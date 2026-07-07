@@ -1,0 +1,26 @@
+/*
+ * throng theme CSS custom properties (FR-030). These :root declarations are the
+ * app-wide token surface; the ThemeProvider overwrites them at runtime from the
+ * active theme document (core `toCssVariables`). Values here are the static
+ * fallback (the "throng" defaults) so the app is styled before the provider
+ * mounts. Every renderer component MUST consume var(--throng-*) — no hardcoded
+ * colours/fonts (US8/T082).
+ */
+:root {
+  /* colours */
+  --throng-colour-surface: #1e1f23;
+  --throng-colour-surfaceActive: #2a2d34;
+  --throng-colour-text: #e6e6e6;
+  --throng-colour-textMuted: #9aa0aa;
+  --throng-colour-accent: #6aa3ff;
+  --throng-colour-danger: #e5534b;
+  --throng-colour-railBg: #17181b;
+  --throng-colour-border: #34363c;
+  --throng-colour-statusBarBg: #17181b;
+
+  /* fonts */
+  --throng-font-family: 'Segoe UI', system-ui, sans-serif;
+  --throng-font-size: 13px;
+  --throng-font-weight-normal: 400;
+  --throng-font-weight-bold: 600;
+}

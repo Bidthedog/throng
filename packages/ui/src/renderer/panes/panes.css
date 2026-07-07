@@ -1,0 +1,138 @@
+/* Collapsible side panes + empty File Explorer pane (FR-004/006/007/008).
+   Each side pane has a fixed-width gutter on its OUTER edge holding the
+   collapse/expand toggle; the gutter is identical when expanded or collapsed. */
+
+/* Two-class specificity (0,2,0) so this beats theme.css `.pane--sidebar`
+   (0,1,0), which sets flex-direction: column and loads after this file. */
+.pane.pane--sidebar,
+.pane.pane--explorer {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+/* The left sidebar's gutter sits before its body; the right explorer's after. */
+.pane--explorer {
+  background: var(--throng-colour-surface);
+  border-left: 1px solid var(--throng-colour-border);
+}
+
+.pane-sidebar__body,
+.pane-explorer__body {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Active Files & Folders pane highlight (006, FR-015/SC-006). Drawn as an overlay
+ * pseudo-element so the border renders ABOVE the tree-row selection box rather than
+ * behind it (a parent's inset box-shadow paints under child backgrounds) — FR-071. */
+.pane-explorer__body--active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--throng-colour-activePaneHighlight, #6aa3ff);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.pane-explorer__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  padding: 12px;
+  text-align: center;
+  color: var(--throng-colour-textMuted);
+  /* font from the paneText typography role (theme.css) */
+}
+
+/* Resize handle on a pane's leading (inner-left) edge — the File Explorer. */
+.resize-handle--leading {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 5;
+}
+/* Visual line + accent come from the shared .resize-handle--leading::before rules
+   in theme.css (thin, theme-accent on hover) — keep this hit area unchanged. */
+
+/* Collapse/expand control — absolutely pinned to the pane's top-outer corner so
+   it keeps the SAME position + size whether the pane is expanded (sitting beside
+   the panel title) or collapsed (the only thing in the rail). (FR #3) */
+.pane-collapse {
+  position: absolute;
+  top: 5px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--throng-colour-textMuted);
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 4px;
+  cursor: pointer;
+  z-index: 6;
+}
+.pane-collapse:hover {
+  color: var(--throng-colour-text);
+  background: var(--throng-colour-surfaceActive);
+}
+.pane-collapse--left {
+  left: 5px;
+}
+.pane-collapse--right {
+  right: 5px;
+}
+
+/* The collapsed rail: just holds the rotated label (the button floats above it). */
+.pane-rail {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 32px;
+  background: var(--throng-colour-railBg);
+  overflow: hidden;
+}
+/* A collapsed pane is a narrow rail: drop the 160px pane min-width so its grid
+   track can shrink to the rail width instead of overflowing the shell. */
+.pane.pane--collapsed {
+  min-width: 0;
+}
+.pane--sidebar.pane--collapsed {
+  border-right: 1px solid var(--throng-colour-border);
+}
+.pane--explorer.pane--collapsed {
+  border-left: 1px solid var(--throng-colour-border);
+}
+
+/* Push the top panel's title clear of the absolute collapse button. */
+.pane--sidebar .pane-sidebar__body .sidebar-panel:first-child .panel__header {
+  padding-left: 34px;
+}
+.pane--explorer .pane-explorer__body .panel__header {
+  padding-right: 34px;
+}
+
+/* Rotated, uppercased label shown in a collapsed gutter (rail). */
+.pane-rail__label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  margin-top: 4px;
+  white-space: nowrap;
+  user-select: none;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--throng-colour-textMuted);
+  font-family: var(--throng-font-family);
+  font-size: 11px;
+}

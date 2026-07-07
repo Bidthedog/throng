@@ -1,0 +1,101 @@
+/* Status bar + root column layout (FR-003/004). Overrides the 002 full-viewport
+   shell so the shell fills the remaining height above a fixed-height status bar. */
+/* Anchor the whole app to the window (position:fixed, not 100vw/100vh). The shell
+   and status bar are then ABSOLUTELY positioned to the root's edges rather than
+   flex-stacked, so a rapid resize repositions them at fixed insets (no flex
+   reflow) — the status bar stays glued to the bottom and the right pane to the
+   right edge instead of smearing/ghosting. */
+.throng-root {
+  position: fixed;
+  inset: 0;
+  --status-bar-height: 24px;
+}
+
+.throng-root .throng-shell {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--status-bar-height);
+  height: auto;
+  width: auto;
+  min-height: 0;
+}
+
+.throng-status-bar {
+  /* position:fixed (viewport-anchored) + its own compositor layer so the OS keeps
+     it pinned to the window's lower bound during a live resize instead of letting
+     it lag/smear behind the frame. */
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--status-bar-height);
+  transform: translateZ(0);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 10px;
+  background: var(--throng-colour-statusBarBg);
+  color: var(--throng-colour-textMuted);
+  border-top: 1px solid var(--throng-colour-border);
+  font-family: var(--throng-font-family);
+  font-size: 12px;
+  line-height: 24px;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.throng-status-bar__left {
+  color: var(--throng-colour-text);
+  font-weight: var(--throng-font-weight-bold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.throng-status-bar__dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+  /* keep the dot visible even on a same-coloured background */
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.25);
+}
+
+.throng-status-bar__path {
+  margin-left: 6px;
+  color: var(--throng-colour-textMuted);
+  font-weight: var(--throng-font-weight-normal);
+}
+
+/* Active Tab · Panel context — moved to the LEFT (after the project path). */
+.throng-status-bar__context {
+  margin-left: 10px;
+  color: var(--throng-colour-textMuted);
+  font-weight: var(--throng-font-weight-normal);
+}
+
+/* Right side holds the ADMIN pill; never shrink or ellipsize it. */
+.throng-status-bar__right {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+
+/* Red-outlined "ADMIN" pill (FR-025e): shown while throng runs elevated. */
+.throng-status-bar__admin {
+  padding: 0 7px;
+  border: 1px solid var(--throng-colour-danger);
+  border-radius: 9px;
+  color: var(--throng-colour-danger);
+  background: color-mix(in srgb, var(--throng-colour-danger) 14%, transparent);
+  font-weight: var(--throng-font-weight-bold);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  line-height: 16px;
+}
