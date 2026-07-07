@@ -1,0 +1,1528 @@
+/* Default dark theme (carried from 001) + two-Pane docking shell layout.
+   The active project's dominant colour is applied at runtime as --accent. */
+
+:root {
+  /* App-wide semantic vars draw from the active theme's tokens (FR-030), so the
+     whole UI re-themes (and hot-reloads) from themes/<name>.json. Literals are
+     fallbacks for before the ThemeProvider applies the tokens. --accent is the
+     active project's colour, overridden at runtime by the projects store. */
+  --bg: var(--throng-colour-appBg, #10131a);
+  --bg-raised: var(--throng-colour-sidebarBg, #161b25);
+  --bg-panel: var(--throng-colour-surface, #1b2230);
+  --border: var(--throng-colour-border, #2a3344);
+  --text: var(--throng-colour-text, #e6ebf2);
+  --text-dim: var(--throng-colour-textMuted, #93a0b4);
+  --accent: var(--throng-colour-accent, #6aa3ff);
+  --sidebar-width: 260px;
+  --min-pane: 160px;
+  /* Shared header height so the Projects / tab-strip / Files & Folders bottom
+     borders line up across all three panes (#6). */
+  --pane-header-height: 34px;
+  font-synthesis: none;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden; /* the drag ghost must never grow the document or scroll it */
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--throng-font-family, 'Segoe UI', system-ui, -apple-system, sans-serif);
+  font-size: var(--throng-font-size, 14px);
+  /* App-wide default case/italic/underline (per-section roles can override). */
+  text-transform: var(--throng-font-transform, none);
+  font-style: var(--throng-font-style, normal);
+  text-decoration: var(--throng-font-decoration, none);
+  overflow: hidden;
+}
+
+.throng-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) 1fr;
+  height: 100%;
+  width: 100%;
+  /* Smooth slide when a side pane collapses/expands (the px column animates).
+     Suppressed during a live resize drag (--no-anim) so dragging stays snappy. */
+  transition: grid-template-columns 0.18s ease;
+}
+.throng-shell--no-anim {
+  transition: none;
+}
+/* A detached sub-workspace window is a single workspace pane (no sidebar/explorer). */
+.throng-shell--subworkspace {
+  grid-template-columns: 1fr;
+}
+@media (prefers-reduced-motion: reduce) {
+  .throng-shell {
+    transition: none;
+  }
+}
+
+.pane {
+  overflow: hidden;
+  min-width: var(--min-pane);
+}
+
+.pane--sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-raised);
+  border-right: 1px solid var(--border);
+}
+
+/* --- Resize handles (sidebar width + sidebar panel split) ------------ */
+.resize-handle {
+  position: absolute;
+  flex: 0 0 auto;
+  background: transparent;
+  touch-action: none;
+  z-index: 5;
+}
+
+/* Handles are invisible at rest — the pane/panel border itself is the divider, so
+   there's no doubled line — and brighten to the THEME accent on hover/drag. The
+   same thin look + accent is shared by the sidebar, explorer and panel handles. */
+.resize-handle::before {
+  content: '';
+  position: absolute;
+  background: transparent;
+  transition: background 0.1s ease;
+}
+
+.resize-handle--horizontal {
+  position: relative;
+  height: 8px;
+  cursor: row-resize;
+  margin: -4px 0;
+}
+
+.resize-handle--horizontal::before {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.resize-handle--vertical {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 8px;
+  cursor: col-resize;
+}
+
+.resize-handle--vertical::before {
+  top: 0;
+  bottom: 0;
+  right: 0; /* sit the line exactly on the pane's right border */
+  width: 1px;
+}
+
+.resize-handle:hover::before,
+.resize-handle--active::before {
+  background: var(--throng-colour-accent);
+}
+
+.resize-handle--horizontal:hover::before,
+.resize-handle--horizontal.resize-handle--active::before {
+  height: 2px;
+}
+
+.resize-handle--vertical:hover::before,
+.resize-handle--vertical.resize-handle--active::before {
+  width: 2px;
+}
+
+/* Explorer (leading, inner-left) handle — same thin shared line + accent, sat
+   exactly on the pane's left border. */
+.resize-handle--leading::before {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+}
+.resize-handle--leading:hover::before,
+.resize-handle--leading.resize-handle--active::before {
+  width: 2px;
+}
+
+.sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  /* Never shrink below the (fixed) header, so a panel can't be squashed away or
+     pushed off the bottom (#2/#3). Inner content scrolls instead. */
+  min-height: var(--pane-header-height);
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-panel:last-child {
+  border-bottom: none;
+}
+
+/* The Sub-workspaces panel keeps a usable minimum and stays pinned to the bottom;
+   on window resize only the Projects panel grows/shrinks (#3, FR-023). */
+.sidebar-panel--subworkspaces {
+  min-height: 160px;
+}
+
+.pane--workspace {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  min-width: 0;
+}
+
+/* --- Sidebar panels --------------------------------------------------- */
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--pane-header-height);
+  flex: 0 0 auto; /* the title row is a fixed size — never squashed or scrolled away */
+  box-sizing: border-box;
+  padding: 0 12px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Pane title (PROJECTS / TERMINALS / FILES & FOLDERS) — paneTitle font role
+   (case/italic/underline come from the theme). */
+.panel__title {
+  letter-spacing: 0.08em;
+  font-family: var(--throng-font-paneTitle-family);
+  font-size: var(--throng-font-paneTitle-size);
+  font-weight: var(--throng-font-paneTitle-weight);
+  text-transform: var(--throng-font-paneTitle-transform);
+  font-style: var(--throng-font-paneTitle-style);
+  text-decoration: var(--throng-font-paneTitle-decoration);
+}
+
+.panel__action {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.panel__action:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.panel__error {
+  margin: 8px 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: #3a1d22;
+  color: #ff9aa6;
+  font-size: 12px;
+}
+
+.panel__hint {
+  margin: 12px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* --- Project create/edit form ---------------------------------------- */
+.project-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.project-form__field {
+  flex: 1 1 100%;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.project-form__colour {
+  width: 36px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-panel);
+}
+
+.project-form__buttons {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.project-form__buttons button {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.project-form__buttons button[type='submit'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06101f;
+  font-weight: 600;
+}
+
+/* --- Project list ----------------------------------------------------- */
+/* The projects panel body (form + list) scrolls as one region, so the create
+   form's fields/buttons stay reachable even when the panel is dragged short. */
+.panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.project-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+  flex: 0 0 auto;
+}
+
+.project-list__empty {
+  padding: 12px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.project-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px 0 4px;
+  border-left: 3px solid transparent;
+}
+
+.project-item--active {
+  border-left-color: var(--accent);
+  background: var(--bg-panel);
+}
+
+.project-item__switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  padding: 8px 6px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.project-item__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.project-item__name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.project-item__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 1 auto;
+}
+
+/* Tab/panel count indicator after the project name (stays put; name ellipsizes). */
+.project-item__counts {
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.project-item__controls {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+}
+
+.project-item:hover .project-item__controls {
+  opacity: 1;
+}
+
+.project-item__controls button {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.project-item__controls button:hover {
+  color: var(--text);
+  background: var(--bg-raised);
+}
+
+/* --- Workspace empty state ------------------------------------------- */
+.workspace-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  color: var(--text-dim);
+  padding: 24px;
+}
+
+.restore-notice {
+  margin: 6px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: #3a3320;
+  color: #ffe08a;
+  font-size: 12px;
+}
+
+/* --- Tab group -------------------------------------------------------- */
+.tab-strip {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: var(--pane-header-height);
+  box-sizing: border-box;
+  padding: 4px 4px 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex: 0 0 auto;
+}
+
+.tab-chip {
+  display: flex;
+  align-items: center;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.tab-chip--active {
+  color: var(--text);
+  background: var(--bg-panel);
+  border-top: 2px solid var(--accent);
+}
+
+.tab-chip--over {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.tab-strip__add {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 6px;
+  margin: 2px 0 2px 4px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.tab-strip__add:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Drop affordance while dragging a Panel onto "+" to move it into a new Tab (FR-027). */
+.tab-strip__add--over {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.tab-body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  padding: 3px;
+}
+
+/* --- Split tree ------------------------------------------------------- */
+.split {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split--row {
+  flex-direction: row;
+}
+
+.split--column {
+  flex-direction: column;
+}
+
+.split__cell {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split__divider {
+  position: relative;
+  flex: 0 0 6px;
+  background: transparent;
+}
+
+/* Thin shared divider line: invisible at rest, theme accent on hover/drag — same
+   look as the sidebar/explorer resize handles. Spacing (the 6px hit area) is
+   unchanged. */
+.split__divider::before {
+  content: '';
+  position: absolute;
+  background: transparent;
+  transition: background 0.1s ease;
+}
+
+.split__divider--row {
+  cursor: col-resize;
+}
+.split__divider--row::before {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+.split__divider--column {
+  cursor: row-resize;
+}
+.split__divider--column::before {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.split__divider:hover::before,
+.split__divider--active::before {
+  background: var(--throng-colour-accent);
+}
+.split__divider--row:hover::before {
+  width: 2px;
+}
+.split__divider--column:hover::before {
+  height: 2px;
+}
+
+/* --- Panel box -------------------------------------------------------- */
+.panel-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  margin: 3px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+
+.panel-box--dragging {
+  opacity: 0.4;
+}
+
+.panel-box__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+  cursor: grab;
+  font-size: 12px;
+  user-select: none;
+}
+
+.panel-box__title {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Per-Panel origin-project label, shown only inside a sub-workspace window. Sits
+   right-aligned before the header actions, coloured by the project (or the
+   sub-workspace, for a project-less Panel). */
+.panel-box__project {
+  /* Owner (project / sub-workspace) text: right-aligned and ALWAYS visible — it
+   * never shrinks, so the editor file pill's folder-brackets truncate first
+   * (FR-085). */
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0 8px;
+  font-size: 10px;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* The Panel's assigned type, shown as a small muted pill after its name (005). */
+.panel-box__kind {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 9px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--throng-colour-textMuted);
+  white-space: nowrap;
+}
+
+/* The terminal flavour, shown after the type inside the pill. */
+.panel-box__flavour {
+  margin-left: 5px;
+  padding-left: 5px;
+  border-left: 1px solid var(--throng-colour-border);
+  color: var(--throng-colour-text);
+}
+
+/* Red-outlined ADMIN pill for an elevated terminal (FR-025d). */
+.panel-box__admin {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid #c0392b;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #e06055;
+  white-space: nowrap;
+}
+
+/* Editor file pill: `filename (relative folder)` (006). The folder-in-brackets
+ * truncates first so the owner text always wins (FR-085). */
+.panel-box__file {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 9px;
+  font-size: 10px;
+  color: var(--throng-colour-text);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Filename is always fully shown; the folder-in-brackets ellipsizes. */
+.panel-box__file-name {
+  flex: 0 0 auto;
+}
+
+.panel-box__file-folder {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--throng-colour-textMuted);
+}
+
+/* The shared unsaved-changes dot (Panel/Tab/project) — one themeable style (006). */
+.throng-unsaved-dot {
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--throng-colour-unsavedDot, #e3b341);
+}
+
+.panel-box__actions {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* When the owner (project / sub-workspace) pill is present it takes the right-edge
+ * auto-margin, so the controls sit immediately beside it (not split across the
+ * header) — owner text right-aligned next to the Panel controls (FR-087). */
+.panel-box__project + .panel-box__actions {
+  margin-left: 6px;
+}
+
+.panel-box__actions button {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 1px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.panel-box__actions button:hover {
+  color: var(--text);
+  background: var(--bg-panel);
+}
+
+.panel-box__body {
+  flex: 1 1 auto;
+  /* min-height:0 lets the body shrink inside the split cell so a typed body that
+     is taller than the panel scrolls (the form) or fits exactly (the terminal),
+     rather than overflowing and being clipped. */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* The placeholder fallback ("Empty Panel") stays centred; the form and terminal
+   fill the body and manage their own overflow. */
+.panel-box__body > .panel-box__placeholder {
+  margin: auto;
+}
+
+/* --- Edge drop zones (shown while dragging) -------------------------- */
+.edge-zones {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.edge-zone {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.edge-zone--top {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 33%;
+}
+
+.edge-zone--bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 33%;
+}
+
+.edge-zone--left {
+  top: 33%;
+  bottom: 33%;
+  left: 0;
+  width: 50%;
+}
+
+.edge-zone--right {
+  top: 33%;
+  bottom: 33%;
+  right: 0;
+  width: 50%;
+}
+
+.edge-zone--over {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* --- Project labels + path marquee (FR-032) -------------------------- */
+.project-item__labels {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.project-item__path {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-dim);
+  max-width: 100%;
+}
+
+.project-item__path-text {
+  display: inline-block;
+  will-change: transform;
+}
+
+/* --- Project form: folder picker (FR-034) ---------------------------- */
+.project-form__row {
+  display: flex;
+  gap: 6px;
+  flex: 1 1 100%;
+}
+
+.project-form__field--grow {
+  flex: 1 1 auto;
+}
+
+/* --- Tab insertion indicator (FR-035) -------------------------------- */
+/* Absolutely positioned at the exact drop boundary so it never shifts tabs. */
+.tab-insert {
+  position: absolute;
+  top: 4px;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* --- Inline rename inputs (FR-036/037) ------------------------------- */
+.tab-chip__rename,
+.panel-box__rename,
+.project-item__rename {
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font: inherit;
+  width: 10ch;
+  min-width: 80px;
+}
+
+.project-item__rename {
+  flex: 1 1 auto;
+  margin: 6px 8px;
+  width: auto;
+}
+
+.panel-box__rename {
+  width: 60%;
+}
+
+/* --- Context menu (FR-036/037) --------------------------------------- */
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  min-width: 160px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+
+.context-menu__item {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.context-menu__icon {
+  flex: 0 0 auto;
+  width: 16px;
+  margin-right: 8px;
+  text-align: center;
+  opacity: 0.8;
+  color: currentColor; /* follows the item's (theme) colour, incl. hover */
+}
+
+.context-menu__label {
+  flex: 1 1 auto;
+}
+
+.context-menu__item:hover {
+  background: var(--accent);
+  color: #06101f;
+}
+
+.context-menu__item--disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.context-menu__item--disabled:hover {
+  background: transparent;
+  color: var(--text-dim);
+}
+
+/* --- Confirmation modal (FR-042/043/044) ----------------------------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.modal {
+  width: min(420px, 90vw);
+  padding: 18px 20px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+}
+
+/* Full-screen blocking "closing…" overlay (005 / FR-015). Sits above everything
+   (incl. other modals) and captures all input so the app is inert while quitting. */
+.app-closing {
+  z-index: 3000;
+  background: rgba(0, 0, 0, 0.66);
+  cursor: wait;
+}
+
+/* Show the wait cursor everywhere underneath the overlay too (the overlay covers
+   the app, but this guarantees the spinner cursor regardless of child styles). */
+.app-closing * {
+  cursor: wait;
+}
+
+.app-closing__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 26px 34px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+}
+
+.app-closing__spinner {
+  width: 26px;
+  height: 26px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent, #6aa3ff);
+  border-radius: 50%;
+  animation: throng-spin 0.8s linear infinite;
+}
+
+@keyframes throng-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.app-closing__message {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.modal--wide {
+  width: min(600px, 92vw);
+}
+
+.app-close-details {
+  margin: 0 0 16px;
+}
+
+.app-close-details > summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 12px;
+  margin-bottom: 8px;
+  user-select: none;
+}
+
+.app-close-details__scroll {
+  max-height: 200px;
+  overflow: auto;
+}
+
+.app-close-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.app-close-table th,
+.app-close-table td {
+  text-align: left;
+  padding: 4px 10px 4px 0;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.app-close-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-panel);
+  color: var(--text-dim);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal__title {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.modal__message {
+  margin: 0 0 16px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Scrollable list of files in the aggregated "cannot open N files" notice (FR-100).
+   Distinct bullets; the file name is bold, its directory path is not. */
+.editor-notice__files {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 4px 4px;
+  max-height: 220px;
+  overflow: auto;
+  background: color-mix(in srgb, var(--border) 22%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.editor-notice__file {
+  position: relative;
+  padding: 5px 8px 5px 20px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.editor-notice__file + .editor-notice__file {
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.editor-notice__file::before {
+  content: '•';
+  position: absolute;
+  left: 7px;
+  top: 5px;
+  color: var(--text-dim);
+}
+
+.editor-notice__file-path {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+/* The path is dim; the file name is highlighted (bold, full-strength text). */
+.editor-notice__file-dir {
+  color: var(--text-dim);
+}
+
+.editor-notice__file-name {
+  color: var(--text);
+  font-weight: var(--throng-font-weight-bold, 700);
+}
+
+.editor-notice__file-note {
+  display: block;
+  margin-top: 1px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+/* Highlighted extra warning in a confirm dialog (FR-026a) — e.g. a destroy that
+   cascades to other windows/sub-workspaces. */
+.modal__warning {
+  margin: 0 0 16px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--danger, #e5534b);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--danger, #e5534b) 14%, transparent);
+  color: var(--text, inherit);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.modal__buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal__buttons button {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.modal__confirm {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06101f;
+  font-weight: 600;
+}
+
+.modal__confirm--danger {
+  background: #d6485a;
+  border-color: #d6485a;
+  color: #fff;
+}
+
+/* The `.modal__buttons button` selector (0,1,1) outranks the single-class
+   confirm rules above (0,1,0), so re-assert the colours at higher specificity. */
+.modal__buttons button.modal__confirm {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06101f;
+}
+.modal__buttons button.modal__confirm--danger {
+  background: var(--throng-colour-danger, #d6485a);
+  border-color: var(--throng-colour-danger, #d6485a);
+  color: #fff;
+}
+.modal__buttons button.modal__confirm--danger:hover {
+  filter: brightness(1.08);
+}
+
+/* --- Tab panel-count badge (FR-045) ---------------------------------- */
+.tab-chip__count {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.tab-chip--active .tab-chip__count {
+  color: var(--text);
+}
+
+/* --- Project drag-to-reorder (FR-046) -------------------------------- */
+.project-list {
+  position: relative;
+}
+
+.project-item__grip {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  color: var(--text-dim);
+  cursor: grab;
+  user-select: none;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+}
+
+.project-item:hover .project-item__grip {
+  opacity: 1;
+}
+
+.project-item--dragging {
+  opacity: 0.4;
+}
+
+.project-insert {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Active (highlighted) Panel — FR-002. The Tab's active Panel is outlined in the
+   theme accent with a subtly raised header so the focused Panel is unambiguous. */
+.panel-box--active {
+  outline: 2px solid var(--throng-colour-accent);
+  outline-offset: -2px;
+}
+
+.panel-box--active .panel-box__header {
+  background: var(--throng-colour-surfaceActive);
+}
+
+/* Project form: validation-error field highlight + colour-picker label (US4). */
+.project-form__field--error {
+  border-color: var(--throng-colour-danger, #d6485a);
+}
+.project-form__colour-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.project-form__colour-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* Neutral (project-colour-independent) buttons in the projects panel + form
+   (US4 refinement): + New icon, Browse, and Create/Save use a fixed neutral
+   colour rather than the active project's --accent. */
+.panel__action--icon {
+  font-size: 15px;
+  line-height: 1;
+}
+.panel__action--neutral:hover {
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+.project-form__browse {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.project-form__browse:hover {
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+.project-form__buttons button[type='submit'] {
+  background: #3a4656;
+  border-color: #4a5568;
+  color: var(--text);
+  font-weight: 600;
+}
+.project-form__buttons button[type='submit']:hover {
+  background: #44515f;
+}
+
+/* Context-menu submenus (FR-023b: "Send to Tab ▸"). */
+.context-menu__item--parent {
+  position: relative;
+}
+.context-menu__chevron {
+  margin-left: 12px;
+  font-size: 10px;
+  opacity: 0.7;
+}
+.context-menu--sub {
+  position: absolute;
+  left: 100%;
+  top: -5px;
+  margin-left: 2px;
+  /* No overflow scroll here: `overflow-y:auto` forces overflow-x to `auto` too,
+     which clips deeper flyouts (the "3rd level shows only a scrollbar" bug). The
+     flip rules below keep flyouts on-screen instead. */
+  overflow: visible;
+}
+/* Flip a flyout that would overflow the screen so all items stay visible. */
+.context-menu--sub.context-menu--flip-x {
+  left: auto;
+  right: 100%;
+  margin-left: 0;
+  margin-right: 2px;
+}
+.context-menu--sub.context-menu--flip-y {
+  top: auto;
+  bottom: -5px;
+}
+
+/* --- Typography roles (FR-030): each text section draws its own themed font,
+   including family / size / weight / case / italic / underline. ------------- */
+.tab-chip__label {
+  font-family: var(--throng-font-tab-family);
+  font-size: var(--throng-font-tab-size);
+  font-weight: var(--throng-font-tab-weight);
+  text-transform: var(--throng-font-tab-transform);
+  font-style: var(--throng-font-tab-style);
+  text-decoration: var(--throng-font-tab-decoration);
+}
+.panel-box__title {
+  font-family: var(--throng-font-panel-family);
+  font-size: var(--throng-font-panel-size);
+  font-weight: var(--throng-font-panel-weight);
+  text-transform: var(--throng-font-panel-transform);
+  font-style: var(--throng-font-panel-style);
+  text-decoration: var(--throng-font-panel-decoration);
+}
+.panel-box__placeholder,
+.panel-type-form,
+.workspace-empty,
+.pane-explorer__empty {
+  font-family: var(--throng-font-paneText-family);
+  font-size: var(--throng-font-paneText-size);
+  font-weight: var(--throng-font-paneText-weight);
+  text-transform: var(--throng-font-paneText-transform);
+  font-style: var(--throng-font-paneText-style);
+  text-decoration: var(--throng-font-paneText-decoration);
+}
+.project-item__name {
+  font-family: var(--throng-font-projectName-family);
+  font-size: var(--throng-font-projectName-size);
+  font-weight: var(--throng-font-projectName-weight);
+  text-transform: var(--throng-font-projectName-transform);
+  font-style: var(--throng-font-projectName-style);
+  text-decoration: var(--throng-font-projectName-decoration);
+}
+.project-item__path-text {
+  font-family: var(--throng-font-projectPath-family);
+  font-size: var(--throng-font-projectPath-size);
+  font-weight: var(--throng-font-projectPath-weight);
+  text-transform: var(--throng-font-projectPath-transform);
+  font-style: var(--throng-font-projectPath-style);
+  text-decoration: var(--throng-font-projectPath-decoration);
+}
+
+/* Unloaded project: italic + muted name (themeable via the textMuted colour). A
+   loaded project shows a small loaded dot. font-style here wins over the role's
+   normal style for the unloaded affordance. */
+.project-item--unloaded .project-item__name {
+  font-style: italic;
+  color: var(--throng-colour-textMuted);
+}
+.project-item__loaded {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--throng-colour-success);
+  margin-left: 2px;
+}
+
+/* --- Sub-workspaces panel (US7) -------------------------------------- */
+/* (Resizable height comes from the stack's inline flex-basis; min-height is set
+   with the Terminals panel above. The list scrolls within.) */
+.subworkspace-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative; /* anchor for the drag-reorder insertion indicator */
+}
+
+/* Error banner: a failed detach/create persist is surfaced here instead of
+   silently swallowed (mirrors .panel__error). */
+.subworkspaces-panel__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 6px 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: #3a1d22;
+  color: #ff9aa6;
+  font-size: 12px;
+}
+.subworkspaces-panel__error-text {
+  flex: 1 1 auto;
+}
+.subworkspaces-panel__error-dismiss {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  font-size: 12px;
+}
+
+/* Drag-to-reorder affordances (mirror the project list). */
+.subworkspace-item__grip {
+  flex: 0 0 auto;
+  padding: 0 2px;
+  color: var(--text-dim);
+  cursor: grab;
+  user-select: none;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+}
+.subworkspace-item:hover .subworkspace-item__grip {
+  opacity: 1;
+}
+.subworkspace-item--dragging {
+  opacity: 0.4;
+}
+.subworkspace-insert {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.subworkspace-list__empty {
+  padding: 8px 12px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.subworkspace-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+}
+
+.subworkspace-item__swatch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+.subworkspace-item__swatch input[type='color'] {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Name + loaded dot share a row (mirrors the project item). */
+.subworkspace-item__name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.subworkspace-item__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 13px;
+  cursor: default;
+}
+.subworkspace-item__rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+/* Unloaded sub-workspace: italic + muted name; a loaded one shows a green dot —
+   identical affordance to the project list. The dot stays after the window
+   closes (loaded = opened this session, not "window currently open"). */
+.subworkspace-item--unloaded .subworkspace-item__name {
+  font-style: italic;
+  color: var(--throng-colour-textMuted);
+}
+.subworkspace-item__loaded {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--throng-colour-success);
+}
+.subworkspace-item__counts {
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+/* Open + delete controls, positioned and revealed on hover like the project row. */
+.subworkspace-item__controls {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  opacity: 0;
+}
+.subworkspace-item:hover .subworkspace-item__controls {
+  opacity: 1;
+}
+.subworkspace-item__controls button {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+.subworkspace-item__controls button:hover {
+  color: var(--text);
+  background: var(--bg-raised);
+}
+.subworkspace-item__delete:hover {
+  color: var(--throng-colour-danger) !important;
+}
+
+/* Resizable vertical panel stack (left sidebar). Fills the sidebar body; panels
+   are sized in px by the stack and dividers clamp to each panel's min height. */
+.panel-stack {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}

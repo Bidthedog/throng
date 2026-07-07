@@ -1,0 +1,230 @@
+// Ambient typing for the preload contextBridge surface (window.throng). The
+// preload exposes a generic JSON-RPC `invoke` plus the 001 daemon-status and
+// zoom relays. Kept in the renderer so components can rely on it type-safely.
+
+export interface ThrongRpcEnvelope {
+  ok: boolean;
+  result?: unknown;
+  error?: { code: number | null; message: string };
+}
+
+declare global {
+  interface Window {
+    throng?: {
+      /** Host OS family for native-separator path display (FR-101). */
+      osName?: 'windows' | 'macos' | 'linux';
+      /** Cross-window projects-changed sync (create/rename/recolour/delete). */
+      projects?: {
+        notifyChanged: () => void;
+        onChanged: (cb: () => void) => () => void;
+      };
+      getDaemonStatus?: () => Promise<unknown>;
+      invoke?: (method: string, params: unknown) => Promise<ThrongRpcEnvelope>;
+      pickFolder?: () => Promise<string | null>;
+      setTitle?: (title: string) => void;
+      zoomBy?: (steps: number) => void;
+      zoomReset?: () => void;
+      fullscreenToggle?: () => void;
+      // App-close warning when terminals are running (005 / FR-015).
+      onAppCloseBegin?: (cb: () => void) => () => void;
+      onAppClosePrompt?: (cb: (info: AppClosePromptInfo) => void) => () => void;
+      onAppCloseClosing?: (cb: (info: { message: string }) => void) => () => void;
+      appCloseChoice?: (choice: 'leave' | 'terminate' | 'cancel') => void;
+      dragGhost?: {
+        start: (kind: 'panel' | 'tab', title: string) => void;
+        move: () => void;
+        hint: (text: string, warn?: boolean) => void;
+        stop: () => void;
+      };
+      // Detached sub-workspace windows (US7): open/raise, close, and a
+      // cross-window content-change signal so an open window re-reads.
+      subWorkspace?: {
+        open: (id: string) => void;
+        atPoint: () => Promise<string | null>;
+        close: (id: string) => void;
+        notifyChanged: (id: string) => void;
+        onChanged: (cb: (id: string) => void) => () => void;
+      };
+      // Cross-window Panel identity sync (003): rename the same Panel everywhere.
+      panel?: {
+        notifyRenamed: (id: string, title: string) => void;
+        onRenamed: (cb: (id: string, title: string) => void) => () => void;
+        notifyDestroyed: (id: string) => void;
+        onDestroyed: (cb: (id: string) => void) => () => void;
+        notifyDraft: (id: string, draft: unknown) => void;
+        onDraft: (cb: (id: string, draft: unknown) => void) => () => void;
+        notifyTyped: (id: string, kind: string, config: unknown) => void;
+        onTyped: (cb: (id: string, kind: string, config: unknown) => void) => () => void;
+      };
+      config?: {
+        get: () => Promise<{ settings?: unknown; theme?: unknown; keybindings?: unknown } | null>;
+        onChange: (
+          cb: (payload: { settings?: unknown; theme?: unknown; keybindings?: unknown }) => void,
+        ) => () => void;
+      };
+      // Typed panels — Terminal (005 Phase B): the Flavour dropdown's catalogue
+      // (machine-detected built-ins ∪ user-defined), served by UI main.
+      terminal?: {
+        listFlavours: () => Promise<TerminalFlavourDto[]>;
+        attach: (req: {
+          panelId: string;
+          projectId: string;
+          projectRoot: string | null;
+          rootless?: boolean;
+          runAsAdmin?: boolean;
+          flavourId: string;
+          params: string;
+          cols: number;
+          rows: number;
+        }) => Promise<TerminalAttachEnvelope>;
+        write: (panelId: string, data: string) => Promise<unknown>;
+        resize: (panelId: string, cols: number, rows: number) => Promise<unknown>;
+        kill: (panelId: string) => Promise<unknown>;
+        list: (projectId?: string) => Promise<{ sessions: TerminalSessionDto[] }>;
+        // Daemon capabilities (FR-025a): { elevated } gates the "run as admin" control.
+        capabilities: () => Promise<{ elevated: boolean }>;
+        contextMenu: (payload: { panelId: string; selection: string }) => Promise<unknown>;
+        // OSC 52 clipboard write from a program inside the terminal → OS clipboard.
+        writeClipboard: (text: string) => Promise<unknown>;
+        onOutput: (cb: (e: { panelId: string; data: string }) => void) => () => void;
+        onExit: (
+          cb: (e: { panelId: string; code: number | null; unexpected: boolean }) => void,
+        ) => () => void;
+      };
+      // File Explorer tree (004): directory reads + file operations, confined to
+      // the active project root by the main process; `onChange` is the live-sync push.
+      files?: {
+        setRoot: (root: string | null) => void;
+        list: (
+          relDir: string,
+        ) => Promise<{ entries: FileTreeEntry[] } | { error: string }>;
+        rename: (relPath: string, newName: string) => Promise<FilesOkOrError>;
+        move: (srcRelPaths: string[], destRelDir: string) => Promise<FilesOkOrError>;
+        copy: (srcRelPaths: string[], destRelDir: string) => Promise<FilesOkOrError>;
+        delete: (relPaths: string[], mode: 'recycle' | 'permanent') => Promise<FilesOkOrError>;
+        newFolder: (destRelDir: string) => Promise<{ relPath: string } | { error: string }>;
+        newFile: (destRelDir: string) => Promise<{ relPath: string } | { error: string }>;
+        reveal: (relPath: string) => Promise<FilesOkOrError>;
+        onChange: (cb: (evt: { relDir: string }) => void) => () => void;
+      };
+      // Editor panels (006): UI-main-owned editor coordination (peer of files.*).
+      editor?: {
+        load: (req: unknown) => Promise<EditorLoadResult>;
+        register: (meta: unknown) => void;
+        notifyDirty: (req: unknown) => void;
+        getContent: (
+          panelId: string,
+        ) => Promise<{
+          text: string;
+          dirty: boolean;
+          absPath: string | null;
+          fileMissing: boolean;
+        } | null>;
+        chooseSavePath: (req: {
+          defaultDir?: string;
+          defaultName?: string;
+        }) => Promise<string | null>;
+        save: (req: unknown) => Promise<EditorSaveResult>;
+        saveAll: (req: unknown) => Promise<EditorSaveAllResult>;
+        openInto: (req: {
+          absPath: string;
+        }) => Promise<
+          { action: 'focus'; panelId: string; windowId: string } | { action: 'open' }
+        >;
+        isOpen: (absPath: string) => Promise<boolean>;
+        list: () => Promise<
+          Array<{
+            panelId: string;
+            absPath: string | null;
+            dirty: boolean;
+            ownerKind: string;
+          }>
+        >;
+        recover: () => Promise<Array<{ panelId: string; text: string }>>;
+        subWorkspaceFiles: () => Promise<Array<{ filePath: string }>>;
+        destroy: (panelId: string) => void;
+        notifySync: (msg: { panelId: string; text?: string; dirty?: boolean }) => void;
+        onSync: (
+          cb: (msg: {
+            panelId: string;
+            text?: string;
+            dirty?: boolean;
+            deleted?: boolean;
+            externalChange?: boolean;
+          }) => void,
+        ) => () => void;
+        onFocus: (cb: (msg: { panelId: string }) => void) => () => void;
+      };
+    };
+  }
+}
+
+/** Result of `window.throng.editor.load`. */
+export type EditorLoadResult =
+  | {
+      ok: true;
+      text: string;
+      encoding: 'utf8';
+      hasBom: boolean;
+      lineEnding: 'lf' | 'crlf' | 'cr';
+      relativeFolder: string | null;
+    }
+  | { ok: false; reason: 'binary' | 'too-large' | 'io'; error: string };
+
+/** Result of `window.throng.editor.save`. */
+export type EditorSaveResult =
+  | { ok: true; absPath: string; encoding: 'utf8'; lineEnding: 'lf' | 'crlf' | 'cr' }
+  | { ok: false; reason: 'out-of-tree' | 'no-location' | 'io'; error: string };
+
+/** Result of `window.throng.editor.saveAll`. */
+export interface EditorSaveAllResult {
+  saved: string[];
+  skippedUnpathed: string[];
+  failed: { panelId: string; reason: string }[];
+}
+
+/** Payload for the app-close warning: the running terminals + their labels (FR-015). */
+export interface AppCloseTerminal {
+  panelId: string;
+  meta?: { projectName?: string; tabName?: string; panelName?: string; flavourLabel?: string };
+}
+export interface AppClosePromptInfo {
+  /** Running-terminal count, or null when the count query failed. */
+  count: number | null;
+  terminals: AppCloseTerminal[];
+}
+
+/** One Flavour returned by `window.throng.terminal.listFlavours` (mirrors core TerminalFlavour). */
+export interface TerminalFlavourDto {
+  id: string;
+  label: string;
+  file: string;
+  args: string[];
+  source: 'builtin' | 'user';
+  defaultParams: string;
+}
+
+/** Result of `window.throng.terminal.attach`. */
+export type TerminalAttachEnvelope =
+  | { ok: true; status: 'running' | 'exited'; scrollback: string; exit?: { code: number | null } }
+  | { ok: false; error: { code: number | null; message: string } };
+
+/** One session row from `window.throng.terminal.list`. */
+export interface TerminalSessionDto {
+  panelId: string;
+  projectId: string;
+  status: 'running' | 'exited';
+  busy: boolean;
+}
+
+/** One immediate child returned by `window.throng.files.list` (mirrors core DirEntry). */
+export interface FileTreeEntry {
+  name: string;
+  kind: 'file' | 'folder';
+  isSymlink: boolean;
+  hasChildren?: boolean;
+}
+
+export type FilesOkOrError = { ok: true } | { error: string };
+
+export {};
