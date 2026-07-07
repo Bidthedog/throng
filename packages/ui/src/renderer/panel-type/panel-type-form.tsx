@@ -1,0 +1,139 @@
+import { useMemo, useSyncExternalStore, type ReactElement } from 'react';
+import { defaultPanelTypeRegistry, type PanelTypeContext } from '@throng/core';
+import { useWorkspace } from '../state/workspace-store.js';
+import {
+  selectKind,
+  canConfirm,
+  confirmConfig,
+  type FormDeps,
+} from './form-state.js';
+import { EMPTY_DRAFT, getDraft, setDraft, clearDraft, subscribeDraft } from './panel-draft-store.js';
+import { useFlavours } from './use-flavours.js';
+import { useCapabilities } from './use-capabilities.js';
+import { TerminalInputs } from './terminal-inputs.js';
+import { EditorInputs } from './editor-inputs.js';
+import { clearPanelExit, getPanelExit } from '../terminal/exit-store.js';
+import './panel-type.css';
+
+/**
+ * The Panel type-selection form (005 / US1, FR-001..006). Replaces the inert
+ * "Empty Panel" body for an untyped Panel: a **Panel Type** dropdown (sourced from
+ * the registry, so a new type appears with no change here — SC-010), the selected
+ * type's own inputs, and Confirm / Clear. Confirm is gated by the
+ * descriptor's validation (FR-005); Confirm assigns the type+config to the Panel
+ * via the workspace store (it then becomes typed and this form is replaced).
+ *
+ * Only the type-specific inputs block is per-type; the selection / confirm / clear
+ * flow is shared, so future types plug in by registering a descriptor and adding
+ * their inputs component.
+ */
+export function PanelTypeForm({
+  panelId,
+  projectRoot,
+  rootless = false,
+}: {
+  panelId: string;
+  projectRoot: string | null;
+  /** Sub-workspace-owned Panel: a null root is allowed (launches at home, FR-028). */
+  rootless?: boolean;
+}): ReactElement {
+  const ws = useWorkspace();
+  const flavours = useFlavours();
+  const { elevated } = useCapabilities();
+  const registry = defaultPanelTypeRegistry;
+  const ctx = useMemo<PanelTypeContext>(
+    () => ({ projectRoot, flavours, rootless }),
+    [projectRoot, flavours, rootless],
+  );
+  const deps = useMemo<FormDeps>(() => ({ registry, ctx }), [registry, ctx]);
+  // The draft lives in a cross-window store keyed by panelId, so a cloned Panel's
+  // form mirrors across the project + sub-workspace windows live. Local edits
+  // broadcast; the sync listener applies remote drafts with broadcast:false.
+  const state = useSyncExternalStore(
+    (cb) => subscribeDraft(panelId, cb),
+    () => getDraft(panelId),
+  );
+
+  const types = registry.list();
+  const confirmable = canConfirm(state, deps);
+
+  const onConfirm = (): void => {
+    const result = confirmConfig(state, deps);
+    if (result) {
+      clearPanelExit(panelId);
+      clearDraft(panelId);
+      ws.setPanelType(panelId, result.kind, result.config);
+      // Mirror the confirmed type+config to the Panel's other views (FR-027a).
+      window.throng?.panel?.notifyTyped?.(panelId, result.kind, result.config);
+    }
+  };
+
+  // When a previous terminal in this Panel ended (exit/crash/launch failure), the
+  // Panel reverted here; surface that as the form returns (FR-017/019/020).
+  const lastExit = getPanelExit(panelId);
+
+  return (
+    <div className="panel-type-form" data-testid={`panel-type-form-${panelId}`}>
+      {lastExit ? (
+        <div className="panel-type-form__exit" data-testid={`panel-exit-${panelId}`} role="status">
+          {lastExit.message}
+        </div>
+      ) : null}
+      <label className="panel-type-form__field">
+        <span>Panel Type</span>
+        <select
+          data-testid={`panel-type-select-${panelId}`}
+          value={state.selectedKind ?? ''}
+          onChange={(e) =>
+            setDraft(
+              panelId,
+              e.target.value ? selectKind(state, e.target.value, deps) : EMPTY_DRAFT,
+              { broadcast: true },
+            )
+          }
+        >
+          <option value="">Choose a type…</option>
+          {types.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {state.selectedKind === 'terminal' ? (
+        <TerminalInputs
+          values={state.values}
+          flavours={flavours}
+          elevated={elevated}
+          onChange={(next) => setDraft(panelId, { ...state, values: next }, { broadcast: true })}
+        />
+      ) : state.selectedKind === 'editor' ? (
+        <EditorInputs rootless={rootless} />
+      ) : null}
+
+      <div className="panel-type-form__actions">
+        <button
+          type="button"
+          className="panel-type-form__clear"
+          data-testid={`panel-type-clear-${panelId}`}
+          onClick={() => {
+            clearPanelExit(panelId);
+            setDraft(panelId, EMPTY_DRAFT, { broadcast: true });
+          }}
+        >
+          Clear
+        </button>
+        <button
+          type="button"
+          className="panel-type-form__confirm"
+          data-testid={`panel-type-confirm-${panelId}`}
+          disabled={!confirmable}
+          onClick={onConfirm}
+        >
+          Confirm
+        </button>
+      </div>
+    </div>
+  );
+}

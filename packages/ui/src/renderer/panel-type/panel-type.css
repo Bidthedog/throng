@@ -1,0 +1,116 @@
+/* Type-selection form styling (005 Phase A). Themed via var(--throng-*). */
+
+.panel-type-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  width: 100%;
+  /* Fill the panel body and scroll when the panel is too short to show it all. */
+  flex: 1 1 auto;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-y: auto;
+  color: var(--throng-colour-text);
+}
+
+.panel-type-form__field,
+.panel-type-form__inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.panel-type-form__inputs {
+  gap: 12px;
+}
+
+.panel-type-form__field > span {
+  font-size: 0.85em;
+  opacity: 0.85;
+}
+
+.panel-type-form select,
+.panel-type-form input[type='text'] {
+  padding: 6px 8px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 4px;
+  background: var(--throng-colour-surface);
+  color: var(--throng-colour-text);
+  font-family: inherit;
+  font-size: 0.95em;
+}
+
+.panel-type-form select:focus,
+.panel-type-form input[type='text']:focus {
+  outline: 2px solid var(--throng-colour-accent);
+  outline-offset: -1px;
+}
+
+.panel-type-form__empty {
+  font-style: italic;
+  opacity: 0.7;
+}
+
+/* "Run as administrator" checkbox row (FR-025). Muted + not-allowed when the
+   daemon isn't elevated, so it reads clearly as disabled. */
+.panel-type-form__check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9em;
+}
+
+.panel-type-form__check input:disabled {
+  cursor: not-allowed;
+}
+
+.panel-type-form__check:has(input:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.panel-type-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.panel-type-form__actions button {
+  padding: 6px 14px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 4px;
+  background: var(--throng-colour-surface);
+  color: var(--throng-colour-text);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.panel-type-form__confirm {
+  border-color: var(--throng-colour-accent) !important;
+  background: var(--throng-colour-accent) !important;
+  color: #fff !important;
+}
+
+.panel-type-form__confirm:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.panel-body--form,
+.panel-body--terminal {
+  width: 100%;
+  height: 100%;
+}
+
+.panel-type-form__exit {
+  padding: 6px 10px;
+  border: 1px solid var(--throng-colour-danger);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--throng-colour-danger) 12%, transparent);
+  color: var(--throng-colour-text);
+  font-size: 0.85em;
+}
