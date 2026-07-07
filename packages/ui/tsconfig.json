@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  // The renderer (src/renderer, React + .tsx) is built by Vite, not tsc — see
+  // vite.config.ts. tsc compiles only the main and preload processes here.
+  "include": ["src/main/**/*", "src/preload/**/*"],
+  "references": [
+    { "path": "../core" },
+    { "path": "../ipc-contract" }
+  ]
+}
