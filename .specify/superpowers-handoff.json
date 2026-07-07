@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-07-05T20:42:02.5373334Z",
+  "feature_directory": "specs/006-editor-panel-type",
+  "source_of_truth": {
+    "constitution": ".specify/memory/constitution.md",
+    "spec": "specs/006-editor-panel-type/spec.md",
+    "plan": "specs/006-editor-panel-type/plan.md",
+    "tasks": "specs/006-editor-panel-type/tasks.md"
+  },
+  "supersedes": [
+    "speckit.implement"
+  ],
+  "executor": "superpowers",
+  "capabilities": [
+    "executing-plans",
+    "test-driven-development",
+    "verification-before-completion",
+    "requesting-code-review",
+    "finishing-a-development-branch"
+  ],
+  "status": "complete",
+  "blocked_reason": null,
+  "artifact_owner": "claude",
+  "review_only_agents": [],
+  "notes": null,
+  "last_snapshot_id": "20260705T2042025196882Z-complete",
+  "instructions": "Use /speckit-superpowers-bridge (Claude Code) or $speckit-superpowers-bridge (Codex). The bridge orchestrates native Superpowers skills against tasks.md; do not run speckit.implement and do not invoke superpowers:writing-plans / :brainstorming for an active Spec Kit feature.",
+  "artifacts_sha256": {
+    "spec.md": "9cce7bf85695b37903c5035b5fb506f7281ce098b9435a4eecf6c9168bf45d99",
+    "plan.md": "dcb400769ee027c9cdccd5db6dddcb18b1a2a5b4633c5c2a1bae93ad2f16e5ec",
+    "tasks.md": "ab8c378664bc6a3b7403330974b87db503e6e2292703d238169fa8af064d7285"
+  }
+}

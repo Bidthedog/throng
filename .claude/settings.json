@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+    ],
+    "deny": [
+    ],
+    "ask": [
+    ]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true
+  },
+  "enabledMcpjsonServers": [
+  ]
+}

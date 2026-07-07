@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "extensions": {
+    "agent-context": {
+      "version": "1.0.0",
+      "source": "local",
+      "manifest_hash": "sha256:9a1dc02d2d0139bb03860392ecacef79183be2c442feda2f9ccaa4e5907b1e47",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "claude": [
+          "speckit.agent-context.update"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-06-25T10:11:19.890735+00:00"
+    },
+    "speckit-superpowers-bridge": {
+      "version": "1.1.0",
+      "source": "local",
+      "manifest_hash": "sha256:f83ce1777a458c2ef9f019fec92065ba5621382f89d6d4db4282ad550772329f",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "claude": [
+          "speckit.speckit-superpowers-bridge.handoff",
+          "speckit.speckit-superpowers-bridge.guard",
+          "speckit.speckit-superpowers-bridge.execute",
+          "speckit.superpowers-bridge"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-06-25T10:12:19.815002+00:00"
+    }
+  }
+}
