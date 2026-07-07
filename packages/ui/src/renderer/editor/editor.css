@@ -1,0 +1,53 @@
+/* Inline CodeMirror editor view (006). Themed from the active theme's editor
+ * colour tokens (var(--throng-colour-editor*)) so a theme change repaints live. */
+
+.editor-panel {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--throng-colour-editorBg, #0c0f16);
+  color: var(--throng-colour-editorFg, #d6deea);
+}
+
+.editor-panel .cm-editor {
+  height: 100%;
+  background: var(--throng-colour-editorBg, #0c0f16);
+  color: var(--throng-colour-editorFg, #d6deea);
+  font-size: var(--throng-font-editor-size, 14px);
+  font-weight: var(--throng-font-editor-weight);
+  font-style: var(--throng-font-editor-style);
+}
+
+.editor-panel .cm-editor.cm-focused {
+  outline: none;
+}
+
+.editor-panel .cm-scroller {
+  /* Editor text font (themeable, monospace by default — 006 FR-074). */
+  font-family: var(--throng-font-editor-family, "Consolas, 'Courier New', monospace");
+}
+
+.editor-panel .cm-gutters {
+  background: var(--throng-colour-editorBg, #0c0f16);
+  color: var(--throng-colour-textMuted, #93a0b4);
+  border-right: 1px solid var(--throng-colour-border, #2a3344);
+}
+
+.editor-panel .cm-activeLineGutter,
+.editor-panel .cm-activeLine {
+  background: color-mix(in srgb, var(--throng-colour-editorFg, #d6deea) 6%, transparent);
+}
+
+.editor-panel .cm-cursor,
+.editor-panel .cm-dropCursor {
+  border-left-color: var(--throng-colour-editorCursor, #6aa3ff);
+}
+
+.editor-panel .cm-selectionBackground,
+.editor-panel .cm-content ::selection {
+  background: var(--throng-colour-editorSelection, #2a3a57) !important;
+}
+
+.editor-panel .cm-focused .cm-selectionBackground {
+  background: var(--throng-colour-editorSelection, #2a3a57) !important;
+}
