@@ -1,6 +1,33 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 3.10.1 → 3.11.0
+Bump rationale: MINOR. One additive governance rule (2026-07-08, feature 007 FR-048), no
+                principle removed or redefined: Development Workflow & Quality Gates gains a
+                "Configuration-editor completeness" rule — every configurable application setting,
+                key binding, and theme token MUST be exposed and editable through the visual
+                preference editors, and when new configuration is added the corresponding editor
+                MUST be updated to expose it (no configuration editable only by hand-editing JSON).
+                The rule is enforced by a declarative editor-metadata registry (one descriptor per
+                configurable key, in @throng/core) plus a completeness test asserting every
+                configurable key/action/token has a descriptor — a newly added config key without an
+                editor descriptor fails the test. The code-review gate is extended with a matching
+                configuration-editor-completeness check. Materially expanded, additive workflow
+                guidance → MINOR.
+Modified principles: none (rule added under Development Workflow & Quality Gates; the code-review
+                gate is extended to verify configuration-editor completeness). Titles unchanged.
+Added sections: none. Removed sections: none.
+Templates / artifacts reviewed:
+  ✅ .specify/templates/plan-template.md  — Constitution Check references the constitution
+       dynamically; the new rule is picked up automatically, no edit needed.
+  ✅ .specify/templates/spec-template.md  — principle-agnostic; no changes required.
+  ✅ .specify/templates/tasks-template.md — principle-agnostic; a feature that adds configuration
+       MUST include the editor-descriptor + completeness-test tasks; enforced at /speckit-tasks time.
+  ✅ .specify/extensions.yml              — no before/after_constitution hooks registered.
+  ✅ specs/007-preferences-editor/*       — the FR-025a editor-metadata registry + FR-047 completeness
+       tests (settings/keybindings/theme) already implement and verify this rule; spec FR-048 records it.
+Deferred TODOs: none.
+                ---- prior amendment (historical) ----
 Version change: 3.10.0 → 3.10.1
 Bump rationale: PATCH. Clarification only — no new obligation and no principle changed (2026-07-03):
                 the Incremental Delivery rule now explicitly cross-references ROADMAP.md as the
@@ -735,13 +762,28 @@ while sub-workspaces give the user one deliberate, bounded place to combine proj
   This reconciliation is part of **`/speckit-converge`** and the definition of done: a change
   MUST NOT be considered complete, and a PR MUST NOT be merged, while any of these documents
   disagrees with the shipped behaviour of the change.
+- **Configuration editors MUST stay in sync with all configurable options (NON-NEGOTIABLE).**
+  Every configurable application setting, key binding, and theme token MUST be exposed and editable
+  through the visual preference editors; when new configuration is added to the application, the
+  corresponding editor MUST be updated to expose it, so no configuration is editable only by
+  hand-editing JSON. This MUST be enforced by a **declarative editor-metadata registry** (a single
+  authoritative source with one descriptor per configurable setting / key-binding action / theme
+  token, living in the platform-agnostic core) **plus a completeness test** asserting every
+  configurable key/action/token has exactly one descriptor — so a newly added config key without an
+  editor descriptor **fails the test**. A change that adds or alters configurable options MUST NOT be
+  considered complete, and a PR MUST NOT be merged, while any configurable key lacks its editor
+  descriptor. (A raw-JSON escape hatch MAY be offered in addition to, never instead of, the visual
+  editor.)
 - Code review MUST verify the engineering gates: Red-Green-Refactor with the
   unit/integration/E2E layers present (V), SOLID/DRY/YAGNI adherence (VIII),
   constructor DI wired only through each boundary's single composition-root
   container (IX), configuration sourced from injected settings rather than
-  hardcoded (X), and that the project documentation (README, CONTRIBUTING,
+  hardcoded (X), that the project documentation (README, CONTRIBUTING,
   ROADMAP) has been brought current with any user-facing, setup, architecture,
-  or capability change (Documentation currency rule above).
+  or capability change (Documentation currency rule above), and that any newly
+  added configurable option is exposed through the visual preference editors and
+  covered by the editor-metadata completeness test (Configuration-editor
+  completeness rule above).
 
 ## Governance
 
@@ -757,4 +799,4 @@ while sub-workspaces give the user one deliberate, bounded place to combine proj
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 3.10.1 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-03
+**Version**: 3.11.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-08
