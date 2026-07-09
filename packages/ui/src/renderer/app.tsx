@@ -22,6 +22,7 @@ import { Chevron } from './panes/chevron.js';
 import { VerticalPanelStack } from './panes/vertical-panel-stack.js';
 import { FileExplorerPane } from './panes/file-explorer-pane.js';
 import { usePersistedBool } from './panes/use-persisted-bool.js';
+import { TitleBar } from './title-bar/title-bar.js';
 
 /** Fixed width (px) of a collapsed side-pane rail. Sized so the 22px collapse
  *  button (pinned 5px from the outer edge) has an equal 5px margin on both sides. */
@@ -106,6 +107,24 @@ function KeybindingsHandler({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [keybindings]);
   return null;
+}
+
+/**
+ * The application-drawn title bar for the MAIN window (007, FR-001/003/005): the
+ * app/active-context identity (the same signal `TitleManager` sends to the OS
+ * taskbar) plus the dominant project colour, and the cog (main window only). The
+ * OS title bar is gone (frameless window); this bar is its replacement.
+ */
+function AppTitleBar(): ReactElement {
+  const { activeProject } = useProjects();
+  const { layout } = useWorkspace();
+  const { elevated } = useCapabilities();
+  const project = activeProject?.name ?? 'No project';
+  const context = layout ? activeContextLabel(layout) : '';
+  const identity = `throng — ${[project, context].filter(Boolean).join(' · ')}${
+    elevated ? ' [ADMIN]' : ''
+  }`;
+  return <TitleBar identity={identity} colour={activeProject?.colour} showCog />;
 }
 
 /**
@@ -285,6 +304,7 @@ export function App(): ReactElement {
       <WorkspaceProvider client={workspace} activeProjectId={activeProject?.id ?? null}>
         <DetachProvider>
         <div className="throng-root">
+          <AppTitleBar />
           <div
             ref={shellRef}
             className={`throng-shell${sidebarWidth.dragging || explorerWidth.dragging ? ' throng-shell--no-anim' : ''}`}

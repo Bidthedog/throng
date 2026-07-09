@@ -92,8 +92,58 @@ export {
   normalizeToken,
   resolveAction,
 } from './config/keybindings.js';
-export type { Theme, ThemeFonts } from './config/theme.js';
+export type { Theme, ThemeFonts, IconValue, TextCase, TypographyRole, ThemeFontRole } from './config/theme.js';
 export { THRONG_THEME, resolveColour, resolveIcon, toCssVariables } from './config/theme.js';
+// Themes editor + icon packs + fonts (007).
+export { THEME_METADATA, buildThemeMetadata, descriptorForThemeToken, themeEditableTokens } from './config/theme-metadata.js';
+export { parseFontStack, serializeFontStack } from './config/font-stack.js';
+export type { IconPackManifest } from './config/icon-pack.js';
+export { parseIconPack, resolveIconValue } from './config/icon-pack.js';
+export type { ThemeRenameResult } from './config/theme-ops.js';
+export { isValidThemeName, checkRename, activateTheme } from './config/theme-ops.js';
+export { matchFamilies } from './config/font-typeahead.js';
+export type { SearchableField, SearchableDescriptor } from './config/settings-search.js';
+export { searchTokens, fieldHaystack, matchesQuery, filterFields } from './config/settings-search.js';
+export { DEFAULT_THEMES, ALL_DEFAULT_THEMES } from './config/default-themes/index.js';
+export type { OnEntrySnapshot, WritePlan, WritePlanEntry } from './config/theme-reset.js';
+export {
+  resetCurrentSettings,
+  resetCurrentKeybindings,
+  resetCurrentTheme,
+  isBuiltInTheme,
+  revertAll,
+} from './config/theme-reset.js';
+export type { IFontEnumeration } from './abstractions/font-enumeration.js';
+// Editor metadata registry (007, FR-025a) — the declarative source the visual
+// preference editors render from, plus the completeness/path helpers.
+export type { ControlKind, FieldDescriptor, MetadataRegistry, RegistryAudit } from './config/metadata.js';
+export {
+  leavesOf,
+  tokensOf,
+  getAtPath,
+  setAtPath,
+  auditRegistry,
+  assertEveryKeyDescribed,
+} from './config/metadata.js';
+export {
+  SETTINGS_METADATA,
+  SETTINGS_INTERNAL_KEYS,
+  settingsLeaves,
+} from './config/settings-metadata.js';
+export { KEYBINDINGS_METADATA } from './config/keybindings-metadata.js';
+export type { CaptureEvent } from './config/chord-capture.js';
+export {
+  captureToken,
+  isBindableChord,
+  isReservedChord,
+  RESERVED_CHORDS,
+  EXCLUDED_KEYS,
+  findConflict,
+  applyReplace,
+  applyReassign,
+  applyAdd,
+  applyRemove,
+} from './config/chord-capture.js';
 
 // Project domain (Principle I).
 export type { Project, ProjectInput } from './projects/project.js';

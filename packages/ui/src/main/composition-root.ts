@@ -2,7 +2,14 @@ import 'reflect-metadata';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Container } from 'inversify';
-import type { IConfigSettings, IConfigStore, IFileWatcher, IUiSettings } from '@throng/core';
+import type {
+  IConfigSettings,
+  IConfigStore,
+  IFileWatcher,
+  IFontEnumeration,
+  IUiSettings,
+} from '@throng/core';
+import { WindowsFontEnumeration } from '@throng/platform-windows';
 import { UI_TYPES } from './tokens.js';
 import { DaemonClient } from './daemon-client.js';
 import { FileConfigStore } from './config-store.js';
@@ -69,5 +76,9 @@ export function createUiContainer(): Container {
   container
     .bind<IFileWatcher>(UI_TYPES.FileWatcher)
     .toConstantValue(new NodeFileWatcher(configSettings.hotReloadDebounceMs));
+  // 007: the installed-font enumeration OS seam (Windows impl for the first target).
+  container
+    .bind<IFontEnumeration>(UI_TYPES.FontEnumeration)
+    .toConstantValue(new WindowsFontEnumeration());
   return container;
 }

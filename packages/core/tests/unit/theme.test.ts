@@ -112,6 +112,21 @@ describe('Theme token resolution (FR-030)', () => {
     expect(vars['--throng-font-panel-family']).toBe('Courier New');
   });
 
+  it('defines the button style tokens + emits their CSS vars (H5, FR-046a)', () => {
+    for (const token of ['buttonBg', 'buttonText', 'buttonHoverBg', 'buttonHoverText']) {
+      expect(THRONG_THEME.colours[token], token).toBeTruthy();
+    }
+    expect(THRONG_THEME.typography?.button, 'button role').toBeDefined();
+    const vars = toCssVariables(THRONG_THEME);
+    expect(vars['--throng-colour-buttonBg']).toBe(THRONG_THEME.colours.buttonBg);
+    expect(vars['--throng-colour-buttonText']).toBe(THRONG_THEME.colours.buttonText);
+    expect(vars['--throng-colour-buttonHoverBg']).toBe(THRONG_THEME.colours.buttonHoverBg);
+    expect(vars['--throng-colour-buttonHoverText']).toBe(THRONG_THEME.colours.buttonHoverText);
+    expect(vars['--throng-font-button-family']).toBeTruthy();
+    expect(vars['--throng-font-button-size']).toBeTruthy();
+    expect(vars['--throng-font-button-weight']).toBeTruthy();
+  });
+
   it('emits a complete CSS custom-property map merged over defaults', () => {
     const sparse: Theme = {
       name: 'Sparse',

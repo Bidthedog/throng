@@ -10,6 +10,7 @@ import { PanelRenameSync } from './workspace/panel-rename-sync.js';
 import { PanelDestroySync } from './workspace/panel-destroy-sync.js';
 import { PanelStateSync } from './workspace/panel-state-sync.js';
 import { EditorChrome } from './editor/editor-chrome.js';
+import { TitleBar } from './title-bar/title-bar.js';
 import {
   SubWorkspaceWindowContext,
   type SubWorkspaceWindowIdentity,
@@ -124,6 +125,13 @@ export function SubWorkspaceApp({ subWorkspaceId }: { subWorkspaceId: string }):
           {/* Editor keybindings + save/discard/notice dialogs — so a sub-workspace-
               owned editor can be saved and destroyed here too (FR-077). */}
           <div className="throng-root">
+            {/* Sub-workspace custom title bar (007, FR-007): identity + window
+                controls, NO cog (the preferences entry point is main-window only). */}
+            <TitleBar
+              identity={`throng — ${identity?.name ?? 'Sub-workspace'}`}
+              colour={identity?.colour}
+              showCog={false}
+            />
             <div
               className="throng-shell throng-shell--subworkspace"
               data-testid="subworkspace-window"

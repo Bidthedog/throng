@@ -29,12 +29,15 @@ interface ConfigState {
   settings: AppSettings;
   theme: Theme;
   keybindings: Keybindings;
+  /** True once the first config payload has arrived (used to snapshot on-entry state). */
+  loaded: boolean;
 }
 
 const DEFAULT_STATE: ConfigState = {
   settings: DEFAULT_APP_SETTINGS,
   theme: THRONG_THEME,
   keybindings: DEFAULT_KEYBINDINGS,
+  loaded: false,
 };
 
 const ConfigContext = createContext<ConfigState>(DEFAULT_STATE);
@@ -50,6 +53,7 @@ function toState(
         ? ({ ...THRONG_THEME, ...(payload.theme as Partial<Theme>) } as Theme)
         : THRONG_THEME,
     keybindings: payload.keybindings ? parseKeybindings(payload.keybindings) : DEFAULT_KEYBINDINGS,
+    loaded: true,
   };
 }
 
@@ -84,3 +88,13 @@ export function useActiveTheme(): Theme {
 export function useKeybindings(): Keybindings {
   return useContext(ConfigContext).keybindings;
 }
+
+/** True once the first config payload has arrived (for on-entry snapshotting). */
+export function useConfigLoaded(): boolean {
+  return useContext(ConfigContext).loaded;
+}
+
+// Renderer config-write plumbing (007, T010): the base helpers every preferences
+// tab's apply-client builds on — re-exported here so config consumers have one
+// import site for reading (hooks above) and writing config.
+export { writeConfig, debounce, type ConfigWriteResult, type Debounced } from './write-config.js';

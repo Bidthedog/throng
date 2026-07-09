@@ -1,0 +1,83 @@
+import { describe, it, expect } from 'vitest';
+import {
+  SETTINGS_METADATA,
+  SETTINGS_INTERNAL_KEYS,
+  settingsLeaves,
+} from '../../src/config/settings-metadata.js';
+import { assertEveryKeyDescribed, auditRegistry, leavesOf } from '../../src/config/metadata.js';
+import { DEFAULT_APP_SETTINGS } from '../../src/config/app-settings.js';
+
+describe('SETTINGS_METADATA completeness (FR-047)', () => {
+  it('describes every configurable settings leaf and no unknown keys', () => {
+    const keys = settingsLeaves();
+    expect(() => assertEveryKeyDescribed(keys, SETTINGS_METADATA)).not.toThrow();
+    // no missing/unknown/duplicated
+    expect(auditRegistry(keys, SETTINGS_METADATA)).toEqual({
+      missing: [],
+      unknown: [],
+      duplicated: [],
+    });
+  });
+
+  it('excludes only the internal version marker from the configurable set', () => {
+    const allLeaves = leavesOf(DEFAULT_APP_SETTINGS);
+    const configurable = settingsLeaves();
+    expect(allLeaves).toContain('version');
+    expect(configurable).not.toContain('version');
+    // Every non-internal leaf is configurable.
+    for (const leaf of allLeaves) {
+      if (!SETTINGS_INTERNAL_KEYS.includes(leaf)) expect(configurable).toContain(leaf);
+    }
+  });
+
+  it('has unique descriptor keys', () => {
+    const seen = new Set<string>();
+    for (const d of SETTINGS_METADATA) {
+      expect(seen.has(d.key), `duplicate ${d.key}`).toBe(false);
+      seen.add(d.key);
+    }
+  });
+});
+
+describe('SETTINGS_METADATA control types (FR-028/029)', () => {
+  const byKey = new Map(SETTINGS_METADATA.map((d) => [d.key, d]));
+
+  it('enumerated leaves are a constrained select with the right allowed values', () => {
+    const confirm = byKey.get('confirmations.destroyProject');
+    expect(confirm?.control).toBe('select');
+    expect(confirm?.allowedValues).toEqual(['none', 'single', 'double']);
+
+    expect(byKey.get('explorer.openMode')?.allowedValues).toEqual(['single', 'double']);
+    expect(byKey.get('explorer.deleteMode')?.allowedValues).toEqual(['recycle', 'permanent']);
+    expect(byKey.get('explorer.dragCopyModifier')?.allowedValues).toEqual(['ctrl', 'shift', 'alt']);
+    expect(byKey.get('editor.saveAllScope')?.allowedValues).toEqual(['tab', 'project', 'all']);
+    expect(byKey.get('editor.defaultLineEnding')?.allowedValues).toEqual(['lf', 'crlf', 'cr']);
+  });
+
+  it('every descriptor with allowedValues uses a choice control, never text', () => {
+    for (const d of SETTINGS_METADATA) {
+      if (d.allowedValues) {
+        expect(['select', 'multiselect', 'enum'], d.key).toContain(d.control);
+      }
+    }
+  });
+
+  it('matches control to value type', () => {
+    expect(byKey.get('editor.autoSave')?.control).toBe('toggle');
+    expect(byKey.get('editor.warnOnMissingFile')?.control).toBe('toggle');
+    expect(byKey.get('panes.projects.maxWidth')?.control).toBe('number');
+    expect(byKey.get('behaviour.tabHoverActivateMs')?.control).toBe('number');
+    expect(byKey.get('editor.maxOpenFileBytes')?.control).toBe('number');
+    // string arrays → array
+    expect(byKey.get('explorer.excludeGlobs')?.control).toBe('array');
+    expect(byKey.get('terminals.disabledBuiltins')?.control).toBe('array');
+  });
+
+  it('groups every descriptor into a labelled section', () => {
+    for (const d of SETTINGS_METADATA) {
+      expect(d.group.length, d.key).toBeGreaterThan(0);
+      expect(d.label.length, d.key).toBeGreaterThan(0);
+      expect(d.description.length, d.key).toBeGreaterThan(0);
+    }
+  });
+});

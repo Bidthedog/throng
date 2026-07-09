@@ -5,4 +5,6 @@ export const UI_TYPES = {
   ConfigSettings: Symbol.for('throng:IConfigSettings'),
   ConfigStore: Symbol.for('throng:IConfigStore'),
   FileWatcher: Symbol.for('throng:IFileWatcher'),
+  // 007: OS seam for installed-font enumeration (background-populated font cache).
+  FontEnumeration: Symbol.for('throng:IFontEnumeration'),
 } as const;

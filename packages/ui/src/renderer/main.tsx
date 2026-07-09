@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CompositionRoot, SubWorkspaceCompositionRoot } from './composition-root.js';
 import { parseWindowIdentity } from './window-identity.js';
+import { PreferencesApp, isPreferencesTab } from './preferences/preferences-app.js';
 import './theme.css';
 
 // Mouse-driven zoom (FR-039): Ctrl+wheel zooms, Ctrl+middle-click resets. Wheel
@@ -27,19 +28,24 @@ function registerMouseZoom(): void {
   });
 }
 
-registerMouseZoom();
-
 // Renderer entry (research D2): mount the two-Pane docking shell through the
 // renderer composition root (#3). A window launched with `?sw=<id>` is a detached
-// sub-workspace window (US7) and mounts the sub-workspace shell instead.
+// sub-workspace window (US7) and mounts the sub-workspace shell; a window launched
+// with `?prefs=<tab>` is the shared preferences window (007) and mounts its own app.
 const container = document.getElementById('root');
 if (!container) throw new Error('Renderer root element #root not found');
 
+const prefsTab = new URLSearchParams(window.location.search).get('prefs');
 const identity = parseWindowIdentity(window.location.search);
+
+// Mouse-driven zoom applies to the workspace windows, not the preferences window.
+if (prefsTab === null) registerMouseZoom();
 
 createRoot(container).render(
   <StrictMode>
-    {identity.kind === 'subworkspace' ? (
+    {prefsTab !== null ? (
+      <PreferencesApp initialTab={isPreferencesTab(prefsTab) ? prefsTab : 'settings'} />
+    ) : identity.kind === 'subworkspace' ? (
       <SubWorkspaceCompositionRoot id={identity.id} />
     ) : (
       <CompositionRoot />

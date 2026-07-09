@@ -29,25 +29,40 @@ let ghost: BrowserWindow | null = null;
 let ghostReady: Promise<unknown> = Promise.resolve();
 let timer: ReturnType<typeof setInterval> | null = null;
 
+/** Ghost theme tokens. Defaults are the `throng` theme; overwritten live from the
+ *  active theme via {@link setGhostTheme} so the ghost follows the current theme
+ *  (rather than staying the default blue). */
+export interface GhostColours {
+  surface: string;
+  surfaceActive: string;
+  text: string;
+  accent: string;
+  border: string;
+}
+let ghostColours: GhostColours = {
+  surface: '#1e1f23',
+  surfaceActive: '#2a2d34',
+  text: '#e6e6e6',
+  accent: '#6aa3ff',
+  border: '#34363c',
+};
+
 /** The ghost's one-time shell. Content is set later via `__renderGhost`, which
- *  uses `textContent` (no HTML interpolation → no escaping/XSS concerns). */
+ *  uses `textContent` (no HTML interpolation → no escaping/XSS concerns). Colours
+ *  are CSS custom properties on :root, injected/updated by {@link applyGhostColours}
+ *  from the active theme; the literals here are only the pre-theme fallback. */
 function shellHtml(): string {
-  const C = {
-    surface: '#1e1f23',
-    surfaceActive: '#2a2d34',
-    text: '#e6e6e6',
-    accent: '#6aa3ff',
-    border: '#34363c',
-  };
+  const C = ghostColours;
   const doc = `<!doctype html><html><head><meta charset="utf-8"><style>
+    :root{--g-surface:${C.surface};--g-surface-active:${C.surfaceActive};--g-text:${C.text};--g-accent:${C.accent};--g-border:${C.border}}
     html,body{margin:0;background:transparent;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif}
-    .g{opacity:.9;box-shadow:0 8px 24px rgba(0,0,0,.5);border:1px solid ${C.accent};border-radius:6px;box-sizing:border-box}
-    .panel{width:236px;height:156px;background:${C.surface};display:flex;flex-direction:column;overflow:hidden}
-    .panel .h{padding:6px 10px;font-size:12px;color:${C.text};background:${C.surfaceActive};border-bottom:1px solid ${C.border};white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .panel .b{flex:1;opacity:.4;background:repeating-linear-gradient(45deg,transparent,transparent 8px,${C.border} 8px,${C.border} 9px)}
-    .tab{display:inline-block;padding:6px 14px;font-size:12px;color:${C.text};background:${C.surfaceActive}}
+    .g{opacity:.9;box-shadow:0 8px 24px rgba(0,0,0,.5);border:1px solid var(--g-accent);border-radius:6px;box-sizing:border-box}
+    .panel{width:236px;height:156px;background:var(--g-surface);display:flex;flex-direction:column;overflow:hidden}
+    .panel .h{padding:6px 10px;font-size:12px;color:var(--g-text);background:var(--g-surface-active);border-bottom:1px solid var(--g-border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .panel .b{flex:1;opacity:.4;background:repeating-linear-gradient(45deg,transparent,transparent 8px,var(--g-border) 8px,var(--g-border) 9px)}
+    .tab{display:inline-block;padding:6px 14px;font-size:12px;color:var(--g-text);background:var(--g-surface-active)}
     /* Drop-target hint: shows where a cross-window drop will land (item 5 fallback). */
-    .hint{display:none;margin-top:6px;font-size:11px;color:${C.text};background:${C.accent};border-radius:4px;padding:3px 9px;white-space:nowrap;max-width:222px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 4px 12px rgba(0,0,0,.5)}
+    .hint{display:none;margin-top:6px;font-size:11px;color:var(--g-text);background:var(--g-accent);border-radius:4px;padding:3px 9px;white-space:nowrap;max-width:222px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 4px 12px rgba(0,0,0,.5)}
     .hint.show{display:inline-block}
     /* Invalid-drop warning (e.g. dragging a sub-workspace-owned panel out). */
     .hint.warn{background:#c0392b;color:#fff}
@@ -100,7 +115,38 @@ function ensureGhost(): BrowserWindow {
   ghostReady = ghost.webContents.loadURL(shellHtml()).catch(() => {
     /* a destroyed/closing ghost can reject the load; ignore */
   });
+  applyGhostColours(); // in case the theme changed since the shell literals
   return ghost;
+}
+
+/** Push the current theme colours onto the loaded ghost as CSS custom properties. */
+function applyGhostColours(): void {
+  const win = ghost;
+  if (!win || win.isDestroyed()) return;
+  const c = ghostColours;
+  const js =
+    `(()=>{const s=document.documentElement.style;` +
+    `s.setProperty('--g-surface',${JSON.stringify(c.surface)});` +
+    `s.setProperty('--g-surface-active',${JSON.stringify(c.surfaceActive)});` +
+    `s.setProperty('--g-text',${JSON.stringify(c.text)});` +
+    `s.setProperty('--g-accent',${JSON.stringify(c.accent)});` +
+    `s.setProperty('--g-border',${JSON.stringify(c.border)});})()`;
+  void ghostReady.then(() => {
+    if (win.isDestroyed()) return;
+    win.webContents.executeJavaScript(js).catch(() => {
+      /* shell not ready / window gone — ignore */
+    });
+  });
+}
+
+/**
+ * Update the drag ghost's colours from the active theme (FR-030 — the ghost must
+ * follow the theme, not stay the default blue). Applied live if the ghost exists,
+ * and baked into the shell literals for the next ghost that is created.
+ */
+export function setGhostTheme(colours: GhostColours): void {
+  ghostColours = { ...colours };
+  applyGhostColours();
 }
 
 /** Swap the ghost's content for this drag, once its shell has loaded. */
