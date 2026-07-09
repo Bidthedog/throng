@@ -25,6 +25,19 @@ declare global {
       zoomBy?: (steps: number) => void;
       zoomReset?: () => void;
       fullscreenToggle?: () => void;
+      // Custom title bar window controls (007): min/max/close for the sender window.
+      window?: {
+        minimize: () => void;
+        maximize: () => void;
+        close: () => void;
+        isMaximized: () => Promise<boolean>;
+        onMaximizeChange: (cb: (maximized: boolean) => void) => () => void;
+      };
+      // Cog → preferences (007, main window only) + the prefs window's tab-switch push.
+      openPreferences?: (tab: 'settings' | 'keybindings' | 'themes') => void;
+      onPreferencesTab?: (
+        cb: (tab: 'settings' | 'keybindings' | 'themes') => void,
+      ) => () => void;
       // App-close warning when terminals are running (005 / FR-015).
       onAppCloseBegin?: (cb: () => void) => () => void;
       onAppClosePrompt?: (cb: (info: AppClosePromptInfo) => void) => () => void;
@@ -61,6 +74,20 @@ declare global {
         onChange: (
           cb: (payload: { settings?: unknown; theme?: unknown; keybindings?: unknown }) => void,
         ) => () => void;
+        // Preferences editor (007): renderer→main write path + theme/font/icon-pack
+        // discovery. `write` persists raw JSON (validated + confined in main) and the
+        // hot-reload watcher live-applies it (immediate-apply, FR-016/017/042).
+        write?: (id: ThrongConfigDocId, json: string) => Promise<ConfigWriteResult>;
+        readRaw?: (id: ThrongConfigDocId) => Promise<string>;
+        listThemes?: () => Promise<string[]>;
+        renameTheme?: (
+          from: string,
+          to: string,
+        ) => Promise<{ ok: boolean; error?: 'exists' | 'invalid' }>;
+        deleteTheme?: (name: string) => Promise<void>;
+        restoreDefaultThemes?: () => Promise<string[]>;
+        listFonts?: () => Promise<string[]>;
+        listIconPacks?: () => Promise<IconPackInfo[]>;
       };
       // Typed panels — Terminal (005 Phase B): the Flavour dropdown's catalogue
       // (machine-detected built-ins ∪ user-defined), served by UI main.
@@ -226,5 +253,24 @@ export interface FileTreeEntry {
 }
 
 export type FilesOkOrError = { ok: true } | { error: string };
+
+/** Config document identity for the preferences write path (mirrors core ConfigDocId). */
+export type ThrongConfigDocId =
+  | { kind: 'settings' }
+  | { kind: 'keybindings' }
+  | { kind: 'theme'; name: string };
+
+/** Result of `window.throng.config.write` (FR-016/017/042). */
+export type ConfigWriteResult = { ok: true } | { ok: false; error: string };
+
+/** An icon value: a glyph, or a pack-relative image filename (mirrors core IconValue). */
+export type IconValueDto = { glyph: string } | { image: string };
+
+/** One discovered icon pack from `window.throng.config.listIconPacks` (007). */
+export interface IconPackInfo {
+  name: string;
+  assetBase: string;
+  tokens: Record<string, IconValueDto>;
+}
 
 export {};

@@ -13,6 +13,21 @@
   --text: var(--throng-colour-text, #e6ebf2);
   --text-dim: var(--throng-colour-textMuted, #93a0b4);
   --accent: var(--throng-colour-accent, #6aa3ff);
+  /* Raised surfaces (menus, popovers, prefs panels) and their hovered/selected
+     state. The cog menu, the preferences chrome and the window-control hovers all
+     style from these; without the aliases their `var(--surface, …)` fallbacks were
+     always taken and those surfaces never re-themed (FR-030). */
+  --surface: var(--bg-panel);
+  --surface-active: var(--throng-colour-surfaceActive, #222c3d);
+  /* Button style tokens (007, FR-046a). Separate from the generic surface/text
+     tokens; fall back to the generic button styling when a theme predates them. */
+  --btn-bg: var(--throng-colour-buttonBg, var(--bg-panel));
+  --btn-text: var(--throng-colour-buttonText, var(--text));
+  --btn-hover-bg: var(--throng-colour-buttonHoverBg, var(--accent));
+  --btn-hover-text: var(--throng-colour-buttonHoverText, var(--text));
+  --btn-font-family: var(--throng-font-button-family, var(--throng-font-family));
+  --btn-font-size: var(--throng-font-button-size, var(--throng-font-size));
+  --btn-font-weight: var(--throng-font-button-weight, var(--throng-font-weight-normal));
   --sidebar-width: 260px;
   --min-pane: 160px;
   /* Shared header height so the Projects / tab-strip / Files & Folders bottom
@@ -44,6 +59,25 @@ body {
   font-style: var(--throng-font-style, normal);
   text-decoration: var(--throng-font-decoration, none);
   overflow: hidden;
+  /* Text selection is disabled application-wide (chrome, labels, dialogs,
+     buttons — e.g. the key-binding "Bind" dialog). It is re-enabled ONLY where
+     selecting/editing text is the point: form fields, the code editor, and
+     terminals (see the rule below). This applies to every window (main,
+     sub-workspace, preferences) since they share this stylesheet. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The only surfaces that MAY select text: real form fields, the built-in code
+   editor (CodeMirror), and terminals (xterm). Re-enabling on the container
+   cascades to their content. */
+input,
+textarea,
+[contenteditable='true'],
+.cm-editor,
+.xterm {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .throng-shell {
@@ -281,12 +315,20 @@ body {
 }
 
 .project-form__buttons button {
-  background: var(--bg-panel);
+  /* Buttons consume the theme's button tokens (007, FR-046a). */
+  background: var(--btn-bg);
   border: 1px solid var(--border);
-  color: var(--text);
+  color: var(--btn-text);
   border-radius: 4px;
   padding: 5px 12px;
+  font-family: var(--btn-font-family);
+  font-weight: var(--btn-font-weight);
   cursor: pointer;
+}
+
+.project-form__buttons button:hover {
+  background: var(--btn-hover-bg);
+  color: var(--btn-hover-text);
 }
 
 .project-form__buttons button[type='submit'] {
@@ -471,17 +513,19 @@ body {
   cursor: pointer;
 }
 
+/* The New Tab (+) affordance follows the THEME accent (not the active project's
+   dominant colour, which overrides --accent) so it re-themes with the theme. */
 .tab-strip__add:hover {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--throng-colour-accent, #6aa3ff);
+  border-color: var(--throng-colour-accent, #6aa3ff);
 }
 
 /* Drop affordance while dragging a Panel onto "+" to move it into a new Tab (FR-027). */
 .tab-strip__add--over {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  outline: 2px solid var(--accent);
+  color: var(--throng-colour-accent, #6aa3ff);
+  border-color: var(--throng-colour-accent, #6aa3ff);
+  background: color-mix(in srgb, var(--throng-colour-accent, #6aa3ff) 22%, transparent);
+  outline: 2px solid var(--throng-colour-accent, #6aa3ff);
   outline-offset: 1px;
 }
 
@@ -1110,12 +1154,20 @@ body {
 }
 
 .modal__buttons button {
-  background: var(--bg-raised);
+  /* Buttons consume the theme's button tokens (007, FR-046a). */
+  background: var(--btn-bg);
   border: 1px solid var(--border);
-  color: var(--text);
+  color: var(--btn-text);
   border-radius: 5px;
   padding: 6px 14px;
+  font-family: var(--btn-font-family);
+  font-weight: var(--btn-font-weight);
   cursor: pointer;
+}
+
+.modal__buttons button:hover {
+  background: var(--btn-hover-bg);
+  color: var(--btn-hover-text);
 }
 
 .modal__confirm {

@@ -88,6 +88,13 @@ describe('core OS-isolation guard', () => {
     // (which must stay OS-free, research D1) is automatically in scope. Assert
     // each expected directory is actually represented so coverage can't silently
     // regress if the scan ever changes (T004).
+    //
+    // 007 (preferences editor, T003): the new pure config modules — metadata,
+    // settings/keybindings/theme metadata registries, chord-capture,
+    // font-typeahead, icon-pack, theme-reset, and config/default-themes/ — all
+    // live under core/src/config/, so the recursive scan above keeps them
+    // OS/DOM-free automatically; '/config/' below is the sentinel that guarantees
+    // that directory stays represented in the scan.
     const files = (await collectTsFiles(coreSrcDir)).map((f) => f.replace(/\\/g, '/'));
     for (const dir of ['/projects/', '/workspace/', '/ports/', '/abstractions/', '/config/']) {
       expect(files.some((f) => f.includes(dir))).toBe(true);

@@ -85,8 +85,11 @@ export function parseKeybindings(raw: unknown): Keybindings {
 
 /** Build the canonical binding token for an event: `Ctrl+Shift+Alt+<key|gesture>`. */
 export function eventToToken(ev: KeyEvent): string | null {
-  const tail = ev.gesture ?? ev.key;
-  if (!tail) return null;
+  const raw = ev.gesture ?? ev.key;
+  if (!raw) return null;
+  // The spacebar reports DOM key ' ' — canonicalise to 'Space' so chords resolve
+  // consistently and reserved combos (e.g. Alt+Space) can be matched (007, FR-032a).
+  const tail = raw === ' ' ? 'Space' : raw;
   const parts: string[] = [];
   if (ev.ctrl) parts.push('Ctrl');
   if (ev.shift) parts.push('Shift');

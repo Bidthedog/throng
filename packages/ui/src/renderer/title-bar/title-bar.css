@@ -1,0 +1,159 @@
+/* Custom application title bar (007, FR-001/002/004/006). A full-width bar at the
+   very top of the window, the same height as the panes header bar and visually
+   distinct from it. Only present when a <TitleBar/> is rendered; the shell then
+   shifts down by the bar's height (`:has(.title-bar)` so sub-workspace windows
+   without a bar stay unaffected until US8). */
+.throng-root {
+  --title-bar-height: var(--pane-header-height, 34px);
+}
+
+.throng-root:has(.title-bar) .throng-shell {
+  top: var(--title-bar-height);
+}
+
+.title-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--title-bar-height);
+  z-index: 15;
+  display: flex;
+  align-items: stretch;
+  box-sizing: border-box;
+  /* Distinct from the panes bar below it: a slightly darker app-chrome shade. */
+  background: var(--throng-colour-appBg, var(--bg));
+  border-bottom: 1px solid var(--border);
+  /* The bar is the OS window drag handle; interactive children opt out below. */
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.title-bar__drag-zone {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 10px;
+  -webkit-app-region: drag;
+}
+
+.title-bar__identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-dim, var(--text));
+  font-size: 12px;
+}
+
+.title-bar__dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+}
+
+.title-bar__identity-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title-bar__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  -webkit-app-region: no-drag;
+}
+
+/* Extensible action area (FR-006): the cog today, more actions later. */
+.title-bar__action,
+.cog-menu__button {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim, var(--text));
+  cursor: pointer;
+}
+
+.title-bar__action:hover,
+.cog-menu__button:hover {
+  background: var(--surface, rgba(255, 255, 255, 0.08));
+  color: var(--text);
+}
+
+.cog-menu {
+  position: relative;
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+
+.cog-menu__list {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 160px;
+  margin-top: 2px;
+  padding: 4px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface, #1a1f2b);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  -webkit-app-region: no-drag;
+}
+
+.cog-menu__item {
+  text-align: left;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cog-menu__item:hover {
+  background: var(--surface-active, rgba(255, 255, 255, 0.1));
+}
+
+.window-controls {
+  display: flex;
+  align-items: stretch;
+  -webkit-app-region: no-drag;
+}
+
+.window-control {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim, var(--text));
+  cursor: pointer;
+}
+
+.window-control:hover {
+  background: var(--surface, rgba(255, 255, 255, 0.08));
+  color: var(--text);
+}
+
+.window-control--close:hover {
+  background: var(--danger, #e14b4b);
+  color: #fff;
+}

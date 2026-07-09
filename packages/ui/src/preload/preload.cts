@@ -122,6 +122,29 @@ contextBridge.exposeInMainWorld('throng', {
     // NB: the active/selected Panel is deliberately NOT relayed (revised
     // 2026-07-02) — selection/focus is window-local.
   },
+  // Custom title bar window controls (007): the frameless windows draw their own
+  // min/max/close; these relay to the sender's BrowserWindow (FR-002/004).
+  window: {
+    minimize: () => ipcRenderer.send('throng:window:minimize'),
+    maximize: () => ipcRenderer.send('throng:window:maximize'),
+    close: () => ipcRenderer.send('throng:window:close'),
+    isMaximized: (): Promise<boolean> => ipcRenderer.invoke('throng:window:isMaximized'),
+    onMaximizeChange: (cb: (maximized: boolean) => void) => {
+      const handler = (_event: unknown, maximized: boolean): void => cb(maximized);
+      ipcRenderer.on('throng:window:maximizeChanged', handler);
+      return () => ipcRenderer.removeListener('throng:window:maximizeChanged', handler);
+    },
+  },
+  // Cog → preferences (007, main window only): create-or-focus the single shared
+  // preferences window on the chosen tab (FR-005/008/009/010).
+  openPreferences: (tab: 'settings' | 'keybindings' | 'themes') =>
+    ipcRenderer.send('throng:preferences:open', tab),
+  // The preferences renderer subscribes to tab switches when the window is reused.
+  onPreferencesTab: (cb: (tab: 'settings' | 'keybindings' | 'themes') => void) => {
+    const handler = (_event: unknown, tab: 'settings' | 'keybindings' | 'themes'): void => cb(tab);
+    ipcRenderer.on('throng:preferences:tab', handler);
+    return () => ipcRenderer.removeListener('throng:preferences:tab', handler);
+  },
   // User config (settings + active theme): pull on mount, then subscribe to
   // hot-reload pushes when the JSON files change (FR-030/031/033).
   config: {
@@ -131,6 +154,24 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.on('throng:config', handler);
       return () => ipcRenderer.removeListener('throng:config', handler);
     },
+    // Preferences editor (007): the renderer→main write path. `write` persists a
+    // config document as raw JSON (validated + confined in main); the existing
+    // hot-reload watcher then live-applies it (immediate-apply, FR-016/017/042).
+    write: (id: unknown, json: string) => ipcRenderer.invoke('throng:config:write', id, json),
+    // Raw on-disk text of a config document, for the JSON editor (007 US5/FR-043).
+    readRaw: (id: unknown): Promise<string> => ipcRenderer.invoke('throng:config:readRaw', id),
+    // Theme file management + discovery for the Themes tab (handlers land with the
+    // Themes/fonts/icon-pack phases — the surface is exposed here up front).
+    listThemes: (): Promise<string[]> => ipcRenderer.invoke('throng:config:listThemes'),
+    renameTheme: (from: string, to: string) =>
+      ipcRenderer.invoke('throng:config:renameTheme', from, to),
+    deleteTheme: (name: string) => ipcRenderer.invoke('throng:config:deleteTheme', name),
+    restoreDefaultThemes: (): Promise<string[]> =>
+      ipcRenderer.invoke('throng:config:restoreDefaultThemes'),
+    // Installed-font typeahead source (cached; may be empty → curated fallback).
+    listFonts: (): Promise<string[]> => ipcRenderer.invoke('throng:config:listFonts'),
+    // Discovered icon packs ({ name, assetBase }); resolved by the main process.
+    listIconPacks: (): Promise<unknown[]> => ipcRenderer.invoke('throng:config:listIconPacks'),
   },
   // Typed panels — Terminal (005). Phase B: list the Flavour dropdown's catalogue
   // (machine-detected built-ins ∪ user-defined), owned by UI main (no daemon).

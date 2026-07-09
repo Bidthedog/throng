@@ -1,28 +1,42 @@
 import 'reflect-metadata';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell, type WebContents } from 'electron';
 import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
   parseAppSettings,
   parseKeybindings,
+  resolveColour,
   THRONG_THEME,
   type IConfigSettings,
   type IConfigStore,
   type IFileWatcher,
+  type IFontEnumeration,
   type IUiSettings,
   type Theme,
 } from '@throng/core';
 import { createUiContainer, UI_TYPES } from './composition-root.js';
 import { broadcastToWindows, senderWebContentsId } from './broadcast.js';
 import { readConfigPayload, startConfigWatcher, type ConfigPayload } from './config-watcher.js';
+import { registerConfigWriteIpc, registerConfigManagementIpc } from './config-write-ipc.js';
+import { FileConfigStore } from './config-store.js';
+import { FontCache } from './font-cache.js';
+import { IconPackService } from './icon-pack-service.js';
+import { registerWindowControlsIpc, wireWindowMaximizeEvents } from './window-controls-ipc.js';
+import {
+  openPreferences,
+  isPreferencesOpen,
+  isPreferencesTab,
+  type PreferencesWindowDeps,
+} from './preferences-window.js';
 import { acquireSingleInstance } from './single-instance.js';
 import { ensureDaemon } from './daemon-lifecycle.js';
 import { DaemonRpcError, type DaemonClient } from './daemon-client.js';
 import { ElectronDisplayInfo } from './electron-display-info.js';
 import { loadWindowState, saveWindowState } from './window-state.js';
-import { registerGhostIpc } from './ghost-window.js';
+import { registerGhostIpc, setGhostTheme } from './ghost-window.js';
 import { WindowManager } from './window-manager.js';
 import { NodeFileSystem } from './node-file-system.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
@@ -68,12 +82,27 @@ function resolveFromHere(relativePath: string): string {
  * first run (FR-031, research D1). `read` creates each absent file from its
  * defaults; an existing (possibly hand-edited) file is left in place.
  */
-async function ensureDefaultConfig(store: IConfigStore): Promise<void> {
+async function ensureDefaultConfig(store: IConfigStore): Promise<{ firstRun: boolean }> {
+  // First run = the settings file doesn't exist yet. Used to seed the bundled
+  // default themes ONCE (007, FR-045) — a later deletion of a default must stick,
+  // so we never re-seed on subsequent launches (only the explicit "restore
+  // defaults" action re-creates a deleted default).
+  let firstRun = false;
+  try {
+    await readFile(store.pathOf({ kind: 'settings' }), 'utf8');
+  } catch {
+    firstRun = true;
+  }
   await store.read({ kind: 'settings' }, DEFAULT_APP_SETTINGS, parseAppSettings);
   await store.read({ kind: 'keybindings' }, DEFAULT_KEYBINDINGS, parseKeybindings);
-  await store.read({ kind: 'theme', name: THRONG_THEME.name }, THRONG_THEME, (raw) =>
-    raw && typeof raw === 'object' ? { ...THRONG_THEME, ...(raw as Partial<Theme>) } : THRONG_THEME,
+  // The default throng theme selects the bundled `throng` glyph pack out of the box
+  // (007, FR-040b). Kept off the THRONG_THEME constant so it stays out of the token
+  // registry; a user's own iconPack choice (raw) always wins.
+  const throngDefault: Theme = { ...THRONG_THEME, iconPack: 'throng' };
+  await store.read({ kind: 'theme', name: THRONG_THEME.name }, throngDefault, (raw) =>
+    raw && typeof raw === 'object' ? { ...throngDefault, ...(raw as Partial<Theme>) } : throngDefault,
   );
+  return { firstRun };
 }
 
 // Zoom is handled in-process because removing the native menu (below) also
@@ -157,6 +186,9 @@ async function createMainWindow(
     minHeight: MIN_HEIGHT,
     title: 'throng',
     backgroundColor: '#10131a',
+    // The application draws its own full-width title bar + window controls (007,
+    // FR-001/002); there is no OS-drawn title bar in addition.
+    frame: false,
     webPreferences: {
       preload: resolveFromHere('../preload/preload.cjs'),
       contextIsolation: true,
@@ -164,6 +196,10 @@ async function createMainWindow(
       sandbox: true,
     },
   });
+  wireWindowMaximizeEvents(window);
+  // If preferences is open (app-modal), a window created afterwards must also be
+  // non-interactive so the prefs window stays the only interactive surface (FR-013).
+  if (isPreferencesOpen()) window.setEnabled(false);
   if (saved?.maximized) window.maximize();
 
   // Persist window geometry on close so size + position are restored (FR-047).
@@ -197,6 +233,8 @@ function createSubWorkspaceWindow(id: string, bounds?: WindowBounds): BrowserWin
     minHeight: MIN_HEIGHT,
     title: 'throng — Sub-workspace',
     backgroundColor: '#10131a',
+    // Sub-workspace windows share the custom title bar (007, FR-007) — no OS frame.
+    frame: false,
     webPreferences: {
       preload: resolveFromHere('../preload/preload.cjs'),
       contextIsolation: true,
@@ -204,6 +242,8 @@ function createSubWorkspaceWindow(id: string, bounds?: WindowBounds): BrowserWin
       sandbox: true,
     },
   });
+  wireWindowMaximizeEvents(window);
+  if (isPreferencesOpen()) window.setEnabled(false); // stay app-modal (FR-013)
   void window.loadFile(resolveFromHere('../renderer/index.html'), { query: { sw: id } });
   return window;
 }
@@ -267,7 +307,10 @@ if (isPrimaryInstance)
   const configStore = container.get<IConfigStore>(UI_TYPES.ConfigStore);
   const configSettings = container.get<IConfigSettings>(UI_TYPES.ConfigSettings);
   const fileWatcher = container.get<IFileWatcher>(UI_TYPES.FileWatcher);
-  await ensureDefaultConfig(configStore);
+  const { firstRun } = await ensureDefaultConfig(configStore);
+  // Seed the 14 bundled default themes on first run so they appear in the Themes
+  // selector out of the box (FR-044/045); a later deletion sticks across restarts.
+  if (firstRun) await (configStore as FileConfigStore).restoreDefaultThemes();
 
   // The renderer pulls the current config (settings + theme + keybindings) on
   // mount (FR-031); it then receives a fresh payload whenever a config file
@@ -277,12 +320,68 @@ if (isPrimaryInstance)
   // Cache the parsed settings in UI main so services (e.g. the editor) can read
   // injected config (Principle X) without a renderer round-trip; kept fresh by the
   // config watcher below.
-  let currentSettings = (await readConfigPayload(configStore)).settings;
+  const initialPayload = await readConfigPayload(configStore);
+  let currentSettings = initialPayload.settings;
+  // Keep the OS-level drag ghost (a separate window that can't consume the app's
+  // CSS vars) styled from the active theme so it follows the theme instead of
+  // staying the default blue (FR-030). Seed it now + refresh on every config change.
+  const pushGhostTheme = (theme: Theme): void =>
+    setGhostTheme({
+      surface: resolveColour(theme, 'surface'),
+      surfaceActive: resolveColour(theme, 'surfaceActive'),
+      text: resolveColour(theme, 'text'),
+      accent: resolveColour(theme, 'accent'),
+      border: resolveColour(theme, 'border'),
+    });
+  pushGhostTheme(initialPayload.theme);
   const broadcast = (payload: ConfigPayload): void => {
     currentSettings = payload.settings;
+    pushGhostTheme(payload.theme);
     broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:config', payload);
   };
   startConfigWatcher({ store: configStore, watcher: fileWatcher, config: configSettings, broadcast });
+
+  // Preferences editor (007): the renderer→main config write path. A validated,
+  // confined write lands on disk atomically; the watcher above then rebroadcasts
+  // `throng:config`, which live-applies the change (immediate-apply, FR-016/042).
+  registerConfigWriteIpc(configStore);
+
+  // Themes tab (007): theme-file management + installed-font cache + icon-pack
+  // discovery. Font enumeration runs in the BACKGROUND (never awaited on the
+  // startup path — SC-010) and writes %APPDATA%\throng\fonts.json; the picker
+  // reads that cache (or a curated fallback). Icon packs are discovered under the
+  // per-user config icon-packs\ directory.
+  const fontCache = new FontCache(
+    container.get<IFontEnumeration>(UI_TYPES.FontEnumeration),
+    app.getPath('userData'),
+  );
+  fontCache.populateInBackground();
+  const iconPackService = new IconPackService(join(configSettings.configRoot, 'icon-packs'));
+  // Seed the pack-format README (FR-040a) + the two bundled packs — the `throng`
+  // glyph pack (default) and the secondary `throng-svg` image pack (FR-040b).
+  // Awaited so both are on disk before the renderer queries `listIconPacks`.
+  await iconPackService.ensureReadme();
+  await iconPackService.ensureBundledPacks();
+  registerConfigManagementIpc({
+    store: configStore as FileConfigStore,
+    listFonts: () => fontCache.read(),
+    listIconPacks: () => iconPackService.listIconPacks(),
+  });
+
+  // Custom title bar (007): window min/max/close relays (each targets its sender
+  // window) + the cog → preferences entry point. The cog opens the single shared,
+  // always-on-top, movable preferences window on the requested tab (FR-002/009/010).
+  registerWindowControlsIpc();
+  const preferencesDeps: PreferencesWindowDeps = {
+    indexHtml: resolveFromHere('../renderer/index.html'),
+    preloadPath: resolveFromHere('../preload/preload.cjs'),
+    // Resolved lazily at open time: `mainWindow` is created further below in this
+    // same startup scope, so this closure captures the current main window (FR-013/013a).
+    getMainWindow: () => (mainWindow.isDestroyed() ? null : mainWindow),
+  };
+  ipcMain.on('throng:preferences:open', (_event, tab: unknown) => {
+    openPreferences(isPreferencesTab(tab) ? tab : 'settings', preferencesDeps);
+  });
 
   // Renderer asks for the daemon health.ping outcome through the preload bridge.
   ipcMain.handle('throng:getDaemonStatus', () => daemonClient.getStatus());

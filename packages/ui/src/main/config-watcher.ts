@@ -7,6 +7,7 @@
 import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
+  isValidThemeName,
   parseAppSettings,
   parseKeybindings,
   THRONG_THEME,
@@ -28,8 +29,13 @@ export interface ConfigPayload {
 /** Read the active settings + the theme they select + keybindings, merged over defaults. */
 export async function readConfigPayload(store: IConfigStore): Promise<ConfigPayload> {
   const settings = await store.read({ kind: 'settings' }, DEFAULT_APP_SETTINGS, parseAppSettings);
+  // Confine the active-theme name to a safe single segment before it becomes a file
+  // path — a hand-edited `appearance.theme` like "../../x" must not read off-tree.
+  const activeThemeName = isValidThemeName(settings.appearance.theme)
+    ? settings.appearance.theme
+    : THRONG_THEME.name;
   const theme = await store.read(
-    { kind: 'theme', name: settings.appearance.theme },
+    { kind: 'theme', name: activeThemeName },
     THRONG_THEME,
     (raw) => (raw && typeof raw === 'object' ? { ...THRONG_THEME, ...(raw as Partial<Theme>) } : THRONG_THEME),
     { create: false }, // a settings-named theme that doesn't exist falls back to defaults, no stray file (#6)

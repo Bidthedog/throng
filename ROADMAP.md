@@ -16,7 +16,7 @@ Planned items are goals, not commitments to a date or order.
 - [x] Lazy loading of projects and sub-workspaces
 - [x] **Settings, Preferences & Themes Hot Reload** — live reflection of settings, themes and key bindings
 - [ ] **Enhanced project list** — search and richer project management
-- [ ] **Settings, Preferences & Theme Editors** — UI for changing application settings
+- [x] **Settings, Preferences & Theme Editors** — a preferences window (opened from the title-bar cog, parented above throng's own windows) with visual Settings, Key Bindings and Themes editors, a debounced typeahead search over Settings (matching any typed word against a setting's name, description or value), a global UI⇄JSON toggle, immediate-apply (no Save), reset-to-default and reset-all; additive multi-chord key bindings (single-key allowed, deletable pills), a multi-select font-family pill editor, dedicated button style tokens, and two bundled icon packs (a `throng` glyph pack + an SVG image pack)
 - [ ] **Live Notifications** — in-app and OS notifications when a terminal needs your attention
 - [ ] **Resource monitor** — keep an eye on throng's own resource usage (CPU, memory, processes) across the UI, daemon and terminals
 
@@ -66,6 +66,8 @@ Planned items are goals, not commitments to a date or order.
 
 ## Configuration & theming
 
-- [x] User-scoped settings and keybindings — human-editable, hot-reloaded
-- [x] Theming — swappable, hot-reloaded theme files
-- [ ] **Additional out-of-the-box themes** — a broader catalogue of bundled themes shipped by default
+- [x] User-scoped settings and keybindings — human-editable, hot-reloaded, and editable from the visual preferences window
+- [x] Theming — swappable, hot-reloaded theme files, with a visual theme editor (colour / size / icon pickers, a multi-select font-family pill editor, and dedicated button style tokens)
+- [x] Custom application title bar — an application-drawn full-width bar replacing the OS chrome (window identity + controls + cog) on the main and sub-workspace windows
+- [x] Icon packs — a glyph or image per token with per-token overrides, rendered at 24px; two bundled packs (a `throng` glyph pack + an SVG image pack) alongside user-supplyable packs
+- [x] **Additional out-of-the-box themes** — 14 bundled default themes (Light, Snake, Gothic, Windows Terminal, Bash, SUBNET *(placeholder)*, VSCode, VI-VIM, English Garden, Matrix, Cyberpunk, Claude, Debian, Ubuntu) alongside the built-in `throng`; brand-derived themes are best-effort approximations

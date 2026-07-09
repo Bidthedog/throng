@@ -44,7 +44,11 @@ export type TypographyRole =
   | 'projectName' // a project's name in the list
   | 'projectPath' // a project's path subtitle
   | 'editor' // inline editor text (CodeMirror) — monospace by default (006)
-  | 'terminal'; // inline terminal text (xterm) — monospace by default (006)
+  | 'terminal' // inline terminal text (xterm) — monospace by default (006)
+  | 'button'; // buttons carry their own typography role (007, FR-046a)
+
+/** An icon value: a glyph string, or an image referenced by a pack-relative filename (007). */
+export type IconValue = { glyph: string } | { image: string };
 
 export interface Theme {
   name: string;
@@ -53,8 +57,12 @@ export interface Theme {
   fonts: ThemeFonts;
   /** Per-section font overrides (each inherits `fonts` for unset fields). */
   typography?: Partial<Record<TypographyRole, ThemeFontRole>>;
-  /** Icon tokens → icon id/source (resolved by the renderer's icon layer). */
+  /** Icon tokens → glyph (the base, always-present glyph defaults). */
   icons: Record<string, string>;
+  /** (007, FR-039) Name of the chosen icon pack — maps all tokens to the pack. */
+  iconPack?: string;
+  /** (007, FR-039) Per-token overrides on top of the pack (glyph or image). */
+  iconOverrides?: Record<string, IconValue>;
 }
 
 /** The default, always-complete theme. Missing tokens in any theme fall back here. */
@@ -87,6 +95,12 @@ export const THRONG_THEME: Theme = {
     unsavedDot: '#e3b341',
     // The active Files & Folders pane highlight (006, FR-015/SC-006).
     activePaneHighlight: '#6aa3ff',
+    // Buttons carry their own style tokens (007, FR-046a) — separate from the
+    // generic surface/text tokens. Hover flips to the accent + the app background.
+    buttonBg: '#222c3d',
+    buttonText: '#e6ebf2',
+    buttonHoverBg: '#6aa3ff',
+    buttonHoverText: '#10131a',
   },
   fonts: {
     family: "'Segoe UI', system-ui, sans-serif",
@@ -103,6 +117,8 @@ export const THRONG_THEME: Theme = {
     paneText: {},
     projectName: { weight: 600 },
     projectPath: { sizePx: 11 },
+    // Buttons carry their own typography role (007, FR-046a); a touch bolder than body.
+    button: { weight: 500 },
     // Editor + terminal default to a monospace face (006, FR-074). Overridable per
     // theme like any other role; sizes pin 14px intentionally.
     editor: { family: "Consolas, 'Courier New', monospace", sizePx: 14 },

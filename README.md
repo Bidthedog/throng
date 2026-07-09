@@ -47,8 +47,24 @@ goal is to pull all of that into a single, simple customisable workspace.
   changes, one buffer is shared per file across all windows, unsaved changes show a shared dot,
   and in-progress edits survive a crash via recovery files. Files open from the tree into the
   last active editor; a synced editor mirrors one document across windows.
-- **Settings & theming** — user-scoped, human-editable settings, keybindings, and themes that
-  hot-reload.
+- **Custom title bar** — an application-drawn, full-width title bar replaces the OS window
+  chrome on every window: window identity + minimise/maximise/close, and (main window only) a
+  **cog** that opens the preferences window. Sub-workspace windows carry the same bar without
+  the cog.
+- **Preferences editor** — a single preferences window (floating above throng's own windows,
+  minimising and restoring with the main window) with visual **Settings**, **Key Bindings**, and
+  **Themes** editors: type-matched controls, a **typeahead search** over Settings that matches any
+  typed word against a setting's name, description or current value (with an inline reset); a
+  press-to-capture shortcut binder that **adds** multiple chords per action (any single non-reserved
+  key allowed), each chord a deletable pill; colour / size / icon pickers and a **multi-select
+  font-family pill** editor; a **global UI⇄JSON toggle** (edit the raw file in the built-in code
+  editor), **immediate-apply** (no Save), and reset-to-default / reset-all. Editing a file's raw JSON
+  while it changes on disk surfaces a reload / keep-editing choice rather than silently discarding
+  either version.
+- **Themes & icon packs** — user-scoped, human-editable, hot-reloading settings, keybindings and
+  themes, plus **14 bundled default themes**, dedicated **button style tokens** (colours + font),
+  and **icon packs** (a glyph or image per token, with per-token overrides). Two packs ship built
+  in — a `throng` glyph pack (default) and an SVG image pack — alongside user-supplyable packs.
 
 What's planned next lives in [`ROADMAP.md`](ROADMAP.md).
 
@@ -112,7 +128,11 @@ defaults, overridable via environment variables:
 | UI ping timeout (ms) | `THRONG_PING_TIMEOUT_MS` | `2000` |
 
 User settings, keybindings, and themes are human-editable files under `%USERPROFILE%\.throng\`
-(`settings.json`, `keybindings.json`, `themes\throng.json`) and hot-reload.
+(`settings.json`, `keybindings.json`, `themes\<name>.json`, and `icon-packs\<pack>\`) and
+hot-reload. Everything is also editable from the visual **preferences window** (title-bar cog),
+which writes those same files and applies changes immediately. The installed-font cache and the
+bundled default-theme source live under `%APPDATA%\throng\`. The config directory is overridable
+via `THRONG_CONFIG_ROOT`.
 
 ## Testing
 

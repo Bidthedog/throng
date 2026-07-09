@@ -1,0 +1,716 @@
+/* Preferences window shell (007, US1). A frameless window: the custom title bar
+   pins to the top, the tabbar + tab panel fill the rest. Everything here must
+   stay usable at the window's minimum size (FR-008/019) — the tabbar is a single
+   flex row whose always-visible tool buttons never wrap out of reach. */
+.prefs-root {
+  position: fixed;
+  inset: 0;
+  --title-bar-height: var(--pane-header-height, 34px);
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}
+
+/* The title bar pins to the top of the prefs window (position:absolute vs the
+   fixed .prefs-root); the body fills the remaining height below it. */
+.prefs-root .title-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+.prefs-body {
+  position: absolute;
+  top: var(--title-bar-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.prefs-tabbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 6px;
+  height: 38px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.prefs-tab {
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-dim, var(--text));
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.prefs-tab:hover {
+  color: var(--text);
+}
+
+.prefs-tab--active {
+  color: var(--text);
+  border-bottom-color: var(--accent, #6aa3ff);
+}
+
+.prefs-tabbar__spacer {
+  flex: 1 1 auto;
+  min-width: 8px;
+}
+
+.prefs-toolbtn {
+  flex: 0 0 auto;
+  align-self: center;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  /* Buttons consume the theme's button tokens (007, FR-046a). */
+  background: var(--btn-bg);
+  color: var(--btn-text);
+  font-family: var(--btn-font-family);
+  font-size: var(--btn-font-size);
+  font-weight: var(--btn-font-weight);
+  cursor: pointer;
+}
+
+.prefs-toolbtn:hover:not(:disabled) {
+  background: var(--btn-hover-bg);
+  color: var(--btn-hover-text);
+}
+
+.prefs-toolbtn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Icon-only toolbar buttons (H3, FR-023/024): square, glyph-centred, no text. */
+.prefs-toolbtn--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  padding: 0;
+}
+
+.prefs-toolbtn--icon svg {
+  display: block;
+}
+
+.prefs-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  background: var(--surface, rgba(255, 255, 255, 0.05));
+  border-bottom: 1px solid var(--border);
+}
+
+.prefs-confirm > span {
+  flex: 1 1 auto;
+}
+
+.prefs-tabpanel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 16px;
+}
+
+.prefs-placeholder {
+  color: var(--text-dim, var(--text));
+  font-size: 13px;
+}
+
+/* Settings form (US2). Grouped sections; each row = label + description (left)
+   and a type-matched control (right). */
+/* Settings typeahead (FR-049): pinned at the top of the Settings section, with an
+   inline reset (×) that appears only once there is a query to clear. */
+.settings-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.settings-search__input {
+  width: 100%;
+  padding: 7px 30px 7px 10px; /* right padding clears the reset button */
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.settings-search__input:focus {
+  outline: none;
+  border-color: var(--throng-colour-accent, var(--accent));
+}
+
+.settings-search__clear {
+  position: absolute;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  color: var(--text-dim, var(--text));
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.settings-search__clear:hover {
+  color: var(--text);
+  background: var(--surface-active);
+}
+
+.settings-search__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim, var(--text));
+}
+
+.settings-group {
+  margin-bottom: 22px;
+}
+
+.settings-group__title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim, var(--text));
+}
+
+.settings-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-row__meta {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-row__label {
+  display: block;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.settings-row__desc {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-dim, var(--text));
+}
+
+.settings-row__control {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  min-width: 180px;
+  justify-content: flex-end;
+}
+
+.ctl__input,
+.ctl--select,
+.ctl__textarea {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  min-width: 120px;
+}
+
+.ctl__input--invalid {
+  border-color: var(--danger, #e14b4b);
+}
+
+.ctl__error {
+  display: block;
+  margin-top: 3px;
+  color: var(--danger, #e14b4b);
+  font-size: 11px;
+}
+
+.ctl--array {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 220px;
+}
+
+.ctl__array-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.ctl__array-row .ctl__input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ctl__array-btn,
+.ctl__array-add {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-dim, var(--text));
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ctl__array-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.ctl--multiselect {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ctl__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.ctl__textarea {
+  min-width: 240px;
+  resize: vertical;
+  font-family: var(--throng-font-editor-family, 'Consolas', monospace);
+}
+
+/* Key Bindings tab (US3 / H2). */
+.keybinding-row {
+  cursor: pointer;
+  /* Double-clicking a row (to add a binding) must not select the row text (FR-031). */
+  user-select: none;
+}
+
+/* Deletable chord pills (H2 / FR-033b). */
+.kb-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 2px 1px 4px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+}
+
+.kb-pill kbd {
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+}
+
+.kb-pill__x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim, var(--text));
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.kb-pill__x:hover {
+  background: var(--danger, #e14b4b);
+  color: #fff;
+}
+
+.kb-ctx-menu {
+  position: fixed;
+  z-index: 45;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--surface, #1a1f2b);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.kb-ctx-menu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.kb-ctx-menu__item:hover {
+  background: var(--surface-active, rgba(255, 255, 255, 0.1));
+}
+
+.keybinding-row:hover {
+  background: var(--surface, rgba(255, 255, 255, 0.04));
+}
+
+.keybinding-chord {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.keybinding-chord kbd {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-family: var(--throng-font-editor-family, 'Consolas', monospace);
+}
+
+.keybinding-chord em {
+  color: var(--text-dim, var(--text));
+  font-size: 12px;
+}
+
+/* Capture modal (US3). */
+.capture-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.capture-modal {
+  min-width: 320px;
+  max-width: 90vw;
+  padding: 18px;
+  background: var(--surface, #1a1f2b);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.capture-modal__title {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.capture-modal__hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-dim, var(--text));
+}
+
+.capture-modal__chord {
+  padding: 12px;
+  text-align: center;
+  font-size: 18px;
+  font-family: var(--throng-font-editor-family, 'Consolas', monospace);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.capture-modal__error {
+  margin: 10px 0 0;
+  color: var(--danger, #e14b4b);
+  font-size: 12px;
+}
+
+.capture-modal__conflict {
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.capture-modal__buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.capture-modal__btn {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.capture-modal__btn--primary {
+  background: var(--accent, #6aa3ff);
+  border-color: var(--accent, #6aa3ff);
+  color: #08111f;
+}
+
+/* Themes tab (US4). */
+.themes-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.themes-toolbar__field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-dim, var(--text));
+}
+
+.themes-toolbar__field > span {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.themes-toolbar__field:has(.ctl__input) {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.themes-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 13px;
+}
+
+.ctl--colour {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.ctl__colour-swatch {
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+}
+
+.ctl__colour-hex {
+  width: 92px;
+  min-width: 0;
+}
+
+.ctl--font {
+  position: relative;
+  min-width: 180px;
+}
+
+/* Multi-select font pill editor (H4, FR-038b). */
+.ctl--font-pills {
+  position: relative;
+  min-width: 200px;
+}
+
+.ctl__pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+}
+
+.ctl__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 3px 1px 7px;
+  border-radius: 10px;
+  background: var(--surface-active, rgba(255, 255, 255, 0.08));
+  font-size: 12px;
+}
+
+.ctl__pill-x {
+  border: none;
+  background: transparent;
+  color: var(--text-dim, var(--text));
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 3px;
+}
+
+.ctl__pill-x:hover {
+  color: var(--danger, #e14b4b);
+}
+
+.ctl__pill-input {
+  flex: 1 1 90px;
+  min-width: 90px;
+  border: none;
+  background: transparent;
+  padding: 3px 2px;
+}
+
+.ctl__font-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--surface, #1a1f2b);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.ctl__font-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.ctl__font-item:hover {
+  background: var(--surface-active, rgba(255, 255, 255, 0.08));
+}
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.icon-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.icon-cell__box {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.icon-cell__img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.icon-cell__name {
+  font-size: 11px;
+  color: var(--text-dim, var(--text));
+}
+
+.icon-cell__override {
+  width: 100%;
+  min-width: 0;
+  font-size: 11px;
+}
+
+/* JSON editor tab (US5). Fills the panel; the CodeMirror view stretches. */
+.json-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.standalone-editor {
+  flex: 1 1 auto;
+  min-height: 200px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.json-tab__error {
+  flex: 0 0 auto;
+  margin-top: 8px;
+  padding: 6px 10px;
+  color: var(--danger, #e14b4b);
+  background: color-mix(in srgb, var(--danger, #e14b4b) 12%, transparent);
+  border-radius: 5px;
+  font-size: 12px;
+}
+
+/* External on-disk change against a dirty buffer (FR-041): the user chooses. */
+.json-tab__conflict {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--throng-colour-accent, #6aa3ff) 14%, transparent);
+  border: 1px solid var(--throng-colour-accent, #6aa3ff);
+  border-radius: 5px;
+  font-size: 12px;
+}
+
+.json-tab__conflict span {
+  flex: 1 1 auto;
+}
