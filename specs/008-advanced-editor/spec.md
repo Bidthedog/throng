@@ -101,6 +101,30 @@ per-language configuration; it introduces **no new daemon RPC and no data-schema
   source (or from a selection-cut) pastes normally at the caret. The full-line marker is **view-local state
   that is invalidated whenever the clipboard changes from another source**, so pasting into or out of another
   application degrades cleanly to plain text plus a trailing newline.
+- Q: Are the new editor commands user-rebindable? → A: **`cut-line` only.** Cut-line ships as a **registered,
+  rebindable command** with a default binding of **Ctrl+X**, exposed in the visual **Key Bindings editor** and
+  covered by the keybinding **completeness test**. **Tab-to-indent is intrinsic editor text-input behaviour**
+  (like Enter or Backspace), not a rebindable command, and the clipboard actions rely on their **native OS
+  bindings** — neither is registered.
+- Q: What is the scope of the indentation configuration? → A: **User-scoped only.** It extends the existing
+  user `editor` settings (global default + per-language overrides); there is **no project-scoped override**
+  and **no new storage**. **`.editorconfig` support is explicitly planned as a future feature** — when it
+  lands it will cascade over these user settings — but it is **not** part of Part 1.
+- Q: Does the editor adapt to a file's existing indentation? → A: **Yes — infer on open.** The editor samples
+  the **first 10% of the document's lines** and, if a clear indentation style emerges, adopts it for that
+  document **in preference to the configured profile**. If no clear style emerges (no indented lines in the
+  sample, or an ambiguous result), it falls back to the effective language's configured profile. Inference
+  governs only **newly typed and auto-inserted** indentation — it never rewrites existing lines.
+- Q: Where does the language indicator sit? → A: In a **status strip along the bottom of the Editor Panel**,
+  with the language label **right-aligned**. It is deliberately **not** in the panel header (which already
+  owns 006's Save/Revert context menu, FR-014) and **not** a floating overlay. The strip is the intended home
+  for further per-document status (encoding, line endings, cursor position) in later features.
+- Q: Can two languages claim the same file extension? → A: **No — the extension→language map is one-to-one**,
+  enforced by a registry test, so extension-only detection is deterministic. Genuinely ambiguous extensions
+  are resolved by fiat in the built-in registry (**`.h` → C++**, the safer superset). **The user MUST be able
+  to override the extension→language mapping in settings** (e.g. remap `.h` to C), applying to every project
+  and every panel. Precedence, highest first: **per-panel manual override (FR-010) → user extension mapping
+  (settings) → built-in registry mapping → plain text.**
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -121,7 +145,8 @@ editor is usable without; highlighting is the reason for the feature.
 in a way distinct from plain text and appropriate to that language. Type new code into a highlighted file and
 confirm the new text is highlighted live. Open a file with an unrecognised or absent extension and confirm it
 renders as readable plain text with no error. Type a `#!` shebang into it and confirm nothing re-highlights
-(detection does not read content).
+(detection does not read content). Open a `.h` file and confirm C++; remap `.h` to C in settings and confirm
+open `.h` editors switch to C.
 
 **Acceptance Scenarios**:
 
@@ -137,6 +162,11 @@ renders as readable plain text with no error. Type a `#!` shebang into it and co
    revert, external reload), **Then** detection re-runs against the (possibly new) extension.
 6. **Given** any bundled theme (light or dark), **When** a highlighted file is shown, **Then** the
    highlighting is legible against that theme's editor colours.
+7. **Given** a `.h` file and the shipped registry, **When** it is opened, **Then** it is highlighted as
+   **C++**.
+8. **Given** the user remaps `.h` to **C** in settings, **When** the setting is applied, **Then** open and
+   subsequently opened `.h` editors highlight as C without being reopened — unless a panel carries its own
+   manual override, which still wins.
 
 ---
 
@@ -207,48 +237,59 @@ line into another application and confirm it arrives as text with a trailing new
    receives the line's text with a trailing line break.
 6. **Given** the cursor is on the **last line** with no trailing newline, **When** the user presses Ctrl+X,
    **Then** the line is cut cleanly without leaving a stray blank line or error.
+7. **Given** the Key Bindings editor, **When** the user rebinds the **cut-line** command to another chord,
+   **Then** that chord cuts the line (and Ctrl+X no longer does) without restarting the application.
 
 ---
 
 ### User Story 4 - Per-language tab/space indentation (Priority: P2)
 
-Indentation follows a **per-language** convention, resolved from the language the editor detected (which the
-file's extension normally determines). Every language uses the **global default of 2 spaces** unless it
-ships an override for its established convention (e.g. tabs for Go, 4 spaces for Python), and the user can
-change both the global default and any per-language override. Pressing **Tab** inserts the configured
-indentation for the current document's language, and automatic indentation (e.g. on a new line) follows the
-same setting.
+Indentation **matches the file the user is actually editing**. On open, the editor samples the document's
+**first 10% of lines** and adopts whatever indentation style it already uses. Where a file offers no clue,
+indentation falls back to a **per-language** convention resolved from the detected language: every language
+uses the **global default of 2 spaces** unless it ships an override for its established convention (e.g.
+tabs for Go, 4 spaces for Python), and the user can change both the global default and any per-language
+override. Pressing **Tab** inserts the document's effective indentation, and automatic indentation (e.g. on
+a new line) follows the same style — so a user never silently introduces mixed indentation into an existing
+file.
 
-**Why this priority**: Correct per-language indentation is expected of a real code editor and is
-low-cost given the editor already exists; but the editor is usable without it, so P2.
+**Why this priority**: Correct indentation is expected of a real code editor and is low-cost given the editor
+already exists; but the editor is usable without it, so P2.
 
-**Independent Test**: Open a Go file and press Tab; confirm a tab character is inserted. Open a Python file
-and press Tab; confirm 4 spaces are inserted. Open a language with no override (e.g. TypeScript) and confirm
-2 spaces are inserted. Change the setting for a language and confirm open editors of that language reflect
-the change. Add a new line inside an indented block and confirm the auto-indent uses the same tabs-or-spaces
-style.
+**Independent Test**: Open a tab-indented file and press Tab; confirm a tab is inserted regardless of the
+configured profile. Open a 4-space-indented file whose language is configured for 2 spaces and confirm 4
+spaces are inserted. Open an **unindented** Go file and press Tab; confirm a tab (Go's override) is inserted.
+Open an unindented file of a language with no override and confirm 2 spaces. Change the setting for a
+language and confirm open editors **without an inferred style** reflect the change. Add a new line inside an
+indented block and confirm the auto-indent matches. Confirm no existing line is ever re-indented and the
+document is not marked dirty by opening it.
 
 **Acceptance Scenarios**:
 
-1. **Given** a language whose override is tabs (e.g. Go), **When** the user presses Tab, **Then** a tab
-   character is inserted at the cursor.
-2. **Given** a language whose override is N-space indentation (e.g. Python, 4), **When** the user presses
-   Tab, **Then** N spaces are inserted.
-3. **Given** a language with **no** override, **When** the user presses Tab, **Then** the global default of
-   **2 spaces** is inserted.
-4. **Given** the user changes a language's indentation style/width (or the global default), **When** the
-   change is applied, **Then** subsequent indentation in open editors of that language uses the new setting
-   (without reopening).
-5. **Given** the user starts a new line inside an indented block, **When** the editor auto-indents, **Then**
-   it uses the language's configured tabs-or-spaces style consistently.
-6. **Given** a file whose language came from a **manual override** rather than its extension, **When** the
-   user presses Tab, **Then** the **overridden language's** indentation profile is used.
+1. **Given** a document whose sampled lines are **tab-indented**, **When** the user presses Tab, **Then** a
+   tab character is inserted — even if the language's configured profile is spaces.
+2. **Given** a document whose sampled lines are consistently **4-space** indented and whose language is
+   configured for 2 spaces, **When** the user presses Tab, **Then** **4 spaces** are inserted.
+3. **Given** a document with **no indented lines** in its sample and a language whose override is tabs (e.g.
+   Go), **When** the user presses Tab, **Then** a tab character is inserted.
+4. **Given** a document with no inferred style and a language with **no** override, **When** the user presses
+   Tab, **Then** the global default of **2 spaces** is inserted.
+5. **Given** the user changes a language's indentation style/width (or the global default), **When** the
+   change is applied, **Then** open editors of that language **with no inferred style** use the new setting
+   without reopening, while editors **with** an inferred style keep it.
+6. **Given** the user starts a new line inside an indented block, **When** the editor auto-indents, **Then**
+   it uses the document's effective indentation style consistently.
+7. **Given** a document with no inferred style whose language came from a **manual override** rather than its
+   extension, **When** the user presses Tab, **Then** the **overridden language's** profile is used.
+8. **Given** any document, **When** it is opened and its indentation inferred, **Then** **no existing line is
+   modified** and the document is **not marked dirty**.
 
 ---
 
 ### User Story 5 - Correct a wrong language guess (Priority: P3)
 
-The Editor Panel always shows the document's **effective language** in a **persistent indicator**. When
+The Editor Panel always shows the document's **effective language** in a **status strip along its bottom
+edge**. When
 detection picks the wrong language — or the file has no usable extension, or the user simply wants a
 different highlighter — the user **clicks the indicator** (or chooses **"Set Language…"** from the editor's
 right-click menu) and picks a language from a **searchable list**. The chosen language applies
@@ -259,8 +300,9 @@ for that panel — remembered across restarts and reflected in every mirrored vi
 correction path for extension-less or misnamed files — but it is only reachable once detection +
 highlighting (US1) exist, so P3.
 
-**Independent Test**: Open a file and confirm the indicator shows its language. Open an extension-less file,
-confirm the indicator reads "Plain Text", click it, filter the list, choose a language, and confirm the
+**Independent Test**: Open a file and confirm the status strip at the bottom of the panel shows its language.
+Open an extension-less file, confirm the indicator reads "Plain Text", click it, filter the list, choose a
+language, and confirm the
 document is re-highlighted immediately, the indicator updates, and Tab now indents in that language's style.
 Repeat via the right-click menu's "Set Language…" and confirm it opens the same picker. Restart the app and
 confirm the panel reopens in the overridden language. Tear the panel into a sub-workspace window and confirm
@@ -282,9 +324,9 @@ and confirm it detects normally.
    is shown, **Then** both use the overridden language and both indicators show it.
 6. **Given** a manual override, **When** the user presses Tab, **Then** the **overridden** language's
    indentation profile is used.
-7. **Given** any open editor, **When** the user looks at the panel, **Then** the indicator shows the
-   document's effective language ("Plain Text" when none is detected), and clicking it opens the searchable
-   picker with the current language marked.
+7. **Given** any open editor, **When** the user looks at the panel, **Then** a status strip along its bottom
+   edge shows the document's effective language ("Plain Text" when none is detected), and clicking it opens
+   the searchable picker with the current language marked.
 8. **Given** the language picker is open, **When** the user types a filter, **Then** the list narrows to
    matching languages.
 9. **Given** any bundled theme (light or dark), **When** the indicator is shown, **Then** it is legible
@@ -298,6 +340,12 @@ and confirm it detects normally.
   as readable plain text (US1 AS2) — never an error, blank view, or broken partial highlighting.
 - **Misleading or absent extension**: The extension is authoritative; a shell script named `deploy.txt` opens
   as plain text. The user corrects it with a **manual override**, which is then remembered for that panel.
+- **Ambiguous extension (`.h`, `.m`, and similar)**: Assigned to exactly one language by the built-in
+  registry (`.h` → C++); the user may remap it globally in settings, or override a single panel.
+- **User remaps an extension while editors are open**: Affected editors re-highlight without reopening,
+  except those carrying a manual override (FR-005a precedence).
+- **User remaps an extension to an unsupported/unknown language**: Rejected by the settings editor; the
+  previous mapping stands.
 - **Document identity changes (rename / Save-As)**: Detection re-runs against the new extension (US1 AS5) —
   **unless a manual override is in effect**, which continues to win (FR-010a).
 - **New / untitled document (no path, no extension)**: Shows as plain text until it is saved with a
@@ -319,15 +367,25 @@ and confirm it detects normally.
 - **Ctrl+X on a document's only line**: The line is cut cleanly, leaving an empty document, without error.
 - **Right-click menus not colliding**: The editor **content** menu (editing actions) and the 006 **panel
   header** menu (Save/Revert) MUST remain separate (US2 AS5).
-- **Indentation setting changed while editors are open**: Editors of the affected language MUST pick up the
-  new indentation style without needing to be reopened (US4 AS4).
-- **Indentation for an undetected / plain-text document**: Falls back to the global default (2 spaces) — no
-  language profile is required for a document to be indentable.
+- **Indentation setting changed while editors are open**: Editors of the affected language that have **no
+  inferred style** MUST pick up the new setting without being reopened; editors with an inferred style keep
+  it (US4 AS5).
+- **Indentation for an undetected / plain-text document**: Falls back to the inferred style, else the global
+  default (2 spaces) — no language profile is required for a document to be indentable.
+- **Empty, single-line, or wholly unindented document**: The 10% sample yields no indented lines, so there is
+  **no inferred style** and the configured profile applies (US4 AS3/AS4).
+- **Very short document**: 10% of a small line count MUST still sample **at least one line**, so a one-line
+  file is not skipped by rounding.
+- **Mixed indentation already in the file**: The sample's **most frequent** leading-space count wins, with a
+  tab anywhere in the sample forcing **tabs** (FR-018c). The editor MUST NOT attempt to repair the file.
+- **Inferred style vs manual language override**: The inferred style wins for indentation; a language
+  override changes the *fallback* profile, not an already-inferred style.
 - **Cross-window synced editor (006 mirror)**: Highlighting, the content menu, the language indicator,
   cut-line, and indentation MUST work in every mirrored view; they are per-view editing behaviours and MUST
   NOT disturb the single shared buffer or its dirty state (006 FR-034).
-- **Language indicator in a narrow panel**: The indicator MUST remain usable (e.g. truncate its label) rather
-  than overflow or disappear when the Editor Panel is very narrow.
+- **Language indicator in a narrow or short panel**: The status strip MUST remain visible and the indicator
+  usable (truncating its label) rather than overflowing or disappearing when the Editor Panel is very narrow;
+  a very short panel MUST still render the strip without collapsing the text area to zero height.
 
 ## Requirements *(mandatory)*
 
@@ -354,9 +412,22 @@ and confirm it detects normally.
   its associated file extensions, its indentation profile, and the highlighter to apply) — so **new
   languages can be added by adding a descriptor**, without modifying the editor's core logic (open/closed;
   reuse of the existing editor component's language ecosystem is expected — see Assumptions).
+- **FR-004a**: The extension→language mapping MUST be **one-to-one**: **no file extension may be claimed by
+  more than one language descriptor**, and this uniqueness MUST be enforced by an automated registry test so
+  detection is deterministic. Genuinely ambiguous extensions are assigned by fiat in the built-in registry;
+  **`.h` MUST map to C++** (the safer superset — a C++ highlighter renders C headers correctly).
+- **FR-004b**: The user MUST be able to **override the extension→language mapping in settings** (e.g. remap
+  `.h` to C). A user mapping MUST be **user-scoped** (applying to every project, sub-workspace and panel),
+  MUST accept any supported language for any extension, MUST take effect for open editors **without
+  reopening** them, and MUST be **exposed in the visual settings editor** per FR-022.
 - **FR-005**: The editor MUST apply the highlighter matched to the detected language, and MUST **fall back to
   plain, unhighlighted text** — never an error or corrupted rendering — when no language is detected or no
   highlighter exists for the detected language.
+- **FR-005a**: Where more than one source names a document's language, precedence MUST be, **highest first**:
+  **(1)** the panel's **manual language override** (FR-010), **(2)** the user's **extension mapping** from
+  settings (FR-004b), **(3)** the **built-in registry** mapping (FR-004a), **(4)** **plain text**. The
+  resulting language is the document's **effective language**, and it selects both the highlighter and the
+  fallback indentation profile.
 - **FR-006**: Syntax highlighting MUST update **live** as the user edits (newly entered code is highlighted
   without reopening the document).
 - **FR-007**: Highlighting MUST be **legible against every bundled theme** in both light and dark
@@ -382,9 +453,12 @@ and confirm it detects normally.
 - **FR-010b**: A manual override MUST also govern the document's **indentation profile** (FR-018) — the
   overridden language, not the extension, selects the indentation to apply.
 - **FR-010c**: The Editor Panel MUST show a **persistent language indicator** displaying the document's
-  **effective language** (detected, overridden, or "Plain Text"). The indicator MUST be **clickable** and
-  MUST open the language picker. It MUST appear in **every mirrored view** of a synced panel and MUST update
-  immediately when the effective language changes.
+  **effective language** (detected, overridden, or "Plain Text"), presented as a **right-aligned label in a
+  status strip along the bottom of the Editor Panel**. The indicator MUST be **clickable** and MUST open the
+  language picker. It MUST appear in **every mirrored view** of a synced panel and MUST update immediately
+  when the effective language changes. The strip MUST NOT be placed in the panel header (FR-014) and MUST NOT
+  overlay the document text; it MUST remain visible while the document is scrolled, and MUST NOT reduce the
+  usable text area enough to break scrolling or the large-file behaviour of FR-008.
 - **FR-010d**: The **editor content context menu** MUST additionally offer a **"Set Language…"** item that
   opens the **same** language picker as the indicator (one picker, two entry points).
 - **FR-010e**: The language **picker** MUST be **searchable/filterable** across all supported languages,
@@ -428,6 +502,14 @@ and confirm it detects normally.
   applies **only** when nothing is selected), and MUST NOT mark the clipboard as a full-line entry.
 - **FR-017**: Cut-line MUST behave correctly on the **last line of a file with no trailing newline** — the
   line is cut cleanly without leaving a stray blank line or raising an error.
+- **FR-017a**: Cut-line MUST be implemented as a **registered, user-rebindable command** whose **default
+  binding is Ctrl+X**. It MUST appear in the visual **Key Bindings editor** and be covered by the
+  **keybinding completeness test** required by the constitution. Rebinding it MUST take effect without an
+  application restart, and MUST NOT disturb the selection-cut behaviour of FR-016 (which follows whatever
+  binding cut-line currently holds).
+- **FR-017b**: **Tab-to-indent (FR-019) is intrinsic editor text-input behaviour**, not a registered command,
+  and MUST NOT appear in the Key Bindings editor. The content menu's clipboard actions rely on their
+  **native OS bindings** and are likewise not registered. No other new keybindings are introduced.
 
 #### Per-language indentation
 
@@ -439,17 +521,38 @@ and confirm it detects normally.
   overrides it: spaces, width 2.** Documents with **no detected language** (plain text) MUST use the global
   default. **Per-language overrides MUST ship only where the language's established convention differs** from
   the global default (e.g. tabs for Go, 4 spaces for Python).
-- **FR-019**: Pressing **Tab** to indent MUST insert the **indentation configured for the current document's
-  detected language** — a tab character, or the configured number of spaces.
+- **FR-018b**: The indentation configuration MUST be **user-scoped**, extending the existing user `editor`
+  settings. It MUST apply to every project and sub-workspace identically. This feature MUST NOT introduce
+  **project-scoped** indentation settings, and MUST NOT read `.editorconfig` (both are out of scope — see
+  [Out of Scope](#out-of-scope)). The shape of the setting MUST leave room for a future `.editorconfig`
+  layer to cascade over it without a breaking change.
+- **FR-018c**: On open, the editor MUST **infer the document's existing indentation style** by sampling the
+  **first 10% of its lines** (rounded up, and **never fewer than one line**), and MUST use the inferred style
+  **in preference to the configured profile** for that document. Inference MUST be evaluated as follows:
+  - Only lines in the sample that begin with whitespace are considered.
+  - If **any** considered line's leading whitespace starts with a **tab**, the inferred style is **tabs**.
+  - Otherwise, if considered lines exist, the inferred style is **spaces**, with the **width** taken from the
+    **most frequent** leading-space count (ties broken toward the **smaller** width).
+  - If **no considered lines exist**, or the sample yields no usable result, there is **no inferred style**
+    and the effective language's **configured profile applies** (FR-018/FR-018a).
+- **FR-018d**: Inference MUST govern only **newly typed and auto-inserted** indentation. It MUST NOT rewrite,
+  re-indent, or normalise any existing line, and MUST NOT mark the document dirty (preserving FR-023).
+  Inference MUST be re-evaluated whenever the document is **reloaded from disk** (revert, external reload).
+- **FR-019**: Pressing **Tab** to indent MUST insert the document's **effective indentation** — the inferred
+  style where one was found (FR-018c), otherwise the profile configured for the effective language — as a tab
+  character or the appropriate number of spaces.
 - **FR-020**: **Automatic indentation** (e.g. the indentation applied when starting a new line inside an
-  indented block) MUST follow the **same** per-language tabs-or-spaces style, consistently with FR-019.
+  indented block) MUST follow the **same** effective indentation style, consistently with FR-019.
 - **FR-021**: Changing a language's indentation setting (or the global default) MUST take effect for open
-  editors of that language **without reopening** them.
-- **FR-022**: The indentation configuration (global default + per-language overrides, and any other new
-  configurable options this feature introduces, such as language-detection overrides) MUST be **exposed and
-  editable through the application's visual settings editor**, not solely by hand-editing JSON, and MUST be
-  covered by the editor-metadata **completeness** discipline required by the constitution
-  (Configuration-editor completeness rule). *(See Dependencies.)*
+  editors of that language **without reopening** them — for documents that have **no inferred style**;
+  a document with an inferred style MUST keep using it (the setting is its fallback, not its override).
+- **FR-022**: Every configurable artefact this feature introduces MUST satisfy the constitution's
+  **Configuration-editor completeness rule** — exposed in the relevant **visual preference editor**, backed by
+  an **editor-metadata descriptor**, and covered by the **completeness test**; none may ship as JSON-only.
+  Specifically: the **indentation configuration** (global default + per-language overrides) and the
+  **extension→language mapping overrides** (FR-004b) in the **Settings** editor; the **`cut-line` command**
+  (FR-017a) in the **Key Bindings** editor; and the **status-strip / language-indicator theme tokens**
+  (FR-010f) in the **Themes** editor. *(See Dependencies.)*
 
 #### Fidelity & isolation (inherited constraints)
 
@@ -465,8 +568,11 @@ and confirm it detects normally.
 ### Key Entities
 
 - **Language descriptor**: One entry in the extensible language registry — a language's identity/display
-  name, its associated file extensions, its indentation profile (where it overrides the global default), and
-  the highlighter to apply. Adding a language = adding a descriptor.
+  name, its associated file extensions (**each extension claimed by exactly one descriptor**), its
+  indentation profile (where it overrides the global default), and the highlighter to apply. Adding a
+  language = adding a descriptor.
+- **Extension mapping override**: A user-scoped setting remapping a file extension to a different supported
+  language (e.g. `.h` → C), outranking the built-in registry but outranked by a panel's manual override.
 - **Language-detection result**: The language chosen for a document, together with how it was decided
   (extension vs content vs manual override), used to select the highlighter **and the indentation profile**
   and to reflect the active language to the user.
@@ -476,12 +582,22 @@ and confirm it detects normally.
 - **Indentation profile**: An indentation configuration — style (tabs/spaces) and, for spaces, width. One
   **global default** (spaces, width 2) applies to every language and to undetected/plain-text documents; a
   profile keyed by **language id** overrides it where a language's convention differs. Both the default and
-  the overrides are user-editable.
+  the overrides are **user-scoped** and user-editable.
+- **Inferred indentation style**: The style deduced on open from the document's first 10% of lines (tabs, or
+  spaces of width N), if any. It takes precedence over the indentation profile for that document, governs
+  only newly typed/auto-inserted indentation, and is re-evaluated on reload from disk.
+- **Effective indentation**: The inferred style where one exists, otherwise the effective language's
+  indentation profile, otherwise the global default.
 - **Editor content action set**: The standard text-editing actions surfaced in the content context menu
   (Cut, Copy, Paste, Select All, Undo, Redo) plus **Set Language…**, distinct from the 006 panel-header
   action set.
-- **Language indicator**: A persistent, clickable element on the Editor Panel showing the document's
-  effective language and opening the language picker. Introduces its own theme tokens.
+- **Editor status strip**: A persistent strip along the bottom of the Editor Panel, below the text area,
+  hosting the language indicator (right-aligned) and reserved for further per-document status later.
+  Introduces this feature's new theme tokens.
+- **Language indicator**: The clickable label in the status strip showing the document's effective language
+  and opening the language picker.
+- **Cut-line command**: The single new **registered, rebindable** command this feature introduces (default
+  binding Ctrl+X), surfaced in the Key Bindings editor. Tab-indent and clipboard actions are *not* commands.
 - **Full-line clipboard entry**: Clipboard content produced by a no-selection Ctrl+X, marked (view-locally)
   as a whole line so that pasting it inserts a line above the caret's line. The marker is invalidated by any
   clipboard change from another source.
@@ -495,7 +611,9 @@ and confirm it detects normally.
 
 - **SC-001**: **100% of the 23 named language targets** are recognised and highlighted — verified by opening
   a representative fixture file per language and confirming language-appropriate, non-plain-text
-  highlighting.
+  highlighting. **No file extension is claimed by two languages** (enforced by an automated registry test).
+- **SC-001a**: A user can **remap any extension to any supported language in the settings editor**, and open
+  editors of that extension re-highlight without being reopened; a panel's manual override still wins.
 - **SC-002**: A file whose **extension is missing, unrecognised, or misleading** opens as plain text with no
   error, and **one** manual-override action puts it into the correct language — measured as: no document's
   content is ever read to guess its language, and typing content signatures never changes the language.
@@ -511,9 +629,11 @@ and confirm it detects normally.
   last line without a trailing newline); pasting it — **from any caret position, including mid-line** —
   reinserts a complete line above the caret's line without splitting it. **Ctrl+X with a selection cuts only
   the selection**, and clipboard content from any other source pastes verbatim at the caret.
-- **SC-006**: Indentation inserted by **Tab matches the detected language's configured style** (tabs vs the
-  configured number of spaces) for **100% of the supported languages** — the global default of **2 spaces**
-  where a language declares no override — and auto-indentation uses the same style.
+- **SC-006**: Indentation inserted by **Tab matches the document's existing indentation** in 100% of files
+  where a style is inferable from the first 10% of lines; where none is inferable it matches the **effective
+  language's configured style** (the global default of **2 spaces** where a language declares no override).
+  Auto-indentation uses the same style, and **opening a file never modifies an existing line or marks it
+  dirty**.
 - **SC-007**: Syntax highlighting **and the language indicator** are **legible on every bundled theme**
   (light and dark) — no highlight colour is illegible against its theme's editor background — and the
   indicator's theme tokens pass the theme-editor **completeness test** (every token exposed in the Themes
@@ -523,6 +643,10 @@ and confirm it detects normally.
 - **SC-009**: A **manual language override** re-highlights the active document immediately, and persists
   across further edits, **across an application restart**, and **across every mirrored view of that panel**,
   until the user changes it — while a separate panel opening the same file still detects independently.
+- **SC-010**: **100% of the configurable artefacts this feature introduces** — the indentation settings, the
+  extension→language mapping overrides, the `cut-line` keybinding, and the status-strip theme tokens — are
+  reachable and editable in their respective visual preference editors, and the **completeness tests pass**
+  with none of them JSON-only. Rebinding `cut-line` takes effect without an application restart.
 
 ## Assumptions
 
@@ -532,11 +656,14 @@ and confirm it detects normally.
   listed languages, rather than hand-writing highlighters. The specific packages and the detection
   mechanism are a **planning decision** (the user asked for a suggested approach — see the note to the plan
   phase); the spec requires only the capabilities and the "detect-first, pluggable-highlighter" structure.
-- **Extension-only detection**, with the **manual override** as the sole correction path, is the chosen
-  detection model (2026-07-09 clarification). Content sniffing was considered and **rejected**: reading and
-  pattern-matching document content to guess a language is a performance and correctness risk (especially
-  near the 006 large-file threshold) and buys little once a persisted per-panel override exists. Content
-  signatures may be revisited as a later enhancement if extension-only detection proves insufficient.
+- **Extension-only detection**, with a **user-editable extension→language mapping** and a **per-panel manual
+  override** as the correction paths, is the chosen detection model (2026-07-09 clarification). Content
+  sniffing was considered and **rejected**: reading and pattern-matching document content to guess a language
+  is a performance and correctness risk (especially near the 006 large-file threshold) and buys little once
+  these two override tiers exist. Content signatures may be revisited later if this proves insufficient.
+- **One-to-one extension mapping.** Determinism is preferred to cleverness: each extension resolves to
+  exactly one language. `.h` → C++ is a judgement call (a C++ highlighter renders C headers correctly, but
+  not vice versa) and is user-remappable.
 - **Built-in theme-aware highlight style.** Part 1 ships one highlight style that adapts to the active
   theme's light/dark editor colours and is legible on all bundled themes. **Per-syntax-category,
   per-theme-editable colour tokens** (which would extend the Themes editor with ~10–15 new tokens) are a
@@ -552,7 +679,12 @@ and confirm it detects normally.
 - **Indentation defaults**: the **global default is 2 spaces** for every language and for plain text.
   Per-language overrides ship **only** where the language's established community convention differs
   (e.g. tabs for Go, 4 spaces for Python); the concrete override list is a planning decision. Everything is
-  user-overridable.
+  user-overridable and **user-scoped**.
+- **Indentation is inferred from the document first.** Sampling the first 10% of a file's lines is cheap
+  (leading-whitespace inspection only, no parsing) and keeps a user from introducing mixed indentation into a
+  file that disagrees with their settings. It is a *document* concern, distinct from language detection —
+  which remains extension-only — and it is superseded in future by `.editorconfig`. Where the sample is
+  inconclusive the configured profile applies, so behaviour is always defined.
 - **No data-schema or daemon change.** Part 1 is renderer-side editor behaviour plus per-language
   configuration; it introduces no new daemon RPC and no SQLite migration.
 
@@ -583,6 +715,10 @@ Also out of scope for Part 1:
 - **Content-based language detection** (shebang / `<?php` / doctype / keyword heuristics). Detection is
   **extension-only**; the manual override covers the gap. Deliberately rejected on performance and
   correctness grounds (2026-07-09 clarification) — revisitable later.
+- **`.editorconfig` support.** Indentation is **user-scoped only** in Part 1. Honouring a project's
+  `.editorconfig` (reading, watching, and cascading it over the user settings) is a **planned future
+  feature**, tracked on `ROADMAP.md`; FR-018b requires the setting shape to accommodate it later.
+- **Project-scoped indentation overrides** (project-level settings storage).
 - **Per-syntax-category theme-editable colour tokens** (a Themes-editor extension).
 - A **rich Jupyter notebook cell view**.
 

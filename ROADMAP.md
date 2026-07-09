@@ -28,6 +28,7 @@ Planned items are goals, not commitments to a date or order.
 - [ ] **OS File Operations** — treat throng's File & Folder list as a native OS folder view, with drag-and-drop and copy/paste support
 - [x] **Editor panels (plain text)** — open and edit a project's text files inline (CodeMirror): encoding/line-ending fidelity, confined save + scoped Save-All, dirty-file lock, app-wide one buffer per file, unsaved indicators, auto-save, crash recovery, and cross-window sync
 - [ ] **Rich code editors** — syntax highlighting and language features on the editor panels above
+- [ ] **`.editorconfig` support** — honour a project's `.editorconfig`, cascading over the user's per-language indentation settings
 - [ ] **Markdown & document preview** — rendered preview alongside the raw file view
 - [ ] **Native OS folder-view panels** — panels that embed the operating system's own folder view with project-based memory
 

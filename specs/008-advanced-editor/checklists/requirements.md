@@ -49,6 +49,15 @@
 - **Accepted scope cost**: the language indicator is new UI chrome, so the feature now owns a small set of new
   **theme tokens** plus the theme-metadata descriptors and completeness test the constitution requires
   (FR-010f).
+- **Second clarification pass (same session, 2026-07-09)** resolved five further decision points: `cut-line`
+  is the **only** new registered/rebindable command (Tab-indent and clipboard actions stay intrinsic);
+  indentation settings are **user-scoped only**, with `.editorconfig` deferred and now tracked on `ROADMAP.md`;
+  the editor **infers a document's existing indentation from its first 10% of lines**, falling back to the
+  configured profile; the language indicator lives in a **bottom status strip**; and the extension→language map
+  is **one-to-one** (`.h` → C++) but **user-remappable in settings**, giving the explicit precedence chain
+  panel override → user mapping → registry → plain text (FR-005a).
+- **Completeness surfaces**: FR-022 now enumerates all three — Settings (indentation + extension mappings),
+  Key Bindings (`cut-line`), Themes (status-strip tokens).
 - **007 dependency**: the feature will be **rebased onto feature 007**, so the preferences window and
   editor-metadata registry are assumed present; new settings are exposed in the visual settings editor
   (FR-022), never JSON-only.
