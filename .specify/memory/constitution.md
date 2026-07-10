@@ -1,6 +1,34 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 3.11.0 → 3.12.0
+Bump rationale: MINOR. One additive governance rule (2026-07-10), no principle removed
+                or redefined: Development Workflow & Quality Gates gains a "Themeable icon controls"
+                rule — every interactive control that performs an action MUST be presented as an icon
+                drawn from the active theme's icon set, carrying a hover title that names the action,
+                in place of a text label; icon colours MUST derive from theme tokens and MUST NOT be
+                hardcoded CSS or inline SVG. A narrow exception is stated for decision buttons inside
+                dialogs (confirm / cancel / save-as), which remain text-labelled because their label
+                IS the statement of consequence the user is consenting to. The code-review gate is
+                extended with a matching themeable-icon-control check. Materially expanded, additive
+                workflow guidance → MINOR.
+Modified principles: none (rule added under Development Workflow & Quality Gates; the code-review gate
+                is extended to verify themeable icon controls). Titles unchanged.
+Added sections: none. Removed sections: none.
+Templates / artifacts reviewed:
+  ✅ .specify/templates/plan-template.md  — Constitution Check references the constitution
+       dynamically; the new rule is picked up automatically, no edit needed.
+  ✅ .specify/templates/spec-template.md  — principle-agnostic; no changes required.
+  ✅ .specify/templates/tasks-template.md — principle-agnostic; a feature that adds an action control
+       MUST include the icon-token + hover-title tasks; enforced at /speckit-tasks time.
+  ✅ .specify/extensions.yml              — no before/after_constitution hooks registered.
+  ⚠ packages/ui/src/renderer/preferences/  — KNOWN VIOLATIONS at time of amendment: preferences-app.tsx
+       (ResetIcon / RevertAllIcon inline SVG), settings-tab.tsx (ClearIcon inline SVG), and themes-tab.tsx
+       (text-labelled .prefs-toolbtn controls). This amendment is forward-looking: the rule binds every
+       change from this point on, and the pre-existing violations above are remediated by the next change
+       that touches those controls. No existing behaviour is broken by the amendment itself.
+Deferred TODOs: none.
+                ---- prior amendment (historical) ----
 Version change: 3.10.1 → 3.11.0
 Bump rationale: MINOR. One additive governance rule (2026-07-08, feature 007 FR-048), no
                 principle removed or redefined: Development Workflow & Quality Gates gains a
@@ -774,6 +802,21 @@ while sub-workspaces give the user one deliberate, bounded place to combine proj
   considered complete, and a PR MUST NOT be merged, while any configurable key lacks its editor
   descriptor. (A raw-JSON escape hatch MAY be offered in addition to, never instead of, the visual
   editor.)
+- **Action controls MUST be themeable icons with hover titles (NON-NEGOTIABLE).**
+  Every interactive control that performs an action — toolbar buttons, row affordances, dismiss and
+  clear controls, panel and tab chrome — MUST be presented as an **icon drawn from the active theme's
+  icon set**, carrying a **hover title that names the action**, rather than a text label. The icon's
+  glyph or image MUST be resolved through the theme's icon tokens, and its colours MUST derive from
+  theme tokens; hardcoded CSS colours and inline SVG assets are prohibited, because a control the user
+  cannot theme is a control outside the theming system (Principle X, Externalised Configuration).
+  - **Exception — dialog decision buttons.** The buttons by which a user consents to or declines an
+    action inside a dialog (for example Confirm / Cancel / Delete / Save) MUST retain text labels.
+    Their label *is* the statement of the consequence being consented to; replacing it with an icon
+    would remove the very information the dialog exists to convey. Their colours MUST still derive
+    from theme tokens.
+  A change that adds or alters an action control MUST NOT be considered complete, and a PR MUST NOT be
+  merged, while that control uses a text label outside the stated exception, or takes its icon or
+  colours from anywhere but the theme.
 - Code review MUST verify the engineering gates: Red-Green-Refactor with the
   unit/integration/E2E layers present (V), SOLID/DRY/YAGNI adherence (VIII),
   constructor DI wired only through each boundary's single composition-root
@@ -783,7 +826,9 @@ while sub-workspaces give the user one deliberate, bounded place to combine proj
   or capability change (Documentation currency rule above), and that any newly
   added configurable option is exposed through the visual preference editors and
   covered by the editor-metadata completeness test (Configuration-editor
-  completeness rule above).
+  completeness rule above), and that every action control introduced or altered is
+  a themeable icon with a hover title, taking its icon and colours from theme
+  tokens (Themeable icon controls rule above).
 
 ## Governance
 
@@ -799,4 +844,4 @@ while sub-workspaces give the user one deliberate, bounded place to combine proj
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 3.11.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-08
+**Version**: 3.12.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-10
