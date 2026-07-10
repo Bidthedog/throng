@@ -498,7 +498,11 @@ if (isPrimaryInstance)
   // Live terminals (005 Phase C): the renderer's terminal.* commands route to the
   // daemon (UI main resolves the launch spec); daemon output/exit notifications
   // arrive over a long-lived events socket and are forwarded to every window.
-  registerTerminalIpc({ daemonClient, shellDetection: shellDetectionService });
+  registerTerminalIpc({
+    daemonClient,
+    shellDetection: shellDetectionService,
+    attachTimeoutMs: settings.attachTimeoutMs,
+  });
   const daemonEvents = new DaemonEvents(settings.pipeName);
   daemonEvents.start();
   app.on('will-quit', () => daemonEvents.stop());

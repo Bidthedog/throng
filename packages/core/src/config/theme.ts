@@ -135,6 +135,9 @@ export const THRONG_THEME: Theme = {
     tab: '▭',
     add: '＋',
     detach: '⧉',
+    // Retry a terminal attach that is still starting (008 FR-005) — a themeable action
+    // icon (constitution v3.12.0), auto-exposed in the Themes editor like every token.
+    retry: '↻',
     // File Explorer tree (004, FR-005/FR-031). Folder/file glyphs, a symlink
     // indicator, by-type file icons, and toolbar actions — all themeable and
     // rendered in a fixed-size box so dimensions stay uniform.

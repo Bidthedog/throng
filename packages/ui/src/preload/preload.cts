@@ -180,8 +180,12 @@ contextBridge.exposeInMainWorld('throng', {
     // Phase C — session commands (request/response → daemon) and push streams.
     attach: (req: unknown) => ipcRenderer.invoke('throng:terminal:attach', req),
     write: (panelId: string, data: string) => ipcRenderer.invoke('throng:terminal:write', panelId, data),
-    resize: (panelId: string, cols: number, rows: number) =>
-      ipcRenderer.invoke('throng:terminal:resize', panelId, cols, rows),
+    resize: (panelId: string, cols: number, rows: number, viewId?: string) =>
+      ipcRenderer.invoke('throng:terminal:resize', panelId, cols, rows, viewId),
+    // A view is going away (008 FR-007/FR-010): remove it from the daemon's grid set.
+    // Not a kill — the daemon terminates only the last view of a sub-workspace panel.
+    detach: (panelId: string, viewId?: string) =>
+      ipcRenderer.invoke('throng:terminal:detach', panelId, viewId),
     kill: (panelId: string) => ipcRenderer.invoke('throng:terminal:kill', panelId),
     list: (projectId?: string) => ipcRenderer.invoke('throng:terminal:list', projectId),
     // Daemon capabilities (FR-025a): { elevated } — gates the "run as admin" control.

@@ -6,6 +6,14 @@
 export const TERMINAL_ATTACH_METHOD = 'terminal.attach';
 export const TERMINAL_WRITE_METHOD = 'terminal.write';
 export const TERMINAL_RESIZE_METHOD = 'terminal.resize';
+/**
+ * A view of a panel is going away (window/panel-view closed). Removes that view from
+ * the session so the daemon recomputes the shared grid across the *remaining* views
+ * (008 FR-009/FR-010). Terminating the session is a *lifecycle* decision the daemon
+ * makes only for the last view of a sub-workspace-owned panel (FR-007) — a detach is
+ * NOT a kill.
+ */
+export const TERMINAL_DETACH_METHOD = 'terminal.detach';
 export const TERMINAL_KILL_METHOD = 'terminal.kill';
 export const TERMINAL_LIST_METHOD = 'terminal.list';
 /** Report daemon capabilities to the UI — currently just its elevation (FR-025a). */
@@ -41,6 +49,24 @@ export interface TerminalAttachParams {
   panelId: string;
   projectId: string;
   launch: LaunchSpecDto;
+  /**
+   * Identity of the *view* (one on-screen presentation of the panel inside one window)
+   * making this attach (008 FR-009). The daemon tracks each view's dimensions and sizes
+   * the shared PTY to the minimum across all attached views. OPTIONAL for backward
+   * compatibility: when absent the daemon treats the panel as having a single implicit
+   * view, so a one-window panel is sized to its own dimensions as before.
+   */
+  viewId?: string;
+  /**
+   * The caller's INTENT (008 FR-002/FR-007). `false`/absent ⇒ an IMPLICIT attach — a
+   * mirror, a re-render, a reconnect — which MUST reuse a running session for this panel
+   * whatever launch identity it computes; this is what prevents the data loss, and the
+   * daemon never reaps on an implicit attach. `true` ⇒ an EXPLICIT user re-type: a
+   * user-initiated destroy-then-create that terminates any running session and cold-starts
+   * the requested launch. Intent is stated by the caller, NEVER inferred from a launch-key
+   * comparison — inferring it from the key is exactly the bug that lost running programs.
+   */
+  explicit?: boolean;
   cols: number;
   rows: number;
   /**
@@ -75,12 +101,22 @@ export interface TerminalWriteParams {
 
 export interface TerminalResizeParams {
   panelId: string;
+  /** The view reporting new dimensions (008 FR-010). Optional: absent ⇒ the single
+   *  implicit view (see {@link TerminalAttachParams.viewId}). */
+  viewId?: string;
   cols: number;
   rows: number;
 }
 
 export interface TerminalKillParams {
   panelId: string;
+}
+
+/** A view of a panel is going away; remove it from the session's grid (008 FR-009/FR-010). */
+export interface TerminalDetachParams {
+  panelId: string;
+  /** The view being removed. Absent ⇒ the single implicit view. */
+  viewId?: string;
 }
 
 export interface TerminalListParams {

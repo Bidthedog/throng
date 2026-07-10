@@ -20,7 +20,7 @@ const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import
 
 // base64("throngClip42") — what the shell will OSC-52 onto the clipboard.
 const EXPECTED = 'throngClip42';
-const B64 = 'VGhyb25nQ2xpcDQy';
+const B64 = 'dGhyb25nQ2xpcDQy';
 
 test('an OSC 52 sequence from inside the terminal writes to the system clipboard', async () => {
   skipIfElevated();

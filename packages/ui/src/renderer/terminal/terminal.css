@@ -41,3 +41,50 @@
 .terminal-panel .xterm-viewport::-webkit-scrollbar-thumb:hover {
   background: var(--throng-colour-textMuted);
 }
+
+/* Positioning context for the "still starting" overlay (008 FR-005). */
+.terminal-panel-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* Non-fatal "still starting" state: a small themed notice with a retry action, layered
+   over the (already-mounted) terminal. Colours from theme tokens only (constitution X). */
+.terminal-panel__starting {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 6px;
+  background: var(--throng-colour-surface);
+  color: var(--throng-colour-text);
+  font-size: 12px;
+  z-index: 3;
+}
+
+/* Themeable icon action control (constitution v3.12.0): glyph from the theme's icon
+   tokens (resolveIcon), colours from theme tokens, hover title names the action. */
+.terminal-panel__retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  background: var(--throng-colour-buttonBg);
+  color: var(--throng-colour-buttonText);
+}
+.terminal-panel__retry:hover {
+  background: var(--throng-colour-buttonHoverBg);
+  color: var(--throng-colour-buttonHoverText);
+}
