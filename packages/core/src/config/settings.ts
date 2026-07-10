@@ -31,6 +31,15 @@ export interface IUiSettings {
   };
   /** Maximum time, in milliseconds, to await a daemon ping before reporting unavailable. */
   pingTimeoutMs: number;
+  /**
+   * Maximum time, in milliseconds, to await a terminal `attach` (008 FR-004). Sized for
+   * launching an interactive shell — several seconds — and therefore SEPARATE from and
+   * much larger than {@link pingTimeoutMs} (a lightweight health check). Reusing the
+   * ping budget for attach is exactly what made a slow-starting shell report a spurious
+   * connection timeout. Exceeding this budget is a non-fatal "still starting" state, not
+   * an error, and never terminates the running session (008 FR-005).
+   */
+  attachTimeoutMs: number;
 }
 
 /**

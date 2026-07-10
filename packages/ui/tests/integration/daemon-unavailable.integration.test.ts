@@ -8,6 +8,7 @@ describe('DaemonClient when the daemon is unavailable (FR-010)', () => {
       pipeName: `\\\\.\\pipe\\throng-absent-${process.pid}`,
       window: { width: 1, height: 1 },
       pingTimeoutMs: 1000,
+      attachTimeoutMs: 15000,
     });
 
     const start = Date.now();

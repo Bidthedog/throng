@@ -28,6 +28,20 @@ export class DaemonRpcError extends Error {
   }
 }
 
+/**
+ * The call exceeded its own timeout budget. Distinct from a transport failure so the
+ * terminal attach path can treat an exceeded `attachTimeoutMs` as a non-fatal
+ * "still starting" state — the daemon may well still be launching the shell — rather
+ * than a hard error (008 FR-005). The underlying session, if any, keeps running.
+ */
+export class RpcTimeoutError extends Error {
+  readonly timedOut = true;
+  constructor(readonly method: string) {
+    super(`RPC "${method}" timed out`);
+    this.name = 'RpcTimeoutError';
+  }
+}
+
 @injectable()
 export class DaemonClient {
   private nextId = 1;
@@ -41,7 +55,12 @@ export class DaemonClient {
    * payload, or rejects with a {@link DaemonRpcError} on a JSON-RPC error / a
    * plain Error on transport failure or timeout.
    */
-  call<TResult>(method: string, params: unknown = {}): Promise<TResult> {
+  /**
+   * @param timeoutMs Per-call timeout override. Defaults to the health-check
+   *   `pingTimeoutMs`; the terminal attach path passes the much larger `attachTimeoutMs`
+   *   so a slow-starting shell is not cut off by the ping budget (008 FR-004).
+   */
+  call<TResult>(method: string, params: unknown = {}, timeoutMs?: number): Promise<TResult> {
     return new Promise<TResult>((resolve, reject) => {
       let settled = false;
       let buffer = '';
@@ -58,8 +77,8 @@ export class DaemonClient {
       };
 
       const timer = setTimeout(
-        () => finish(() => reject(new Error(`RPC "${method}" timed out`))),
-        this.settings.pingTimeoutMs,
+        () => finish(() => reject(new RpcTimeoutError(method))),
+        timeoutMs ?? this.settings.pingTimeoutMs,
       );
 
       socket.setEncoding('utf8');

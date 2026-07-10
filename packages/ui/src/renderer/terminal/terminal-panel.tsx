@@ -7,7 +7,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
 } from 'react';
-import type { Panel, TerminalPanelConfig, Theme } from '@throng/core';
+import { resolveIcon, type Panel, type TerminalPanelConfig, type Theme } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useActiveTheme } from '../config/config-store.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
@@ -59,6 +59,11 @@ export function TerminalPanel({
   const ws = useWorkspace();
   const theme = useActiveTheme();
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
+  // Non-fatal "still starting" state (008 FR-005): set when an attach exceeds its budget,
+  // cleared when an attach resolves running. `attempt` is bumped by the retry control to
+  // re-run the attach (a reattach, idempotent by session reuse) — never a revert or kill.
+  const [stillStarting, setStillStarting] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const config = (panel.config ?? {}) as Partial<TerminalPanelConfig>;
   const xtermTheme = useMemo(() => buildXtermTheme(theme), [theme]);
   const font = useMemo(() => terminalFont(theme), [theme]);
@@ -99,6 +104,12 @@ export function TerminalPanel({
     [end],
   );
   const onError = useCallback((message: string) => end(message), [end]);
+  const onStillStarting = useCallback(() => setStillStarting(true), []);
+  const onAttached = useCallback(() => setStillStarting(false), []);
+  const onRetry = useCallback(() => {
+    setStillStarting(false);
+    setAttempt((n) => n + 1); // re-run the attach effect → reattach (idempotent by reuse)
+  }, []);
 
   useTerminal({
     panelId: panel.id,
@@ -115,16 +126,43 @@ export function TerminalPanel({
     meta,
     onExit,
     onError,
+    onStillStarting,
+    onAttached,
+    attempt,
     apiRef,
   });
 
   return (
-    <div
-      className="terminal-panel"
-      data-testid={`terminal-${panel.id}`}
-      ref={setContainer}
-      onContextMenu={onContextMenu}
-      style={{ background: xtermTheme.background }}
-    />
+    <div className="terminal-panel-wrap" style={{ background: xtermTheme.background }}>
+      <div
+        className="terminal-panel"
+        data-testid={`terminal-${panel.id}`}
+        ref={setContainer}
+        onContextMenu={onContextMenu}
+        style={{ background: xtermTheme.background }}
+      />
+      {stillStarting ? (
+        <div
+          className="terminal-panel__starting"
+          data-testid={`terminal-starting-${panel.id}`}
+          role="status"
+        >
+          <span className="terminal-panel__starting-msg">Terminal is still starting…</span>
+          {/* Action control (constitution v3.12.0): a themeable icon (glyph from the
+              theme's icon tokens, colours from theme tokens) with a hover title — not a
+              text button, not an inline SVG. Retry reattaches to the running session. */}
+          <button
+            type="button"
+            className="terminal-panel__retry"
+            title="Retry"
+            aria-label="Retry"
+            data-testid={`terminal-retry-${panel.id}`}
+            onClick={onRetry}
+          >
+            {resolveIcon(theme, 'retry')}
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }

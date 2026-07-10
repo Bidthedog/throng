@@ -97,6 +97,10 @@ declare global {
           panelId: string;
           projectId: string;
           projectRoot: string | null;
+          /** The view (one window's presentation of this panel) attaching (008 FR-009). */
+          viewId?: string;
+          /** The user explicitly (re-)typed this panel (008 FR-002/FR-007): destroy + create. */
+          explicit?: boolean;
           rootless?: boolean;
           runAsAdmin?: boolean;
           flavourId: string;
@@ -105,7 +109,9 @@ declare global {
           rows: number;
         }) => Promise<TerminalAttachEnvelope>;
         write: (panelId: string, data: string) => Promise<unknown>;
-        resize: (panelId: string, cols: number, rows: number) => Promise<unknown>;
+        resize: (panelId: string, cols: number, rows: number, viewId?: string) => Promise<unknown>;
+        /** A view is going away (008 FR-007/FR-010) — remove it from the daemon's grid set. */
+        detach: (panelId: string, viewId?: string) => Promise<unknown>;
         kill: (panelId: string) => Promise<unknown>;
         list: (projectId?: string) => Promise<{ sessions: TerminalSessionDto[] }>;
         // Daemon capabilities (FR-025a): { elevated } gates the "run as admin" control.
@@ -234,7 +240,9 @@ export interface TerminalFlavourDto {
 /** Result of `window.throng.terminal.attach`. */
 export type TerminalAttachEnvelope =
   | { ok: true; status: 'running' | 'exited'; scrollback: string; exit?: { code: number | null } }
-  | { ok: false; error: { code: number | null; message: string } };
+  // `stillStarting` marks a non-fatal attach timeout (008 FR-005): the session may still
+  // be launching; the view shows a "still starting" state with a retry, not a hard error.
+  | { ok: false; stillStarting?: boolean; error: { code: number | null; message: string } };
 
 /** One session row from `window.throng.terminal.list`. */
 export interface TerminalSessionDto {

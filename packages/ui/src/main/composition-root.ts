@@ -14,42 +14,19 @@ import { UI_TYPES } from './tokens.js';
 import { DaemonClient } from './daemon-client.js';
 import { FileConfigStore } from './config-store.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
+import { numberFromEnv, readUiSettings } from './ui-settings.js';
 
 export { UI_TYPES } from './tokens.js';
 
 /**
  * Composition root #2 (Principle IX / [Gap B]): the UI main process's single
  * IoC container. Object graphs are composed here and nowhere else; the rest of
- * the UI code remains unaware of the container.
+ * the UI code remains unaware of the container. The UI-settings reader lives in
+ * `./ui-settings.ts` (pure, no OS imports) so its defaults/env overrides stay
+ * unit-testable; environment access remains confined to this boundary.
  */
 
-const DEFAULT_PIPE_NAME = '\\\\.\\pipe\\throng.daemon';
-const DEFAULT_WINDOW_WIDTH = 1280;
-const DEFAULT_WINDOW_HEIGHT = 800;
-const DEFAULT_PING_TIMEOUT_MS = 2000;
 const DEFAULT_HOTRELOAD_DEBOUNCE_MS = 150;
-
-function numberFromEnv(value: string | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-/**
- * Reads UI settings from documented defaults, overridable via environment.
- * Environment access lives ONLY in the composition root (Principle X / [Gap C]);
- * the rest of the UI consumes the injected IUiSettings interface.
- */
-function readUiSettings(env: NodeJS.ProcessEnv = process.env): IUiSettings {
-  return {
-    pipeName: env.THRONG_PIPE_NAME ?? DEFAULT_PIPE_NAME,
-    window: {
-      width: numberFromEnv(env.THRONG_WINDOW_WIDTH, DEFAULT_WINDOW_WIDTH),
-      height: numberFromEnv(env.THRONG_WINDOW_HEIGHT, DEFAULT_WINDOW_HEIGHT),
-    },
-    pingTimeoutMs: numberFromEnv(env.THRONG_PING_TIMEOUT_MS, DEFAULT_PING_TIMEOUT_MS),
-  };
-}
 
 /**
  * User-scoped config locations (003 / research D1). The config root defaults to

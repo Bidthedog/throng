@@ -20,10 +20,17 @@ import { EditorPanel } from '../editor/editor-panel.js';
  * a sub-workspace where a Panel may belong to another project — FR-008).
  */
 export function PanelBody({ panel, tabId }: { panel: Panel; tabId: string }): ReactElement {
-  const { projects, activeProject } = useProjects();
+  const { projects, activeProject, loading } = useProjects();
   const { layout } = useWorkspace();
   const subWin = useSubWorkspaceWindow();
+  const hasOrigin = typeof panel.originProjectId === 'string' && panel.originProjectId.length > 0;
   const originProject = projects.find((p) => p.id === panel.originProjectId);
+  // FR-001: while the project list is still loading and this panel's origin project has
+  // not yet appeared, the panel's OWNERSHIP — project vs sub-workspace, and therefore its
+  // working directory — is not yet known. Establishing a session now could connect at the
+  // wrong root (or misclassify a mirrored project panel as rootless). Hold a loading state
+  // until ownership resolves, then attach.
+  const ownershipPending = hasOrigin && originProject === undefined && loading;
   // A Panel created inside a sub-workspace has no owning project (FR-028): its
   // terminal is "rootless" and launches at the user's home directory. Crucially we
   // must NOT fall back to some unrelated active project's root here (that would
@@ -35,6 +42,18 @@ export function PanelBody({ panel, tabId }: { panel: Panel; tabId: string }): Re
     return <PanelTypeForm panelId={panel.id} projectRoot={root} rootless={ownedBySub} />;
   }
   if (panel.kind === 'terminal') {
+    // FR-001: do not establish a session until ownership is known — show a loading state.
+    if (ownershipPending) {
+      return (
+        <div
+          className="panel-box__placeholder"
+          data-testid={`terminal-loading-${panel.id}`}
+          role="status"
+        >
+          Resolving project…
+        </div>
+      );
+    }
     // Display labels for the app-close warning details (FR-015). A sub-workspace-
     // owned Panel shows the sub-workspace's own name.
     const meta = {

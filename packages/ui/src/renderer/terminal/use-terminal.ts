@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { shouldDropScrollback } from './clear-detect.js';
 import { parseOsc52 } from './osc52.js';
 import { TerminalOutputGate } from './output-gate.js';
+import { consumeExplicitRetype } from './explicit-retype.js';
 
 export interface TerminalExit {
   code: number | null;
@@ -38,6 +39,20 @@ export interface UseTerminalOptions {
   onExit: (exit: TerminalExit) => void;
   /** Called when (re)attach fails — bad params, missing flavour, etc. (FR-019). */
   onError: (message: string) => void;
+  /**
+   * Called when the attach exceeds its budget (008 FR-005). NON-fatal: the session may
+   * still be launching, so the view shows a "still starting" state with a retry — it does
+   * NOT revert to the form (that is {@link onError}) and does NOT kill the session.
+   */
+  onStillStarting?: () => void;
+  /** Called when an attach resolves as running — clears any "still starting" state. */
+  onAttached?: () => void;
+  /**
+   * Retry counter (008 FR-005). Bumping it re-runs the attach effect, reattaching to the
+   * (already-running) session — idempotent by session reuse — so a still-starting view can
+   * recover without reverting or replacing.
+   */
+  attempt?: number;
   /** Populated with an imperative handle to the live terminal (for the menu). */
   apiRef?: MutableRefObject<TerminalApi | null>;
 }
@@ -59,10 +74,14 @@ export function useTerminal(opts: UseTerminalOptions): void {
 
   const onExitRef = useRef(opts.onExit);
   const onErrorRef = useRef(opts.onError);
+  const onStillStartingRef = useRef(opts.onStillStarting);
+  const onAttachedRef = useRef(opts.onAttached);
   const themeRef = useRef(opts.theme);
   const metaRef = useRef(opts.meta);
   onExitRef.current = opts.onExit;
   onErrorRef.current = opts.onError;
+  onStillStartingRef.current = opts.onStillStarting;
+  onAttachedRef.current = opts.onAttached;
   themeRef.current = opts.theme;
   metaRef.current = opts.meta;
 
@@ -87,6 +106,11 @@ export function useTerminal(opts: UseTerminalOptions): void {
     if (!bridge) return;
 
     let disposed = false;
+    // Identity of THIS view (this window's presentation of the panel) for the daemon's
+    // per-view grid (008 FR-009). Generated per mount so attach/resize/detach all carry
+    // the same id; the daemon sizes the shared PTY to the minimum across every view, so
+    // two different-sized windows can never corrupt one grid.
+    const viewId = crypto.randomUUID();
     // Timestamp of the last PTY resize. A resize makes ConPTY repaint the whole
     // (new-size) viewport — cursor-home + an erase per row, the same shape as a
     // `cls` — so we must NOT treat output arriving just after a resize as a clear,
@@ -174,6 +198,12 @@ export function useTerminal(opts: UseTerminalOptions): void {
         panelId,
         projectId,
         projectRoot,
+        viewId,
+        // Was this attach triggered by the user explicitly (re-)typing the panel via the
+        // Confirm button (008 FR-002/FR-007)? Consumed one-shot: an explicit re-type
+        // terminates any running session and cold-starts the chosen flavour; a mirror or
+        // re-render leaves it false and reuses the running session.
+        explicit: consumeExplicitRetype(panelId),
         rootless: rootless === true,
         runAsAdmin: runAsAdmin === true,
         flavourId,
@@ -185,9 +215,16 @@ export function useTerminal(opts: UseTerminalOptions): void {
       .then((res) => {
         if (disposed) return;
         if (!res.ok) {
+          // A non-fatal attach timeout (008 FR-005): the session may still be launching.
+          // Show the "still starting" state + retry; do NOT revert to the form or kill it.
+          if (res.stillStarting) {
+            onStillStartingRef.current?.();
+            return;
+          }
           onErrorRef.current(res.error.message);
           return;
         }
+        onAttachedRef.current?.(); // a successful attach clears any "still starting" state
         if (res.scrollback) term.write(res.scrollback);
         // Scrollback is applied — open the gate and flush any live output that
         // arrived during the attach window, in order, after the backlog.
@@ -221,7 +258,9 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // Arm the resize-repaint window so the repaint ConPTY sends back is not
       // mistaken for a `cls` (which would wipe the scrollback on enlarge).
       resizedAt = Date.now();
-      void bridge.resize(panelId, term.cols, term.rows);
+      // Report THIS view's measured size; the daemon re-derives the grid as the minimum
+      // across all views and resizes the PTY only if that minimum moved (008 FR-010).
+      void bridge.resize(panelId, term.cols, term.rows, viewId);
     };
     const observer = new ResizeObserver(() => {
       if (resizeTimer !== undefined) clearTimeout(resizeTimer);
@@ -251,9 +290,17 @@ export function useTerminal(opts: UseTerminalOptions): void {
       observer.disconnect();
       offOutput();
       offExit();
+      // Detach THIS view so the daemon drops it from the shared grid and recomputes
+      // across the survivors (008 FR-010). This is NOT a kill: the session keeps running
+      // for its other views, and is terminated by the daemon only when the last view of a
+      // sub-workspace-owned panel goes (FR-007). A window-close that never runs this
+      // cleanup is backstopped by the main process (FR-008a).
+      void bridge.detach?.(panelId, viewId);
       term.dispose();
       termRef.current = null;
       if (opts.apiRef) opts.apiRef.current = null;
     };
-  }, [panelId, projectId, projectRoot, rootless, runAsAdmin, flavourId, params, container]);
+    // `opts.attempt` is a dep so a retry (008 FR-005) re-runs the effect and reattaches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelId, projectId, projectRoot, rootless, runAsAdmin, flavourId, params, container, opts.attempt]);
 }

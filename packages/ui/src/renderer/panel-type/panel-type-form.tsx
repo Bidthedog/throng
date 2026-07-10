@@ -13,6 +13,7 @@ import { useCapabilities } from './use-capabilities.js';
 import { TerminalInputs } from './terminal-inputs.js';
 import { EditorInputs } from './editor-inputs.js';
 import { clearPanelExit, getPanelExit } from '../terminal/exit-store.js';
+import { markExplicitRetype } from '../terminal/explicit-retype.js';
 import './panel-type.css';
 
 /**
@@ -62,6 +63,13 @@ export function PanelTypeForm({
     if (result) {
       clearPanelExit(panelId);
       clearDraft(panelId);
+      // Confirm is a deliberate user action: mark the next attach for this panel as an
+      // EXPLICIT re-type (008 FR-002/FR-007), so if a session is still running for this
+      // panel the daemon terminates it and cold-starts the chosen flavour instead of
+      // reusing the old one. Set locally BEFORE typing the panel (which mounts the
+      // terminal and attaches); the mirror in other windows never runs this, so it
+      // reuses the new session. Only a terminal attaches.
+      if (result.kind === 'terminal') markExplicitRetype(panelId);
       ws.setPanelType(panelId, result.kind, result.config);
       // Mirror the confirmed type+config to the Panel's other views (FR-027a).
       window.throng?.panel?.notifyTyped?.(panelId, result.kind, result.config);

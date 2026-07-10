@@ -12,6 +12,7 @@ import {
   TERMINAL_ATTACH_METHOD,
   TERMINAL_WRITE_METHOD,
   TERMINAL_RESIZE_METHOD,
+  TERMINAL_DETACH_METHOD,
   TERMINAL_KILL_METHOD,
   TERMINAL_LIST_METHOD,
   TERMINAL_CAPABILITIES_METHOD,
@@ -20,6 +21,7 @@ import {
   type TerminalAttachParams,
   type TerminalAttachResult,
   type TerminalCapabilitiesResult,
+  type TerminalDetachParams,
   type TerminalKillParams,
   type TerminalListParams,
   type TerminalListResult,
@@ -35,6 +37,22 @@ import { TerminalLockManager } from './terminal-lock-manager.js';
 /** Bounded scrollback kept per session for reattach replay (~64 KB). */
 const MAX_SCROLLBACK = 64 * 1024;
 
+/**
+ * Key for a panel presented in a single window that sends no explicit `viewId`
+ * (backward compatibility): the panel is treated as having one implicit view, so a
+ * one-window terminal is sized to its own dimensions exactly as before (008 FR-009).
+ */
+const DEFAULT_VIEW_ID = '__default__';
+
+/** The character grid MUST never be driven below one column or one row (008 FR-012). */
+const MIN_GRID = 1;
+
+/** One view's most-recently-reported character dimensions. */
+interface ViewDims {
+  cols: number;
+  rows: number;
+}
+
 /** A live terminal session — the daemon's in-memory record keyed by panelId. */
 interface Session {
   /** Durable identity/tag (Principle III): owning project, panel, cwd. */
@@ -47,9 +65,18 @@ interface Session {
    *  de-elevated agent host for an unchecked terminal in an elevated daemon (FR-025c). */
   readonly host: IPtyHost;
   readonly handle: PtyHandle;
-  /** Identity of what was launched (file+args+cwd+elevation). A reattach with a
-   *  DIFFERENT key means the Panel was re-typed → replace, not reuse (FR-020). */
-  readonly launchKey: string;
+  /**
+   * Every attached view's measured dimensions, keyed by `viewId` (008 FR-009). The
+   * daemon — the only component that observes every window — sizes the single PTY to
+   * the minimum columns and rows across this set, so two different-sized windows can
+   * never fight over one grid (the last-writer-wins corruption). NB: session reuse is
+   * keyed purely by `panelId`; the launch identity is deliberately NOT part of the
+   * record, so a mirror computing a different cwd can never look like a different
+   * terminal and reap the running program (008 FR-002).
+   */
+  readonly views: Map<string, ViewDims>;
+  /** The current PTY grid (last value sent to the host); recomputed on view change. */
+  grid: ViewDims;
   scrollback: string;
   status: 'running' | 'exited';
   exit?: { code: number | null; signal?: string };
@@ -67,18 +94,9 @@ function asObject(params: unknown): Record<string, unknown> {
   return params as Record<string, unknown>;
 }
 
-/**
- * Stable identity of a terminal launch — what distinguishes "reattach the same
- * terminal" (mirror/reopen) from "this Panel was re-typed to a different terminal".
- * A different flavour resolves to a different file/args; toggling "run as admin"
- * changes the integrity; both must cold-start a NEW terminal rather than reuse.
- */
-function launchKeyOf(
-  launch: { file: string; args?: unknown; cwd: string },
-  runAsAdmin: boolean,
-): string {
-  const args = Array.isArray(launch.args) ? launch.args : [];
-  return JSON.stringify([launch.file, args, launch.cwd, runAsAdmin]);
+/** Read a request's `viewId`, defaulting to the single implicit view (008 FR-009). */
+function viewIdOf(params: { viewId?: unknown }): string {
+  return typeof params.viewId === 'string' && params.viewId ? params.viewId : DEFAULT_VIEW_ID;
 }
 
 /**
@@ -103,6 +121,14 @@ export class TerminalService {
     /** Test hook: route EVERY terminal through the agent regardless of elevation,
      *  so the agent plumbing can be verified at medium integrity. */
     private readonly forceAgent = false,
+    /**
+     * Test seam (008 FR-005): artificially delay a COLD-START attach's response by this
+     * many ms, simulating a shell that takes seconds to come up, so the client-side
+     * `attachTimeoutMs` and the "still starting" retry are verifiable end-to-end. The
+     * session is registered BEFORE the delay, so a retry (reuse) returns immediately —
+     * exactly the recovery path. Zero (default/production) means no delay.
+     */
+    private readonly attachColdStartDelayMs = 0,
   ) {}
 
   /** Pick the PTY host for a terminal: the de-elevated agent for an unchecked
@@ -118,6 +144,7 @@ export class TerminalService {
     router.register(TERMINAL_ATTACH_METHOD, (p) => this.attach(p));
     router.register(TERMINAL_WRITE_METHOD, (p) => this.write(p));
     router.register(TERMINAL_RESIZE_METHOD, (p) => this.resize(p));
+    router.register(TERMINAL_DETACH_METHOD, (p) => this.detach(p));
     router.register(TERMINAL_KILL_METHOD, (p) => this.kill(p));
     router.register(TERMINAL_LIST_METHOD, (p) => this.list(p));
     router.register(TERMINAL_CAPABILITIES_METHOD, () => this.capabilities());
@@ -183,7 +210,7 @@ export class TerminalService {
     }
   }
 
-  private attach(rawParams: unknown): TerminalAttachResult {
+  private async attach(rawParams: unknown): Promise<TerminalAttachResult> {
     const params = asObject(rawParams) as unknown as TerminalAttachParams;
     const { panelId, projectId, launch } = params;
     const rootless = params.rootless === true;
@@ -194,21 +221,29 @@ export class TerminalService {
       throw new RpcError('A valid "launch" spec is required', JSON_RPC_INVALID_PARAMS);
     }
 
-    const launchKey = launchKeyOf(launch, params.runAsAdmin === true);
+    const viewId = viewIdOf(params);
+    const explicit = params.explicit === true;
 
-    // Reattach an already-live session ONLY when it's the same terminal — replay its
-    // scrollback; its output keeps flowing to the subscribed events socket (FR-021
-    // mirror / reopen). If the launch differs, the Panel was re-typed to a different
-    // terminal (e.g. after a client-side attach TIMEOUT left the old session live):
-    // reap the stale one and cold-start the requested one below, so the right shell
-    // loads rather than the abandoned one (FR-020).
+    // A live session already exists for this panel. What happens next turns ENTIRELY on
+    // the caller's stated intent (008 FR-002/FR-007) — never on a launch-key comparison,
+    // which is the inference that caused the original data loss:
+    //   • IMPLICIT attach (mirror / re-render / reconnect) → REUSE the running session,
+    //     whatever launch identity it computed. A mirror into a sub-workspace resolving a
+    //     different cwd must never reap the running program. Record this view's dimensions
+    //     and recompute the shared grid so a second, different-sized window can't corrupt
+    //     the first; replay the scrollback into the new view (FR-014/FR-021).
+    //   • EXPLICIT re-type (the user deliberately picked a different terminal) → a
+    //     user-initiated destroy-then-create (FR-007 explicit request): terminate the old
+    //     session, then fall through to cold-start the requested launch below.
     const existing = this.sessions.get(panelId);
     if (existing && existing.status === 'running') {
-      if (existing.launchKey === launchKey) {
+      if (!explicit) {
         if (params.meta) existing.meta = params.meta; // refresh labels (e.g. a rename)
+        existing.views.set(viewId, { cols: params.cols, rows: params.rows });
+        this.recomputeGrid(existing);
         return { status: 'running', scrollback: existing.scrollback };
       }
-      this.reapForReplace(existing);
+      this.terminate(existing);
     }
 
     // Cold start. Acquire the project-root lock for the first terminal (FR-022) —
@@ -218,14 +253,16 @@ export class TerminalService {
     // Route to the de-elevated agent for an unchecked terminal on an elevated daemon
     // (FR-025c); otherwise the local host. Fixed per-session for its lifetime.
     const host = this.hostFor(params.runAsAdmin === true);
+    const startCols = params.cols > 0 ? params.cols : 80;
+    const startRows = params.rows > 0 ? params.rows : 24;
     let handle: PtyHandle;
     try {
       handle = host.start({
         file: launch.file,
         args: Array.isArray(launch.args) ? launch.args : [],
         cwd: launch.cwd,
-        cols: params.cols > 0 ? params.cols : 80,
-        rows: params.rows > 0 ? params.rows : 24,
+        cols: startCols,
+        rows: startRows,
         runAsAdmin: params.runAsAdmin === true,
       });
     } catch (error) {
@@ -244,7 +281,8 @@ export class TerminalService {
       rootless,
       host,
       handle,
-      launchKey,
+      views: new Map([[viewId, { cols: params.cols, rows: params.rows }]]),
+      grid: { cols: startCols, rows: startRows },
       scrollback: '',
       status: 'running',
       userKilled: false,
@@ -259,18 +297,75 @@ export class TerminalService {
     );
     session.disposers.push(host.onExit(handle, (e) => this.handleExit(session, e)));
     this.sessions.set(panelId, session);
+    // Test seam (008 FR-005): simulate a slow-starting shell. The session is already
+    // registered, so a client that times out and retries reuses it immediately.
+    if (this.attachColdStartDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, this.attachColdStartDelayMs));
+    }
     return { status: 'running', scrollback: '' };
   }
 
   /**
-   * Tear down a stale session so its Panel can be re-typed to a different terminal
-   * (FR-020). Unlike {@link handleExit} this publishes NO `terminal.exit` (the Panel
-   * is being replaced, not closing) and — crucially — runs the session's disposers
-   * first, unsubscribing its `onExit`. That way the kill's asynchronous process-exit
-   * cannot later fire `handleExit` and delete the NEW same-panelId session from the
-   * registry. The OS host is still killed, so no terminal is orphaned (Constitution VII).
+   * Recompute the session's single character grid as the minimum columns and minimum
+   * rows across every attached view, clamped to at least {@link MIN_GRID} × {@link
+   * MIN_GRID} (008 FR-009/FR-012). A PTY resize is transmitted ONLY when the computed
+   * grid actually changes (008 FR-010/FR-013), so a focus change or a same-size reflow
+   * — which report no new dimensions — never makes the shell repaint. Called on every
+   * attach, resize, and detach. With no views the grid is left untouched.
    */
-  private reapForReplace(session: Session): void {
+  private recomputeGrid(session: Session): void {
+    if (session.views.size === 0) return;
+    let cols = Number.POSITIVE_INFINITY;
+    let rows = Number.POSITIVE_INFINITY;
+    for (const dims of session.views.values()) {
+      cols = Math.min(cols, dims.cols);
+      rows = Math.min(rows, dims.rows);
+    }
+    cols = Math.max(MIN_GRID, cols);
+    rows = Math.max(MIN_GRID, rows);
+    if (cols === session.grid.cols && rows === session.grid.rows) return;
+    session.grid = { cols, rows };
+    if (session.status === 'running') {
+      try {
+        session.host.resize(session.handle, cols, rows);
+      } catch {
+        /* best-effort — the process may already be gone */
+      }
+    }
+  }
+
+  /**
+   * A view of a panel is going away (008 FR-007/FR-010). Remove it from the session's
+   * grid set and recompute across the survivors. A detach is NOT a kill: the session is
+   * terminated ONLY when its LAST view goes AND the panel is sub-workspace-owned
+   * (rootless) — nothing owns it any more. A project-owned panel's session survives its
+   * views closing, because the panel lives on in its project (killing it is reserved for
+   * an explicit `terminal.kill`, panel-destroy, or project-delete).
+   */
+  private detach(rawParams: unknown): TerminalOkResult {
+    const params = asObject(rawParams) as unknown as TerminalDetachParams;
+    const session = this.sessions.get(params.panelId);
+    if (!session) return { ok: true };
+    session.views.delete(viewIdOf(params));
+    if (session.views.size > 0) {
+      this.recomputeGrid(session);
+      return { ok: true };
+    }
+    // Last view gone. Terminate only a sub-workspace-owned session (008 FR-007).
+    if (session.rootless && session.status === 'running') {
+      this.terminate(session);
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Tear a session down without publishing a `terminal.exit` (its owning surface is
+   * going away, it is not a process failure): run its disposers first — unsubscribing
+   * `onExit` so the kill's asynchronous process-exit cannot later fire {@link handleExit}
+   * and clobber a new same-panelId session — then delete it, release any lock, and kill
+   * the OS host so no ConPTY is orphaned (Principle III resource hygiene).
+   */
+  private terminate(session: Session): void {
     session.status = 'exited';
     session.userKilled = true;
     for (const dispose of session.disposers) {
@@ -319,7 +414,12 @@ export class TerminalService {
     const params = asObject(rawParams) as unknown as TerminalResizeParams;
     const session = this.sessions.get(params.panelId);
     if (session && session.status === 'running') {
-      session.host.resize(session.handle, params.cols, params.rows);
+      // Record THIS view's new dimensions and re-derive the shared grid as the minimum
+      // across all attached views (008 FR-009/FR-010). The PTY is resized by
+      // recomputeGrid only if the minimum actually moved — a view reporting the same, or
+      // a larger, size than the current minimum changes nothing.
+      session.views.set(viewIdOf(params), { cols: params.cols, rows: params.rows });
+      this.recomputeGrid(session);
     }
     return { ok: true };
   }

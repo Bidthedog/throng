@@ -146,6 +146,9 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
   // Test hook: force EVERY terminal through the agent so its plumbing is verifiable
   // at medium integrity (THRONG_FORCE_PTY_AGENT=1).
   const forceAgent = env.THRONG_FORCE_PTY_AGENT === '1';
+  // Test seam (008 FR-005): delay a cold-start attach to exercise the "still starting"
+  // retry. Zero in production (env unset).
+  const attachColdStartDelayMs = numberFromEnv(env.THRONG_ATTACH_DELAY_MS, 0);
   const terminalService = new TerminalService(
     localPty,
     terminalEvents,
@@ -153,6 +156,7 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
     elevation,
     deElevatedPty,
     forceAgent,
+    attachColdStartDelayMs,
   );
   container.bind<TerminalEvents>(DAEMON_TYPES.TerminalEvents).toConstantValue(terminalEvents);
   container.bind<TerminalLockManager>(DAEMON_TYPES.TerminalLockManager).toConstantValue(lockManager);
