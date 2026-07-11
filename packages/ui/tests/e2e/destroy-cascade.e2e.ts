@@ -67,7 +67,7 @@ test('destroying a mirrored Panel INSIDE a sub-workspace is local — the projec
     await expect(child.locator('.panel-box')).toHaveCount(2);
 
     await child.getByTestId(`panel-handle-${b}`).click({ button: 'right' });
-    await child.getByTestId('menu-item-Destroy Panel').click();
+    await child.getByTestId('menu-item-Close Panel').click();
     // Empty Panel + local destroy → no confirmation dialog is shown.
     await expect(child.getByTestId('confirm-dialog')).toHaveCount(0);
 
@@ -114,7 +114,7 @@ test('destroying a mirrored TERMINAL Panel inside a sub-workspace keeps the sess
       // Destroy the terminal Panel INSIDE the sub-workspace. The confirmation must
       // NOT threaten termination — the session survives in the project.
       await child.getByTestId(`panel-handle-${a}`).click({ button: 'right' });
-      await child.getByTestId('menu-item-Destroy Panel').click();
+      await child.getByTestId('menu-item-Close Panel').click();
       // Active-panel destroy defaults to 'double' → two confirms; NEITHER may say
       // the terminal will be terminated (it keeps running in the project).
       await expect(child.getByTestId('confirm-dialog')).toBeVisible();
