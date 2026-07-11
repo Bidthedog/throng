@@ -241,7 +241,10 @@ export class TerminalService {
         if (params.meta) existing.meta = params.meta; // refresh labels (e.g. a rename)
         existing.views.set(viewId, { cols: params.cols, rows: params.rows });
         this.recomputeGrid(existing);
-        return { status: 'running', scrollback: existing.scrollback };
+        // Hand back the shared grid so this joining view conforms its xterm immediately —
+        // even when it did not move the minimum (a larger window mirroring a smaller one),
+        // so it never renders a full-screen program offset (008 FR-009).
+        return { status: 'running', scrollback: existing.scrollback, grid: existing.grid };
       }
       this.terminate(existing);
     }
@@ -302,7 +305,7 @@ export class TerminalService {
     if (this.attachColdStartDelayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, this.attachColdStartDelayMs));
     }
-    return { status: 'running', scrollback: '' };
+    return { status: 'running', scrollback: '', grid: session.grid };
   }
 
   /**
@@ -325,6 +328,14 @@ export class TerminalService {
     rows = Math.max(MIN_GRID, rows);
     if (cols === session.grid.cols && rows === session.grid.rows) return;
     session.grid = { cols, rows };
+    // Tell every view the new grid FIRST, so each conforms its xterm to the minimum
+    // before the PTY resize below makes the program repaint (008 FR-009/FR-013). A view
+    // rendering at any size other than the shared grid shows a full-screen program
+    // offset/wrapped — the alternate screen is painted absolutely and is not reflowed.
+    // The notification is written to the events socket before host.resize even fires, and
+    // the program's redraw only travels back after the resize round-trips, so a view has
+    // always conformed before that redraw output reaches it.
+    this.events.publishGrid(session.panelId, cols, rows);
     if (session.status === 'running') {
       try {
         session.host.resize(session.handle, cols, rows);

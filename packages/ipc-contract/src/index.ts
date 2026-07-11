@@ -93,6 +93,7 @@ export {
   TERMINAL_OUTPUT_NOTIFICATION,
   TERMINAL_EXIT_NOTIFICATION,
   TERMINAL_FLAVOUR_MISSING_NOTIFICATION,
+  TERMINAL_GRID_NOTIFICATION,
 } from './terminal.js';
 export type {
   LaunchSpecDto,
@@ -111,5 +112,6 @@ export type {
   TerminalOutputNotification,
   TerminalExitNotification,
   TerminalFlavourMissingNotification,
+  TerminalGridNotification,
   JsonRpcNotification,
 } from './terminal.js';
