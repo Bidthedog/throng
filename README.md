@@ -63,8 +63,12 @@ goal is to pull all of that into a single, simple customisable workspace.
   either version.
 - **Themes & icon packs** — user-scoped, human-editable, hot-reloading settings, keybindings and
   themes, plus **14 bundled default themes**, dedicated **button style tokens** (colours + font),
-  and **icon packs** (a glyph or image per token, with per-token overrides). Two packs ship built
-  in — a `throng` glyph pack (default) and an SVG image pack — alongside user-supplyable packs.
+  a themeable **editor gutter** (its own background and line-number colours), and **icon packs**
+  (a glyph or image per token, with per-token overrides). Two packs ship built in — a `throng`
+  glyph pack (default) and an SVG image pack — alongside user-supplyable packs. Every theme token
+  carries a plain-language label and description in the theme editor, and the bundled themes are
+  guarded automatically for pairwise visual distinctness and (for the redesigned Bash, SUBNET and
+  Cyberpunk themes) WCAG AA contrast.
 
 What's planned next lives in [`ROADMAP.md`](ROADMAP.md).
 
