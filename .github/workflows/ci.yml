@@ -1,0 +1,169 @@
+name: CI
+
+# Quality gates for throng (see the constitution, "Static analysis & linting"
+# and Principle V). Lint + type-check + the vitest layers + the Playwright-Electron
+# E2E suite all run on every push to master and every pull request.
+#
+# Everything runs on Windows: throng is a Windows-first app whose terminal stack is
+# ConPTY / node-pty and whose de-elevation path shells out to Windows tools, so the
+# suite cannot run on a Linux runner. The Windows runner has a virtual desktop, which
+# the E2E layer requires (the app has no headless mode — inline xterm.js terminals
+# only paint in a visible window; see docs/testing.md).
+#
+# Runner is pinned to `windows-2022` (not `windows-latest`): `windows-latest` now maps
+# to Windows Server 2025 shipping Visual Studio 2026, which the node-gyp bundled with
+# Node 20's npm does not recognise ("unknown version ... at ...\Visual Studio\18") — so
+# the better-sqlite3 / node-pty native builds fail at `npm ci`. windows-2022 ships
+# VS 2022, which node-gyp detects. Revisit when node-gyp/npm gain VS 2026 support.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch/PR cancels an in-flight run to save runner time.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # node-gyp builds (better-sqlite3, node-pty) are noisy; keep logs terse.
+  npm_config_loglevel: error
+
+jobs:
+  lint:
+    name: Lint & type-check
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: ESLint
+        run: npm run lint
+      - name: TypeScript type-check
+        run: npm run typecheck
+
+  test:
+    name: Unit / integration / contract
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      # Point TEMP/TMP at an alias-free path. The default %TEMP%
+      # (C:\Users\RUNNER~1\...) carries an 8.3 short-name because the runner username
+      # forces one. Some file specs realpath a target (expanding RUNNER~1 to its long
+      # form) then compare it against the raw short-name root, breaking in-tree /
+      # watcher-path matching — only where 8.3 names appear. RUNNER_TEMP (D:\a\_temp)
+      # has no aliased components. (runner.temp isn't usable in a job-level `env`.)
+      - name: Use an alias-free temp dir
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install dependencies
+        run: npm ci
+      # Unit tests run against TypeScript source (aliased in vitest.config.ts) and need
+      # no build. Integration & contract, however, spawn the REAL daemon
+      # (`node packages/daemon/dist/main.js`) and read its `dist/BUILD_ID`, so the daemon
+      # must be built first — on a clean checkout there is no `dist/`. `npm run build`
+      # produces the daemon dist and stamps BUILD_ID (same build the E2E job runs).
+      - name: Build (daemon dist + BUILD_ID for the daemon-spawning layers)
+        run: npm run build
+      # Integration & contract spawn real OS processes and are single-file-serial by
+      # design (see docs/testing.md) — run each layer as its own step so a failure names it.
+      - name: Unit tests
+        run: npm run test:unit
+      - name: Integration tests
+        run: npm run test:integration
+      - name: Contract tests
+        run: npm run test:contract
+
+  e2e:
+    name: E2E (Playwright-Electron)
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      # GitHub's Windows runner is 4 vCPU; the E2E suite is CPU-bound (each worker is a
+      # full Electron app + daemon + real shells) and per docs/testing.md failures RISE
+      # with worker count. On this constrained shared runner, run single-worker for the
+      # least contention (the config default of 6 targets a many-core dev box) and allow
+      # an extra retry so an occasional load-transient flake still recovers. Wall time
+      # stays well under the job timeout.
+      THRONG_E2E_WORKERS: 1
+      THRONG_E2E_RETRIES: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      # Alias-free temp dir — see the note on the `test` job (avoids 8.3 short-name
+      # path mismatches from the C:\Users\RUNNER~1\... default %TEMP%).
+      - name: Use an alias-free temp dir
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install dependencies
+        run: npm ci
+      # The runner's virtual desktop defaults to 1024x768 — too small for the window
+      # geometry some specs assert (e.g. restoring a 1100px-wide window clamps to 1024)
+      # and cramped for drag-and-drop. Bump it before the app opens real windows.
+      - name: Set screen resolution to 1920x1080
+        shell: pwsh
+        run: |
+          Add-Type @'
+          using System;
+          using System.Runtime.InteropServices;
+          public class Disp {
+            [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Ansi)]
+            public struct DEVMODE {
+              [MarshalAs(UnmanagedType.ByValTStr, SizeConst=32)] public string dmDeviceName;
+              public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
+              public int dmFields, dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
+              public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+              [MarshalAs(UnmanagedType.ByValTStr, SizeConst=32)] public string dmFormName;
+              public short dmLogPixels; public int dmBitsPerPel, dmPelsWidth, dmPelsHeight;
+              public int dmDisplayFlags, dmDisplayFrequency, dmICMMethod, dmICMIntent, dmMediaType, dmDitherType;
+              public int dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
+            }
+            [DllImport("user32.dll")] public static extern int EnumDisplaySettings(string d, int n, ref DEVMODE dm);
+            [DllImport("user32.dll")] public static extern int ChangeDisplaySettings(ref DEVMODE dm, int f);
+            public static int Set(int w, int h) {
+              DEVMODE dm = new DEVMODE();
+              dm.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+              if (EnumDisplaySettings(null, -1, ref dm) == 0) return -1;
+              dm.dmPelsWidth = w; dm.dmPelsHeight = h;
+              dm.dmFields = 0x80000 | 0x100000; // DM_PELSWIDTH | DM_PELSHEIGHT
+              return ChangeDisplaySettings(ref dm, 0);
+            }
+          }
+          '@
+          $rc = [Disp]::Set(1920, 1080)
+          Write-Host "ChangeDisplaySettings -> $rc (0 = success)"
+      # `pretest:e2e` builds the app first. The runner is elevated (GitHub Windows
+      # runners run as administrator), so: @admin specs remain excluded by default
+      # (playwright.config.ts grepInvert), and non-elevated-baseline specs self-skip via
+      # skipIfElevated(); the elevated de-elevation path is absorbed by retries.
+      - name: Run E2E suite
+        run: npm run test:e2e
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+          if-no-files-found: ignore
