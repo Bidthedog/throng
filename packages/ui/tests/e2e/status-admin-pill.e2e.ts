@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import { runApp, createProject } from './harness.js';
+import { skipIfElevated } from './admin.js';
 
 // Status-bar ADMIN pill (FR-025e): when throng runs elevated — the same
 // daemon-capabilities signal that enables the per-terminal "Run as admin" checkbox
@@ -41,6 +42,7 @@ test('shows a red ADMIN pill on the right when elevated; context is on the left'
 });
 
 test('shows no ADMIN pill when not elevated', async () => {
+  skipIfElevated(); // on an elevated runner the pill correctly appears (see the test above)
   const root = mkdtempSync(join(tmpdir(), 'throng-adminpill-off-'));
   try {
     await runApp(async (_app, win) => {

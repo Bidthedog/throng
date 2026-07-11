@@ -30,7 +30,16 @@ async function waitFor(pred: () => boolean, timeoutMs = 4000): Promise<void> {
   }
 }
 afterEach(() => {
-  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of tempDirs.splice(0)) {
+    try {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    } catch {
+      // Best-effort: on the Windows CI runner a recursive fs.watch handle can linger
+      // past the retry window and block rmdir (ENOTEMPTY/EBUSY). The dir is under the
+      // runner temp (auto-cleaned) and removes cleanly locally — don't fail a passing
+      // test on a teardown race.
+    }
+  }
 });
 
 describe('preferences external-change reflection (FR-041 clean side)', () => {

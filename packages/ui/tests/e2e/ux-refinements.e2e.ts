@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
+import { skipIfElevated } from './admin.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -218,6 +219,7 @@ test('resizes the sidebar horizontally by dragging its handle (FR-033)', async (
 });
 
 test('window title shows the active project + Tab · Panel, no path or totals (FR-040)', async () => {
+  skipIfElevated(); // asserts no [ADMIN] marker; on an elevated runner the marker correctly appears
   await run(async (app, win) => {
     await createProject(win, 'TitleA', 'C:/c/a');
     await createProject(win, 'TitleB', 'C:/c/b'); // the newly created project becomes active
