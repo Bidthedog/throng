@@ -7,4 +7,7 @@ export const UI_TYPES = {
   FileWatcher: Symbol.for('throng:IFileWatcher'),
   // 007: OS seam for installed-font enumeration (background-populated font cache).
   FontEnumeration: Symbol.for('throng:IFontEnumeration'),
+  // 010: the immutable shipped-defaults record + the restore/seed/upgrade applier.
+  ShippedDefaults: Symbol.for('throng:ShippedDefaults'),
+  ShippedDefaultsService: Symbol.for('throng:ShippedDefaultsService'),
 } as const;

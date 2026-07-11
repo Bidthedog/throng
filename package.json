@@ -21,7 +21,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "tsc -b && npm run build:renderer --workspace @throng/ui && npm run stamp:build",
+    "build": "tsc -b && npm run generate:defaults && npm run build:renderer --workspace @throng/ui && npm run stamp:build",
+    "generate:defaults": "node scripts/generate-shipped-defaults.mjs",
     "stamp:build": "node scripts/stamp-build.mjs",
     "build:renderer": "npm run build:renderer --workspace @throng/ui",
     "clean": "tsc -b --clean",

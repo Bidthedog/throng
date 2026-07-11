@@ -14,6 +14,17 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promise
 import { dirname, join } from 'node:path';
 import { ALL_DEFAULT_THEMES, checkRename, THRONG_THEME, type ConfigDocId, type ConfigReadOptions, type IConfigStore, type ThemeRenameResult } from '@throng/core';
 
+/** Result of a transactional multi-file write (010, FR-012/012a). */
+export type WriteAllResult = { ok: true } | { ok: false; failedPath: string; error: string };
+
+interface FileSnapshot {
+  path: string;
+  content: string;
+  existed: boolean;
+  original?: Buffer;
+  tmp: string;
+}
+
 export class FileConfigStore implements IConfigStore {
   /** Monotonic counter giving each write its own temp file, so concurrent writes
    *  to the same document never race on a shared `.tmp` (rapid theme edits). */
@@ -64,7 +75,7 @@ export class FileConfigStore implements IConfigStore {
     try {
       await mkdir(dirname(path), { recursive: true });
       const tmp = `${path}.${(this.writeSeq += 1)}.tmp`; // unique per write (no shared-tmp race)
-      await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+      await writeFile(tmp, FileConfigStore.serialize(value), 'utf8');
       await rename(tmp, path); // atomic replace (libuv MoveFileEx w/ replace on Windows)
     } catch (err) {
       // Best-effort: surface the failure without crashing the app (contract).
@@ -144,4 +155,88 @@ export class FileConfigStore implements IConfigStore {
     }
     return this.listThemes();
   }
+
+  // ---- 010 shipped-defaults: transactional multi-file write (FR-012/012a) ----
+
+  /** Serialise a value to the on-disk JSON form used by every config write. */
+  static serialize(value: unknown): string {
+    return `${JSON.stringify(value, null, 2)}\n`;
+  }
+
+  /**
+   * Write many files as a single all-or-nothing operation (FR-012/012a). Stages
+   * every file to a temp, then commits with atomic renames; on the FIRST failure
+   * (realistically a locked/unwritable target on Windows) it discards the staging
+   * and rolls back any already-committed files to their prior bytes (deleting
+   * those that did not exist before), leaving the previous configuration exactly
+   * as it was, and reports the offending path. Absolute `path`s only.
+   */
+  async writeFilesAtomic(files: Array<{ path: string; content: string }>): Promise<WriteAllResult> {
+    const snaps: FileSnapshot[] = [];
+    for (const f of files) {
+      let existed = false;
+      let original: Buffer | undefined;
+      try {
+        original = await readFile(f.path);
+        existed = true;
+      } catch {
+        existed = false; // absent before
+      }
+      snaps.push({ path: f.path, content: f.content, existed, original, tmp: `${f.path}.${(this.writeSeq += 1)}.staging` });
+    }
+
+    // Stage phase: any failure here means nothing on disk was replaced.
+    for (const s of snaps) {
+      try {
+        await mkdir(dirname(s.path), { recursive: true });
+        await writeFile(s.tmp, s.content, 'utf8');
+      } catch (err) {
+        await this.cleanupTemps(snaps);
+        return { ok: false, failedPath: s.path, error: errorMessage(err) };
+      }
+    }
+
+    // Commit phase: atomic renames. On the first failure, roll back the committed
+    // ones and clean up the rest.
+    const committed: FileSnapshot[] = [];
+    for (const s of snaps) {
+      try {
+        await rename(s.tmp, s.path);
+        committed.push(s);
+      } catch (err) {
+        await this.rollback(committed);
+        await this.cleanupTemps(snaps.filter((x) => !committed.includes(x)));
+        return { ok: false, failedPath: s.path, error: errorMessage(err) };
+      }
+    }
+    return { ok: true };
+  }
+
+  private async cleanupTemps(snaps: FileSnapshot[]): Promise<void> {
+    for (const s of snaps) {
+      await rm(s.tmp, { force: true }).catch(() => {
+        /* best-effort */
+      });
+    }
+  }
+
+  private async rollback(committed: FileSnapshot[]): Promise<void> {
+    for (const s of committed) {
+      try {
+        if (s.existed && s.original !== undefined) {
+          const tmp = `${s.path}.${(this.writeSeq += 1)}.rollback`;
+          await writeFile(tmp, s.original);
+          await rename(tmp, s.path);
+        } else {
+          await rm(s.path, { force: true });
+        }
+      } catch (err) {
+        console.error(`[config-store] rollback failed for ${s.path}:`, err);
+      }
+    }
+  }
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
