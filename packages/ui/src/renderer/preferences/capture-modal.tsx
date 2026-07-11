@@ -9,6 +9,7 @@ import {
   type ActionId,
   type CaptureEvent,
 } from '@throng/core';
+import { chordKey } from '../config/chord-key.js';
 
 /**
  * Key-binding capture modal (feature 007, FR-031/032/032a/033/033a/034). While
@@ -29,7 +30,9 @@ export interface CaptureModalProps {
 }
 
 function fromDomEvent(e: KeyboardEvent): CaptureEvent {
-  return { key: e.key, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, meta: e.metaKey };
+  // Normalise the backtick physical key so a captured `Ctrl+Shift+`` matches how it
+  // resolves at runtime regardless of layout (012 — see chordKey).
+  return { key: chordKey(e), ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, meta: e.metaKey };
 }
 
 /** DOM `key` values that are themselves modifiers (not the chord's key). */

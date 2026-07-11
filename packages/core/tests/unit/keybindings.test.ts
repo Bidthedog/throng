@@ -72,9 +72,11 @@ describe('Keybindings resolver (FR-033)', () => {
     expect(resolveAction(kb, { ctrl: true, alt: true, key: 'ArrowUp' })).toBe('focus.up');
     expect(resolveAction(kb, { ctrl: true, alt: true, key: 'ArrowDown' })).toBe('focus.down');
 
-    // Cycle: Ctrl+` forward, Ctrl+~ (Shift+backtick) backward — distinct tokens.
+    // Cycle: the backtick key is normalised (renderer `chordKey`) so Shift is what
+    // distinguishes forward from back — portable across layouts (UK Shift+backtick is
+    // ¬, not ~), unlike a produced-character token.
     expect(resolveAction(kb, { ctrl: true, key: '`' })).toBe('focus.cycle');
-    expect(resolveAction(kb, { ctrl: true, key: '~' })).toBe('focus.cycleBack');
+    expect(resolveAction(kb, { ctrl: true, shift: true, key: '`' })).toBe('focus.cycleBack');
   });
 
   it('parses defaults and merges custom bindings', () => {

@@ -19,6 +19,7 @@ import { useServices } from './composition-root.js';
 import { TabGroup } from './workspace/tab-group.js';
 import { focusPanel } from './workspace/panel-focus.js';
 import { setActivePane } from './workspace/active-pane.js';
+import { chordKey, isBackquote } from './config/chord-key.js';
 import { DetachProvider } from './workspace/detach-context.js';
 import { PanelRenameSync } from './workspace/panel-rename-sync.js';
 import { PanelDestroySync } from './workspace/panel-destroy-sync.js';
@@ -151,7 +152,17 @@ function KeybindingsHandler({
       'view.toggleExplorer',
     ]);
     const onKeyDown = (e: KeyboardEvent): void => {
-      const action = resolveAction(keybindings, { key: e.key, ctrl: e.ctrlKey, alt: e.altKey });
+      // Shift is deliberately dropped for most keys (the produced character already
+      // encodes it, e.g. "Ctrl++" is Ctrl+Shift+"="). The BACKTICK key is the
+      // exception: it is normalised from its physical key and its Shift state IS the
+      // signal that distinguishes focus.cycle from focus.cycleBack across layouts.
+      const backtick = isBackquote(e);
+      const action = resolveAction(keybindings, {
+        key: chordKey(e),
+        ctrl: e.ctrlKey,
+        alt: e.altKey,
+        ...(backtick ? { shift: e.shiftKey } : {}),
+      });
       if (!action || !HANDLED.has(action)) return;
       // Capture phase: stop the focused terminal/editor from ALSO acting on the chord
       // (e.g. Git Bash turning Ctrl+Alt+Arrow into an escape sequence), then handle it.

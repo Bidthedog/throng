@@ -53,15 +53,17 @@ export const DEFAULT_KEYBINDINGS: Keybindings = {
     'panel.zoomIn': ['Ctrl+Alt+=', 'Ctrl+Alt++'],
     'panel.zoomOut': ['Ctrl+Alt+-'],
     'panel.zoomReset': ['Ctrl+Alt+0'],
-    // Keyboard move-focus (012). Tokens are the produced key names: arrow keys
-    // report `Arrow*`, and Shift+backtick reports `~` — so cycle-back is `Ctrl+~`
-    // (i.e. Ctrl+Shift+backtick on a US layout). All rebindable in the editor.
+    // Keyboard move-focus (012). Arrow tokens use the produced key names (`Arrow*`).
+    // The cycle chords use the BACKTICK key, normalised to `` ` `` from its physical
+    // key (renderer `chordKey`) so `Ctrl+Shift+`` works on every layout — Shift+
+    // backtick is `~` on US but `¬` on UK, so a produced-character token isn't
+    // portable. All rebindable in the editor.
     'focus.left': ['Ctrl+Alt+ArrowLeft'],
     'focus.right': ['Ctrl+Alt+ArrowRight'],
     'focus.up': ['Ctrl+Alt+ArrowUp'],
     'focus.down': ['Ctrl+Alt+ArrowDown'],
     'focus.cycle': ['Ctrl+`'],
-    'focus.cycleBack': ['Ctrl+~'],
+    'focus.cycleBack': ['Ctrl+Shift+`'],
     'view.fullscreen': ['F11'],
     'view.toggleProjects': ['Ctrl+B'],
     'view.toggleExplorer': ['Ctrl+N'],
