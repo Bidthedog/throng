@@ -31,6 +31,8 @@
     "test:e2e:admin": "npm run build && node scripts/test-e2e-admin.mjs",
     "start:daemon": "node packages/daemon/dist/main.js",
     "start:ui": "electron packages/ui/dist/main/main.js",
+    "lint": "eslint .",
+    "typecheck": "tsc -b",
     "test": "node scripts/run-tests.mjs",
     "pretest:e2e": "npm run build",
     "test:unit": "vitest run --project unit",
@@ -39,13 +41,18 @@
     "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@playwright/test": "^1.48.0",
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^26.1.0",
     "concurrently": "^10.0.3",
     "electron": "^43.0.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^16.5.0",
     "playwright": "^1.48.0",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.63.0",
     "vitest": "^4.1.10"
   },
   "dependencies": {
