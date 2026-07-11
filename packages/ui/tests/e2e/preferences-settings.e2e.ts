@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp } from './harness.js';
+import { runApp, stubFolderDialog } from './harness.js';
 
 /**
  * US2 (007 Phase B): the Settings tab edits every control type from a visual form
@@ -85,6 +85,62 @@ test('edits toggle / select / number / array controls and applies + persists eac
 /** Rows currently rendered by the Settings form (non-matching rows are unmounted). */
 const rowCount = (prefs: Page, key: string): Promise<number> =>
   prefs.getByTestId(`setting-${key}`).count();
+
+test('the Override start folder renders the shared folder picker (browse + typing) (011 FR-042/042a)', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openSettings(app, win);
+
+      // The override-path setting is NOT a bare text box: it renders the shared folder
+      // picker — an editable path input PLUS a themeable browse control that opens the
+      // OS dialog on demand (settings variant never auto-pops).
+      const input = prefs.getByTestId('control-newProject.overridePath');
+      const browse = prefs.getByTestId('control-newProject.overridePath-browse');
+      await expect(input).toBeVisible();
+      await expect(browse).toBeVisible();
+
+      // Browsing writes the picked folder immediately.
+      await stubFolderDialog(app, 'C:/picked/override');
+      await browse.click();
+      await expect
+        .poll(() => readSettings(cfgRoot)?.newProject?.overridePath)
+        .toBe('C:/picked/override');
+
+      // Typing/pasting a path also persists (commit on blur).
+      await input.fill('C:/typed/override');
+      await input.blur();
+      await expect
+        .poll(() => readSettings(cfgRoot)?.newProject?.overridePath)
+        .toBe('C:/typed/override');
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
+
+test('enum dropdowns show machine tokens in Title Case; stored value is unchanged (011 polish)', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openSettings(app, win);
+
+      // The New Project starting-folder enum: each token renders EXACTLY Title-cased
+      // (option text) while its stored value stays the machine token (option value).
+      const start = prefs.getByTestId('control-newProject.startingFolder');
+      await expect(start.locator('option[value="lastViewed"]')).toHaveText('Last Viewed');
+      await expect(start.locator('option[value="override"]')).toHaveText('Override');
+      await expect(start.locator('option[value="profile"]')).toHaveText('Profile');
+      // …and the DEFAULT is Last Viewed.
+      await expect(start).toHaveValue('lastViewed');
+
+      // Line-ending abbreviations keep their casing (LF/CRLF/CR, never "Lf"/"Crlf").
+      const le = prefs.getByTestId('control-editor.defaultLineEnding');
+      await expect(le.locator('option[value="crlf"]')).toHaveText('CRLF');
+      await expect(le.locator('option[value="lf"]')).toHaveText('LF');
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
 
 test('the settings search filters by name, description and value (FR-049)', async () => {
   const cfgRoot = freshCfgRoot();

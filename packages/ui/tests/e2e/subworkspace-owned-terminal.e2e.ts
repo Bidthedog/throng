@@ -128,7 +128,7 @@ test('closing the last Panel of a sub-workspace closes the sub-workspace — FR-
 
     // Close the sub-workspace's only Panel → a warning confirm appears; accept it.
     await child.getByTestId(`panel-close-${a}`).click();
-    await expect(child.getByTestId('confirm-warning')).toContainText('close the sub-workspace');
+    await expect(child.getByTestId('confirm-warning')).toContainText('destroys the sub-workspace');
     await Promise.all([
       child.waitForEvent('close'),
       child.getByTestId('confirm-accept').click(),

@@ -53,7 +53,7 @@ test('a sub-workspace edited in its own window updates the main window’s sync 
     // confirmation, removed immediately). A sub-workspace destroy is LOCAL (FR-026):
     // it only leaves this sub-workspace — the project keeps its Panel.
     await child.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-    await child.getByTestId('menu-item-Destroy Panel').click();
+    await child.getByTestId('menu-item-Close Panel').click();
     await expect(child.getByTestId(`panel-${pid}`)).toHaveCount(0);
 
     // The main window must SEE the change: counts drop back to 1T·1P …
