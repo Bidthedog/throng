@@ -13,8 +13,10 @@
 
 /** Current version of the layout JSON document (for forward migration).
  * v2 (003) adds `Tab.activePanelId`; v1 documents are migrated on load
- * (default `activePanelId` = first panel). */
-export const LAYOUT_SCHEMA_VERSION = 2;
+ * (default `activePanelId` = first panel). v3 (012) adds per-panel `Panel.zoom`
+ * (each panel's own text-zoom level); an absent `zoom` is inherited (level 0) and
+ * needs no migration content. */
+export const LAYOUT_SCHEMA_VERSION = 3;
 
 /**
  * A Panel's assigned type (005). Open by design: the panel-type registry is the
@@ -76,6 +78,13 @@ export interface Panel {
   kind?: PanelKind;
   /** The configuration captured at Confirm for `kind` (005 / FR-007). */
   config?: PanelConfig;
+  /**
+   * This panel's own text-zoom level (012, revised to per-instance). An integer
+   * step in the shared zoom range (see config/zoom.ts); absent / 0 = inherited (no
+   * adjustment). Every panel zooms independently of every other — terminals and
+   * editors alike. Persisted as part of the layout blob.
+   */
+  zoom?: number;
 }
 
 /** An internal split container tiling its children into a row or column. */

@@ -18,6 +18,63 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
   chord('zoom.out', 'Zoom', 'Zoom out', 'Decrease the interface zoom level.'),
   chord('zoom.reset', 'Zoom', 'Reset zoom', 'Return the interface zoom to 100%.'),
 
+  // Focus & Zoom (012) — per-panel-type text zoom, routed to the active panel's
+  // type; distinct from the app-wide zoom above.
+  chord(
+    'panel.zoomIn',
+    'Focus & Zoom',
+    'Zoom panel type in',
+    "Increase the text size of every panel of the active panel's type.",
+  ),
+  chord(
+    'panel.zoomOut',
+    'Focus & Zoom',
+    'Zoom panel type out',
+    "Decrease the text size of every panel of the active panel's type.",
+  ),
+  chord(
+    'panel.zoomReset',
+    'Focus & Zoom',
+    'Reset panel type zoom',
+    "Return the active panel's type to its default text size.",
+  ),
+  chord(
+    'focus.left',
+    'Focus & Zoom',
+    'Focus panel to the left',
+    'Move the active panel focus to the adjacent panel on the left.',
+  ),
+  chord(
+    'focus.right',
+    'Focus & Zoom',
+    'Focus panel to the right',
+    'Move the active panel focus to the adjacent panel on the right.',
+  ),
+  chord(
+    'focus.up',
+    'Focus & Zoom',
+    'Focus panel above',
+    'Move the active panel focus to the adjacent panel above.',
+  ),
+  chord(
+    'focus.down',
+    'Focus & Zoom',
+    'Focus panel below',
+    'Move the active panel focus to the adjacent panel below.',
+  ),
+  chord(
+    'focus.cycle',
+    'Focus & Zoom',
+    'Cycle focus forward',
+    'Move focus to the next panel in layout order, wrapping at the end.',
+  ),
+  chord(
+    'focus.cycleBack',
+    'Focus & Zoom',
+    'Cycle focus backward',
+    'Move focus to the previous panel in layout order, wrapping at the start.',
+  ),
+
   // View
   chord('view.fullscreen', 'View', 'Toggle fullscreen', 'Enter or leave fullscreen mode.'),
   chord(

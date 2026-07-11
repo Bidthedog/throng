@@ -46,6 +46,10 @@ export type { IDirectoryLock, LockHandle } from './abstractions/directory-lock.j
 // Elevation OS seam (005 Phase G): report whether a process runs elevated (FR-025).
 export type { IElevationState } from './abstractions/elevation.js';
 
+// Process-cwd OS seam (012 revision): read a running process's working directory
+// (the daemon polls each terminal's shell pid to show its live cwd in the title).
+export type { IProcessCwd } from './abstractions/process-cwd.js';
+
 // De-elevation OS seam (005 Phase G, FR-025c): wrap a launch to run de-elevated.
 export type { IDeElevator, DeElevateSpec } from './abstractions/de-elevator.js';
 export { passthroughDeElevator } from './abstractions/de-elevator.js';
@@ -88,6 +92,15 @@ export type {
 export { DEFAULT_APP_SETTINGS, parseAppSettings } from './config/app-settings.js';
 export type { StartingFolderConfig, StartingFolderContext } from './config/starting-folder.js';
 export { resolveStartingFolder, isOverrideResolvable } from './config/starting-folder.js';
+// Shared zoom range & mapping (012) — global + per-type zoom use one source.
+export {
+  ZOOM_STEP,
+  ZOOM_MIN_LEVEL,
+  ZOOM_MAX_LEVEL,
+  clampZoomLevel,
+  zoomFactor,
+  stepZoomLevel,
+} from './config/zoom.js';
 export type { Keybindings, ActionId, KeyEvent } from './config/keybindings.js';
 export {
   DEFAULT_KEYBINDINGS,
@@ -222,6 +235,9 @@ export type {
   SubWorkspaceBounds,
 } from './workspace/model.js';
 export { LAYOUT_SCHEMA_VERSION, isPanel, isSplit } from './workspace/model.js';
+// Move-focus geometry (012) — directional + cyclic keyboard focus over the tree.
+export { panelRects, moveFocus, cycleOrder, nextInCycle } from './workspace/focus-move.js';
+export type { Rect, Direction } from './workspace/focus-move.js';
 
 // Editor domain (006): pure encoding/confinement/scope/registry/indicators/overlap
 // + the editorPanelType descriptor. UI-main service/renderer consume these.
@@ -332,8 +348,12 @@ export {
   closeOtherTabs,
   resizeSplit,
   setActivePanel,
+  panelAfterRemoval,
   effectiveActivePanelId,
   activeContextLabel,
+  panelZoomLevel,
+  bumpZoom,
+  resetZoom,
 } from './workspace/operations.js';
 export type { Edge, NewTabIds } from './workspace/operations.js';
 export {

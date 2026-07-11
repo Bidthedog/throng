@@ -8,6 +8,19 @@ export type ActionId =
   | 'zoom.in'
   | 'zoom.out'
   | 'zoom.reset'
+  // Per-panel-type zoom (012, FR-014). Routed to the active panel's TYPE; distinct
+  // from the app-wide global zoom.* above.
+  | 'panel.zoomIn'
+  | 'panel.zoomOut'
+  | 'panel.zoomReset'
+  // Keyboard move-focus (012, FR-015). Directional moves + a stable-layout-order
+  // cycle over the active tab's panels; tokens use the produced key names.
+  | 'focus.left'
+  | 'focus.right'
+  | 'focus.up'
+  | 'focus.down'
+  | 'focus.cycle'
+  | 'focus.cycleBack'
   | 'view.fullscreen'
   | 'view.toggleProjects'
   | 'view.toggleExplorer'
@@ -36,6 +49,19 @@ export const DEFAULT_KEYBINDINGS: Keybindings = {
     'zoom.in': ['Ctrl+=', 'Ctrl++', 'Ctrl+WheelUp'],
     'zoom.out': ['Ctrl+-', 'Ctrl+WheelDown'],
     'zoom.reset': ['Ctrl+0', 'Ctrl+MiddleClick'],
+    // Per-panel-type zoom (012) — distinct modifier family (Ctrl+Alt) from global zoom.
+    'panel.zoomIn': ['Ctrl+Alt+=', 'Ctrl+Alt++'],
+    'panel.zoomOut': ['Ctrl+Alt+-'],
+    'panel.zoomReset': ['Ctrl+Alt+0'],
+    // Keyboard move-focus (012). Tokens are the produced key names: arrow keys
+    // report `Arrow*`, and Shift+backtick reports `~` — so cycle-back is `Ctrl+~`
+    // (i.e. Ctrl+Shift+backtick on a US layout). All rebindable in the editor.
+    'focus.left': ['Ctrl+Alt+ArrowLeft'],
+    'focus.right': ['Ctrl+Alt+ArrowRight'],
+    'focus.up': ['Ctrl+Alt+ArrowUp'],
+    'focus.down': ['Ctrl+Alt+ArrowDown'],
+    'focus.cycle': ['Ctrl+`'],
+    'focus.cycleBack': ['Ctrl+~'],
     'view.fullscreen': ['F11'],
     'view.toggleProjects': ['Ctrl+B'],
     'view.toggleExplorer': ['Ctrl+N'],

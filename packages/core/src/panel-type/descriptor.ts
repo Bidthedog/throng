@@ -60,6 +60,9 @@ export type PanelTypeValues = Record<string, string>;
 export interface PanelTypeDescriptor<V extends PanelTypeValues = PanelTypeValues> {
   id: PanelKind;
   label: string;
+  /** Theme icon token marking this panel type in its header (012). Optional so a
+   *  future type can omit it; the renderer falls back to no icon. */
+  icon?: string;
   inputs: PanelTypeInputSpec[];
   defaults(ctx: PanelTypeContext): V;
   validate(values: V, ctx: PanelTypeContext): ValidationResult;

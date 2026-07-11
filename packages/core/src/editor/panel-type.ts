@@ -26,6 +26,7 @@ export type EditorValues = Record<string, never>;
 export const editorPanelType: PanelTypeDescriptor<EditorValues> = {
   id: EDITOR_KIND,
   label: 'Editor Panel',
+  icon: 'editorPanel',
   inputs: [],
   defaults: (): EditorValues => ({}),
   validate: (_values: EditorValues, ctx: PanelTypeContext): ValidationResult =>

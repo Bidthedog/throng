@@ -47,6 +47,7 @@ export interface TerminalValues {
 export const terminalPanelType: PanelTypeDescriptor<TerminalValues> = {
   id: TERMINAL_KIND,
   label: 'Terminal',
+  icon: 'terminal',
   inputs: [
     {
       key: 'flavourId',
