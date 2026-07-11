@@ -1,5 +1,5 @@
-import { useState, type ReactElement } from 'react';
-import type { Panel } from '@throng/core';
+import { useState, type CSSProperties, type ReactElement } from 'react';
+import { zoomFactor, panelZoomLevel, type Panel } from '@throng/core';
 import { useEditor } from './use-editor.js';
 import './editor.css';
 
@@ -25,5 +25,18 @@ export function EditorPanel({
 }): ReactElement {
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   useEditor({ panel, tabId, projectRoot, rootless, ownerProjectId, container });
-  return <div className="editor-panel" data-testid={`editor-${panel.id}`} ref={setContainer} />;
+  // Per-panel editor zoom (012, per-instance): this panel's own zoom factor scales
+  // only its CodeMirror text (editor.css `calc(... * var(--throng-zoom-editor))`).
+  // Presentation only — file content, encoding and line endings are untouched.
+  const zoomStyle = {
+    ['--throng-zoom-editor']: String(zoomFactor(panelZoomLevel(panel))),
+  } as CSSProperties;
+  return (
+    <div
+      className="editor-panel"
+      data-testid={`editor-${panel.id}`}
+      style={zoomStyle}
+      ref={setContainer}
+    />
+  );
 }

@@ -9,7 +9,7 @@
  * colour token set, so each theme is complete without hand-listing 22 colours.
  */
 import { THRONG_THEME, type Theme } from '../theme.js';
-import { hexToRgb, relativeLuminance } from '../theme-quality.js';
+import { contrastRatio, hexToRgb, relativeLuminance } from '../theme-quality.js';
 
 const MONO = "Consolas, 'Cascadia Mono', 'Courier New', monospace";
 
@@ -31,6 +31,40 @@ function mixToward(hex: string, amount: number): string {
 function gutterBgFor(editorBg: string): string {
   const light = relativeLuminance(hexToRgb(editorBg)) > 0.5;
   return mixToward(editorBg, light ? -0.06 : 0.09);
+}
+
+/** Linear blend between two hex colours (`t` = 0 → `a`, 1 → `b`). */
+function blend(a: string, b: string, t: number): string {
+  const ca = hexToRgb(a);
+  const cb = hexToRgb(b);
+  const mix = (x: number, y: number): number => Math.round(x + (y - x) * t);
+  const to2 = (c: number): string => c.toString(16).padStart(2, '0');
+  return `#${to2(mix(ca.r, cb.r))}${to2(mix(ca.g, cb.g))}${to2(mix(ca.b, cb.b))}`;
+}
+
+/**
+ * Active-panel focus-context indicator colours (012, FR-002 / SC-001), derived so
+ * every bundled theme is legible without hand-listing them. The FOREGROUND border
+ * keeps the theme accent where it already clears the WCAG AA non-text floor (≥3:1
+ * against the panel surface); where the accent is too dark/low-contrast (some dark
+ * themes), it is pulled toward the theme's own text colour — which is designed to
+ * contrast the surface — until it clears the floor. The dimmed BACKGROUND border is
+ * the foreground one pulled back toward the surface so it reads as de-emphasised,
+ * but never below the identifiable floor (≥1.6:1).
+ */
+function activePanelBorders(accent: string, surface: string, text: string): {
+  active: string;
+  inactive: string;
+} {
+  let active = accent;
+  for (let t = 0; t <= 1 && contrastRatio(active, surface) < 3.2; t += 0.1) {
+    active = blend(accent, text, t);
+  }
+  let inactive = blend(active, surface, 0.55);
+  for (let t = 0.5; t > 0 && contrastRatio(inactive, surface) < 1.6; t -= 0.1) {
+    inactive = blend(active, surface, t);
+  }
+  return { active, inactive };
 }
 
 interface Palette {
@@ -88,6 +122,12 @@ function makeTheme(name: string, p: Palette): Theme {
       editorGutterFg: p.editorGutterFg ?? p.textMuted ?? p.text,
       unsavedDot: p.unsavedDot ?? '#e3b341',
       activePaneHighlight: p.accent,
+      // Active-panel focus context (012, FR-002 / SC-001): a contrast-guaranteed
+      // accent marks the active panel when the window is foreground; a dimmed
+      // variant marks it when the window is background — still identifiable but
+      // visibly de-emphasised. Derived per theme so every palette stays legible.
+      activePanelBorder: activePanelBorders(p.accent, p.surface, p.text).active,
+      activePanelBorderInactive: activePanelBorders(p.accent, p.surface, p.text).inactive,
       // Button style tokens (007, FR-046a): a raised surface with the theme accent
       // on hover, hover text flipping to the app background for contrast against it.
       buttonBg: p.surfaceActive ?? p.surface,

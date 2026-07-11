@@ -14,6 +14,8 @@ export interface TerminalExit {
 /** Imperative handle exposed for the right-click menu (current text selection). */
 export interface TerminalApi {
   getSelection(): string;
+  /** Move DOM focus into the terminal's input surface (012, move-focus). */
+  focus(): void;
 }
 
 export interface UseTerminalOptions {
@@ -86,18 +88,29 @@ export function useTerminal(opts: UseTerminalOptions): void {
   metaRef.current = opts.meta;
 
   const termRef = useRef<Terminal | null>(null);
+  // Re-measure-and-resize callback, published by the main effect so the font/zoom
+  // effect below can recompute the grid when the effective font size changes (012).
+  const applyResizeRef = useRef<(() => void) | null>(null);
 
   // Live theme updates (hot-reload) without recreating the terminal.
   useEffect(() => {
     if (termRef.current) termRef.current.options.theme = opts.theme;
   }, [opts.theme]);
 
-  // Hot-reload the terminal font when the theme's terminal role changes (FR-074).
+  // Hot-reload the terminal font when the theme's terminal role changes (FR-074) OR
+  // the per-panel-type zoom changes the effective font size (012, FR-012). A font
+  // metric change alters how many columns/rows the same container holds, so after
+  // applying it we re-measure the grid (proposeDimensions) and resize the PTY only
+  // when cols/rows actually move (SC-005) — a deferred call lets xterm apply the new
+  // cell size first. A pure focus change never runs this effect, so it sends no
+  // resize (SC-004).
   useEffect(() => {
     const t = termRef.current;
     if (!t) return;
     t.options.fontFamily = opts.fontFamily;
     t.options.fontSize = opts.fontSize;
+    const id = setTimeout(() => applyResizeRef.current?.(), 0);
+    return () => clearTimeout(id);
   }, [opts.fontFamily, opts.fontSize]);
 
   useEffect(() => {
@@ -127,7 +140,12 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // PowerShell output. (cls/clear is handled separately via isScreenClear.)
     });
     termRef.current = term;
-    if (opts.apiRef) opts.apiRef.current = { getSelection: () => term.getSelection() };
+    if (opts.apiRef) {
+      opts.apiRef.current = {
+        getSelection: () => term.getSelection(),
+        focus: () => term.focus(),
+      };
+    }
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(container);
@@ -308,6 +326,9 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // back — which is what actually resizes this xterm (008 FR-010/FR-013).
       void bridge.resize(panelId, dims.cols, dims.rows, viewId);
     };
+    // Publish so the font/zoom effect can trigger a re-measure when the effective
+    // font size changes (012, FR-012 / SC-005).
+    applyResizeRef.current = applyResize;
     const observer = new ResizeObserver(() => {
       if (resizeTimer !== undefined) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(applyResize, 60);
@@ -331,6 +352,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
 
     return () => {
       disposed = true;
+      applyResizeRef.current = null;
       if (resizeTimer !== undefined) clearTimeout(resizeTimer);
       clearInterval(repaintTimer);
       observer.disconnect();

@@ -55,6 +55,30 @@ describe('Keybindings resolver (FR-033)', () => {
     expect(resolveAction(DEFAULT_KEYBINDINGS, { ctrl: true, key: 'q' })).toBeNull();
   });
 
+  it('resolves the 012 per-type zoom + move-focus chords the KeybindingsHandler dispatches', () => {
+    const kb = DEFAULT_KEYBINDINGS;
+    // Per-type zoom (Ctrl+Alt family) — distinct from the global zoom (Ctrl family).
+    expect(resolveAction(kb, { ctrl: true, alt: true, key: '=' })).toBe('panel.zoomIn');
+    expect(resolveAction(kb, { ctrl: true, alt: true, key: '+' })).toBe('panel.zoomIn');
+    expect(resolveAction(kb, { ctrl: true, alt: true, key: '-' })).toBe('panel.zoomOut');
+    expect(resolveAction(kb, { ctrl: true, alt: true, key: '0' })).toBe('panel.zoomReset');
+    // …and the global zoom chords still resolve to the global actions (distinct, FR-014).
+    expect(resolveAction(kb, { ctrl: true, key: '=' })).toBe('zoom.in');
+    expect(resolveAction(kb, { ctrl: true, key: '0' })).toBe('zoom.reset');
+
+    // Directional move-focus — arrow keys report `Arrow*`, matching the defaults.
+    expect(resolveAction(kb, { ctrl: true, alt: true, key: 'ArrowLeft' })).toBe('focus.left');
+    expect(resolveAction(kb, { ctrl: true, alt: true, key: 'ArrowRight' })).toBe('focus.right');
+    expect(resolveAction(kb, { ctrl: true, alt: true, key: 'ArrowUp' })).toBe('focus.up');
+    expect(resolveAction(kb, { ctrl: true, alt: true, key: 'ArrowDown' })).toBe('focus.down');
+
+    // Cycle: the backtick key is normalised (renderer `chordKey`) so Shift is what
+    // distinguishes forward from back — portable across layouts (UK Shift+backtick is
+    // ¬, not ~), unlike a produced-character token.
+    expect(resolveAction(kb, { ctrl: true, key: '`' })).toBe('focus.cycle');
+    expect(resolveAction(kb, { ctrl: true, shift: true, key: '`' })).toBe('focus.cycleBack');
+  });
+
   it('parses defaults and merges custom bindings', () => {
     expect(parseKeybindings(undefined)).toEqual(DEFAULT_KEYBINDINGS);
     const custom = parseKeybindings({ bindings: { 'zoom.in': ['Ctrl+Shift+='] } });

@@ -99,6 +99,12 @@ export const THRONG_THEME: Theme = {
     unsavedDot: '#e3b341',
     // The active Files & Folders pane highlight (006, FR-015/SC-006).
     activePaneHighlight: '#6aa3ff',
+    // The active-panel focus context indicator (012, FR-002). Two states: the
+    // foreground treatment when this window is the foreground OS window, and a
+    // dimmed inactive treatment when it is background (the indicator persists in
+    // both). Distinct tokens so a theme can tune each independently.
+    activePanelBorder: '#6aa3ff',
+    activePanelBorderInactive: '#3f5f8c',
     // Buttons carry their own style tokens (007, FR-046a) — separate from the
     // generic surface/text tokens. Hover flips to the accent + the app background.
     buttonBg: '#222c3d',
@@ -146,6 +152,11 @@ export const THRONG_THEME: Theme = {
     // Retry a terminal attach that is still starting (008 FR-005) — a themeable action
     // icon (constitution v3.12.0), auto-exposed in the Themes editor like every token.
     retry: '↻',
+    // Per-panel zoom controls (012) — themeable action icons on the panel context
+    // menu (constitution v3.12.0). Circled +/-/dot read as in / out / reset.
+    zoomIn: '⊕',
+    zoomOut: '⊖',
+    zoomReset: '⊙',
     // File Explorer tree (004, FR-005/FR-031). Folder/file glyphs, a symlink
     // indicator, by-type file icons, and toolbar actions — all themeable and
     // rendered in a fixed-size box so dimensions stay uniform.
@@ -159,6 +170,9 @@ export const THRONG_THEME: Theme = {
     fileImage: '🖼',
     fileText: '📄',
     symlink: '↳',
+    // Panel-type markers shown at the head of each panel's title (012). Terminal
+    // reuses the terminal glyph below; the editor gets its own themeable token.
+    editorPanel: '🖉',
     expandAll: '⊞',
     collapseAll: '⊟',
     newFolder: '📁',

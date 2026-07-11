@@ -24,6 +24,11 @@ import {
   closeOtherTabs as opCloseOtherTabs,
   resizeSplit as opResizeSplit,
   setActivePanel as opSetActivePanel,
+  panelAfterRemoval,
+  effectiveActivePanelId,
+  collectPanels,
+  bumpZoom as opBumpZoom,
+  resetZoom as opResetZoom,
   setPanelType as opSetPanelType,
   clearPanelType as opClearPanelType,
   updatePanelConfig as opUpdatePanelConfig,
@@ -63,6 +68,11 @@ export interface WorkspaceContextValue {
    *  deliberately NOT mirrored across windows (revised 2026-07-02 — sub-workspace
    *  focus is independent of the main window's). */
   setActivePanel(tabId: string, panelId: string): void;
+  /** Zoom ONE panel in/out by `presses` (012, per-instance). Persisted on the panel
+   *  in the layout blob; every other panel is untouched. */
+  bumpZoom(panelId: string, presses: number): void;
+  /** Reset ONE panel to its default (inherited) text size (012, FR-009). */
+  resetZoom(panelId: string): void;
   renameTab(tabId: string, title: string): void;
   renamePanel(panelId: string, title: string): void;
   closeTab(tabId: string): void;
@@ -205,10 +215,24 @@ export function WorkspaceProvider({
         apply((l) => opMovePanelToEdge(l, sourceId, targetId, edge)),
       movePanelToTab: (sourceId, tabId) => apply((l) => opMovePanelToTab(l, sourceId, tabId)),
       addTabFromPanel: (sourceId) => apply((l) => opAddTabFromPanel(l, sourceId, { tab: newId() })),
-      removePanel: (panelId) => apply((l) => opRemovePanel(l, panelId)),
+      removePanel: (panelId) =>
+        apply((l) => {
+          // Deterministic focus fallback (012, FR-005): when the panel being
+          // removed is the active one, re-home focus to the panel preceding it in
+          // layout order (or the following one if it was first) so the window is
+          // never left routing input to a panel that no longer exists.
+          const tab = l.tabs.find((t) => collectPanels(t.root).some((p) => p.id === panelId));
+          const wasActive = tab ? effectiveActivePanelId(tab) === panelId : false;
+          const fallback = tab && wasActive ? panelAfterRemoval(tab.root, panelId) : undefined;
+          const next = opRemovePanel(l, panelId);
+          if (next === l) return l; // removal refused (last panel) — no change
+          return tab && fallback ? opSetActivePanel(next, tab.id, fallback) : next;
+        }),
       reorderTab: (tabId, toIndex) => apply((l) => opReorderTab(l, tabId, toIndex)),
       setActiveTab: (tabId) => apply((l) => opSetActiveTab(l, tabId)),
       setActivePanel: (tabId, panelId) => apply((l) => opSetActivePanel(l, tabId, panelId)),
+      bumpZoom: (panelId, presses) => apply((l) => opBumpZoom(l, panelId, presses)),
+      resetZoom: (panelId) => apply((l) => opResetZoom(l, panelId)),
       renameTab: (tabId, title) => apply((l) => opRenameTab(l, tabId, title)),
       renamePanel: (panelId, title) => apply((l) => opRenamePanel(l, panelId, title)),
       closeTab: (tabId) => apply((l) => opCloseTab(l, tabId)),

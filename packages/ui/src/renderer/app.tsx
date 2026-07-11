@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { resolveAction, activeContextLabel } from '@throng/core';
+import {
+  resolveAction,
+  activeContextLabel,
+  effectiveActivePanelId,
+  moveFocus,
+  cycleOrder,
+  nextInCycle,
+  type Direction,
+  type LayoutNode,
+} from '@throng/core';
 import { EditorChrome } from './editor/editor-chrome.js';
 import { useCapabilities } from './panel-type/use-capabilities.js';
 import { ProjectsPanel } from './sidebar/projects-panel.js';
@@ -8,6 +17,9 @@ import { useProjects } from './state/projects-store.js';
 import { WorkspaceProvider, useWorkspace } from './state/workspace-store.js';
 import { useServices } from './composition-root.js';
 import { TabGroup } from './workspace/tab-group.js';
+import { focusPanel } from './workspace/panel-focus.js';
+import { setActivePane } from './workspace/active-pane.js';
+import { chordKey, isBackquote } from './config/chord-key.js';
 import { DetachProvider } from './workspace/detach-context.js';
 import { PanelRenameSync } from './workspace/panel-rename-sync.js';
 import { PanelDestroySync } from './workspace/panel-destroy-sync.js';
@@ -73,13 +85,89 @@ function KeybindingsHandler({
   onToggleExplorer: () => void;
 }): null {
   const keybindings = useKeybindings();
+  const ws = useWorkspace();
   const cbRef = useRef({ onToggleProjects, onToggleExplorer });
   cbRef.current = { onToggleProjects, onToggleExplorer };
+  // The workspace store is read through a ref so the keydown listener isn't
+  // re-subscribed on every layout change (012 — per-type zoom routes to it).
+  const wsRef = useRef(ws);
+  wsRef.current = ws;
   useEffect(() => {
+    // The id of the active panel — the target of per-panel zoom (012, per-instance).
+    // undefined when there is no active panel, in which case a zoom command no-ops.
+    const activePanelId = (): string | undefined => {
+      const layout = wsRef.current.layout;
+      if (!layout) return undefined;
+      const tab = layout.tabs.find((t) => t.id === layout.activeTabId);
+      return tab ? effectiveActivePanelId(tab) : undefined;
+    };
+    // The active tab's split tree + active panel — the input to move-focus (012, US3).
+    const activeFocus = (): { tabId: string; root: LayoutNode; activeId: string } | null => {
+      const layout = wsRef.current.layout;
+      if (!layout) return null;
+      const tab = layout.tabs.find((t) => t.id === layout.activeTabId);
+      if (!tab) return null;
+      const activeId = effectiveActivePanelId(tab);
+      if (!activeId) return null;
+      return { tabId: tab.id, root: tab.root, activeId };
+    };
+    // Move the active panel AND transfer DOM focus (012, US3 fix): after changing
+    // which panel is active, route real keyboard focus into its input surface so
+    // typing follows the indicator — from and to terminals and editors alike.
+    const goToPanel = (tabId: string, target: string): void => {
+      wsRef.current.setActivePanel(tabId, target);
+      setActivePane('workspace'); // a workspace Panel is now active (gates Ctrl+S etc.)
+      focusPanel(target); // move the caret / input into the target view
+    };
+    const dispatchMove = (dir: Direction): void => {
+      const f = activeFocus();
+      if (!f) return;
+      const target = moveFocus(f.root, f.activeId, dir); // null at the edge → stay put
+      if (target && target !== f.activeId) goToPanel(f.tabId, target);
+    };
+    const dispatchCycle = (step: 1 | -1): void => {
+      const f = activeFocus();
+      if (!f) return;
+      const target = nextInCycle(cycleOrder(f.root), f.activeId, step);
+      if (target !== f.activeId) goToPanel(f.tabId, target);
+    };
+    // Actions this handler owns. Only these are intercepted (and stopped) in the
+    // capture phase; anything else (editor.save, file.*, plain typing) is left for
+    // the focused widget — so Ctrl+S in an editor and Ctrl+C in a terminal still work.
+    const HANDLED: ReadonlySet<string> = new Set([
+      'zoom.in',
+      'zoom.out',
+      'zoom.reset',
+      'panel.zoomIn',
+      'panel.zoomOut',
+      'panel.zoomReset',
+      'focus.left',
+      'focus.right',
+      'focus.up',
+      'focus.down',
+      'focus.cycle',
+      'focus.cycleBack',
+      'view.fullscreen',
+      'view.toggleProjects',
+      'view.toggleExplorer',
+    ]);
     const onKeyDown = (e: KeyboardEvent): void => {
-      const action = resolveAction(keybindings, { key: e.key, ctrl: e.ctrlKey, alt: e.altKey });
-      if (!action) return;
+      // Shift is deliberately dropped for most keys (the produced character already
+      // encodes it, e.g. "Ctrl++" is Ctrl+Shift+"="). The BACKTICK key is the
+      // exception: it is normalised from its physical key and its Shift state IS the
+      // signal that distinguishes focus.cycle from focus.cycleBack across layouts.
+      const backtick = isBackquote(e);
+      const action = resolveAction(keybindings, {
+        key: chordKey(e),
+        ctrl: e.ctrlKey,
+        alt: e.altKey,
+        ...(backtick ? { shift: e.shiftKey } : {}),
+      });
+      if (!action || !HANDLED.has(action)) return;
+      // Capture phase: stop the focused terminal/editor from ALSO acting on the chord
+      // (e.g. Git Bash turning Ctrl+Alt+Arrow into an escape sequence), then handle it.
       e.preventDefault();
+      e.stopPropagation();
       switch (action) {
         case 'zoom.in':
           window.throng?.zoomBy?.(1);
@@ -89,6 +177,41 @@ function KeybindingsHandler({
           break;
         case 'zoom.reset':
           window.throng?.zoomReset?.();
+          break;
+        // Per-panel zoom (012, per-instance) — routed to the active panel by id.
+        case 'panel.zoomIn': {
+          const id = activePanelId();
+          if (id) wsRef.current.bumpZoom(id, 1);
+          break;
+        }
+        case 'panel.zoomOut': {
+          const id = activePanelId();
+          if (id) wsRef.current.bumpZoom(id, -1);
+          break;
+        }
+        case 'panel.zoomReset': {
+          const id = activePanelId();
+          if (id) wsRef.current.resetZoom(id);
+          break;
+        }
+        // Keyboard move-focus (012, US3) — routed to the active tab's split tree.
+        case 'focus.left':
+          dispatchMove('left');
+          break;
+        case 'focus.right':
+          dispatchMove('right');
+          break;
+        case 'focus.up':
+          dispatchMove('up');
+          break;
+        case 'focus.down':
+          dispatchMove('down');
+          break;
+        case 'focus.cycle':
+          dispatchCycle(1);
+          break;
+        case 'focus.cycleBack':
+          dispatchCycle(-1);
           break;
         case 'view.fullscreen':
           window.throng?.fullscreenToggle?.();
@@ -103,8 +226,10 @@ function KeybindingsHandler({
           break;
       }
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    // Capture phase (third arg true): runs BEFORE the focused widget's own key
+    // handlers, so move-focus/zoom chords are intercepted even inside a terminal.
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [keybindings]);
   return null;
 }

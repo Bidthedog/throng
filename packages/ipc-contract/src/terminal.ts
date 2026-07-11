@@ -37,6 +37,8 @@ export const TERMINAL_FLAVOUR_MISSING_NOTIFICATION = 'terminal.flavourMissing';
  * any view larger than the minimum. Broadcast to all views so each conforms its xterm.
  */
 export const TERMINAL_GRID_NOTIFICATION = 'terminal.grid';
+/** A terminal's shell working directory changed (012 revision) — shown in the panel title. */
+export const TERMINAL_CWD_NOTIFICATION = 'terminal.cwd';
 
 /** Resolved at (re)start; never persisted. cwd = project root. */
 export interface LaunchSpecDto {
@@ -187,6 +189,13 @@ export interface TerminalGridNotification {
   panelId: string;
   cols: number;
   rows: number;
+}
+
+/** The shell's current working directory for a terminal panel (012 revision). */
+export interface TerminalCwdNotification {
+  panelId: string;
+  /** Absolute path of the shell's current working directory. */
+  cwd: string;
 }
 
 /** A JSON-RPC 2.0 notification frame (no `id`) — the daemon→UI streaming shape. */

@@ -42,7 +42,8 @@ test('creates an editor, types, saves within the tree, and shows type + file pil
       const pid = await newEditor(win);
 
       // Type pill reads the registry label.
-      await expect(win.getByTestId(`panel-kind-${pid}`)).toContainText('Editor Panel');
+      // The type is now shown as a themeable icon; its name lives in the hover title.
+      await expect(win.getByTestId(`panel-kind-${pid}`)).toHaveAttribute('title', /Editor Panel/);
 
       await typeInto(win, pid, 'hello\nworld\n');
       // Editing marks the Panel unsaved (shared dot).

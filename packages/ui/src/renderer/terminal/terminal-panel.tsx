@@ -7,10 +7,18 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
 } from 'react';
-import { resolveIcon, type Panel, type TerminalPanelConfig, type Theme } from '@throng/core';
+import {
+  resolveIcon,
+  zoomFactor,
+  panelZoomLevel,
+  type Panel,
+  type TerminalPanelConfig,
+  type Theme,
+} from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useActiveTheme } from '../config/config-store.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
+import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import { setPanelExit } from './exit-store.js';
 import { useTerminal, type TerminalApi } from './use-terminal.js';
 import './terminal.css';
@@ -67,6 +75,11 @@ export function TerminalPanel({
   const config = (panel.config ?? {}) as Partial<TerminalPanelConfig>;
   const xtermTheme = useMemo(() => buildXtermTheme(theme), [theme]);
   const font = useMemo(() => terminalFont(theme), [theme]);
+  // Per-panel TERMINAL zoom (012, FR-012 / per-instance): the effective font size is
+  // the themed base size × THIS panel's own zoom factor. The grid is computed from
+  // this size (not the app-wide global zoom, which raster-scales the rendered
+  // result). Rounded to a whole pixel for crisp glyphs.
+  const effectiveFontSize = Math.round(font.size * zoomFactor(panelZoomLevel(panel)));
   const apiRef = useRef<TerminalApi | null>(null);
 
   // Right-click → the native (Electron) Copy / Paste menu, instead of the app's
@@ -111,6 +124,14 @@ export function TerminalPanel({
     setAttempt((n) => n + 1); // re-run the attach effect → reattach (idempotent by reuse)
   }, []);
 
+  // Register this terminal's focus with the panel-focus registry (012) so keyboard
+  // move-focus can route DOM focus into its input surface.
+  useEffect(() => {
+    const id = panel.id;
+    registerPanelFocus(id, () => apiRef.current?.focus());
+    return () => unregisterPanelFocus(id);
+  }, [panel.id]);
+
   useTerminal({
     panelId: panel.id,
     projectId: panel.originProjectId,
@@ -122,7 +143,7 @@ export function TerminalPanel({
     container,
     theme: xtermTheme,
     fontFamily: font.family,
-    fontSize: font.size,
+    fontSize: effectiveFontSize,
     meta,
     onExit,
     onError,

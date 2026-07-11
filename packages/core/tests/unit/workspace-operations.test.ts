@@ -17,8 +17,18 @@ import {
   collectPanels,
   isMainLayoutValid,
   isSplit,
+  panelZoomLevel,
+  bumpZoom,
+  resetZoom,
+  ZOOM_MAX_LEVEL,
   type WorkspaceLayout,
 } from '@throng/core';
+
+/** The stored zoom level of a specific panel in a layout (for assertions). */
+function zoomOf(layout: WorkspaceLayout, panelId: string): number {
+  const panel = layout.tabs.flatMap((t) => collectPanels(t.root)).find((p) => p.id === panelId);
+  return panel ? panelZoomLevel(panel) : NaN;
+}
 
 function base(): WorkspaceLayout {
   return createDefaultLayout('proj', { tab: 't1', panel: 'p1' });
@@ -234,5 +244,51 @@ describe('resizeSplit (FR-038)', () => {
   it('ignores a size array whose length mismatches the split', () => {
     const l = addPanel(base(), 't1', 'p2');
     expect(resizeSplit(l, 't1', [], [1])).toEqual(l);
+  });
+});
+
+describe('per-panel zoom reducer (012, per-instance)', () => {
+  /** A two-panel layout: p1 and p2 as row siblings, both at inherited zoom. */
+  function twoPanels(): WorkspaceLayout {
+    return addPanel(base(), 't1', 'p2');
+  }
+
+  it('panelZoomLevel reads 0 when a panel has no stored zoom', () => {
+    expect(zoomOf(base(), 'p1')).toBe(0);
+  });
+
+  it('bumpZoom changes only the target panel, leaving every other panel untouched', () => {
+    let l = twoPanels();
+    l = bumpZoom(l, 'p1', 2); // two presses in on p1 only
+    expect(zoomOf(l, 'p1')).toBeGreaterThan(0);
+    expect(zoomOf(l, 'p2')).toBe(0); // the sibling is unaffected
+    const p1Level = zoomOf(l, 'p1');
+    l = bumpZoom(l, 'p2', -1); // one press out on p2 only
+    expect(zoomOf(l, 'p2')).toBeLessThan(0);
+    expect(zoomOf(l, 'p1')).toBe(p1Level); // p1 untouched by p2's zoom
+  });
+
+  it('bumpZoom is immutable and a no-op at a bound (FR-011)', () => {
+    const l = base();
+    const bumped = bumpZoom(l, 'p1', 1);
+    expect(bumped).not.toBe(l); // new object
+    expect(collectPanels(l.tabs[0].root)[0].zoom).toBeUndefined(); // input not mutated
+    // drive p1 to the max, then a further in-press is a no-op (same reference)
+    let hi = l;
+    for (let i = 0; i < 40; i += 1) hi = bumpZoom(hi, 'p1', 1);
+    expect(zoomOf(hi, 'p1')).toBe(ZOOM_MAX_LEVEL);
+    expect(bumpZoom(hi, 'p1', 1)).toBe(hi); // no-op → same reference
+    // an unknown panel id is also a no-op
+    expect(bumpZoom(hi, 'nope', 1)).toBe(hi);
+  });
+
+  it('resetZoom returns one panel to default and is idempotent (FR-009)', () => {
+    let l = twoPanels();
+    l = bumpZoom(l, 'p1', 3);
+    l = bumpZoom(l, 'p2', 2);
+    const reset = resetZoom(l, 'p1');
+    expect(zoomOf(reset, 'p1')).toBe(0);
+    expect(zoomOf(reset, 'p2')).toBeGreaterThan(0); // the other panel is kept
+    expect(resetZoom(reset, 'p1')).toBe(reset); // idempotent → same reference
   });
 });

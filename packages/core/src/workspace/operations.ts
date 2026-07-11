@@ -8,6 +8,7 @@ import {
   type WorkspaceLayout,
 } from './model.js';
 import { collectPanels, countPanels } from './invariants.js';
+import { clampZoomLevel, stepZoomLevel } from '../config/zoom.js';
 
 // Typed-panel ops (005) live in the panel-type module but are surfaced here so
 // callers reach all layout mutations through one operations surface (FR-006/020).
@@ -375,6 +376,71 @@ export function activeContextLabel(layout: WorkspaceLayout): string {
   const activeId = effectiveActivePanelId(tab);
   const panel = collectPanels(tab.root).find((p) => p.id === activeId);
   return panel ? `${tab.title} · ${panel.title}` : tab.title;
+}
+
+/** A single panel's effective zoom level (absent → 0), clamped on read (012). */
+export function panelZoomLevel(panel: Panel): number {
+  return clampZoomLevel(panel.zoom ?? 0);
+}
+
+/** Apply `fn` to the panel with `panelId` anywhere in a tree; identity elsewhere. */
+function mapPanelById(node: LayoutNode, panelId: string, fn: (p: Panel) => Panel): LayoutNode {
+  if (isPanel(node)) return node.id === panelId ? fn(node) : node;
+  return { ...node, children: node.children.map((c) => mapPanelById(c, panelId, fn)) };
+}
+
+/** Set `panelId`'s zoom to `level`; returns the SAME layout reference on no change. */
+function setPanelZoom(layout: WorkspaceLayout, panelId: string, level: number): WorkspaceLayout {
+  let changed = false;
+  const tabs = layout.tabs.map((tab) => {
+    const root = mapPanelById(tab.root, panelId, (p) => {
+      if (panelZoomLevel(p) === level) return p; // no-op
+      changed = true;
+      // Store 0 as the level explicitly (so an at-default panel round-trips as 0);
+      // callers treat absent and 0 identically via panelZoomLevel.
+      return { ...p, zoom: level };
+    });
+    return root === tab.root ? tab : { ...tab, root };
+  });
+  return changed ? { ...layout, tabs } : layout;
+}
+
+/**
+ * Bump ONE panel's zoom by `presses` (>0 in, <0 out), clamped to the shared bounds
+ * (012, revised to per-instance). Only that panel changes — every other panel,
+ * including others of the same type, is untouched. A no-op at a bound returns the
+ * same reference (FR-011). Immutable.
+ */
+export function bumpZoom(layout: WorkspaceLayout, panelId: string, presses: number): WorkspaceLayout {
+  const panel = findPanel(layout, panelId);
+  if (!panel) return layout;
+  const next = stepZoomLevel(panelZoomLevel(panel), presses);
+  return setPanelZoom(layout, panelId, next);
+}
+
+/**
+ * Reset ONE panel to its default (level 0) — the inherited size (012, FR-009).
+ * Idempotent: a panel already at 0 returns the same layout reference.
+ */
+export function resetZoom(layout: WorkspaceLayout, panelId: string): WorkspaceLayout {
+  const panel = findPanel(layout, panelId);
+  if (!panel) return layout;
+  return setPanelZoom(layout, panelId, 0);
+}
+
+/**
+ * The Panel that should become active when `removedId` is removed from a Tab's
+ * split `root` (012 / FR-005). Deterministic — the panel immediately **preceding**
+ * the removed one in depth-first layout order (the same order used by focus-cycle),
+ * or the one immediately **following** it when the removed panel was first.
+ * Returns `undefined` only when no other Panel remains (or the id is unknown), so
+ * the caller can leave the tab to its normal empty-tab handling. Pure; no DOM.
+ */
+export function panelAfterRemoval(root: LayoutNode, removedId: string): string | undefined {
+  const order = collectPanels(root).map((p) => p.id);
+  const idx = order.indexOf(removedId);
+  if (idx < 0 || order.length <= 1) return undefined;
+  return idx === 0 ? order[1] : order[idx - 1];
 }
 
 /**

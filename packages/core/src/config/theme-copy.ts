@@ -139,6 +139,16 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Active pane highlight',
     description: 'The emphasis marking the focused entry in the files and folders pane.',
   },
+  'colours.activePanelBorder': {
+    label: 'Active panel border',
+    description:
+      'The outline around the panel that currently receives keyboard input, while its window is in the foreground.',
+  },
+  'colours.activePanelBorderInactive': {
+    label: 'Active panel border, window in background',
+    description:
+      'The dimmed outline marking the panel that will receive input once its window returns to the foreground.',
+  },
   'colours.buttonBg': {
     label: 'Button background',
     description: 'The resting surface of push buttons.',
@@ -267,6 +277,18 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The glyph on the control that re-runs a failed or interrupted action, such as reconnecting a dropped terminal session.',
   },
+  'icons.zoomIn': {
+    label: 'Zoom in icon',
+    description: 'The glyph on the panel menu control that enlarges that panel’s text.',
+  },
+  'icons.zoomOut': {
+    label: 'Zoom out icon',
+    description: 'The glyph on the panel menu control that shrinks that panel’s text.',
+  },
+  'icons.zoomReset': {
+    label: 'Reset zoom icon',
+    description: 'The glyph on the panel menu control that returns that panel’s text to its default size.',
+  },
   'icons.collapse': {
     label: 'Collapse icon',
     description: 'The glyph on the control that folds a pane or section closed.',
@@ -334,6 +356,10 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'icons.symlink': {
     label: 'Symbolic link icon',
     description: 'The badge marking a tree entry that points to another location.',
+  },
+  'icons.editorPanel': {
+    label: 'Editor panel type icon',
+    description: 'The glyph at the head of an editor panel’s title marking it as a text editor.',
   },
   'icons.expandAll': {
     label: 'Expand all icon',

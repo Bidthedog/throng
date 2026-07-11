@@ -8,6 +8,9 @@ import {
   parseAppSettings,
   parseKeybindings,
   resolveColour,
+  ZOOM_STEP,
+  ZOOM_MIN_LEVEL,
+  ZOOM_MAX_LEVEL,
   type IConfigSettings,
   type IConfigStore,
   type IFileWatcher,
@@ -95,12 +98,11 @@ async function isFirstRun(store: IConfigStore): Promise<boolean> {
 // Zoom is handled in-process because removing the native menu (below) also
 // removed its zoomIn/zoomOut/resetZoom accelerators. setZoomLevel is the single
 // source of truth so keyboard, mouse wheel, and middle-click all stay in sync.
-const ZOOM_STEP = 0.5;
-const ZOOM_LIMIT = 5;
-
+// The step and bounds come from the shared @throng/core zoom range (012, DRY) so
+// the app-wide global zoom and the per-panel-type zoom behave identically.
 function zoomBy(webContents: WebContents, steps: number): void {
   const next = webContents.getZoomLevel() + steps * ZOOM_STEP;
-  webContents.setZoomLevel(Math.min(Math.max(next, -ZOOM_LIMIT), ZOOM_LIMIT));
+  webContents.setZoomLevel(Math.min(Math.max(next, ZOOM_MIN_LEVEL), ZOOM_MAX_LEVEL));
 }
 
 function resetZoom(webContents: WebContents): void {

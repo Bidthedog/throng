@@ -210,6 +210,12 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.on('throng:terminal:grid', handler);
       return () => ipcRenderer.removeListener('throng:terminal:grid', handler);
     },
+    // A terminal's shell working directory changed (012) — shown in the panel title.
+    onCwd: (cb: (e: { panelId: string; cwd: string }) => void) => {
+      const handler = (_event: unknown, e: { panelId: string; cwd: string }): void => cb(e);
+      ipcRenderer.on('throng:terminal:cwd', handler);
+      return () => ipcRenderer.removeListener('throng:terminal:cwd', handler);
+    },
     onExit: (cb: (e: { panelId: string; code: number | null; unexpected: boolean }) => void) => {
       const handler = (_event: unknown, e: { panelId: string; code: number | null; unexpected: boolean }): void =>
         cb(e);

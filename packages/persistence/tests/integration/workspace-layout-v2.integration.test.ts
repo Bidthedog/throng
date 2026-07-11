@@ -47,8 +47,12 @@ describe('workspace layout v1 → v2 migration on load (T028)', () => {
 
       const result = new WorkspaceRepository(db).load('u', 'p1');
       expect(result.restored).toBe(true);
-      expect(result.layout.schemaVersion).toBe(2);
+      // v1 now migrates all the way to the current schema (v3), populating the
+      // activePanelId (v2 step). v3 adds per-panel zoom, which is inherited-by-default
+      // — so there is no layout-level zoom field to add.
+      expect(result.layout.schemaVersion).toBe(3);
       expect(result.layout.tabs[0].activePanelId).toBe(firstPanelId);
+      expect((result.layout as { zoom?: unknown }).zoom).toBeUndefined();
     } finally {
       db.close();
     }

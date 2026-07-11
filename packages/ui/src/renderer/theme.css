@@ -680,25 +680,32 @@ textarea,
 }
 
 /* The Panel's assigned type, shown as a small muted pill after its name (005). */
-.panel-box__kind {
-  flex: 0 0 auto;
-  margin-left: 6px;
-  padding: 1px 6px;
-  border: 1px solid var(--throng-colour-border);
-  border-radius: 9px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--throng-colour-textMuted);
+/* The terminal's live working directory (012), shown after the panel title so the
+   path is visible even when a full-screen program hides the prompt. Muted, and the
+   first thing to truncate when the header is tight (the name always wins). */
+.panel-box__cwd {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 11px;
+  color: var(--throng-colour-textMuted);
+  direction: rtl; /* keep the tail (the deepest folder) visible when truncated */
+  text-align: left;
 }
 
-/* The terminal flavour, shown after the type inside the pill. */
-.panel-box__flavour {
-  margin-left: 5px;
-  padding-left: 5px;
-  border-left: 1px solid var(--throng-colour-border);
-  color: var(--throng-colour-text);
+/* Panel-type marker icon (012) — a small glyph at the head of the title, before
+   the name, indicating the panel's type. Replaces the former type/flavour text
+   pill; the type and flavour now live in its hover title. */
+.panel-box__type-icon {
+  flex: 0 0 auto;
+  order: -1; /* pin to the far left of the header, before the title */
+  margin-right: 6px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--throng-colour-textMuted);
 }
 
 /* Red-outlined ADMIN pill for an elevated terminal (FR-025d). */
@@ -1285,11 +1292,17 @@ textarea,
   z-index: 2;
 }
 
-/* Active (highlighted) Panel — FR-002. The Tab's active Panel is outlined in the
-   theme accent with a subtly raised header so the focused Panel is unambiguous. */
+/* Active (highlighted) Panel — FR-002 / 012. The Tab's active Panel is outlined in
+   the active-panel token with a subtly raised header so the focused Panel is
+   unambiguous. When this window is NOT the foreground OS window the outline
+   switches to the dimmed inactive token (it persists, never disappears — SC-001a). */
 .panel-box--active {
-  outline: 2px solid var(--throng-colour-accent);
+  outline: 2px solid var(--throng-colour-activePanelBorder);
   outline-offset: -2px;
+}
+
+.panel-box--active-dimmed {
+  outline-color: var(--throng-colour-activePanelBorderInactive);
 }
 
 .panel-box--active .panel-box__header {
