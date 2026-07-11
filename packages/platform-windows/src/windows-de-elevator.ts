@@ -108,7 +108,7 @@ public static int Run(string appName, string cmdLine) {
 }
 '@
 # Build a properly-quoted command line: "file" "arg1" "arg2" ...
-function Quote([string]$s) { if ($s -match '[\s"]') { '"' + ($s -replace '"','\\"') + '"' } else { $s } }
+function Quote([string]$s) { if ($s -match '[\\s"]') { '"' + ($s -replace '"','\\"') + '"' } else { $s } }
 $cmdLine = (@($targetFile) + $targetArgs | ForEach-Object { Quote $_ }) -join ' '
 try {
   exit ([Throng.DeElev]::Run($targetFile, $cmdLine))
