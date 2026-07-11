@@ -7,6 +7,8 @@ import {
   editorPathParts,
   toDisplayPath,
   effectiveActivePanelId,
+  panelZoomLevel,
+  resolveIcon,
   findPanelLocations,
   planConfirmations,
   type Edge,
@@ -18,7 +20,7 @@ import { useProjects } from '../state/projects-store.js';
 import { useServices } from '../composition-root.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useContextMenu } from '../context-menu-provider.js';
-import { useAppSettings } from '../config/config-store.js';
+import { useAppSettings, useActiveTheme } from '../config/config-store.js';
 import { panelHasLiveTerminal, panelHasRunningSubprocess } from './subprocess.js';
 import { useCapabilities } from '../panel-type/use-capabilities.js';
 import { useDetach } from './detach-context.js';
@@ -26,6 +28,8 @@ import { useSubWorkspaceWindow } from './subworkspace-window-context.js';
 import { destroySubWorkspace } from './destroy-sub-workspace.js';
 import { edgeDropId, panelDragId, useDragState } from './drag-state.js';
 import { setActivePane } from './active-pane.js';
+import { useWindowFocus } from './use-window-focus.js';
+import { useTerminalCwd } from '../terminal/cwd-store.js';
 import { useEditorState } from '../editor/editor-state.js';
 import { setLastActiveEditor } from '../editor/last-active-editor.js';
 import { getEditorActions } from '../editor/editor-actions.js';
@@ -58,6 +62,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const confirm = useConfirm();
   const { openMenu } = useContextMenu();
   const settings = useAppSettings();
+  const theme = useActiveTheme(); // type-icon glyph resolves from the live theme
   const detach = useDetach();
   const subWin = useSubWorkspaceWindow();
   const services = useServices();
@@ -107,6 +112,16 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   // Panel (FR-002). Clicking anywhere in the Panel activates it.
   const ownTab = ws.layout?.tabs.find((t) => t.id === tabId);
   const isActive = ownTab ? effectiveActivePanelId(ownTab) === panel.id : false;
+  // Two-state focus context (012, FR-002): the active-panel indicator is drawn in
+  // the foreground treatment when this window is the foreground OS window, and a
+  // dimmed inactive treatment when it is background — it persists in both, never
+  // disappearing (SC-001a). Distinct from the OS focus/raise group.
+  const windowForeground = useWindowFocus();
+  const isActiveDimmed = isActive && !windowForeground;
+  // The terminal's live working directory (012), shown in the header so the path is
+  // visible even when a full-screen program hides the prompt. Undefined for
+  // non-terminal panels (no cwd is ever pushed for their id).
+  const terminalCwd = useTerminalCwd(panel.id);
 
   // Removal verb per ownership + location (011, FR-030/031). Inside a sub-workspace a
   // Panel backed by a real project (`originProject` resolved above) is a mirrored VIEW:
@@ -260,16 +275,21 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
 
   return (
     <div
-      className={`panel-box${isDragging ? ' panel-box--dragging' : ''}${isActive ? ' panel-box--active' : ''}`}
+      className={`panel-box${isDragging ? ' panel-box--dragging' : ''}${isActive ? ' panel-box--active' : ''}${isActiveDimmed ? ' panel-box--active-dimmed' : ''}`}
       data-testid={`panel-${panel.id}`}
       data-panel-id={panel.id}
       data-active={isActive}
+      data-active-dimmed={isActiveDimmed}
+      data-zoom={panelZoomLevel(panel)}
       onPointerDown={() => {
         ws.setActivePanel(tabId, panel.id);
         setActivePane('workspace'); // a workspace Panel is now active (gates Ctrl+S)
         if (panel.kind === 'editor') setLastActiveEditor(tabId, panel.id); // FR-010
       }}
-      style={isActive && activeColour ? { outlineColor: activeColour } : undefined}
+      // The dominant project/owner colour marks the active panel only while the
+      // window is foreground (Principle VI); when the window is background the
+      // CSS dimmed-inactive token takes over so no runtime colour hides it.
+      style={isActive && windowForeground && activeColour ? { outlineColor: activeColour } : undefined}
     >
       <div
         ref={setNodeRef}
@@ -282,6 +302,16 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
           const others = (ws.layout?.tabs ?? []).filter((t) => t.id !== tabId);
           openMenu(e.clientX, e.clientY, [
             { label: 'Rename', icon: 'rename', onClick: () => setRenaming(true) },
+            // Per-panel zoom (012) — zoom THIS panel's text independently of others.
+            {
+              label: 'Zoom',
+              icon: 'zoomIn',
+              submenu: [
+                { label: 'Zoom In', icon: 'zoomIn', onClick: () => ws.bumpZoom(panel.id, 1) },
+                { label: 'Zoom Out', icon: 'zoomOut', onClick: () => ws.bumpZoom(panel.id, -1) },
+                { label: 'Reset Zoom', icon: 'zoomReset', onClick: () => ws.resetZoom(panel.id) },
+              ],
+            },
             // Editor Panels: Save (== Ctrl+S, FR-076) and Revert-all-changes with a
             // confirmation (FR-075). Revert is disabled when there is nothing to undo.
             ...(panel.kind === 'editor'
@@ -381,6 +411,33 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         {...(renaming ? {} : listeners)}
         {...attributes}
       >
+        {/* Panel-type marker (012): a small themeable icon at the head of the title,
+            replacing the former "TERMINAL/EDITOR PANEL" text pill. The type and
+            flavour move into its hover title. */}
+        {panel.kind
+          ? (() => {
+              const desc = defaultPanelTypeRegistry.get(panel.kind);
+              const typeLabel = desc?.label ?? panel.kind;
+              const glyph = desc?.icon ? resolveIcon(theme, desc.icon) : '';
+              if (!glyph) return null;
+              // Prefer the captured flavour label; fall back to the flavour id for
+              // Panels typed before the label was persisted (back-compat).
+              const flavour =
+                (typeof panel.config?.flavourLabel === 'string' && panel.config.flavourLabel) ||
+                (typeof panel.config?.flavourId === 'string' && panel.config.flavourId) ||
+                null;
+              return (
+                <span
+                  className="panel-box__type-icon"
+                  data-testid={`panel-kind-${panel.id}`}
+                  title={flavour ? `${typeLabel} · ${flavour}` : `Panel type: ${typeLabel}`}
+                  aria-label={typeLabel}
+                >
+                  {glyph}
+                </span>
+              );
+            })()
+          : null}
         {renaming ? (
           <input
             className="panel-box__rename"
@@ -398,27 +455,15 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         ) : (
           <span className="panel-box__title">{panel.title}</span>
         )}
-        {panel.kind
-          ? (() => {
-              const typeLabel = defaultPanelTypeRegistry.get(panel.kind)?.label ?? panel.kind;
-              // Prefer the captured flavour label; fall back to the flavour id for
-              // Panels typed before the label was persisted (back-compat).
-              const flavour =
-                (typeof panel.config?.flavourLabel === 'string' && panel.config.flavourLabel) ||
-                (typeof panel.config?.flavourId === 'string' && panel.config.flavourId) ||
-                null;
-              return (
-                <span
-                  className="panel-box__kind"
-                  data-testid={`panel-kind-${panel.id}`}
-                  title={flavour ? `${typeLabel} · ${flavour}` : `Panel type: ${typeLabel}`}
-                >
-                  {typeLabel}
-                  {flavour ? <span className="panel-box__flavour">{flavour}</span> : null}
-                </span>
-              );
-            })()
-          : null}
+        {panel.kind === 'terminal' && terminalCwd ? (
+          <span
+            className="panel-box__cwd"
+            data-testid={`panel-cwd-${panel.id}`}
+            title={terminalCwd}
+          >
+            {terminalCwd}
+          </span>
+        ) : null}
         {panel.kind === 'editor' && editorUi ? (
           <span
             className="panel-box__file"

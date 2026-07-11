@@ -122,6 +122,8 @@ declare global {
         onOutput: (cb: (e: { panelId: string; data: string }) => void) => () => void;
         /** The shared grid changed (008 FR-009/FR-013): conform this view's xterm to it. */
         onGrid: (cb: (e: { panelId: string; cols: number; rows: number }) => void) => () => void;
+        /** The shell's working directory changed (012): shown in the panel title. */
+        onCwd: (cb: (e: { panelId: string; cwd: string }) => void) => () => void;
         onExit: (
           cb: (e: { panelId: string; code: number | null; unexpected: boolean }) => void,
         ) => () => void;

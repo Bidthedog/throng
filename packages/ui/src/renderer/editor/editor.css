@@ -13,7 +13,11 @@
   height: 100%;
   background: var(--throng-colour-editorBg, #0c0f16);
   color: var(--throng-colour-editorFg, #d6deea);
-  font-size: var(--throng-font-editor-size, 14px);
+  /* Per-panel editor zoom (012, FR-013 / per-instance): the presentation-only text
+     scale. --throng-zoom-editor is THIS editor panel's own zoom factor, set on its
+     .editor-panel container; it multiplies the themed base size. Zoom NEVER touches
+     file content, encoding, or line endings — only the rendered size. */
+  font-size: calc(var(--throng-font-editor-size, 14px) * var(--throng-zoom-editor, 1));
   font-weight: var(--throng-font-editor-weight);
   font-style: var(--throng-font-editor-style);
 }

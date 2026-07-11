@@ -7,6 +7,7 @@ import {
   TERMINAL_EXIT_NOTIFICATION,
   TERMINAL_FLAVOUR_MISSING_NOTIFICATION,
   TERMINAL_GRID_NOTIFICATION,
+  TERMINAL_CWD_NOTIFICATION,
 } from '@throng/ipc-contract';
 
 /**
@@ -75,7 +76,9 @@ export class DaemonEvents {
             ? 'throng:terminal:flavourMissing'
             : msg.method === TERMINAL_GRID_NOTIFICATION
               ? 'throng:terminal:grid'
-              : null;
+              : msg.method === TERMINAL_CWD_NOTIFICATION
+                ? 'throng:terminal:cwd'
+                : null;
     if (!channel) return;
     broadcastToWindows(BrowserWindow.getAllWindows(), channel, msg.params);
   }
