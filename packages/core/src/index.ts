@@ -137,6 +137,20 @@ export {
   isBuiltInTheme,
   revertAll,
 } from './config/theme-reset.js';
+// Shipped defaults (010): the authoritative immutable/versioned record + pure
+// restore/reset/seed/upgrade decision logic. I/O lives in UI-main.
+export type { ShippedDefaults, ThemeUpgradePlan } from './config/shipped-defaults.js';
+export {
+  SHIPPED_DEFAULTS_VERSION,
+  buildShippedDefaults,
+  serializeShippedDefaults,
+  reservedThemeNames,
+  isReservedThemeName,
+  resetBindingValue,
+  resetSettingValue,
+  fillMissingThemeProps,
+  planThemeUpgrade,
+} from './config/shipped-defaults.js';
 export type { IFontEnumeration } from './abstractions/font-enumeration.js';
 // Editor metadata registry (007, FR-025a) — the declarative source the visual
 // preference editors render from, plus the completeness/path helpers.

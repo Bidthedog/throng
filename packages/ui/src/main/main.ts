@@ -4,20 +4,19 @@ import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell, type WebContents } from 'electron';
 import {
-  DEFAULT_APP_SETTINGS,
-  DEFAULT_KEYBINDINGS,
   parseAppSettings,
   parseKeybindings,
   resolveColour,
-  THRONG_THEME,
   type IConfigSettings,
   type IConfigStore,
   type IFileWatcher,
   type IFontEnumeration,
   type IUiSettings,
+  type ShippedDefaults,
   type Theme,
 } from '@throng/core';
 import { createUiContainer, UI_TYPES } from './composition-root.js';
+import { ShippedDefaultsService } from './shipped-defaults-service.js';
 import { broadcastToWindows, senderWebContentsId } from './broadcast.js';
 import { readConfigPayload, startConfigWatcher, type ConfigPayload } from './config-watcher.js';
 import { registerConfigWriteIpc, registerConfigManagementIpc } from './config-write-ipc.js';
@@ -78,31 +77,17 @@ function resolveFromHere(relativePath: string): string {
 }
 
 /**
- * Ensure the user-scoped config documents exist with documented defaults on
- * first run (FR-031, research D1). `read` creates each absent file from its
- * defaults; an existing (possibly hand-edited) file is left in place.
+ * First run = the settings document doesn't exist yet. Used to choose between
+ * seeding the whole user configuration from the shipped-defaults record (010) and
+ * running the additive-only upgrade against an existing configuration.
  */
-async function ensureDefaultConfig(store: IConfigStore): Promise<{ firstRun: boolean }> {
-  // First run = the settings file doesn't exist yet. Used to seed the bundled
-  // default themes ONCE (007, FR-045) — a later deletion of a default must stick,
-  // so we never re-seed on subsequent launches (only the explicit "restore
-  // defaults" action re-creates a deleted default).
-  let firstRun = false;
+async function isFirstRun(store: IConfigStore): Promise<boolean> {
   try {
     await readFile(store.pathOf({ kind: 'settings' }), 'utf8');
+    return false;
   } catch {
-    firstRun = true;
+    return true;
   }
-  await store.read({ kind: 'settings' }, DEFAULT_APP_SETTINGS, parseAppSettings);
-  await store.read({ kind: 'keybindings' }, DEFAULT_KEYBINDINGS, parseKeybindings);
-  // The default throng theme selects the bundled `throng` glyph pack out of the box
-  // (007, FR-040b). Kept off the THRONG_THEME constant so it stays out of the token
-  // registry; a user's own iconPack choice (raw) always wins.
-  const throngDefault: Theme = { ...THRONG_THEME, iconPack: 'throng' };
-  await store.read({ kind: 'theme', name: THRONG_THEME.name }, throngDefault, (raw) =>
-    raw && typeof raw === 'object' ? { ...throngDefault, ...(raw as Partial<Theme>) } : throngDefault,
-  );
-  return { firstRun };
 }
 
 // Zoom is handled in-process because removing the native menu (below) also
@@ -302,15 +287,32 @@ if (isPrimaryInstance)
     console.error('[throng-ui] daemon did not start:', (error as Error).message);
   }
 
-  // First-run: create the user config files (settings/keybindings/theme) under
-  // %USERPROFILE%\.throng\ from documented defaults (FR-031).
+  // Shipped defaults (010): on first run, seed the entire user configuration
+  // (settings, keybindings, every built-in theme) plus the version marker from the
+  // authoritative record; otherwise run the additive-only upgrade (add newly-shipped
+  // themes + materialise newly-added theme properties) gated on the version marker —
+  // which NEVER overwrites a value the user already has (a later deletion of a
+  // default sticks; only "Restore All Themes" recreates it).
   const configStore = container.get<IConfigStore>(UI_TYPES.ConfigStore);
   const configSettings = container.get<IConfigSettings>(UI_TYPES.ConfigSettings);
   const fileWatcher = container.get<IFileWatcher>(UI_TYPES.FileWatcher);
-  const { firstRun } = await ensureDefaultConfig(configStore);
-  // Seed the 14 bundled default themes on first run so they appear in the Themes
-  // selector out of the box (FR-044/045); a later deletion sticks across restarts.
-  if (firstRun) await (configStore as FileConfigStore).restoreDefaultThemes();
+  const shipped = container.get<ShippedDefaults>(UI_TYPES.ShippedDefaults);
+  const shippedService = container.get<ShippedDefaultsService>(UI_TYPES.ShippedDefaultsService);
+  if (await isFirstRun(configStore)) {
+    const seeded = await shippedService.seed();
+    if (!seeded.ok)
+      console.error('[throng-ui] shipped-defaults seed failed:', seeded.failedPath, seeded.error);
+  } else {
+    // Defensive: recreate the singleton documents if a user deleted one (sourced
+    // from the record), then apply the additive upgrade when the version advanced.
+    await configStore.read({ kind: 'settings' }, shipped.settings, parseAppSettings);
+    await configStore.read({ kind: 'keybindings' }, shipped.keybindings, parseKeybindings);
+    if ((await shippedService.readAppliedVersion()) !== shipped.version) {
+      const upgraded = await shippedService.upgrade();
+      if (!upgraded.ok)
+        console.error('[throng-ui] shipped-defaults upgrade failed:', upgraded.failedPath, upgraded.error);
+    }
+  }
 
   // The renderer pulls the current config (settings + theme + keybindings) on
   // mount (FR-031); it then receives a fresh payload whenever a config file

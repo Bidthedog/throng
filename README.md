@@ -138,6 +138,14 @@ which writes those same files and applies changes immediately. The installed-fon
 bundled default-theme source live under `%APPDATA%\throng\`. The config directory is overridable
 via `THRONG_CONFIG_ROOT`.
 
+The application ships an immutable, versioned record of its defaults (built-in themes, settings, key
+bindings), generated from the application's own definitions and distributed with the build. It is the
+single source every restore-to-default reads from: a first run seeds the config from it (without
+clobbering any file already present), and an application upgrade only *adds* newly-shipped themes and
+fills in newly-added theme properties — it never overwrites a value you already have. A version marker
+(`defaults-state.json`) records which defaults have been applied. Adopting new shipped *values* on an
+existing theme is a deliberate choice, made via the theme editor's restore control.
+
 ## Testing
 
 Four Vitest/Playwright layers — **unit, integration, contract, E2E** — run via the commands

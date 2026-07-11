@@ -8,11 +8,14 @@ import type {
   IFileWatcher,
   IFontEnumeration,
   IUiSettings,
+  ShippedDefaults,
 } from '@throng/core';
+import { buildShippedDefaults } from '@throng/core';
 import { WindowsFontEnumeration } from '@throng/platform-windows';
 import { UI_TYPES } from './tokens.js';
 import { DaemonClient } from './daemon-client.js';
 import { FileConfigStore } from './config-store.js';
+import { ShippedDefaultsService } from './shipped-defaults-service.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { numberFromEnv, readUiSettings } from './ui-settings.js';
 
@@ -47,9 +50,15 @@ export function createUiContainer(): Container {
 
   const configSettings = readConfigSettings();
   container.bind<IConfigSettings>(UI_TYPES.ConfigSettings).toConstantValue(configSettings);
+  const configStore = new FileConfigStore(configSettings.configRoot);
+  container.bind<IConfigStore>(UI_TYPES.ConfigStore).toConstantValue(configStore);
+  // 010: the authoritative shipped-defaults record (immutable/versioned, generated
+  // from the core definitions) + the applier that seeds/upgrades/restores from it.
+  const shippedDefaults = buildShippedDefaults();
+  container.bind<ShippedDefaults>(UI_TYPES.ShippedDefaults).toConstantValue(shippedDefaults);
   container
-    .bind<IConfigStore>(UI_TYPES.ConfigStore)
-    .toConstantValue(new FileConfigStore(configSettings.configRoot));
+    .bind<ShippedDefaultsService>(UI_TYPES.ShippedDefaultsService)
+    .toConstantValue(new ShippedDefaultsService(configStore, shippedDefaults));
   container
     .bind<IFileWatcher>(UI_TYPES.FileWatcher)
     .toConstantValue(new NodeFileWatcher(configSettings.hotReloadDebounceMs));
