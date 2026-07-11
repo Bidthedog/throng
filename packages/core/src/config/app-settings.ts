@@ -86,6 +86,23 @@ export interface EditorSettings {
   warnOnMissingFile: boolean;
 }
 
+/** Where the new-project folder picker opens (011, FR-041). */
+export type StartingFolderMode = 'profile' | 'lastViewed' | 'override';
+
+/** New-project folder-picker preferences (011, US3). `lastProjectFolder` is
+ *  internal bookkeeping (the folder last chosen for a project) — not surfaced in
+ *  the settings editor; see SETTINGS_INTERNAL_KEYS. */
+export interface NewProjectSettings {
+  /** Which folder the picker opens at. Default 'lastViewed'. */
+  startingFolder: StartingFolderMode;
+  /** The fixed override folder used when startingFolder === 'override'. */
+  overridePath: string;
+  /** INTERNAL: the folder last chosen for a project (drives 'lastViewed'). */
+  lastProjectFolder: string;
+}
+
+const STARTING_FOLDER_MODES: readonly StartingFolderMode[] = ['profile', 'lastViewed', 'override'];
+
 const CONFIRM_LEVELS: readonly ConfirmLevel[] = ['none', 'single', 'double'];
 const EDITOR_OPEN_ON_CLICK: readonly EditorOpenOnClick[] = ['single', 'double', 'none'];
 const SAVE_ALL_SCOPES: readonly SaveAllScopeSetting[] = ['tab', 'project', 'all'];
@@ -129,6 +146,8 @@ export interface AppSettings {
   terminals: TerminalSettings;
   /** Editor panel preferences (006). */
   editor: EditorSettings;
+  /** New-project folder-picker preferences (011). */
+  newProject: NewProjectSettings;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -170,6 +189,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     projectPathDisplay: 'full',
     subWorkspacePathDisplay: 'full',
     warnOnMissingFile: true,
+  },
+  newProject: {
+    startingFolder: 'lastViewed',
+    overridePath: '',
+    lastProjectFolder: '',
   },
 };
 
@@ -302,6 +326,19 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
   };
 }
 
+/** Tolerant per-field parse of the `newProject` section; bad values fall back to
+ *  the default for that field (never throws). */
+function newProjectSettings(v: unknown, fallback: NewProjectSettings): NewProjectSettings {
+  if (!isRecord(v)) return { ...fallback };
+  const startingFolder = STARTING_FOLDER_MODES.includes(v.startingFolder as StartingFolderMode)
+    ? (v.startingFolder as StartingFolderMode)
+    : fallback.startingFolder;
+  const overridePath = typeof v.overridePath === 'string' ? v.overridePath : fallback.overridePath;
+  const lastProjectFolder =
+    typeof v.lastProjectFolder === 'string' ? v.lastProjectFolder : fallback.lastProjectFolder;
+  return { startingFolder, overridePath, lastProjectFolder };
+}
+
 /**
  * Parse raw JSON into a complete, valid AppSettings by merging over the defaults.
  * Unknown/invalid fields fall back to their default. Never throws.
@@ -349,6 +386,7 @@ export function parseAppSettings(raw: unknown): AppSettings {
     explorer: explorerSettings(explorer, d.explorer),
     terminals: terminalSettings(raw.terminals, d.terminals),
     editor: editorSettings(raw.editor, d.editor),
+    newProject: newProjectSettings(raw.newProject, d.newProject),
   };
 }
 
@@ -365,5 +403,6 @@ function structuredCloneSettings(s: AppSettings): AppSettings {
     explorer: cloneExplorer(s.explorer),
     terminals: cloneTerminals(s.terminals),
     editor: { ...s.editor },
+    newProject: { ...s.newProject },
   };
 }

@@ -9,7 +9,12 @@ import { DEFAULT_APP_SETTINGS } from './app-settings.js';
 import { leavesOf, type FieldDescriptor, type MetadataRegistry } from './metadata.js';
 
 /** Leaves that are internal bookkeeping, not user-configurable settings. */
-export const SETTINGS_INTERNAL_KEYS: readonly string[] = ['version'];
+export const SETTINGS_INTERNAL_KEYS: readonly string[] = [
+  'version',
+  // The folder last chosen for a project — machine bookkeeping that drives the
+  // "Last Viewed" picker option (011), not a hand-tuned setting.
+  'newProject.lastProjectFolder',
+];
 
 /** The configurable settings leaves (every leaf minus the internal keys). */
 export function settingsLeaves(): string[] {
@@ -36,8 +41,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   // Confirmations
   confirmDescriptor(
     'confirmations.destroyProject',
-    'Delete a project',
-    'How many confirmations before a project is deleted.',
+    'Remove a project',
+    'How many confirmations before a project is removed (unregistered; no files are deleted).',
   ),
   confirmDescriptor(
     'confirmations.destroyTab',
@@ -51,8 +56,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   ),
   confirmDescriptor(
     'confirmations.destroySubWorkspace',
-    'Delete a sub-workspace',
-    'How many confirmations before a sub-workspace is deleted.',
+    'Destroy a sub-workspace',
+    'How many confirmations before a sub-workspace is destroyed.',
   ),
 
   // Panes
@@ -232,5 +237,24 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     description: 'Show a popup when an editor’s file is missing or deleted.',
     group: 'Editor',
     control: 'toggle',
+  },
+
+  // New Project (011)
+  {
+    key: 'newProject.startingFolder',
+    label: 'New project folder starts at',
+    description:
+      'Where the new-project folder picker opens: your user profile, the last folder you chose, or a fixed override.',
+    group: 'New Project',
+    control: 'select',
+    allowedValues: ['profile', 'lastViewed', 'override'],
+  },
+  {
+    key: 'newProject.overridePath',
+    label: 'Override start folder',
+    description:
+      'The fixed folder the new-project picker opens at when "Override" is selected. Type a path or browse to pick one.',
+    group: 'New Project',
+    control: 'folder',
   },
 ];
