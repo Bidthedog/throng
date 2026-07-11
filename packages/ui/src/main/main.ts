@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
+import { existsSync, statSync } from 'node:fs';
 import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell, type WebContents } from 'electron';
 import {
   parseAppSettings,
@@ -38,6 +39,7 @@ import { loadWindowState, saveWindowState } from './window-state.js';
 import { registerGhostIpc, setGhostTheme } from './ghost-window.js';
 import { WindowManager } from './window-manager.js';
 import { NodeFileSystem } from './node-file-system.js';
+import { resolvePickerDefaultPath } from './pick-folder.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { ElectronShellIntegration } from './electron-shell-integration.js';
 import { FilesService } from './files-service.js';
@@ -397,15 +399,25 @@ if (isPrimaryInstance)
     return invokeDaemon(daemonClient, method, params);
   });
 
-  // Native folder picker for a project's root folder (FR-034). Returns the chosen
-  // absolute path, or null if the dialog was cancelled.
-  ipcMain.handle('throng:pickFolder', async (event): Promise<string | null> => {
-    const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;
-    const result = owner
-      ? await dialog.showOpenDialog(owner, { properties: ['openDirectory'] })
-      : await dialog.showOpenDialog({ properties: ['openDirectory'] });
-    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
-  });
+  // Native folder picker for a project's root folder (FR-034). Opens at the
+  // caller's requested `defaultPath` when it resolves to a real directory, else at
+  // the user's profile/home folder (011, FR-043). Returns the chosen absolute path,
+  // or null if the dialog was cancelled.
+  ipcMain.handle(
+    'throng:pickFolder',
+    async (event, opts?: { defaultPath?: string | string[] }): Promise<string | null> => {
+      const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+      const defaultPath = resolvePickerDefaultPath(
+        opts?.defaultPath,
+        app.getPath('home'),
+        (p) => existsSync(p) && statSync(p).isDirectory(),
+      );
+      const result = owner
+        ? await dialog.showOpenDialog(owner, { properties: ['openDirectory'], defaultPath })
+        : await dialog.showOpenDialog({ properties: ['openDirectory'], defaultPath });
+      return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
+    },
+  );
 
   // Native save-location chooser for a new editor document (006, T041). The
   // confinement guard in editor-service still refuses an out-of-tree pick, so this

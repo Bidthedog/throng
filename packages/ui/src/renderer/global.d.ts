@@ -20,7 +20,7 @@ declare global {
       };
       getDaemonStatus?: () => Promise<unknown>;
       invoke?: (method: string, params: unknown) => Promise<ThrongRpcEnvelope>;
-      pickFolder?: () => Promise<string | null>;
+      pickFolder?: (opts?: { defaultPath?: string | string[] }) => Promise<string | null>;
       setTitle?: (title: string) => void;
       zoomBy?: (steps: number) => void;
       zoomReset?: () => void;

@@ -22,6 +22,7 @@ import { ExplorerRowContext } from './explorer-context.js';
 import { buildContextMenuItems } from './context-menu-items.js';
 import { useExplorerKeybindings } from './explorer-keybindings.js';
 import { useContextMenu } from '../context-menu-provider.js';
+import { DismissButton } from '../common/dismiss-button.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { openFileInTab, openFileInNewEditor } from '../editor/editor-open.js';
@@ -73,6 +74,7 @@ export function FileTree({
     data,
     ready,
     error,
+    clearError,
     initialOpenState,
     onToggle,
     onSelect,
@@ -305,7 +307,17 @@ export function FileTree({
         onNewFolder={() => createFolder(primarySelected)}
         onDelete={() => remove(selectedRelPaths)}
       />
-      {error && <div className="explorer__error">{error}</div>}
+      {error && (
+        <div className="explorer__error" data-testid="explorer-error" role="alert">
+          <span className="explorer__error-text">{error}</span>
+          <DismissButton
+            onDismiss={clearError}
+            title="Dismiss error"
+            className="explorer__error-dismiss"
+            testId="explorer-error-dismiss"
+          />
+        </div>
+      )}
       <div className="explorer__body" ref={ref} onContextMenu={onEmptyContextMenu}>
         {ready && width > 0 && height > 0 && (
           <Tree<TreeNodeData>

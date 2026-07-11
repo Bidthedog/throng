@@ -471,10 +471,10 @@ export function TabGroup(): ReactElement {
     // no-op. Destroy the sub-workspace instead (terminating its live terminals).
     if (subWin !== null && layout.tabs.length <= 1) {
       const ok = await confirm({
-        title: 'Close sub-workspace',
+        title: 'Destroy sub-workspace',
         message: `Destroy “${tab.title}”? It has ${panels} panel${panels === 1 ? '' : 's'}, ${subs} of which ${subs === 1 ? 'is' : 'are'} active.`,
-        warningMessage: `This is the last tab in “${subWin.name}” — closing it will close the sub-workspace.`,
-        confirmLabel: 'Close sub-workspace',
+        warningMessage: `This is the last tab in “${subWin.name}” — destroying it destroys the sub-workspace (project-owned panels it mirrored are merely closed).`,
+        confirmLabel: 'Destroy sub-workspace',
         cancelLabel: 'Cancel',
         danger: true,
       });

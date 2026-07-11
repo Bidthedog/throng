@@ -18,11 +18,19 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { countPanels, planConfirmations, SUBWORKSPACE_PALETTE } from '@throng/core';
+import {
+  countPanels,
+  planConfirmations,
+  resolveStartingFolder,
+  SUBWORKSPACE_PALETTE,
+} from '@throng/core';
 import { useAppSettings } from '../config/config-store.js';
+import { writeConfig } from '../config/write-config.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useProjects } from '../state/projects-store.js';
 import { useConfirm } from '../confirm-dialog.js';
+import { FolderPicker } from '../common/folder-picker.js';
+import { DismissButton } from '../common/dismiss-button.js';
 
 const MARQUEE_DELAY_MS = 200;
 
@@ -110,6 +118,7 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
     activeProject,
     loadedIds,
     error,
+    clearError,
     createProject,
     updateProject,
     deleteProject,
@@ -159,13 +168,11 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
     return pool[Math.floor(Math.random() * pool.length)];
   };
 
-  // Open the OS folder picker and apply the result to the draft, auto-naming +
-  // selecting the name when it is empty (FR-026).
-  const runFolderPicker = async (): Promise<void> => {
-    const dir = await window.throng?.pickFolder?.();
-    if (!dir) return;
+  // A folder was chosen through the OS dialog: auto-name from its basename when the
+  // name is still empty, then select the name for immediate overtyping (FR-026).
+  const applyPickedFolder = (dir: string): void => {
     setDraft((d) =>
-      d ? { ...d, rootFolder: dir, name: d.name.trim().length === 0 ? folderBasename(dir) : d.name } : d,
+      d ? { ...d, name: d.name.trim().length === 0 ? folderBasename(dir) : d.name } : d,
     );
     setTimeout(() => {
       const el = nameRef.current;
@@ -176,11 +183,23 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
     }, 0);
   };
 
-  // "+ New": open the create form (with a random unused colour) and immediately
-  // prompt for the folder.
+  // The candidate start folder for the new-project picker (011, FR-040/041). The
+  // profile fallback for 'profile' mode / empty values is applied in UI-main (it
+  // owns the OS home dir), so an empty candidate here resolves to the profile there.
+  const startFolder = resolveStartingFolder(settings.newProject, { profileDir: '' });
+
+  // "+ New": open the create form (with a random unused colour). The FolderPicker
+  // (autoOpenOnMount) then pops the OS dialog at the resolved start folder.
   const openCreate = (): void => {
     setDraft({ mode: 'create', name: '', colour: pickInitialColour(), rootFolder: '' });
-    void runFolderPicker();
+  };
+
+  // Persist the folder last chosen for a project so 'Last Viewed' opens there next
+  // time (011, FR-040). Writes the full settings doc through the immediate-apply path.
+  const persistLastProjectFolder = (folder: string): void => {
+    if (folder.trim().length === 0) return;
+    const next = { ...settings, newProject: { ...settings.newProject, lastProjectFolder: folder } };
+    void writeConfig({ kind: 'settings' }, JSON.stringify(next));
   };
 
   const confirmDelete = async (id: string, name: string): Promise<void> => {
@@ -197,12 +216,15 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
     // "double": a summary then the wry "Yes, I'm absolutely sure" dialog.
     // TODO(FR-025a): refuse + name the sub-workspaces holding this project's
     // panels once sub-workspace windows exist.
+    // "Remove" a project: it is unregistered from Throng and its panels/tabs are
+    // destroyed, but NO files on disk are touched (011, FR-030/033/035). The
+    // confirmation states that consequence explicitly.
     const plan = planConfirmations('project', settings.confirmations);
     if (plan.dialogs >= 1) {
       const ok = await confirm({
-        title: 'Destroy Project',
-        message: `Destroy project “${name}”? Its saved workspace layout is removed too.`,
-        confirmLabel: 'Destroy Project',
+        title: 'Remove Project',
+        message: `Remove project “${name}” from Throng? Its panels, tabs and saved layout are removed. No files on disk are deleted.`,
+        confirmLabel: 'Remove Project',
         cancelLabel: 'Cancel',
         danger: true,
       });
@@ -211,7 +233,7 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
     if (plan.wryFinal) {
       const sure = await confirm({
         title: 'Are you absolutely sure?',
-        message: `This permanently destroys “${name}” and cannot be undone.`,
+        message: `This unregisters “${name}” from Throng. No files on disk are deleted, but its layout cannot be recovered.`,
         confirmLabel: "Yes, I'm absolutely sure",
         cancelLabel: 'No, I concede',
         danger: true,
@@ -301,6 +323,8 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
         return;
       }
       ok = await createProject({ name: draft.name, colour: draft.colour, rootFolder: draft.rootFolder });
+      // Remember the folder for the next new project's 'Last Viewed' start (FR-040).
+      if (ok) persistLastProjectFolder(draft.rootFolder);
     } else if (draft.id) {
       ok = await updateProject({
         id: draft.id,
@@ -335,28 +359,31 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
       <div className="panel__body">
       {error ? (
         <p className="panel__error" data-testid="project-error">
-          {error}
+          <span className="panel__error-text">{error}</span>
+          <DismissButton
+            onDismiss={clearError}
+            title="Dismiss error"
+            className="panel__error-dismiss"
+            testId="project-error-dismiss"
+          />
         </p>
       ) : null}
 
       {draft ? (
         <form className="project-form" data-testid="project-form" onSubmit={submit}>
           <div className="project-form__row">
-            <input
-              className={`project-form__field project-form__field--grow${folderError ? ' project-form__field--error' : ''}`}
-              data-testid="project-root-input"
-              placeholder="Folder Selection"
+            <FolderPicker
               value={draft.rootFolder}
-              onChange={(e) => setDraft({ ...draft, rootFolder: e.target.value })}
+              onChange={(path) => setDraft((d) => (d ? { ...d, rootFolder: path } : d))}
+              onPick={applyPickedFolder}
+              autoOpenOnMount={draft.mode === 'create'}
+              defaultPath={startFolder}
+              browseTitle="Browse for project folder"
+              placeholder="Folder Selection"
+              inputClassName={`project-form__field project-form__field--grow${folderError ? ' project-form__field--error' : ''}`}
+              inputTestId="project-root-input"
+              browseTestId="project-pick-folder"
             />
-            <button
-              type="button"
-              className="project-form__browse"
-              data-testid="project-pick-folder"
-              onClick={() => void runFolderPicker()}
-            >
-              Browse…
-            </button>
           </div>
           <input
             ref={nameRef}
@@ -496,7 +523,8 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                   <button
                     type="button"
                     data-testid={`project-delete-${project.id}`}
-                    title="Delete"
+                    title="Remove project"
+                    aria-label="Remove project"
                     onClick={() => void confirmDelete(project.id, project.name)}
                   >
                     ✕

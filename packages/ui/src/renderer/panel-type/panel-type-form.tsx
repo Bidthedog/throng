@@ -12,8 +12,9 @@ import { useFlavours } from './use-flavours.js';
 import { useCapabilities } from './use-capabilities.js';
 import { TerminalInputs } from './terminal-inputs.js';
 import { EditorInputs } from './editor-inputs.js';
-import { clearPanelExit, getPanelExit } from '../terminal/exit-store.js';
+import { clearPanelExit, dismissPanelExit, useVisiblePanelExit } from '../terminal/exit-store.js';
 import { markExplicitRetype } from '../terminal/explicit-retype.js';
+import { DismissButton } from '../common/dismiss-button.js';
 import './panel-type.css';
 
 /**
@@ -77,14 +78,22 @@ export function PanelTypeForm({
   };
 
   // When a previous terminal in this Panel ended (exit/crash/launch failure), the
-  // Panel reverted here; surface that as the form returns (FR-017/019/020).
-  const lastExit = getPanelExit(panelId);
+  // Panel reverted here; surface that as the form returns (FR-017/019/020). Read
+  // reactively so dismissing the notice (011, US1) hides it immediately, and a fresh
+  // exit re-shows it (recurrence, FR-003).
+  const lastExit = useVisiblePanelExit(panelId);
 
   return (
     <div className="panel-type-form" data-testid={`panel-type-form-${panelId}`}>
       {lastExit ? (
         <div className="panel-type-form__exit" data-testid={`panel-exit-${panelId}`} role="status">
-          {lastExit.message}
+          <span className="panel-type-form__exit-text">{lastExit.message}</span>
+          <DismissButton
+            onDismiss={() => dismissPanelExit(panelId)}
+            title="Dismiss notice"
+            className="panel-type-form__exit-dismiss"
+            testId={`exit-dismiss-${panelId}`}
+          />
         </div>
       ) : null}
       <label className="panel-type-form__field">
@@ -126,7 +135,9 @@ export function PanelTypeForm({
           className="panel-type-form__clear"
           data-testid={`panel-type-clear-${panelId}`}
           onClick={() => {
-            clearPanelExit(panelId);
+            // Clear resets ONLY the form fields (011, US1) — it MUST NOT clear the
+            // exit notice or any error state. Clearing the form leaves a visible
+            // exit notice visible; dismissing the notice is a separate control.
             setDraft(panelId, EMPTY_DRAFT, { broadcast: true });
           }}
         >

@@ -42,6 +42,8 @@ export interface ExplorerApi {
   data: TreeNodeData[];
   ready: boolean;
   error: string | null;
+  /** Dismiss the current error banner immediately (011, US1, FR-002). */
+  clearError: () => void;
   initialOpenState: OpenMap;
   onToggle: (id: string) => void;
   onSelect: (nodes: NodeApi<TreeNodeData>[]) => void;
@@ -548,6 +550,7 @@ export function useExplorerData(
     data,
     ready,
     error,
+    clearError: () => setError(null),
     initialOpenState,
     onToggle,
     onSelect,

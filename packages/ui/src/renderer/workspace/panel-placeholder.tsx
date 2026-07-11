@@ -108,6 +108,14 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const ownTab = ws.layout?.tabs.find((t) => t.id === tabId);
   const isActive = ownTab ? effectiveActivePanelId(ownTab) === panel.id : false;
 
+  // Removal verb per ownership + location (011, FR-030/031). Inside a sub-workspace a
+  // Panel backed by a real project (`originProject` resolved above) is a mirrored VIEW:
+  // removing it here is a **Close** (it leaves this sub-workspace only; the project keeps
+  // the Panel and its running terminal). A Panel the sub-workspace itself owns (no backing
+  // project, so `originProject` is null) — and every Panel in the main window — is a
+  // **Destroy** (gone, session terminated). This mirrors the owner-label logic above.
+  const panelVerb = subWin !== null && originProject !== null ? 'Close' : 'Destroy';
+
   // A freshly added Panel opens directly in rename mode (FR-041 / new-panel UX).
   useEffect(() => {
     if (ws.lastAddedPanelId === panel.id) {
@@ -158,6 +166,11 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
     // live terminal (FR-021); only this window's view goes away. An OWNED
     // sub-workspace Panel (it carries the window's synthetic project id) has no other
     // view, so destroying it does take its session down.
+      // NOTE: this uses the synthetic-project-id predicate, whereas the header/menu
+    // `panelVerb` (above) keys off `originProject` (found in the projects list). The
+    // two agree in every normal case; they can only diverge if a mirrored Panel's
+    // backing project is unregistered while its sub-workspace view is still open —
+    // an extreme edge with no correctness impact on the session-kill decision here.
     const ownedBySub = inSubWorkspace && panel.originProjectId === ws.layout?.projectId;
     const killsSession = !inSubWorkspace || ownedBySub;
     const activeMessage = killsSession
@@ -172,10 +185,10 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
       : 0;
     if (subWin !== null && totalPanels <= 1) {
       const ok = await confirm({
-        title: 'Close sub-workspace',
+        title: 'Destroy sub-workspace',
         message: active ? activeMessage : `Destroy “${panel.title}”?`,
-        warningMessage: `This is the last panel in “${subWin.name}” — closing it will close the sub-workspace.`,
-        confirmLabel: 'Close sub-workspace',
+        warningMessage: `This is the last panel in “${subWin.name}” — destroying it destroys the sub-workspace (project-owned panels it mirrored are merely closed).`,
+        confirmLabel: 'Destroy sub-workspace',
         cancelLabel: 'Cancel',
         danger: true,
       });
@@ -199,12 +212,17 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         : undefined;
     const cascades = warningMessage !== undefined;
 
+    // A project-owned Panel closed from a sub-workspace uses "Close" wording; the
+    // active-terminal message already reflects that its session keeps running.
+    const closeActiveMessage = killsSession
+      ? activeMessage
+      : `Close “${panel.title}”? It leaves this sub-workspace; its terminal keeps running in the project.`;
     if (plan.dialogs > 0 || cascades) {
       const ok = await confirm({
-        title: 'Destroy Panel',
-        message: active ? activeMessage : `Destroy “${panel.title}”?`,
+        title: `${panelVerb} Panel`,
+        message: active ? (panelVerb === 'Close' ? closeActiveMessage : activeMessage) : `${panelVerb} “${panel.title}”?`,
         warningMessage,
-        confirmLabel: 'Destroy Panel',
+        confirmLabel: `${panelVerb} Panel`,
         cancelLabel: 'Cancel',
         danger: true,
       });
@@ -215,7 +233,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         title: 'Are you absolutely sure?',
         message: killsSession
           ? `This destroys “${panel.title}” and terminates its running terminal.`
-          : `This destroys “${panel.title}” (its terminal keeps running in the project).`,
+          : `This closes “${panel.title}” here (its terminal keeps running in the project).`,
         confirmLabel: "Yes, I'm absolutely sure",
         cancelLabel: 'No, I concede',
         danger: true,
@@ -357,7 +375,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                   },
                 ]
               : []),
-            { label: 'Destroy Panel', icon: 'destroy', onClick: () => void destroyPanel() },
+            { label: `${panelVerb} Panel`, icon: 'destroy', onClick: () => void destroyPanel() },
           ]);
         }}
         {...(renaming ? {} : listeners)}
@@ -449,7 +467,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
           </button>
           <button
             type="button"
-            title="Destroy panel"
+            title={`${panelVerb} panel`}
+            aria-label={`${panelVerb} panel`}
             data-testid={`panel-close-${panel.id}`}
             onClick={() => void destroyPanel()}
           >

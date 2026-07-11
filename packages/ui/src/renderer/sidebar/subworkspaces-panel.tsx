@@ -12,6 +12,7 @@ import { planConfirmations } from '@throng/core';
 import { useSubWorkspaces } from '../state/subworkspaces-store.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useAppSettings } from '../config/config-store.js';
+import { DismissButton } from '../common/dismiss-button.js';
 
 const dragId = (id: string): string => `subws|${id}`;
 const parseDragId = (id: string): string | null => (id.startsWith('subws|') ? id.slice(6) : null);
@@ -70,9 +71,9 @@ export function SubworkspacesPanel(): ReactElement {
     const plan = planConfirmations('subWorkspace', settings.confirmations);
     if (plan.dialogs > 0) {
       const ok = await confirm({
-        title: 'Delete sub-workspace',
-        message: `Delete “${name}”? Its tabs and panels are destroyed and cannot be recovered.`,
-        confirmLabel: 'Delete',
+        title: 'Destroy sub-workspace',
+        message: `Destroy “${name}”? Its tabs and the panels it owns are destroyed and cannot be recovered; project-owned panels it mirrored are merely closed.`,
+        confirmLabel: 'Destroy',
         cancelLabel: 'Cancel',
         danger: true,
       });
@@ -147,16 +148,12 @@ export function SubworkspacesPanel(): ReactElement {
       {error !== null ? (
         <div className="subworkspaces-panel__error" data-testid="subworkspace-error" role="alert">
           <span className="subworkspaces-panel__error-text">{error}</span>
-          <button
-            type="button"
+          <DismissButton
+            onDismiss={clearError}
+            title="Dismiss error"
             className="subworkspaces-panel__error-dismiss"
-            data-testid="subworkspace-error-dismiss"
-            title="Dismiss"
-            aria-label="Dismiss error"
-            onClick={clearError}
-          >
-            ✕
-          </button>
+            testId="subworkspace-error-dismiss"
+          />
         </div>
       ) : null}
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
@@ -253,8 +250,8 @@ export function SubworkspacesPanel(): ReactElement {
                       type="button"
                       className="subworkspace-item__delete"
                       data-testid={`subworkspace-delete-${sw.id}`}
-                      title="Delete sub-workspace"
-                      aria-label="Delete sub-workspace"
+                      title="Destroy sub-workspace"
+                      aria-label="Destroy sub-workspace"
                       onClick={() => void destroy(sw.id, sw.name)}
                     >
                       ✕

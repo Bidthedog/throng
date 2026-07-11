@@ -19,6 +19,8 @@ export interface ProjectsContextValue {
   loadedIds: ReadonlySet<string>;
   loading: boolean;
   error: string | null;
+  /** Dismiss the current error immediately (011, US1, FR-002). */
+  clearError(): void;
   refresh(): Promise<void>;
   /** Resolves true on success, false if the create was rejected (e.g. validation). */
   createProject(input: ProjectsCreateParams): Promise<boolean>;
@@ -124,6 +126,7 @@ export function ProjectsProvider({
       loadedIds,
       loading,
       error,
+      clearError: () => setError(null),
       refresh,
       createProject: async (input) => {
         try {
