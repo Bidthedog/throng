@@ -91,6 +91,10 @@ export const THRONG_THEME: Theme = {
     editorFg: '#d6deea',
     editorCursor: '#6aa3ff',
     editorSelection: '#2a3a57',
+    // Editor line-number gutter (009) — its own surface + line-number colour, a
+    // subtle offset from the editor body so it reads as a distinct strip.
+    editorGutterBg: '#151a23',
+    editorGutterFg: '#8b98ac',
     // The shared unsaved-changes dot (Panel/Tab/project) + editor file/type pills (006).
     unsavedDot: '#e3b341',
     // The active Files & Folders pane highlight (006, FR-015/SC-006).
@@ -128,6 +132,10 @@ export const THRONG_THEME: Theme = {
   // font; a future theme may map these tokens to an icon set.
   icons: {
     destroy: '✕',
+    // Dismiss a transient message (error bar / notice). Same default glyph as
+    // `destroy` but a distinct token so re-skinning one never affects the other
+    // (009 addition; consumed by 011 main-window affordances).
+    dismiss: '✕',
     collapse: '‹',
     expand: '›',
     rename: '✎',

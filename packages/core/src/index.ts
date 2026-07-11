@@ -95,7 +95,31 @@ export {
 export type { Theme, ThemeFonts, IconValue, TextCase, TypographyRole, ThemeFontRole } from './config/theme.js';
 export { THRONG_THEME, resolveColour, resolveIcon, toCssVariables } from './config/theme.js';
 // Themes editor + icon packs + fonts (007).
-export { THEME_METADATA, buildThemeMetadata, descriptorForThemeToken, themeEditableTokens } from './config/theme-metadata.js';
+export { THEME_METADATA, buildThemeMetadata, descriptorForThemeToken, themeEditableTokens, mechanicalCopy } from './config/theme-metadata.js';
+// Hand-written token copy + theme-quality guards (009).
+export { THEME_TOKEN_COPY, BANNED_ABBREVIATIONS, containsAbbreviation } from './config/theme-copy.js';
+export type { TokenCopy } from './config/theme-copy.js';
+export {
+  hexToRgb,
+  relativeLuminance,
+  contrastRatio,
+  rgbToLab,
+  ciede2000,
+  themePairDistance,
+  closestPair,
+  assertDistinct,
+  DISTINCTNESS_THRESHOLD,
+  CLOSEST_LEGITIMATE_PAIR_DELTA,
+  WCAG_AA_BODY,
+  WCAG_AA_LARGE_UI,
+  IN_SCOPE_THEMES,
+  CONTRAST_PAIRINGS,
+  measureContrast,
+  contrastFailures,
+  assertInScopeContrast,
+  knownContrastIssues,
+} from './config/theme-quality.js';
+export type { Rgb, Lab, ClosestPair, ContrastPairing, ContrastResult, KnownContrastIssue } from './config/theme-quality.js';
 export { parseFontStack, serializeFontStack } from './config/font-stack.js';
 export type { IconPackManifest } from './config/icon-pack.js';
 export { parseIconPack, resolveIconValue } from './config/icon-pack.js';

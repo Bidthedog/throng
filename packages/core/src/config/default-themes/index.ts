@@ -9,8 +9,29 @@
  * colour token set, so each theme is complete without hand-listing 22 colours.
  */
 import { THRONG_THEME, type Theme } from '../theme.js';
+import { hexToRgb, relativeLuminance } from '../theme-quality.js';
 
 const MONO = "Consolas, 'Cascadia Mono', 'Courier New', monospace";
+
+/** Mix a hex colour toward white (amount>0) or black (amount<0) by |amount|. */
+function mixToward(hex: string, amount: number): string {
+  const { r, g, b } = hexToRgb(hex);
+  const target = amount >= 0 ? 255 : 0;
+  const f = Math.abs(amount);
+  const mix = (c: number): number => Math.round(c + (target - c) * f);
+  const to2 = (c: number): string => mix(c).toString(16).padStart(2, '0');
+  return `#${to2(r)}${to2(g)}${to2(b)}`;
+}
+
+/**
+ * Default editor-gutter background: a subtle offset from the editor body — lighter
+ * on dark themes, darker on light themes — so the gutter reads as a distinct strip
+ * (009, FR-012). Dark themes lift ~9% toward white; light themes drop ~6% to black.
+ */
+function gutterBgFor(editorBg: string): string {
+  const light = relativeLuminance(hexToRgb(editorBg)) > 0.5;
+  return mixToward(editorBg, light ? -0.06 : 0.09);
+}
 
 interface Palette {
   bg: string;
@@ -28,6 +49,8 @@ interface Palette {
   terminalFg?: string;
   editorBg?: string;
   editorFg?: string;
+  editorGutterBg?: string;
+  editorGutterFg?: string;
   selection?: string;
   unsavedDot?: string;
   fontFamily?: string;
@@ -59,6 +82,10 @@ function makeTheme(name: string, p: Palette): Theme {
       editorFg: p.editorFg ?? p.text,
       editorCursor: p.accent,
       editorSelection: p.selection ?? p.surfaceActive ?? p.surface,
+      // Editor gutter (009): a subtle offset from the editor body; line numbers
+      // reuse the theme's muted foreground (≥3:1 on the gutter background).
+      editorGutterBg: p.editorGutterBg ?? gutterBgFor(p.editorBg ?? p.bg),
+      editorGutterFg: p.editorGutterFg ?? p.textMuted ?? p.text,
       unsavedDot: p.unsavedDot ?? '#e3b341',
       activePaneHighlight: p.accent,
       // Button style tokens (007, FR-046a): a raised surface with the theme accent
@@ -108,17 +135,33 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
     text: '#cccccc', textMuted: '#8a8a8a', accent: '#3a96dd', border: '#2a2a2a',
     terminalBg: '#0c0c0c', terminalFg: '#cccccc', selection: '#264f78', fontFamily: MONO,
   }),
+  // Multi-hue Git Bash prompt on black (009, FR-001): light-grey text with green
+  // (user@host), magenta (shell tag), yellow (path), teal and cyan (git branch)
+  // accents — deliberately far from Matrix's mono-green identity.
   Bash: makeTheme('Bash', {
-    bg: '#000000', sidebar: '#000000', surface: '#0f150f', surfaceActive: '#152115',
-    text: '#19cb19', textMuted: '#0f8a0f', accent: '#19cb19', border: '#123212',
-    terminalBg: '#000000', terminalFg: '#19cb19', selection: '#124512', fontFamily: MONO,
+    bg: '#000000', sidebar: '#000000', surface: '#101010', surfaceActive: '#1c1c1c',
+    text: '#d7d7d7', textMuted: '#8a8a8a', accent: '#2bd4ee', danger: '#d160c9',
+    success: '#2ecc71', border: '#1aa08a', statusBar: '#000000',
+    terminalBg: '#000000', terminalFg: '#d7d7d7', editorBg: '#000000', editorFg: '#d7d7d7',
+    selection: '#264f4a', unsavedDot: '#e5c07b', fontFamily: MONO,
   }),
-  SUBNET: makeTheme('SUBNET', {
-    // Placeholder approximation pending the user's branding (spec Assumptions).
-    bg: '#0f141a', sidebar: '#0b1015', surface: '#1a222c', surfaceActive: '#25303d',
-    text: '#c4d0dc', textMuted: '#7a8794', accent: '#5a8aa8', border: '#28323d',
-    selection: '#2a3a48',
-  }),
+  // SUBNET brand palette (009, FR-003/004): Deep Space Blue base, Neon Core Green
+  // + Neon Cyan reserved for accents/active states (never large blocks), Burnt
+  // Amber callouts, Gunmetal Grey chrome, Midnight Slate as the secondary surface.
+  SUBNET: ((): Theme => {
+    const t = makeTheme('SUBNET', {
+      bg: '#001B40', sidebar: '#001330', surface: '#303841', surfaceActive: '#3b4753',
+      text: '#d6e6f5', textMuted: '#9fb0c2', accent: '#39FF14', danger: '#FF6F32',
+      success: '#39FF14', border: '#4C4C4C', statusBar: '#001330',
+      terminalBg: '#001B40', terminalFg: '#d6e6f5', editorBg: '#001B40', editorFg: '#d6e6f5',
+      selection: '#0a3350', unsavedDot: '#FFE600',
+    });
+    // Neon Cyan is the second accent — placed on the cursors so both neons appear
+    // as active-state accents alongside Neon Core Green (highlights / hover).
+    t.colours.terminalCursor = '#00EFFF';
+    t.colours.editorCursor = '#00EFFF';
+    return t;
+  })(),
   VSCode: makeTheme('VSCode', {
     bg: '#1e1e1e', sidebar: '#252526', surface: '#2d2d2d', surfaceActive: '#37373d',
     text: '#d4d4d4', textMuted: '#858585', accent: '#007acc', border: '#333333',
@@ -139,10 +182,14 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
     text: '#00ff41', textMuted: '#0aa028', accent: '#00ff41', border: '#0a3a0a',
     terminalBg: '#000000', terminalFg: '#00ff41', selection: '#0f4f0f', fontFamily: MONO,
   }),
+  // Cyberpunk reference palette (009, FR-005): near-black base, crimson + deep
+  // maroon structure, bright-yellow highlights, pale-teal accents.
   Cyberpunk: makeTheme('Cyberpunk', {
-    bg: '#0d0221', sidebar: '#0a021a', surface: '#1a0b3a', surfaceActive: '#2a1155',
-    text: '#d1f7ff', textMuted: '#7a86b8', accent: '#ff2a6d', success: '#05d9e8',
-    danger: '#ff2a6d', border: '#2a1155', terminalBg: '#0d0221', selection: '#3a1a66',
+    bg: '#000000', sidebar: '#000000', surface: '#1a0209', surfaceActive: '#2a0410',
+    text: '#f3e9ec', textMuted: '#b78a93', accent: '#55ead4', danger: '#c5003c',
+    success: '#55ead4', border: '#880425', statusBar: '#000000',
+    terminalBg: '#000000', terminalFg: '#f3e9ec', editorBg: '#000000', editorFg: '#f3e9ec',
+    selection: '#3a0212', unsavedDot: '#f3e600', fontFamily: MONO,
   }),
   Claude: makeTheme('Claude', {
     bg: '#1a1613', sidebar: '#14100d', surface: '#262019', surfaceActive: '#332a20',

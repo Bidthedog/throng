@@ -11,6 +11,7 @@
  */
 import { THRONG_THEME, type Theme, type TextCase } from './theme.js';
 import { tokensOf, type ControlKind, type FieldDescriptor, type MetadataRegistry } from './metadata.js';
+import { THEME_TOKEN_COPY } from './theme-copy.js';
 
 const TEXT_CASES: readonly TextCase[] = ['original', 'title', 'lower', 'upper'];
 
@@ -25,27 +26,41 @@ function lastSegment(key: string): string {
   return i >= 0 ? key.slice(i + 1) : key;
 }
 
-/** Infer the descriptor for one theme token path. */
-export function descriptorForThemeToken(key: string): FieldDescriptor {
+/**
+ * The label/description a token WOULD get from mechanical inference alone (the
+ * pre-009 behaviour: humanised identifier + a self-referential sentence). Retained
+ * so the copy test can assert the hand-written descriptions are not derivable from
+ * the identifier, and as a safety fallback for any token missing catalogue copy.
+ */
+export function mechanicalCopy(key: string): { label: string; description: string } {
   if (key.startsWith('colours.')) {
-    const name = lastSegment(key);
-    return {
-      key,
-      label: humanise(name),
-      description: `The “${humanise(name)}” colour token.`,
-      group: 'Colours',
-      control: 'colour',
-    };
+    const name = humanise(lastSegment(key));
+    return { label: name, description: `The “${name}” colour token.` };
   }
   if (key.startsWith('icons.')) {
-    const name = lastSegment(key);
-    return {
-      key,
-      label: humanise(name),
-      description: `The “${humanise(name)}” icon (glyph or pack image).`,
-      group: 'Icons',
-      control: 'icon',
-    };
+    const name = humanise(lastSegment(key));
+    return { label: name, description: `The “${name}” icon (glyph or pack image).` };
+  }
+  const field = lastSegment(key);
+  let group = 'Fonts';
+  if (key.startsWith('typography.')) {
+    group = `Typography: ${humanise(key.split('.')[1] ?? '')}`;
+  }
+  return {
+    label: humanise(field),
+    description: `The ${group.toLowerCase()} ${humanise(field).toLowerCase()}.`,
+  };
+}
+
+/** Infer the descriptor for one theme token path (copy from the hand-written catalogue). */
+export function descriptorForThemeToken(key: string): FieldDescriptor {
+  const copy = THEME_TOKEN_COPY[key] ?? mechanicalCopy(key);
+
+  if (key.startsWith('colours.')) {
+    return { key, label: copy.label, description: copy.description, group: 'Colours', control: 'colour' };
+  }
+  if (key.startsWith('icons.')) {
+    return { key, label: copy.label, description: copy.description, group: 'Icons', control: 'icon' };
   }
 
   // Fonts + typography roles share the same field inference.
@@ -69,8 +84,8 @@ export function descriptorForThemeToken(key: string): FieldDescriptor {
 
   return {
     key,
-    label: humanise(field),
-    description: `The ${group.toLowerCase()} ${humanise(field).toLowerCase()}.`,
+    label: copy.label,
+    description: copy.description,
     group,
     control,
     ...(allowedValues ? { allowedValues } : {}),
