@@ -201,6 +201,13 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.on('throng:terminal:output', handler);
       return () => ipcRenderer.removeListener('throng:terminal:output', handler);
     },
+    // The shared grid changed (008 FR-009/FR-013): each view conforms its xterm to it so
+    // a full-screen program renders identically in windows of different sizes.
+    onGrid: (cb: (e: { panelId: string; cols: number; rows: number }) => void) => {
+      const handler = (_event: unknown, e: { panelId: string; cols: number; rows: number }): void => cb(e);
+      ipcRenderer.on('throng:terminal:grid', handler);
+      return () => ipcRenderer.removeListener('throng:terminal:grid', handler);
+    },
     onExit: (cb: (e: { panelId: string; code: number | null; unexpected: boolean }) => void) => {
       const handler = (_event: unknown, e: { panelId: string; code: number | null; unexpected: boolean }): void =>
         cb(e);

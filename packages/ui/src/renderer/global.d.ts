@@ -120,6 +120,8 @@ declare global {
         // OSC 52 clipboard write from a program inside the terminal → OS clipboard.
         writeClipboard: (text: string) => Promise<unknown>;
         onOutput: (cb: (e: { panelId: string; data: string }) => void) => () => void;
+        /** The shared grid changed (008 FR-009/FR-013): conform this view's xterm to it. */
+        onGrid: (cb: (e: { panelId: string; cols: number; rows: number }) => void) => () => void;
         onExit: (
           cb: (e: { panelId: string; code: number | null; unexpected: boolean }) => void,
         ) => () => void;
@@ -239,7 +241,14 @@ export interface TerminalFlavourDto {
 
 /** Result of `window.throng.terminal.attach`. */
 export type TerminalAttachEnvelope =
-  | { ok: true; status: 'running' | 'exited'; scrollback: string; exit?: { code: number | null } }
+  | {
+      ok: true;
+      status: 'running' | 'exited';
+      scrollback: string;
+      /** The session's shared grid — the attaching view conforms its xterm to it (008 FR-009). */
+      grid?: { cols: number; rows: number };
+      exit?: { code: number | null };
+    }
   // `stillStarting` marks a non-fatal attach timeout (008 FR-005): the session may still
   // be launching; the view shows a "still starting" state with a retry, not a hard error.
   | { ok: false; stillStarting?: boolean; error: { code: number | null; message: string } };

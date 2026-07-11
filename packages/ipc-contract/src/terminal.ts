@@ -29,6 +29,14 @@ export const TERMINAL_SUBSCRIBE_METHOD = 'terminal.subscribe';
 export const TERMINAL_OUTPUT_NOTIFICATION = 'terminal.output';
 export const TERMINAL_EXIT_NOTIFICATION = 'terminal.exit';
 export const TERMINAL_FLAVOUR_MISSING_NOTIFICATION = 'terminal.flavourMissing';
+/**
+ * The shared character grid for a panel changed (008 FR-009/FR-013). The daemon sizes
+ * one PTY to the minimum across every attached view; every view MUST render its xterm at
+ * exactly this grid, or a full-screen (alternate-screen) program — which paints text
+ * absolutely for the PTY's grid and is NOT reflowed by xterm — appears offset/wrapped in
+ * any view larger than the minimum. Broadcast to all views so each conforms its xterm.
+ */
+export const TERMINAL_GRID_NOTIFICATION = 'terminal.grid';
 
 /** Resolved at (re)start; never persisted. cwd = project root. */
 export interface LaunchSpecDto {
@@ -91,6 +99,13 @@ export interface TerminalAttachResult {
   status: 'running' | 'exited';
   /** Buffered scrollback to replay into the view on (re)attach. */
   scrollback: string;
+  /**
+   * The session's current shared grid (008 FR-009). The attaching view MUST size its
+   * xterm to this immediately — so a view JOINING an existing session (whose minimum it
+   * may not move, e.g. a larger window mirroring a smaller one) still conforms and does
+   * not render a full-screen program offset. Absent only when there is no live session.
+   */
+  grid?: { cols: number; rows: number };
   exit?: { code: number | null; signal?: string };
 }
 
@@ -165,6 +180,13 @@ export interface TerminalExitNotification {
 export interface TerminalFlavourMissingNotification {
   panelId: string;
   flavourId: string;
+}
+
+/** The shared grid changed — every view conforms its xterm to it (008 FR-009/FR-013). */
+export interface TerminalGridNotification {
+  panelId: string;
+  cols: number;
+  rows: number;
 }
 
 /** A JSON-RPC 2.0 notification frame (no `id`) — the daemon→UI streaming shape. */

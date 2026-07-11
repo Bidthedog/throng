@@ -177,6 +177,41 @@ export function useTerminal(opts: UseTerminalOptions): void {
       }
     };
 
+    // Conform THIS view's xterm to the shared daemon grid (008 FR-009/FR-013). The
+    // daemon sizes one PTY to the MINIMUM columns/rows across every attached view; a
+    // view rendering at any other size shows a full-screen (alternate-screen) program
+    // offset/wrapped, because that screen is painted absolutely for the PTY grid and is
+    // not reflowed by xterm. This is the ONLY thing that sets the xterm's size — the
+    // ResizeObserver below merely REPORTS this view's container capacity so the daemon
+    // can compute the minimum, and the daemon broadcasts the result back here.
+    const conformGrid = (cols: number, rows: number): void => {
+      if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols < 1 || rows < 1) return;
+      // Any grid change makes ConPTY repaint the viewport (home + erase-per-row — the
+      // same shape as a `cls`); arm the window so that repaint is not mistaken for a
+      // clear (which would wipe scrollback), whether or not this xterm's size changes.
+      resizedAt = Date.now();
+      if (term.cols === cols && term.rows === rows) return;
+      // A shrink in EITHER dimension can leave stale cells beyond the new grid (a right
+      // column tail and/or bottom rows); a pure grow cannot.
+      const shrank = cols < term.cols || rows < term.rows;
+      const wasAlt = term.buffer.active.type === 'alternate';
+      try {
+        term.resize(cols, rows);
+        // On the ALTERNATE screen a shrink can leave stale cells beyond the new grid: the
+        // program repaints via ABSOLUTE cursor positioning (it does not clear-then-draw),
+        // ConPTY suppresses the app's own clear right after a resize, and xterm does not
+        // reflow the alt buffer — so a view that had been larger keeps old content in the
+        // now-out-of-grid columns/rows and shows a full-screen program offset. Clear the
+        // alt screen ourselves so the imminent resize-repaint (a full-screen program always
+        // repaints on SIGWINCH) lands on a clean grid. NEVER on the normal buffer — that
+        // would wipe a shell's visible output, which is not repainted on a resize — and
+        // only on a shrink, so a grow never flashes empty before the repaint.
+        if (wasAlt && shrank) term.write('\u001b[H\u001b[2J'); // clear stale alt-screen cells
+      } catch {
+        /* not measurable yet */
+      }
+    };
+
     // Live output can arrive before attach() resolves with the scrollback backlog
     // (the two travel on different sockets). Buffer it until scrollback is applied,
     // then flush in order, so a busy reattach/mirror never renders recent lines
@@ -185,6 +220,12 @@ export function useTerminal(opts: UseTerminalOptions): void {
     const offOutput = bridge.onOutput((e) => {
       if (e.panelId !== panelId || disposed) return;
       if (gate.accept(e.data)) writeChunk(e.data);
+    });
+    // The shared grid moved (a view joined/left/resized): conform this xterm to it so a
+    // full-screen program stays identical across differently-sized windows (008 FR-009).
+    const offGrid = bridge.onGrid((e) => {
+      if (e.panelId !== panelId || disposed) return;
+      conformGrid(e.cols, e.rows);
     });
     const offExit = bridge.onExit((e) => {
       if (e.panelId === panelId && !disposed) onExitRef.current({ code: e.code, unexpected: e.unexpected });
@@ -225,6 +266,11 @@ export function useTerminal(opts: UseTerminalOptions): void {
           return;
         }
         onAttachedRef.current?.(); // a successful attach clears any "still starting" state
+        // Conform to the session's shared grid BEFORE replaying scrollback, so a view
+        // joining an existing session (whose minimum it may not move — e.g. a larger
+        // window mirroring a smaller one) renders the replayed screen at the right size
+        // instead of offset (008 FR-009). The grid is absent only if there is no session.
+        if (res.grid) conformGrid(res.grid.cols, res.grid.rows);
         if (res.scrollback) term.write(res.scrollback);
         // Scrollback is applied — open the gate and flush any live output that
         // arrived during the attach window, in order, after the backlog.
@@ -247,20 +293,20 @@ export function useTerminal(opts: UseTerminalOptions): void {
     let lastRows = term.rows;
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
     const applyResize = (): void => {
-      try {
-        fit.fit();
-      } catch {
-        return; // container not measurable yet
-      }
-      if (term.cols === lastCols && term.rows === lastRows) return;
-      lastCols = term.cols;
-      lastRows = term.rows;
-      // Arm the resize-repaint window so the repaint ConPTY sends back is not
-      // mistaken for a `cls` (which would wipe the scrollback on enlarge).
-      resizedAt = Date.now();
-      // Report THIS view's measured size; the daemon re-derives the grid as the minimum
-      // across all views and resizes the PTY only if that minimum moved (008 FR-010).
-      void bridge.resize(panelId, term.cols, term.rows, viewId);
+      // MEASURE the container's capacity — do NOT fit()/resize the xterm here. The xterm's
+      // size is driven solely by the shared grid the daemon broadcasts back (conformGrid).
+      // If a view sized itself to its own container it would diverge from a smaller
+      // mirrored view and render a full-screen program offset (008 FR-009). fit.fit() is
+      // measure-and-apply; proposeDimensions is measure-only, exactly what we want.
+      const dims = fit.proposeDimensions();
+      if (!dims || !Number.isFinite(dims.cols) || !Number.isFinite(dims.rows)) return;
+      if (dims.cols === lastCols && dims.rows === lastRows) return;
+      lastCols = dims.cols;
+      lastRows = dims.rows;
+      // Report THIS view's capacity; the daemon re-derives the grid as the minimum across
+      // all views, resizes the PTY only if that minimum moved, and broadcasts the grid
+      // back — which is what actually resizes this xterm (008 FR-010/FR-013).
+      void bridge.resize(panelId, dims.cols, dims.rows, viewId);
     };
     const observer = new ResizeObserver(() => {
       if (resizeTimer !== undefined) clearTimeout(resizeTimer);
@@ -289,6 +335,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       clearInterval(repaintTimer);
       observer.disconnect();
       offOutput();
+      offGrid();
       offExit();
       // Detach THIS view so the daemon drops it from the shared grid and recomputes
       // across the survivors (008 FR-010). This is NOT a kill: the session keeps running
