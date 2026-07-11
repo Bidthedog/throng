@@ -49,10 +49,11 @@ test('replaces Empty Panel with the type form; swaps inputs; Clear resets; Confi
       await expect(win.getByTestId(`panel-type-select-${pid}`)).toHaveCount(0);
       const term = win.getByTestId(`terminal-${pid}`);
       await expect(term).toBeVisible();
-      // The Panel header shows its type AND flavour after the name (005 UX).
+      // The Panel header marks its type with an icon; the type AND flavour are in
+      // its hover title (012 — the former text pill was replaced by the icon).
       const kind = win.getByTestId(`panel-kind-${pid}`);
-      await expect(kind).toContainText('Terminal');
-      await expect(kind).toContainText('Command Prompt');
+      await expect(kind).toHaveAttribute('title', /Terminal/);
+      await expect(kind).toHaveAttribute('title', /Command Prompt/);
       // Wait for cmd's prompt (its cwd) so it is ready for input.
       await expect(term).toContainText(basename(root), { timeout: 15000 });
 

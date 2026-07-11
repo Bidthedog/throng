@@ -278,6 +278,46 @@ export function daemonRpc(
   });
 }
 
+/**
+ * Count `throng:terminal:resize` IPC messages the renderer sends to the main
+ * process (012, T003). Reused by SC-004 (a focus change must send ZERO terminal
+ * resizes) and SC-005 (a per-type zoom recomputes the terminal grid → ≥1 resize).
+ *
+ * Instruments the main process by wrapping the existing `ipcMain.handle` for the
+ * resize channel with a counter that delegates to the original handler, so the
+ * real resize path (and its return value) is unchanged — only observed.
+ */
+export async function installResizeProbe(app: ElectronApplication): Promise<{
+  count: () => Promise<number>;
+  reset: () => Promise<void>;
+}> {
+  await app.evaluate(({ ipcMain }) => {
+    const g = globalThis as unknown as { __throngResizeCount?: number; __throngResizeProbed?: boolean };
+    if (g.__throngResizeProbed) return;
+    const channel = 'throng:terminal:resize';
+    const store = ipcMain as unknown as {
+      _invokeHandlers: Map<string, (...a: unknown[]) => unknown>;
+    };
+    const original = store._invokeHandlers.get(channel);
+    if (!original) return;
+    g.__throngResizeCount = 0;
+    g.__throngResizeProbed = true;
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, (event, ...args: unknown[]) => {
+      g.__throngResizeCount = (g.__throngResizeCount ?? 0) + 1;
+      return (original as (...a: unknown[]) => unknown)(event, ...args);
+    });
+  });
+  return {
+    count: () =>
+      app.evaluate(() => (globalThis as { __throngResizeCount?: number }).__throngResizeCount ?? 0),
+    reset: () =>
+      app.evaluate(() => {
+        (globalThis as { __throngResizeCount?: number }).__throngResizeCount = 0;
+      }),
+  };
+}
+
 /** The terminal-hosting daemon's OS pid (via health.ping over its pipe). */
 export async function daemonPid(pipeName: string): Promise<number> {
   const pong = (await daemonRpc(pipeName, 'health.ping')) as { pid?: number } | null;
