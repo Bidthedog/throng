@@ -13,8 +13,10 @@ contextBridge.exposeInMainWorld('throng', {
   // tagged { ok, result } | { ok, error } envelope; the renderer's typed clients
   // unwrap it (002 / research D10).
   invoke: (method: string, params: unknown) => ipcRenderer.invoke('throng:rpc', method, params),
-  // Native folder picker for a project's root folder (FR-034).
-  pickFolder: () => ipcRenderer.invoke('throng:pickFolder'),
+  // Native folder picker for a project's root folder (FR-034). Optionally opens at
+  // a requested start folder (011, FR-040/043).
+  pickFolder: (opts?: { defaultPath?: string | string[] }) =>
+    ipcRenderer.invoke('throng:pickFolder', opts),
   // Set the window title to a workspace summary (FR-040).
   setTitle: (title: string) => ipcRenderer.send('throng:setTitle', title),
   // Mouse-driven zoom: the renderer can't reach webContents from the sandbox,

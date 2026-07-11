@@ -68,9 +68,25 @@
 }
 
 .explorer__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
   flex: 0 0 auto;
   padding: 4px 8px;
   color: var(--throng-colour-danger);
+  font-size: 11px;
+}
+.explorer__error-text {
+  flex: 1 1 auto;
+}
+.explorer__error-dismiss {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
   font-size: 11px;
 }
 

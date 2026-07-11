@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import type { FieldDescriptor } from '@throng/core';
+import { FolderPicker } from '../common/folder-picker.js';
 
 /**
  * Generic descriptor-driven form controls (feature 007, FR-028/029). One control
@@ -34,6 +35,8 @@ export function SettingControl(props: SettingControlProps): ReactElement {
       return <NumberControl {...props} />;
     case 'array':
       return <ArrayControl {...props} />;
+    case 'folder':
+      return <FolderControl {...props} />;
     default:
       // text / colour / font-family / icon / chord fall back to a text field here;
       // richer pickers live in the Themes/Key Bindings tabs (US3/US4).
@@ -42,6 +45,30 @@ export function SettingControl(props: SettingControlProps): ReactElement {
 }
 
 const testId = (key: string): string => `control-${key}`;
+
+/** Abbreviations that must not be naively Title-cased (e.g. line endings). */
+const OPTION_LABEL_OVERRIDES: Record<string, string> = {
+  lf: 'LF',
+  crlf: 'CRLF',
+  cr: 'CR',
+};
+
+/**
+ * Display label for a static enum option value (011 polish): the stored value is a
+ * machine token (`lastViewed`, `override`, `tab`, …) but the dropdown shows it in
+ * Title Case (`Last Viewed`, `Override`, `Tab`). The JSON value is unchanged — this
+ * is display-only. Dynamic option lists (theme/font names) are shown verbatim.
+ */
+function humanizeOptionLabel(value: string): string {
+  if (value in OPTION_LABEL_OVERRIDES) return OPTION_LABEL_OVERRIDES[value];
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2') // split camelCase boundaries
+    .replace(/[_-]+/g, ' ') // and any snake/kebab separators
+    .trim()
+    .split(/\s+/)
+    .map((w) => (w.length > 0 ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(' ');
+}
 
 function ToggleControl({ descriptor, value, onCommit }: SettingControlProps): ReactElement {
   const checked = value === true;
@@ -58,7 +85,11 @@ function ToggleControl({ descriptor, value, onCommit }: SettingControlProps): Re
 }
 
 function SelectControl({ descriptor, value, options, onCommit }: SettingControlProps): ReactElement {
+  // Dynamic option lists (e.g. themes on disk) are real names shown verbatim; static
+  // enum options are machine tokens shown in Title Case (display-only, 011 polish).
+  const isDynamic = options != null;
   const opts = (options ?? descriptor.allowedValues ?? []).map(String);
+  const label = (v: string): string => (isDynamic ? v : humanizeOptionLabel(v));
   const current = value === undefined || value === null ? '' : String(value);
   return (
     <select
@@ -69,10 +100,12 @@ function SelectControl({ descriptor, value, options, onCommit }: SettingControlP
     >
       {/* If the current value isn't among the options (dynamic list still loading),
           keep it visible so we never silently drop it. */}
-      {!opts.includes(current) && current !== '' ? <option value={current}>{current}</option> : null}
+      {!opts.includes(current) && current !== '' ? (
+        <option value={current}>{label(current)}</option>
+      ) : null}
       {opts.map((o) => (
         <option key={o} value={o}>
-          {o}
+          {label(o)}
         </option>
       ))}
     </select>
@@ -185,6 +218,41 @@ function TextControl({ descriptor, value, onCommit }: SettingControlProps): Reac
         focused.current = false;
         if (text !== value) onCommit(text);
       }}
+    />
+  );
+}
+
+/** Folder path control (011, FR-042/042a): the shared FolderPicker — an editable path
+ *  field plus a themeable browse icon that opens the OS dialog on demand. The settings
+ *  variant NEVER auto-pops (no `autoOpenOnMount`): typing commits on blur (like the other
+ *  text settings), and browsing commits the picked folder immediately. */
+function FolderControl({ descriptor, value, onCommit }: SettingControlProps): ReactElement {
+  const [text, setText] = useState<string>(value === undefined ? '' : String(value));
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) setText(value === undefined ? '' : String(value));
+  }, [value]);
+  return (
+    <FolderPicker
+      value={text}
+      onChange={(p) => {
+        focused.current = true;
+        setText(p);
+      }}
+      onBlur={() => {
+        focused.current = false;
+        if (text !== value) onCommit(text);
+      }}
+      onPick={(p) => {
+        focused.current = false;
+        onCommit(p);
+      }}
+      defaultPath={typeof value === 'string' && value.length > 0 ? value : undefined}
+      browseTitle="Browse for a folder"
+      placeholder="Folder path"
+      inputClassName="ctl ctl--text ctl__input"
+      inputTestId={testId(descriptor.key)}
+      browseTestId={`${testId(descriptor.key)}-browse`}
     />
   );
 }

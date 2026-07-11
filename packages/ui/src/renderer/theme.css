@@ -266,11 +266,27 @@ textarea,
 }
 
 .panel__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
   margin: 8px 12px;
   padding: 6px 8px;
   border-radius: 4px;
   background: #3a1d22;
   color: #ff9aa6;
+  font-size: 12px;
+}
+.panel__error-text {
+  flex: 1 1 auto;
+}
+.panel__error-dismiss {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
   font-size: 12px;
 }
 
@@ -730,7 +746,11 @@ textarea,
   color: var(--throng-colour-textMuted);
 }
 
-/* The shared unsaved-changes dot (Panel/Tab/project) — one themeable style (006). */
+/* The shared unsaved-changes dot (Panel/Tab/project) — one themeable style (006).
+ * It PULSES continuously wherever it appears (011, US5): a single keyframe on the
+ * shared class means all three locations animate from the same document timeline and
+ * are therefore always in step (FR-022). Opacity never reaches zero — an absent dot
+ * means "no unsaved changes", so a blink would be a lie (FR-021). */
 .throng-unsaved-dot {
   flex: 0 0 auto;
   display: inline-block;
@@ -739,6 +759,25 @@ textarea,
   margin-left: 6px;
   border-radius: 50%;
   background: var(--throng-colour-unsavedDot, #e3b341);
+  animation: throng-unsaved-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes throng-unsaved-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* Reduced motion (FR-023): render static at full opacity — no animation. */
+@media (prefers-reduced-motion: reduce) {
+  .throng-unsaved-dot {
+    animation: none;
+    opacity: 1;
+  }
 }
 
 .panel-box__actions {
@@ -1282,16 +1321,29 @@ textarea,
   border-color: var(--text-dim);
   color: var(--text);
 }
-.project-form__browse {
+/* --- Shared folder picker (011, FR-042): editable path + themeable browse icon - */
+.folder-picker {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.folder-picker__path {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.folder-picker__browse {
+  flex: 0 0 auto;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: 4px;
   padding: 6px 10px;
   cursor: pointer;
-  white-space: nowrap;
+  line-height: 1;
 }
-.project-form__browse:hover {
+.folder-picker__browse:hover {
   border-color: var(--text-dim);
   color: var(--text);
 }
