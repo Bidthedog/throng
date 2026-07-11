@@ -14,7 +14,6 @@ describe('WindowsElevation', () => {
     // don't fail here when not elevated (no silent pass — the contract stability
     // check above is the real gate). Log a notice when we can't exercise `true`.
     if (!elevated) {
-      // eslint-disable-next-line no-console
       console.info('[elevation-contract] runner is not elevated — skipping the elevated-true path');
     }
   });

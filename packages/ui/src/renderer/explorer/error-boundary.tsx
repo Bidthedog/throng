@@ -12,7 +12,6 @@ export class TreeErrorBoundary extends Component<{ children: ReactNode }, { erro
   }
 
   componentDidCatch(error: unknown, info: ErrorInfo): void {
-    // eslint-disable-next-line no-console
     console.error('File tree error:', error, info.componentStack);
   }
 

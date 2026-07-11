@@ -32,7 +32,7 @@ function clamp(v: number, lo: number, hi: number): number {
  *  its min, so a shrunk middle panel stays at its min when the window grows again. */
 function fit(sizes: number[], mins: number[], total: number): number[] {
   const out = sizes.map((v, i) => Math.max(v, mins[i]));
-  let diff = total - out.reduce((a, b) => a + b, 0);
+  const diff = total - out.reduce((a, b) => a + b, 0);
   if (diff > 0) {
     out[0] += diff;
   } else if (diff < 0) {

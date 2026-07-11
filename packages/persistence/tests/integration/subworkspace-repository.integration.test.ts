@@ -37,7 +37,7 @@ describe('SubWorkspaceRepository', () => {
     const path = freshDbPath();
     let db = openDatabase({ databasePath: path });
     runMigrations(db);
-    let ws = new WorkspaceRepository(db);
+    const ws = new WorkspaceRepository(db);
     let sub = new SubWorkspaceRepository(db);
 
     ws.persistSubWorkspaces('u', [makeSub('s1', 'Alpha', '#ffffff'), makeSub('s2', 'Beta', '#000000')]);

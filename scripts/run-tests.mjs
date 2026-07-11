@@ -22,7 +22,6 @@ const workersArg = process.argv.find((a) => a.startsWith('--e2e-workers='));
 if (workersArg) process.env.THRONG_E2E_WORKERS = workersArg.split('=')[1];
 
 const { dir, owned } = ensureRunDir();
-// eslint-disable-next-line no-console
 console.log(`[throng test] run dir: ${dir}`);
 
 let exitCode = 0;

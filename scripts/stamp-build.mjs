@@ -10,7 +10,7 @@
 // code the daemon actually runs changes, so unchanged rebuilds reuse the running
 // daemon (terminals persist) and real code changes retire it (no stale code).
 import { createHash } from 'node:crypto';
-import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 

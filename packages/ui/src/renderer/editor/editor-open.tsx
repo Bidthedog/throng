@@ -75,7 +75,7 @@ export async function openFileInTab(ws: Ws, tabId: string, absPath: string): Pro
   //    the tab, else create the tab's single dedicated editor (FR-010).
   const editorsHere = editorPanelsInTab(tab.root);
   const last = getLastActiveEditor(tabId);
-  let targetId = last && editorsHere.includes(last) ? last : editorsHere[0];
+  const targetId = last && editorsHere.includes(last) ? last : editorsHere[0];
 
   if (!targetId) {
     createDedicatedEditor(ws, tabId, absPath);
@@ -107,7 +107,6 @@ export async function openFileInTab(ws: Ws, tabId: string, absPath: string): Pro
   }
 
   await actions.openFile(absPath);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   void targetId;
 }
 

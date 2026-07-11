@@ -29,7 +29,6 @@ test('dragging does not emit blink.mojom.Widget rejections', async () => {
 
     const joined = stderr.join('');
     const hits = (joined.match(/blink\.mojom\.Widget/g) ?? []).length;
-    // eslint-disable-next-line no-console
     console.log(`[probe] blink.mojom.Widget hits: ${hits}`);
     expect(hits, joined).toBe(0);
   });
