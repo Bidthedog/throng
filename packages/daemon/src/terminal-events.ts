@@ -5,6 +5,7 @@ import {
   TERMINAL_EXIT_NOTIFICATION,
   TERMINAL_FLAVOUR_MISSING_NOTIFICATION,
   TERMINAL_GRID_NOTIFICATION,
+  TERMINAL_CWD_NOTIFICATION,
 } from '@throng/ipc-contract';
 
 /** Anything that can receive a serialized notification frame (a connected socket). */
@@ -64,6 +65,11 @@ export class TerminalEvents {
    */
   publishGrid(panelId: string, cols: number, rows: number): void {
     this.emit(TERMINAL_GRID_NOTIFICATION, { panelId, cols, rows });
+  }
+
+  /** A terminal's shell working directory changed (012 revision) — shown in its title. */
+  publishCwd(panelId: string, cwd: string): void {
+    this.emit(TERMINAL_CWD_NOTIFICATION, { panelId, cwd });
   }
 
   private emit(method: string, params: unknown): void {

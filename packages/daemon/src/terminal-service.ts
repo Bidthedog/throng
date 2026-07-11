@@ -3,6 +3,7 @@ import {
   isBusy,
   shouldDeElevate,
   type IElevationState,
+  type IProcessCwd,
   type IPtyHost,
   type PtyExit,
   type PtyHandle,
@@ -46,6 +47,9 @@ const DEFAULT_VIEW_ID = '__default__';
 
 /** The character grid MUST never be driven below one column or one row (008 FR-012). */
 const MIN_GRID = 1;
+
+/** How often to poll each live terminal's shell working directory (012 revision). */
+const CWD_POLL_MS = 1000;
 
 /** One view's most-recently-reported character dimensions. */
 interface ViewDims {
@@ -129,7 +133,49 @@ export class TerminalService {
      * exactly the recovery path. Zero (default/production) means no delay.
      */
     private readonly attachColdStartDelayMs = 0,
-  ) {}
+    /**
+     * Process-cwd OS seam (012 revision). When provided, the service polls each live
+     * terminal's shell working directory and publishes changes as `terminal.cwd`
+     * notifications, so a panel's title shows its live cwd (even when a full-screen
+     * program hides the prompt). Optional so existing call sites/tests are unchanged.
+     */
+    private readonly processCwd?: IProcessCwd,
+  ) {
+    if (this.processCwd) {
+      this.cwdTimer = setInterval(() => void this.pollCwd(), CWD_POLL_MS);
+      this.cwdTimer.unref?.(); // never keep the daemon process alive for polling
+    }
+  }
+
+  /** Last cwd published per panel, so we only emit on an actual change. */
+  private readonly lastCwd = new Map<string, string>();
+  private readonly cwdTimer?: ReturnType<typeof setInterval>;
+
+  /**
+   * Poll every running terminal's shell cwd (012 revision) and publish changes.
+   * Skips entirely when nothing is listening or nothing is running. Never throws —
+   * the seam omits any process it cannot read (e.g. one that just exited).
+   */
+  private async pollCwd(): Promise<void> {
+    if (!this.processCwd || this.events.sinkCount === 0) return;
+    const byPid = new Map<number, string>(); // shell pid → panelId
+    for (const s of this.sessions.values()) {
+      if (s.status === 'running') byPid.set(s.handle.pid, s.panelId);
+    }
+    if (byPid.size === 0) return;
+    let cwds: Map<number, string>;
+    try {
+      cwds = await this.processCwd.read([...byPid.keys()]);
+    } catch {
+      return; // a poll failure must never disturb the daemon
+    }
+    for (const [pid, cwd] of cwds) {
+      const panelId = byPid.get(pid);
+      if (!panelId || this.lastCwd.get(panelId) === cwd) continue;
+      this.lastCwd.set(panelId, cwd);
+      this.events.publishCwd(panelId, cwd);
+    }
+  }
 
   /** Pick the PTY host for a terminal: the de-elevated agent for an unchecked
    *  terminal on an elevated daemon (or when forced for testing), else local. */
@@ -387,6 +433,7 @@ export class TerminalService {
       }
     }
     if (this.sessions.get(session.panelId) === session) this.sessions.delete(session.panelId);
+    this.lastCwd.delete(session.panelId); // a reused panelId must re-publish its cwd
     if (!session.rootless) this.locks.release(session.projectId);
     try {
       session.host.kill(session.handle);
@@ -399,6 +446,7 @@ export class TerminalService {
     if (session.status === 'exited') return; // already torn down
     session.status = 'exited';
     session.exit = exit;
+    this.lastCwd.delete(session.panelId); // stop reporting a dead shell's cwd
     const unexpected = !session.userKilled;
     for (const dispose of session.disposers) {
       try {

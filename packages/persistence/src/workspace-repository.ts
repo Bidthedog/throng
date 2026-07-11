@@ -138,15 +138,20 @@ export class WorkspaceRepository implements IWorkspaceStore {
   }
 
   /**
-   * Migrate a stored layout document up to the current schema (T028). v1 lacked
-   * `Tab.activePanelId`; v2 populates it (default = the tab's first panel). Saves
-   * always write the current schema, so this is idempotent for already-v2 docs.
+   * Migrate a stored layout document up to the current schema. v1 lacked
+   * `Tab.activePanelId`; v2 populates it (default = the tab's first panel). v3 (012)
+   * introduces per-panel `Panel.zoom` — absent means inherited (level 0), so v3
+   * needs no zoom-content migration; the version bump just records the new shape.
+   * Out-of-range hand-edited `Panel.zoom` is clamped on read (`panelZoomLevel`), not
+   * here. Each step is additive and version-guarded, so re-running is idempotent.
    */
   private migrateLayout(layout: WorkspaceLayout): WorkspaceLayout {
     if ((layout.schemaVersion ?? 1) >= LAYOUT_SCHEMA_VERSION) return layout;
+    // v1 → v2: default activePanelId (idempotent — guarded per tab).
     const tabs = layout.tabs.map((tab) =>
       tab.activePanelId ? tab : { ...tab, activePanelId: collectPanels(tab.root)[0]?.id },
     );
+    // v2 → v3: per-panel zoom is inherited-by-default; only the version bumps.
     return { ...layout, schemaVersion: LAYOUT_SCHEMA_VERSION, tabs };
   }
 

@@ -20,6 +20,7 @@ import {
   NodePtyHost,
   WindowsDirectoryLock,
   WindowsElevation,
+  WindowsProcessCwd,
   WindowsDeElevatedLauncher,
 } from '@throng/platform-windows';
 import {
@@ -157,6 +158,7 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
     deElevatedPty,
     forceAgent,
     attachColdStartDelayMs,
+    new WindowsProcessCwd(), // 012: poll each terminal's shell cwd for the panel title
   );
   container.bind<TerminalEvents>(DAEMON_TYPES.TerminalEvents).toConstantValue(terminalEvents);
   container.bind<TerminalLockManager>(DAEMON_TYPES.TerminalLockManager).toConstantValue(lockManager);
