@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
 import { runApp, createProject } from './harness.js';
+import { skipIfElevated } from './admin.js';
 
 // FR-040: the OS window title shows the active project name + the active Tab · Panel
 // context (the same `activeContextLabel` the status bar uses), NO path and NO
@@ -11,6 +12,7 @@ const title = (app: ElectronApplication): Promise<string> =>
   app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle());
 
 test('window title shows active project · Tab · Panel (no path, no totals); status bar keeps the path', async () => {
+  skipIfElevated(); // asserts no [ADMIN] marker; on an elevated runner the marker correctly appears
   await runApp(async (app, win) => {
     await createProject(win, 'Titler', 'C:/code/titler');
 

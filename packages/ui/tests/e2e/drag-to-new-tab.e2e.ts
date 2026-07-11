@@ -114,10 +114,17 @@ test('drag a Panel onto "+" → new active Tab containing only that Panel', asyn
     // The split is gone in the (now single-panel) active tab.
     await expect(win.getByTestId('split-node')).toHaveCount(0);
 
-    // The source tab still holds Panel A (switch back to it).
-    await win.locator('.tab-chip').first().click();
+    // The source tab still holds Panel A (switch back to it). The tab-chip is a
+    // @dnd-kit draggable, so its synthetic click can be swallowed as a zero-distance
+    // tab drag on a loaded CI runner, leaving the new tab active. Re-fire the click
+    // until the source tab actually reports active, then read its panel.
+    const srcTab = win.locator('.tab-chip').first();
+    await expect(async () => {
+      await srcTab.click();
+      await expect(srcTab).toHaveAttribute('data-active', 'true');
+    }).toPass();
     await expect(win.locator('.panel-box')).toHaveCount(1);
-    expect((await panelIds(win))[0]).toBe(a);
+    await expect.poll(async () => (await panelIds(win))[0]).toBe(a);
   } finally {
     if (app) await app.close();
     await stopDaemon(h.daemon);
