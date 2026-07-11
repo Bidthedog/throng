@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { resolveAction, activeContextLabel, effectiveActivePanelId } from '@throng/core';
+import { resolveAction, activeContextLabel } from '@throng/core';
 import { EditorChrome } from './editor/editor-chrome.js';
 import { useCapabilities } from './panel-type/use-capabilities.js';
 import { ProjectsPanel } from './sidebar/projects-panel.js';

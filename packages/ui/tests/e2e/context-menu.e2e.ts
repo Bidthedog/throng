@@ -12,12 +12,6 @@ import type { ElectronApplication, Page } from '@playwright/test';
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
 
-interface Harness {
-  daemon: ChildProcess;
-  dataDir: string;
-  pipeName: string;
-}
-
 function startDaemon(pipeName: string, dataDir: string): Promise<ChildProcess> {
   const child = spawn(process.execPath, [daemonEntry], {
     env: { ...process.env, THRONG_PIPE_NAME: pipeName, THRONG_DATABASE_PATH: join(dataDir, 'throng.db') },

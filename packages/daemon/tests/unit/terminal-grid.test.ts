@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { IPtyHost, PtyStartOptions, PtyHandle, PtyExit } from '@throng/core';
+import type { IPtyHost, PtyStartOptions, PtyHandle } from '@throng/core';
 import { TerminalService } from '../../src/terminal-service.js';
 import { TerminalEvents } from '../../src/terminal-events.js';
 import { TerminalLockManager } from '../../src/terminal-lock-manager.js';

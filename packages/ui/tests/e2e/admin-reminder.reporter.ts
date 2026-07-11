@@ -36,7 +36,6 @@ export default class AdminReminderReporter implements Reporter {
       );
     }
     out.push(RULE, '');
-    // eslint-disable-next-line no-console
     console.log(out.join('\n'));
   }
 }

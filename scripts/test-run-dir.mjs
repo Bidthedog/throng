@@ -71,7 +71,6 @@ export function cleanupRunDir(dir) {
     rmSync(dir, { recursive: true, force: true });
     return;
   }
-  // eslint-disable-next-line no-console
   console.log(
     `\n[throng test] kept run dir with ${leftovers.length} leftover item(s) ` +
       `(a test likely crashed or hung before cleanup):\n  ${dir}\n`,
