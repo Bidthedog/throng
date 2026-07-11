@@ -28,8 +28,10 @@
 }
 
 .editor-panel .cm-gutters {
-  background: var(--throng-colour-editorBg, #0c0f16);
-  color: var(--throng-colour-textMuted, #93a0b4);
+  /* Gutter has its own themeable surface + line-number colour (009), distinct
+     from the editor body so changing them repaints only the gutter strip. */
+  background: var(--throng-colour-editorGutterBg, #151a23);
+  color: var(--throng-colour-editorGutterFg, #8b98ac);
   border-right: 1px solid var(--throng-colour-border, #2a3344);
 }
 
