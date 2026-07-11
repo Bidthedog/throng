@@ -81,3 +81,28 @@ describe('SETTINGS_METADATA control types (FR-028/029)', () => {
     }
   });
 });
+
+describe('SETTINGS_METADATA new-project + verb changes (011)', () => {
+  const byKey = new Map(SETTINGS_METADATA.map((d) => [d.key, d]));
+
+  it('describes the starting-folder choice as a select', () => {
+    const d = byKey.get('newProject.startingFolder');
+    expect(d?.control).toBe('select');
+    expect(d?.allowedValues).toEqual(['profile', 'lastViewed', 'override']);
+  });
+
+  it('describes the override path with the folder control', () => {
+    expect(byKey.get('newProject.overridePath')?.control).toBe('folder');
+  });
+
+  it('treats lastProjectFolder as internal (no descriptor, not configurable)', () => {
+    expect(SETTINGS_INTERNAL_KEYS).toContain('newProject.lastProjectFolder');
+    expect(byKey.has('newProject.lastProjectFolder')).toBe(false);
+    expect(settingsLeaves()).not.toContain('newProject.lastProjectFolder');
+  });
+
+  it('re-aligns the confirmation labels to the new verbs (keys unchanged)', () => {
+    expect(byKey.get('confirmations.destroyProject')?.label).toBe('Remove a project');
+    expect(byKey.get('confirmations.destroySubWorkspace')?.label).toBe('Destroy a sub-workspace');
+  });
+});

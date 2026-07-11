@@ -82,8 +82,12 @@ export type {
   SaveAllScopeSetting,
   DefaultLineEnding,
   EditorPathDisplay,
+  NewProjectSettings,
+  StartingFolderMode,
 } from './config/app-settings.js';
 export { DEFAULT_APP_SETTINGS, parseAppSettings } from './config/app-settings.js';
+export type { StartingFolderConfig, StartingFolderContext } from './config/starting-folder.js';
+export { resolveStartingFolder, isOverrideResolvable } from './config/starting-folder.js';
 export type { Keybindings, ActionId, KeyEvent } from './config/keybindings.js';
 export {
   DEFAULT_KEYBINDINGS,

@@ -21,7 +21,8 @@ export type ControlKind =
   | 'font-size'
   | 'enum'
   | 'chord' // keybinding chord (edited via the capture modal)
-  | 'icon'; // theme icon token (pack-aware)
+  | 'icon' // theme icon token (pack-aware)
+  | 'folder'; // editable path + browse-to-pick folder (011, shared folder-picker)
 
 /** One editor field: a configurable key plus how to render and constrain it. */
 export interface FieldDescriptor {
