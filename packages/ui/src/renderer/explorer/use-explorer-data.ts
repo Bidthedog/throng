@@ -270,46 +270,53 @@ export function useExplorerData(
     };
   }, [ready, selectedId, projectId, treeRef]);
 
-  // Live sync (US2): when the main-process watcher reports a change under the
-  // root, re-read every currently-loaded directory and merge. Folders that
-  // vanished are dropped; new entries appear. react-arborist keeps open +
-  // selected state by id, so expansion/selection are preserved for survivors.
+  // Re-read directories and merge. With no argument every currently-loaded dir is
+  // re-read (US2 watcher-driven live sync). Given explicit dirs, only those already
+  // loaded are re-read (plus the always-loaded root) — used to reconcile from an
+  // awaited operation result (see paste), which converges the tree even when the
+  // fs-watch re-read is missed or coalesced. Folders that vanished are dropped; new
+  // entries appear. react-arborist keeps open + selected state by id, so
+  // expansion/selection are preserved for survivors.
+  const reloadDirs = useCallback(async (dirs?: readonly string[]): Promise<void> => {
+    const loaded = childrenMapRef.current;
+    const keys = (dirs ?? [...loaded.keys()]).filter((k) => k === '' || loaded.has(k));
+    if (keys.length === 0) return;
+    const results = await Promise.all(
+      keys.map(async (k) => [k, await fetchRef.current(k)] as const),
+    );
+    setChildrenMap((prev) => {
+      const next = new Map(prev);
+      let changed = false;
+      for (const [k, kids] of results) {
+        if (kids) {
+          if (!sameEntries(prev.get(k), kids)) {
+            next.set(k, kids);
+            changed = true;
+          }
+        } else if (k !== '' && prev.has(k)) {
+          next.delete(k); // a loaded folder disappeared
+          changed = true;
+        }
+      }
+      // No real change (e.g. a spurious watch event) → keep the SAME map ref so
+      // react-arborist doesn't rebuild and lose open/selection state.
+      return changed ? next : prev;
+    });
+  }, []);
+
+  // Live sync (US2): re-read every loaded directory when the watcher reports a change.
   useEffect(() => {
     if (!rootFolder) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const reload = async (): Promise<void> => {
-      const keys = [...childrenMapRef.current.keys()];
-      const results = await Promise.all(
-        keys.map(async (k) => [k, await fetchRef.current(k)] as const),
-      );
-      setChildrenMap((prev) => {
-        const next = new Map(prev);
-        let changed = false;
-        for (const [k, kids] of results) {
-          if (kids) {
-            if (!sameEntries(prev.get(k), kids)) {
-              next.set(k, kids);
-              changed = true;
-            }
-          } else if (k !== '' && prev.has(k)) {
-            next.delete(k); // a loaded folder disappeared
-            changed = true;
-          }
-        }
-        // No real change (e.g. a spurious watch event) → keep the SAME map ref so
-        // react-arborist doesn't rebuild and lose open/selection state.
-        return changed ? next : prev;
-      });
-    };
     const off = window.throng?.files?.onChange?.(() => {
       if (timer) clearTimeout(timer);
-      timer = setTimeout(() => void reload(), 80); // coalesce bursts
+      timer = setTimeout(() => void reloadDirs(), 80); // coalesce bursts
     });
     return () => {
       if (timer) clearTimeout(timer);
       off?.();
     };
-  }, [rootFolder]);
+  }, [rootFolder, reloadDirs]);
 
   // Ensure a folder's children are loaded (lazy, on first open).
   const ensureLoaded = useCallback(
@@ -455,14 +462,25 @@ export function useExplorerData(
     (target: TargetNode | null) => {
       if (!clipboard) return;
       const dest = resolveTarget(target);
+      // Reconcile the moved-from parents (and the destination) from the awaited
+      // result: the move/copy promise resolving guarantees the on-disk change is done,
+      // so this drops any stale moved-from row deterministically even when the
+      // debounced fs-watch re-read is missed or coalesced (as on a slow CI filesystem).
       if (clipboard.mode === 'cut') {
-        void window.throng?.files?.move?.(clipboard.relPaths, dest).then(report);
+        const affected = [...new Set([...clipboard.relPaths.map(parentRel), dest])];
+        void window.throng?.files?.move?.(clipboard.relPaths, dest).then((res) => {
+          report(res);
+          void reloadDirs(affected);
+        });
         setClipboard(null);
       } else {
-        void window.throng?.files?.copy?.(clipboard.relPaths, dest).then(report);
+        void window.throng?.files?.copy?.(clipboard.relPaths, dest).then((res) => {
+          report(res);
+          void reloadDirs([dest]);
+        });
       }
     },
-    [clipboard, report],
+    [clipboard, report, reloadDirs],
   );
 
   const remove = useCallback(
