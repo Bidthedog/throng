@@ -35,6 +35,14 @@ goal is to pull all of that into a single, simple customisable workspace.
   and drag-to-split panels; the full per-project layout is saved and restored every session.
 - **Multi-window sub-workspaces** — tear tabs or panels off into separate OS windows that
   stay in sync and move as one focus group.
+- **Focus contexts & per-panel zoom** — every window has one visible *active panel*, drawn
+  from theme tokens (a foreground treatment, dimmed to a distinct inactive treatment when the
+  window is in the background) and movable from the keyboard (directional and layout-order
+  cycle, carrying real input focus into and out of terminals and editors); each panel zooms
+  its text **independently** — from the keyboard or its right-click menu — composing on top of
+  the app-wide zoom and persisted with the layout. Each panel shows a small type icon, and a
+  terminal shows its **live working directory** in its header (even when a full-screen program
+  hides the prompt).
 - **File explorer** — a live, project-scoped file tree with full operations (rename, move,
   copy, Recycle-Bin delete, per-project hide, editable exclude globs).
 - **Terminal panels** — PowerShell, Git Bash, CMD, and custom shell flavours run inline via
