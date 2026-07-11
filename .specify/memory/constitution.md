@@ -1,6 +1,35 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 3.12.0 → 3.13.0
+Bump rationale: MINOR. One additive governance rule (2026-07-11), no principle removed
+                or redefined: Development Workflow & Quality Gates gains a "Static analysis &
+                linting" quality gate — the codebase MUST pass an automated linter (ESLint with
+                the typescript-eslint rule set) with ZERO errors, in addition to strict TypeScript
+                type-checking (`tsc`), before a change is complete and before a PR merges; a lint
+                error is a build failure, not a suggestion. Lint rules MAY be scoped/tuned in the
+                shared lint configuration where a rule is genuinely inapplicable, but MUST NOT be
+                disabled ad hoc to paper over a real defect (a line-level suppression MUST be
+                justified). The lint + type-check gates, together with the Principle V test layers
+                (unit/integration/contract/E2E), MUST run in continuous integration on every pull
+                request so a red gate blocks merge automatically rather than relying on local
+                discipline. The code-review gate is extended with a matching lint/type-check check.
+                Materially expanded, additive workflow guidance → MINOR.
+Modified principles: none (rule added under Development Workflow & Quality Gates; the code-review
+                gate is extended to verify lint + type-check pass with zero errors). Titles unchanged.
+Added sections: none. Removed sections: none.
+Templates / artifacts reviewed:
+  ✅ .specify/templates/plan-template.md  — Constitution Check references the constitution
+       dynamically; the new rule is picked up automatically, no edit needed.
+  ✅ .specify/templates/spec-template.md  — principle-agnostic; no changes required.
+  ✅ .specify/templates/tasks-template.md — principle-agnostic; no changes required.
+  ✅ .specify/extensions.yml              — no before/after_constitution hooks registered.
+  ✅ eslint.config.js + package.json (`lint` / `typecheck` scripts) + .github/workflows/ci.yml —
+       implement and enforce this rule: a flat ESLint config (typescript-eslint) across the
+       workspace, and a CI workflow that runs lint, type-check, the vitest layers, and the
+       Playwright-Electron E2E suite on `windows-latest` for every push / pull request.
+Deferred TODOs: none.
+                ---- prior amendment (historical) ----
 Version change: 3.11.0 → 3.12.0
 Bump rationale: MINOR. One additive governance rule (2026-07-10), no principle removed
                 or redefined: Development Workflow & Quality Gates gains a "Themeable icon controls"
@@ -770,6 +799,19 @@ while sub-workspaces give the user one deliberate, bounded place to combine proj
 - Every plan MUST be evaluated against all eleven principles; any violation MUST
   be recorded and justified in the plan's Complexity Tracking section or the
   design MUST be revised to comply.
+- **Static analysis & linting MUST pass as a quality gate (NON-NEGOTIABLE).**
+  The codebase MUST be kept clean under an automated linter — **ESLint** with the
+  **typescript-eslint** rule set — in addition to strict TypeScript type-checking
+  (`tsc`). Lint MUST report **zero errors**: a lint error MUST be treated as a build
+  failure, not a suggestion. A change MUST NOT be considered complete, and a PR MUST
+  NOT be merged, while lint or type-check reports errors. Lint rules MAY be tuned or
+  scoped in the **shared lint configuration** where a rule is genuinely inapplicable
+  (with the reason evident from the config), but MUST NOT be disabled ad hoc to mask a
+  real defect; a line-level suppression MUST carry a justification. These gates MUST be
+  enforced automatically: the linter, the type-check, and the layered test suites of
+  Principle V (unit, integration, contract, and E2E) MUST run in **continuous
+  integration on every pull request**, so that a red gate blocks merge without relying
+  on local discipline.
 - Changes that touch the OS abstraction boundary, the daemon/terminal process
   lifecycle, or persisted edit/layout state MUST be reviewed with particular
   scrutiny against Principles II, III, V, and VII.
@@ -817,7 +859,9 @@ while sub-workspaces give the user one deliberate, bounded place to combine proj
   A change that adds or alters an action control MUST NOT be considered complete, and a PR MUST NOT be
   merged, while that control uses a text label outside the stated exception, or takes its icon or
   colours from anywhere but the theme.
-- Code review MUST verify the engineering gates: Red-Green-Refactor with the
+- Code review MUST verify the engineering gates: that lint (ESLint) and type-check
+  (`tsc`) both pass with **zero errors** and the CI gate is green (Static analysis &
+  linting rule above), Red-Green-Refactor with the
   unit/integration/E2E layers present (V), SOLID/DRY/YAGNI adherence (VIII),
   constructor DI wired only through each boundary's single composition-root
   container (IX), configuration sourced from injected settings rather than
@@ -844,4 +888,4 @@ while sub-workspaces give the user one deliberate, bounded place to combine proj
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 3.12.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-10
+**Version**: 3.13.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-11
