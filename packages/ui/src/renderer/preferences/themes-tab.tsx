@@ -4,7 +4,10 @@ import {
   activateTheme,
   classifyThemes,
   cloneName,
+  emptyValueFor,
+  filterFields,
   getAtPath,
+  matchesQuery,
   reservedThemeNames,
   setAtPath,
   type FieldDescriptor,
@@ -15,6 +18,7 @@ import { useActiveTheme, useAppSettings } from '../config/config-store.js';
 import { writeConfig, debounce } from '../config/write-config.js';
 import { createApplyClient } from './apply-client.js';
 import { ThemeTokenControl } from './pickers.js';
+import { RowActions } from './row-actions.js';
 import { IconSection } from './icon-section.js';
 import { IconButton } from '../common/icon-button.js';
 import { DismissButton } from '../common/dismiss-button.js';
@@ -40,11 +44,33 @@ import { NameDialog } from './name-dialog.js';
  * Below the toolbar, the grouped token controls + icon section edit the ACTIVE theme via the
  * immediate-apply path (unchanged from 007).
  */
-function groupNonIconDescriptors(): { group: string; items: FieldDescriptor[] }[] {
+/** How long the typeahead waits after the last keystroke before filtering (FR-021). */
+const SEARCH_DEBOUNCE_MS = 150;
+
+/** The theme's editable token descriptors — icons excluded, the icon section owns those. */
+const THEME_TOKEN_FIELDS: readonly FieldDescriptor[] = THEME_METADATA.filter(
+  (d) => d.control !== 'icon',
+);
+
+/** The icon tokens — same registry, same descriptors, filtered by the same typeahead (FR-021). */
+const THEME_ICON_FIELDS: readonly FieldDescriptor[] = THEME_METADATA.filter(
+  (d) => d.control === 'icon',
+);
+
+/** The icon-pack selector is a Theme property, not a token, so it needs its own searchable text. */
+const ICON_PACK_FIELD = {
+  key: 'iconPack',
+  label: 'Icon pack',
+  description: 'Map all icon tokens at once; override individual tokens below.',
+};
+
+function groupNonIconDescriptors(items: readonly FieldDescriptor[]): {
+  group: string;
+  items: FieldDescriptor[];
+}[] {
   const order: string[] = [];
   const byGroup = new Map<string, FieldDescriptor[]>();
-  for (const d of THEME_METADATA) {
-    if (d.control === 'icon') continue; // the icon section handles these
+  for (const d of items) {
     if (!byGroup.has(d.group)) {
       byGroup.set(d.group, []);
       order.push(d.group);
@@ -69,7 +95,46 @@ export function ThemesTab(): ReactElement {
   const activeName = settings.appearance.theme;
 
   const applySettings = useMemo(() => createApplyClient({ kind: 'settings' }), []);
-  const groups = useMemo(groupNonIconDescriptors, []);
+  // FR-021: the third and last tab to get the typeahead — and the one that needs it most, with
+  // several hundred token rows. Same shared `filterFields` the other two use; a theme value is
+  // matched on its label, its description and its current value.
+  const [query, setQuery] = useState('');
+  const [applied, setApplied] = useState('');
+  const applySearch = useMemo(() => debounce((q: string) => setApplied(q), SEARCH_DEBOUNCE_MS), []);
+  useEffect(() => () => applySearch.cancel(), [applySearch]);
+
+  const onSearchChange = (next: string): void => {
+    setQuery(next);
+    applySearch(next);
+  };
+  const clearSearch = (): void => {
+    applySearch.cancel(); // the clear is immediate, never debounced
+    setQuery('');
+    setApplied('');
+  };
+
+  const matches = useMemo(
+    () => filterFields(applied, THEME_TOKEN_FIELDS, (d) => getAtPath(activeTheme, d.key)),
+    [applied, activeTheme],
+  );
+  const groups = useMemo(() => groupNonIconDescriptors(matches), [matches]);
+
+  /**
+   * The icon section is part of the theme, so it is part of the search (FR-021). It used to sit
+   * outside the filtered groups and simply ignore the query — search for "terminal" and you got
+   * two matching colour rows and, still, the entire icon grid underneath. A section that ignores
+   * the filter is worse than one with no filter, because it looks like a result.
+   */
+  const iconFilter = useMemo(() => {
+    if (!applied) return null; // no search → show the whole section
+    const fields = filterFields(applied, THEME_ICON_FIELDS, (d) => getAtPath(activeTheme, d.key));
+    return {
+      tokens: fields.map((d) => d.key.replace(/^icons\./, '')),
+      packRowMatches: matchesQuery(applied, ICON_PACK_FIELD, activeTheme.iconPack ?? ''),
+    };
+  }, [applied, activeTheme]);
+
+  const iconSectionMatches = !iconFilter || iconFilter.tokens.length > 0 || iconFilter.packRowMatches;
   // Reserved built-in names come straight from the pure 010 record — no IPC needed,
   // so a DELETED built-in's name is still reserved (FR-007).
   const reserved = useMemo(() => reservedThemeNames(), []);
@@ -145,6 +210,16 @@ export function ThemesTab(): ReactElement {
 
   const commitToken = (key: string, value: unknown): void => {
     applyTheme(setAtPath(themeRef.current, key, value) as Theme);
+  };
+
+  /**
+   * Offer a clear only where the field declares empty a valid value AND the value is not already
+   * empty — clearing an empty value is a no-op, and a no-op affordance is noise (FR-016a).
+   */
+  const canClear = (d: FieldDescriptor): boolean => {
+    if (!d.clearable) return false;
+    const value = getAtPath(activeTheme, d.key);
+    return Array.isArray(value) ? value.length > 0 : value !== '';
   };
 
   const setIconPack = (pack: string | undefined): void => {
@@ -405,6 +480,33 @@ export function ThemesTab(): ReactElement {
         />
       ) : null}
 
+      <div className="settings-search">
+        <input
+          type="text"
+          className="settings-search__input"
+          data-testid="themes-search"
+          placeholder="Search theme values…"
+          aria-label="Search theme values"
+          value={query}
+          onChange={(e) => onSearchChange(e.target.value)}
+        />
+        {query ? (
+          <IconButton
+            token="dismiss"
+            className="settings-search__clear"
+            testId="themes-search-clear"
+            title="Clear search"
+            onClick={clearSearch}
+          />
+        ) : null}
+      </div>
+
+      {groups.length === 0 && !iconSectionMatches ? (
+        <p className="settings-search__empty" data-testid="themes-search-empty">
+          No theme values match “{query}”.
+        </p>
+      ) : null}
+
       {groups.map(({ group, items }) => (
         <section className="settings-group" key={group} data-testid={`settings-group-${group}`}>
           <h3 className="settings-group__title">{group}</h3>
@@ -422,12 +524,29 @@ export function ThemesTab(): ReactElement {
                   onCommit={(v) => commitToken(d.key, v)}
                 />
               </div>
+              {/* Clear only (FR-016/FR-018). A theme's font stack may legitimately be emptied —
+                  the app has a fallback family — but a per-TOKEN reset or revert would duplicate
+                  feature 014's per-theme restore, which already writes this same file. Declining
+                  an action is not the same as disabling one: reset and revert are absent here
+                  because they will NEVER apply, not because they do not apply yet. */}
+              <RowActions
+                kind="theme"
+                itemKey={d.key}
+                label={d.label}
+                clearable={canClear(d)}
+                onClear={() => commitToken(d.key, emptyValueFor(d))}
+              />
             </div>
           ))}
         </section>
       ))}
 
-      <IconSection theme={activeTheme} onSetPack={setIconPack} onOverride={overrideIcon} />
+      <IconSection
+        theme={activeTheme}
+        onSetPack={setIconPack}
+        onOverride={overrideIcon}
+        filter={iconFilter}
+      />
     </div>
   );
 }

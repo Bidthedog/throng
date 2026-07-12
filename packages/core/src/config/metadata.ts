@@ -44,9 +44,51 @@ export interface FieldDescriptor {
   step?: number;
   /** element control for an 'array' field. */
   itemControl?: ControlKind;
+  /**
+   * Empty is a valid value for this field, so the row may offer a **clear** affordance
+   * (015, FR-016a).
+   *
+   * Declared, never inferred: whether a value may be emptied is a property of the FIELD, not of
+   * whatever it happens to hold today. A required setting must not become emptiable into an
+   * invalid state merely because it is currently a string.
+   *
+   * The bar is that empty is *valid* — the tolerant parser accepts it and a runtime fallback
+   * supplies behaviour in its absence — not that the field's shipped default is itself empty.
+   * The theme's font stack ships populated and is still legitimately clearable (FR-018).
+   * {@link auditClearable} holds the declaration to that bar.
+   */
+  clearable?: boolean;
 }
 
 export type MetadataRegistry = readonly FieldDescriptor[];
+
+/** The empty value for a field, by control kind — what a **clear** writes (015, FR-016a). */
+export function emptyValueFor(field: FieldDescriptor): unknown {
+  return field.control === 'array' || field.control === 'multiselect' ? [] : '';
+}
+
+/**
+ * The keys of every field that **declares** itself clearable but whose empty value does not
+ * survive a round-trip through the tolerant parser — i.e. every declaration that is a lie
+ * (015, FR-016a).
+ *
+ * `roundTrip` empties the field, parses the document, and reads the field back. A field passes
+ * when what comes back is still empty: that is what proves the app can actually live with the
+ * value the clear affordance would write. A field whose parser quietly substitutes a default is
+ * NOT clearable, however much its descriptor would like to be.
+ */
+export function auditClearable<T extends FieldDescriptor>(
+  registry: readonly T[],
+  roundTrip: (field: T) => unknown,
+): string[] {
+  return registry
+    .filter((d) => d.clearable === true)
+    .filter((d) => {
+      const back = roundTrip(d);
+      return Array.isArray(back) ? back.length > 0 : back !== '';
+    })
+    .map((d) => d.key);
+}
 
 /** True for values that terminate a dotted path: primitives, arrays, and null. */
 function isLeaf(value: unknown): boolean {

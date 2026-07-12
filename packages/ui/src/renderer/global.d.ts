@@ -88,6 +88,12 @@ declare global {
         // Feature 014 restore controls (010 FR-008 / FR-005 / FR-005a).
         restoreAllThemes?: () => Promise<{ ok: boolean; failedPath?: string; error?: string }>;
         restoreTheme?: (name: string) => Promise<{ ok: boolean; failedPath?: string; error?: string }>;
+        // Feature 015 granular reset controls (010's reset API, finally reachable).
+        resetBinding?: (action: string) => Promise<{ ok: boolean; reason?: string }>;
+        resetSetting?: (path: string) => Promise<{ ok: boolean; reason?: string }>;
+        resetPreferences?: () => Promise<{ ok: boolean; failedPath?: string; error?: string }>;
+        resetSettings?: () => Promise<{ ok: boolean; failedPath?: string; error?: string }>;
+        resetKeybindings?: () => Promise<{ ok: boolean; failedPath?: string; error?: string }>;
         listFonts?: () => Promise<string[]>;
         listIconPacks?: () => Promise<IconPackInfo[]>;
       };

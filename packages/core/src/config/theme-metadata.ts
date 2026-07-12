@@ -88,6 +88,10 @@ export function descriptorForThemeToken(key: string): FieldDescriptor {
     description: copy.description,
     group,
     control,
+    // A font stack may be emptied outright (015, FR-018): the app has a fallback family, so
+    // "no preference" is a real answer, not a broken one. It is the clearest case of a value
+    // whose SHIPPED default is populated yet which is still legitimately clearable.
+    ...(control === 'font-family' ? { clearable: true } : {}),
     ...(allowedValues ? { allowedValues } : {}),
     ...(control === 'font-size' ? { min: 6, max: 96, step: 1 } : {}),
   };

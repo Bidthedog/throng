@@ -297,6 +297,31 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The glyph on the control that returns every built-in theme to the values it was shipped with, leaving your own themes untouched.',
   },
+  'icons.revert': {
+    label: 'Revert item icon',
+    description:
+      'The glyph on the control that undoes your changes to a single preference, putting it back to the value it had when you opened this window — which is not necessarily the value Throng ships with.',
+  },
+  'icons.editJson': {
+    label: 'Edit as JSON icon',
+    description:
+      'The glyph on the preferences toggle that swaps the visual editor for the raw configuration text, so you can type the underlying values by hand.',
+  },
+  'icons.editVisual': {
+    label: 'Edit visually icon',
+    description:
+      'The glyph on the preferences toggle that swaps the raw configuration text back for the visual editor, with its labelled rows and controls.',
+  },
+  'icons.moveUp': {
+    label: 'Move up icon',
+    description:
+      'The glyph on the control that moves an entry one place earlier in a list you are editing, such as a folder-exclusion rule.',
+  },
+  'icons.moveDown': {
+    label: 'Move down icon',
+    description:
+      'The glyph on the control that moves an entry one place later in a list you are editing, such as a folder-exclusion rule.',
+  },
   'icons.zoomIn': {
     label: 'Zoom in icon',
     description: 'The glyph on the panel menu control that enlarges that panel’s text.',
