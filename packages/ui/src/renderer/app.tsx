@@ -10,6 +10,7 @@ import {
   type LayoutNode,
 } from '@throng/core';
 import { EditorChrome } from './editor/editor-chrome.js';
+import { SearchKeybindings } from './search/search-keybindings.js';
 import { useCapabilities } from './panel-type/use-capabilities.js';
 import { ProjectsPanel } from './sidebar/projects-panel.js';
 import { SubworkspacesPanel } from './sidebar/subworkspaces-panel.js';
@@ -496,6 +497,7 @@ export function App(): ReactElement {
             <PanelDestroySync />
             <PanelStateSync />
             <EditorChrome />
+            <SearchKeybindings />
             <KeybindingsHandler onToggleProjects={toggleLeft} onToggleExplorer={toggleRight} />
             <WorkspacePane />
             <section

@@ -1,6 +1,7 @@
 import { useState, type CSSProperties, type ReactElement } from 'react';
 import { zoomFactor, panelZoomLevel, type Panel } from '@throng/core';
 import { useEditor } from './use-editor.js';
+import { FindBar } from '../search/find-bar.js';
 import './editor.css';
 
 /**
@@ -32,11 +33,15 @@ export function EditorPanel({
     ['--throng-zoom-editor']: String(zoomFactor(panelZoomLevel(panel))),
   } as CSSProperties;
   return (
-    <div
-      className="editor-panel"
-      data-testid={`editor-${panel.id}`}
-      style={zoomStyle}
-      ref={setContainer}
-    />
+    <div className="editor-panel-wrap">
+      <div
+        className="editor-panel"
+        data-testid={`editor-${panel.id}`}
+        style={zoomStyle}
+        ref={setContainer}
+      />
+      {/* The one shared find bar (013); renders only while find is open on this panel. */}
+      <FindBar panelId={panel.id} />
+    </div>
   );
 }

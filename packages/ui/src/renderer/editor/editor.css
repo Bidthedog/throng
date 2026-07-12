@@ -1,6 +1,15 @@
 /* Inline CodeMirror editor view (006). Themed from the active theme's editor
  * colour tokens (var(--throng-colour-editor*)) so a theme change repaints live. */
 
+/* Positioning context for the find bar (013), which overlays the editor's top-right
+ * corner rather than displacing the text. */
+.editor-panel-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
 .editor-panel {
   width: 100%;
   height: 100%;

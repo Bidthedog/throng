@@ -67,6 +67,38 @@ function activePanelBorders(accent: string, surface: string, text: string): {
   return { active, inactive };
 }
 
+/**
+ * Search match-highlight surfaces (013, FR-019 / SC-005), derived so every bundled
+ * theme is legible without hand-listing them. Both surfaces tint the editor background
+ * toward the theme accent — the current match more strongly than an ordinary one — but
+ * only as far as keeps the editor's OWN text readable on top (WCAG AA text floor,
+ * 4.5:1), because a highlight you cannot read through is worse than none. The outline
+ * is the accent pulled toward the text until it clears the non-text floor (3:1) against
+ * the current-match fill, so the match you are on stays identifiable on any palette.
+ */
+function searchHighlights(
+  accent: string,
+  editorBg: string,
+  editorFg: string,
+): { match: string; current: string; border: string } {
+  let strongest = 0.05;
+  for (let t = 0.7; t > 0.05; t -= 0.05) {
+    if (contrastRatio(editorFg, blend(editorBg, accent, t)) >= 4.5) {
+      strongest = t;
+      break;
+    }
+  }
+  const current = blend(editorBg, accent, strongest);
+  // An ordinary match is the same hue at ~45% of the strength, so it always reads as
+  // weaker than the current one and is at least as legible (it sits nearer the surface).
+  const match = blend(editorBg, accent, strongest * 0.45);
+  let border = accent;
+  for (let t = 0; t <= 1 && contrastRatio(border, current) < 3; t += 0.1) {
+    border = blend(accent, editorFg, t);
+  }
+  return { match, current, border };
+}
+
 interface Palette {
   bg: string;
   sidebar?: string;
@@ -121,6 +153,13 @@ function makeTheme(name: string, p: Palette): Theme {
       editorGutterBg: p.editorGutterBg ?? gutterBgFor(p.editorBg ?? p.bg),
       editorGutterFg: p.editorGutterFg ?? p.textMuted ?? p.text,
       unsavedDot: p.unsavedDot ?? '#e3b341',
+      // Search match highlights (013, FR-019 / SC-005): derived per palette so text
+      // stays readable through a highlight on every bundled theme.
+      searchMatch: searchHighlights(p.accent, p.editorBg ?? p.bg, p.editorFg ?? p.text).match,
+      searchMatchCurrent: searchHighlights(p.accent, p.editorBg ?? p.bg, p.editorFg ?? p.text)
+        .current,
+      searchMatchCurrentBorder: searchHighlights(p.accent, p.editorBg ?? p.bg, p.editorFg ?? p.text)
+        .border,
       activePaneHighlight: p.accent,
       // Active-panel focus context (012, FR-002 / SC-001): a contrast-guaranteed
       // accent marks the active panel when the window is foreground; a dimmed

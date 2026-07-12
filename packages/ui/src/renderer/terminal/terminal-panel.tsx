@@ -8,6 +8,8 @@ import {
   type ReactElement,
 } from 'react';
 import {
+  resolveAction,
+  resolveColour,
   resolveIcon,
   zoomFactor,
   panelZoomLevel,
@@ -16,11 +18,15 @@ import {
   type Theme,
 } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
-import { useActiveTheme } from '../config/config-store.js';
+import { useActiveTheme, useKeybindings } from '../config/config-store.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import { setPanelExit } from './exit-store.js';
 import { useTerminal, type TerminalApi } from './use-terminal.js';
+import { FindBar } from '../search/find-bar.js';
+import { reservedByTerminal } from '../search/search-actions.js';
+import { getFindState, updateCount } from '../search/search-store.js';
+import type { SearchCount } from '../search/search-model.js';
 import './terminal.css';
 
 /** Build the xterm theme from the active throng terminal colour tokens (FR-030). */
@@ -75,6 +81,40 @@ export function TerminalPanel({
   const config = (panel.config ?? {}) as Partial<TerminalPanelConfig>;
   const xtermTheme = useMemo(() => buildXtermTheme(theme), [theme]);
   const font = useMemo(() => terminalFont(theme), [theme]);
+  // Match highlights are painted by xterm's own decorations, so the colours have to be
+  // handed over as values — resolved from the SAME theme tokens the editor's highlights
+  // use, so a match looks like a match in either panel type (FR-019).
+  const searchDecorations = useMemo(
+    () => ({
+      matchBackground: resolveColour(theme, 'searchMatch'),
+      activeMatchBackground: resolveColour(theme, 'searchMatchCurrent'),
+      activeMatchBorder: resolveColour(theme, 'searchMatchCurrentBorder'),
+    }),
+    [theme],
+  );
+  // xterm re-reports the result set as output streams in or the buffer is trimmed, so the
+  // bar's count stays true to the live scrollback (FR-012).
+  const onSearchCount = useCallback(
+    (count: SearchCount) => updateCount(panel.id, count),
+    [panel.id],
+  );
+  // Which keys are throng's rather than the shell's — decided per keypress from the LIVE
+  // bindings and the LIVE find state, so rebinding find moves the reservation with it
+  // (FR-017), and so keys like Escape reach the program whenever no find bar is up.
+  const keybindings = useKeybindings();
+  const reserveKey = useCallback(
+    (e: KeyboardEvent) =>
+      reservedByTerminal(
+        resolveAction(keybindings, {
+          key: e.key,
+          ctrl: e.ctrlKey,
+          shift: e.shiftKey,
+          alt: e.altKey,
+        }),
+        getFindState().panelId === panel.id,
+      ),
+    [keybindings, panel.id],
+  );
   // Per-panel TERMINAL zoom (012, FR-012 / per-instance): the effective font size is
   // the themed base size × THIS panel's own zoom factor. The grid is computed from
   // this size (not the app-wide global zoom, which raster-scales the rendered
@@ -151,6 +191,9 @@ export function TerminalPanel({
     onAttached,
     attempt,
     apiRef,
+    searchDecorations,
+    onSearchCount,
+    reserveKey,
   });
 
   return (
@@ -162,6 +205,8 @@ export function TerminalPanel({
         onContextMenu={onContextMenu}
         style={{ background: xtermTheme.background }}
       />
+      {/* The one shared find bar (013); renders only while find is open on this panel. */}
+      <FindBar panelId={panel.id} />
       {stillStarting ? (
         <div
           className="terminal-panel__starting"

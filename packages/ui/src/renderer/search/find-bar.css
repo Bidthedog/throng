@@ -1,0 +1,113 @@
+/* The shared find bar (013) and the in-content match highlights it drives.
+ * Every colour resolves to a theme token — nothing here is hardcoded, so a theme
+ * change repaints the bar and the highlights live. */
+
+.find-bar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: var(--throng-colour-surface, #1b2230);
+  border: 1px solid var(--throng-colour-border, #2a3344);
+  border-top: none;
+  border-right: none;
+  border-radius: 0 0 0 4px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 35%);
+}
+
+.find-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.find-bar-icon {
+  width: 16px;
+  text-align: center;
+  color: var(--throng-colour-textMuted, #93a0b4);
+}
+
+.find-bar-input {
+  width: 160px;
+  padding: 2px 6px;
+  color: var(--throng-colour-text, #e6ebf2);
+  background: var(--throng-colour-appBg, #10131a);
+  border: 1px solid var(--throng-colour-border, #2a3344);
+  border-radius: 3px;
+  outline: none;
+}
+
+.find-bar-input:focus {
+  border-color: var(--throng-colour-accent, #6aa3ff);
+}
+
+.find-bar-input:disabled {
+  opacity: 0.5;
+}
+
+.find-bar-count {
+  min-width: 64px;
+  font-size: 0.85em;
+  color: var(--throng-colour-textMuted, #93a0b4);
+  text-align: right;
+}
+
+.find-bar-count--empty {
+  color: var(--throng-colour-danger, #e5534b);
+}
+
+/* Every action control is the same size, whatever glyph a theme gives it: the icons range
+ * from a wide emoji to a two-letter "Aa", so the box is fixed and the glyph is centred and
+ * scaled to fit inside it rather than being allowed to set the button's dimensions. */
+.find-bar-btn {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--throng-colour-buttonText, #e6ebf2);
+  text-align: center;
+  cursor: pointer;
+  background: var(--throng-colour-buttonBg, #222c3d);
+  border: 1px solid var(--throng-colour-border, #2a3344);
+  border-radius: 3px;
+}
+
+.find-bar-btn:hover:not(:disabled) {
+  color: var(--throng-colour-buttonHoverText, #10131a);
+  background: var(--throng-colour-buttonHoverBg, #6aa3ff);
+}
+
+/* An engaged match-mode toggle reads as pressed. */
+.find-bar-btn--on {
+  color: var(--throng-colour-buttonHoverText, #10131a);
+  background: var(--throng-colour-accent, #6aa3ff);
+  border-color: var(--throng-colour-accent, #6aa3ff);
+}
+
+.find-bar-btn:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+/* In-content match highlights (FR-019). Shared by the editor; the terminal feeds the
+ * same tokens to its own decorations. Body text must stay readable through these —
+ * the bundled themes derive them to guarantee it (SC-005). */
+.cm-editor .throng-search-match {
+  background: var(--throng-colour-searchMatch, #1c2f4d);
+}
+
+.cm-editor .throng-search-match--current {
+  background: var(--throng-colour-searchMatchCurrent, #2c4a7a);
+  outline: 1px solid var(--throng-colour-searchMatchCurrentBorder, #6aa3ff);
+}

@@ -218,13 +218,14 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * current legitimate pair passes while an exact/near duplicate (mean → 0) fails.
  * Value confirmed by the distinctness test.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 4.415211979884614;
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 4.46892856529523;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean
  * ΔE00. Calibrated to sit just below the closest legitimate pair
- * (CLOSEST_LEGITIMATE_PAIR_DELTA = Windows Terminal vs VSCode, 4.415 after the
- * 012 active-panel tokens were added to every palette) — see
+ * (CLOSEST_LEGITIMATE_PAIR_DELTA = Windows Terminal vs VSCode, 4.469 after the
+ * 013 search match-highlight tokens joined the 012 active-panel ones in every
+ * palette — the pair drifted slightly further apart, so the gate still holds) — see
  * research.md R2. A duplicated/near-cloned theme (mean → 0) fails; every current
  * legitimate pair passes; the recoloured Bash sits ~20 from Matrix.
  */

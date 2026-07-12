@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/014-theme-editor/plan.md
+at specs/013-terminal-and-editor-search/plan.md
 <!-- SPECKIT END -->

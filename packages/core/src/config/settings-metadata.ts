@@ -257,4 +257,15 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'New Project',
     control: 'folder',
   },
+  {
+    key: 'search.asYouTypeDebounceMs',
+    label: 'Find delay',
+    description:
+      'How long find waits after you stop typing before it re-runs the search and updates the highlights.',
+    group: 'Search',
+    control: 'number',
+    min: 0,
+    max: 1000,
+    step: 10,
+  },
 ];
