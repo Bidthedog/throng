@@ -163,6 +163,21 @@ export const THRONG_THEME: Theme = {
     // circular arrow: the Themes editor shows "restore this theme" and "restore ALL themes"
     // side by side, so they must read as different actions at a glance.
     restoreAll: '⎌',
+    // Undo one item back to the value it had when the preferences window was opened (015,
+    // FR-016). It sits in the same row gutter as `retry` (reset to shipped) and `destroy`
+    // (clear), so it has to read as a THIRD action: a plain undo arrow, not another circular
+    // one. "Back to where I started" is not "back to what Throng ships".
+    revert: '↶',
+    // Preferences UI⇄JSON mode toggle (015). The toggle was the last text-labelled
+    // control in the window ("{ }" / "UI"). Deliberately NOT `fileJson`/`fileCode`:
+    // those mean "a JSON/code FILE" in the explorer tree, and re-skinning them for
+    // the tree would silently re-skin the preferences toolbar too.
+    editJson: '{ }',
+    editVisual: '▤',
+    // Reorder controls on the preferences array editor (015) — the last hard-coded glyphs
+    // in the window. `collapse`/`expand` are horizontal chevrons and read wrong here.
+    moveUp: '↑',
+    moveDown: '↓',
     // Per-panel zoom controls (012) — themeable action icons on the panel context
     // menu (constitution v3.12.0). Circled +/-/dot read as in / out / reset.
     zoomIn: '⊕',

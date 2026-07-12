@@ -59,6 +59,14 @@ export class ShippedDefaultsService {
     return { path: this.store.pathOf({ kind: 'theme', name }), content: FileConfigStore.serialize(this.shipped.themes[name]) };
   }
 
+  private settingsFile(): { path: string; content: string } {
+    return { path: this.store.pathOf({ kind: 'settings' }), content: FileConfigStore.serialize(this.shipped.settings) };
+  }
+
+  private keybindingsFile(): { path: string; content: string } {
+    return { path: this.store.pathOf({ kind: 'keybindings' }), content: FileConfigStore.serialize(this.shipped.keybindings) };
+  }
+
   private markerFile(): { path: string; content: string } {
     return { path: this.markerPath(), content: FileConfigStore.serialize({ version: this.shipped.version }) };
   }
@@ -83,11 +91,28 @@ export class ShippedDefaultsService {
     return this.store.writeFilesAtomic([this.themeFile(name)]);
   }
 
+  /**
+   * Feature 015, FR-011/FR-011b: restore the whole SETTINGS document from the shipped
+   * record — what the preferences window's per-tab "Reset to Defaults" runs on the
+   * Settings tab. A thin single-file operation on top of the record + the atomic write,
+   * exactly like {@link restoreTheme}. It exists so the RENDERER never computes a
+   * defaults document: doing that is what gave the app a second, drifting notion of
+   * "shipped default" in the first place.
+   */
+  async resetSettings(): Promise<RestoreResult> {
+    return this.store.writeFilesAtomic([this.settingsFile()]);
+  }
+
+  /** Feature 015, FR-011/FR-011b: the Key Bindings counterpart of {@link resetSettings}. */
+  async resetKeybindings(): Promise<RestoreResult> {
+    return this.store.writeFilesAtomic([this.keybindingsFile()]);
+  }
+
   /** FR-015: full reset — settings + keybindings + every built-in theme from the record. */
   async resetEverything(): Promise<RestoreResult> {
     const files = [
-      { path: this.store.pathOf({ kind: 'settings' }), content: FileConfigStore.serialize(this.shipped.settings) },
-      { path: this.store.pathOf({ kind: 'keybindings' }), content: FileConfigStore.serialize(this.shipped.keybindings) },
+      this.settingsFile(),
+      this.keybindingsFile(),
       ...reservedThemeNames(this.shipped).map((name) => this.themeFile(name)),
     ];
     return this.store.writeFilesAtomic(files);
@@ -124,8 +149,8 @@ export class ShippedDefaultsService {
    */
   async seed(): Promise<RestoreResult> {
     const candidates = [
-      { path: this.store.pathOf({ kind: 'settings' }), content: FileConfigStore.serialize(this.shipped.settings) },
-      { path: this.store.pathOf({ kind: 'keybindings' }), content: FileConfigStore.serialize(this.shipped.keybindings) },
+      this.settingsFile(),
+      this.keybindingsFile(),
       ...reservedThemeNames(this.shipped).map((name) => this.themeFile(name)),
       this.markerFile(),
     ];

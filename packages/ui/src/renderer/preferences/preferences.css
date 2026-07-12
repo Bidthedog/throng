@@ -103,8 +103,75 @@
   padding: 0;
 }
 
-.prefs-toolbtn--icon svg {
-  display: block;
+/* The mode toggle and the reset controls render a themed GLYPH, not an inline SVG
+   (constitution v3.12.0) — size it like the old icon so the toolbar keeps its rhythm. */
+.prefs-toolbtn--icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Feature 015: the per-item affordances (FR-015). Three actions — revert, reset, clear — AFTER
+   the control, and all three are present at all times: one that does not currently apply is
+   disabled and greyed, never removed. That is what holds the row still. An affordance that comes
+   and goes changes the row's geometry the instant the user edits something, sliding the input out
+   from under the pointer at the exact moment they touched it. The fixed width keeps every control
+   in the form aligned with every other even where a surface offers fewer than three actions. */
+/* Width comes from the number of actions the SURFACE offers (`--row-action-slots`), not from the
+   three that exist. A DISABLED action still holds its slot — it may light up on the next
+   keystroke, and the row must not move when it does. A DECLINED one never will: the Themes tab
+   has no per-token reset at all, so a fixed three-slot gutter reserved space there for something
+   that could never arrive. */
+.settings-row__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  width: calc(var(--row-action-slots, 3) * 22px);
+  min-height: 22px;
+}
+
+/* Colours come from theme tokens only (constitution v3.12.0). */
+.settings-row__action {
+  flex: 0 0 auto;
+  width: 20px;
+  padding: 0 2px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-muted, #93a0b4);
+}
+
+.settings-row__action:hover:not(:disabled) {
+  color: var(--accent, #6aa3ff);
+}
+
+/* Idle: on screen so the action is DISCOVERABLE — you learn a revert exists before you need it,
+   not after you have already changed something and gone looking for a way back — but plainly
+   inert, and its hover title says WHY it will not respond (FR-015a). Dimmed, never invisible:
+   an affordance the user cannot see teaches them nothing. */
+.settings-row__action--idle {
+  opacity: 0.35;
+  cursor: default;
+  color: var(--text-muted, #93a0b4);
+}
+
+/* A reset that could not be written says so, and says nothing changed (FR-006a). */
+.prefs-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--danger, #e5534b);
+  background: var(--surface, rgba(255, 255, 255, 0.05));
+  border-bottom: 1px solid var(--border);
+}
+
+.prefs-notice > span {
+  flex: 1 1 auto;
 }
 
 .prefs-confirm {
@@ -199,17 +266,32 @@
   color: var(--text-dim, var(--text));
 }
 
+/* Horizontal padding is not decoration (FR-019b): without it a row-hover highlight runs
+   edge-to-edge to the panel border and reads as a rendering fault the moment the hover colour
+   differs from the panel behind it. */
+/* Two DIFFERENT gaps, which is why this is a margin and not one flex `gap`. The label needs air
+   between it and the control it describes; the row's actions belong TIGHT to the control they act
+   on — a wide gap there reads as a separate column of unrelated buttons rather than as this row's
+   affordances. */
 .settings-row {
   display: flex;
-  gap: 16px;
-  align-items: flex-start;
-  padding: 8px 0;
+  gap: 6px; /* control ↔ actions: tight, they belong together */
+  align-items: center;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
 }
 
+/* `flex-basis: 0`, NOT `auto` (FR-019b). With `auto` the meta's base size is its own content
+   width, so a long description makes the box want to be that wide and the text spills over the
+   control instead of wrapping — which is why the "Excluded globs" description landed underneath
+   the form controls, and only on the themes with wider fonts, where the text finally got long
+   enough to notice. Basis 0 makes it take the space that is LEFT and wrap inside it, on every
+   theme, whatever the font. */
 .settings-row__meta {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 0;
+  margin-right: 10px; /* label ↔ control: 6 + 10 = the 16px the row used to carry everywhere */
+  overflow-wrap: anywhere;
 }
 
 .settings-row__label {
@@ -224,11 +306,17 @@
   color: var(--text-dim, var(--text));
 }
 
+/* `flex: 0 1 auto` + a cap is what actually makes the multi-value controls WRAP (FR-019).
+   As `flex: 0 0 auto` this box simply grew with its content, so a row of chords or a stack of
+   font pills ran on in a single line and squashed — the inner containers had `flex-wrap: wrap`
+   all along, but nothing ever bounded them, so the wrap could never trigger. Bound it, and both
+   controls wrap for free. */
 .settings-row__control {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   min-width: 180px;
+  max-width: 55%;
   justify-content: flex-end;
 }
 
@@ -317,21 +405,24 @@
   user-select: none;
 }
 
-/* Deletable chord pills (H2 / FR-033b). */
+/* Deletable chord pills (H2 / FR-033b). ONE box per binding, holding the chord and its remove
+   control (FR-019a) — it used to be a bordered <kbd> nested inside this bordered pill, so three
+   chords read as six objects. */
 .kb-pill {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 1px 2px 1px 4px;
+  padding: 1px 2px 1px 6px;
   border: 1px solid var(--border);
   border-radius: 5px;
   background: var(--bg);
 }
 
-.kb-pill kbd {
-  border: none;
-  background: transparent;
-  padding: 2px 4px;
+.kb-pill__chord {
+  padding: 2px 2px;
+  font-size: 12px;
+  font-family: var(--throng-font-editor-family, 'Consolas', monospace);
+  white-space: nowrap;
 }
 
 .kb-pill__x {
@@ -391,19 +482,14 @@
   display: inline-flex;
   gap: 4px;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
 }
 
-.keybinding-chord kbd {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 12px;
-  font-family: var(--throng-font-editor-family, 'Consolas', monospace);
-}
-
-.keybinding-chord em {
+/* Vertically centred like every other row value — it used to sit off-centre (FR-019b). */
+.keybinding-chord__unbound {
+  display: inline-flex;
+  align-items: center;
   color: var(--text-dim, var(--text));
   font-size: 12px;
 }
@@ -601,18 +687,39 @@
   align-items: center;
 }
 
+/* The colour control's SWATCH (FR-020). `background: transparent` on the input is not enough:
+   Chromium renders the swatch inside its own shadow-DOM wrapper, which carries a default padding
+   ring and border of its own — so an unstyled `<input type="color">` shows a pale bevel around
+   the colour, in a themed dark window, and no amount of styling the input itself removes it.
+   Reach into the shadow parts.
+
+   The POPUP this control opens is a different matter: it is drawn by Chromium and CANNOT be
+   themed by any means available to us. Theming it means replacing the native control with a
+   custom picker — issue #64. This rule themes the half that can be themed; nothing here should
+   be read as a claim about the other half. */
 .ctl__colour-swatch {
   width: 30px;
   height: 26px;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 5px;
-  background: transparent;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.ctl__colour-swatch::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.ctl__colour-swatch::-webkit-color-swatch {
+  border: 1px solid var(--border);
+  border-radius: 3px;
 }
 
 .ctl__colour-hex {
   width: 92px;
   min-width: 0;
+  font-family: var(--throng-font-editor-family, 'Consolas', monospace);
 }
 
 .ctl--font {

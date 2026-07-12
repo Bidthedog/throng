@@ -11,14 +11,18 @@ import { DEFAULT_APP_SETTINGS, type AppSettings } from './app-settings.js';
 import { DEFAULT_KEYBINDINGS, type Keybindings } from './keybindings.js';
 import { ALL_DEFAULT_THEMES } from './default-themes/index.js';
 import { THRONG_THEME, type Theme } from './theme.js';
-import { getAtPath, setAtPath } from './metadata.js';
+import { setAtPath } from './metadata.js';
 
 /**
  * Version of the shipped-defaults set. Bumped when the shape or content shipped
  * to users changes in a way that a later app version must detect (drives the
  * additive upgrade migration in `ShippedDefaultsService.upgrade`).
  */
-export const SHIPPED_DEFAULTS_VERSION = 1;
+// Bumped by 015: four icon tokens entered the record (editJson, editVisual, moveUp, moveDown).
+// The additive upgrade is gated on this version, so without the bump an existing install's theme
+// files would never materialise them — the on-disk record silently drifting from the shipped one,
+// which is the exact drift SC-009 exists to end.
+export const SHIPPED_DEFAULTS_VERSION = 2;
 
 /** The authoritative shipped-defaults record (immutable/frozen once built). */
 export interface ShippedDefaults {
@@ -88,6 +92,23 @@ export function isReservedThemeName(name: string, d: ShippedDefaults = buildShip
 }
 
 /**
+ * Resolve a dotted path against OWN properties only. Plain bracket access resolves keys
+ * inherited from `Object.prototype` — so `__proto__`, `constructor` and `toString` would
+ * otherwise look like real configuration carrying real shipped defaults, and a reset of
+ * `constructor` would sail past the "no shipped default" guard and then throw deep inside the
+ * write path. The IPC layer accepts an arbitrary string, so the guard belongs here (015).
+ */
+export function ownAtPath(obj: unknown, path: string): unknown {
+  let cur: unknown = obj;
+  for (const seg of path.split('.')) {
+    if (cur === null || typeof cur !== 'object') return undefined;
+    if (!Object.prototype.hasOwnProperty.call(cur, seg)) return undefined;
+    cur = (cur as Record<string, unknown>)[seg];
+  }
+  return cur;
+}
+
+/**
  * Reset one action to its shipped binding tokens, leaving every other action
  * untouched. Returns a fresh Keybindings, or `null` when the action has no
  * shipped default (FR-009/016). `current` is never mutated.
@@ -97,6 +118,7 @@ export function resetBindingValue(
   action: string,
   d: ShippedDefaults = buildShippedDefaults(),
 ): Keybindings | null {
+  if (!Object.prototype.hasOwnProperty.call(d.keybindings.bindings, action)) return null;
   const shipped = d.keybindings.bindings[action];
   if (shipped === undefined) return null;
   return {
@@ -116,7 +138,7 @@ export function resetSettingValue(
   path: string,
   d: ShippedDefaults = buildShippedDefaults(),
 ): AppSettings | null {
-  const shipped = getAtPath(d.settings, path);
+  const shipped = ownAtPath(d.settings, path);
   if (shipped === undefined) return null;
   return setAtPath(current, path, clone(shipped));
 }

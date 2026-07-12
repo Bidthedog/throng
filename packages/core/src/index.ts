@@ -148,10 +148,6 @@ export { searchTokens, fieldHaystack, matchesQuery, filterFields } from './confi
 export { DEFAULT_THEMES, ALL_DEFAULT_THEMES } from './config/default-themes/index.js';
 export type { OnEntrySnapshot, WritePlan, WritePlanEntry } from './config/theme-reset.js';
 export {
-  resetCurrentSettings,
-  resetCurrentKeybindings,
-  resetCurrentTheme,
-  isBuiltInTheme,
   revertAll,
 } from './config/theme-reset.js';
 // Shipped defaults (010): the authoritative immutable/versioned record + pure
@@ -163,11 +159,22 @@ export {
   serializeShippedDefaults,
   reservedThemeNames,
   isReservedThemeName,
+  ownAtPath,
   resetBindingValue,
   resetSettingValue,
   fillMissingThemeProps,
   planThemeUpgrade,
 } from './config/shipped-defaults.js';
+// The overridden-test (015): is this item still what the app shipped? Decides when a
+// per-item reset affordance is shown — the affordance IS the row's "modified" cue.
+// Its sibling, the differs-from-entry test, decides when the per-item REVERT affordance is
+// shown: same comparison, but against the document the window was opened with (FR-016).
+export {
+  isSettingOverridden,
+  isBindingOverridden,
+  settingDiffersFromEntry,
+  bindingDiffersFromEntry,
+} from './config/overridden.js';
 // Theme-editor model (014): pure row classification + name validation for the restore/create controls.
 export type { ThemeRow, ThemeRowKind, ThemeNameValidation } from './config/theme-editor-model.js';
 export { classifyThemes, validateThemeName, cloneName } from './config/theme-editor-model.js';
@@ -182,6 +189,10 @@ export {
   setAtPath,
   auditRegistry,
   assertEveryKeyDescribed,
+  // Declared clearability (015, FR-016a): what a clear writes, and the guard that stops a
+  // `clearable` declaration from lying about whether the field can survive being emptied.
+  emptyValueFor,
+  auditClearable,
 } from './config/metadata.js';
 export {
   SETTINGS_METADATA,

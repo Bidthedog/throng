@@ -175,6 +175,22 @@ contextBridge.exposeInMainWorld('throng', {
     // Feature 014: restore/recreate a single built-in theme (FR-005/005a).
     restoreTheme: (name: string): Promise<{ ok: boolean; failedPath?: string; error?: string }> =>
       ipcRenderer.invoke('throng:config:restoreTheme', name),
+    // Feature 015: the granular reset controls. Feature 010 shipped these operations
+    // and nothing could reach them — until now they were exposed nowhere.
+    resetBinding: (action: string): Promise<{ ok: boolean; reason?: string }> =>
+      ipcRenderer.invoke('throng:config:resetBinding', action),
+    resetSetting: (path: string): Promise<{ ok: boolean; reason?: string }> =>
+      ipcRenderer.invoke('throng:config:resetSetting', path),
+    // Settings + key bindings + every BUILT-IN theme, atomically. Custom themes, projects,
+    // window layout and workspace state are never touched — hence "preferences", not
+    // "everything" (FR-005b).
+    resetPreferences: (): Promise<{ ok: boolean; failedPath?: string; error?: string }> =>
+      ipcRenderer.invoke('throng:config:resetPreferences'),
+    // The per-tab "Reset to Defaults" — one whole editor, restored in main from the record.
+    resetSettings: (): Promise<{ ok: boolean; failedPath?: string; error?: string }> =>
+      ipcRenderer.invoke('throng:config:resetSettings'),
+    resetKeybindings: (): Promise<{ ok: boolean; failedPath?: string; error?: string }> =>
+      ipcRenderer.invoke('throng:config:resetKeybindings'),
     // Installed-font typeahead source (cached; may be empty → curated fallback).
     listFonts: (): Promise<string[]> => ipcRenderer.invoke('throng:config:listFonts'),
     // Discovered icon packs ({ name, assetBase }); resolved by the main process.

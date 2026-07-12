@@ -6,6 +6,7 @@ import {
   type FieldDescriptor,
 } from '@throng/core';
 import { SettingControl } from './form-controls.js';
+import { IconButton } from '../common/icon-button.js';
 
 /**
  * Theme token pickers (feature 007, US4 — FR-038/038a/038b). A colour picker for
@@ -139,16 +140,13 @@ function FontFamilyPills({
             <span className="ctl__pill-label" style={{ fontFamily: p }}>
               {p}
             </span>
-            <button
-              type="button"
+            <IconButton
+              token="destroy"
               className="ctl__pill-x"
-              data-testid={`${testId(descriptor.key)}-remove-${i}`}
+              testId={`${testId(descriptor.key)}-remove-${i}`}
               title={`Remove ${p}`}
-              aria-label={`Remove ${p}`}
               onClick={() => removeAt(i)}
-            >
-              ×
-            </button>
+            />
           </span>
         ))}
         <input

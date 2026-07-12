@@ -13,7 +13,7 @@
 import { ipcMain } from 'electron';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import type { ConfigDocId, IConfigStore } from '@throng/core';
-import type { RestoreResult } from './shipped-defaults-service.js';
+import type { ResetOne, RestoreResult } from './shipped-defaults-service.js';
 
 export type WriteResult = { ok: true } | { ok: false; error: string };
 
@@ -93,10 +93,19 @@ export interface ConfigManagementDeps {
     deleteTheme(name: string): Promise<void>;
     readRaw(id: ConfigDocId): Promise<string>;
   };
-  /** Feature 010 restore API consumed by feature 014's restore controls. */
+  /**
+   * Feature 010's restore/reset API. Feature 014 exposed the THEME half; feature 015
+   * exposes the rest — until then `resetBinding`/`resetSetting`/`resetEverything`
+   * existed on the service but were reachable from nowhere in the renderer.
+   */
   shippedDefaults: {
     restoreAllThemes(): Promise<RestoreResult>;
     restoreTheme(name: string): Promise<RestoreResult>;
+    resetBinding(action: string): Promise<ResetOne>;
+    resetSetting(path: string): Promise<ResetOne>;
+    resetEverything(): Promise<RestoreResult>;
+    resetSettings(): Promise<RestoreResult>;
+    resetKeybindings(): Promise<RestoreResult>;
   };
   listFonts(): Promise<string[]>;
   listIconPacks(): Promise<{ name: string; assetBase: string }[]>;
@@ -125,6 +134,23 @@ export function registerConfigManagementIpc(deps: ConfigManagementDeps): void {
   ipcMain.handle('throng:config:restoreTheme', (_e, name: string) =>
     deps.shippedDefaults.restoreTheme(name),
   );
+  // Feature 015: the granular reset controls. These take an ACTION ID or a dotted
+  // SETTINGS PATH — never a filesystem path — so unlike the theme channels there is no
+  // path-escape surface to guard: the service resolves the target file itself.
+  // `resetPreferences` is deliberately NOT called `resetEverything` on the wire: it
+  // resets settings, key bindings and built-in themes, and nothing else — the project
+  // list, window layout and workspace state are never touched (FR-005b).
+  ipcMain.handle('throng:config:resetBinding', (_e, action: string) =>
+    deps.shippedDefaults.resetBinding(action),
+  );
+  ipcMain.handle('throng:config:resetSetting', (_e, path: string) =>
+    deps.shippedDefaults.resetSetting(path),
+  );
+  ipcMain.handle('throng:config:resetPreferences', () => deps.shippedDefaults.resetEverything());
+  // The per-tab "Reset to Defaults" (FR-011): one whole editor, restored in MAIN from the
+  // shipped record — the renderer never computes a defaults document.
+  ipcMain.handle('throng:config:resetSettings', () => deps.shippedDefaults.resetSettings());
+  ipcMain.handle('throng:config:resetKeybindings', () => deps.shippedDefaults.resetKeybindings());
   ipcMain.handle('throng:config:listFonts', () => deps.listFonts());
   ipcMain.handle('throng:config:listIconPacks', () => deps.listIconPacks());
 }

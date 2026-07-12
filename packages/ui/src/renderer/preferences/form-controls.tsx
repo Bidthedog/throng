@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import type { FieldDescriptor } from '@throng/core';
 import { FolderPicker } from '../common/folder-picker.js';
+import { IconButton } from '../common/icon-button.js';
 
 /**
  * Generic descriptor-driven form controls (feature 007, FR-028/029). One control
@@ -283,8 +284,8 @@ function StringArrayControl({ descriptor, value, onCommit }: SettingControlProps
               set(next);
             }}
           />
-          <button
-            type="button"
+          <IconButton
+            token="moveUp"
             className="ctl__array-btn"
             title="Move up"
             disabled={i === 0}
@@ -293,11 +294,9 @@ function StringArrayControl({ descriptor, value, onCommit }: SettingControlProps
               [next[i - 1], next[i]] = [next[i], next[i - 1]];
               set(next);
             }}
-          >
-            ↑
-          </button>
-          <button
-            type="button"
+          />
+          <IconButton
+            token="moveDown"
             className="ctl__array-btn"
             title="Move down"
             disabled={i === items.length - 1}
@@ -306,28 +305,23 @@ function StringArrayControl({ descriptor, value, onCommit }: SettingControlProps
               [next[i + 1], next[i]] = [next[i], next[i + 1]];
               set(next);
             }}
-          >
-            ↓
-          </button>
-          <button
-            type="button"
+          />
+          <IconButton
+            token="destroy"
             className="ctl__array-btn"
-            data-testid={`${testId(descriptor.key)}-remove-${i}`}
+            testId={`${testId(descriptor.key)}-remove-${i}`}
             title="Remove"
             onClick={() => set(items.filter((_, j) => j !== i))}
-          >
-            ✕
-          </button>
+          />
         </div>
       ))}
-      <button
-        type="button"
+      <IconButton
+        token="add"
         className="ctl__array-add"
-        data-testid={`${testId(descriptor.key)}-add`}
+        testId={`${testId(descriptor.key)}-add`}
+        title="Add an entry"
         onClick={() => set([...items, ''])}
-      >
-        + Add
-      </button>
+      />
     </div>
   );
 }

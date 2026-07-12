@@ -1,13 +1,21 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import {
   SETTINGS_METADATA,
+  buildShippedDefaults,
+  emptyValueFor,
   filterFields,
   getAtPath,
+  isSettingOverridden,
   setAtPath,
+  settingDiffersFromEntry,
   type FieldDescriptor,
 } from '@throng/core';
 import { useAppSettings } from '../config/config-store.js';
 import { debounce } from '../config/write-config.js';
+import { IconButton } from '../common/icon-button.js';
+import { useResetNotice } from './reset-notice.js';
+import { useOnEntry } from './on-entry.js';
+import { RowActions } from './row-actions.js';
 import { SettingControl } from './form-controls.js';
 import { createApplyClient } from './apply-client.js';
 
@@ -47,17 +55,8 @@ function groupDescriptors(items: readonly FieldDescriptor[]): {
   return order.map((group) => ({ group, items: byGroup.get(group)! }));
 }
 
-/** The reset affordance inside the typeahead — clears the query in one click. */
-function ClearIcon(): ReactElement {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden focusable="false">
-      <path
-        fill="currentColor"
-        d="M4.28 3.22a.75.75 0 0 0-1.06 1.06L6.94 8l-3.72 3.72a.75.75 0 1 0 1.06 1.06L8 9.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L9.06 8l3.72-3.72a.75.75 0 0 0-1.06-1.06L8 6.94 4.28 3.22z"
-      />
-    </svg>
-  );
-}
+/** The shipped record is frozen and pure — build it once for the overridden-test. */
+const SHIPPED = buildShippedDefaults();
 
 export function SettingsTab({
   searchDebounceMs = SEARCH_DEBOUNCE_MS,
@@ -65,6 +64,8 @@ export function SettingsTab({
   searchDebounceMs?: number;
 } = {}): ReactElement {
   const settings = useAppSettings();
+  const entry = useOnEntry().settings;
+  const { report } = useResetNotice();
   const apply = useMemo(() => createApplyClient({ kind: 'settings' }), []);
 
   // `query` drives the input (instant); `applied` drives the filter (debounced).
@@ -117,6 +118,17 @@ export function SettingsTab({
     void apply.applyNow(next);
   };
 
+  /**
+   * A row's value is clearable when the field declares empty a valid value for it AND it is not
+   * already empty — offering "clear" on an empty value is offering a no-op (the same reasoning
+   * that hides the reset affordance on a row that is not overridden, FR-004a).
+   */
+  const canClear = (d: FieldDescriptor): boolean => {
+    if (!d.clearable) return false;
+    const value = getAtPath(settings, d.key);
+    return Array.isArray(value) ? value.length > 0 : value !== '';
+  };
+
   return (
     <div className="settings-form" data-testid="settings-tab">
       <div className="settings-search">
@@ -130,16 +142,13 @@ export function SettingsTab({
           onChange={(e) => onSearchChange(e.target.value)}
         />
         {query ? (
-          <button
-            type="button"
+          <IconButton
+            token="dismiss"
             className="settings-search__clear"
-            data-testid="settings-search-clear"
+            testId="settings-search-clear"
             title="Clear search"
-            aria-label="Clear search"
             onClick={clearSearch}
-          >
-            <ClearIcon />
-          </button>
+          />
         ) : null}
       </div>
 
@@ -166,6 +175,31 @@ export function SettingsTab({
                   onCommit={(v) => commit(d.key, v)}
                 />
               </div>
+              <RowActions
+                kind="setting"
+                itemKey={d.key}
+                label={d.label}
+                overridden={isSettingOverridden(settings, d.key, SHIPPED)}
+                changed={settingDiffersFromEntry(settings, entry, d.key)}
+                clearable={canClear(d)}
+                onReset={() => {
+                  // A reset restores the SHIPPED value, so it goes through feature 010's record in
+                  // the main process — never a value this renderer computed (FR-011b).
+                  //
+                  // `Promise.resolve` + a rejection handler: optional chaining short-circuits the
+                  // WHOLE chain when the bridge is missing, and a throw inside the handler would be
+                  // an unhandled rejection — both are the silent failure FR-006a forbids.
+                  void Promise.resolve(window.throng?.config?.resetSetting?.(d.key)).then(
+                    (r) => report(`Resetting ${d.label}`, r),
+                    () => report(`Resetting ${d.label}`, undefined),
+                  );
+                }}
+                // Revert and clear are ordinary EDITS — to a remembered value and to an empty one
+                // — so they take the same write path as typing in the box. Only a reset consults
+                // the shipped record, and only a reset needs an IPC channel of its own.
+                onRevert={() => commit(d.key, getAtPath(entry, d.key))}
+                onClear={() => commit(d.key, emptyValueFor(d))}
+              />
             </div>
           ))}
         </section>

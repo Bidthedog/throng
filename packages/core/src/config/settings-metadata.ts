@@ -128,6 +128,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'File Explorer',
     control: 'array',
     itemControl: 'text',
+    clearable: true, // empty = exclude nothing; the parser honours an explicit empty list
   },
   {
     key: 'explorer.dragCopyModifier',
@@ -162,6 +163,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Terminals',
     control: 'array',
     itemControl: 'text',
+    clearable: true, // empty = hide nothing, which is also what it ships as
   },
 
   // Editor
@@ -256,6 +258,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'The fixed folder the new-project picker opens at when "Override" is selected. Type a path or browse to pick one.',
     group: 'New Project',
     control: 'folder',
+    clearable: true, // empty = no override; the picker falls back to last-viewed, then the profile
   },
   {
     key: 'search.asYouTypeDebounceMs',

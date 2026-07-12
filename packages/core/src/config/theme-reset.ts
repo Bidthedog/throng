@@ -1,40 +1,17 @@
 /**
- * Reset / revert logic for the preferences editor (feature 007, FR-023/024).
- * Pure: produces the values (reset-current) or the write plan (reset-all) the
- * renderer applies via config.write. No OS/DOM.
+ * The **session undo** for the preferences editor (feature 007, FR-024) — restore every
+ * editor to its state when the window opened. Pure: produces the write plan the renderer
+ * applies via config.write. No OS/DOM.
+ *
+ * This is NOT a reset to shipped defaults, and must never be conflated with one. Feature
+ * 015 retired the reset-to-defaults helpers that used to live here (`resetCurrentSettings`,
+ * `resetCurrentKeybindings`, `resetCurrentTheme`, `isBuiltInTheme`): they resolved defaults
+ * from the DEFAULT_* / ALL_DEFAULT_THEMES constants rather than feature 010's shipped
+ * record, giving the app two competing answers to "what did this ship as" — and they had
+ * already drifted apart. Defaults now come from `buildShippedDefaults()`, and only from
+ * there (SC-009). The session undo below is untouched.
  */
-import { DEFAULT_APP_SETTINGS, type AppSettings } from './app-settings.js';
-import { DEFAULT_KEYBINDINGS, type Keybindings } from './keybindings.js';
-import { ALL_DEFAULT_THEMES } from './default-themes/index.js';
-import type { Theme } from './theme.js';
 import type { ConfigDocId } from '../abstractions/config-store.js';
-
-/** Reset the Settings document to throng's defaults (FR-023). */
-export function resetCurrentSettings(): AppSettings {
-  return DEFAULT_APP_SETTINGS;
-}
-
-/** Reset the Key Bindings document to throng's defaults (FR-023). */
-export function resetCurrentKeybindings(): Keybindings {
-  return DEFAULT_KEYBINDINGS;
-}
-
-/**
- * Reset the selected theme (FR-023). Enabled only for a built-in (bundled) theme
- * — returns its installed default. A user-created theme returns null (the reset
- * control is disabled).
- */
-export function resetCurrentTheme(
-  name: string,
-  defaults: Record<string, Theme> = ALL_DEFAULT_THEMES,
-): Theme | null {
-  return defaults[name] ?? null;
-}
-
-/** Whether the reset-current control is enabled for a theme (built-ins only). */
-export function isBuiltInTheme(name: string, defaults: Record<string, Theme> = ALL_DEFAULT_THEMES): boolean {
-  return name in defaults;
-}
 
 /** The reset-all on-entry snapshot (FR-024). */
 export interface OnEntrySnapshot {
