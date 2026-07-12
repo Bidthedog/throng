@@ -17,6 +17,12 @@ Thumbs.db
 .remember/
 .specify/bridge-snapshots/
 .specify/bridge-events.jsonl
+# Per-working-copy Spec Kit state, not project source: which feature THIS checkout is on,
+# and the live bridge handoff (status + artifact hashes, rewritten constantly by tooling).
+# Tracking them made every feature branch collide on the same two files. Both are recreated
+# on demand by the speckit scripts, so removing them from version control costs nothing.
+.specify/feature.json
+.specify/superpowers-handoff.json
 *.stackdump
 test-results/
 playwright-report/
