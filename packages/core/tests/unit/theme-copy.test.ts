@@ -15,6 +15,16 @@ describe('hand-written theme token copy (FR-006/007/008/009)', () => {
     }
   });
 
+  it('ships the editing-mode glyphs the preferences toggle needs (015, FR-009c)', () => {
+    // The UI⇄JSON toggle was text ("{ }" / "UI") — the last un-themeable control in the
+    // window. It needs two tokens of its own: `fileJson`/`fileCode` mean "a JSON/code FILE"
+    // in the explorer tree, so reusing them would re-skin the toolbar by accident.
+    expect(THRONG_THEME.icons.editJson, 'icons.editJson').toBeDefined();
+    expect(THRONG_THEME.icons.editVisual, 'icons.editVisual').toBeDefined();
+    expect(THEME_TOKEN_COPY['icons.editJson']).toBeDefined();
+    expect(THEME_TOKEN_COPY['icons.editVisual']).toBeDefined();
+  });
+
   it('has no entries for unknown tokens', () => {
     const known = new Set(tokens);
     for (const key of Object.keys(THEME_TOKEN_COPY)) {

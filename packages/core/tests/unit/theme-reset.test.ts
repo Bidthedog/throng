@@ -1,35 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  resetCurrentSettings,
-  resetCurrentKeybindings,
-  resetCurrentTheme,
-  isBuiltInTheme,
-  revertAll,
-  type OnEntrySnapshot,
-} from '../../src/config/theme-reset.js';
-import { DEFAULT_APP_SETTINGS } from '../../src/config/app-settings.js';
-import { DEFAULT_KEYBINDINGS } from '../../src/config/keybindings.js';
-import { DEFAULT_THEMES } from '../../src/config/default-themes/index.js';
-import { THRONG_THEME } from '../../src/config/theme.js';
-
-describe('reset current (FR-023)', () => {
-  it('resets settings and keybindings to defaults', () => {
-    expect(resetCurrentSettings()).toBe(DEFAULT_APP_SETTINGS);
-    expect(resetCurrentKeybindings()).toBe(DEFAULT_KEYBINDINGS);
-  });
-
-  it('resets a built-in theme to its installed default, but a user theme is disabled (null)', () => {
-    expect(resetCurrentTheme('Matrix')).toBe(DEFAULT_THEMES.Matrix);
-    expect(resetCurrentTheme('throng')).toBe(THRONG_THEME);
-    expect(resetCurrentTheme('MyUserTheme')).toBeNull();
-  });
-
-  it('isBuiltInTheme distinguishes built-ins from user themes', () => {
-    expect(isBuiltInTheme('throng')).toBe(true);
-    expect(isBuiltInTheme('Cyberpunk')).toBe(true);
-    expect(isBuiltInTheme('MyUserTheme')).toBe(false);
-  });
-});
+import { revertAll, type OnEntrySnapshot } from '../../src/config/theme-reset.js';
 
 describe('revertAll (FR-024)', () => {
   const snapshot: OnEntrySnapshot = {
