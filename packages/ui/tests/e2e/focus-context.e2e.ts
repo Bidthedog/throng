@@ -2,7 +2,14 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, installResizeProbe } from './harness.js';
+import {
+  runApp,
+  createProject,
+  firstPanelId,
+  panelIds,
+  addPanels,
+  installResizeProbe,
+} from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 // 012 US1 (FR-001/002/005, SC-001a/006): the active panel is a single, visible,
@@ -10,15 +17,6 @@ import { skipIfElevated } from './admin.js';
 // window is foreground, a dimmed inactive treatment when it is background (it
 // persists, never disappears) — that re-homes deterministically when the active
 // panel is closed, and that a pure focus change never resizes a terminal (SC-004).
-
-/** Add `n` extra sibling panels to the current tab (committing each inline rename). */
-async function addPanels(win: import('@playwright/test').Page, n: number): Promise<void> {
-  for (let i = 0; i < n; i += 1) {
-    const first = (await panelIds(win))[0];
-    await win.getByTestId(`panel-add-${first}`).click();
-    await win.keyboard.press('Enter'); // commit the new panel's inline rename
-  }
-}
 
 /** The computed outline colour of a panel box (to prove the token actually swaps). */
 function outlineColour(win: import('@playwright/test').Page, pid: string): Promise<string> {

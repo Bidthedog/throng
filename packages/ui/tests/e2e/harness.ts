@@ -244,6 +244,46 @@ export async function panelIds(win: Page): Promise<string[]> {
   return win.locator('.panel-box').evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.panelId ?? ''));
 }
 
+/**
+ * Add `n` sibling panels to the active tab, committing each new panel's inline rename.
+ *
+ * The two specs that need this each grew their own copy, each closing one of the two races
+ * below and leaving the other open — so both were flaky, for different reasons (issue #59).
+ * One helper, both races closed.
+ *
+ * **Race 1 — the baseline.** The workspace renders NO panels until its layout has loaded (the
+ * tab group returns an empty fragment while `layout` is null), and {@link createProject} returns
+ * as soon as the project appears in the sidebar, which is *before* that round-trip lands. Neither
+ * `count()` nor `evaluateAll()` auto-waits, so a baseline read inside that window is 0 — the
+ * click still works, and every assertion built on the baseline is then off by one. Settle on a
+ * rendered workspace before reading anything.
+ *
+ * **Race 2 — the stray Enter.** A new panel opens in rename mode with its input `autoFocus`ed.
+ * Press Enter before that focus lands and it re-activates the add BUTTON, adding a panel nobody
+ * asked for.
+ *
+ * The rename input also commits on blur, so anything that steals focus back — a live terminal in
+ * a sibling panel does exactly that — commits the rename for us and unmounts the input. That is a
+ * legitimate outcome, not a failure: settle on the new panel existing, then commit the rename
+ * only if it is still open.
+ */
+export async function addPanels(win: Page, n: number): Promise<void> {
+  await expect(win.locator('.panel-box').first()).toBeVisible();
+  for (let i = 0; i < n; i += 1) {
+    const before = await win.locator('.panel-box').count();
+    const first = (await panelIds(win))[0];
+    await win.getByTestId(`panel-add-${first}`).click();
+    await expect(win.locator('.panel-box')).toHaveCount(before + 1);
+
+    const rename = win.locator('[data-testid^="panel-rename-input-"]');
+    if ((await rename.count()) > 0) {
+      await expect(rename).toBeFocused();
+      await win.keyboard.press('Enter');
+    }
+    await expect(rename).toHaveCount(0);
+  }
+}
+
 /** JSON-RPC over the daemon pipe (one-shot request/response). */
 export function daemonRpc(
   pipeName: string,
