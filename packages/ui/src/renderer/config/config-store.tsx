@@ -16,6 +16,7 @@ import {
   type Keybindings,
   type Theme,
 } from '@throng/core';
+import { onConfigWritten } from './write-config.js';
 
 /**
  * Renderer-side mirror of the user configuration (T039). On mount it pulls the
@@ -68,9 +69,41 @@ export function ConfigProvider({ children }: { children: ReactNode }): ReactElem
     const off = window.throng?.config?.onChange?.((payload) => {
       if (active) setState(toState(payload));
     });
+
+    /**
+     * Adopt a document the moment it is written, without waiting for the watcher (issue #50).
+     *
+     * Every edit serialises the WHOLE document from this state. The watcher's round-trip through
+     * the filesystem takes long enough that a user editing quickly gets there first, and their
+     * second edit would be computed from the copy that predates the first — silently reverting
+     * it. Nothing errored; the change simply vanished. Applying the written document here means
+     * the next edit always builds on the last one. The watcher broadcast that follows carries the
+     * same values, so it confirms this rather than contradicting it; a genuine external change
+     * still wins, because it arrives afterwards.
+     */
+    const offWrite = onConfigWritten((id, json) => {
+      if (!active) return;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(json);
+      } catch {
+        return; // main refuses invalid JSON anyway; nothing to adopt
+      }
+      setState((prev) => {
+        if (id.kind === 'settings') return { ...prev, settings: parseAppSettings(parsed) };
+        if (id.kind === 'keybindings') return { ...prev, keybindings: parseKeybindings(parsed) };
+        // A theme write only changes what is on screen when it IS the theme on screen.
+        if (id.kind === 'theme' && id.name === prev.settings.appearance.theme && parsed && typeof parsed === 'object') {
+          return { ...prev, theme: { ...THRONG_THEME, ...(parsed as Partial<Theme>) } as Theme };
+        }
+        return prev;
+      });
+    });
+
     return () => {
       active = false;
       off?.();
+      offWrite();
     };
   }, []);
 
