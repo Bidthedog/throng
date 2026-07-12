@@ -73,9 +73,22 @@ goal is to pull all of that into a single, simple customisable workspace.
   press-to-capture shortcut binder that **adds** multiple chords per action (any single non-reserved
   key allowed), each chord a deletable pill; colour / size / icon pickers and a **multi-select
   font-family pill** editor; a **global UI⇄JSON toggle** (edit the raw file in the built-in code
-  editor), **immediate-apply** (no Save), and reset-to-default / reset-all. Editing a file's raw JSON
-  while it changes on disk surfaces a reload / keep-editing choice rather than silently discarding
-  either version.
+  editor) and **immediate-apply** (no Save). Editing a file's raw JSON while it changes on disk
+  surfaces a reload / keep-editing choice rather than silently discarding either version.
+- **Reset controls** — four clearly separated scopes, all reading the same shipped-defaults record,
+  so there is exactly one answer to "what did this ship as":
+  - **Per item** — a setting or a key binding shows a reset icon **only while it differs from its
+    shipped value**, so the icon doubles as the "modified" cue. Clicking it restores that one item
+    (for a binding, its **full** shipped chord set) immediately, leaving every other item alone.
+  - **Per editor** — restores the whole Settings or Key Bindings editor to its shipped defaults.
+  - **Reset All Preferences** — settings, key bindings and every **built-in** theme, in one atomic
+    all-or-nothing operation. Your **projects, window layout, workspace state and custom themes are
+    not touched**, and the confirmation says so. If it cannot complete, nothing changes at all.
+  - **Revert All Preferences** — a **session undo**: back to how the window looked when you opened
+    it. Not a reset to defaults.
+
+  A reset that cannot be written never fails quietly: a dismissable message names the operation and
+  states that nothing was changed.
 - **Themes & icon packs** — user-scoped, human-editable, hot-reloading settings, keybindings and
   themes, plus **14 bundled default themes**, dedicated **button style tokens** (colours + font),
   a themeable **editor gutter** (its own background and line-number colours), and **icon packs**
