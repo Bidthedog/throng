@@ -77,6 +77,15 @@ goal is to pull all of that into a single, simple customisable workspace.
   carries a plain-language label and description in the theme editor, and the bundled themes are
   guarded automatically for pairwise visual distinctness and (for the redesigned Bash, SUBNET and
   Cyberpunk themes) WCAG AA contrast.
+- **Theme restore & creation** — the Themes editor pairs a theme dropdown with one set of actions that
+  apply to the selected theme (restore, clone, rename, delete), plus a separate **Restore All Themes to
+  Default**. Restore All (behind a confirmation) returns every edited built-in to its shipped values and
+  recreates any you deleted, atomically, leaving your custom themes untouched — and it is the only way
+  to bring back a deleted built-in, so no built-in is ever lost for good. A single built-in can also be
+  restored on its own (confirmed). **Clone** is how you create a theme: it duplicates the selected theme
+  and opens a name dialog prefilled `"<source> - Clone"`, and renaming uses that same dialog. A theme can
+  never take the name of a built-in — including one you have deleted. Each preferences tab keeps its own
+  scroll position.
 
 What's planned next lives in [`ROADMAP.md`](ROADMAP.md).
 
@@ -152,7 +161,9 @@ single source every restore-to-default reads from: a first run seeds the config 
 clobbering any file already present), and an application upgrade only *adds* newly-shipped themes and
 fills in newly-added theme properties — it never overwrites a value you already have. A version marker
 (`defaults-state.json`) records which defaults have been applied. Adopting new shipped *values* on an
-existing theme is a deliberate choice, made via the theme editor's restore control.
+existing theme is a deliberate choice, made via the theme editor's restore controls — **Restore All
+Themes to Default**, or a per-theme restore / recreate on a single built-in. Every restore is
+whole-operation atomic: if a theme file cannot be written, nothing is changed.
 
 ## Testing
 
