@@ -10,6 +10,7 @@ import { PanelRenameSync } from './workspace/panel-rename-sync.js';
 import { PanelDestroySync } from './workspace/panel-destroy-sync.js';
 import { PanelStateSync } from './workspace/panel-state-sync.js';
 import { EditorChrome } from './editor/editor-chrome.js';
+import { SearchKeybindings } from './search/search-keybindings.js';
 import { TitleBar } from './title-bar/title-bar.js';
 import {
   SubWorkspaceWindowContext,
@@ -122,6 +123,7 @@ export function SubWorkspaceApp({ subWorkspaceId }: { subWorkspaceId: string }):
           <PanelDestroySync />
           <PanelStateSync />
           <EditorChrome isSubWorkspace />
+          <SearchKeybindings />
           {/* Editor keybindings + save/discard/notice dialogs — so a sub-workspace-
               owned editor can be saved and destroyed here too (FR-077). */}
           <div className="throng-root">

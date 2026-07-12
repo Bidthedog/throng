@@ -10,9 +10,15 @@ import { skipIfElevated } from './admin.js';
 
 async function addPanels(win: Page, n: number): Promise<void> {
   for (let i = 0; i < n; i += 1) {
+    const before = await win.locator('.panel-box').count();
     const first = (await panelIds(win))[0];
     await win.getByTestId(`panel-add-${first}`).click();
+    // A new Panel opens in rename mode, and its input takes focus on mount. Wait for that
+    // BEFORE committing: while focus is still on the add button, an Enter activates the
+    // button again and adds another Panel — a race a slower machine loses.
+    await expect(win.locator('[data-testid^="panel-rename-input-"]')).toBeFocused();
     await win.keyboard.press('Enter'); // commit the inline rename
+    await expect(win.locator('.panel-box')).toHaveCount(before + 1);
   }
 }
 
