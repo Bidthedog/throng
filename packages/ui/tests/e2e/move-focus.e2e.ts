@@ -2,25 +2,11 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds } from './harness.js';
+import { runApp, createProject, firstPanelId, panelIds, addPanels } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 // 012 US3 (FR-015, SC-008/008a): directional + cyclic keyboard focus movement over
 // the active tab's split tree, in stable layout order, staying put at the edge.
-
-async function addPanels(win: Page, n: number): Promise<void> {
-  for (let i = 0; i < n; i += 1) {
-    const before = await win.locator('.panel-box').count();
-    const first = (await panelIds(win))[0];
-    await win.getByTestId(`panel-add-${first}`).click();
-    // A new Panel opens in rename mode, and its input takes focus on mount. Wait for that
-    // BEFORE committing: while focus is still on the add button, an Enter activates the
-    // button again and adds another Panel — a race a slower machine loses.
-    await expect(win.locator('[data-testid^="panel-rename-input-"]')).toBeFocused();
-    await win.keyboard.press('Enter'); // commit the inline rename
-    await expect(win.locator('.panel-box')).toHaveCount(before + 1);
-  }
-}
 
 async function expectActive(win: Page, pid: string): Promise<void> {
   await expect(win.getByTestId(`panel-${pid}`)).toHaveAttribute('data-active', 'true');
