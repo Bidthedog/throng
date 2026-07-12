@@ -12,7 +12,7 @@
  */
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { ALL_DEFAULT_THEMES, checkRename, THRONG_THEME, type ConfigDocId, type ConfigReadOptions, type IConfigStore, type ThemeRenameResult } from '@throng/core';
+import { ALL_DEFAULT_THEMES, checkRename, type ConfigDocId, type ConfigReadOptions, type IConfigStore, type ThemeRenameResult } from '@throng/core';
 
 /** Result of a transactional multi-file write (010, FR-012/012a). */
 export type WriteAllResult = { ok: true } | { ok: false; failedPath: string; error: string };
@@ -99,9 +99,18 @@ export class FileConfigStore implements IConfigStore {
     return dirname(this.pathOf({ kind: 'theme', name: '_' }));
   }
 
-  /** Theme names present in the themes/ directory (always includes `throng`). */
+  /**
+   * Theme names ACTUALLY present in the themes/ directory.
+   *
+   * This used to always inject `throng` so feature 007's theme dropdown never had an empty
+   * selection. That dropdown is gone (014 replaced it with a row list), and the phantom actively
+   * lied: a deleted `throng` still reported as present, so it never surfaced as a
+   * "deleted/restorable" row and could not be recreated (FR-005a). Callers that need the built-in
+   * as a fallback resolve it from the shipped record instead. `readPresentThemes` already skipped
+   * the phantom, so its behaviour is unchanged.
+   */
   async listThemes(): Promise<string[]> {
-    const names = new Set<string>([THRONG_THEME.name]);
+    const names = new Set<string>();
     try {
       for (const entry of await readdir(this.themesDir(), { withFileTypes: true })) {
         if (entry.isFile() && entry.name.toLowerCase().endsWith('.json')) {

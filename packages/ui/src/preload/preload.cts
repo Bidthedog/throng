@@ -168,8 +168,13 @@ contextBridge.exposeInMainWorld('throng', {
     renameTheme: (from: string, to: string) =>
       ipcRenderer.invoke('throng:config:renameTheme', from, to),
     deleteTheme: (name: string) => ipcRenderer.invoke('throng:config:deleteTheme', name),
-    restoreDefaultThemes: (): Promise<string[]> =>
-      ipcRenderer.invoke('throng:config:restoreDefaultThemes'),
+    // Feature 014: real "Restore All Themes to Default" (010 FR-008) — resets every edited
+    // built-in to shipped values and recreates deleted built-ins, atomically; customs untouched.
+    restoreAllThemes: (): Promise<{ ok: boolean; failedPath?: string; error?: string }> =>
+      ipcRenderer.invoke('throng:config:restoreAllThemes'),
+    // Feature 014: restore/recreate a single built-in theme (FR-005/005a).
+    restoreTheme: (name: string): Promise<{ ok: boolean; failedPath?: string; error?: string }> =>
+      ipcRenderer.invoke('throng:config:restoreTheme', name),
     // Installed-font typeahead source (cached; may be empty → curated fallback).
     listFonts: (): Promise<string[]> => ipcRenderer.invoke('throng:config:listFonts'),
     // Discovered icon packs ({ name, assetBase }); resolved by the main process.

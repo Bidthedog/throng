@@ -277,6 +277,11 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The glyph on the control that re-runs a failed or interrupted action, such as reconnecting a dropped terminal session.',
   },
+  'icons.restoreAll': {
+    label: 'Restore all defaults icon',
+    description:
+      'The glyph on the control that returns every built-in theme to the values it was shipped with, leaving your own themes untouched.',
+  },
   'icons.zoomIn': {
     label: 'Zoom in icon',
     description: 'The glyph on the panel menu control that enlarges that panel’s text.',

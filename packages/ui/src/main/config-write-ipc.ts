@@ -13,6 +13,7 @@
 import { ipcMain } from 'electron';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import type { ConfigDocId, IConfigStore } from '@throng/core';
+import type { RestoreResult } from './shipped-defaults-service.js';
 
 export type WriteResult = { ok: true } | { ok: false; error: string };
 
@@ -84,27 +85,46 @@ export function registerConfigWriteIpc(store: IConfigStore): void {
   );
 }
 
-/** Theme-file management + font/icon-pack discovery for the Themes tab (007). */
+/** Theme-file management + font/icon-pack discovery for the Themes tab (007/014). */
 export interface ConfigManagementDeps {
   store: {
     listThemes(): Promise<string[]>;
     renameTheme(from: string, to: string): Promise<{ ok: boolean; error?: 'exists' | 'invalid' }>;
     deleteTheme(name: string): Promise<void>;
-    restoreDefaultThemes(): Promise<string[]>;
     readRaw(id: ConfigDocId): Promise<string>;
+  };
+  /** Feature 010 restore API consumed by feature 014's restore controls. */
+  shippedDefaults: {
+    restoreAllThemes(): Promise<RestoreResult>;
+    restoreTheme(name: string): Promise<RestoreResult>;
   };
   listFonts(): Promise<string[]>;
   listIconPacks(): Promise<{ name: string; assetBase: string }[]>;
 }
 
 export function registerConfigManagementIpc(deps: ConfigManagementDeps): void {
-  ipcMain.handle('throng:config:readRaw', (_e, id: ConfigDocId) => deps.store.readRaw(id));
+  ipcMain.handle('throng:config:readRaw', (_e, id: ConfigDocId) => {
+    // A theme name reaches the filesystem here too — confine it exactly as the write path does.
+    if (id?.kind === 'theme' && !isSafeThemeName(id.name)) return Promise.resolve('');
+    return deps.store.readRaw(id);
+  });
   ipcMain.handle('throng:config:listThemes', () => deps.store.listThemes());
   ipcMain.handle('throng:config:renameTheme', (_e, from: string, to: string) =>
     deps.store.renameTheme(from, to),
   );
-  ipcMain.handle('throng:config:deleteTheme', (_e, name: string) => deps.store.deleteTheme(name));
-  ipcMain.handle('throng:config:restoreDefaultThemes', () => deps.store.restoreDefaultThemes());
+  ipcMain.handle('throng:config:deleteTheme', (_e, name: string) => {
+    // Never let a crafted name (e.g. '../settings') escape the themes directory.
+    if (!isSafeThemeName(name)) return Promise.resolve();
+    return deps.store.deleteTheme(name);
+  });
+  // Feature 014: the real "Restore All" (010 FR-008) + single-theme restore/recreate (FR-005/005a).
+  // The old `throng:config:restoreDefaultThemes` channel is GONE: it was create-if-missing only
+  // (it never reverted an edited built-in), and leaving a half-working restore callable from the
+  // renderer is precisely what this feature set out to remove.
+  ipcMain.handle('throng:config:restoreAllThemes', () => deps.shippedDefaults.restoreAllThemes());
+  ipcMain.handle('throng:config:restoreTheme', (_e, name: string) =>
+    deps.shippedDefaults.restoreTheme(name),
+  );
   ipcMain.handle('throng:config:listFonts', () => deps.listFonts());
   ipcMain.handle('throng:config:listIconPacks', () => deps.listIconPacks());
 }

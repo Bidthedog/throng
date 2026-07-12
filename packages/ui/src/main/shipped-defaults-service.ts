@@ -70,6 +70,19 @@ export class ShippedDefaultsService {
     return this.store.writeFilesAtomic(files);
   }
 
+  /**
+   * Feature 014, FR-005/FR-005a: restore ONE built-in theme to its shipped value, recreating it
+   * if the user had deleted it, touching no other theme. A thin single-file operation on top of
+   * feature 010's shipped record + atomic write — it does not re-implement either. A name that is
+   * not a reserved built-in is refused (`error:'not-reserved'`) and nothing is written.
+   */
+  async restoreTheme(name: string): Promise<RestoreResult> {
+    if (!reservedThemeNames(this.shipped).includes(name)) {
+      return { ok: false, failedPath: '', error: 'not-reserved' };
+    }
+    return this.store.writeFilesAtomic([this.themeFile(name)]);
+  }
+
   /** FR-015: full reset — settings + keybindings + every built-in theme from the record. */
   async resetEverything(): Promise<RestoreResult> {
     const files = [

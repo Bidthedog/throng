@@ -85,7 +85,9 @@ declare global {
           to: string,
         ) => Promise<{ ok: boolean; error?: 'exists' | 'invalid' }>;
         deleteTheme?: (name: string) => Promise<void>;
-        restoreDefaultThemes?: () => Promise<string[]>;
+        // Feature 014 restore controls (010 FR-008 / FR-005 / FR-005a).
+        restoreAllThemes?: () => Promise<{ ok: boolean; failedPath?: string; error?: string }>;
+        restoreTheme?: (name: string) => Promise<{ ok: boolean; failedPath?: string; error?: string }>;
         listFonts?: () => Promise<string[]>;
         listIconPacks?: () => Promise<IconPackInfo[]>;
       };
