@@ -43,6 +43,13 @@ goal is to pull all of that into a single, simple customisable workspace.
   the app-wide zoom and persisted with the layout. Each panel shows a small type icon, and a
   terminal shows its **live working directory** in its header (even when a full-screen program
   hides the prompt).
+- **In-panel search** — one find bar that adapts to whichever panel is active: an editor gets
+  find **and replace** (replace-all is a single undoable step that leaves the file's encoding
+  and line endings untouched); a terminal gets a **read-only** find over its retained
+  scrollback that never types at the shell, and parking on a match holds the view there while
+  output keeps streaming. Matches highlight as you type with a running count, case and
+  whole-word toggles, and highlight colours drawn from theme tokens. Terminals are also
+  navigable from the keyboard alone — page, line, top, bottom, and jump between matches.
 - **File explorer** — a live, project-scoped file tree with full operations (rename, move,
   copy, Recycle-Bin delete, per-project hide, editable exclude globs).
 - **Terminal panels** — PowerShell, Git Bash, CMD, and custom shell flavours run inline via

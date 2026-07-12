@@ -31,6 +31,9 @@ Planned items are goals, not commitments to a date or order.
 - [ ] **Copy & Paste Files Between Projects** — convenience feature to reduce friction
 - [ ] **OS File Operations** — treat throng's File & Folder list as a native OS folder view, with drag-and-drop and copy/paste support
 - [x] **Editor panels (plain text)** — open and edit a project's text files inline (CodeMirror): encoding/line-ending fidelity, confined save + scoped Save-All, dirty-file lock, app-wide one buffer per file, unsaved indicators, auto-save, crash recovery, and cross-window sync
+- [x] In-panel find & replace — one adaptive find bar over the active panel: as-you-type highlighting with a running count, case/whole-word toggles, wrap, and an editor replace-all that is a single undoable step preserving encoding and line endings
+- [ ] **Regular-expression search** — pattern matching in the find bar, alongside the case and whole-word toggles
+- [ ] **Search results list** — a scrollable list of matches to click through, and project-wide (cross-file) search
 - [ ] **Rich code editors** — syntax highlighting and language features on the editor panels above
 - [ ] **Markdown & document preview** — rendered preview alongside the raw file view
 - [ ] **Native OS folder-view panels** — panels that embed the operating system's own folder view with project-based memory
@@ -38,6 +41,7 @@ Planned items are goals, not commitments to a date or order.
 ## Terminals
 
 - [x] Terminal panels — live xterm.js shells on detached daemon-owned PTYs, reattach with scrollback, idle-close/cold-respawn
+- [x] Scrollback search & keyboard navigation — read-only find over the retained scrollback (never typed at the shell), page/line/top/bottom movement, and jump-between-matches
 - [x] Shell auto-detection & user flavours — PowerShell, Git Bash, CMD, custom flavours with default startup params
 - [x] Safe lifecycle — three-choice app-close, unexpected-exit surfacing, root lock, run-as-admin/de-elevation, no orphaned processes
 - [ ] **Terminal presets** — saved shell + working directory + startup-command sets, per project, to reconstitute a cold project
