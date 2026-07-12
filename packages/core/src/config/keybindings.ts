@@ -35,7 +35,25 @@ export type ActionId =
   // pane is a workspace Panel, not Files & Folders (research D7).
   | 'editor.save'
   | 'editor.saveAll'
-  | 'editor.saveAs';
+  | 'editor.saveAs'
+  // In-panel search (013, FR-017/FR-020). One shared find affordance routed to the
+  // ACTIVE panel: a terminal searches its scrollback (read-only), an editor searches
+  // and replaces in its file. The replace commands are inert unless an editor is active.
+  | 'search.find'
+  | 'search.findNext'
+  | 'search.findPrevious'
+  | 'search.close'
+  | 'search.replace'
+  | 'search.replaceCurrent'
+  | 'search.replaceAll'
+  // Terminal scrollback navigation (013, FR-014/FR-016). Resolved only while a
+  // terminal panel is active; never delivered as a keystroke to the running program.
+  | 'terminal.scrollLineUp'
+  | 'terminal.scrollLineDown'
+  | 'terminal.scrollPageUp'
+  | 'terminal.scrollPageDown'
+  | 'terminal.scrollToTop'
+  | 'terminal.scrollToBottom';
 
 export interface Keybindings {
   version: number;
@@ -75,6 +93,23 @@ export const DEFAULT_KEYBINDINGS: Keybindings = {
     'editor.save': ['Ctrl+S'],
     'editor.saveAll': ['Ctrl+Shift+S'],
     'editor.saveAs': ['Ctrl+Alt+S'],
+    // In-panel search (013). The find chords are the near-universal ones; because the
+    // handler consumes them while a panel is active, a terminal's shell never sees them.
+    'search.find': ['Ctrl+F'],
+    'search.findNext': ['F3'],
+    'search.findPrevious': ['Shift+F3'],
+    'search.close': ['Escape'],
+    'search.replace': ['Ctrl+H'],
+    'search.replaceCurrent': ['Alt+Enter'],
+    'search.replaceAll': ['Ctrl+Alt+Enter'],
+    // Terminal scrollback navigation (013). Shift+Page is the conventional terminal
+    // scrollback pair; the line/top/bottom chords follow the same "view, not input" family.
+    'terminal.scrollLineUp': ['Ctrl+Shift+ArrowUp'],
+    'terminal.scrollLineDown': ['Ctrl+Shift+ArrowDown'],
+    'terminal.scrollPageUp': ['Shift+PageUp'],
+    'terminal.scrollPageDown': ['Shift+PageDown'],
+    'terminal.scrollToTop': ['Ctrl+Home'],
+    'terminal.scrollToBottom': ['Ctrl+End'],
   },
 };
 

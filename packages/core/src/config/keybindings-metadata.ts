@@ -101,4 +101,68 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
   chord('editor.save', 'Editor', 'Save', 'Save the active editor document.'),
   chord('editor.saveAll', 'Editor', 'Save all', 'Save all open editor documents in scope.'),
   chord('editor.saveAs', 'Editor', 'Save as', 'Save the active document to a new location.'),
+
+  // Search (013) — one shared find bar routed to the active panel. A terminal
+  // searches its scrollback (read-only); an editor searches and replaces its file.
+  chord('search.find', 'Search', 'Find', 'Open find on the active panel.'),
+  chord('search.findNext', 'Search', 'Find next', 'Move to the next match, wrapping at the end.'),
+  chord(
+    'search.findPrevious',
+    'Search',
+    'Find previous',
+    'Move to the previous match, wrapping at the start.',
+  ),
+  chord('search.close', 'Search', 'Close find', 'Close the find bar and clear its highlights.'),
+  chord('search.replace', 'Search', 'Replace', 'Open find with replace on the active editor.'),
+  chord(
+    'search.replaceCurrent',
+    'Search',
+    'Replace match',
+    'Replace the current match and move to the next one.',
+  ),
+  chord(
+    'search.replaceAll',
+    'Search',
+    'Replace all',
+    'Replace every match in the file as a single undoable step.',
+  ),
+
+  // Terminal scrollback navigation (013) — view-only movement through retained
+  // output; these keys are never delivered to the running program.
+  chord(
+    'terminal.scrollLineUp',
+    'Terminal',
+    'Scroll line up',
+    'Scroll the terminal view up by one line.',
+  ),
+  chord(
+    'terminal.scrollLineDown',
+    'Terminal',
+    'Scroll line down',
+    'Scroll the terminal view down by one line.',
+  ),
+  chord(
+    'terminal.scrollPageUp',
+    'Terminal',
+    'Scroll page up',
+    'Scroll the terminal view up by one screen.',
+  ),
+  chord(
+    'terminal.scrollPageDown',
+    'Terminal',
+    'Scroll page down',
+    'Scroll the terminal view down by one screen.',
+  ),
+  chord(
+    'terminal.scrollToTop',
+    'Terminal',
+    'Scroll to top',
+    'Jump to the oldest retained line of scrollback.',
+  ),
+  chord(
+    'terminal.scrollToBottom',
+    'Terminal',
+    'Scroll to bottom',
+    'Jump to the newest output and resume following it.',
+  ),
 ];

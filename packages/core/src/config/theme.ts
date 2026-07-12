@@ -97,6 +97,13 @@ export const THRONG_THEME: Theme = {
     editorGutterFg: '#8b98ac',
     // The shared unsaved-changes dot (Panel/Tab/project) + editor file/type pills (006).
     unsavedDot: '#e3b341',
+    // In-panel search match highlights (013, FR-019). One pair of surfaces shared by
+    // the editor and the terminal: every match is tinted, and the current match takes
+    // a stronger tint plus an outline so it reads as "the one you are on". Body text
+    // must stay legible on both (SC-005), so bundled themes derive these per palette.
+    searchMatch: '#1c2f4d',
+    searchMatchCurrent: '#2c4a7a',
+    searchMatchCurrentBorder: '#6aa3ff',
     // The active Files & Folders pane highlight (006, FR-015/SC-006).
     activePaneHighlight: '#6aa3ff',
     // The active-panel focus context indicator (012, FR-002). Two states: the
@@ -181,6 +188,18 @@ export const THRONG_THEME: Theme = {
     collapseAll: '⊟',
     newFolder: '📁',
     terminal: '▣',
+    // Find-bar action controls (013, FR-018). Every control in the find bar is a
+    // themeable icon carrying a hover title — never a text label. Closing the bar
+    // reuses the shared `dismiss` glyph above.
+    search: '🔍',
+    findNext: '↓',
+    findPrevious: '↑',
+    // The two match-mode toggles read as the thing they match on: "Aa" for letter case,
+    // "ab" for a whole word. Both are two characters, so the pair reads as a set.
+    matchCase: 'Aa',
+    wholeWord: 'ab',
+    replace: '⇄',
+    replaceAll: '⇶',
   },
 };
 

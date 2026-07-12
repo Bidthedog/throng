@@ -135,6 +135,21 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The dot on a tab, panel, or project that has edits not yet written to disk, and the editor file and type pills.',
   },
+  'colours.searchMatch': {
+    label: 'Search match',
+    description:
+      'The surface tinting every occurrence of the search term in an editor or a terminal, behind text that must stay readable.',
+  },
+  'colours.searchMatchCurrent': {
+    label: 'Current search match',
+    description:
+      'The stronger surface marking the one match you are presently sitting on, so it stands out from the others.',
+  },
+  'colours.searchMatchCurrentBorder': {
+    label: 'Current match outline',
+    description:
+      'The line drawn around the match you are presently on, keeping it identifiable even on a busy surface.',
+  },
   'colours.activePaneHighlight': {
     label: 'Active pane highlight',
     description: 'The emphasis marking the focused entry in the files and folders pane.',
@@ -381,5 +396,35 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'icons.terminal': {
     label: 'Terminal icon',
     description: 'The glyph that marks a terminal panel or a new-terminal control.',
+  },
+  'icons.search': {
+    label: 'Find icon',
+    description: 'The glyph on the control that opens the find bar over the active panel.',
+  },
+  'icons.findNext': {
+    label: 'Find next icon',
+    description: 'The glyph on the control that steps forward to the following match.',
+  },
+  'icons.findPrevious': {
+    label: 'Find previous icon',
+    description: 'The glyph on the control that steps back to the preceding match.',
+  },
+  'icons.matchCase': {
+    label: 'Match case toggle icon',
+    description:
+      'The glyph on the toggle that makes the search distinguish capital letters from small ones.',
+  },
+  'icons.wholeWord': {
+    label: 'Whole word toggle icon',
+    description:
+      'The glyph on the toggle that restricts the search to complete words rather than fragments.',
+  },
+  'icons.replace': {
+    label: 'Replace match icon',
+    description: 'The glyph on the control that swaps the current match for the replacement text.',
+  },
+  'icons.replaceAll': {
+    label: 'Replace all icon',
+    description: 'The glyph on the control that swaps every match for the replacement text at once.',
   },
 };

@@ -148,6 +148,18 @@ export interface AppSettings {
   editor: EditorSettings;
   /** New-project folder-picker preferences (011). */
   newProject: NewProjectSettings;
+  /** In-panel search preferences (013). */
+  search: SearchSettings;
+}
+
+/** In-panel search preferences (013, FR-002a / SC-007). */
+export interface SearchSettings {
+  /**
+   * Quiet period (ms) after the last keystroke before the as-you-type search re-runs.
+   * Bounds the cost of searching a large file or scrollback while keeping results inside
+   * the 1000 ms budget (SC-007). Externalised rather than hardcoded (Principle X).
+   */
+  asYouTypeDebounceMs: number;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -195,7 +207,23 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     overridePath: '',
     lastProjectFolder: '',
   },
+  search: {
+    asYouTypeDebounceMs: 120,
+  },
 };
+
+/** Tolerant parse of the search section; a bad or negative value falls back. */
+function searchSettings(raw: unknown, d: SearchSettings): SearchSettings {
+  const v = isRecord(raw) ? raw : {};
+  return {
+    asYouTypeDebounceMs:
+      typeof v.asYouTypeDebounceMs === 'number' &&
+      Number.isFinite(v.asYouTypeDebounceMs) &&
+      v.asYouTypeDebounceMs >= 0
+        ? v.asYouTypeDebounceMs
+        : d.asYouTypeDebounceMs,
+  };
+}
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -387,6 +415,7 @@ export function parseAppSettings(raw: unknown): AppSettings {
     terminals: terminalSettings(raw.terminals, d.terminals),
     editor: editorSettings(raw.editor, d.editor),
     newProject: newProjectSettings(raw.newProject, d.newProject),
+    search: searchSettings(raw.search, d.search),
   };
 }
 
@@ -404,5 +433,6 @@ function structuredCloneSettings(s: AppSettings): AppSettings {
     terminals: cloneTerminals(s.terminals),
     editor: { ...s.editor },
     newProject: { ...s.newProject },
+    search: { ...s.search },
   };
 }
