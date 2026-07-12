@@ -478,27 +478,38 @@
   font-size: 13px;
 }
 
+/*
+ * Dialog decision buttons keep TEXT labels (constitution v3.12.0 exception) but
+ * their colours MUST still derive from theme tokens — no hardcoded CSS colours.
+ * (014: remediates the previously hardcoded #08111f foreground.)
+ *
+ * Uses the button hover PAIR rather than accent-on-background: `buttonHoverBg` /
+ * `buttonHoverText` are a foreground/background pair the theme author has already
+ * matched, so the label stays legible on every theme (SC-006) — whereas
+ * accent-on-app-background can collide on a light theme with a pale accent.
+ */
 .capture-modal__btn--primary {
-  background: var(--accent, #6aa3ff);
-  border-color: var(--accent, #6aa3ff);
-  color: #08111f;
+  background: var(--btn-hover-bg);
+  border-color: var(--btn-hover-bg);
+  color: var(--btn-hover-text);
 }
 
-/* Themes tab (US4). */
+/* Themes tab (US4 base + 014 restore/create controls). */
 .themes-toolbar {
   display: flex;
-  flex-wrap: wrap;
   gap: 10px;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: space-between;
   padding-bottom: 12px;
   margin-bottom: 12px;
   border-bottom: 1px solid var(--border);
 }
 
+/* The theme picker: a compact dropdown + one set of action icons acting on the selection. */
 .themes-toolbar__field {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   color: var(--text-dim, var(--text));
 }
@@ -508,18 +519,80 @@
   letter-spacing: 0.06em;
 }
 
-.themes-toolbar__field:has(.ctl__input) {
-  flex-direction: row;
+.themes-toolbar__actions {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
 }
 
-.themes-confirm {
+/* Sets "Restore All" apart: it acts on every built-in, not on the selected theme. */
+.themes-toolbar__sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 6px;
+  background: var(--border);
+}
+
+/*
+ * Generic themeable action icon button (014 / constitution v3.12.0). The glyph
+ * comes from the active theme's icon token; every colour here derives from theme
+ * tokens — no hardcoded colours, no inline SVG.
+ */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 5px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim, var(--text));
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--surface-active);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.icon-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Restore/create result feedback (FR-003/007). */
+.themes-notice {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  padding: 8px 0;
-  font-size: 13px;
+  margin: 0 0 10px;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* A failure must not read like a success — colour it with the theme's danger token. */
+.themes-notice--error {
+  border-color: var(--danger, var(--accent));
+  color: var(--danger, var(--text));
+}
+
+.themes-notice__dismiss {
+  border: none;
+  background: transparent;
+  color: var(--text-dim, var(--text));
+  font-family: inherit;
+  cursor: pointer;
 }
 
 .ctl--colour {

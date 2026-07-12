@@ -152,6 +152,10 @@ export const THRONG_THEME: Theme = {
     // Retry a terminal attach that is still starting (008 FR-005) — a themeable action
     // icon (constitution v3.12.0), auto-exposed in the Themes editor like every token.
     retry: '↻',
+    // Restore a configuration to its shipped defaults (014). Deliberately NOT the `retry`
+    // circular arrow: the Themes editor shows "restore this theme" and "restore ALL themes"
+    // side by side, so they must read as different actions at a glance.
+    restoreAll: '⎌',
     // Per-panel zoom controls (012) — themeable action icons on the panel context
     // menu (constitution v3.12.0). Circled +/-/dot read as in / out / reset.
     zoomIn: '⊕',

@@ -168,6 +168,9 @@ export {
   fillMissingThemeProps,
   planThemeUpgrade,
 } from './config/shipped-defaults.js';
+// Theme-editor model (014): pure row classification + name validation for the restore/create controls.
+export type { ThemeRow, ThemeRowKind, ThemeNameValidation } from './config/theme-editor-model.js';
+export { classifyThemes, validateThemeName, cloneName } from './config/theme-editor-model.js';
 export type { IFontEnumeration } from './abstractions/font-enumeration.js';
 // Editor metadata registry (007, FR-025a) — the declarative source the visual
 // preference editors render from, plus the completeness/path helpers.

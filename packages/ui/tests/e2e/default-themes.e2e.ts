@@ -46,13 +46,19 @@ test('a fresh install lists all 14 default themes plus throng (15) and restores 
       const options = await select.locator('option').allTextContents();
       for (const name of EXPECTED_15) expect(options).toContain(name);
 
-      // Delete Matrix, then restore defaults re-creates it.
+      // Select Matrix and delete it; the toolbar acts on the selected theme.
       await select.selectOption('Matrix');
-      await expect(select).toHaveValue('Matrix');
+      await expect(select).toHaveValue('Matrix'); // select = activate; wait for it to land
       await prefs.getByTestId('theme-delete').click();
-      await prefs.getByTestId('theme-delete-confirm-yes').click();
+      await prefs.getByTestId('theme-confirm-yes').click();
       await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Matrix.json'))).toBe(false);
-      await prefs.getByTestId('theme-restore').click();
+      // A deleted built-in leaves the list entirely; Restore All is the only way back (FR-005a).
+      await expect
+        .poll(() => select.locator('option').allTextContents())
+        .not.toContain('Matrix');
+
+      await prefs.getByTestId('theme-restore-all').click();
+      await prefs.getByTestId('theme-confirm-yes').click();
       await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Matrix.json'))).toBe(true);
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },

@@ -8,10 +8,12 @@
  * Activating it MUST remove the error immediately (FR-002): the parent passes an
  * `onDismiss` that clears the error state synchronously, with no focus change or
  * re-render trigger required.
+ *
+ * (014) This is now a thin wrapper over the generic {@link IconButton} — one
+ * themeable-icon implementation shared by every action control (DRY, Principle VIII).
  */
 import { type ReactElement } from 'react';
-import { resolveIcon } from '@throng/core';
-import { useActiveTheme } from '../config/config-store.js';
+import { IconButton } from './icon-button.js';
 
 export interface DismissButtonProps {
   /** Clears the owning surface's error immediately (FR-002). */
@@ -28,17 +30,13 @@ export function DismissButton({
   className = 'dismiss-button',
   testId,
 }: DismissButtonProps): ReactElement {
-  const theme = useActiveTheme();
   return (
-    <button
-      type="button"
-      className={className}
-      data-testid={testId}
+    <IconButton
+      token="dismiss"
       title={title}
-      aria-label={title}
+      className={className}
+      testId={testId}
       onClick={onDismiss}
-    >
-      {resolveIcon(theme, 'dismiss')}
-    </button>
+    />
   );
 }

@@ -370,6 +370,7 @@ if (isPrimaryInstance)
   await iconPackService.ensureBundledPacks();
   registerConfigManagementIpc({
     store: configStore as FileConfigStore,
+    shippedDefaults: shippedService,
     listFonts: () => fontCache.read(),
     listIconPacks: () => iconPackService.listIconPacks(),
   });

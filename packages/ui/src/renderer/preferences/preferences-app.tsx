@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react';
 import {
   isBuiltInTheme,
   resetCurrentKeybindings,
   resetCurrentSettings,
-  resetCurrentTheme,
   revertAll,
   type OnEntrySnapshot,
 } from '@throng/core';
@@ -74,6 +73,21 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
   const [tab, setTab] = useState<PreferencesTab>(initialTab);
   const [mode, setMode] = useState<'ui' | 'json'>('ui'); // global UI⇄JSON toggle (FR-020)
   const [confirming, setConfirming] = useState<null | 'current' | 'all'>(null);
+
+  // Per-tab scroll position. The three editors share ONE scrolling element (the tab panel is a
+  // single DOM node whose children swap), so without this the browser carries one tab's scroll
+  // offset over to the next — scrolled deep into Settings, you land mid-way down Themes. Each
+  // editor now keeps its own offset, restored when you switch back to it.
+  const panelRef = useRef<HTMLDivElement>(null);
+  const scrollTops = useRef<Record<PreferencesTab, number>>({
+    settings: 0,
+    keybindings: 0,
+    themes: 0,
+  });
+  useLayoutEffect(() => {
+    const el = panelRef.current;
+    if (el) el.scrollTop = scrollTops.current[tab];
+  }, [tab, mode]);
   const settings = useAppSettings();
   const keybindings = useKeybindings();
   const theme = useActiveTheme();
@@ -122,8 +136,12 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
     else if (tab === 'keybindings')
       void writeConfig({ kind: 'keybindings' }, JSON.stringify(resetCurrentKeybindings()));
     else {
-      const t = resetCurrentTheme(activeName);
-      if (t) void writeConfig({ kind: 'theme', name: activeName }, JSON.stringify(t));
+      // Themes (014): delegate to feature 010's atomic single-theme restore — the SAME operation
+      // the Themes tab's per-row restore icon uses. The old path went through core's
+      // `resetCurrentTheme` → ALL_DEFAULT_THEMES, which is NOT the shipped record (it lacks
+      // throng's bundled `iconPack`), so the two controls silently produced different themes.
+      // One authoritative per-theme restore, sourced from the shipped record (FR-005/FR-011).
+      void window.throng?.config?.restoreTheme?.(activeName);
     }
     setConfirming(null);
   };
@@ -212,7 +230,15 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
               </button>
             </div>
           ) : null}
-          <div className="prefs-tabpanel" role="tabpanel" data-testid={`prefs-panel-${tab}`}>
+          <div
+            className="prefs-tabpanel"
+            role="tabpanel"
+            data-testid={`prefs-panel-${tab}`}
+            ref={panelRef}
+            onScroll={(e) => {
+              scrollTops.current[tab] = e.currentTarget.scrollTop;
+            }}
+          >
             {mode === 'json' ? (
               <JsonTab
                 docId={

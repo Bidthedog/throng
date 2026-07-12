@@ -6,10 +6,17 @@ import type { ElectronApplication, Page } from '@playwright/test';
 import { runApp } from './harness.js';
 
 /**
- * US4 (007 Phase E): the Themes tab — select=activate, colour/enum edits apply +
- * persist, rename-collision rejected, delete with a single confirm, and restore
- * defaults. Chords/fonts pickers are unit-covered; this exercises the file + apply
- * behaviour end-to-end.
+ * The Themes tab — feature 007's base editor (activate, token edits apply + persist,
+ * delete) plus feature 014's restore & create controls:
+ *  - Restore All (010 FR-008) behind a confirmation;
+ *  - per-theme restore-to-shipped (confirmed); a DELETED built-in leaves the list entirely and
+ *    is recovered only by Restore All;
+ *  - Clone as the sole creation path, via a modal name dialog prefilled
+ *    "<source> - Clone" with "Clone" pre-selected, enforcing 010's reserved
+ *    built-in-name set (even for a DELETED built-in);
+ *  - rename through that same dialog (007's in-place field is gone).
+ * The picker is a compact dropdown + one action bar acting on the SELECTED theme, with Restore All
+ * set apart (it acts on every built-in). Actions announce failures only — no success banner.
  */
 const cfgRoots: string[] = [];
 function freshCfgRoot(seedThemes: Record<string, unknown> = {}): string {
@@ -52,6 +59,25 @@ async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
   return prefs;
 }
 
+/** The shipped set is seeded on first run: 15 options (throng + 14). */
+async function waitForSeededList(prefs: Page): Promise<void> {
+  await expect.poll(() => prefs.getByTestId('theme-select').locator('option').count()).toBe(15);
+}
+
+/**
+ * Select a theme and wait for the selection to LAND.
+ *
+ * Selecting activates, and activation round-trips through the config watcher. The dropdown (and the
+ * toolbar that acts on it, and the token editor below) all follow the *active* theme, so they stay
+ * coherent — but that means an action fired in the same tick as `selectOption` would still target
+ * the previously-active theme. Waiting for the dropdown to show the new name is exactly the
+ * "activation has landed" signal.
+ */
+async function pickTheme(prefs: Page, name: string): Promise<void> {
+  await prefs.getByTestId('theme-select').selectOption(name);
+  await expect(prefs.getByTestId('theme-select')).toHaveValue(name);
+}
+
 test('editing a colour token applies to the active theme file and reflects live', async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(
@@ -72,33 +98,38 @@ test('editing a colour token applies to the active theme file and reflects live'
   );
 });
 
-test('select = activate: choosing a theme updates appearance.theme', async () => {
+test('selecting a theme in the dropdown activates it (select = activate)', async () => {
   const cfgRoot = freshCfgRoot({
-    matrix: { name: 'matrix', colours: { accent: '#00ff41' }, fonts: { family: 'Consolas', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} },
+    CustomOne: { name: 'CustomOne', colours: { accent: '#00ff41' }, fonts: { family: 'Consolas', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} },
   });
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
-      await prefs.getByTestId('theme-select').selectOption('matrix');
-      await expect.poll(() => readActiveTheme(cfgRoot)).toBe('matrix');
+      await pickTheme(prefs, 'CustomOne');
+      await expect.poll(() => readActiveTheme(cfgRoot)).toBe('CustomOne');
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('renaming to an existing name is rejected with inline validation', async () => {
+test('the rename dialog refuses a reserved built-in name and writes nothing', async () => {
   const cfgRoot = freshCfgRoot({
-    matrix: { name: 'matrix', colours: {}, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} },
+    CustomOne: { name: 'CustomOne', colours: {}, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} },
   });
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
-      // Active theme is 'throng'; try to rename it to the existing 'matrix'.
-      await prefs.getByTestId('theme-rename-input').fill('matrix');
-      await prefs.getByTestId('theme-rename-apply').click();
-      await expect(prefs.getByTestId('theme-rename-error')).toBeVisible();
-      // throng.json still exists; no matrix overwrite.
+      // `CustomOne` is a CUSTOM theme (its name does not collide with any built-in, even
+      // case-insensitively), so it carries the rename control.
+      await pickTheme(prefs, 'CustomOne');
+      await prefs.getByTestId('theme-rename').click();
+      await expect(prefs.getByTestId('theme-name-dialog')).toBeVisible();
+      await prefs.getByTestId('theme-name-input').fill('throng');
+      await expect(prefs.getByTestId('theme-name-error')).toBeVisible();
+      await expect(prefs.getByTestId('theme-name-confirm')).toBeDisabled();
+      // Nothing written: both files still as they were.
       expect(existsSync(join(cfgRoot, 'themes', 'throng.json'))).toBe(true);
+      expect(existsSync(join(cfgRoot, 'themes', 'CustomOne.json'))).toBe(true);
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
@@ -106,18 +137,16 @@ test('renaming to an existing name is rejected with inline validation', async ()
 
 test('deleting a theme requires a single confirm and removes the file', async () => {
   const cfgRoot = freshCfgRoot({
-    matrix: { name: 'matrix', colours: {}, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} },
+    CustomOne: { name: 'CustomOne', colours: {}, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} },
   });
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
-      await prefs.getByTestId('theme-select').selectOption('matrix');
-      // Wait for select=activate to propagate so delete targets the active theme.
-      await expect(prefs.getByTestId('theme-select')).toHaveValue('matrix');
+      await pickTheme(prefs, 'CustomOne');
       await prefs.getByTestId('theme-delete').click();
       await expect(prefs.getByTestId('theme-delete-confirm')).toBeVisible();
-      await prefs.getByTestId('theme-delete-confirm-yes').click();
-      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'matrix.json'))).toBe(false);
+      await prefs.getByTestId('theme-confirm-yes').click();
+      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'CustomOne.json'))).toBe(false);
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
@@ -170,8 +199,7 @@ test('an existing comma stack loads back as ordered pills (H4, FR-038b)', async 
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
-      await prefs.getByTestId('theme-select').selectOption('stacky');
-      await expect(prefs.getByTestId('theme-select')).toHaveValue('stacky');
+      await pickTheme(prefs, 'stacky');
       const key = 'fonts.family';
       await expect(prefs.getByTestId(`control-${key}-pill-0`)).toContainText('Segoe UI');
       await expect(prefs.getByTestId(`control-${key}-pill-1`)).toContainText('system-ui');
@@ -202,26 +230,177 @@ test('button colour + font tokens appear in the editor and apply live to buttons
           ),
         )
         .toBe('#123456');
-      // A toolbar button (a .prefs-toolbtn) now renders with the button background.
+      // A real .prefs-toolbtn now renders with the button background.
       await expect
-        .poll(() => prefs.getByTestId('theme-restore').evaluate((el) => getComputedStyle(el).backgroundColor))
+        .poll(() => prefs.getByTestId('prefs-mode-toggle').evaluate((el) => getComputedStyle(el).backgroundColor))
         .toBe('rgb(18, 52, 86)');
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('restore defaults re-creates a missing throng theme', async () => {
+/* ---------------------------------------------------------------------------
+ * Feature 014 — restore & create controls
+ * ------------------------------------------------------------------------- */
+
+test('US1: Restore All resets edited built-ins, recreates a deleted built-in, and leaves customs untouched', async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
-      // Delete throng, then restore.
+      await waitForSeededList(prefs);
+
+      // 1. Edit a built-in (the active theme, throng).
+      await prefs.getByTestId('control-colours.accent-hex').fill('#123456');
+      await expect.poll(() => readTheme(cfgRoot, 'throng')?.colours?.accent).toBe('#123456');
+
+      // 2. Create a custom theme by cloning a built-in (Clone activates the new theme).
+      await pickTheme(prefs, 'Matrix');
+      await prefs.getByTestId('theme-clone').click();
+      await prefs.getByTestId('theme-name-input').fill('MyCustom');
+      await prefs.getByTestId('theme-name-confirm').click();
+      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'MyCustom.json'))).toBe(true);
+      const customBefore = readFileSync(join(cfgRoot, 'themes', 'MyCustom.json'), 'utf8');
+
+      // 3. Delete a built-in — it disappears from the list entirely (FR-005a).
+      await pickTheme(prefs, 'Debian');
       await prefs.getByTestId('theme-delete').click();
-      await prefs.getByTestId('theme-delete-confirm-yes').click();
-      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'throng.json'))).toBe(false);
+      await prefs.getByTestId('theme-confirm-yes').click();
+      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Debian.json'))).toBe(false);
+      await expect.poll(() => prefs.getByTestId('theme-select').locator('option').allTextContents()).not.toContain('Debian');
+
+      // 4. Restore All — confirmed, because it destroys edits to built-ins (FR-004).
+      await prefs.getByTestId('theme-restore-all').click();
+      await expect(prefs.getByTestId('theme-confirm-dialog')).toBeVisible();
+      await prefs.getByTestId('theme-confirm-yes').click();
+
+      // Edited built-in reverted; deleted built-in recreated; custom byte-identical.
+      await expect.poll(() => readTheme(cfgRoot, 'throng')?.colours?.accent).not.toBe('#123456');
+      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Debian.json'))).toBe(true);
+      expect(readFileSync(join(cfgRoot, 'themes', 'MyCustom.json'), 'utf8')).toBe(customBefore);
+
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
+
+test('US2: per-theme restore reverts only that built-in (confirmed); a deleted built-in leaves the list and only Restore All brings it back', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openThemes(app, win);
+      await waitForSeededList(prefs);
+
+      // Edit two built-ins: throng (active by default) and Matrix.
+      await prefs.getByTestId('control-colours.accent-hex').fill('#111111');
+      await expect.poll(() => readTheme(cfgRoot, 'throng')?.colours?.accent).toBe('#111111');
+      await pickTheme(prefs, 'Matrix');
+      await prefs.getByTestId('control-colours.accent-hex').fill('#222222');
+      await expect.poll(() => readTheme(cfgRoot, 'Matrix')?.colours?.accent).toBe('#222222');
+
+      // Restore ONLY Matrix (destructive to its edits → confirmed).
+      await pickTheme(prefs, 'Matrix');
       await prefs.getByTestId('theme-restore').click();
-      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'throng.json'))).toBe(true);
+      await expect(prefs.getByTestId('theme-confirm-dialog')).toBeVisible();
+      await prefs.getByTestId('theme-confirm-yes').click();
+      await expect.poll(() => readTheme(cfgRoot, 'Matrix')?.colours?.accent).not.toBe('#222222');
+      // The other built-in's edit is untouched.
+      expect(readTheme(cfgRoot, 'throng')?.colours?.accent).toBe('#111111');
+
+      // Deleting a built-in removes it from the list ENTIRELY (FR-005a) — there is no per-theme
+      // recreate control; Restore All is the only way back.
+      await pickTheme(prefs, 'Debian');
+      await prefs.getByTestId('theme-delete').click();
+      await prefs.getByTestId('theme-confirm-yes').click();
+      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Debian.json'))).toBe(false);
+      await expect
+        .poll(() => prefs.getByTestId('theme-select').locator('option').allTextContents())
+        .not.toContain('Debian');
+      await expect(prefs.getByTestId('theme-recreate')).toHaveCount(0);
+
+      await prefs.getByTestId('theme-restore-all').click();
+      await prefs.getByTestId('theme-confirm-yes').click();
+      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Debian.json'))).toBe(true);
+      await expect
+        .poll(() => prefs.getByTestId('theme-select').locator('option').allTextContents())
+        .toContain('Debian');
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
+
+test('US3: Clone is the sole creation path — prefilled "<source> - Clone" with "Clone" pre-selected; rename uses the same dialog', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openThemes(app, win);
+      await waitForSeededList(prefs);
+
+      await pickTheme(prefs, 'throng');
+      await prefs.getByTestId('theme-clone').click();
+      const input = prefs.getByTestId('theme-name-input');
+      await expect(prefs.getByTestId('theme-name-dialog')).toBeVisible();
+      await expect(input).toHaveValue('throng - Clone');
+      // The trailing word "Clone" is pre-selected so the user types straight over it.
+      expect(
+        await input.evaluate((el) => {
+          const i = el as HTMLInputElement;
+          return i.value.slice(i.selectionStart ?? 0, i.selectionEnd ?? 0);
+        }),
+      ).toBe('Clone');
+
+      // A reserved built-in name is refused (and cannot be confirmed).
+      await input.fill('Matrix');
+      await expect(prefs.getByTestId('theme-name-error')).toBeVisible();
+      await expect(prefs.getByTestId('theme-name-confirm')).toBeDisabled();
+
+      // ...in ANY case: a theme name is a FILE name, and `MATRIX.json` IS `Matrix.json` on
+      // Windows, so a case-only difference would silently overwrite the built-in.
+      await input.fill('MATRIX');
+      await expect(prefs.getByTestId('theme-name-error')).toBeVisible();
+      await expect(prefs.getByTestId('theme-name-confirm')).toBeDisabled();
+
+      // A valid name creates the custom theme (a copy of the source) and activates it.
+      await input.fill('MyTheme');
+      await prefs.getByTestId('theme-name-confirm').click();
+      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'MyTheme.json'))).toBe(true);
+      await expect.poll(() => readActiveTheme(cfgRoot)).toBe('MyTheme');
+      await expect.poll(() => prefs.getByTestId('theme-select').locator('option').allTextContents()).toContain('MyTheme');
+      // It is a copy of the source, retargeted to the new name.
+      expect(readTheme(cfgRoot, 'MyTheme')?.name).toBe('MyTheme');
+
+      // Rename it through the SAME dialog (007's in-place field is gone).
+      await pickTheme(prefs, 'MyTheme');
+      await prefs.getByTestId('theme-rename').click();
+      await prefs.getByTestId('theme-name-input').fill('Renamed');
+      await prefs.getByTestId('theme-name-confirm').click();
+      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Renamed.json'))).toBe(true);
+      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'MyTheme.json'))).toBe(false);
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
+
+test('US3: a DELETED built-in name is still reserved for a new theme (FR-007)', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openThemes(app, win);
+      await waitForSeededList(prefs);
+
+      // Delete a built-in — its name stays reserved even though it is gone from disk.
+      await pickTheme(prefs, 'Debian');
+      await prefs.getByTestId('theme-delete').click();
+      await prefs.getByTestId('theme-confirm-yes').click();
+      await expect.poll(() => prefs.getByTestId('theme-select').locator('option').allTextContents()).not.toContain('Debian');
+
+      await pickTheme(prefs, 'throng');
+      await prefs.getByTestId('theme-clone').click();
+      await prefs.getByTestId('theme-name-input').fill('Debian');
+      await expect(prefs.getByTestId('theme-name-error')).toBeVisible();
+      await expect(prefs.getByTestId('theme-name-confirm')).toBeDisabled();
+      // Nothing was created.
+      expect(existsSync(join(cfgRoot, 'themes', 'Debian.json'))).toBe(false);
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
