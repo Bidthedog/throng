@@ -1,6 +1,13 @@
 import { useEffect, useRef, type MutableRefObject } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { SearchAddon } from '@xterm/addon-search';
+import { registerPanelSearch, unregisterPanelSearch } from '../search/search-controller.js';
+import {
+  createTerminalSearchController,
+  type TerminalSearchDecorations,
+} from '../search/terminal-search.js';
+import type { SearchCount } from '../search/search-model.js';
 import { shouldDropScrollback } from './clear-detect.js';
 import { parseOsc52 } from './osc52.js';
 import { TerminalOutputGate } from './output-gate.js';
@@ -57,6 +64,19 @@ export interface UseTerminalOptions {
   attempt?: number;
   /** Populated with an imperative handle to the live terminal (for the menu). */
   apiRef?: MutableRefObject<TerminalApi | null>;
+  /**
+   * Match-highlight colours for in-terminal find (013, FR-019), resolved from theme
+   * tokens by the panel. Search is registered only when supplied.
+   */
+  searchDecorations?: TerminalSearchDecorations;
+  /** The live match count, as xterm re-evaluates it against the growing buffer (FR-012). */
+  onSearchCount?: (count: SearchCount) => void;
+  /**
+   * True for a key that belongs to throng (find, scrollback navigation) rather than to
+   * the shell. xterm would otherwise handle these itself and write them to the pty;
+   * reserving them is what keeps them out of the running program (FR-010 / FR-014).
+   */
+  reserveKey?: (e: KeyboardEvent) => boolean;
 }
 
 /**
@@ -80,12 +100,21 @@ export function useTerminal(opts: UseTerminalOptions): void {
   const onAttachedRef = useRef(opts.onAttached);
   const themeRef = useRef(opts.theme);
   const metaRef = useRef(opts.meta);
+  // Search collaborators are read through refs too (013): the key-reservation predicate
+  // changes when the user rebinds a chord or opens/closes find, and the highlight colours
+  // change when the theme does — the mount effect must not freeze yesterday's copies.
+  const reserveKeyRef = useRef(opts.reserveKey);
+  const decorationsRef = useRef(opts.searchDecorations);
+  const onSearchCountRef = useRef(opts.onSearchCount);
   onExitRef.current = opts.onExit;
   onErrorRef.current = opts.onError;
   onStillStartingRef.current = opts.onStillStarting;
   onAttachedRef.current = opts.onAttached;
   themeRef.current = opts.theme;
   metaRef.current = opts.meta;
+  reserveKeyRef.current = opts.reserveKey;
+  decorationsRef.current = opts.searchDecorations;
+  onSearchCountRef.current = opts.onSearchCount;
 
   const termRef = useRef<Terminal | null>(null);
   // Re-measure-and-resize callback, published by the main effect so the font/zoom
@@ -129,12 +158,17 @@ export function useTerminal(opts: UseTerminalOptions): void {
     // `cls` — so we must NOT treat output arriving just after a resize as a clear,
     // or enlarging the Panel wipes the scrollback. See shouldDropScrollback.
     let resizedAt = 0;
+    /** Tears down the search registration when this view goes (013). */
+    let cleanupSearch: (() => void) | undefined;
     const term = new Terminal({
       convertEol: false,
       cursorBlink: true,
       fontFamily: opts.fontFamily,
       fontSize: opts.fontSize,
       theme: themeRef.current,
+      // The search addon paints match highlights through xterm's decorations API, which
+      // is still flagged "proposed" — without this it throws rather than highlighting (013).
+      allowProposedApi: true,
       // NB: do NOT set `windowsPty` here. Without a matching Windows build number it
       // applies the wrong ConPTY reflow/wrapping heuristics and garbles scrolled
       // PowerShell output. (cls/clear is handled separately via isScreenClear.)
@@ -146,8 +180,44 @@ export function useTerminal(opts: UseTerminalOptions): void {
         focus: () => term.focus(),
       };
     }
+    // Hand throng's own chords (find, scrollback navigation) back to the app: returning
+    // false tells xterm not to process the key at all, so it is never written to the pty.
+    // The window-level handler then acts on it. This is the mechanism behind "searching
+    // types nothing at the shell" (SC-002).
+    //
+    // Read through a REF, never captured: the predicate depends on the user's bindings and
+    // on whether a find bar is open, both of which change while this terminal lives. A
+    // captured copy would keep reserving yesterday's chord and leak today's to the shell.
+    term.attachCustomKeyEventHandler(
+      (e) => !(e.type === 'keydown' && reserveKeyRef.current?.(e) === true),
+    );
+
     const fit = new FitAddon();
     term.loadAddon(fit);
+
+    // In-panel find over the retained scrollback (013). Read-only: the addon reads the
+    // buffer and moves the viewport, never the pty. Registered against the panel id so
+    // the shared find bar can drive whichever terminal is active.
+    if (decorationsRef.current) {
+      const searchAddon = new SearchAddon();
+      term.loadAddon(searchAddon);
+      // Colours are read at search time, so re-theming repaints the highlights.
+      const controller = createTerminalSearchController(term, searchAddon, () =>
+        decorationsRef.current ?? {
+          matchBackground: '#1c2f4d',
+          activeMatchBackground: '#2c4a7a',
+          activeMatchBorder: '#6aa3ff',
+        },
+      );
+      const offCount = controller.onCountChange((c) => onSearchCountRef.current?.(c));
+      registerPanelSearch(panelId, controller);
+      cleanupSearch = () => {
+        offCount?.();
+        unregisterPanelSearch(panelId);
+        searchAddon.dispose();
+      };
+    }
+
     term.open(container);
     term.focus();
     try {
@@ -365,6 +435,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // sub-workspace-owned panel goes (FR-007). A window-close that never runs this
       // cleanup is backstopped by the main process (FR-008a).
       void bridge.detach?.(panelId, viewId);
+      cleanupSearch?.();
       term.dispose();
       termRef.current = null;
       if (opts.apiRef) opts.apiRef.current = null;
