@@ -1,6 +1,30 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 3.13.0 → 3.14.0
+Bump rationale: MINOR. Strengthens Principle V (Test-First Quality Discipline) with an explicit
+                rule for how a test RUN is conducted (2026-07-12), additive; no principle removed
+                or redefined.
+
+                The suites here are expensive — E2E alone runs for minutes — and the failure mode
+                being closed is a real one, observed during feature 015: a suite was run with its
+                output piped through `grep` so that only the summary line survived, the failure
+                detail was discarded, and the suite was then re-run repeatedly at several minutes
+                a time purely to recover the name of the test that had already failed. Worse, a
+                flaky test that passed on one of those re-runs would have been silently absorbed
+                into a green bar.
+
+                The rule: run a suite ONCE, UNFILTERED, and capture its COMPLETE output; parse that
+                captured output as many times as needed rather than re-running. After a failure,
+                re-run ONLY the failing tests until they pass; then re-run the FULL suite once to
+                prove nothing else broke. A test that fails and then passes with no code change is
+                flaky, not fixed, and MUST be investigated or tracked — never absorbed by
+                repetition.
+
+Impact: ✅ Principle V — new sub-rule on conducting a test run.
+        No template, plan or spec artifact changes required (this governs execution, not authoring).
+Deferred TODOs: none.
+                ---- prior amendment (historical) ----
 Version change: 3.12.0 → 3.13.0
 Bump rationale: MINOR. One additive governance rule (2026-07-11), no principle removed
                 or redefined: Development Workflow & Quality Gates gains a "Static analysis &
@@ -530,6 +554,23 @@ Red-Green-Refactor cycle.
   the strength of build, type-check, or unit/integration evidence alone. Pre-existing
   UI shipped without E2E coverage MUST have that coverage backfilled as a tracked
   deferral under the Incremental Delivery rule rather than left permanently uncovered.
+- **A test run MUST be executed once, in full, and its complete output captured.**
+  Test suites here are expensive — the E2E suite alone runs for minutes — and a run
+  whose output is filtered away is a run that must be paid for twice.
+  - A suite MUST be run **unfiltered**, with its **complete** output written to a file
+    or scrollback. Piping a run through `grep`/`head` and keeping only a summary line
+    discards the failure detail — the test name, the assertion, the diff, the stack —
+    which is the only part that was worth waiting for. **Parse the captured output as
+    many times as needed; re-run the suite zero times to learn what it already said.**
+  - After a failure, **only the failing tests** are re-run, as many times as the fix
+    takes. The rest of the suite is not re-executed to learn something already known.
+  - Once the failures pass in isolation, the **full** suite MUST be re-run — once —
+    to prove the fix broke nothing else. That full green run is the evidence; a
+    partial run is not.
+  - A test that fails and then passes on re-run without a code change is **flaky, not
+    fixed**. It MUST be investigated and either fixed or explicitly tracked — never
+    absorbed into a green bar by repetition, and never used as a reason to re-run a
+    suite until it happens to pass.
 - Abstraction contracts (Principle II) MUST have contract tests that any
   OS-specific implementation is verified against.
 - Process lifecycle behaviour (spawn, detach, tag, persist, idle-close,
@@ -888,4 +929,4 @@ while sub-workspaces give the user one deliberate, bounded place to combine proj
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 3.13.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-11
+**Version**: 3.14.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-12
