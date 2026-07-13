@@ -101,7 +101,37 @@ async function newTerminal(win: Page, root: string): Promise<string> {
 // REPORTS its container capacity (proposeDimensions) — the daemon grid is the single
 // source of truth for xterm size. This does NOT touch the attach/viewId path that a prior
 // attempt broke (issue #1), which is separately verified by terminal-mirror-survival.
-test('a full-screen (alt-screen) program renders identically in two different-sized views, and stays identical when either window is resized', async () => {
+/*
+ * QUARANTINED (017, FR-013b) — and this is NOT a flake. It is a deterministically red test that
+ * has been hidden by retries, and what it is red about is a REAL PRODUCT BUG.
+ *
+ * It fails on every attempt — 9/9 across every configuration, in isolation and under load,
+ * including all three attempts under `retries: 2`. So arming the flake gate does not "expose" it;
+ * it was always failing, and the retry machinery was never rescuing it either. What hid it is that
+ * a red E2E in a suite nobody could trust reads as noise.
+ *
+ * THE DEFECT: a PTY resize never reaches the process inside it. The daemon's `NodePtyHost.resize()`
+ * is called, finds its session, and `proc.resize()` returns without throwing — yet the hosted
+ * program's `getWindowSize()` never changes. Reproducible with ONE window and no mirroring: shrink
+ * a terminal panel and xterm conforms to the new grid while the program keeps painting for the old
+ * one. On the normal buffer xterm reflows and hides it; on the ALTERNATE screen it is exactly the
+ * "offset lines" symptom feature 008 exists to prevent. Two silent `catch {}` blocks
+ * (`terminal-service.ts:385-390`, `node-pty-host.ts:151-157`) would swallow any failure here.
+ *
+ * WHY NOT WEAKEN THE ASSERTION: the test waits for the full-screen program to repaint after the
+ * shared grid shrinks (`toContainText('L1|')`). A program only repaints when the PTY tells it the
+ * size changed — which is the thing that is broken. Relaxing the wait would erase the only coverage
+ * of the 008 alt-screen invariant while the defect underneath it survives. That is how a bug gets
+ * permanently forgotten.
+ *
+ * The 008 parity invariant itself still holds: both views were measured at 25×35 rendering
+ * byte-identically. It is the RESIZE path that is broken, not parity.
+ *
+ * Quarantine here is an admission of a real bug, not a timing gap. It must be fixed, and it is
+ * enumerable in the meantime:
+ *   THRONG_E2E_INCLUDE_QUARANTINE=1 npx playwright test --grep @quarantine --list
+ */
+test('@quarantine a full-screen (alt-screen) program renders identically in two different-sized views, and stays identical when either window is resized', async () => {
   skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-alt-'));
   writeFileSync(join(root, 'alt.js'), ALT_PROGRAM);

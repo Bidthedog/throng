@@ -28,7 +28,22 @@ export function registerTempCleanup(): void {
   test.afterEach(() => {
     // The app holds its userData dir until fully closed — hence the retries.
     for (const dir of created.splice(0)) {
-      rmSync(dir, { recursive: true, force: true, maxRetries: 15, retryDelay: 200 });
+      try {
+        rmSync(dir, { recursive: true, force: true, maxRetries: 15, retryDelay: 200 });
+      } catch {
+        // BEST-EFFORT, and deliberately so (017 FR-013a/FR-014).
+        //
+        // Electron releases its userData dir asynchronously, some time after the process
+        // exits; under load it can still hold the lock when the retries above run out,
+        // and rmSync then throws EPERM. This is *housekeeping*, not an assertion — the
+        // test it is attributed to has already passed. Letting it throw turns a lost race
+        // with the OS file lock into a RED TEST, which is precisely the kind of
+        // non-signal the flake gate must not fire on. (Observed: context-menu.e2e.ts
+        // failed this way, in an afterEach, with every assertion green.)
+        //
+        // Nothing leaks: globalTeardown removes the whole per-run `throng_e2e_<runhash>`
+        // folder, which is where every one of these dirs lives.
+      }
     }
   });
 }

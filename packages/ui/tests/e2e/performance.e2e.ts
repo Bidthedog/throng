@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import Database from 'better-sqlite3';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
@@ -69,6 +70,45 @@ async function createProject(win: Page, name: string): Promise<void> {
   await win.getByTestId('project-save').click();
 }
 
+/**
+ * Wait until the project is REALLY in the daemon's store (017 FR-013a, race class (c)).
+ *
+ * Replaces `await win.waitForTimeout(800)`. That sleep was doing nothing useful: it was
+ * evidently meant to let the debounced workspace-layout save land before the app closed —
+ * but a `workspace_layout` row is only written when the layout CHANGES, and this test never
+ * changes it. (Proven: polling for that row here times out after 15s, every time. The
+ * persistence specs, which DO mutate the layout, see the row appear immediately.)
+ *
+ * The condition this test actually depends on is the one asserted here: the PROJECT is on
+ * disk, so the relaunch below has something to open. That write is a synchronous daemon RPC,
+ * so this settles at once — no sleep, and no dependence on 800ms being "enough".
+ *
+ * NB: this means the relaunch restores a DEFAULT workspace, not a saved one — the spec's
+ * name overstates what it measures. Flagged in e2e-audit.md rather than silently "fixed"
+ * here, because seeding a real layout would change what the budget is measured against.
+ */
+async function expectProjectSaved(dataDir: string, projectName: string): Promise<void> {
+  await expect
+    .poll(
+      () => {
+        let db: InstanceType<typeof Database> | undefined;
+        try {
+          db = new Database(join(dataDir, 'throng.db'), { readonly: true });
+          const row = db
+            .prepare(`SELECT 1 AS ok FROM projects WHERE name = ?`)
+            .get(projectName) as { ok?: number } | undefined;
+          return row?.ok === 1;
+        } catch {
+          return false; // not written yet, or a transient read of a mid-write DB
+        } finally {
+          db?.close();
+        }
+      },
+      { timeout: 15_000, message: `the project "${projectName}" was never persisted` },
+    )
+    .toBe(true);
+}
+
 test('restores a project workspace within the launch budget (NFR-002)', async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
@@ -78,7 +118,7 @@ test('restores a project workspace within the launch budget (NFR-002)', async ()
     let win = await app.firstWindow();
     await createProject(win, 'Perf');
     await expect(win.getByTestId('tab-strip')).toBeVisible();
-    await win.waitForTimeout(800);
+    await expectProjectSaved(h.dataDir, 'Perf');
     await app.close();
 
     // Measure cold-ish launch to a visible, restored workspace.

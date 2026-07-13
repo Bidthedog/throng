@@ -12,7 +12,6 @@ import type { ElectronApplication, Page } from '@playwright/test';
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
-const SAVE_WAIT = 800; // debounce (400ms) + IPC round-trip slack
 
 interface Harness {
   daemon: ChildProcess;
@@ -84,6 +83,57 @@ async function panelIds(win: Page): Promise<string[]> {
   );
 }
 
+/**
+ * Wait until the project's layout has ACTUALLY been persisted to the daemon's store,
+ * in the shape we expect (017 FR-013a, race class (c)).
+ *
+ * This replaces `await win.waitForTimeout(SAVE_WAIT)` — an unconditional 800ms sleep
+ * standing in for "the debounced save (400ms) plus its IPC round-trip has landed". A
+ * sleep *asserts that 800ms is always enough*; under six-worker contention it is not,
+ * and the app was then closed mid-save — so the restart these tests are ABOUT restored a
+ * layout that had never been written, and the failure surfaced far from its cause.
+ *
+ * The condition is real and observable: the row is in SQLite. So poll for it. This is
+ * strictly stronger than the sleep — it fails with "layout was never persisted" instead
+ * of silently proceeding with a stale store.
+ */
+async function expectLayoutSaved(
+  dataDir: string,
+  projectName: string,
+  predicate: (layoutJson: string) => boolean,
+): Promise<void> {
+  await expect
+    .poll(
+      () => {
+        let db: InstanceType<typeof Database> | undefined;
+        try {
+          db = new Database(dbPath(dataDir), { readonly: true });
+          const row = db
+            .prepare(
+              `SELECT w.layout_json AS json
+                 FROM workspace_layout w
+                 JOIN projects p ON p.id = w.project_id
+                WHERE p.name = ?`,
+            )
+            .get(projectName) as { json?: string } | undefined;
+          return row?.json !== undefined && predicate(row.json);
+        } catch {
+          return false; // not written yet, or a transient read of a mid-write DB
+        } finally {
+          db?.close();
+        }
+      },
+      { timeout: 15_000, message: `the layout for "${projectName}" was never persisted` },
+    )
+    .toBe(true);
+}
+
+/** Panels in a persisted layout, counted shape-agnostically from its JSON. */
+const savedPanels = (json: string): number => (json.match(/"type":"panel"/g) ?? []).length;
+/** Tabs in a persisted layout. */
+const savedTabs = (json: string): number =>
+  ((JSON.parse(json) as { tabs?: unknown[] }).tabs ?? []).length;
+
 test('restores each project’s own layout after a restart (SC-006)', async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
@@ -96,7 +146,7 @@ test('restores each project’s own layout after a restart (SC-006)', async () =
     await expect(projectItem(win, 'Alpha')).toHaveAttribute('data-active', 'true');
     await win.getByTestId('tab-add').click();
     await expect(win.locator('.tab-chip')).toHaveCount(2);
-    await win.waitForTimeout(SAVE_WAIT);
+    await expectLayoutSaved(h.dataDir, 'Alpha', (json) => savedTabs(json) === 2);
 
     // Beta: created → opens with one Tab. Split it into two Panels.
     await createProject(win, 'Beta');
@@ -105,7 +155,7 @@ test('restores each project’s own layout after a restart (SC-006)', async () =
     const first = (await panelIds(win))[0];
     await win.getByTestId(`panel-add-${first}`).click();
     await expect(win.locator('.panel-box')).toHaveCount(2);
-    await win.waitForTimeout(SAVE_WAIT);
+    await expectLayoutSaved(h.dataDir, 'Beta', (json) => savedPanels(json) === 2);
 
     await app.close();
     app = undefined;
@@ -144,7 +194,10 @@ test('falls back to the default workspace and notifies on a corrupt layout (SC-0
     await createProject(win, 'Gamma');
     await win.getByTestId('tab-add').click();
     await expect(win.locator('.tab-chip')).toHaveCount(2);
-    await win.waitForTimeout(SAVE_WAIT);
+    // Settle on the layout being REALLY saved before corrupting it: corrupting a row that
+    // was never written would make this test pass for the wrong reason (there would be no
+    // layout to fail to restore), which is exactly the false green FR-013 exists to stop.
+    await expectLayoutSaved(h.dataDir, 'Gamma', (json) => savedTabs(json) === 2);
 
     await app.close();
     app = undefined;

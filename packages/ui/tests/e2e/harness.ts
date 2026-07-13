@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, _electron as electron } from '@playwright/test';
-import type { ElectronApplication, Page } from '@playwright/test';
+import type { ElectronApplication, Locator, Page } from '@playwright/test';
 import { openDatabase, runMigrations, type ThrongDatabase } from '@throng/persistence';
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
@@ -145,10 +145,28 @@ export async function runApp(
     if (daemon) await stopDaemon(daemon);
     // Clean up every temp dir this run created (Electron holds the userData dir until
     // the app has fully closed, hence the retries). Skip any the caller supplied.
-    const cleanup = { recursive: true, force: true, maxRetries: 10, retryDelay: 150 } as const;
-    if (!opts.dataDir) rmSync(dataDir, cleanup);
-    if (ownCfgRoot) rmSync(cfgRoot, cleanup);
-    if (!opts.userDataDir) rmSync(userData, cleanup);
+    //
+    // BEST-EFFORT, and this matters (017 FR-013a/FR-014). Electron releases its userData
+    // dir asynchronously, some time after the process exits; under worker contention it can
+    // still hold the lock when the retries run out, and rmSync then throws EPERM. This is
+    // housekeeping, not an assertion — the test has already passed by the time we get here —
+    // so letting it throw turns a lost race with the OS file lock into a RED TEST, on the
+    // first attempt, after every assertion was green. That is the precise non-signal the
+    // flake gate must never fire on. `runApp` backs ~40 specs, so an unguarded rmSync here
+    // is a flake source for the whole cohort. (The same class was fixed for non-runApp specs
+    // in temp-file-helpers.ts; this is the seam it missed.) Nothing leaks: globalTeardown
+    // removes the whole per-run throng_e2e_<runhash> folder these dirs live under.
+    const cleanup = { recursive: true, force: true, maxRetries: 15, retryDelay: 200 } as const;
+    const rmBestEffort = (dir: string): void => {
+      try {
+        rmSync(dir, cleanup);
+      } catch {
+        // lost the race with Electron's userData lock; globalTeardown sweeps it.
+      }
+    };
+    if (!opts.dataDir) rmBestEffort(dataDir);
+    if (ownCfgRoot) rmBestEffort(cfgRoot);
+    if (!opts.userDataDir) rmBestEffort(userData);
   }
 }
 
@@ -276,12 +294,117 @@ export async function addPanels(win: Page, n: number): Promise<void> {
     await expect(win.locator('.panel-box')).toHaveCount(before + 1);
 
     const rename = win.locator('[data-testid^="panel-rename-input-"]');
-    if ((await rename.count()) > 0) {
+    // The new panel opens in rename mode, but its autoFocus input mounts a render AFTER the
+    // panel-box count settles above — so a bare `.count()` here can read 0 before the input has
+    // appeared, skip the commit, and then the input shows up and lingers open past the
+    // toHaveCount(0) below (observed on CI: single-worker, "Expected 0, Received 1"). That is the
+    // exact non-auto-waiting-read race this suite's harness is meant to be free of (017 FR-013a).
+    //
+    // Wait for the input to actually appear before deciding. If a sibling terminal steals focus and
+    // auto-commits it on blur (Race 2 above), it never appears within the window, which is equally
+    // fine — either way we end with no open rename input.
+    const appeared = await rename
+      .waitFor({ state: 'visible', timeout: 5000 })
+      .then(() => true)
+      .catch(() => false);
+    if (appeared) {
       await expect(rename).toBeFocused();
       await win.keyboard.press('Enter');
     }
     await expect(rename).toHaveCount(0);
   }
+}
+
+/**
+ * Settle on a RENDERED window before reading any raw state (017 FR-013).
+ *
+ * A test may not measure the interface before the interface exists. The trap this closes is a
+ * *negative* opening assertion — `await expect(x).toHaveCount(0)` — which a DOM that has not
+ * rendered anything at all satisfies **vacuously**. It passes instantly, proves nothing, and reads
+ * to the next author exactly like a wait. Assert something is PRESENT first; assert absence after.
+ *
+ * The root is a parameter because `.throng-shell` exists only in the main and sub-workspace
+ * windows — the Preferences window's root is `.prefs-root`.
+ */
+export async function settle(win: Page, root = '.throng-shell'): Promise<void> {
+  await expect(win.locator(root)).toBeVisible();
+}
+
+/**
+ * Element geometry, measured only once the element has STOPPED MOVING (017 FR-013a).
+ *
+ * Two things are wrong with the read this replaces —
+ * `page.evaluate(() => document.querySelector(…).getBoundingClientRect())`:
+ *
+ *   1. It does not wait for the element to exist, so it throws on null or measures an element the
+ *      stylesheet has not reached yet.
+ *   2. It does not wait for the element to be STILL. The pane layout animates
+ *      (`grid-template-columns`, 180ms), so a read taken mid-transition is a real number that
+ *      describes a moment nobody cares about — and it differs from run to run purely by timing.
+ *
+ * `locator.boundingBox()` fixes (1) but NOT (2): it waits for visibility, not for stability. So we
+ * poll until two consecutive boxes agree. That is a genuine *condition* — "the element has stopped
+ * moving" — and it is why this helper can replace `waitForTimeout(300)` rather than merely hide it.
+ * A sleep asserts that 300ms is always enough; this asserts that the thing you are about to measure
+ * has actually settled.
+ *
+ * Throws rather than returning null, so a missing element cannot slide into a `NaN` comparison that
+ * silently passes.
+ */
+export async function geom(
+  locator: Locator,
+): Promise<{ x: number; y: number; w: number; h: number }> {
+  await expect(locator).toBeVisible();
+
+  let previous: { x: number; y: number; width: number; height: number } | null = null;
+  let settledBox: { x: number; y: number; width: number; height: number } | null = null;
+
+  await expect
+    .poll(
+      async () => {
+        const current = await locator.boundingBox();
+        if (!current) return false;
+        const still =
+          previous !== null &&
+          Math.abs(current.x - previous.x) < 0.5 &&
+          Math.abs(current.y - previous.y) < 0.5 &&
+          Math.abs(current.width - previous.width) < 0.5 &&
+          Math.abs(current.height - previous.height) < 0.5;
+        previous = current;
+        if (still) settledBox = current;
+        return still;
+      },
+      {
+        timeout: 10_000,
+        message: `geom(): ${locator.toString()} never stopped moving (still animating?)`,
+        intervals: [50, 50, 100, 100, 250],
+      },
+    )
+    .toBe(true);
+
+  if (!settledBox) {
+    throw new Error(
+      `geom(): element never became visible, so it has no box: ${locator.toString()}. ` +
+        'Settle on it first (see settle()).',
+    );
+  }
+  const box: { x: number; y: number; width: number; height: number } = settledBox;
+  return { x: box.x, y: box.y, w: box.width, h: box.height };
+}
+
+/**
+ * The window's inner dimensions.
+ *
+ * Needed because some assertions measure a control against the WINDOW EDGE (e.g. the pane-collapse
+ * button's gap from the right edge = `innerWidth - rect.right`), which a bounding box alone cannot
+ * express. Reading `window.innerWidth` touches no element, so it cannot race with one rendering —
+ * it is not the unguarded "reach through evaluate and measure an element" read that FR-013a bans.
+ *
+ * Take `geom()` FIRST (it auto-waits, and so establishes that the layout has settled), then read
+ * the viewport. That ordering is what makes the pair consistent.
+ */
+export async function viewport(win: Page): Promise<{ width: number; height: number }> {
+  return win.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
 }
 
 /** JSON-RPC over the daemon pipe (one-shot request/response). */
