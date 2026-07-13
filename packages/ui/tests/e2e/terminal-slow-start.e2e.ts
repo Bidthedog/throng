@@ -40,12 +40,34 @@ test('a slow-starting terminal shows the "still starting" state and recovers on 
         // Retry reattaches to the now-running session → the state clears and the terminal
         // shows its prompt (the project root), never a fresh cold start or a form.
         await win.getByTestId(`terminal-retry-${pid}`).click();
-        await expect(win.getByTestId(`terminal-starting-${pid}`)).toHaveCount(0, { timeout: 20000 });
+        // POSITIVE first (017 FR-013): the terminal actually recovered and is showing its
+        // prompt. Only then is "the still-starting state is gone" worth asserting.
+        //
+        // The old order asserted `toHaveCount(0)` on the still-starting overlay FIRST — and
+        // that assertion was VACUOUS: the retry handler clears the state synchronously
+        // (`setStillStarting(false)` in terminal-panel.tsx), so the overlay is already gone
+        // the instant the click returns, whether or not the reattach then succeeded. It
+        // passed instantly, proved nothing, and hid the real failure below.
         await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: 20000 });
+        await expect(win.getByTestId(`terminal-starting-${pid}`)).toHaveCount(0);
       },
       {
         skipDaemon: true,
-        env: { THRONG_ATTACH_TIMEOUT_MS: '400', THRONG_ATTACH_DELAY_MS: '3000' },
+        // Budgets sized so only the FIRST attach can miss (017 FR-013a, race class (c)).
+        //
+        // The cold-start attach is delayed IN THE DAEMON by ATTACH_DELAY_MS, and the client
+        // gives up after ATTACH_TIMEOUT_MS. The test needs exactly one thing to be certain:
+        // delay >> budget, so the first attach ALWAYS exceeds it. 8000 vs 2000 gives that a
+        // 4x margin — it is a structural guarantee, not a timing hope.
+        //
+        // The old pair (3000/400) also satisfied delay > budget, but it made the *retry*
+        // race too: the retry is a session REUSE and returns immediately, yet it still had
+        // to complete a renderer→main→daemon round-trip inside 400ms. Under six-worker
+        // contention that round-trip does not fit, so the retry ALSO timed out, re-entered
+        // "still starting", and the terminal never painted — the test then sat for 20s on a
+        // blank terminal. (Reproduced 3/3 under load; 3/3 green in isolation.) The retry was
+        // never meant to be on a clock; only the first attach is.
+        env: { THRONG_ATTACH_TIMEOUT_MS: '2000', THRONG_ATTACH_DELAY_MS: '8000' },
       },
     );
   } finally {

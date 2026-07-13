@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { THRONG_THEME, resolveColour, resolveIcon, toCssVariables, type Theme } from '@throng/core';
+import { THRONG_THEME, resolveColour, resolveIconAsset, toCssVariables, type Theme } from '@throng/core';
 
 describe('Theme token resolution (FR-030)', () => {
   it('resolves a present colour token', () => {
@@ -12,7 +12,13 @@ describe('Theme token resolution (FR-030)', () => {
     expect(resolveColour(sparse, 'surface')).toBe('#fff');
     // missing in sparse → throng default
     expect(resolveColour(sparse, 'danger')).toBe(THRONG_THEME.colours.danger);
-    expect(resolveIcon(sparse, 'destroy')).toBe(THRONG_THEME.icons.destroy);
+    // 017: `resolveIcon` is deleted — it was the pack-BLIND resolver, and the reason the user's
+    // icon-pack choice was ignored everywhere in the app (#54). The same fallback is now asserted
+    // through the single pack-aware resolver, which also honours the selected pack.
+    expect(resolveIconAsset(sparse, {}, 'destroy')).toEqual({
+      kind: 'glyph',
+      glyph: THRONG_THEME.icons.destroy,
+    });
   });
 
   it('emits per-section typography vars; unset role sizes track baseSizePx', () => {

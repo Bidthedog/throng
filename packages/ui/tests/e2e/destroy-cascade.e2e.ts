@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { createProject, firstPanelId, runApp } from './harness.js';
+import { addPanels, createProject, firstPanelId, runApp } from './harness.js';
 
 // FR-026 (batch 2, clarified 2026-07-01): the destroy cascade is ONE-directional.
 // A Panel belongs to its project. Destroying it IN THE PROJECT removes it from the
@@ -22,9 +22,10 @@ async function panelIds(page: Page): Promise<string[]> {
 async function projectWithMirroredPanel(app: ElectronApplication, win: Page) {
   await createProject(win, 'Cascade', 'C:/c/cascade');
   const a = await firstPanelId(win);
-  await win.getByTestId(`panel-add-${a}`).click();
-  await win.keyboard.press('Enter'); // commit the new Panel's rename
-  await expect(win.locator('.panel-box')).toHaveCount(2);
+  // Use the shared helper (017 FR-013a): a bare `panel-add` + `press('Enter')` races the
+  // new panel's autoFocus'd rename input — press Enter too early and the add BUTTON
+  // re-activates, adding a panel nobody asked for. addPanels settles on both.
+  await addPanels(win, 1);
   const b = (await panelIds(win)).find((id) => id !== a)!;
 
   await win.getByTestId(`panel-handle-${b}`).click({ button: 'right' });
@@ -62,9 +63,7 @@ test('destroying a mirrored Panel INSIDE a sub-workspace is local — the projec
 
     // Give the sub-workspace a 2nd Panel so destroying b doesn't hit the never-empty
     // guard, then destroy b INSIDE the sub-workspace window.
-    await child.getByTestId(`panel-add-${b}`).click();
-    await child.keyboard.press('Enter');
-    await expect(child.locator('.panel-box')).toHaveCount(2);
+    await addPanels(child, 1);
 
     await child.getByTestId(`panel-handle-${b}`).click({ button: 'right' });
     await child.getByTestId('menu-item-Close Panel').click();
@@ -107,9 +106,10 @@ test('destroying a mirrored TERMINAL Panel inside a sub-workspace keeps the sess
       await expect(child.getByTestId(`terminal-${a}`)).toBeVisible({ timeout: 15000 });
 
       // A 2nd Panel in the sub-workspace so destroying a isn't the last-panel case.
-      await child.getByTestId(`panel-add-${a}`).click();
-      await child.keyboard.press('Enter');
-      await expect(child.locator('.panel-box')).toHaveCount(2);
+      // addPanels also handles the live terminal in the sibling panel stealing focus back
+      // (which commits the rename on blur and unmounts the input) — a legitimate outcome
+      // the bare press('Enter') could not distinguish from a lost keystroke.
+      await addPanels(child, 1);
 
       // Destroy the terminal Panel INSIDE the sub-workspace. The confirmation must
       // NOT threaten termination — the session survives in the project.

@@ -115,12 +115,24 @@ test('shows the panel count on a Tab and confirms tab close (FR-045/043)', async
       .first()
       .evaluate((el) => (el as HTMLElement).dataset.panelId ?? '');
     await win.getByTestId(`panel-add-${firstPanel}`).click();
-    await win.keyboard.press('Enter'); // commit the new panel's rename
+    // Commit the new panel's inline rename — but only once its input actually HAS focus
+    // (017 FR-013a). A new panel opens in rename mode with an `autoFocus` input; pressing
+    // Enter before that focus lands re-activates the add BUTTON, which silently adds a
+    // panel nobody asked for and makes the count below [3]. Settling on the input being
+    // focused is the real condition the bare `press('Enter')` was assuming.
+    const panelRename = win.locator('[data-testid^="panel-rename-input-"]');
+    await expect(panelRename).toBeFocused();
+    await win.keyboard.press('Enter');
+    await expect(panelRename).toHaveCount(0);
     await expect(win.locator('.tab-chip__count').first()).toHaveText('[2]');
 
     // Add a 2nd tab so Close is enabled, then close the first with confirmation.
     await win.getByTestId('tab-add').click();
+    const tabRename = win.locator('[data-testid^="tab-rename-input-"]');
+    await expect(tabRename).toBeFocused(); // same race, same guard
     await win.keyboard.press('Enter');
+    await expect(tabRename).toHaveCount(0);
+    await expect(win.locator('.tab-chip')).toHaveCount(2);
     await win.locator('.tab-chip').first().click({ button: 'right' });
     await win.getByTestId('menu-item-Destroy Tab').click();
     // Both panels are EMPTY (no confirmed terminal), so none has a running subprocess
