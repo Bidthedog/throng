@@ -12,7 +12,7 @@
  */
 import { ipcMain } from 'electron';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
-import type { ConfigDocId, IConfigStore } from '@throng/core';
+import type { ConfigDocId, IConfigStore, LoadedIconPack } from '@throng/core';
 import type { ResetOne, RestoreResult } from './shipped-defaults-service.js';
 
 export type WriteResult = { ok: true } | { ok: false; error: string };
@@ -108,7 +108,7 @@ export interface ConfigManagementDeps {
     resetKeybindings(): Promise<RestoreResult>;
   };
   listFonts(): Promise<string[]>;
-  listIconPacks(): Promise<{ name: string; assetBase: string }[]>;
+  listIconPacks(): Promise<LoadedIconPack[]>;
 }
 
 export function registerConfigManagementIpc(deps: ConfigManagementDeps): void {

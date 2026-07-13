@@ -17,6 +17,7 @@ import {
   type IConfigStore,
   type IFileWatcher,
   type Keybindings,
+  type LoadedIconPack,
   type Theme,
 } from '@throng/core';
 
@@ -24,10 +25,22 @@ export interface ConfigPayload {
   settings: AppSettings;
   theme: Theme;
   keybindings: Keybindings;
+  /**
+   * 017 / #54 — icon packs ride the SAME channel as the theme, deliberately.
+   *
+   * A theme selects a pack (`theme.iconPack`). If packs arrived on a different channel, the two
+   * would race, and there would be a frame in which the new theme is paired with the old pack's
+   * icons. One payload, one render, no mismatch — which is also what makes a pack change LIVE
+   * (FR-005) rather than merely eventual.
+   */
+  iconPacks: LoadedIconPack[];
 }
 
-/** Read the active settings + the theme they select + keybindings, merged over defaults. */
-export async function readConfigPayload(store: IConfigStore): Promise<ConfigPayload> {
+/** Read the active settings + the theme they select + keybindings + icon packs, merged over defaults. */
+export async function readConfigPayload(
+  store: IConfigStore,
+  loadIconPacks: () => Promise<LoadedIconPack[]> = async () => [],
+): Promise<ConfigPayload> {
   const settings = await store.read({ kind: 'settings' }, DEFAULT_APP_SETTINGS, parseAppSettings);
   // Confine the active-theme name to a safe single segment before it becomes a file
   // path — a hand-edited `appearance.theme` like "../../x" must not read off-tree.
@@ -41,7 +54,8 @@ export async function readConfigPayload(store: IConfigStore): Promise<ConfigPayl
     { create: false }, // a settings-named theme that doesn't exist falls back to defaults, no stray file (#6)
   );
   const keybindings = await store.read({ kind: 'keybindings' }, DEFAULT_KEYBINDINGS, parseKeybindings);
-  return { settings, theme, keybindings };
+  const iconPacks = await loadIconPacks();
+  return { settings, theme, keybindings, iconPacks };
 }
 
 /** Begin watching the config root; re-read + broadcast on every (debounced) change. */
@@ -50,8 +64,9 @@ export function startConfigWatcher(deps: {
   watcher: IFileWatcher;
   config: IConfigSettings;
   broadcast: (payload: ConfigPayload) => void;
+  loadIconPacks?: () => Promise<LoadedIconPack[]>;
 }): Disposable {
   return deps.watcher.watch(deps.config.configRoot, () => {
-    void readConfigPayload(deps.store).then(deps.broadcast);
+    void readConfigPayload(deps.store, deps.loadIconPacks).then(deps.broadcast);
   });
 }

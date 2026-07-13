@@ -7,8 +7,8 @@
  */
 import { useRef, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react';
 import type { NodeRendererProps } from 'react-arborist';
-import { decideClick, resolveIcon } from '@throng/core';
-import { useActiveTheme } from '../config/config-store.js';
+import { decideClick } from '@throng/core';
+import { Icon } from '../common/icon.js';
 import { fileIconToken } from './tree-icons.js';
 import { useExplorerRow } from './explorer-context.js';
 import type { TreeNodeData } from './use-explorer-data.js';
@@ -18,7 +18,6 @@ export function TreeRow({
   style,
   dragHandle,
 }: NodeRendererProps<TreeNodeData>): ReactElement {
-  const theme = useActiveTheme();
   const row = useExplorerRow();
   const data = node.data;
   const isRoot = data.relPath === '';
@@ -28,9 +27,11 @@ export function TreeRow({
   const escapedRef = useRef(false);
   // Highlight the folder that would receive a drop while dragging (FR-091).
   const willDrop = node.willReceiveDrop;
-  const icon = isFolder
-    ? resolveIcon(theme, node.isOpen || isRoot ? 'folderOpen' : 'folder')
-    : resolveIcon(theme, fileIconToken(data.name));
+  const iconToken = isFolder
+    ? node.isOpen || isRoot
+      ? 'folderOpen'
+      : 'folder'
+    : fileIconToken(data.name);
 
   // Selection — including Ctrl/Shift multi-select (FR-015) — is handled by
   // react-arborist's DefaultRow (node.handleClick). Here we decide what a click
@@ -74,10 +75,10 @@ export function TreeRow({
       title={isRoot ? data.name : data.relPath}
     >
       <span className={`tree-twisty${node.isOpen ? ' tree-twisty--open' : ''}`} aria-hidden>
-        {isFolder && !isRoot ? resolveIcon(theme, 'chevron') : ''}
+        {isFolder && !isRoot ? <Icon token="chevron" /> : ''}
       </span>
       <span className="tree-icon" aria-hidden>
-        {icon}
+        <Icon token={iconToken} />
       </span>
       {node.isEditing ? (
         <input
@@ -114,9 +115,18 @@ export function TreeRow({
       ) : (
         <span className="tree-label">{data.name}</span>
       )}
+      {/*
+        FR-006d — an icon may not be the SOLE carrier of meaning.
+
+        This marker's entire job is to say "this is a symbolic link". Making icons decorative
+        (aria-hidden, FR-006c) is right for an icon that merely decorates an already-labelled
+        control — but it would erase this one's meaning outright, with nothing left in its place.
+        So the MARKER carries the name while the icon inside it stays decorative: a screen reader
+        hears "Symbolic link" once, and never the glyph.
+      */}
       {data.isSymlink && !node.isEditing && (
-        <span className="tree-symlink" aria-hidden>
-          {resolveIcon(theme, 'symlink')}
+        <span className="tree-symlink" role="img" aria-label="Symbolic link" title="Symbolic link">
+          <Icon token="symlink" />
         </span>
       )}
     </div>

@@ -1,29 +1,22 @@
-import { useEffect, useState, type ReactElement } from 'react';
-import { resolveIconValue, THRONG_THEME, type IconPackManifest, type Theme } from '@throng/core';
+import { type ReactElement } from 'react';
+import { THRONG_THEME, type Theme } from '@throng/core';
+import { Icon } from '../common/icon.js';
+import { useIconPacks } from '../config/config-store.js';
 
 /**
- * Icon section of the Themes tab (feature 007, US4 — FR-039/040). Choose an icon
- * pack that maps all tokens at once, and override individual tokens on top of it
- * (glyph or image). Each token renders in a 24px box: a glyph as text, an image
- * via a `file://` URL from the pack's asset base. A token missing everywhere falls
- * back to the default throng glyph. Writes update the selected theme file.
+ * Icon section of the Themes tab (007, US4 — FR-039/040; reworked by 017 / #54).
+ *
+ * Choose an icon pack that maps all tokens at once, and override individual tokens on top of it.
+ *
+ * This grid used to render icons through a PRIVATE `<img src="file://…">` path of its own, and that
+ * was the root of #54 twice over. It made this the only screen in the app where a pack was honoured
+ * at all — and because an SVG inside an `<img>` is an isolated document, its `currentColor` resolved
+ * to black rather than to the theme, so even here the pack looked broken on a dark theme.
+ *
+ * It now renders through the SAME <Icon> component as the rest of the app. A preview that renders
+ * differently from the thing it is previewing is not a preview.
  */
-interface IconPackDto {
-  name: string;
-  assetBase: string;
-  tokens: Record<string, { glyph: string } | { image: string }>;
-}
-
 const ICON_TOKENS = Object.keys(THRONG_THEME.icons);
-
-function assetBaseFor(packs: IconPackDto[], name: string | undefined): string | null {
-  return packs.find((p) => p.name === name)?.assetBase ?? null;
-}
-
-function fileUrl(base: string, file: string): string {
-  const norm = `${base}/${file}`.replace(/\\/g, '/');
-  return `file:///${norm.replace(/^\/+/, '')}`;
-}
 
 export interface IconSectionProps {
   theme: Theme;
@@ -47,32 +40,11 @@ export function IconSection({
   onOverride,
   filter = null,
 }: IconSectionProps): ReactElement | null {
-  const [packs, setPacks] = useState<IconPackDto[]>([]);
-  useEffect(() => {
-    let active = true;
-    void window.throng?.config
-      ?.listIconPacks?.()
-      .then((list) => {
-        if (active) setPacks(list as IconPackDto[]);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const manifests: Record<string, IconPackManifest> = {};
-  for (const p of packs) manifests[p.name] = { name: p.name, tokens: p.tokens };
-  const packBase = assetBaseFor(packs, theme.iconPack);
-
-  const renderIcon = (token: string): ReactElement => {
-    const value = resolveIconValue(theme, manifests, token);
-    if ('image' in value && packBase) {
-      return <img className="icon-cell__img" src={fileUrl(packBase, value.image)} alt={token} />;
-    }
-    const glyph = 'glyph' in value ? value.glyph : '';
-    return <span className="icon-cell__glyph">{glyph}</span>;
-  };
+  // Packs arrive on the same hot-reloaded payload as the theme that selects them, so this grid
+  // needs no fetch of its own and cannot show a pack that disagrees with the live theme.
+  const packMap = useIconPacks();
+  const packs = Object.values(packMap);
+  const selected = theme.iconPack ? packMap[theme.iconPack] : undefined;
 
   // The section takes part in the Themes typeahead like everything else on the tab (FR-021).
   const visibleTokens = filter ? ICON_TOKENS.filter((t) => filter.tokens.includes(t)) : ICON_TOKENS;
@@ -97,11 +69,31 @@ export function IconSection({
             >
               <option value="">(default glyphs)</option>
               {packs.map((p) => (
-                <option key={p.name} value={p.name}>
+                <option
+                  key={p.name}
+                  value={p.name}
+                  disabled={!!p.error}
+                  // The REASON travels with the option, so a broken pack explains itself without
+                  // the user having to select it first — which they cannot, since it is disabled.
+                  title={p.error}
+                  data-testid={`icon-pack-option-${p.name}`}
+                >
                   {p.name}
+                  {p.error ? ' (unavailable)' : ''}
                 </option>
               ))}
             </select>
+            {/*
+              FR-004a — a pack that cannot be loaded says SO, right where it was chosen.
+              Falling back silently would reproduce the exact confusion this feature exists to
+              remove: a setting the user changed that appears to do nothing.
+            */}
+            {selected?.error ? (
+              <p className="settings-row__error" data-testid="icon-pack-error" role="alert">
+                <strong>{selected.name}</strong> could not be loaded, so the theme&apos;s own icons
+                are being shown instead. {selected.error}
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -109,7 +101,9 @@ export function IconSection({
       <div className="icon-grid" data-testid="icon-grid">
         {visibleTokens.map((token) => (
           <div className="icon-cell" key={token} data-testid={`icon-cell-${token}`}>
-            <div className="icon-cell__box">{renderIcon(token)}</div>
+            <div className="icon-cell__box">
+              <Icon token={token} className="icon-cell__icon" />
+            </div>
             <span className="icon-cell__name">{token}</span>
             <input
               className="ctl__input icon-cell__override"

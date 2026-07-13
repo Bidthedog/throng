@@ -8,8 +8,8 @@
  * v3.12.0) — glyphs and colours come from theme tokens, never inline assets.
  */
 import { useEffect, useRef, useState } from 'react';
-import { resolveIcon } from '@throng/core';
-import { useActiveTheme, useAppSettings } from '../config/config-store.js';
+import { useAppSettings } from '../config/config-store.js';
+import { Icon } from '../common/icon.js';
 import { getPanelSearch } from './search-controller.js';
 import {
   closeFind,
@@ -31,7 +31,6 @@ export interface FindBarProps {
 
 export function FindBar({ panelId }: FindBarProps): React.JSX.Element | null {
   const state = useFindState();
-  const theme = useActiveTheme();
   const debounceMs = useAppSettings().search.asYouTypeDebounceMs;
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [input, setInput] = useState('');
@@ -64,7 +63,6 @@ export function FindBar({ panelId }: FindBarProps): React.JSX.Element | null {
 
   if (!open) return null;
 
-  const icon = (token: string): string => resolveIcon(theme, token);
   const noResults = state.term.length > 0 && state.count.total === 0;
   const label = noResults
     ? 'No results'
@@ -87,7 +85,7 @@ export function FindBar({ panelId }: FindBarProps): React.JSX.Element | null {
     <div className="find-bar" data-testid={`find-bar-${panelId}`} role="search">
       <div className="find-bar-row">
         <span className="find-bar-icon" aria-hidden="true">
-          {icon('search')}
+          <Icon token="search" />
         </span>
         <input
           ref={inputRef}
@@ -114,7 +112,7 @@ export function FindBar({ panelId }: FindBarProps): React.JSX.Element | null {
           title="Match case"
           onClick={() => toggleMode('caseSensitive')}
         >
-          {icon('matchCase')}
+          <Icon token="matchCase" />
         </button>
         <button
           type="button"
@@ -124,7 +122,7 @@ export function FindBar({ panelId }: FindBarProps): React.JSX.Element | null {
           title="Whole word"
           onClick={() => toggleMode('wholeWord')}
         >
-          {icon('wholeWord')}
+          <Icon token="wholeWord" />
         </button>
         <button
           type="button"
@@ -133,7 +131,7 @@ export function FindBar({ panelId }: FindBarProps): React.JSX.Element | null {
           title="Find previous"
           onClick={() => findPrevious()}
         >
-          {icon('findPrevious')}
+          <Icon token="findPrevious" />
         </button>
         <button
           type="button"
@@ -142,7 +140,7 @@ export function FindBar({ panelId }: FindBarProps): React.JSX.Element | null {
           title="Find next"
           onClick={() => findNext()}
         >
-          {icon('findNext')}
+          <Icon token="findNext" />
         </button>
         <button
           type="button"
@@ -151,14 +149,14 @@ export function FindBar({ panelId }: FindBarProps): React.JSX.Element | null {
           title="Close find"
           onClick={() => closeFind()}
         >
-          {icon('dismiss')}
+          <Icon token="dismiss" />
         </button>
       </div>
 
       {isEditor && state.replaceShown ? (
         <div className="find-bar-row" data-testid="find-replace-row">
           <span className="find-bar-icon" aria-hidden="true">
-            {icon('replace')}
+            <Icon token="replace" />
           </span>
           <input
             className="find-bar-input"
@@ -180,7 +178,7 @@ export function FindBar({ panelId }: FindBarProps): React.JSX.Element | null {
             disabled={readOnly}
             onClick={() => replaceCurrent()}
           >
-            {icon('replace')}
+            <Icon token="replace" />
           </button>
           <button
             type="button"
@@ -190,7 +188,7 @@ export function FindBar({ panelId }: FindBarProps): React.JSX.Element | null {
             disabled={readOnly}
             onClick={() => replaceAll()}
           >
-            {icon('replaceAll')}
+            <Icon token="replaceAll" />
           </button>
         </div>
       ) : null}

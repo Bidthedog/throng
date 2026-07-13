@@ -293,11 +293,29 @@ export type ConfigWriteResult = { ok: true } | { ok: false; error: string };
 /** An icon value: a glyph, or a pack-relative image filename (mirrors core IconValue). */
 export type IconValueDto = { glyph: string } | { image: string };
 
-/** One discovered icon pack from `window.throng.config.listIconPacks` (007). */
+/**
+ * What an icon token RENDERS AS (017 / #54). `svg` carries sanitised MARKUP, not a path: an SVG
+ * inside an `<img>` is an isolated document whose `currentColor` resolves to black instead of to
+ * the theme, so inlining is the only way a pack icon can take the theme's colour.
+ */
+export type IconAssetDto =
+  | { kind: 'glyph'; glyph: string }
+  | { kind: 'svg'; markup: string }
+  | { kind: 'raster'; dataUri: string }
+  | { kind: 'missing' };
+
+/**
+ * One discovered icon pack (007; assets added by 017).
+ *
+ * Note there is no `assetBase`: the renderer must not be able to reach the disk on the render path,
+ * so it receives loaded assets rather than a directory to read from.
+ */
 export interface IconPackInfo {
   name: string;
-  assetBase: string;
   tokens: Record<string, IconValueDto>;
+  assets: Record<string, IconAssetDto>;
+  /** Why the pack could not be loaded — shown in the Icons picker (FR-004a). */
+  error?: string;
 }
 
 export {};

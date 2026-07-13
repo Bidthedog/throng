@@ -11,8 +11,7 @@
  * control never opens a dialog on its own — only when the user clicks browse.
  */
 import { useEffect, useRef, type ReactElement } from 'react';
-import { resolveIcon } from '@throng/core';
-import { useActiveTheme } from '../config/config-store.js';
+import { Icon } from './icon.js';
 
 export interface FolderPickerProps {
   /** The current path (editable). */
@@ -52,7 +51,6 @@ export function FolderPicker({
   inputTestId,
   browseTestId,
 }: FolderPickerProps): ReactElement {
-  const theme = useActiveTheme();
   const opened = useRef(false);
 
   const browse = async (): Promise<void> => {
@@ -91,7 +89,7 @@ export function FolderPicker({
         aria-label={browseTitle}
         onClick={() => void browse()}
       >
-        {resolveIcon(theme, 'folderOpen')}
+        <Icon token="folderOpen" />
       </button>
     </div>
   );
