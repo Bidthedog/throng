@@ -16,6 +16,25 @@ export default async function () {
   const { dir, owned } = ensureRunDir();
   if (owned) process.env.THRONG_TEST_RUN_OWNED_DIR = dir;
 
+  // Size the app's daemon-RPC budget for the TEST environment (017 FR-013a).
+  //
+  // Every non-attach RPC — `workspace.*`, `projects.*`, `subworkspace.*` — shares the
+  // app's DEFAULT_PING_TIMEOUT_MS, which is **2000ms** (packages/ui/src/main/ui-settings.ts).
+  // That is a liveness budget, not a work budget, and it is ample for one app talking to
+  // one daemon. This suite, however, runs up to SIX Electron apps and six daemons at once,
+  // where a round-trip routinely exceeds 2s. When it does, the RPC rejects and the app
+  // reports a *user-facing failure* for an action that was never broken — e.g.
+  //   "Couldn't create the sub-workspace: RPC \"workspace.loadSubWorkspaces\" timed out"
+  // — and the spec fails for a reason that has nothing to do with the behaviour it asserts.
+  // (Proven: destroy-cascade's terminal-mirror test failed 3/9 this way; it passes 5/5 with
+  // this budget raised. See specs/017-icon-tooltip-flake-fixes/e2e-audit.md.)
+  //
+  // This is deliberately NOT a fix for the underlying conflation of the ping and work
+  // budgets, which is a real product concern and is reported separately — it removes the
+  // harness's own contention from the tests' results. Overridable, so a test that wants to
+  // exercise the timeout itself still can.
+  if (!process.env.THRONG_PING_TIMEOUT_MS) process.env.THRONG_PING_TIMEOUT_MS = '20000';
+
   // Warm up Electron once on CI. The first-ever launch on a cold runner is slow and
   // highly variable — reading ~200MB of Electron off cold disk, plus GPU/V8 init —
   // which would otherwise be charged to whichever spec launches first and can blow

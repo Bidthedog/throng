@@ -21,11 +21,29 @@ const target = process.argv.slice(2).join(' ') || 'terminal-admin-integrity.e2e.
 
 // The elevated PowerShell: cd to the repo, run Playwright for the target, keep the
 // window open. Encoded (base64/UTF-16LE) to avoid nested-quoting between PS layers.
+/*
+ * 017 — forward the test-run environment ACROSS the elevation hop.
+ *
+ * `Start-Process -Verb RunAs` launches a new process through UAC, and an elevated process does NOT
+ * inherit the caller's environment block. That is why `THRONG_E2E_INCLUDE_ADMIN` already has to be
+ * re-set *inside* the encoded script below rather than simply exported by the parent.
+ *
+ * The same is true of every other knob — and for `THRONG_E2E_RETRIES` that silence was dangerous:
+ * running `THRONG_E2E_RETRIES=0 npm run test:e2e:admin` LOOKED like a retries-disabled run, but the
+ * variable never arrived, so the elevated suite quietly executed at the config default of 2 retries.
+ * Any "zero first-attempt failures" conclusion drawn from it would have been a green bar bought by a
+ * retry — the precise laundering this feature exists to abolish.
+ */
+const forwarded = ['THRONG_E2E_RETRIES', 'THRONG_E2E_INCLUDE_QUARANTINE', 'THRONG_E2E_WORKERS']
+  .filter((name) => process.env[name] !== undefined)
+  .map((name) => `$env:${name}='${process.env[name]}'`);
+
 const elevatedScript = [
   `Set-Location -LiteralPath '${repoRoot}'`,
   `Write-Host 'Running elevated E2E: ${target}' -ForegroundColor Cyan`,
   // Opt @admin specs back in (the normal config's grepInvert excludes them).
   `$env:THRONG_E2E_INCLUDE_ADMIN='1'`,
+  ...forwarded,
   `npx playwright test ${target} --workers=1`,
   `Write-Host ''`,
   `Write-Host 'Done. Review the results above; close this window when finished.' -ForegroundColor Cyan`,
