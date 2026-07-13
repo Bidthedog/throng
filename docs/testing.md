@@ -102,14 +102,67 @@ process tree those assertions don't hold for. Such specs call `skipIfElevated()`
 run stays green; they still execute on CI / a normal shell. **Prefer a non-elevated
 shell for the full E2E run.**
 
-## Flaky-under-load retries
+## A flaky test FAILS the run
 
-E2E `retries` default to **2**. High worker counts can produce load-transient
-failures — a slow Electron close briefly EPERM-locking its userData dir, a 15s
-render just exceeded under contention, a ConPTY repaint stressed by many parallel
-terminals. Retries absorb those (a genuinely flaky test is reported as `flaky`; a
-real bug fails all attempts). Set `THRONG_E2E_RETRIES=0` to see raw first-run
-results.
+**A green run means every test passed on its FIRST attempt.** `failOnFlakyTests` is set in
+`playwright.config.ts`, so a test that fails and then passes on retry turns the run **red**.
+
+`retries` still default to **2** — but for their *diagnostic* value, not their absolving value. A
+retry captures the first failure's assertion, diff and trace, which is genuinely useful. What it may
+never do is convert a failure into a pass.
+
+This reverses the old policy, which said retries should *absorb* load-transient failures. That policy
+was measurably wrong: a run with retries disabled found **ten** tests failing on their first attempt
+and being reported green. A suite that retries until it passes does not produce a green suite — it
+produces a green *run*, of a suite that is still broken, and somebody will trust that bar.
+
+The constitution (Principle V, v3.14.0) already said so: a test that fails and then passes with no
+code change is *"flaky, not fixed"* and must never be *"absorbed into a green bar by repetition"*.
+Nothing enforced it until feature 017.
+
+The accepted cost: a genuinely transient infrastructure fault now fails a run. The remedy is to fix
+the test or quarantine it — never to relax the gate.
+
+Set `THRONG_E2E_RETRIES=0` to see raw first-run results with no diagnostic retry at all.
+
+### Writing a test that does not flake
+
+Two helpers in `packages/ui/tests/e2e/harness.ts` exist to close the race class that produced most of
+the flakes we found. Use them:
+
+- **`settle(win, root?)`** — a POSITIVE assertion that the window has rendered. Make it the first
+  statement of any test that later reads raw state. A *negative* opening assertion
+  (`await expect(x).toHaveCount(0)`) is satisfied vacuously by a DOM that has not rendered anything:
+  it looks like a wait and settles nothing. (The Preferences window's root is `.prefs-root`.)
+- **`geom(locator)`** — element geometry, polled until the element **stops moving**. Never reach
+  through `page.evaluate` to `querySelector(...).getBoundingClientRect()`: that read does not wait
+  for the element to exist *or* to stop animating, and both failures look like flakiness rather than
+  like the broken read they are.
+- **`viewport(win)`** — window dimensions, for measuring a control against the window edge.
+
+Prefer an assertion on a real condition (`toBeVisible`, `toHaveCount`, `expect.poll`) over
+`waitForTimeout(n)`. A sleep asserts that *n* milliseconds is always enough; a condition asserts that
+the thing you are about to measure has actually happened.
+
+## Quarantine
+
+A test that genuinely cannot be made deterministic is tagged **`@quarantine`** and excluded from the
+default run. It is **not** deleted and **not** `test.skip`-ped, because lost coverage must stay
+*visible* — you have to be able to answer "what are we not testing?" with a command:
+
+```bash
+THRONG_E2E_INCLUDE_QUARANTINE=1 npx playwright test --grep @quarantine --list
+```
+
+(A bare `--grep @quarantine` lists nothing: a CLI `--grep` does not clear a config `grepInvert`.)
+
+Every quarantined test carries a written justification in
+`specs/017-icon-tooltip-flake-fixes/e2e-audit.md`.
+
+**A quarantine is not an environment guard.** `@admin` / `skipIfElevated()` skip a test because the
+environment *cannot run it*, and its coverage lives elsewhere — a dedicated elevated runner verifies
+it for real. Quarantine means the coverage lives **nowhere**. One routes coverage; the other admits
+defeat. Only the second needs counting.
 
 ## Temp files
 

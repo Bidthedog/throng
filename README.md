@@ -93,7 +93,13 @@ goal is to pull all of that into a single, simple customisable workspace.
   themes, plus **14 bundled default themes**, dedicated **button style tokens** (colours + font),
   a themeable **editor gutter** (its own background and line-number colours), and **icon packs**
   (a glyph or image per token, with per-token overrides). Two packs ship built in — a `throng`
-  glyph pack (default) and an SVG image pack — alongside user-supplyable packs. Every theme token
+  glyph pack (default) and an SVG image pack — alongside user-supplyable packs. A selected pack
+  re-skins the **whole application** — the file explorer, panel and tab chrome, menus, toolbars and
+  buttons — live, with no restart. Image icons are **inlined**, so they take their colour from the
+  active theme rather than rendering as fixed black, and they are decorative to assistive
+  technology (the control around them carries the name). A pack that cannot be read never breaks
+  the app: its icons fall back to the theme's, and the Icons picker shows it as unavailable with
+  the reason. Every theme token
   carries a plain-language label and description in the theme editor, and the bundled themes are
   guarded automatically for pairwise visual distinctness and (for the redesigned Bash, SUBNET and
   Cyberpunk themes) WCAG AA contrast.
