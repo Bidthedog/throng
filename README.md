@@ -63,9 +63,11 @@ goal is to pull all of that into a single, simple customisable workspace.
   and in-progress edits survive a crash via recovery files. Files open from the tree into the
   last active editor; a synced editor mirrors one document across windows.
 - **Custom title bar** — an application-drawn, full-width title bar replaces the OS window
-  chrome on every window: window identity + minimise/maximise/close, and (main window only) a
-  **cog** that opens the preferences window. Sub-workspace windows carry the same bar without
-  the cog.
+  chrome on every window: the **throng mark** + window identity, minimise/maximise/close, and
+  (main window only) a **cog** that opens the preferences window. Sub-workspace windows carry
+  the same bar without the cog. The mark is drawn in the active theme's own colours, so it
+  reads on light and dark themes alike; the taskbar and Alt-Tab show the same icon, with
+  artwork drawn for the size being rendered.
 - **Preferences editor** — a single preferences window (floating above throng's own windows,
   minimising and restoring with the main window) with visual **Settings**, **Key Bindings**, and
   **Themes** editors: type-matched controls, a **typeahead search** over Settings that matches any
