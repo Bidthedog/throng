@@ -88,6 +88,9 @@ Layered and test-first — the runner commands are in the [README](README.md#com
 - **New OS-abstraction seams** (`IShellDetection`, `IPtyHost`, `IDirectoryLock`, …) need contract tests.
 - **Process-lifecycle** behaviour (spawn, detach, persist, idle-close, reattach, no-orphans) needs automated tests, including process-level E2E where the constitution requires it (III).
 - **`@admin` tests are elevation-gated** — skipped unless elevated, verified via `npm run test:e2e:admin`; a green non-elevated bar never implies admin coverage.
+- **A flaky test FAILS the run.** `failOnFlakyTests` is set, so a test that only passes on retry turns the run red. A green run means every test passed on its **first** attempt. Retries are kept for their *diagnostic* value (they capture the first failure's trace), never to absorb a failure into a pass.
+- **Write E2E that cannot flake.** Open with `settle(win)` — a *positive* assertion that the window rendered. A negative opening assertion (`toHaveCount(0)`) is satisfied by a DOM that has not rendered anything: it looks like a wait and settles nothing. Take geometry with `geom(locator)` (which polls until the element stops moving), never through `page.evaluate` + `querySelector` + `getBoundingClientRect`. Prefer a real condition over `waitForTimeout(n)`: a sleep asserts that *n* ms is always enough; a condition asserts the thing actually happened. See [docs/testing.md](docs/testing.md).
+- **Quarantine, don't skip.** A test that cannot be made deterministic is tagged `@quarantine`, so what is *not* being tested stays countable: `THRONG_E2E_INCLUDE_QUARANTINE=1 npx playwright test --grep @quarantine --list`. Deleting it, or `test.skip`-ping it, hides the gap.
 
 Paste the relevant passing output in your PR — "tests pass" without evidence isn't enough.
 
