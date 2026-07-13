@@ -4,8 +4,7 @@
  * resets to the root. (New folder lands in US3.)
  */
 import { type ReactElement } from 'react';
-import { resolveIcon } from '@throng/core';
-import { useActiveTheme } from '../config/config-store.js';
+import { Icon } from '../common/icon.js';
 
 export function ExplorerToolbar({
   onExpand,
@@ -18,7 +17,6 @@ export function ExplorerToolbar({
   onNewFolder: () => void;
   onDelete: () => void;
 }): ReactElement {
-  const theme = useActiveTheme();
   return (
     <div className="explorer-toolbar" data-testid="explorer-toolbar">
       <button
@@ -28,7 +26,7 @@ export function ExplorerToolbar({
         aria-label="Expand"
         onClick={onExpand}
       >
-        {resolveIcon(theme, 'expandAll')}
+        <Icon token="expandAll" />
       </button>
       <button
         type="button"
@@ -37,7 +35,7 @@ export function ExplorerToolbar({
         aria-label="Collapse all"
         onClick={onCollapseAll}
       >
-        {resolveIcon(theme, 'collapseAll')}
+        <Icon token="collapseAll" />
       </button>
       <button
         type="button"
@@ -46,7 +44,7 @@ export function ExplorerToolbar({
         aria-label="New folder"
         onClick={onNewFolder}
       >
-        {resolveIcon(theme, 'newFolder')}
+        <Icon token="newFolder" />
       </button>
       <button
         type="button"
@@ -55,7 +53,7 @@ export function ExplorerToolbar({
         aria-label="Delete"
         onClick={onDelete}
       >
-        {resolveIcon(theme, 'destroy')}
+        <Icon token="destroy" />
       </button>
     </div>
   );

@@ -833,7 +833,14 @@
   line-height: 1;
 }
 
-.icon-cell__img {
+/*
+ * 017 / #54 — the grid used to render pack images as `<img class="icon-cell__img">`, which is
+ * exactly why the SVG pack rendered black: inside an <img> the SVG is an isolated document and its
+ * `currentColor` cannot see the page's theme colour. Pack icons are now INLINED, so they inherit
+ * `color` from here like any other text.
+ */
+.icon-cell__box .icon-cell__icon > svg,
+.icon-cell__box .icon-cell__icon > img {
   width: 24px;
   height: 24px;
   object-fit: contain;

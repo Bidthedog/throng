@@ -7,8 +7,7 @@ import {
   type ReactElement,
   type Ref,
 } from 'react';
-import { resolveIcon, type Theme } from '@throng/core';
-import { useActiveTheme } from '../config/config-store.js';
+import { Icon } from '../common/icon.js';
 
 export interface MenuItem {
   label: string;
@@ -32,7 +31,6 @@ function MenuLevel({
   items,
   onClose,
   submenuDelayMs,
-  theme,
   testId,
   rootRef,
   style,
@@ -40,7 +38,6 @@ function MenuLevel({
   items: MenuItem[];
   onClose: () => void;
   submenuDelayMs: number;
-  theme: Theme;
   testId: string;
   rootRef?: Ref<HTMLUListElement>;
   style?: CSSProperties;
@@ -84,7 +81,6 @@ function MenuLevel({
     >
       {items.map((item) => {
         const hasSub = !!item.submenu && item.submenu.length > 0;
-        const glyph = item.icon ? resolveIcon(theme, item.icon) : '';
         return (
           <li
             key={item.label}
@@ -112,7 +108,7 @@ function MenuLevel({
             }}
           >
             <span className="context-menu__icon" aria-hidden>
-              {glyph}
+              {item.icon ? <Icon token={item.icon} /> : ''}
             </span>
             <span className="context-menu__label">{item.label}</span>
             {hasSub ? (
@@ -125,7 +121,6 @@ function MenuLevel({
                 items={item.submenu!}
                 onClose={onClose}
                 submenuDelayMs={submenuDelayMs}
-                theme={theme}
                 testId={`submenu-${item.label}`}
               />
             ) : null}
@@ -156,7 +151,6 @@ export function ContextMenu({
   submenuDelayMs?: number;
 }): ReactElement {
   const ref = useRef<HTMLUListElement>(null);
-  const theme = useActiveTheme(); // icons resolve from the live theme (hot-reloadable)
 
   // Keep the root menu fully on-screen (FR-089): when it would overflow the right
   // edge, open it to the LEFT of the cursor; when it would overflow the bottom,
@@ -200,7 +194,6 @@ export function ContextMenu({
       items={items}
       onClose={onClose}
       submenuDelayMs={submenuDelayMs}
-      theme={theme}
       testId="context-menu"
       rootRef={ref}
       style={{ left: pos.left, top: pos.top }}

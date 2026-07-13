@@ -1643,3 +1643,38 @@ textarea,
   min-height: 0;
   overflow: hidden;
 }
+
+/*
+ * 017 / #54 — icons drawn by the shared <Icon> component.
+ *
+ * An icon used to be a text glyph, so it sized itself from `font-size` and coloured itself from
+ * `color` for free. A pack icon is an inlined <svg>, which does neither — so it is given the same
+ * behaviour explicitly: `1em` square (it tracks the surrounding text size exactly as a glyph did),
+ * and `currentColor` for its stroke/fill, which is how it takes the ACTIVE THEME's colour.
+ *
+ * This is the whole point of inlining. Inside an <img> the SVG is an isolated document and
+ * `currentColor` resolves to black — which is why the SVG pack was invisible on dark themes (#54).
+ */
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+}
+
+.icon > svg {
+  width: 1em;
+  height: 1em;
+  /*
+   * Do NOT hardcode `stroke`/`fill` here. A pack SVG already carries its own
+   * `stroke="currentColor"` or `fill="currentColor"` (the bundled throng-svg is stroke-based), and
+   * `.icon { color: inherit }` above makes `currentColor` resolve to the theme. Forcing `fill:none`
+   * here would render a legitimately fill-based third-party pack completely invisible.
+   */
+}
+
+.icon > img {
+  width: 1em;
+  height: 1em;
+  object-fit: contain;
+}

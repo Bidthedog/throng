@@ -1,21 +1,44 @@
 /**
- * Icon-pack discovery (feature 007, FR-040). Scans the per-user
- * `%USERPROFILE%\.throng\icon-packs\` directory for pack folders (a folder is a
- * pack iff it contains a `pack.json` manifest) and returns each pack's name plus
- * the absolute base directory its image assets resolve against. The sandboxed
- * renderer never touches `fs`; it renders images via a `file://` URL built from
- * `assetBase`. Absence-tolerant.
+ * Icon-pack discovery and LOADING (007 FR-040; reworked by 017 / #54).
+ *
+ * Scans the per-user `%USERPROFILE%\.throng\icon-packs\` directory for pack folders (a folder is a
+ * pack iff it contains a `pack.json` manifest) and loads each pack's assets INTO MEMORY, once.
+ *
+ * Two things changed in 017, and both are load-bearing:
+ *
+ *  1. **We no longer hand the renderer an `assetBase`.** It used to render pack images via a
+ *     `file://` URL built from that path — but an SVG inside an `<img>` is an isolated document
+ *     whose `currentColor` resolves to BLACK rather than to the page's theme colour. That is why
+ *     selecting the SVG pack produced black-on-dark icons. The only way to theme a pack icon is to
+ *     inline its markup, so we ship sanitised MARKUP instead of a path.
+ *  2. **Assets are read once, here.** The file explorer resolves an icon per row; if rendering
+ *     could reach the disk, painting a large tree would cost hundreds of reads per frame.
+ *
+ * A broken pack DEGRADES: it comes back with an `error` and no assets, so the Preferences picker can
+ * show it as unavailable *with a reason*. It never throws, and it never disappears silently — a
+ * chosen setting that appears to do nothing is the precise defect this feature exists to remove.
  */
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { parseIconPack, THRONG_THEME, type IconValue } from '@throng/core';
+import {
+  parseIconPack,
+  sanitiseSvg,
+  THRONG_THEME,
+  type IconAsset,
+  type IconValue,
+} from '@throng/core';
+
+/** Icons are small; a raster asset beyond this is treated as unloadable (→ glyph fallback). */
+const MAX_RASTER_BYTES = 512 * 1024;
 
 export interface IconPackInfo {
   name: string;
-  /** Absolute directory holding the pack's manifest + image assets. */
-  assetBase: string;
-  /** Parsed token → glyph|image map (so the renderer can resolve pack icons). */
+  /** Parsed token → glyph|image map. */
   tokens: Record<string, IconValue>;
+  /** Every token pre-resolved to something renderable. The renderer never touches the disk. */
+  assets: Record<string, IconAsset>;
+  /** Why the pack could not be loaded. Its presence is how "this pack is broken" reaches the user. */
+  error?: string;
 }
 
 const README_CONTENT = `# throng icon packs
@@ -173,6 +196,38 @@ export class IconPackService {
     }
   }
 
+  /**
+   * Load one token's image asset from disk.
+   *
+   * Never throws: an unreadable or non-SVG file becomes `missing`, and the caller then falls back
+   * DOWN the icon chain (theme glyph, then default) rather than rendering a hole (FR-003).
+   */
+  private async loadAsset(dir: string, file: string): Promise<IconAsset> {
+    const isSvg = /\.svg$/i.test(file);
+    try {
+      if (isSvg) {
+        const markup = sanitiseSvg(await readFile(join(dir, file), 'utf8'));
+        // `null` = the file is not an SVG at all. A pack file that is not an icon is not an icon.
+        return markup === null ? { kind: 'missing' } : { kind: 'svg', markup };
+      }
+      const bytes = await readFile(join(dir, file));
+      // Cap raster assets. A data URI lives in main-process RAM and is structure-cloned to every
+      // window on every config broadcast, so an unbounded PNG would be paid for repeatedly. An icon
+      // has no business being large; a bloated one degrades to `missing` (→ glyph fallback) rather
+      // than being shipped. No bundled pack uses PNG; this guards a user-supplied one.
+      if (bytes.byteLength > MAX_RASTER_BYTES) return { kind: 'missing' };
+      return { kind: 'raster', dataUri: `data:image/png;base64,${bytes.toString('base64')}` };
+    } catch {
+      return { kind: 'missing' };
+    }
+  }
+
+  /**
+   * Every pack, with its assets loaded into memory. Absence-tolerant; never throws.
+   *
+   * A pack that cannot be read is still RETURNED, carrying an `error` — it must not vanish, because
+   * a pack that silently disappears looks exactly like a setting that does nothing.
+   */
   async listIconPacks(): Promise<IconPackInfo[]> {
     const packs: IconPackInfo[] = [];
     let entries;
@@ -181,16 +236,34 @@ export class IconPackService {
     } catch {
       return packs; // icon-packs dir absent → no packs
     }
+
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const dir = join(this.iconPacksDir, entry.name);
+
+      let tokens: Record<string, IconValue>;
       try {
         const raw = await readFile(join(dir, 'pack.json'), 'utf8'); // a pack must have a manifest
-        const manifest = parseIconPack(JSON.parse(raw));
-        packs.push({ name: entry.name, assetBase: dir, tokens: manifest.tokens });
-      } catch {
-        // no/invalid manifest → not a usable pack, skip
+        tokens = parseIconPack(JSON.parse(raw)).tokens;
+      } catch (err) {
+        packs.push({
+          name: entry.name,
+          tokens: {},
+          assets: {},
+          error: `Could not read pack.json: ${err instanceof Error ? err.message : String(err)}`,
+        });
+        continue;
       }
+
+      // Read every image ONCE, here, so that rendering an icon later costs no disk at all.
+      const assets: Record<string, IconAsset> = {};
+      for (const [token, value] of Object.entries(tokens)) {
+        assets[token] =
+          'glyph' in value
+            ? { kind: 'glyph', glyph: value.glyph }
+            : await this.loadAsset(dir, value.image);
+      }
+      packs.push({ name: entry.name, tokens, assets });
     }
     return packs;
   }

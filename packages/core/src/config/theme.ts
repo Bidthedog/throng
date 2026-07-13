@@ -223,10 +223,18 @@ export function resolveColour(theme: Theme, token: string): string {
   return theme.colours[token] ?? THRONG_THEME.colours[token] ?? '#000000';
 }
 
-/** Resolve an icon token, falling back to the throng default (or empty string). */
-export function resolveIcon(theme: Theme, token: string): string {
-  return theme.icons[token] ?? THRONG_THEME.icons[token] ?? '';
-}
+/*
+ * `resolveIcon` used to live here. It is DELETED (017 / #54).
+ *
+ * It returned `theme.icons[token]` — never consulting `theme.iconPack` or `theme.iconOverrides` —
+ * and its `string` return type structurally could not express an image. Every icon in the app went
+ * through it, so the user's icon-pack choice was honoured nowhere they could see it.
+ *
+ * It is deleted rather than deprecated because leaving it exported is precisely what would let a
+ * fourteenth call site quietly reintroduce the bug. Use `resolveIconAsset` (icon-pack.ts), which is
+ * pack-aware and can return an image. A source guard fails the build if anything reaches for the old
+ * name again.
+ */
 
 /**
  * Produce the full CSS custom-property map for a theme, merged over the throng

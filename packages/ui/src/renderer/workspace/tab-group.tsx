@@ -90,7 +90,13 @@ function TabChip({
       data-active={active ? 'true' : 'false'}
       onClick={() => ws.setActiveTab(tab.id)}
       onDoubleClick={() => onStartRename()}
-      title="Click: Switch · Double-click: Rename · Right-click: Menu · Drag: Reorder"
+      /*
+       * 017 / #57 — the TITLE, not instructions. A tab label is not ellipsized (a long tab grows
+       * and the strip scrolls), so this is a reachability and consistency fix rather than the
+       * "no other way to read it" case the panel header has. The interactions stay in the
+       * right-click menu.
+       */
+      title={tab.title}
       onContextMenu={(e) => {
         e.preventDefault();
         onMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
@@ -114,7 +120,9 @@ function TabChip({
         />
       ) : (
         <>
-          <span className="tab-chip__label">{tab.title}</span>
+          <span className="tab-chip__label" data-testid={`tab-title-${tab.id}`}>
+            {tab.title}
+          </span>
           {tabDirty ? (
             <span
               className="throng-unsaved-dot tab-chip__unsaved"

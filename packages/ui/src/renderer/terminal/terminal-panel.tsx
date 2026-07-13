@@ -10,7 +10,6 @@ import {
 import {
   resolveAction,
   resolveColour,
-  resolveIcon,
   zoomFactor,
   panelZoomLevel,
   type Panel,
@@ -19,6 +18,7 @@ import {
 } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useActiveTheme, useKeybindings } from '../config/config-store.js';
+import { Icon } from '../common/icon.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import { setPanelExit } from './exit-store.js';
@@ -225,7 +225,7 @@ export function TerminalPanel({
             data-testid={`terminal-retry-${panel.id}`}
             onClick={onRetry}
           >
-            {resolveIcon(theme, 'retry')}
+            <Icon token="retry" />
           </button>
         </div>
       ) : null}

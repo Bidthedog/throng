@@ -8,7 +8,6 @@ import {
   toDisplayPath,
   effectiveActivePanelId,
   panelZoomLevel,
-  resolveIcon,
   findPanelLocations,
   planConfirmations,
   type Edge,
@@ -20,7 +19,8 @@ import { useProjects } from '../state/projects-store.js';
 import { useServices } from '../composition-root.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useContextMenu } from '../context-menu-provider.js';
-import { useAppSettings, useActiveTheme } from '../config/config-store.js';
+import { useAppSettings } from '../config/config-store.js';
+import { Icon } from '../common/icon.js';
 import { panelHasLiveTerminal, panelHasRunningSubprocess } from './subprocess.js';
 import { useCapabilities } from '../panel-type/use-capabilities.js';
 import { useDetach } from './detach-context.js';
@@ -62,7 +62,6 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const confirm = useConfirm();
   const { openMenu } = useContextMenu();
   const settings = useAppSettings();
-  const theme = useActiveTheme(); // type-icon glyph resolves from the live theme
   const detach = useDetach();
   const subWin = useSubWorkspaceWindow();
   const services = useServices();
@@ -295,7 +294,18 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         ref={setNodeRef}
         className="panel-box__header"
         data-testid={`panel-handle-${panel.id}`}
-        title="Click: Activate · Drag: Move · Double-click: Rename · Right-click: Menu"
+        /*
+         * 017 / #57 — the TITLE, not a list of instructions.
+         *
+         * `.panel-box__title` is ellipsized, so hovering the header is the only way to read a long
+         * panel name in full — and this tooltip used to spend itself on "Click: Activate · Drag:
+         * Move · …", withholding the one thing it existed to give. The interactions remain
+         * discoverable from the right-click menu, which is where they belong.
+         *
+         * The title goes on the HEADER rather than on the inner span: put it on the span and the
+         * tooltip would change meaning as the pointer moved two pixels sideways.
+         */
+        title={panel.title}
         onDoubleClick={() => setRenaming(true)}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -418,8 +428,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
           ? (() => {
               const desc = defaultPanelTypeRegistry.get(panel.kind);
               const typeLabel = desc?.label ?? panel.kind;
-              const glyph = desc?.icon ? resolveIcon(theme, desc.icon) : '';
-              if (!glyph) return null;
+              if (!desc?.icon) return null;
               // Prefer the captured flavour label; fall back to the flavour id for
               // Panels typed before the label was persisted (back-compat).
               const flavour =
@@ -433,7 +442,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                   title={flavour ? `${typeLabel} · ${flavour}` : `Panel type: ${typeLabel}`}
                   aria-label={typeLabel}
                 >
-                  {glyph}
+                  <Icon token={desc.icon} />
                 </span>
               );
             })()
@@ -453,7 +462,9 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             }}
           />
         ) : (
-          <span className="panel-box__title">{panel.title}</span>
+          <span className="panel-box__title" data-testid={`panel-title-${panel.id}`}>
+            {panel.title}
+          </span>
         )}
         {panel.kind === 'terminal' && terminalCwd ? (
           <span

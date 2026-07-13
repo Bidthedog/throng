@@ -318,15 +318,30 @@ if (isPrimaryInstance)
     }
   }
 
-  // The renderer pulls the current config (settings + theme + keybindings) on
+  /*
+   * The icon-pack service must exist BEFORE the first config payload is read, because 017 puts the
+   * loaded packs ON that payload — they ride the same channel as the theme that selects them, so no
+   * frame can pair a new theme with an old pack's icons.
+   *
+   * Seeding is awaited so both bundled packs are on disk before anything reads them.
+   */
+  const iconPackService = new IconPackService(join(configSettings.configRoot, 'icon-packs'));
+  await iconPackService.ensureReadme();
+  await iconPackService.ensureBundledPacks();
+
+  // The renderer pulls the current config (settings + theme + keybindings + icon packs) on
   // mount (FR-031); it then receives a fresh payload whenever a config file
   // changes (hot-reload, FR-030/033). The renderer resolves keyboard accelerators
   // from the pushed keybindings.
-  ipcMain.handle('throng:config:get', () => readConfigPayload(configStore));
+  ipcMain.handle('throng:config:get', () =>
+    readConfigPayload(configStore, () => iconPackService.listIconPacks()),
+  );
   // Cache the parsed settings in UI main so services (e.g. the editor) can read
   // injected config (Principle X) without a renderer round-trip; kept fresh by the
   // config watcher below.
-  const initialPayload = await readConfigPayload(configStore);
+  const initialPayload = await readConfigPayload(configStore, () =>
+    iconPackService.listIconPacks(),
+  );
   let currentSettings = initialPayload.settings;
   // Keep the OS-level drag ghost (a separate window that can't consume the app's
   // CSS vars) styled from the active theme so it follows the theme instead of
@@ -345,7 +360,13 @@ if (isPrimaryInstance)
     pushGhostTheme(payload.theme);
     broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:config', payload);
   };
-  startConfigWatcher({ store: configStore, watcher: fileWatcher, config: configSettings, broadcast });
+  startConfigWatcher({
+    store: configStore,
+    watcher: fileWatcher,
+    config: configSettings,
+    broadcast,
+    loadIconPacks: () => iconPackService.listIconPacks(),
+  });
 
   // Preferences editor (007): the renderer→main config write path. A validated,
   // confined write lands on disk atomically; the watcher above then rebroadcasts
@@ -362,12 +383,6 @@ if (isPrimaryInstance)
     app.getPath('userData'),
   );
   fontCache.populateInBackground();
-  const iconPackService = new IconPackService(join(configSettings.configRoot, 'icon-packs'));
-  // Seed the pack-format README (FR-040a) + the two bundled packs — the `throng`
-  // glyph pack (default) and the secondary `throng-svg` image pack (FR-040b).
-  // Awaited so both are on disk before the renderer queries `listIconPacks`.
-  await iconPackService.ensureReadme();
-  await iconPackService.ensureBundledPacks();
   registerConfigManagementIpc({
     store: configStore as FileConfigStore,
     shippedDefaults: shippedService,
