@@ -1,11 +1,12 @@
 import { type ReactElement } from 'react';
 import { WindowControls } from './window-controls.js';
 import { CogMenu } from './cog-menu.js';
+import { ThrongMark } from './throng-mark.js';
 import './title-bar.css';
 
 /**
  * The application-drawn full-width title bar (007, FR-001/003/004/006). Replaces
- * the OS chrome: it carries the window-identity (left), an extensible action area
+ * the OS chrome: it carries the brand mark + window-identity (left), an extensible action area
  * (currently the cog — main window only), and the window controls (right). The
  * empty area is the OS drag handle (`-webkit-app-region: drag`, title-bar.css);
  * double-clicking it toggles maximise/restore (FR-004). Sub-workspace windows use
@@ -27,6 +28,7 @@ export function TitleBar({ identity, colour, showCog = false }: TitleBarProps): 
     <header className="title-bar" data-testid="title-bar">
       <div className="title-bar__drag-zone" onDoubleClick={onDoubleClick}>
         <div className="title-bar__identity" data-testid="title-bar-identity">
+          <ThrongMark />
           {colour ? (
             <span className="title-bar__dot" style={{ background: colour }} aria-hidden />
           ) : null}

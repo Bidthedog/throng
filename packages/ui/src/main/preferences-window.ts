@@ -10,6 +10,7 @@
  */
 import { BrowserWindow } from 'electron';
 import { wireWindowMaximizeEvents } from './window-controls-ipc.js';
+import { appIcon } from './app-icon.js';
 
 export type PreferencesTab = 'settings' | 'keybindings' | 'themes';
 
@@ -77,6 +78,7 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
     movable: true,
     resizable: true,
     title: 'throng — Preferences',
+    icon: appIcon(),
     backgroundColor: deps.backgroundColor ?? '#10131a',
     webPreferences: {
       preload: deps.preloadPath,
