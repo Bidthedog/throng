@@ -47,6 +47,26 @@
   font-size: 12px;
 }
 
+/* The brand mark (#72). Colour-adaptive by construction: the frame and the "T" ride
+   `currentColor` (the identity's text colour) and the window body takes the app
+   background — so the mark reads correctly on light themes as well as dark, where a
+   fixed white-on-black artwork would lose its frame entirely. */
+.throng-mark {
+  flex: 0 0 auto;
+  /* The bar is the OS drag handle; the mark is inert and must not interrupt it. */
+  -webkit-app-region: drag;
+  pointer-events: none;
+}
+
+.throng-mark__frame,
+.throng-mark__glyph {
+  fill: currentColor;
+}
+
+.throng-mark__body {
+  fill: var(--throng-colour-appBg, var(--bg, #10131a));
+}
+
 .title-bar__dot {
   flex: 0 0 auto;
   width: 9px;

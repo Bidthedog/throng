@@ -20,6 +20,7 @@ import {
   type Theme,
 } from '@throng/core';
 import { createUiContainer, UI_TYPES } from './composition-root.js';
+import { appIcon } from './app-icon.js';
 import { ShippedDefaultsService } from './shipped-defaults-service.js';
 import { broadcastToWindows, senderWebContentsId } from './broadcast.js';
 import { readConfigPayload, startConfigWatcher, type ConfigPayload } from './config-watcher.js';
@@ -174,6 +175,7 @@ async function createMainWindow(
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
     title: 'throng',
+    icon: appIcon(),
     backgroundColor: '#10131a',
     // The application draws its own full-width title bar + window controls (007,
     // FR-001/002); there is no OS-drawn title bar in addition.
@@ -221,6 +223,7 @@ function createSubWorkspaceWindow(id: string, bounds?: WindowBounds): BrowserWin
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
     title: 'throng — Sub-workspace',
+    icon: appIcon(),
     backgroundColor: '#10131a',
     // Sub-workspace windows share the custom title bar (007, FR-007) — no OS frame.
     frame: false,
