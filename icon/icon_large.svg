@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   version="1.1"
+   width="1000"
+   height="1000"
+   viewBox="0 0 1000 1000"
+   id="svg1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1" />
+  <g
+     id="l_lrg"
+     style="display:inline">
+    <path
+       id="lrg_bg_bot"
+       style="display:inline;fill:#ffffff;stroke-width:0.390625;stroke-linecap:round;stroke-linejoin:round"
+       d="m 60,940 v 30 h 880 v -30 h 30 V 280 H 30 v 660 z" />
+    <path
+       id="lrg_bg_top"
+       style="display:inline;fill:#ffffff;stroke-width:0.390625;stroke-linecap:round;stroke-linejoin:round"
+       d="M 60,60 V 30 h 880 v 30 h 30 V 270 H 30 V 60 Z" />
+    <path
+       id="lrg_win"
+       fill="none"
+       stroke-width="1.28263"
+       d="m 80,50 h 840 v 30 h 30 V 250 H 50 V 80 H 80 Z M 50,920 V 300 h 900 v 620 h -30 v 30 H 80 v -30 z"
+       style="display:inline;fill:#000000;fill-opacity:1" />
+    <path
+       id="lrg_t_bord_top"
+       fill="none"
+       stroke-width="1.28263"
+       d="m 60,30 h 880 v 30 h 30 V 260 H 960 V 70 H 930 V 40 H 70 V 70 H 40 v 190 h 930 v 10 H 30 V 70 60 h 30 z"
+       style="display:inline;fill:#000000;fill-opacity:1" />
+    <path
+       id="lrg_t_bord_bot"
+       style="display:inline;fill:#000000;fill-opacity:1"
+       d="m 30,280 v 660 h 30 v 30 h 880 v -30 h 30 V 280 Z m 10,10 h 920 v 640 l -29.28516,1.28516 V 960 H 69.285156 v -28.71484 h -28.71289 z" />
+    <path
+       d="m 460,510 h 80 v 80 h 80 v 60 h -80 l 0.53165,190 H 620 v -50 h 50 V 900 H 510 V 890 H 490 V 880 H 480 V 860 H 460 V 650 h -50 v -60 c 0,0 30,0 40,0 6.42027,0 10,-4.59619 10,-10 0,-23.33333 0,-70 0,-70 z"
+       style="display:inline;fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:1.28175"
+       id="lrg_t" />
+    <path
+       id="lrg_carat"
+       fill="none"
+       stroke="#000000"
+       stroke-width="1.28175"
+       d="m 190,170 h 80 v 10 l -80,-0.48301 z m -40,-30 h 20 v 20 h -20 z m -20,-20 h 20 v 20 h -20 z m 0,40 h 20 v 20 h -20 z"
+       style="display:inline;fill:#ffffff;fill-opacity:1;stroke:none" />
+    <path
+       id="lrg_ctrl"
+       fill="none"
+       stroke="#000000"
+       stroke-width="1.28175"
+       d="m 850,160 h 20 v 20 h -20 z m -40,0 h 20 v 20 h -20 z m -40,0 h 20 v 20 h -20 z"
+       style="display:inline;fill:#ffffff;fill-opacity:1;stroke:none" />
+    <path
+       id="lrg_prong_t"
+       fill="none"
+       stroke="#000000"
+       stroke-width="1.28175"
+       d="m 490,350 h 20 v 10 h 20 v 40 h -20 v 90 h -20 v -90 h -20 v -40 h 20 z"
+       style="display:inline;fill:#ffffff;fill-opacity:1;stroke:none" />
+    <path
+       id="lrg_prong_l"
+       fill="none"
+       stroke="#000000"
+       stroke-width="1.28175"
+       d="m 250,630 v -20 h 10 v -20 h 40 v 20 h 90 v 20 h -90 v 20 h -40 v -20 z"
+       style="display:inline;fill:#ffffff;fill-opacity:1;stroke:none" />
+    <path
+       id="lrg_prong_r"
+       fill="none"
+       stroke="#000000"
+       stroke-width="1.28175"
+       d="m 780,610 v 20 h -10 v 20 h -40 v -20 h -90 v -20 h 90 v -20 h 40 v 20 z"
+       style="display:inline;fill:#ffffff;fill-opacity:1;stroke:none" />
+  </g>
+</svg>
