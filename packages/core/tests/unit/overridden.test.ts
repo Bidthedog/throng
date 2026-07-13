@@ -8,9 +8,12 @@ import {
   buildShippedDefaults,
   isBindingOverridden,
   isSettingOverridden,
+  isThemeTokenOverridden,
+  themeTokenDiffersFromEntry,
   type AppSettings,
   type Keybindings,
   type ShippedDefaults,
+  type Theme,
 } from '../../src/index.js';
 
 const shipped = buildShippedDefaults();
@@ -121,5 +124,78 @@ describe('inherited Object.prototype keys are not mistaken for configuration', (
     for (const action of attacks) {
       expect(isBindingOverridden(shipped.keybindings, action, shipped), action).toBe(false);
     }
+  });
+});
+
+/**
+ * Theme-token overridden / differs-from-entry (issue #76) — the predicates behind the per-TOKEN
+ * Reset and Revert affordances on the Themes tab. Same shape as the setting/binding pair: reset
+ * asks "what does Throng ship?", revert asks "what did this window open with?".
+ *
+ * A theme IS its file (no override layer like settings.json), so the comparison is a plain
+ * value-at-key equality; "reset" writes the shipped leaf as an ordinary token edit.
+ */
+describe('theme-token overridden / differs-from-entry (#76)', () => {
+  const base: Theme = {
+    name: 'T',
+    colours: { surface: '#111', accent: '#2a2' },
+    fonts: { ui: 'Inter', mono: 'Fira' },
+    icons: { folder: 'F' },
+  };
+
+  describe('isThemeTokenOverridden', () => {
+    it('is false when the token equals its shipped value', () => {
+      expect(isThemeTokenOverridden(base, base, 'colours.surface')).toBe(false);
+    });
+
+    it('is true when the token differs from shipped', () => {
+      const edited: Theme = { ...base, colours: { ...base.colours, surface: '#fff' } };
+      expect(isThemeTokenOverridden(edited, base, 'colours.surface')).toBe(true);
+    });
+
+    it('is false when there is NO shipped baseline (a custom theme is not resettable)', () => {
+      // A user/cloned theme has no shipped record; reset must be declined, never falsely offered.
+      expect(isThemeTokenOverridden(base, undefined, 'colours.surface')).toBe(false);
+    });
+
+    it('is false for a token the shipped theme does not have', () => {
+      const shippedNoAccent: Theme = { ...base, colours: { surface: '#111' } };
+      const cur: Theme = { ...base, colours: { surface: '#111', accent: '#zzz' } };
+      expect(isThemeTokenOverridden(cur, shippedNoAccent, 'colours.accent')).toBe(false);
+    });
+
+    it('never resolves inherited prototype keys', () => {
+      expect(isThemeTokenOverridden(base, base, 'colours.__proto__')).toBe(false);
+      expect(isThemeTokenOverridden(base, base, 'constructor')).toBe(false);
+    });
+
+    it('compares a nested typography leaf structurally', () => {
+      const shippedT: Theme = { ...base, typography: { paneTitle: { sizePx: 11 } } };
+      const same: Theme = { ...base, typography: { paneTitle: { sizePx: 11 } } };
+      const diff: Theme = { ...base, typography: { paneTitle: { sizePx: 13 } } };
+      expect(isThemeTokenOverridden(same, shippedT, 'typography.paneTitle.sizePx')).toBe(false);
+      expect(isThemeTokenOverridden(diff, shippedT, 'typography.paneTitle.sizePx')).toBe(true);
+    });
+  });
+
+  describe('themeTokenDiffersFromEntry', () => {
+    it('is false when the token equals the on-entry value', () => {
+      expect(themeTokenDiffersFromEntry(base, base, 'colours.surface')).toBe(false);
+    });
+
+    it('is true when the token differs from the on-entry value', () => {
+      const edited: Theme = { ...base, colours: { ...base.colours, surface: '#000' } };
+      expect(themeTokenDiffersFromEntry(edited, base, 'colours.surface')).toBe(true);
+    });
+
+    it('reflects the ENTRY value, not the shipped value', () => {
+      // A user who opened the window with an ALREADY-edited token should revert to THAT, not to
+      // shipped — the same reason settings keep reset and revert distinct.
+      const entry: Theme = { ...base, colours: { ...base.colours, surface: '#abc' } };
+      const current: Theme = { ...base, colours: { ...base.colours, surface: '#abc' } };
+      expect(themeTokenDiffersFromEntry(current, entry, 'colours.surface')).toBe(false);
+      // …even though it differs from shipped:
+      expect(isThemeTokenOverridden(current, base, 'colours.surface')).toBe(true);
+    });
   });
 });

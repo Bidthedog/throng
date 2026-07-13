@@ -2,14 +2,17 @@ import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   THEME_METADATA,
   activateTheme,
+  buildShippedDefaults,
   classifyThemes,
   cloneName,
   emptyValueFor,
   filterFields,
   getAtPath,
+  isThemeTokenOverridden,
   matchesQuery,
   reservedThemeNames,
   setAtPath,
+  themeTokenDiffersFromEntry,
   type FieldDescriptor,
   type IconValue,
   type Theme,
@@ -46,6 +49,9 @@ import { NameDialog } from './name-dialog.js';
  */
 /** How long the typeahead waits after the last keystroke before filtering (FR-021). */
 const SEARCH_DEBOUNCE_MS = 150;
+
+/** The shipped record, once — the factory baseline a per-token Reset returns a built-in to (#76). */
+const SHIPPED = buildShippedDefaults();
 
 /** The theme's editable token descriptors — icons excluded, the icon section owns those. */
 const THEME_TOKEN_FIELDS: readonly FieldDescriptor[] = THEME_METADATA.filter(
@@ -211,6 +217,29 @@ export function ThemesTab(): ReactElement {
   const commitToken = (key: string, value: unknown): void => {
     applyTheme(setAtPath(themeRef.current, key, value) as Theme);
   };
+
+  /**
+   * The per-token Reset / Revert baselines (issue #76).
+   *
+   * A theme file IS the theme — no override layer — so both are ordinary token edits through
+   * `commitToken`: Reset writes the shipped leaf, Revert writes the on-entry leaf. Neither needs a
+   * restore IPC, which is what keeps a per-token reset clear of 015 FR-013's duplicate-write rule:
+   * it is a *different write scope* from 014's whole-theme restore and takes the editor's own path.
+   *
+   * Reset applies only to a **built-in** — a custom/cloned theme has no factory value to return to,
+   * so `shippedTheme` is undefined and the Reset affordance is DECLINED (not merely disabled).
+   *
+   * Revert's baseline is captured **per theme, the first time this session activates it** — the
+   * value it had when the window opened. Lazy because the user may switch between (and edit) several
+   * themes without leaving the window; each keeps its own on-entry value, so reverting one never
+   * restores another's.
+   */
+  const shippedTheme: Theme | undefined = isBuiltIn ? SHIPPED.themes[targetName] : undefined;
+  const entryThemes = useRef<Record<string, Theme>>({});
+  if (!Object.prototype.hasOwnProperty.call(entryThemes.current, activeName)) {
+    entryThemes.current[activeName] = activeTheme;
+  }
+  const entryTheme = entryThemes.current[activeName] ?? activeTheme;
 
   /**
    * Offer a clear only where the field declares empty a valid value AND the value is not already
@@ -524,16 +553,24 @@ export function ThemesTab(): ReactElement {
                   onCommit={(v) => commitToken(d.key, v)}
                 />
               </div>
-              {/* Clear only (FR-016/FR-018). A theme's font stack may legitimately be emptied —
-                  the app has a fallback family — but a per-TOKEN reset or revert would duplicate
-                  feature 014's per-theme restore, which already writes this same file. Declining
-                  an action is not the same as disabling one: reset and revert are absent here
-                  because they will NEVER apply, not because they do not apply yet. */}
+              {/* Per-token Reset / Revert / Clear (issue #76) — the Themes tab now matches Settings
+                  and Key Bindings. All three are ordinary token edits through `commitToken` (Reset →
+                  shipped leaf, Revert → on-entry leaf, Clear → empty), so none needs a restore IPC
+                  and none duplicates 014's whole-theme restore (a different write scope). Reset is
+                  DECLINED on a custom theme, which has no shipped value to return to. */}
               <RowActions
                 kind="theme"
                 itemKey={d.key}
                 label={d.label}
+                overridden={isThemeTokenOverridden(activeTheme, shippedTheme, d.key)}
+                changed={themeTokenDiffersFromEntry(activeTheme, entryTheme, d.key)}
                 clearable={canClear(d)}
+                onReset={
+                  shippedTheme
+                    ? () => commitToken(d.key, getAtPath(shippedTheme, d.key))
+                    : undefined
+                }
+                onRevert={() => commitToken(d.key, getAtPath(entryTheme, d.key))}
                 onClear={() => commitToken(d.key, emptyValueFor(d))}
               />
             </div>

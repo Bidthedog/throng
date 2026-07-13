@@ -26,10 +26,12 @@ import { ROW_ACTION_TOKENS, type RowActionName } from './row-action-tokens.js';
  * (An earlier attempt reserved an empty gutter to hold the geometry still. That worked, but it
  * bought stillness with dead space on every row and taught the user nothing.)
  *
- * A surface may still decline an action entirely, and the Themes tab does: theme tokens get
- * **clear** (a font stack may be emptied, FR-018) but not reset or revert, because feature 014
- * already restores a theme to its shipped values from the theme row itself. A per-token reset
- * would be a second control writing the same file — the duplication FR-013 exists to prevent.
+ * A surface may still decline an action per row. On the Themes tab (issue #76) all three apply —
+ * theme tokens now get reset and revert like Settings and Key Bindings — EXCEPT **Reset on a
+ * custom theme**, which has no shipped value to return to and so is declined there. (This
+ * superseded 015 FR-013's original scoping, which withheld per-token reset entirely: a per-token
+ * reset is a *different write scope* from 014's whole-theme restore and takes the editor's own
+ * token-write path, so it does not reintroduce the duplicate-write hazard FR-013 guarded against.)
  * Declining is not the same as disabling: a declined action is absent because it will *never*
  * apply here, a disabled one is present because it does not apply *yet*.
  */
@@ -70,9 +72,10 @@ export function RowActions({
    *
    * The distinction that matters is declining vs disabling. A disabled action still occupies its
    * slot, because it may light up on the next keystroke and the row must not move when it does.
-   * A DECLINED action never will — the Themes tab has no per-token reset at all — so holding a
-   * slot open for it reserves space for something that can never arrive. That is what made every
-   * theme row carry two-thirds of a gutter it could never use.
+   * A DECLINED action never will — e.g. Reset on a *custom* theme row (issue #76), which has no
+   * shipped value to return to — so holding a slot open for it would reserve space for something
+   * that can never arrive. Sizing the gutter to the actions the surface actually offers keeps a
+   * custom-theme row (revert + clear) from carrying a dead reset slot.
    */
   const slots = [onRevert, onReset, onClear].filter(Boolean).length;
 

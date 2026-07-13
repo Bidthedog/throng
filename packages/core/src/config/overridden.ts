@@ -19,6 +19,7 @@
  */
 import type { AppSettings } from './app-settings.js';
 import type { Keybindings } from './keybindings.js';
+import type { Theme } from './theme.js';
 import { buildShippedDefaults, ownAtPath, type ShippedDefaults } from './shipped-defaults.js';
 
 /** Order- and case-insensitive identity of a chord set. */
@@ -116,4 +117,37 @@ function ownChords(k: Keybindings, action: string): readonly string[] {
   return Object.prototype.hasOwnProperty.call(k.bindings, action)
     ? (k.bindings[action] ?? [])
     : [];
+}
+
+/*
+ * Theme-token variants (issue #76) — the predicates behind the per-TOKEN Reset and Revert on the
+ * Themes tab.
+ *
+ * A theme has no override layer the way settings.json overlays the shipped settings — a theme file
+ * IS the theme, holding every token's value directly. So "overridden" is a plain value-at-key
+ * comparison against the shipped theme, and a reset is an ordinary token edit that writes the
+ * shipped leaf (not a separate restore API — which is what keeps this clear of 015 FR-013's
+ * duplicate-write concern; see issue #76). The comparison walks OWN properties only, exactly as the
+ * setting/binding predicates do.
+ */
+
+/**
+ * True iff the token at `key` differs from its value in `shipped`. A theme with **no shipped
+ * baseline** (a user/cloned theme) is not resettable, so it is never reported overridden — passing
+ * `undefined` for `shipped` is how the caller says "this theme has no factory value".
+ */
+export function isThemeTokenOverridden(
+  current: Theme,
+  shipped: Theme | undefined,
+  key: string,
+): boolean {
+  if (!shipped) return false;
+  const shippedValue = ownAtPath(shipped, key);
+  if (shippedValue === undefined) return false;
+  return !deepEqual(ownAtPath(current, key), shippedValue);
+}
+
+/** True iff the token at `key` differs from the value it held when the window opened. */
+export function themeTokenDiffersFromEntry(current: Theme, entry: Theme, key: string): boolean {
+  return !deepEqual(ownAtPath(current, key), ownAtPath(entry, key));
 }
