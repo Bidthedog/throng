@@ -96,9 +96,12 @@ jobs:
       # GitHub's Windows runner is 4 vCPU; the E2E suite is CPU-bound (each worker is a
       # full Electron app + daemon + real shells) and per docs/testing.md failures RISE
       # with worker count. On this constrained shared runner, run single-worker for the
-      # least contention (the config default of 6 targets a many-core dev box) and allow
-      # an extra retry so an occasional load-transient flake still recovers. Wall time
-      # stays well under the job timeout.
+      # least contention (the config default of 6 targets a many-core dev box).
+      #
+      # Retries are kept for their DIAGNOSTIC value only — they capture the first failure's
+      # assertion and trace. They no longer absorb anything: `failOnFlakyTests` in
+      # playwright.config.ts means a test that only passes on retry FAILS THE RUN (017, FR-014).
+      # A green CI run therefore means every test passed on its FIRST attempt.
       THRONG_E2E_WORKERS: 1
       THRONG_E2E_RETRIES: 3
     steps:
@@ -154,7 +157,13 @@ jobs:
       # `pretest:e2e` builds the app first. The runner is elevated (GitHub Windows
       # runners run as administrator), so: @admin specs remain excluded by default
       # (playwright.config.ts grepInvert), and non-elevated-baseline specs self-skip via
-      # skipIfElevated(); the elevated de-elevation path is absorbed by retries.
+      # skipIfElevated().
+      #
+      # The elevated de-elevation path used to be described here as "absorbed by retries" — i.e.
+      # its CI coverage DEPENDED on a retry converting a failure into a pass. That is exactly what
+      # 017 abolishes, and it is not a form of coverage: a path that only passes on the second
+      # attempt is not passing. It is now handled by the environment guard (skipIfElevated /
+      # @admin) that routes it to the dedicated elevated runner, where it can actually be verified.
       - name: Run E2E suite
         run: npm run test:e2e
       - name: Upload Playwright report
