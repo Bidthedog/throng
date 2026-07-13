@@ -153,8 +153,17 @@ function NumberControl({ descriptor, value, onCommit }: SettingControlProps): Re
     return n;
   };
 
-  const commit = (): void => {
-    const n = parse(text);
+  /*
+   * Commit the value that is ACTUALLY IN THE BOX, read from the DOM — not the `text` state.
+   *
+   * `commit` fires from onBlur/Enter, and those can run before React has re-rendered with the value
+   * onChange just set: a fast paste-then-tab (or a test's fill-then-blur) blurs while the handler
+   * still closes over the previous `text`, so the edit is silently dropped. Reading the live input
+   * value instead is immune to that — the box shows what the user sees, and that is what commits.
+   * (This was a real flake: a debounce setting filled to 1500, blurred, and stayed 900.)
+   */
+  const commit = (raw: string): void => {
+    const n = parse(raw);
     if (n === null) {
       setInvalid(true); // not applied; last valid value remains (FR-017)
       return;
@@ -181,12 +190,12 @@ function NumberControl({ descriptor, value, onCommit }: SettingControlProps): Re
           setText(e.target.value);
           setInvalid(false);
         }}
-        onBlur={() => {
+        onBlur={(e) => {
           focused.current = false;
-          commit();
+          commit(e.currentTarget.value);
         }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') commit();
+          if (e.key === 'Enter') commit(e.currentTarget.value);
         }}
       />
       {invalid ? (
@@ -215,9 +224,12 @@ function TextControl({ descriptor, value, onCommit }: SettingControlProps): Reac
         focused.current = true;
       }}
       onChange={(e) => setText(e.target.value)}
-      onBlur={() => {
+      onBlur={(e) => {
         focused.current = false;
-        if (text !== value) onCommit(text);
+        // Commit the live input value, not the `text` closure — same stale-render race the
+        // NumberControl above fixes (a fast paste-then-tab could otherwise drop the edit).
+        const raw = e.currentTarget.value;
+        if (raw !== value) onCommit(raw);
       }}
     />
   );
