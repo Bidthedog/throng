@@ -167,31 +167,23 @@ test('the icon section takes part in the Themes search, and is not exempt from i
   );
 });
 
-test('the Themes row gutter is sized to the actions it OFFERS, not the three that exist', async () => {
+test('a built-in theme row offers all three actions, like Settings (issue #76)', async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'themes');
+      // A built-in theme is active by default, so its token rows now carry reset + revert + clear —
+      // the Themes tab used to decline reset/revert wholesale (015 FR-013); #76 supersedes that,
+      // because a per-token reset is a different write scope from 014's whole-theme restore.
       const themeActions = prefs.getByTestId('theme-actions-colours.editorBg');
       await expect(themeActions).toBeVisible();
+      await expect(themeActions.locator('button')).toHaveCount(3);
 
-      // The Themes tab DECLINES reset and revert — feature 014 restores a theme from the theme
-      // row, so a per-token reset would be a second control writing the same file. A declined
-      // action can never light up, so reserving a slot for it is dead space on every row.
-      await expect(themeActions.locator('button')).toHaveCount(1);
-      const themeBox = await themeActions.boundingBox();
-
-      // Switch tabs INSIDE the same window — the preferences window is reused (FR-010/011), so a
-      // second cog click pushes a tab switch rather than opening a second window.
+      // …the same three-slot gutter a Settings row has (the window is reused across tabs).
       await prefs.getByTestId('prefs-tab-settings').click();
       const settingActions = prefs.getByTestId('setting-actions-editor.autoSave');
       await expect(settingActions).toBeVisible();
-
-      // A Settings row offers all three, so its gutter is three slots wide.
       await expect(settingActions.locator('button')).toHaveCount(3);
-      const settingBox = await settingActions.boundingBox();
-
-      expect(themeBox!.width).toBeLessThan(settingBox!.width);
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );

@@ -173,8 +173,10 @@ export {
 export {
   isSettingOverridden,
   isBindingOverridden,
+  isThemeTokenOverridden,
   settingDiffersFromEntry,
   bindingDiffersFromEntry,
+  themeTokenDiffersFromEntry,
 } from './config/overridden.js';
 // Theme-editor model (014): pure row classification + name validation for the restore/create controls.
 export type { ThemeRow, ThemeRowKind, ThemeNameValidation } from './config/theme-editor-model.js';
