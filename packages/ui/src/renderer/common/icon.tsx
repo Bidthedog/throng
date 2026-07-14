@@ -61,18 +61,6 @@ export function Icon({ token, className }: IconProps): ReactElement | null {
         />
       );
 
-    case 'raster':
-      // A raster image cannot take a colour from the theme — it keeps its own. No bundled pack uses
-      // PNG; this exists so a user-authored one is shown rather than silently dropped.
-      return (
-        <img
-          className={className ? `icon ${className}` : 'icon'}
-          src={asset.dataUri}
-          alt=""
-          aria-hidden="true"
-        />
-      );
-
     case 'glyph':
       return (
         <span className={className ? `icon ${className}` : 'icon'} aria-hidden="true">

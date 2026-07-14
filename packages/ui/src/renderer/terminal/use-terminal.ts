@@ -1,4 +1,5 @@
 import { useEffect, useRef, type MutableRefObject } from 'react';
+import { THRONG_THEME } from '@throng/core';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
@@ -203,10 +204,14 @@ export function useTerminal(opts: UseTerminalOptions): void {
       term.loadAddon(searchAddon);
       // Colours are read at search time, so re-theming repaints the highlights.
       const controller = createTerminalSearchController(term, searchAddon, () =>
+        // 018 / SC-002 — the fallback used to be three hard-coded hexes, which happened to be the base
+        // theme's values COPIED. Two copies of a colour drift; and a literal here is invisible to the
+        // no-inline-artwork guard, which walks CSS and TSX, not TS. Read the shipped theme instead, so
+        // there is one place the colour lives and no literal to go stale.
         decorationsRef.current ?? {
-          matchBackground: '#1c2f4d',
-          activeMatchBackground: '#2c4a7a',
-          activeMatchBorder: '#6aa3ff',
+          matchBackground: THRONG_THEME.colours.searchMatch,
+          activeMatchBackground: THRONG_THEME.colours.searchMatchCurrent,
+          activeMatchBorder: THRONG_THEME.colours.searchMatchCurrentBorder,
         },
       );
       const offCount = controller.onCountChange((c) => onSearchCountRef.current?.(c));

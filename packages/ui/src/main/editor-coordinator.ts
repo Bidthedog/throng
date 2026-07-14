@@ -27,7 +27,6 @@ import {
   createOpenRegistry,
   editorsInScope,
   isOpenAnywhere,
-  isWithinTree,
   openOrFocus,
   partitionByPathed,
   registerOpen,
@@ -46,6 +45,7 @@ import {
   type SerialisedHistory,
 } from '@throng/core';
 import { DocumentAuthority } from './document-authority.js';
+import type { DropDecision } from '@throng/core';
 import type { EditorService, LoadResult, SaveResult } from './editor-service.js';
 import type { EditorRecovery, RecoveredDoc, RecoverySnapshot } from './editor-recovery.js';
 
@@ -152,16 +152,54 @@ export class EditorCoordinator {
     private readonly deps: CoordinatorDeps,
   ) {}
 
+  /**
+   * Can this path be opened into a document with these roots? (018 / US9.)
+   *
+   * A pure question about permission, asked BEFORE anything is opened — so a drop can be refused with a
+   * reason, rather than opened and then found unsaveable. It delegates to the same `resolveEntry` the
+   * load path uses, which is the whole point: one rule, not two that are supposed to agree.
+   */
+  async resolveDrop(req: {
+    absPath: string;
+    ownerKind: EditorOwnerKind;
+    ownerRoot: string | null;
+    allProjectRoots: string[];
+  }): Promise<DropDecision> {
+    try {
+      return await this.service.resolveEntry(req);
+    } catch {
+      // `stat` REJECTS when the path is gone — a file deleted between picking it up and letting go, a
+      // dangling symlink, a directory whose parent denies traversal. Left bare, that rejection crossed
+      // the bridge, rejected the renderer's `resolveDrop` promise, and was swallowed by the `void` on
+      // the call — so the drop did NOTHING AT ALL and said nothing about it. That is precisely the
+      // silent no-op FR-061 forbids, arriving by the one route nobody tests: the unhappy path of the
+      // unhappy path.
+      return {
+        ok: false,
+        reason: 'not-found',
+        error: 'That file could not be read — it may have been moved or deleted.',
+      };
+    }
+  }
+
   /** Load a file for an editor and register it in the app-wide registry. */
   async load(
     meta: Omit<DocMeta, 'encoding' | 'hasBom' | 'lineEnding' | 'absPath'> & { absPath: string },
   ): Promise<LoadResult> {
-    // Ownership (FR-036): a project's file may only be loaded into an editor of
-    // that project — never another project's editor. Refuse a cross-project load.
-    if (meta.ownerKind === 'project' && meta.ownerRoot && !isWithinTree(meta.absPath, meta.ownerRoot)) {
-      return { ok: false, reason: 'io', error: 'That file belongs to another project.' };
-    }
-    const result = await this.service.load({ absPath: meta.absPath, ownerRoot: meta.ownerRoot });
+    // Ownership (FR-036, and 018 / US9 SC-012). This check used to live HERE, and it was three
+    // different kinds of wrong: it compared the UNRESOLVED path (so a symlink inside the project
+    // walked straight out of it), it had no outside-all-projects branch (so a sub-workspace editor
+    // happily opened a project's file and then refused to save it), and it SKIPPED ITSELF when the
+    // owner root was unknown — turning a missing fact into permission.
+    //
+    // It now lives in EditorService.resolveEntry, which is the same code the SAVE path runs, on the
+    // same resolved path. Read scope equals write scope because it is one rule, not two that agree.
+    const result = await this.service.load({
+      absPath: meta.absPath,
+      ownerRoot: meta.ownerRoot,
+      ownerKind: meta.ownerKind,
+      allProjectRoots: meta.allProjectRoots,
+    });
     if (!result.ok) return result;
     // Re-pointing an editor at a new file: drop its previous registry entry so the
     // old path is no longer considered open (and free of a stale one-buffer claim),
@@ -654,7 +692,12 @@ export class EditorCoordinator {
   private async onDiskChange(panelId: string, watchedPath: string): Promise<void> {
     const doc = this.docs.get(panelId);
     if (!doc || doc.absPath !== watchedPath) return; // stale watch after a re-point
-    const res = await this.service.load({ absPath: doc.absPath, ownerRoot: doc.ownerRoot });
+    const res = await this.service.load({
+      absPath: doc.absPath,
+      ownerRoot: doc.ownerRoot,
+      ownerKind: doc.ownerKind,
+      allProjectRoots: doc.allProjectRoots,
+    });
     if (!res.ok) {
       // Disappeared out from under us (external delete/rename) — same as an in-app
       // delete: keep the buffer, mark dirty + file-missing (FR-099).

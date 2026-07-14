@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import type { FieldDescriptor } from '@throng/core';
+import { formatGrouped, parseGrouped, type FieldDescriptor } from '@throng/core';
+
 import { FolderPicker } from '../common/folder-picker.js';
 import { IconButton } from '../common/icon-button.js';
 import { MapControl } from './map-control.js';
@@ -32,6 +33,7 @@ export function SettingControl(props: SettingControlProps): ReactElement {
       return <SelectControl {...props} />;
     case 'multiselect':
       return <MultiSelectControl {...props} />;
+    case 'slider':
     case 'number':
     case 'font-size':
       return <NumberControl {...props} />;
@@ -79,14 +81,33 @@ function humanizeOptionLabel(value: string): string {
 }
 
 function ToggleControl({ descriptor, value, onCommit }: SettingControlProps): ReactElement {
-  const checked = value === true;
+  /**
+   * The click shows AT ONCE; the stored value catches up.
+   *
+   * A checkbox driven purely by the stored value could not move until that value came back — and on the
+   * Themes tab it comes back the long way round: through a debounced write, out to the theme file, back
+   * in through the file watcher, and into the config store. So you clicked Bold and the box stayed
+   * empty for a moment, which reads exactly like a control that does not work. (It is why "I can't
+   * change the font settings" and "clicking does nothing" are the same bug wearing two hats.)
+   *
+   * The optimistic value is dropped the instant the real one arrives, so the store always has the last
+   * word — this shortens the wait, it does not invent an answer.
+   */
+  const stored = value === true;
+  const [optimistic, setOptimistic] = useState<boolean | null>(null);
+  useEffect(() => setOptimistic(null), [value]);
+  const checked = optimistic ?? stored;
+
   return (
     <label className="ctl ctl--toggle">
       <input
         type="checkbox"
         data-testid={testId(descriptor.key)}
         checked={checked}
-        onChange={(e) => onCommit(e.target.checked)}
+        onChange={(e) => {
+          setOptimistic(e.target.checked);
+          onCommit(e.target.checked);
+        }}
       />
     </label>
   );
@@ -140,25 +161,72 @@ function MultiSelectControl({ descriptor, value, onCommit }: SettingControlProps
 }
 
 function NumberControl({ descriptor, value, onCommit }: SettingControlProps): ReactElement {
-  const [text, setText] = useState<string>(value === undefined ? '' : String(value));
+  // 018 / FR-037 — the DISPLAYED value is grouped; the STORED value never is.
+  //
+  // `editor.maxOpenFileBytes` showed as `10485760`: eight digits with no grouping, which nobody
+  // reads as ten megabytes. `formatGrouped` leaves anything under five digits alone, because a
+  // 5000 ms delay rendered as `5,000` reads as a typo rather than a kindness.
+  const display = (v: unknown): string =>
+    typeof v === 'number' ? formatGrouped(v) : v === undefined ? '' : String(v);
+
+  const [text, setText] = useState<string>(() => display(value));
   const [invalid, setInvalid] = useState(false);
   const focused = useRef(false);
 
+  /**
+   * The value the slider is showing WHILE IT IS BEING DRAGGED, before it has been written anywhere.
+   *
+   * A range input fires `change` on every pixel of travel, and the slider committed on every one of
+   * them — so dragging a font size from 12 to 40 wrote the settings file twenty-eight times, and every
+   * one of those writes went out to disk, came back through the file watcher, and re-themed the entire
+   * application mid-drag. The theming is the part you can see: the whole window flickers through every
+   * size on the way to the one you wanted.
+   *
+   * So the drag is now LOCAL and the write is DEBOUNCED: the slider and its field follow your thumb at
+   * once, and the application is re-themed once, when you stop.
+   */
+  const [dragging, setDragging] = useState<number | null>(null);
+  const shown = dragging ?? value;
+
+  /*
+   * The write happens when you LET GO — not on a timer.
+   *
+   * A range input fires `change` on every pixel of travel, and each one used to be written to the
+   * settings file, read back through the file watcher, and re-themed into the whole application: the
+   * window flickered through every value on the way to the one you wanted. A 300ms debounce fixed the
+   * flicker but replaced it with a lag — you stopped, and a moment later the application caught up,
+   * which feels like something is wrong with it.
+   *
+   * A slider has a gesture with a natural END: the pointer comes up. So that is when it commits. The
+   * keyboard has one too — the key comes up — and typing a number in the box beside it still commits on
+   * Enter or blur. No timer, so nothing to wait for and nothing to tune.
+   */
+  const commitDrag = (): void => {
+    const n = dragging;
+    setDragging(null);
+    if (n !== null && n !== value) onCommit(n);
+  };
+
   // Sync from the live value when not being edited.
   useEffect(() => {
-    if (!focused.current) {
-      setText(value === undefined ? '' : String(value));
+    if (!focused.current && dragging === null) {
+      setText(display(value));
       setInvalid(false);
     }
-  }, [value]);
+  }, [value, dragging]);
 
   const parse = (raw: string): number | null => {
-    const n = Number(raw);
-    if (raw.trim() === '' || !Number.isFinite(n)) return null;
+    // `parseGrouped` is the exact inverse of `formatGrouped` for the active locale, so the
+    // separators the field just PUT IN come straight back out — and a grouping character can never
+    // reach the settings file (FR-038). A bare `Number(raw)` would simply reject `10,485,760`.
+    const n = parseGrouped(raw);
+    if (n === null) return null;
     if (descriptor.min !== undefined && n < descriptor.min) return null;
     if (descriptor.max !== undefined && n > descriptor.max) return null;
     return n;
   };
+
+  const isSlider = descriptor.control === 'slider';
 
   /*
    * Commit the value that is ACTUALLY IN THE BOX, read from the DOM — not the `text` state.
@@ -180,7 +248,45 @@ function NumberControl({ descriptor, value, onCommit }: SettingControlProps): Re
   };
 
   return (
-    <span className="ctl ctl--number">
+    <span className={`ctl ctl--number${isSlider ? ' ctl--slider' : ''}`}>
+      {isSlider ? (
+        /*
+         * 018 / FR-033 — the slider and the field drive ONE value, and each reflects the other.
+         *
+         * The two commit paths are reconciled deliberately. The slider commits on every `change`,
+         * because it is bounded and stepped BY CONSTRUCTION: it cannot produce an invalid value, so
+         * there is nothing to validate and nothing to defer. The field keeps its blur/Enter commit,
+         * reading the LIVE DOM input rather than React state.
+         *
+         * That last detail is not incidental. A fast paste-then-blur fires the commit before React
+         * has re-rendered, so a handler closing over the previous state silently drops the edit — a
+         * real CI flake (a debounce filled to 1500, blurred, and stayed 900). Adding a slider that
+         * streams values continuously is exactly the change that would reintroduce it if the field
+         * were switched to commit-on-change to "match". It is not.
+         */
+        <input
+          type="range"
+          className="ctl__slider"
+          data-testid={`${testId(descriptor.key)}-slider`}
+          aria-label={descriptor.label}
+          min={descriptor.min}
+          max={descriptor.max}
+          // `step` has been declared since feature 007 and read by NOBODY — dead metadata describing
+          // a behaviour that did not exist. This is what makes it load-bearing (FR-035).
+          step={descriptor.step}
+          value={typeof shown === 'number' ? shown : (descriptor.min ?? 0)}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            // Show it NOW — in the slider and in the field beside it, which must agree with the thumb
+            // the user is holding. Write it when they let go.
+            setDragging(n);
+            setText(display(n));
+          }}
+          onPointerUp={commitDrag}
+          onKeyUp={commitDrag}
+          onBlur={commitDrag}
+        />
+      ) : null}
       <input
         type="text"
         inputMode="numeric"
@@ -231,6 +337,16 @@ function TextControl({ descriptor, value, onCommit }: SettingControlProps): Reac
         focused.current = true;
       }}
       onChange={(e) => setText(e.target.value)}
+      // ENTER COMMITS, everywhere. Blur is the only way this field used to accept an answer, so a user
+      // who typed a value and pressed Enter — as anyone would — saw nothing happen, and had to guess
+      // that they were supposed to click elsewhere instead. Enter is the confirm key; every box in the
+      // window honours it now.
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter') return;
+        const raw = e.currentTarget.value;
+        if (raw !== value) onCommit(raw);
+        e.currentTarget.blur();
+      }}
       onBlur={(e) => {
         focused.current = false;
         // Commit the live input value, not the `text` closure — same stale-render race the
@@ -301,6 +417,11 @@ function StringArrayControl({ descriptor, value, onCommit }: SettingControlProps
               const next = [...items];
               next[i] = e.target.value;
               set(next);
+            }}
+            // Enter confirms, like every other box in the window. (This row already commits as you
+            // type, so Enter's job is to say "done" and let go of the field.)
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur();
             }}
           />
           <IconButton

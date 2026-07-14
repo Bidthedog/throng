@@ -74,7 +74,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Projects pane max width',
     description: 'The widest (px) the Projects sidebar pane can be dragged.',
     group: 'Panes',
-    control: 'number',
+    control: 'slider',
     min: 200,
     max: 1200,
     step: 10,
@@ -84,7 +84,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'File Explorer pane max width',
     description: 'The widest (px) the Files & Folders pane can be dragged.',
     group: 'Panes',
-    control: 'number',
+    control: 'slider',
     min: 200,
     max: 1200,
     step: 10,
@@ -96,7 +96,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Tab hover-activate delay',
     description: 'Dwell time (ms) hovering a tab during a panel drag before it activates.',
     group: 'Behaviour',
-    control: 'number',
+    control: 'slider',
     min: 0,
     max: 5000,
     step: 50,
@@ -106,7 +106,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Submenu hover delay',
     description: 'Dwell time (ms) before a context-menu submenu opens.',
     group: 'Behaviour',
-    control: 'number',
+    control: 'slider',
     min: 0,
     max: 2000,
     step: 25,
@@ -208,10 +208,14 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Auto-save delay',
     description: 'Debounce (ms) after typing stops before an auto-save writes.',
     group: 'Editor',
-    control: 'number',
+    control: 'slider',
     min: 0,
     max: 10000,
-    step: 50,
+    // 018: WIDENED from 50. A step must be at least 1% of the range (FR-035), and 50 across
+    // 0–10000 is 0.5% — a slider with two hundred indistinguishable positions, which is no more
+    // usable than no slider at all. Every other numeric already satisfied the rule; this was the
+    // one that did not, and a rule the codebase does not satisfy is a red bar nobody can fix.
+    step: 100,
   },
   {
     key: 'editor.saveAllScope',
@@ -231,12 +235,26 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   },
   {
     key: 'editor.maxOpenFileBytes',
+    // A SLIDER, in 5 MiB steps.
+    //
+    // 018 originally left this typed, and the reasoning was sound as far as it went: a slider running
+    // from one kilobyte to gigabytes moves in megabyte jumps per pixel, which is a worse control than
+    // the text box it replaces, and any ceiling would have been invented to serve the control rather
+    // than because the system has one.
+    //
+    // What that reasoning missed is that the STEP is what makes a slider usable, not the range. Five
+    // megabytes is the unit anybody actually thinks in here — nobody wants 10,486,784 bytes — and with
+    // it the range collapses to fifty positions you can aim at. The ceiling is honest about what it is:
+    // a practical limit for a PLAIN-TEXT editor, not a limit the system imposes. The field is still
+    // there beside it, still typed, still digit-grouped, for anyone who wants an exact number.
     label: 'Max open file size',
-    description: 'Files larger than this (bytes) report "too large" instead of opening.',
+    description:
+      'Files larger than this report "too large" instead of opening. Measured in bytes; the slider moves in 5 MB steps.',
     group: 'Editor',
-    control: 'number',
-    min: 1024,
-    step: 1024,
+    control: 'slider',
+    min: 5242880,
+    max: 262144000,
+    step: 5242880,
   },
   {
     key: 'editor.projectPathDisplay',
@@ -274,14 +292,18 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     control: 'select',
     allowedValues: ['spaces', 'tabs'],
   },
+  // Bounded numerics, so they take the control those bounds exist for (018 / FR-032, SC-007). They
+  // shipped as bare text boxes carrying a 1–16 range that nothing showed the user and nothing enforced
+  // at the control — you could type 400 into a box that claimed to stop at 16.
   {
     key: 'editor.indent.indentWidth',
     label: 'Indent width',
     description: 'How many spaces one indent level inserts.',
     group: 'Editor · Indentation',
-    control: 'number',
+    control: 'slider',
     min: 1,
     max: 16,
+    step: 1,
   },
   {
     key: 'editor.indent.tabWidth',
@@ -289,9 +311,10 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     description:
       'How many columns a literal tab occupies on screen. Display only — it never changes the file’s contents.',
     group: 'Editor · Indentation',
-    control: 'number',
+    control: 'slider',
     min: 1,
     max: 16,
+    step: 1,
   },
   {
     key: 'editor.indentByLanguage',
@@ -359,7 +382,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     description:
       'How long find waits after you stop typing before it re-runs the search and updates the highlights.',
     group: 'Search',
-    control: 'number',
+    control: 'slider',
     min: 0,
     max: 1000,
     step: 10,

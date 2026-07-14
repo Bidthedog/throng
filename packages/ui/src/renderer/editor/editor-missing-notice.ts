@@ -13,12 +13,42 @@ import { showEditorNotice, type NoticeFile } from './editor-notice-store.js';
 export interface LoadErrorEntry {
   filePath: string | null;
   panelName: string;
-  /** 'binary' | 'too-large' | 'missing' | other (missing/moved/deleted). */
+  /** A `LoadResult` reason: 'binary' | 'too-large' | 'out-of-tree' | 'folder' | 'io'. */
   reason: string;
 }
 
+/**
+ * Reasons a file could not be opened that are NOT "the file isn't there" (018 / US9, FR-061).
+ *
+ * This used to be spelt `reason !== 'binary' && reason !== 'too-large'`, in two places — a rule that
+ * silently classified every OTHER reason as a missing file, including reasons that did not yet exist.
+ * So the moment the load path learned to REFUSE a file on ownership grounds, the refusal was announced
+ * as a file that "may have been moved, renamed, or deleted", which is not true, and then SUPPRESSED for
+ * anyone with missing-file warnings off, which is worse than not true.
+ *
+ * It is enumerated now, and it is enumerated ONCE — a rule that has to be restated is a rule that will
+ * eventually be restated differently.
+ */
+export const NOT_A_MISSING_FILE: ReadonlySet<string> = new Set([
+  'binary',
+  'too-large',
+  'out-of-tree',
+  'folder',
+]);
+
+/** True when the file could not be opened because it is not there (as opposed to not permitted). */
+export function isMissingReason(reason: string): boolean {
+  return !NOT_A_MISSING_FILE.has(reason);
+}
+
 function shortReason(reason: string): string {
-  return reason === 'binary' ? 'not text' : reason === 'too-large' ? 'too large' : 'missing';
+  if (reason === 'binary') return 'not text';
+  if (reason === 'too-large') return 'too large';
+  // The file EXISTS. Saying "missing" here would send the user looking for a file that is sitting
+  // exactly where they left it.
+  if (reason === 'out-of-tree') return 'not permitted here';
+  if (reason === 'folder') return 'a folder';
+  return 'missing';
 }
 
 /** Split a native path into its directory prefix (with trailing separator) + name. */
@@ -32,7 +62,7 @@ function splitPath(p: string): { dir: string; name: string } {
 export function showMissingFilesNotice(entries: readonly LoadErrorEntry[], os: OsName): void {
   if (entries.length === 0) return;
   const path = (p: string | null): string => (p ? toDisplayPath(p, os) : '(unsaved document)');
-  const allMissing = entries.every((e) => e.reason !== 'binary' && e.reason !== 'too-large');
+  const allMissing = entries.every((e) => isMissingReason(e.reason));
 
   const files: NoticeFile[] = entries.map((e) => {
     const { dir, name } = splitPath(path(e.filePath));

@@ -26,9 +26,31 @@ import { setAtPath } from './metadata.js';
 // Bumped by 016 (2 → 3): ~150 new shipped theme colour values (10 syntax tokens + 3 editor
 // status-strip tokens, across every bundled theme) and the platform-keyed keybinding record. The
 // bump is required by the THEME tokens alone, whatever shape the bindings take: without it an
-// existing install never materialises them and code renders unstyled. ONE bump, one owner —
-// nothing later in this feature bumps it again.
-export const SHIPPED_DEFAULTS_VERSION = 3;
+// existing install never materialises them and code renders unstyled.
+//
+// Bumped by 018 (3 → 4): ten colour tokens (the split surface roles, the scrollbar trio,
+// `accentText` and the optional icon colour), the error-notice pair (`errorSurface`/`errorText`),
+// the two size tokens, the typography roles, and five icon tokens (settings + the four window
+// controls).
+//
+// This bump is NOT bookkeeping — it is the difference between the feature working and shipping a
+// visible defect to every existing user. A fresh install seeds its theme files from the shipped
+// record, so it gets the new tokens and every test passes. An EXISTING install already has
+// `themes/Light.json` on disk, and the config reader merges it shallowly: without the bump the
+// additive upgrade never runs, the new tokens never materialise, and `toCssVariables` falls through
+// to throng's DARK defaults for them. A Light-theme user would get a near-black scrollbar trough
+// with a navy thumb on every scrollable surface — and no fresh-install E2E could ever see it,
+// because every test run starts from an empty config root.
+//
+// It is also why 018 could NOT simply inherit 016's `3`. Both features were written against a
+// record at 2 and both, independently, called their own bump "3". Rebased, that collides: an
+// install that has already run 016 holds `3` on disk, the gate is `applied !== shipped`, and 018's
+// tokens would be silently skipped for exactly the users who already had the app — the population
+// no fresh-install test can see. The version is a sequence, not a label.
+//
+// The split tokens are saved by their FR-008 parent chain; `scrollbarTrack`, `scrollbarThumb`,
+// `accentText` has no parent, so nothing else would catch this.
+export const SHIPPED_DEFAULTS_VERSION = 4;
 
 /** The authoritative shipped-defaults record (immutable/frozen once built). */
 export interface ShippedDefaults {

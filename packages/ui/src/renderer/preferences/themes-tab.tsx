@@ -24,8 +24,9 @@ import { ThemeTokenControl } from './pickers.js';
 import { RowActions } from './row-actions.js';
 import { IconSection } from './icon-section.js';
 import { IconButton } from '../common/icon-button.js';
-import { DismissButton } from '../common/dismiss-button.js';
-import { ConfirmDialog } from './confirm-dialog.js';
+import { ROW_ACTION_TOKENS } from './row-action-tokens.js';
+import { useConfirm } from '../confirm-dialog.js';
+import { useNotify } from '../common/notification.js';
 import { NameDialog } from './name-dialog.js';
 
 /**
@@ -70,6 +71,20 @@ const ICON_PACK_FIELD = {
   description: 'Map all icon tokens at once; override individual tokens below.',
 };
 
+/**
+ * Tokens the generic Colours group must NOT render, because they have a home of their own.
+ *
+ * `iconColour` is edited BESIDE THE ICON-PACK SELECTOR (FR-027) — which is where the user is
+ * standing when the icons look wrong, and is why the requirement puts it there. But it is also a
+ * real colour token with a derived descriptor (that is what makes it editable at all, and what
+ * satisfies the constitution's configuration-editor-completeness rule), so the generic loop would
+ * otherwise render a SECOND control for it in the Colours group.
+ *
+ * Two controls for one value is not a cosmetic problem: edit one and the other silently disagrees
+ * until the round-trip lands, and neither tells you the other exists.
+ */
+const RENDERED_ELSEWHERE = new Set(['colours.iconColour']);
+
 function groupNonIconDescriptors(items: readonly FieldDescriptor[]): {
   group: string;
   items: FieldDescriptor[];
@@ -77,6 +92,7 @@ function groupNonIconDescriptors(items: readonly FieldDescriptor[]): {
   const order: string[] = [];
   const byGroup = new Map<string, FieldDescriptor[]>();
   for (const d of items) {
+    if (RENDERED_ELSEWHERE.has(d.key)) continue;
     if (!byGroup.has(d.group)) {
       byGroup.set(d.group, []);
       order.push(d.group);
@@ -86,12 +102,8 @@ function groupNonIconDescriptors(items: readonly FieldDescriptor[]): {
   return order.map((group) => ({ group, items: byGroup.get(group)! }));
 }
 
-/** Which modal (if any) is open. Only one at a time. */
-type Pending =
-  | { kind: 'restore-all' }
-  | { kind: 'restore-theme'; name: string }
-  | { kind: 'delete'; name: string }
-  | null;
+/* The `Pending` modal state is gone: the three confirmations are `await`ed on the shared model now,
+   so there is no local "which dialog is open" to track. */
 
 type NameFlow = { mode: 'clone' | 'rename'; source: string } | null;
 
@@ -147,14 +159,100 @@ export function ThemesTab(): ReactElement {
 
   const [themes, setThemes] = useState<string[]>([]);
   const [fonts, setFonts] = useState<string[]>([]);
-  const [pending, setPending] = useState<Pending>(null);
   const [nameFlow, setNameFlow] = useState<NameFlow>(null);
+
+  const confirm = useConfirm();
+  const { notify } = useNotify();
+
   /**
    * Only FAILURES are surfaced. A successful restore / clone / rename is immediately visible in the
    * editor below, so announcing it in a banner is noise — but a restore that silently did nothing
    * (a locked file, say) must never look like it worked (SC-007).
+   *
+   * 018: through THE notification model. This surface used to own the app's FIFTH dismissable error
+   * strip — the one the specification's count of four missed — whose colour fell through a variable
+   * defined nowhere to `--accent`, rendering a failure in the success colour.
    */
-  const [error, setError] = useState<string | null>(null);
+  const setError = (message: string): void =>
+    notify({ severity: 'error', message, testId: 'theme-notice-error' });
+
+  /**
+   * The three confirmations, on the SHARED model — which this window can finally reach.
+   *
+   * The rival dialog they used to open existed for exactly one reason: `useConfirm()` throws outside
+   * a provider, and the preferences window never mounted one. Its identifiers are preserved.
+   */
+  const askOnThemes = (
+    title: string,
+    message: string,
+    confirmLabel: string,
+    // The DELETE confirmation carried its own identifier, distinct from the other two, and a suite
+    // reads it. Collapsing them would have been a rename, and FR-053 says identifiers are preserved.
+    dialogTestId = 'theme-confirm-dialog',
+  ): Promise<boolean> =>
+    confirm({
+      title,
+      message,
+      confirmLabel,
+      testIds: { dialog: dialogTestId },
+      choices: [
+        { label: 'Cancel', value: 'cancel', testId: 'theme-confirm-no' },
+        { label: confirmLabel, value: 'accept', danger: true, testId: 'theme-confirm-yes' },
+      ],
+    });
+
+  const askRestoreAll = (): void => {
+    void askOnThemes(
+      'Restore all themes to default?',
+      'Every built-in theme returns to its shipped values and any deleted built-in is recreated. Your edits to built-in themes will be lost. Custom themes are not touched.',
+      'Restore All',
+    ).then((ok) => {
+      if (ok) void doRestoreAll();
+    });
+  };
+
+  const askRestoreTheme = (name: string): void => {
+    void askOnThemes(
+      `Restore “${name}” to default?`,
+      'This theme returns to its shipped values. Your edits to it will be lost. No other theme is affected.',
+      'Restore',
+    ).then((ok) => {
+      if (ok) void doRestoreTheme(name);
+    });
+  };
+
+  /**
+   * REVERT the whole theme: back to exactly what it was when this window opened.
+   *
+   * Distinct from Restore, and the distinction is the point. Restore asks "what does Throng SHIP?" —
+   * so it exists only for a built-in, and it throws away work you may have done deliberately months
+   * ago. Revert asks "what did I OPEN this window with?" — so it exists for every theme, custom ones
+   * included, and it undoes only this sitting. Every row already offered both; the theme as a WHOLE
+   * offered only Restore, so a custom theme you had just made a mess of had no way back at all short
+   * of undoing each token by hand.
+   */
+  const askRevertTheme = (name: string): void => {
+    void askOnThemes(
+      `Revert “${name}” to how it was?`,
+      'Every change you have made to this theme since opening Preferences is undone. Changes you made in an earlier session are kept — this is not a restore to the shipped default.',
+      'Revert',
+    ).then((ok) => {
+      if (ok) applyTheme(entryThemes.current[activeNameRef.current] ?? themeRef.current);
+    });
+  };
+
+  const askDelete = (name: string): void => {
+    void askOnThemes(
+      `Delete “${name}”?`,
+      reserved.includes(name)
+        ? 'This is a built-in theme. It will be removed from the list; the only way to bring it back is “Restore all themes to default”.'
+        : 'This custom theme has no shipped default, so it cannot be restored afterwards.',
+      'Delete',
+      'theme-delete-confirm',
+    ).then((ok) => {
+      if (ok) void doDelete(name);
+    });
+  };
 
   const refreshThemes = (): void => {
     void window.throng?.config?.listThemes?.().then(setThemes).catch(() => {});
@@ -240,6 +338,14 @@ export function ThemesTab(): ReactElement {
     entryThemes.current[activeName] = activeTheme;
   }
   const entryTheme = entryThemes.current[activeName] ?? activeTheme;
+
+  // Has THIS theme been touched since the window opened? Asked with the same predicate each row uses,
+  // so the toolbar's Revert appears exactly when at least one row's Revert does — one rule, so the two
+  // can never disagree about whether there is anything to undo.
+  const dirtyTheme = useMemo(
+    () => THEME_METADATA.some((d) => themeTokenDiffersFromEntry(activeTheme, entryTheme, d.key)),
+    [activeTheme, entryTheme],
+  );
 
   /**
    * Offer a clear only where the field declares empty a valid value AND the value is not already
@@ -345,7 +451,6 @@ export function ThemesTab(): ReactElement {
   };
 
   const closeName = (): void => setNameFlow(null);
-  const closePending = (): void => setPending(null);
 
   return (
     <div className="themes-tab" data-testid="themes-tab">
@@ -368,12 +473,22 @@ export function ThemesTab(): ReactElement {
 
         {/* Actions on the SELECTED theme… */}
         <span className="themes-toolbar__actions">
+          {/* Undo this sitting's edits — offered for EVERY theme, built-in or custom, and only when
+              there is actually something to undo (a no-op affordance is noise, FR-016a). */}
+          {dirtyTheme ? (
+            <IconButton
+              token={ROW_ACTION_TOKENS.revert}
+              title={`Revert “${targetName}” to how it was when this window opened`}
+              testId="theme-revert"
+              onClick={() => askRevertTheme(targetName)}
+            />
+          ) : null}
           {isBuiltIn ? (
             <IconButton
               token="retry"
               title={`Restore “${targetName}” to default`}
               testId="theme-restore"
-              onClick={() => setPending({ kind: 'restore-theme', name: targetName })}
+              onClick={() => askRestoreTheme(targetName)}
             />
           ) : null}
           <IconButton
@@ -394,7 +509,7 @@ export function ThemesTab(): ReactElement {
             token="destroy"
             title={`Delete “${targetName}”`}
             testId="theme-delete"
-            onClick={() => setPending({ kind: 'delete', name: targetName })}
+            onClick={() => askDelete(targetName)}
           />
 
           {/*
@@ -406,68 +521,28 @@ export function ThemesTab(): ReactElement {
             token="restoreAll"
             title="Restore all themes to default"
             testId="theme-restore-all"
-            onClick={() => setPending({ kind: 'restore-all' })}
+            onClick={askRestoreAll}
           />
         </span>
       </div>
 
-      {/* Only failures are announced — a success is visible in the editor below (no banner). */}
-      {error ? (
-        <p className="themes-notice themes-notice--error" data-testid="theme-notice-error">
-          <span>{error}</span>
-          <DismissButton
-            onDismiss={() => setError(null)}
-            className="themes-notice__dismiss"
-            testId="theme-notice-dismiss"
-          />
-        </p>
-      ) : null}
-
-      {pending?.kind === 'restore-all' ? (
-        <ConfirmDialog
-          title="Restore all themes to default?"
-          message="Every built-in theme returns to its shipped values and any deleted built-in is recreated. Your edits to built-in themes will be lost. Custom themes are not touched."
-          confirmLabel="Restore All"
-          onConfirm={() => {
-            closePending();
-            void doRestoreAll();
-          }}
-          onCancel={closePending}
-        />
-      ) : null}
-
-      {pending?.kind === 'restore-theme' ? (
-        <ConfirmDialog
-          title={`Restore “${pending.name}” to default?`}
-          message="This theme returns to its shipped values. Your edits to it will be lost. No other theme is affected."
-          confirmLabel="Restore"
-          onConfirm={() => {
-            const { name } = pending;
-            closePending();
-            void doRestoreTheme(name);
-          }}
-          onCancel={closePending}
-        />
-      ) : null}
-
-      {pending?.kind === 'delete' ? (
-        <ConfirmDialog
-          title={`Delete “${pending.name}”?`}
-          message={
-            reserved.includes(pending.name)
-              ? 'This is a built-in theme. It will be removed from the list; the only way to bring it back is “Restore all themes to default”.'
-              : 'This custom theme has no shipped default, so it cannot be restored afterwards.'
-          }
-          confirmLabel="Delete"
-          onConfirm={() => {
-            const { name } = pending;
-            closePending();
-            void doDelete(name);
-          }}
-          onCancel={closePending}
-          testId="theme-delete-confirm"
-        />
-      ) : null}
+      {/*
+       * 018 / FR-051 — the themes surface's RIVAL confirmation dialog and its FIFTH error strip are
+       * both gone.
+       *
+       * The rival dialog existed for exactly one reason: `useConfirm()` throws outside a
+       * ConfirmProvider, and the preferences window never mounted one. So this surface could not
+       * reach the shared confirmation and had to grow a second, incompatible implementation — built
+       * on different CSS, with a different z-index, a different overlay opacity and different
+       * buttons. It would never have looked the same beside the one it duplicated.
+       *
+       * The error strip was the fifth in the app, and the specification's count of four missed it.
+       * Its colour came from `--danger`, a variable defined nowhere, so it fell through to
+       * `--accent` and rendered a FAILURE IN THE SUCCESS COLOUR — directly contradicting the comment
+       * that used to sit above it.
+       *
+       * Both are the shared models now. Every identifier is preserved.
+       */}
 
       {nameFlow?.mode === 'clone'
         ? (() => {
@@ -582,6 +657,9 @@ export function ThemesTab(): ReactElement {
         theme={activeTheme}
         onSetPack={setIconPack}
         onOverride={overrideIcon}
+        // An ordinary token edit — the same debounced, theme-captured write path every colour uses,
+        // so the icon colour cannot misfile itself into another theme any more than a colour can.
+        onSetIconColour={(hex) => commitToken('colours.iconColour', hex)}
         filter={iconFilter}
       />
     </div>

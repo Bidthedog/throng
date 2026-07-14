@@ -41,7 +41,7 @@ import {
   searchHighlightExtension,
 } from '../search/editor-search.js';
 import { showEditorNotice } from './editor-notice-store.js';
-import { showMissingFilesNotice } from './editor-missing-notice.js';
+import { isMissingReason, showMissingFilesNotice } from './editor-missing-notice.js';
 import { buildFileChangedNotice } from './file-changed-notice.js';
 import { throngHighlighting } from './highlight-style.js';
 import { claimLanguage, languageCompartment, removePanelLanguage } from './editor-language.js';
@@ -265,11 +265,8 @@ export function useEditor(params: UseEditorParams): void {
     });
   };
 
-  // A load failure that means "the file isn't there" (vs. binary / too-large).
-  const isMissingReason = (reason: string): boolean => reason !== 'binary' && reason !== 'too-large';
-
   // Show the "cannot open" notice for a deliberate open — missing-file warnings are
-  // gated by editor.warnOnMissingFile; binary/too-large always show (FR-105).
+  // gated by editor.warnOnMissingFile; everything else always shows (FR-105).
   const maybeWarn = (
     entries: { filePath: string | null; panelName: string; reason: string }[],
   ): void => {
@@ -672,6 +669,27 @@ export function useEditor(params: UseEditorParams): void {
           // it through the controller registered below; CodeMirror's own search panel
           // is deliberately not used (its controls could not be theme-token driven).
           searchHighlightExtension,
+          /*
+           * CODEMIRROR MUST NOT EAT THE FILE DROP.
+           *
+           * Its default `drop` handler reads the dropped files with a FileReader and INSERTS THEIR TEXT
+           * into the document. In an editor that is a reasonable default; in THIS application it is a
+           * disaster, because dropping a file here already means something else — open it — and the
+           * confinement rule may be about to REFUSE it.
+           *
+           * So a file the rule rejected still had its entire contents poured into the buffer, marked it
+           * dirty, and synced it to every other window holding that document. The refusal notice
+           * appeared on top of the damage it had failed to prevent. Worse, it happened for ACCEPTED
+           * files too: the file opened in one panel and was simultaneously pasted into another.
+           *
+           * Returning `true` tells CodeMirror the event is handled and it must keep its hands off. The
+           * event still bubbles to the panel's drop target, which is the thing that actually knows what
+           * a dropped file means.
+           */
+          EditorView.domEventHandlers({
+            drop: (event) => Array.from(event.dataTransfer?.types ?? []).includes('Files'),
+            dragover: (event) => Array.from(event.dataTransfer?.types ?? []).includes('Files'),
+          }),
           EditorView.theme({
             '&': { height: '100%' },
             '.cm-scroller': {

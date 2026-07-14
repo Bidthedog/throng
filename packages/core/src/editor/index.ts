@@ -29,6 +29,7 @@ export {
   isOutsideAllProjects,
   resolveSaveConfinement,
 } from './confinement.js';
+export { resolveDrop, type DropCandidate, type DropDecision, type DropRejection } from './drop.js';
 export {
   type SaveAllScope,
   type ScopeEditor,

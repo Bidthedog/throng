@@ -2,6 +2,12 @@
    pins to the top, the tabbar + tab panel fill the rest. Everything here must
    stay usable at the window's minimum size (FR-008/019) — the tabbar is a single
    flex row whose always-visible tool buttons never wrap out of reach. */
+/* The DIALOG typography role (018).
+ *
+ * The preferences window's own text answered to no role at all. You could restyle every surface in the
+ * application EXCEPT the one you were standing in while you did it — change the font here and nothing
+ * happened, which reads as a broken control rather than a missing one. It has a role now, and so do the
+ * dialogs, which have the same problem for the same reason. */
 .prefs-root {
   position: fixed;
   inset: 0;
@@ -10,6 +16,22 @@
   color: var(--text);
   display: flex;
   flex-direction: column;
+  font-family: var(--throng-font-dialog-family, var(--throng-font-family));
+  font-size: var(--throng-font-dialog-size, var(--throng-font-size));
+  font-weight: var(--throng-font-dialog-weight, var(--throng-font-weight-normal));
+  text-transform: var(--throng-font-dialog-transform, none);
+  font-style: var(--throng-font-dialog-style, normal);
+  text-decoration: var(--throng-font-dialog-decoration, none);
+}
+
+/* Inputs and buttons do not inherit font by default — they take the OS widget font unless told
+   otherwise, which is why the preferences window kept looking the same however the theme changed. */
+.prefs-root input,
+.prefs-root select,
+.prefs-root textarea,
+.prefs-root button {
+  font-family: inherit;
+  font-size: inherit;
 }
 
 /* The title bar pins to the top of the prefs window (position:absolute vs the
@@ -141,7 +163,7 @@
   cursor: pointer;
   font-size: 13px;
   line-height: 1;
-  color: var(--text-muted, #93a0b4);
+  color: var(--text-dim);
 }
 
 .settings-row__action:hover:not(:disabled) {
@@ -155,38 +177,17 @@
 .settings-row__action--idle {
   opacity: 0.35;
   cursor: default;
-  color: var(--text-muted, #93a0b4);
+  color: var(--text-dim);
 }
 
 /* A reset that could not be written says so, and says nothing changed (FR-006a). */
-.prefs-notice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
-  color: var(--danger, #e5534b);
-  background: var(--surface, rgba(255, 255, 255, 0.05));
-  border-bottom: 1px solid var(--border);
-}
 
-.prefs-notice > span {
-  flex: 1 1 auto;
-}
 
-.prefs-confirm {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
-  background: var(--surface, rgba(255, 255, 255, 0.05));
-  border-bottom: 1px solid var(--border);
-}
 
-.prefs-confirm > span {
-  flex: 1 1 auto;
-}
+
+
+
+
 
 .prefs-tabpanel {
   flex: 1 1 auto;
@@ -217,7 +218,7 @@
   font: inherit;
   font-size: 13px;
   color: var(--text);
-  background: var(--surface);
+  background: var(--throng-colour-inputSurface);
   border: 1px solid var(--border);
   border-radius: 4px;
 }
@@ -245,7 +246,7 @@
 
 .settings-search__clear:hover {
   color: var(--text);
-  background: var(--surface-active);
+  background: var(--throng-colour-hoverSurface);
 }
 
 .settings-search__empty {
@@ -453,40 +454,15 @@
 }
 
 .kb-pill__x:hover {
-  background: var(--danger, #e14b4b);
-  color: #fff;
+  background: var(--throng-colour-danger);
+  color: var(--throng-colour-dangerText);
 }
 
-.kb-ctx-menu {
-  position: fixed;
-  z-index: 45;
-  min-width: 160px;
-  padding: 4px;
-  background: var(--surface, #1a1f2b);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-}
 
-.kb-ctx-menu__item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 6px 10px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text);
-  font-size: 13px;
-  cursor: pointer;
-}
 
-.kb-ctx-menu__item:hover {
-  background: var(--surface-active, rgba(255, 255, 255, 0.1));
-}
 
 .keybinding-row:hover {
-  background: var(--surface, rgba(255, 255, 255, 0.04));
+  background: var(--throng-colour-hoverSurface);
 }
 
 .keybinding-chord {
@@ -506,21 +482,13 @@
 }
 
 /* Capture modal (US3). */
-.capture-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
-}
+
 
 .capture-modal {
   min-width: 320px;
   max-width: 90vw;
   padding: 18px;
-  background: var(--surface, #1a1f2b);
+  background: var(--throng-colour-dialogSurface);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
@@ -585,11 +553,7 @@
  * matched, so the label stays legible on every theme (SC-006) — whereas
  * accent-on-app-background can collide on a light theme with a pale accent.
  */
-.capture-modal__btn--primary {
-  background: var(--btn-hover-bg);
-  border-color: var(--btn-hover-bg);
-  color: var(--btn-hover-text);
-}
+
 
 /* Themes tab (US4 base + 014 restore/create controls). */
 .themes-toolbar {
@@ -653,7 +617,7 @@
 }
 
 .icon-button:hover:not(:disabled) {
-  background: var(--surface-active);
+  background: var(--throng-colour-hoverSurface);
   border-color: var(--border);
   color: var(--text);
 }
@@ -664,33 +628,12 @@
 }
 
 /* Restore/create result feedback (FR-003/007). */
-.themes-notice {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin: 0 0 10px;
-  padding: 6px 8px;
-  font-size: 12px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--surface);
-  color: var(--text);
-}
+
 
 /* A failure must not read like a success — colour it with the theme's danger token. */
-.themes-notice--error {
-  border-color: var(--danger, var(--accent));
-  color: var(--danger, var(--text));
-}
 
-.themes-notice__dismiss {
-  border: none;
-  background: transparent;
-  color: var(--text-dim, var(--text));
-  font-family: inherit;
-  cursor: pointer;
-}
+
+
 
 .ctl--colour {
   display: inline-flex;
@@ -761,7 +704,7 @@
   gap: 3px;
   padding: 1px 3px 1px 7px;
   border-radius: 10px;
-  background: var(--surface-active, rgba(255, 255, 255, 0.08));
+  background: var(--throng-colour-surfaceActive);
   font-size: 12px;
 }
 
@@ -795,7 +738,7 @@
   z-index: 20;
   max-height: 200px;
   overflow-y: auto;
-  background: var(--surface, #1a1f2b);
+  background: var(--throng-colour-menuSurface);
   border: 1px solid var(--border);
   border-radius: 5px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
@@ -814,7 +757,8 @@
 }
 
 .ctl__font-item:hover {
-  background: var(--surface-active, rgba(255, 255, 255, 0.08));
+  background: var(--throng-colour-menuItemHoverSurface, var(--accent));
+  color: var(--throng-colour-accentText);
 }
 
 .icon-grid {
@@ -850,10 +794,32 @@
  * `currentColor` cannot see the page's theme colour. Pack icons are now INLINED, so they inherit
  * `color` from here like any other text.
  */
+
+/*
+ * 018 follow-up — the PREVIEW keeps its own size.
+ *
+ * `Icon` renders a `<span class="icon">` around the artwork, and 018 gave every `.icon` the theme's
+ * icon size (`--throng-size-icon`, 16px by default). That is right for an icon in the CHROME and
+ * wrong for this one: the span became 16px, and because it is an inline-flex box the 24px glyph
+ * inside it — a flex item, free to shrink — quietly shrank to fit. The whole token grid dropped to
+ * two-thirds size.
+ *
+ * This cell is a SPECIMEN of the artwork, not of the size setting. It is what a theme author studies
+ * to decide whether a glyph reads at all, so it stays at a legible fixed size however small the user
+ * has set their chrome icons — otherwise setting icons to 10px would make the very grid you use to
+ * inspect them illegible.
+ */
+.icon-cell__box .icon-cell__icon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+}
+
 .icon-cell__box .icon-cell__icon > svg,
 .icon-cell__box .icon-cell__icon > img {
   width: 24px;
   height: 24px;
+  flex: 0 0 auto;
   object-fit: contain;
 }
 
@@ -933,7 +899,7 @@
   text-align: left;
   font-weight: 600;
   padding: 2px 6px 4px 0;
-  color: var(--throng-colour-textMuted, var(--text-muted));
+  color: var(--throng-colour-textMuted);
 }
 
 .map-control-table th,
@@ -959,7 +925,7 @@
 }
 
 .map-control-empty {
-  color: var(--throng-colour-textMuted, var(--text-muted));
+  color: var(--throng-colour-textMuted);
   font-style: italic;
   padding: 4px 0;
 }
@@ -1010,7 +976,212 @@
   border-radius: 999px;
   font-size: 0.75em;
   font-weight: 400;
-  color: var(--text-muted, var(--text));
+  color: var(--throng-colour-textMuted);
   opacity: 0.8;
   white-space: nowrap;
+}
+
+/* 018 / US4 — the themed colour picker.
+ *
+ * The control this replaces opened the OPERATING SYSTEM'S colour dialog: a light-grey panel in
+ * system fonts, in the middle of a fully-themed dark application, which no stylesheet or flag could
+ * reach. The only remedy was to stop using the native control.
+ *
+ * Every surface here comes from a theme token — including the picker's own card, which uses
+ * `dialogSurface` because that is exactly what it is. */
+.ctl--colour {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ctl__colour-swatch {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.ctl__colour-swatch:focus-visible {
+  outline: 2px solid var(--throng-colour-accent);
+  outline-offset: 1px;
+}
+
+.colour-picker {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--throng-colour-dialogSurface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+}
+
+/* The saturation/value area: a pure-hue base, washed white to the left and black to the bottom.
+   That is the whole of an HSV square, and it needs no image. */
+.colour-picker__sv {
+  position: relative;
+  border-radius: 4px;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* `:focus`, not `:focus-visible`. The picker TAKES focus on open (so a keyboard user can begin at
+   once), and :focus-visible deliberately suppresses the ring for a mouse-initiated focus — which
+   would leave a mouse user pressing an arrow key with no indication of what the keys are driving.
+   A control that steals focus owes the user a mark saying so. */
+.colour-picker__sv:focus,
+.colour-picker__sv:focus-visible {
+  outline: 2px solid var(--throng-colour-accent);
+  outline-offset: 2px;
+}
+
+.colour-picker__sv-white,
+.colour-picker__sv-black {
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+}
+
+.colour-picker__sv-white {
+  background: linear-gradient(to right, #fff, rgb(255 255 255 / 0%));
+}
+
+.colour-picker__sv-black {
+  background: linear-gradient(to top, #000, rgb(0 0 0 / 0%));
+}
+
+.colour-picker__thumb {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border: 2px solid var(--throng-colour-text);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 45%);
+  pointer-events: none;
+}
+
+.colour-picker__hue {
+  width: 100%;
+  height: 12px;
+  margin: 0;
+  appearance: none;
+  border-radius: 6px;
+  background: linear-gradient(
+    to right,
+    #f00 0%,
+    #ff0 17%,
+    #0f0 33%,
+    #0ff 50%,
+    #00f 67%,
+    #f0f 83%,
+    #f00 100%
+  );
+  cursor: pointer;
+}
+
+.colour-picker__hue:focus,
+.colour-picker__hue:focus-visible {
+  outline: 2px solid var(--throng-colour-accent);
+  outline-offset: 2px;
+}
+
+.colour-picker__hue::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--throng-colour-text);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* 018 / US7 — the slider that a bounded numeric renders alongside its field.
+ *
+ * Font sizes, delays and pane widths are far easier to set by dragging than by typing. The field
+ * stays, because a slider cannot be aimed precisely and some values are known exactly. */
+.ctl--slider {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ctl--slider .ctl__input {
+  width: 6.5em;
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.ctl__slider {
+  flex: 1 1 auto;
+  min-width: 120px;
+  height: 4px;
+  margin: 0;
+  appearance: none;
+  border-radius: 2px;
+  background: var(--throng-colour-scrollbarThumb);
+  cursor: pointer;
+}
+
+.ctl__slider:focus-visible {
+  outline: 2px solid var(--throng-colour-accent);
+  outline-offset: 4px;
+}
+
+.ctl__slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 50%;
+  background: var(--throng-colour-accent);
+  cursor: pointer;
+}
+
+/* The key-binding CAPTURE modal and the name dialog.
+ *
+ * These are NOT notices and were deliberately left out of the 018 sweep: they neither report a
+ * failure nor ask for consent — they take INPUT. A chord to bind; a name for a theme. Folding them
+ * into a confirmation would have been unification for its own sake, and the sweep is about the
+ * surfaces that say the same thing in different ways. */
+.capture-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 45%);
+}
+
+.capture-modal__btn--primary {
+  background: var(--btn-hover-bg);
+  border-color: var(--btn-hover-bg);
+  color: var(--btn-hover-text);
+}
+
+/* 018 / FR-013 — the typeahead FLIPS above its field when it would open off the bottom of the window.
+   Its height was already clamped; this is the other half of "flip and clamp like every other floating
+   surface". A list you cannot see is not a list. */
+.ctl__font-list--up {
+  top: auto;
+  bottom: 100%;
+}
+
+/* 018 / FR-013 — the picker FLIPS above its swatch when it would open off the bottom of the window.
+   Found by the discovering floating-surface guard, which is the entire argument for writing one: this
+   is a surface THIS feature added, and a guard shaped around the surfaces the spec listed would have
+   passed while it was broken. */
+.colour-picker--up {
+  top: auto;
+  bottom: calc(100% + 6px);
 }

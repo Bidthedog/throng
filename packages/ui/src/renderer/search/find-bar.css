@@ -11,7 +11,7 @@
   flex-direction: column;
   gap: 2px;
   padding: 4px;
-  background: var(--throng-colour-surface, #1b2230);
+  background: var(--throng-colour-dialogSurface);
   border: 1px solid var(--throng-colour-border, #2a3344);
   border-top: none;
   border-right: none;

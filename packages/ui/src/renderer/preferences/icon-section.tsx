@@ -1,5 +1,8 @@
 import { type ReactElement } from 'react';
 import { THRONG_THEME, type Theme } from '@throng/core';
+import { ColourField } from '../common/colour-picker.js';
+import { IconButton } from '../common/icon-button.js';
+import { ROW_ACTION_TOKENS } from './row-action-tokens.js';
 import { Icon } from '../common/icon.js';
 import { useIconPacks } from '../config/config-store.js';
 
@@ -23,6 +26,16 @@ export interface IconSectionProps {
   onSetPack: (pack: string | undefined) => void;
   onOverride: (token: string, value: string) => void;
   /**
+   * Set the theme's icon colour (018 / US5). `''` clears it back to unset.
+   *
+   * The colour lives BESIDE the pack selector because that is where the user is when the icons look
+   * wrong. The bundled set is monochrome line art: it reads well on dark themes and badly on light
+   * ones, and the obvious remedy — ship a black set and a white set — is the wrong one. The artwork
+   * already inherits its colour, so the two sets would be the same art twice, and would still be
+   * wrong for every theme that suits neither pure black nor pure white.
+   */
+  onSetIconColour: (hex: string) => void;
+  /**
    * The icon tokens surviving the Themes tab's typeahead (FR-021), and whether the icon-pack row
    * itself matched. `null` means no search is active — show everything.
    *
@@ -38,6 +51,7 @@ export function IconSection({
   theme,
   onSetPack,
   onOverride,
+  onSetIconColour,
   filter = null,
 }: IconSectionProps): ReactElement | null {
   // Packs arrive on the same hot-reloaded payload as the theme that selects them, so this grid
@@ -93,6 +107,48 @@ export function IconSection({
                 <strong>{selected.name}</strong> could not be loaded, so the theme&apos;s own icons
                 are being shown instead. {selected.error}
               </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {showPackRow ? (
+        <div className="settings-row" data-testid="icon-colour-row">
+          <div className="settings-row__meta">
+            <label className="settings-row__label">Icon colour</label>
+            <p className="settings-row__desc">
+              Leave it empty and every glyph takes the colour of whatever holds it — which is what
+              they have always done, so no theme changes until you set this.
+            </p>
+          </div>
+          <div className="settings-row__control">
+            {/*
+             * The SAME picker every colour token uses (FR-025). It sits here rather than among the
+             * colour tokens because this is where you are standing when the icons look wrong.
+             *
+             * It is one of the two OPTIONAL tokens, and its emptiness is its meaning: unset, the
+             * artwork inherits its host's colour, exactly as before this feature — which is what
+             * makes FR-029 true, that no bundled theme changes appearance the day it lands.
+             */}
+            <ColourField
+              value={theme.colours.iconColour ?? ''}
+              testId="control-colours.iconColour"
+              onCommit={(hex) => onSetIconColour(hex)}
+              // One of the only two tokens whose ABSENCE is its meaning: unset, every icon keeps the
+              // colour of whatever it sits on, which is why no bundled theme sets it.
+              clearable
+            />
+            {/* FR-043a — an action control, therefore a THEMED ICON with a hover title, not a text
+                button. Offered only when there is something to clear: clearing an already-unset value
+                is a no-op, and a no-op affordance is noise (FR-016a). */}
+            {theme.colours.iconColour ? (
+              <IconButton
+                token={ROW_ACTION_TOKENS.clear}
+                className="icon-colour__clear"
+                testId="icon-colour-clear"
+                title="Clear the icon colour — icons take the colour of what they sit on"
+                onClick={() => onSetIconColour('')}
+              />
             ) : null}
           </div>
         </div>

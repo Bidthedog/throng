@@ -149,7 +149,14 @@ export {
   resolveAction,
 } from './config/keybindings.js';
 export type { Theme, ThemeFonts, IconValue, TextCase, TypographyRole, ThemeFontRole } from './config/theme.js';
-export { THRONG_THEME, resolveColour, toCssVariables } from './config/theme.js';
+export {
+  THRONG_THEME,
+  OPTIONAL_THEME_COLOUR_TOKENS,
+  TOKEN_PARENT,
+  resolveColour,
+  resolveSplitColour,
+  toCssVariables,
+} from './config/theme.js';
 // Themes editor + icon packs + fonts (007).
 export { THEME_METADATA, buildThemeMetadata, descriptorForThemeToken, themeEditableTokens, mechanicalCopy } from './config/theme-metadata.js';
 // Hand-written token copy + theme-quality guards (009).
@@ -327,6 +334,10 @@ export {
   isWithinTree,
   isOutsideAllProjects,
   resolveSaveConfinement,
+  resolveDrop,
+  type DropCandidate,
+  type DropDecision,
+  type DropRejection,
   type SaveAllScope,
   type ScopeEditor,
   type ScopeContext,
@@ -490,3 +501,12 @@ export type { ISubWorkspaceStore, SubWorkspaceMeta } from './ports/subworkspace-
 // Note: the OS contract-test helpers are intentionally NOT re-exported here.
 // They live behind the "@throng/core/testing" subpath export so test utilities
 // stay out of the production API surface.
+
+// 018 / US4 — the themed colour picker's pure core. There was NO colour validation before this:
+// the control committed raw text on every keystroke, so `zzz` went into the theme file on disk.
+export type { Hsv } from './config/colour.js';
+export { parseHex, isValidHex, toHex, rgbToHsv, hsvToRgb } from './config/colour.js';
+
+// 018 / US7 — digit grouping. Strictly a VIEW concern: the parser is the exact inverse of the
+// formatter for the active locale, so a grouping character can never reach a settings file.
+export { formatGrouped, parseGrouped } from './config/number-format.js';

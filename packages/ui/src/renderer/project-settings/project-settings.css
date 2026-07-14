@@ -1,0 +1,75 @@
+/* 018 / US8 — the project settings dialog. Themed ENTIRELY from theme tokens (FR-044): every colour
+   here is a var, and the guard in no-inline-artwork.test.ts walks this file to make sure it stays
+   that way. It reuses the shared `.modal` / `.modal-overlay` chrome, so it inherits the dialog
+   surface, radius and shadow rather than inventing a second dialog look. */
+
+.project-settings {
+  min-width: 30rem;
+  max-width: 44rem;
+}
+
+.project-settings__section {
+  margin: 1rem 0 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.project-settings__empty {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.project-settings__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 18rem;
+  overflow-y: auto;
+}
+
+.hidden-path {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: 0.5rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 4px;
+}
+
+.hidden-path:hover {
+  background: var(--throng-colour-hoverSurface);
+}
+
+.hidden-path__path {
+  font-family: var(--throng-font-editor-family, "Consolas, 'Courier New', monospace");
+  font-size: 0.85rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* The note wraps under the path and spans only the first column, so the remove control stays put. */
+.hidden-path__note {
+  grid-column: 1;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+/* A path the global globs ALSO exclude: removing it here will not bring the file back, and the row
+   has to look different or the user will keep clicking a control that does nothing (FR-047a). */
+.hidden-path--also-excluded .hidden-path__path {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.project-settings__globals {
+  margin: 0.9rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.project-settings__globs {
+  font-family: var(--throng-font-editor-family, "Consolas, 'Courier New', monospace");
+  color: var(--text);
+}

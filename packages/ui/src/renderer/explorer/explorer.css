@@ -36,7 +36,7 @@
 }
 
 .explorer-toolbar__btn:hover:not(:disabled) {
-  background: var(--throng-colour-surfaceActive);
+  background: var(--throng-colour-hoverSurface);
   color: var(--throng-colour-text);
 }
 
@@ -67,7 +67,7 @@
   white-space: nowrap;
 }
 
-.explorer__error {
+.explorer__crash {
   display: flex;
   align-items: flex-start;
   gap: 6px;
@@ -76,19 +76,8 @@
   color: var(--throng-colour-danger);
   font-size: 11px;
 }
-.explorer__error-text {
-  flex: 1 1 auto;
-}
-.explorer__error-dismiss {
-  flex: 0 0 auto;
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  padding: 0 2px;
-  line-height: 1;
-  font-size: 11px;
-}
+
+
 
 .explorer__body {
   flex: 1 1 auto;
@@ -111,7 +100,7 @@
 }
 
 .tree-row:hover {
-  background: var(--throng-colour-surface);
+  background: var(--throng-colour-hoverSurface);
 }
 
 .tree-row--selected,

@@ -2,7 +2,7 @@
 // world and is the only bridge between the Electron main process and the
 // renderer (Principle: clean sandbox boundary). Exposes the daemon health.ping
 // outcome to the landing page (US3, T030).
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 contextBridge.exposeInMainWorld('throng', {
   // The host OS family, so the renderer can render paths with native separators
@@ -283,6 +283,27 @@ contextBridge.exposeInMainWorld('throng', {
   editor: {
     /** Read + decode a file for an editor (registers it in the one-buffer registry). */
     load: (req: unknown) => ipcRenderer.invoke('throng:editor:load', req),
+    /**
+     * The absolute path of a File the user dragged in from the operating system (018 / US9, FR-066a).
+     *
+     * THIS IS THE ONE LINE END-TO-END TESTS CANNOT REACH, and it is stated here rather than hidden.
+     * Electron 43 removed the non-standard `File.path`, so an OS path can only come from `webUtils`,
+     * which is available only in the preload. A File synthesised in the renderer is NOT an OS file and
+     * this returns '' for it — so a fabricated drop event cannot exercise the real extraction, and no
+     * test in this feature pretends that it does.
+     *
+     * Everything downstream is a pure, path-taking function. That is why the seam is here: the
+     * untestable part is one adapter, not a system.
+     */
+    getPathForFile: (file: File) => webUtils.getPathForFile(file),
+    /**
+     * Decide whether a dropped path may be opened into this document (018 / US9).
+     *
+     * The renderer says "this path was dropped on me". It does NOT get to say whether that is allowed:
+     * MAIN resolves the symlinks and applies the confinement rule, because a renderer-side check is a
+     * suggestion, not a boundary.
+     */
+    resolveDrop: (req: unknown) => ipcRenderer.invoke('throng:editor:resolveDrop', req),
     /** Register a new/known document (unpathed new doc, or a restored panel). */
     register: (meta: unknown) => ipcRenderer.send('throng:editor:register', meta),
     /** Dispatch an edit this view has ALREADY shown its user, to the document's authority

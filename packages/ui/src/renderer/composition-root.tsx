@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, type ReactElement, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, type ReactElement, type ReactNode } from 'react';
 import { createBridge, type ThrongBridge } from './state/bridge.js';
 import { ProjectsClient } from './state/projects-client.js';
 import { WorkspaceClient } from './state/workspace-client.js';
@@ -8,6 +8,7 @@ import { DocumentClient } from './state/document-client.js';
 import { ProjectsProvider } from './state/projects-store.js';
 import { SubWorkspacesProvider } from './state/subworkspaces-store.js';
 import { ConfirmProvider } from './confirm-dialog.js';
+import { NotificationProvider } from './common/notification.js';
 import { ContextMenuProvider } from './context-menu-provider.js';
 import { ConfigProvider } from './config/config-store.js';
 import { App } from './app.js';
@@ -50,7 +51,39 @@ export function useServices(): Services {
 }
 
 /** Compose the real renderer services and mount the main app. */
+/**
+ * Stop a stray file drop from destroying the running application (018 / US9, FR-061a).
+ *
+ * THIS IS THE ONE THAT WOULD HAVE BEEN CATASTROPHIC. Drop a file anywhere that is not a drop target —
+ * the title bar, the sidebar, the status bar, the gap between panels — and the browser engine's DEFAULT
+ * behaviour is to NAVIGATE TO IT: the renderer replaces the entire running workspace with a view of the
+ * dropped file. Every terminal, every unsaved buffer, the whole layout — gone, with no way back. Nothing
+ * in the application prevented this before US9, because before US9 nothing invited the user to drag a
+ * file at Throng in the first place.
+ *
+ * It is a RENDERER `preventDefault`, deliberately, and not a main-process `will-navigate` handler: this
+ * stops the default BEFORE it becomes a navigation, rather than catching a navigation that has already
+ * begun. Mounted at the composition root so it covers the main window AND every sub-workspace window.
+ */
+export function useNoDropNavigation(): void {
+  useEffect(() => {
+    const swallow = (e: globalThis.DragEvent): void => {
+      // A drop target that wants the file has already called preventDefault and stopped propagation, so
+      // by the time an event reaches here it landed on nothing. Refuse the navigation, silently — the
+      // user aimed at nothing in particular and expects nothing in particular to happen.
+      e.preventDefault();
+    };
+    window.addEventListener('dragover', swallow);
+    window.addEventListener('drop', swallow);
+    return () => {
+      window.removeEventListener('dragover', swallow);
+      window.removeEventListener('drop', swallow);
+    };
+  }, []);
+}
+
 export function CompositionRoot(): ReactElement {
+  useNoDropNavigation();
   const services = useMemo<Services>(() => {
     const bridge = createBridge();
     return {
@@ -64,15 +97,18 @@ export function CompositionRoot(): ReactElement {
   return (
     <ServicesProvider services={services}>
       <ConfigProvider>
-        <ConfirmProvider>
-          <ContextMenuProvider>
-            <ProjectsProvider client={services.projects}>
-              <SubWorkspacesProvider client={services.subWorkspaces}>
-                <App />
-              </SubWorkspacesProvider>
-            </ProjectsProvider>
-          </ContextMenuProvider>
-        </ConfirmProvider>
+        {/* 018 / FR-054 — the two notice models, in every window. */}
+        <NotificationProvider>
+          <ConfirmProvider>
+            <ContextMenuProvider>
+              <ProjectsProvider client={services.projects}>
+                <SubWorkspacesProvider client={services.subWorkspaces}>
+                  <App />
+                </SubWorkspacesProvider>
+              </ProjectsProvider>
+            </ContextMenuProvider>
+          </ConfirmProvider>
+        </NotificationProvider>
       </ConfigProvider>
     </ServicesProvider>
   );
@@ -85,6 +121,10 @@ export function CompositionRoot(): ReactElement {
  * renders the lightweight {@link SubWorkspaceApp} shell (no project sidebar/panes).
  */
 export function SubWorkspaceCompositionRoot({ id }: { id: string }): ReactElement {
+  // A sub-workspace window is a SEPARATE renderer realm with its own root, so it needs the guard too —
+  // and it is the window where a stray drop costs most, because a drop is the only file-open affordance
+  // it has (it mounts no explorer), so it is the window the user will actually drag files at.
+  useNoDropNavigation();
   const services = useMemo<Services>(() => {
     const bridge = createBridge();
     return {
@@ -97,16 +137,18 @@ export function SubWorkspaceCompositionRoot({ id }: { id: string }): ReactElemen
   return (
     <ServicesProvider services={services}>
       <ConfigProvider>
-        <ConfirmProvider>
-          <ContextMenuProvider>
-            {/* A sub-workspace MAY hold Panels from several projects (INV-5), and
-                the Panel header colours itself by its origin project — so the
-                projects list is needed here too. */}
-            <ProjectsProvider client={services.projects}>
-              <SubWorkspaceApp subWorkspaceId={id} />
-            </ProjectsProvider>
-          </ContextMenuProvider>
-        </ConfirmProvider>
+        <NotificationProvider>
+          <ConfirmProvider>
+            <ContextMenuProvider>
+              {/* A sub-workspace MAY hold Panels from several projects (INV-5), and
+                  the Panel header colours itself by its origin project — so the
+                  projects list is needed here too. */}
+              <ProjectsProvider client={services.projects}>
+                <SubWorkspaceApp subWorkspaceId={id} />
+              </ProjectsProvider>
+            </ContextMenuProvider>
+          </ConfirmProvider>
+        </NotificationProvider>
       </ConfigProvider>
     </ServicesProvider>
   );

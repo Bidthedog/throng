@@ -566,7 +566,18 @@ if (isPrimaryInstance)
   if (!currentSettings.editor.persistUndoHistory) {
     void editorCoordinator.purgePersistedHistories();
   }
-  registerEditorIpc(editorCoordinator);
+  registerEditorIpc(editorCoordinator, {
+    // MAIN's own view of which projects exist, straight from the daemon that owns them (018 / US9).
+    // The renderer no longer supplies the roots that parameterise its own confinement check — it asks
+    // about a file, and main decides against facts the renderer cannot author.
+    listProjects: async () => {
+      const result = await daemonClient.call<{ projects: { id: string; rootFolder: string }[] }>(
+        'projects.list',
+        {},
+      );
+      return result.projects.map((p) => ({ id: p.id, rootFolder: p.rootFolder }));
+    },
+  });
   // The OS clipboard, behind the seam (016, FR-013a) — one app-global record of what throng last
   // copied and what SHAPE it was, so a block cut in one window pastes as a block in another.
   registerClipboardIpc(container.get<ClipboardService>(UI_TYPES.ClipboardService));

@@ -1,0 +1,13 @@
+/* 018 / US9 — the OS file drop target. Themed from tokens (no literals): the drop affordance has to be
+   visible against every shipped theme, and a hard-coded highlight would be invisible in at least one. */
+
+.drop-target {
+  display: contents;
+}
+
+/* While a file is over the panel. `display: contents` gives this element no box of its own, so the
+   affordance is drawn on the panel body beneath — hence the outline lives on the child. */
+.drop-target--over > * {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}

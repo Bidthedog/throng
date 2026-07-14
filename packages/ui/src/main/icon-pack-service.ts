@@ -28,9 +28,6 @@ import {
   type IconValue,
 } from '@throng/core';
 
-/** Icons are small; a raster asset beyond this is treated as unloadable (→ glyph fallback). */
-const MAX_RASTER_BYTES = 512 * 1024;
-
 export interface IconPackInfo {
   name: string;
   /** Parsed token → glyph|image map. */
@@ -51,19 +48,20 @@ in Preferences → Themes → Icons.
     icon-packs/
       <your-pack>/
         pack.json          # the manifest (required)
-        *.svg | *.png      # image assets referenced by pack.json
+        *.svg             # SVG assets referenced by pack.json (SVG only — see below)
 
 ## pack.json
 
 Maps each icon token to EITHER a glyph string OR a relative image filename
-(ending .svg or .png). A pack may mix both. Tokens you omit fall back to the
+(ending .svg). SVG ONLY: icons take the theme's colour and the theme's size, and a raster can
+do neither. Tokens you omit fall back to the
 default throng glyph.
 
     {
       "name": "<your-pack>",
       "tokens": {
         "folder": "folder.svg",
-        "file": "file.png",
+        "file": "file.svg",
         "add": "＋",
         "terminal": "▣"
       }
@@ -109,6 +107,14 @@ const SVG_SHAPES: Record<string, string> = {
   collapseAll: '<path d="M7 12l5-5 5 5"/><path d="M7 18l5-5 5 5"/>',
   newFolder: '<path d="M3 7h6l2 2h10v10H3z"/><path d="M15 13v4M13 15h4"/>',
   terminal: '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10l3 3-3 3M13 16h4"/>',
+  // 018. Without a shape here a token silently falls back to GENERIC_SHAPE — a rounded square — so
+  // the icon "works" while looking like nothing in particular. That is worse than failing.
+  settings:
+    '<circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/>',
+  windowMinimise: '<path d="M5 12h14"/>',
+  windowMaximise: '<rect x="5" y="5" width="14" height="14" rx="1"/>',
+  windowRestore: '<rect x="5" y="8" width="11" height="11" rx="1"/><path d="M8 8V5h11v11h-3"/>',
+  windowClose: '<path d="M6 6l12 12M18 6L6 18"/>',
 };
 
 const GENERIC_SHAPE = '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="12" cy="12" r="2.5"/>';
@@ -203,20 +209,22 @@ export class IconPackService {
    * DOWN the icon chain (theme glyph, then default) rather than rendering a hole (FR-003).
    */
   private async loadAsset(dir: string, file: string): Promise<IconAsset> {
-    const isSvg = /\.svg$/i.test(file);
+    /*
+     * SVG ONLY. A raster is not an icon here (018 follow-up).
+     *
+     * Icons are now SIZED by the theme and COLOURED by the theme. A PNG can do neither: it cannot be
+     * asked to grow without going soft, and it cannot take `currentColor`, so it renders in whatever
+     * colour it was painted with — which is wrong for most of the fifteen themes by construction. It
+     * was accepted because it was easy to accept, and every pack that used it looked broken on arrival.
+     *
+     * A non-SVG file degrades to `missing`, which falls DOWN the icon chain to the theme's glyph — the
+     * same as a corrupt file. The pack is not rejected; only the file that cannot do the job is.
+     */
+    if (!/\.svg$/i.test(file)) return { kind: 'missing' };
     try {
-      if (isSvg) {
-        const markup = sanitiseSvg(await readFile(join(dir, file), 'utf8'));
-        // `null` = the file is not an SVG at all. A pack file that is not an icon is not an icon.
-        return markup === null ? { kind: 'missing' } : { kind: 'svg', markup };
-      }
-      const bytes = await readFile(join(dir, file));
-      // Cap raster assets. A data URI lives in main-process RAM and is structure-cloned to every
-      // window on every config broadcast, so an unbounded PNG would be paid for repeatedly. An icon
-      // has no business being large; a bloated one degrades to `missing` (→ glyph fallback) rather
-      // than being shipped. No bundled pack uses PNG; this guards a user-supplied one.
-      if (bytes.byteLength > MAX_RASTER_BYTES) return { kind: 'missing' };
-      return { kind: 'raster', dataUri: `data:image/png;base64,${bytes.toString('base64')}` };
+      const markup = sanitiseSvg(await readFile(join(dir, file), 'utf8'));
+      // `null` = the file is not an SVG at all, whatever it is called.
+      return markup === null ? { kind: 'missing' } : { kind: 'svg', markup };
     } catch {
       return { kind: 'missing' };
     }

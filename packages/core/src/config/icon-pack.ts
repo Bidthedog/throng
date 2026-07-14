@@ -26,7 +26,10 @@ export interface IconPackManifest {
 export type IconAsset =
   | { kind: 'glyph'; glyph: string }
   | { kind: 'svg'; markup: string }
-  | { kind: 'raster'; dataUri: string }
+  // 018 follow-up — NO RASTER. An icon takes the theme's colour and the theme's size; a PNG can do
+  // neither. It kept its own colour, wrong for most of the fifteen themes by construction, and went
+  // soft the moment anybody enlarged it. A non-SVG asset now degrades to `missing`, which falls down
+  // the icon chain to the theme's glyph.
   | { kind: 'missing' };
 
 /**
