@@ -1,6 +1,80 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 3.14.0 → 3.15.0
+Bump rationale: MINOR. Principle XI (Dockable Workspace: Panes, Tabs & Panels) gains an additive
+                "One document, one state" rule (2026-07-13, issue #68, feature 016 FR-028/FR-028d).
+
+                Considered MAJOR and rejected. MAJOR is reserved for the removal or backward-
+                incompatible REDEFINITION of a principle — as in v2.0.0 → v3.0.0, where Principle
+                XI's three-Pane model was REPLACED by the two-Pane model and previously-compliant
+                LAYOUTS became non-compliant. Nothing in XI's docking model (Panes, Tabs, Panels,
+                splitting, tear-off, sub-workspaces, persistence) is changed or contradicted here:
+                every layout compliant under v3.14.0 remains compliant. What is added is a rule
+                about the STATE of the content a Panel presents — an area XI previously left
+                undefined. That is materially expanded, additive guidance → MINOR.
+
+                It is true that the rule makes a piece of SHIPPED code non-compliant (see the
+                known violation below). That does not make the amendment MAJOR: the same was true
+                of v3.11.0 → v3.12.0 (themeable icon controls), which was likewise recorded as
+                MINOR and forward-looking, with its known violations named and scheduled. A new
+                constraint that existing code fails is the ordinary case for an additive rule; a
+                bump is MAJOR only when a PREVIOUSLY-STATED guarantee is withdrawn or reversed.
+
+                The rule: a Panel is a VIEW; the artefact it presents is a DOCUMENT. When one
+                artefact is presented by more than one Panel — same Tab, different Tabs, or
+                different windows — it MUST be ONE document in every respect. Every Panel showing
+                it shares, as a SINGLE VALUE: the content buffer and its dirty state, the
+                undo/redo history, the effective language (including any manual override), and the
+                effective indentation. Only VIEW state — cursor, selection, scroll, per-panel zoom
+                — MAY differ per Panel. The test is AUTHORITY, not mechanism: exactly ONE component
+                owns the document state and every other copy is a DERIVED REPLICA driven by that
+                authority's ORDERED CHANGE STREAM. Peer-to-peer reconciliation between co-equal
+                copies is FORBIDDEN, and a change based on a superseded version MUST be REBASED onto
+                the authority's current version rather than applied at the position it first named.
+                The rule deliberately does NOT demand one literally-shared in-memory object: views
+                may live in different processes, where that is impossible. What it forbids is TWO
+                ORIGINALS. (Wording sharpened during the same-day /speckit-clarify pass: an earlier
+                draft said "shared, not synchronised" and declared any relay non-compliant, which —
+                read literally — forbade EVERY implementable cross-process design, including the one
+                feature 016 adopts. A rule that no design can satisfy governs nothing.)
+
+                Why it is constitutional rather than a rule of one feature: it was arrived at by
+                finding a CONTENT-CORRUPTION path the previous (unstated) model permitted — one
+                file, open in two Panels, with a different effective indentation in each, writes
+                BOTH indentation styles into the ONE buffer that is saved to disk. That hazard is
+                not a property of editors; it belongs to ANY panel type that can present the same
+                artefact twice — a diff view, a document preview, a notebook view, a plugin-
+                supplied Panel. Left as a local decision of feature 016, the next panel type
+                re-derives it, or doesn't, and reintroduces the corruption path.
+
+Modified principles: XI "Dockable Workspace: Panes, Tabs & Panels" (added the "One document, one
+                state" rule and a matching clause in the principle rationale). Title unchanged.
+Added sections: none. Removed sections: none.
+Templates / artifacts reviewed:
+  ✅ .specify/templates/plan-template.md  — Constitution Check is dynamic ("[Gates determined based
+       on constitution file]"); the new rule is picked up automatically. No edit needed (verified,
+       not assumed).
+  ✅ .specify/templates/spec-template.md  — principle-agnostic (zero principle/constitution
+       references); no changes required.
+  ✅ .specify/templates/tasks-template.md — principle-agnostic (zero references); no changes required.
+  ✅ .specify/extensions.yml              — no before/after_constitution hooks registered.
+  ✅ Development Workflow & Quality Gates — the particular-scrutiny review bullet is extended to
+       cover changes to the state of a document presented in more than one Panel, and to name
+       Principle XI alongside II, III, V and VII.
+  ✅ specs/016-advanced-editor/*          — plan.md's Constitution Check row for XI is corrected
+       (it read "PASS (untouched)", which this amendment falsifies: XI is now the principle 016
+       most directly serves). Version citations in plan.md, research.md, quickstart.md and
+       tasks.md advanced 3.14.0 → 3.15.0.
+  ⚠ packages/ui/src/renderer/editor/     — KNOWN VIOLATION at time of amendment: a file mirrored
+       into a second Editor Panel is rendered by a SEPARATE CodeMirror EditorView with its OWN
+       history(), the two kept in step by relaying {text, dirty}. That is synchronised state, not
+       shared state, so undo/redo is per-view today and diverges at the first unrelayed update.
+       This amendment is forward-looking and does not break existing behaviour by itself; the
+       violation is remediated by feature 016 (FR-026c, the document-level undo history), which
+       is the feature this rule was extracted from. Tracked by #68.
+Deferred TODOs: none.
+                ---- prior amendment (historical) ----
 Version change: 3.13.0 → 3.14.0
 Bump rationale: MINOR. Strengthens Principle V (Test-First Quality Discipline) with an explicit
                 rule for how a test RUN is conducted (2026-07-12), additive; no principle removed
@@ -721,6 +795,36 @@ three distinct entities:
 
 The model MUST obey these rules:
 
+- **One document, one state.** A **Panel** is a *view*; the artefact it presents is a
+  **document**. Where the same underlying artefact — the same file — is presented by more
+  than one Panel (in the same Tab, in different Tabs, or in different windows), it MUST be
+  **one document in every respect**. Every Panel showing it MUST share, as a **single
+  value**: the content buffer and its dirty/unsaved state, the undo/redo history, the
+  effective language (including any manual override), and the effective indentation — along
+  with any comparable **content-shaping** state a future panel type introduces. Only **view
+  state** — cursor position, selection, scroll position, per-panel zoom — MAY differ per Panel.
+  - **One authority, not two peers.** The test is **authority**, not mechanism. Exactly **one**
+    component MUST own the document state; every other copy MUST be a **derived replica**, changed
+    only by applying that authority's **ordered change stream**, never by being an independent source
+    of truth. **Peer-to-peer reconciliation between co-equal copies is FORBIDDEN** — two Panels that
+    each own their state and keep in step by relaying updates to each other are still **two states**,
+    and they diverge at the first update that is not relayed, arrives out of order, or arrives stale.
+    A change that was based on a superseded version of the document MUST be **rebased onto the
+    authority's current version**, never applied at the position it originally named.
+    - This is deliberately **not** a demand that one in-memory object be literally shared: views may
+      live in **different processes**, where that is impossible, and a replica driven by an ordered
+      stream from a single authority satisfies this rule. What fails it is *two originals*.
+  - This rule binds **every** panel type that can present one artefact twice — an editor, a
+    diff view, a document preview, a notebook view, a plugin-supplied Panel — not only the
+    editor that first surfaced it.
+
+  Rationale: this is a **data-integrity** rule, not an ergonomic one. Per-Panel content state
+  permits a **content-corruption** path: one file, open in two Panels, with a different
+  effective indentation in each, writes **both** indentation styles into the **one** buffer
+  that is saved to disk. A shared undo history is the same rule seen from the other side — an
+  undo stack that does not span every view of a document cannot faithfully reverse an edit made
+  through another view of it.
+
 - The default layout MUST provide at least two top-level Panes. When a project is
   active, the layout is three Panes: a **Sidebar Pane** hosting the **Projects**
   Panel and a **Sub-workspaces** Panel **stacked** (non-tabbed), with the
@@ -772,6 +876,9 @@ is what makes a many-terminal, multi-monitor, multi-project workspace shapeable
 without fragmenting the application's focus or losing the saved layout. Keeping the
 main workspace single-project preserves the project-first isolation of Principle I,
 while sub-workspaces give the user one deliberate, bounded place to combine projects.
+Separating the **document** from the **view** is what keeps that shapeability *safe*: a
+workspace whose whole purpose is to let one artefact appear in many places at once MUST NOT
+let it acquire many conflicting truths.
 
 ## Technology & Architecture Constraints
 
@@ -854,8 +961,11 @@ while sub-workspaces give the user one deliberate, bounded place to combine proj
   integration on every pull request**, so that a red gate blocks merge without relying
   on local discipline.
 - Changes that touch the OS abstraction boundary, the daemon/terminal process
-  lifecycle, or persisted edit/layout state MUST be reviewed with particular
-  scrutiny against Principles II, III, V, and VII.
+  lifecycle, persisted edit/layout state, or **the state of a document presented in more
+  than one Panel** MUST be reviewed with particular scrutiny against Principles II, III,
+  V, VII, and **XI** (One document, one state). In particular, a change that introduces a
+  new panel type able to present an existing artefact MUST be checked for per-Panel copies
+  of content-shaping state.
 - **Documentation MUST be kept current as part of the lifecycle (NON-NEGOTIABLE).**
   Any change that alters user-facing behaviour, setup or commands, architecture, or the
   set of delivered/planned capabilities MUST update the affected project documentation
@@ -929,4 +1039,4 @@ while sub-workspaces give the user one deliberate, bounded place to combine proj
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 3.14.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-12
+**Version**: 3.15.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-13
