@@ -282,6 +282,14 @@ A user wants to start over — return settings, key bindings and themes to exact
 - **SC-010**: Reset All Preferences leaves 100% of **custom** themes intact while restoring every built-in theme.
 - **SC-015**: Reset All Preferences leaves 100% of **projects, window layout and workspace state** intact, and its confirmation states both what is reset and what survives before the user commits.
 - **SC-011**: No control duplicates another control's write, and the reset affordances use **one** themeable icon-button primitive (feature 014's). *(This feature deliberately does **not** unify the app's confirmation/notice surfaces — the inline strip and feature 014's modal dialog coexist until issue #48.)*
+
+  > **Discharged by feature 018 (2026-07-14).** The deferral above is closed. 018 (US6, FR-048) converged
+  > the application on **exactly two** notice models — one confirmation (modal, blocking, text-labelled
+  > decision buttons) and one notification (transient, dismissable, severity governing persistence) — and
+  > deleted the inline strip this feature reused, along with the rival confirmation dialog, the
+  > non-dismissable restore notice, the modal message box and the five copy-pasted error strips. The
+  > count of surfaces named here (three) was itself an undercount: there were **nine**. 015's controls and
+  > their identifiers are unchanged; only the surfaces they raise are.
 - **SC-012**: A reset that cannot be written never fails silently: 100% of write failures produce a dismissable message that names the operation and states nothing was changed — and the configuration is indeed unchanged.
 - **SC-013**: A binding whose chords have merely been reordered or recapitalised is never reported as modified, so no reset affordance is offered that would produce no visible change.
 - **SC-016**: A row's control **never moves**. All three affordances are present on every row at all times, right of the control, greyed and disabled while inapplicable — so an item becoming overridden, changed or empty changes **no** row's geometry, in 100% of trials. Every action is visible before it is needed, not only after.

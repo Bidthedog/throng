@@ -606,6 +606,18 @@ appears and the item is unchanged. Repeat for a folder.
   holds unsaved content, and MUST respect ownership/confinement (FR-036) — a file may be loaded only into an
   editor that is allowed to own it.
 
+  > **Repaired by feature 018 (2026-07-14).** This requirement was written correctly and implemented
+  > incompletely: the LOAD path did not enforce what the SAVE path enforced. It compared the *unresolved*
+  > path against the owner root (so a symlink inside a project resolved out of it and was still admitted),
+  > it had no outside-all-projects branch (so a sub-workspace editor could load a project's file), and it
+  > SKIPPED the check entirely when the owner root was unknown — turning a missing fact into permission.
+  > A file could therefore be opened into an editor that would later REFUSE TO SAVE IT.
+  >
+  > 018 (US9) makes read scope equal write scope: one rule (`resolveDrop`), applied to the REALPATH-ed
+  > path, in the main process, on every route in — the tree, an OS file drop, and restore-on-mount. A
+  > refused load now reports `out-of-tree`, which is distinct from a missing file and is never suppressed
+  > by the missing-file preference.
+
 #### Active-pane focus model
 
 - **FR-015**: The Files & Folders pane MUST be a focusable **active pane**: clicking anywhere in it MUST

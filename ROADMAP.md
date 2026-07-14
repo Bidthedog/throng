@@ -27,9 +27,11 @@ Planned items are goals, not commitments to a date or order.
 ## Files & editors
 
 - [x] Project-scoped file explorer — live tree, full file operations, Recycle-Bin delete, per-project hide, editable exclude globs
+- [x] **Reversible hiding** — a project-settings dialog listing everything a project hides, with per-path un-hide; a path *also* matched by a global exclusion glob is marked as such, because removing it from the hidden list will not bring it back
 - [ ] **Enhanced file explorer** — search and richer project management
 - [ ] **Copy & Paste Files Between Projects** — convenience feature to reduce friction
-- [ ] **OS File Operations** — treat throng's File & Folder list as a native OS folder view, with drag-and-drop and copy/paste support
+- [x] **Drag a file in from the operating system** — drop onto an editor, or onto an empty panel (which becomes an editor showing the file); a multi-file drop opens each and refuses any folder among them individually. Read scope now equals write scope: symlinks are resolved before the ownership rule, and a file that could not be saved is refused up front rather than opened into a buffer with nowhere to go
+- [ ] **OS File Operations** — treat throng's File & Folder list as a native OS folder view, with copy/paste support and drag-OUT to the operating system
 - [x] **Editor panels (plain text)** — open and edit a project's text files inline (CodeMirror): encoding/line-ending fidelity, confined save + scoped Save-All, dirty-file lock, app-wide one buffer per file, unsaved indicators, auto-save, crash recovery, and cross-window sync
 - [x] In-panel find & replace — one adaptive find bar over the active panel: as-you-type highlighting with a running count, case/whole-word toggles, wrap, and an editor replace-all that is a single undoable step preserving encoding and line endings
 - [ ] **Regular-expression search** — pattern matching in the find bar, alongside the case and whole-word toggles
@@ -80,6 +82,9 @@ Planned items are goals, not commitments to a date or order.
 ## Configuration & theming
 
 - [x] User-scoped settings and keybindings — human-editable, hot-reloaded, and editable from the visual preferences window
+- [x] **Exactly two notice models** — one *confirmation* (modal, blocking, text-labelled decision buttons) and one *notification* (transient, dismissable, severity governing persistence). The nine idioms that preceded them — five copy-pasted error strips, an inline notice, a non-dismissable restore notice, a modal message box, and three n-way decision modals — are gone
+- [x] **Themed colour picker** — drawn from theme tokens rather than the operating system's dialog, keyboard-driveable, applying live and reporting an invalid value rather than silently discarding it
+- [x] **Surface tokens split by role** — menus, inputs, hovers, dialogs and scrollbars each carry their own token instead of sharing one, so restyling one no longer breaks the others; optional tokens (icon colour, menu hover) mean *absence*, and switching theme now removes what the previous theme set
 - [x] Theming — swappable, hot-reloaded theme files, with a visual theme editor (colour / size / icon pickers, a multi-select font-family pill editor, and dedicated button style tokens)
 - [x] Custom application title bar — an application-drawn full-width bar replacing the OS chrome (window identity + controls + cog) on the main and sub-workspace windows
 - [x] Icon packs — a glyph or image per token with per-token overrides; two bundled packs (a `throng` glyph pack + an SVG image pack) alongside user-supplyable packs. A selected pack re-skins the **whole application** (explorer, panel and tab chrome, menus, toolbars, buttons) live, with no restart; image icons are inlined so they take the **active theme's colour** instead of rendering fixed black; a pack that cannot be read degrades to the theme's icons and is shown as unavailable, with the reason, in the picker
