@@ -28,6 +28,7 @@ import {
   ProjectRepository,
   WorkspaceRepository,
   SubWorkspaceRepository,
+  DocumentStateRepository,
   type ThrongDatabase,
 } from '@throng/persistence';
 import { DAEMON_TYPES } from './tokens.js';
@@ -37,6 +38,7 @@ import { HealthService } from './health-service.js';
 import { ProjectIpcService } from './project-service.js';
 import { WorkspaceIpcService } from './workspace-service.js';
 import { SubWorkspaceIpcService } from './subworkspace-service.js';
+import { DocumentIpcService } from './document-service.js';
 import { TerminalEvents } from './terminal-events.js';
 import { TerminalLockManager } from './terminal-lock-manager.js';
 import { TerminalService } from './terminal-service.js';
@@ -175,6 +177,13 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
   ).register(router);
   new WorkspaceIpcService({ workspaceStore, projectStore, userContext }).register(router);
   new SubWorkspaceIpcService({ store: subWorkspaceStore, userContext }).register(router);
+  // document.* (016) — the per-document language override. Keyed by the FILE, so a panel opening
+  // it later adopts the user's choice rather than re-detecting.
+  new DocumentIpcService(
+    new DocumentStateRepository(database),
+    userContext,
+    (ownerUser, projectId) => projectStore.getById(ownerUser, projectId)?.rootFolder ?? null,
+  ).register(router);
   terminalService.register(router);
   container.bind<RpcRouter>(DAEMON_TYPES.RpcRouter).toConstantValue(router);
 

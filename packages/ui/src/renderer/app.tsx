@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import {
-  resolveAction,
   activeContextLabel,
   effectiveActivePanelId,
   moveFocus,
@@ -9,6 +8,7 @@ import {
   type Direction,
   type LayoutNode,
 } from '@throng/core';
+import { resolveScoped, type ScopeInput } from './keybindings/scope.js';
 import { EditorChrome } from './editor/editor-chrome.js';
 import { SearchKeybindings } from './search/search-keybindings.js';
 import { useCapabilities } from './panel-type/use-capabilities.js';
@@ -102,6 +102,11 @@ function KeybindingsHandler({
       const tab = layout.tabs.find((t) => t.id === layout.activeTabId);
       return tab ? effectiveActivePanelId(tab) : undefined;
     };
+    // What the scope provider needs to answer "which context is the keyboard in?" (016).
+    const scopeInput = (): ScopeInput => {
+      const layout = wsRef.current.layout;
+      return { tabs: layout?.tabs, activeTabId: layout?.activeTabId ?? null };
+    };
     // The active tab's split tree + active panel — the input to move-focus (012, US3).
     const activeFocus = (): { tabId: string; root: LayoutNode; activeId: string } | null => {
       const layout = wsRef.current.layout;
@@ -158,12 +163,19 @@ function KeybindingsHandler({
       // exception: it is normalised from its physical key and its Shift state IS the
       // signal that distinguishes focus.cycle from focus.cycleBack across layouts.
       const backtick = isBackquote(e);
-      const action = resolveAction(keybindings, {
-        key: chordKey(e),
-        ctrl: e.ctrlKey,
-        alt: e.altKey,
-        ...(backtick ? { shift: e.shiftKey } : {}),
-      });
+      // Window-level chords are live in every scope (012, FR-024b) — including from inside an
+      // editor's find bar, so the user can always move focus out of wherever they are. The
+      // HANDLED gate below is what keeps this listener to zoom/focus/view and nothing else.
+      const action = resolveScoped(
+        keybindings,
+        {
+          key: chordKey(e),
+          ctrl: e.ctrlKey,
+          alt: e.altKey,
+          ...(backtick ? { shift: e.shiftKey } : {}),
+        },
+        scopeInput(),
+      );
       if (!action || !HANDLED.has(action)) return;
       // Capture phase: stop the focused terminal/editor from ALSO acting on the chord
       // (e.g. Git Bash turning Ctrl+Alt+Arrow into an escape sequence), then handle it.

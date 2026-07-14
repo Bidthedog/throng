@@ -276,9 +276,20 @@
 .settings-row {
   display: flex;
   gap: 6px; /* control ↔ actions: tight, they belong together */
-  align-items: center;
+  /* TOP, not centre. A row whose control is tall — the keyed-map tables are many rows high —
+     centred its label and its action buttons against the middle of that table, so the thing the
+     label names was nowhere near it and the actions floated in the middle of nothing. Every row
+     aligns to its first line, which is where the eye starts. */
+  align-items: flex-start;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
+}
+
+/* …and the single-line rows keep their controls beside the label rather than hanging off the top. */
+.settings-row__meta,
+.settings-row__control,
+.settings-row__actions {
+  padding-top: 1px;
 }
 
 /* `flex-basis: 0`, NOT `auto` (FR-019b). With `auto` the meta's base size is its own content
@@ -900,4 +911,106 @@
 
 .json-tab__conflict span {
   flex: 1 1 auto;
+}
+
+/* The keyed-table control (016, F5) — a settings value that is a MAP.
+   Every colour is a THEME TOKEN. A hardcoded colour here would look correct in the theme it was
+   picked against and wrong in the other fourteen. */
+.map-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.map-control-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.map-control-table th {
+  text-align: left;
+  font-weight: 600;
+  padding: 2px 6px 4px 0;
+  color: var(--throng-colour-textMuted, var(--text-muted));
+}
+
+.map-control-table th,
+.map-control-table td {
+  vertical-align: top;
+}
+
+.map-control-table td {
+  padding: 2px 6px 2px 0;
+}
+
+/* A language is shown by its NAME ("C#", "PowerShell"), not its internal id — so this is ordinary
+   prose, not code, and the monospace face it used to wear was telling the user otherwise. An
+   EXTENSION key (".foo") is still literal text, and keeps it. */
+.map-control-key {
+  color: var(--throng-colour-text, var(--text));
+  white-space: nowrap;
+  padding-top: 5px;
+}
+
+.map-control--text .map-control-key {
+  font-family: var(--throng-font-editor-family, monospace);
+}
+
+.map-control-empty {
+  color: var(--throng-colour-textMuted, var(--text-muted));
+  font-style: italic;
+  padding: 4px 0;
+}
+
+.map-control-number {
+  width: 68px;
+}
+
+.map-control-select {
+  min-width: 120px;
+}
+
+.map-control-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-control-add input,
+.map-control-add select {
+  flex: 0 1 180px;
+  min-width: 0;
+}
+
+.map-control-error {
+  color: var(--throng-colour-danger, #f85149);
+  font-size: 12px;
+}
+
+/**
+ * WHERE a command's chord is live (016, FR-017b0) — the Key Bindings tab's scope chip.
+ *
+ * Quiet on purpose: it is an explanation, not a value the user sets. It earns its place only when
+ * a chord looks duplicated, and the rest of the time it should recede.
+ */
+.keybinding-scopes {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* ONE pill per context. Joined, "Editor · Terminal" reads as a single exotic scope rather than as
+   two ordinary ones — the pill is the unit of meaning. */
+.keybinding-scope {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.75em;
+  font-weight: 400;
+  color: var(--text-muted, var(--text));
+  opacity: 0.8;
+  white-space: nowrap;
 }

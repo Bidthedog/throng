@@ -4,6 +4,7 @@ import { ProjectsClient } from './state/projects-client.js';
 import { WorkspaceClient } from './state/workspace-client.js';
 import { SubWorkspacesClient } from './state/subworkspaces-client.js';
 import { SubWorkspaceWorkspaceClient } from './state/subworkspace-window-client.js';
+import { DocumentClient } from './state/document-client.js';
 import { ProjectsProvider } from './state/projects-store.js';
 import { SubWorkspacesProvider } from './state/subworkspaces-store.js';
 import { ConfirmProvider } from './confirm-dialog.js';
@@ -24,6 +25,8 @@ export interface Services {
   projects: ProjectsClient;
   workspace: WorkspaceClient;
   subWorkspaces: SubWorkspacesClient;
+  /** Per-document state — the language override (016, FR-028e). */
+  documents: DocumentClient;
 }
 
 const ServicesContext = createContext<Services | null>(null);
@@ -55,6 +58,7 @@ export function CompositionRoot(): ReactElement {
       projects: new ProjectsClient(bridge),
       workspace: new WorkspaceClient(bridge),
       subWorkspaces: new SubWorkspacesClient(bridge),
+      documents: new DocumentClient(bridge),
     };
   }, []);
   return (

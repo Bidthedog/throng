@@ -152,18 +152,41 @@ declare global {
         reveal: (relPath: string) => Promise<FilesOkOrError>;
         onChange: (cb: (evt: { relDir: string }) => void) => () => void;
       };
+      // The OS clipboard (016, FR-013a) — behind the seam, in UI main.
+      clipboard?: {
+        write: (entry: { text: string; mode: import('@throng/core').ClipboardMode }) => Promise<void>;
+        paste: () => Promise<{ text: string; mode: import('@throng/core').ClipboardMode }>;
+      };
       // Editor panels (006): UI-main-owned editor coordination (peer of files.*).
       editor?: {
         load: (req: unknown) => Promise<EditorLoadResult>;
         register: (meta: unknown) => void;
-        notifyDirty: (req: unknown) => void;
+        /** Send an edit this view has already applied locally, to the document's authority. */
+        dispatch: (req: import('@throng/core').DispatchChangeMsg & Record<string, unknown>) => void;
+        /** Ask the authority to undo/redo — the stack belongs to the document (FR-026c). */
+        undo: (req: { panelId: string; viewId: string }) => void;
+        redo: (req: { panelId: string; viewId: string }) => void;
+        revert: (panelId: string) => Promise<boolean>;
+        resync: (panelId: string) => Promise<import('@throng/core').ResetDocumentMsg | null>;
+        /** Restore crash-recovered content into the authority, dirty vs the disk file (FR-102). */
+        restoreRecovered: (panelId: string, text: string, history?: unknown) => Promise<void>;
+        /** THIS panel's crash snapshot — never the whole recovery directory (FR-027b). */
+        recoverOne: (
+          panelId: string,
+        ) => Promise<{ text: string; version: number; history?: unknown } | null>;
         getContent: (
           panelId: string,
         ) => Promise<{
           text: string;
           dirty: boolean;
+          /** The authority's version — where a mounting replica starts counting from. */
+          version: number;
           absPath: string | null;
           fileMissing: boolean;
+          /** The FILE's own encoding, learnt from its bytes — never the app defaults (FR-023). */
+          encoding: import('@throng/core').EncodingId;
+          hasBom: boolean;
+          lineEnding: import('@throng/core').LineEndingId;
         } | null>;
         chooseSavePath: (req: {
           defaultDir?: string;
@@ -185,14 +208,17 @@ declare global {
             ownerKind: string;
           }>
         >;
-        recover: () => Promise<Array<{ panelId: string; text: string }>>;
+        recover: () => Promise<
+          Array<{ panelId: string; text: string; version: number; history?: unknown }>
+        >;
         subWorkspaceFiles: () => Promise<Array<{ filePath: string }>>;
         destroy: (panelId: string) => void;
-        notifySync: (msg: { panelId: string; text?: string; dirty?: boolean }) => void;
+        /** The authority's ordered stream for a document shown in this window (FR-028f). */
         onSync: (
           cb: (msg: {
             panelId: string;
-            text?: string;
+            change?: import('@throng/core').CanonicalChangeMsg;
+            reset?: import('@throng/core').ResetDocumentMsg;
             dirty?: boolean;
             deleted?: boolean;
             externalChange?: boolean;

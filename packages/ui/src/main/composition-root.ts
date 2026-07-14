@@ -2,7 +2,9 @@ import 'reflect-metadata';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Container } from 'inversify';
+import { clipboard as electronClipboard } from 'electron';
 import type {
+  IClipboard,
   IConfigSettings,
   IConfigStore,
   IFileWatcher,
@@ -13,6 +15,9 @@ import type {
 import { buildShippedDefaults } from '@throng/core';
 import { WindowsFontEnumeration } from '@throng/platform-windows';
 import { UI_TYPES } from './tokens.js';
+import { ElectronClipboard } from './electron-clipboard.js';
+import { MemoryClipboard } from './memory-clipboard.js';
+import { ClipboardService } from './clipboard-service.js';
 import { DaemonClient } from './daemon-client.js';
 import { FileConfigStore } from './config-store.js';
 import { ShippedDefaultsService } from './shipped-defaults-service.js';
@@ -46,6 +51,21 @@ function readConfigSettings(env: NodeJS.ProcessEnv = process.env): IConfigSettin
 export function createUiContainer(): Container {
   const container = new Container({ defaultScope: 'Singleton' });
   container.bind<IUiSettings>(UI_TYPES.UiSettings).toConstantValue(readUiSettings());
+  // The OS clipboard seam (016, FR-013a) — bound ONCE, here, at the boundary that owns Electron.
+  //
+  // Under E2E it is filled in-process instead, because Electron's clipboard DOES NOT WORK in the
+  // Playwright-Electron harness: text written to it reads back empty and `availableFormats()` is
+  // empty, so the app under test has no clipboard at all. The tests then prove the feature rather
+  // than the OS, and two parallel workers stop fighting over the one global clipboard. The shipped
+  // path is unchanged, and the real seam is covered by the clipboard CONTRACT suite.
+  const clipboardSeam: IClipboard =
+    process.env.THRONG_E2E_CLIPBOARD === 'memory'
+      ? new MemoryClipboard()
+      : new ElectronClipboard(electronClipboard);
+  container.bind<IClipboard>(UI_TYPES.Clipboard).toConstantValue(clipboardSeam);
+  container
+    .bind<ClipboardService>(UI_TYPES.ClipboardService)
+    .toConstantValue(new ClipboardService(clipboardSeam));
   container.bind<DaemonClient>(UI_TYPES.DaemonClient).to(DaemonClient);
 
   const configSettings = readConfigSettings();

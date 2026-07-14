@@ -5,6 +5,27 @@
 // Exports grow per implementation phase; each addition keeps the tree compiling.
 
 export type { IPlatformInfo, OsName } from './abstractions/platform-info.js';
+// The OS clipboard seam (016, FR-013a) — core reads the live clipboard to decide a paste mode.
+export type { IClipboard } from './abstractions/clipboard.js';
+export type { ClipboardMode, ClipboardRecord, CursorRange, SelectionShape } from './editor/clipboard-mode.js';
+export { clipboardModeFor, pasteModeFor } from './editor/clipboard-mode.js';
+// `cut-line` (016, FR-016a) — what Ctrl+X takes when nothing is selected.
+export { cutLine } from './editor/cut-line.js';
+export type { CursorSpan, CutLineResult, LineIndex, LineRef } from './editor/cut-line.js';
+// Which indentation a document actually uses (016, FR-018) — the file outranks every preference.
+export { effectiveIndent, indentUnitOf } from './editor/effective-indent.js';
+// The document authority's wire (016, FR-028f) — shared by UI main (the authority) and every
+// renderer (the replicas), so neither end owns the contract between them.
+export type {
+  CanonicalChangeMsg,
+  DispatchChangeMsg,
+  MergeClass,
+  ResetDocumentMsg,
+} from './editor/document-sync.js';
+// The undo history, as it survives a crash (016, FR-027a) — bounded, and carried INSIDE the
+// recovery snapshot so it can never outlive it.
+export { MAX_HISTORY_BYTES, boundHistory } from './editor/undo-persistence.js';
+export type { SerialisedHistory, SerialisedUndoEntry } from './editor/undo-persistence.js';
 export type { IUserContext, CurrentUser } from './abstractions/user-context.js';
 export type {
   IDisplayInfo,
@@ -101,9 +122,27 @@ export {
   zoomFactor,
   stepZoomLevel,
 } from './config/zoom.js';
-export type { Keybindings, ActionId, KeyEvent } from './config/keybindings.js';
+export type {
+  Keybindings,
+  ActionId,
+  KeyEvent,
+  DispatchScope,
+  CommandScopes,
+  ChordCollision,
+  ColumnSelectModifier,
+  PlatformBindings,
+} from './config/keybindings.js';
 export {
   DEFAULT_KEYBINDINGS,
+  DEFAULT_BINDING_PLATFORM,
+  SHIPPED_KEYBINDINGS_BY_PLATFORM,
+  COMMAND_SCOPES,
+  shippedBindingsFor,
+  chordCollisions,
+  columnSelectHeld,
+  scopeLabel,
+  scopeNames,
+  scopesIntersect,
   parseKeybindings,
   eventToToken,
   normalizeToken,
@@ -184,9 +223,17 @@ export { classifyThemes, validateThemeName, cloneName } from './config/theme-edi
 export type { IFontEnumeration } from './abstractions/font-enumeration.js';
 // Editor metadata registry (007, FR-025a) — the declarative source the visual
 // preference editors render from, plus the completeness/path helpers.
-export type { ControlKind, FieldDescriptor, MetadataRegistry, RegistryAudit } from './config/metadata.js';
+export type {
+  ControlKind,
+  FieldDescriptor,
+  MapColumn,
+  MetadataRegistry,
+  RegistryAudit,
+} from './config/metadata.js';
 export {
   leavesOf,
+  // Map-aware leaves (016, F5): a key DECLARED `control: 'map'` is one leaf, not one per entry.
+  leavesOfDeclared,
   tokensOf,
   getAtPath,
   setAtPath,
@@ -195,6 +242,7 @@ export {
   // Declared clearability (015, FR-016a): what a clear writes, and the guard that stops a
   // `clearable` declaration from lying about whether the field can survive being emptied.
   emptyValueFor,
+  isEmptyValue,
   auditClearable,
 } from './config/metadata.js';
 export {
@@ -300,6 +348,34 @@ export {
   editorPathParts,
   toDisplayPath,
   type EditorPathParts,
+  // Language registry, extension-only detection, bounded indentation inference (016).
+  type IndentProfile,
+  SHIPPED_INDENT_BY_LANGUAGE,
+  type LanguageDescriptor,
+  type LanguageResolution,
+  type LanguageSource,
+  type ResolveLanguageArgs,
+  type InferredIndent,
+  LANGUAGES,
+  PLAIN_TEXT_ID,
+  PLAIN_TEXT_NAME,
+  languageById,
+  languageName,
+  isKnownLanguage,
+  detectLanguage,
+  resolveLanguage,
+  inferIndent,
+  // Rectangular (column) selection (016, US6).
+  columnAt,
+  isRectangular,
+  offsetAt,
+  padding,
+  rectPaste,
+  rowsOf,
+  seedFromSelections,
+  type PadStyle,
+  type RectPasteChange,
+  type RowSpan,
 } from './editor/index.js';
 
 // Typed panels (005): the pure panel-type registry + assignment ops, and the

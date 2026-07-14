@@ -2,6 +2,8 @@ import { useState, type CSSProperties, type ReactElement } from 'react';
 import { zoomFactor, panelZoomLevel, type Panel } from '@throng/core';
 import { useEditor } from './use-editor.js';
 import { FindBar } from '../search/find-bar.js';
+import { StatusStrip } from './status-strip.js';
+import { toRelPath } from './language-override.js';
 import './editor.css';
 
 /**
@@ -32,6 +34,7 @@ export function EditorPanel({
   const zoomStyle = {
     ['--throng-zoom-editor']: String(zoomFactor(panelZoomLevel(panel))),
   } as CSSProperties;
+  const filePath = (panel.config as { filePath?: string } | undefined)?.filePath ?? null;
   return (
     <div className="editor-panel-wrap">
       <div
@@ -42,6 +45,14 @@ export function EditorPanel({
       />
       {/* The one shared find bar (013); renders only while find is open on this panel. */}
       <FindBar panelId={panel.id} />
+      {/* The language indicator (016, FR-010) — the ONLY way to see what the editor detected, and
+          the way to correct it. It sits BELOW the text area (the wrap is a flex column), never
+          over it. */}
+      <StatusStrip
+        panelId={panel.id}
+        projectId={ownerProjectId ?? null}
+        relPath={toRelPath(projectRoot, filePath)}
+      />
     </div>
   );
 }

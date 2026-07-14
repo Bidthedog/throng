@@ -105,12 +105,14 @@ export function TerminalPanel({
   const reserveKey = useCallback(
     (e: KeyboardEvent) =>
       reservedByTerminal(
-        resolveAction(keybindings, {
-          key: e.key,
-          ctrl: e.ctrlKey,
-          shift: e.shiftKey,
-          alt: e.altKey,
-        }),
+        // The TERMINAL scope, by construction: this reservation runs inside a terminal panel's
+        // own key handler. Resolving scope-blind here would let an editor-only command claim a
+        // key the shell owns (016, FR-017d).
+        resolveAction(
+          keybindings,
+          { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey },
+          'terminal',
+        ),
         getFindState().panelId === panel.id,
       ),
     [keybindings, panel.id],

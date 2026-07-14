@@ -10,4 +10,7 @@ export const UI_TYPES = {
   // 010: the immutable shipped-defaults record + the restore/seed/upgrade applier.
   ShippedDefaults: Symbol.for('throng:ShippedDefaults'),
   ShippedDefaultsService: Symbol.for('throng:ShippedDefaultsService'),
+  // 016: the OS clipboard seam, and the app-global mode record that rides on it.
+  Clipboard: Symbol.for('throng:IClipboard'),
+  ClipboardService: Symbol.for('throng:ClipboardService'),
 } as const;

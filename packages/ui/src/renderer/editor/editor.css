@@ -66,3 +66,128 @@
 .editor-panel .cm-focused .cm-selectionBackground {
   background: var(--throng-colour-editorSelection, #2a3a57) !important;
 }
+
+/* ---------------------------------------------------------------------------
+   The editor status strip (016, FR-010) — the band along the bottom of an
+   Editor Panel carrying the language indicator.
+
+   The wrap becomes a flex COLUMN so the strip sits BELOW the text area rather
+   than overlaying it: an absolutely-positioned strip would cover the last line
+   of the document, which is where the caret usually is.
+   --------------------------------------------------------------------------- */
+.editor-panel-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-panel {
+  /* Takes the space the strip does not. `min-height: 0` is what allows it to
+     shrink inside a flex column — without it, a long document forces the panel
+     taller than its box and the strip is pushed out of sight. */
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+
+.editor-status-strip {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end; /* right-aligned (FR-010) */
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  min-height: 20px;
+  /* The strip owns a stacking context ABOVE the CodeMirror content, so the picker it opens is not
+     swallowed by the document. It must NOT clip its own overflow: the picker pops UPWARD out of a
+     20px strip, and `overflow: hidden` here would cut it off entirely — visible in the DOM,
+     unclickable on screen. Truncation is the LABEL's job (below), not the strip's. */
+  position: relative;
+  z-index: 5;
+  background: var(--throng-colour-editorStatusStripBg, #151a23);
+  color: var(--throng-colour-editorStatusStripFg, #a7b4c8);
+  border-top: 1px solid var(--throng-colour-border, #2a3344);
+  font-size: 11px;
+  /* Dimmed by default; only the ACTIVE panel of a FOREGROUND window is fully lit —
+     the same rule 012's active-panel indicator uses, read from 012's own classes
+     rather than re-derived (FR-010g). */
+  opacity: 0.55;
+}
+
+.panel-box--active .editor-status-strip {
+  opacity: 1;
+}
+
+.panel-box--active-dimmed .editor-status-strip {
+  opacity: 0.55;
+}
+
+.editor-status-strip__language {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: inherit; /* the strip's theme token — never a hardcoded colour */
+  font: inherit;
+  cursor: pointer;
+}
+
+.editor-status-strip__language:hover {
+  background: var(--throng-colour-editorStatusStripHover, #233047);
+}
+
+.language-picker {
+  position: absolute;
+  right: 4px;
+  bottom: 22px;
+  z-index: 20;
+  width: 220px;
+  max-height: 260px;
+  display: flex;
+  flex-direction: column;
+  background: var(--throng-colour-surface, #1b2230);
+  border: 1px solid var(--throng-colour-border, #2a3344);
+  border-radius: 4px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 35%);
+}
+
+.language-picker__filter {
+  margin: 6px;
+  padding: 4px 6px;
+  background: var(--throng-colour-appBg, #10131a);
+  color: var(--throng-colour-text, #e6ebf2);
+  border: 1px solid var(--throng-colour-border, #2a3344);
+  border-radius: 3px;
+  font: inherit;
+}
+
+.language-picker__list {
+  overflow-y: auto;
+  margin: 0;
+  padding: 0 0 6px;
+  list-style: none;
+}
+
+.language-picker__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 4px 10px;
+  background: transparent;
+  border: 0;
+  color: var(--throng-colour-text, #e6ebf2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.language-picker__item:hover {
+  background: var(--throng-colour-surfaceActive, #222c3d);
+}
+
+.language-picker__item--current {
+  color: var(--throng-colour-accent, #6aa3ff);
+  font-weight: 600;
+}

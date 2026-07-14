@@ -267,6 +267,15 @@ contextBridge.exposeInMainWorld('throng', {
       return () => ipcRenderer.removeListener('throng:files:changed', handler);
     },
   },
+  // The OS clipboard (016, FR-013a): the sandboxed renderer cannot reach it, so it says WHAT to
+  // copy and what SHAPE it is, and UI main writes it and remembers. The shape is app-global — one
+  // record — which is what lets a block cut in one file paste as a block in another window.
+  clipboard: {
+    write: (entry: { text: string; mode: string }) =>
+      ipcRenderer.invoke('throng:clipboard:write', entry),
+    /** What a paste should insert, and how — decided against the LIVE clipboard, never cached. */
+    paste: () => ipcRenderer.invoke('throng:clipboard:paste'),
+  },
   // Editor panels (006): UI-main-owned editor coordination — a peer of files.*,
   // NOT daemon RPC. The renderer reads/saves and reports edits through here; the
   // dirty-file lock, recovery temps, one-buffer registry, and cross-window mirror
@@ -276,8 +285,22 @@ contextBridge.exposeInMainWorld('throng', {
     load: (req: unknown) => ipcRenderer.invoke('throng:editor:load', req),
     /** Register a new/known document (unpathed new doc, or a restored panel). */
     register: (meta: unknown) => ipcRenderer.send('throng:editor:register', meta),
-    /** Report an edit / dirty-state change (drives lock + recovery + mirror). */
-    notifyDirty: (req: unknown) => ipcRenderer.send('throng:editor:notifyDirty', req),
+    /** Dispatch an edit this view has ALREADY shown its user, to the document's authority
+     *  (016, FR-028f). Replaces 006's `notifyDirty`, which pushed the whole document. */
+    dispatch: (req: unknown) => ipcRenderer.send('throng:editor:dispatch', req),
+    /** Undo/redo the document's last change — performed by the authority, because the undo
+     *  stack belongs to the DOCUMENT and is shared by every view of it (FR-026c). */
+    undo: (req: unknown) => ipcRenderer.send('throng:editor:undo', req),
+    redo: (req: unknown) => ipcRenderer.send('throng:editor:redo', req),
+    /** Discard unsaved changes back to the content on disk (FR-075). */
+    revert: (panelId: string) => ipcRenderer.invoke('throng:editor:revert', panelId),
+    /** The authority's current text + version, for a view that has fallen out of step. */
+    resync: (panelId: string) => ipcRenderer.invoke('throng:editor:resync', panelId),
+    /** Restore crash-recovered content into the authority, dirty vs the disk file (FR-102). */
+    restoreRecovered: (panelId: string, text: string, history?: unknown) =>
+      ipcRenderer.invoke('throng:editor:restoreRecovered', { panelId, text, history }),
+    /** THIS panel's crash snapshot — never the whole recovery directory (FR-027b). */
+    recoverOne: (panelId: string) => ipcRenderer.invoke('throng:editor:recoverOne', panelId),
     /** Current UI-main content for a panel (moved panel / mirror / restore). */
     getContent: (panelId: string) => ipcRenderer.invoke('throng:editor:getContent', panelId),
     /** Native save-location chooser for a new document (constrained by confinement). */
@@ -298,13 +321,18 @@ contextBridge.exposeInMainWorld('throng', {
     subWorkspaceFiles: () => ipcRenderer.invoke('throng:editor:subWsFiles'),
     /** Tear down a document (Panel destroy/close): release lock + clean temp. */
     destroy: (panelId: string) => ipcRenderer.send('throng:editor:destroy', panelId),
-    /** Relay a cross-window mirror message (content + dirty) to other windows. */
-    notifySync: (msg: unknown) => ipcRenderer.send('throng:editor:notifySync', msg),
-    /** Receive a cross-window mirror message for a panel shown in this window. */
+    /**
+     * The authority's stream for a document shown in this window (016, FR-028f).
+     *
+     * `change` is one ordered canonical change, which EVERY view applies — including the
+     * one that sent it, which needs the acknowledgement to advance its version. `reset`
+     * means the document was replaced wholesale. The rest is state no change describes.
+     */
     onSync: (
       cb: (msg: {
         panelId: string;
-        text?: string;
+        change?: unknown;
+        reset?: unknown;
         dirty?: boolean;
         deleted?: boolean;
         externalChange?: boolean;
@@ -314,7 +342,8 @@ contextBridge.exposeInMainWorld('throng', {
         _event: unknown,
         msg: {
           panelId: string;
-          text?: string;
+          change?: unknown;
+          reset?: unknown;
           dirty?: boolean;
           deleted?: boolean;
           externalChange?: boolean;

@@ -5,6 +5,7 @@
  */
 import { DEFAULT_EXCLUDE_GLOBS } from '../explorer/exclude.js';
 import type { DragModifierKey } from '../explorer/drag.js';
+import { SHIPPED_INDENT_BY_LANGUAGE, type IndentProfile } from '../editor/languages.js';
 
 /** Confirmation depth for a destroy action: none / single / double (wry second). */
 export type ConfirmLevel = 'none' | 'single' | 'double';
@@ -84,6 +85,21 @@ export interface EditorSettings {
   /** Show the "Cannot open file" popup when an editor's file is missing/deleted
    *  (FR-105). When false, missing-file editors restore silently. */
   warnOnMissingFile: boolean;
+  /**
+   * The GLOBAL indentation profile (016, FR-018) — the fallback when nothing more specific applies.
+   *
+   * The order of precedence is: what the FILE already does (inferred, FR-018a) ▸ the language's
+   * profile ▸ this. The file wins because a document's existing indentation is a fact about that
+   * document, and a setting that overruled it would silently mix tabs and spaces in a file the user
+   * did not intend to convert (FR-018d).
+   */
+  indent: IndentProfile;
+  /** Per-language indentation, keyed by language id (FR-018/FR-022). Shipped from the registry. */
+  indentByLanguage: Record<string, IndentProfile>;
+  /** User extension→language mappings (FR-005a): `.foo` → `python`. Shipped EMPTY. */
+  languageByExtension: Record<string, string>;
+  /** Persist the undo history alongside the crash-recovery snapshot (FR-027a). */
+  persistUndoHistory: boolean;
 }
 
 /** Where the new-project folder picker opens (011, FR-041). */
@@ -201,6 +217,15 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     projectPathDisplay: 'full',
     subWorkspacePathDisplay: 'full',
     warnOnMissingFile: true,
+    // Two spaces is the majority convention across the languages this editor ships with; the ones
+    // that disagree say so in the registry, and the file itself overrules both (FR-018a).
+    indent: { style: 'spaces', indentWidth: 2, tabWidth: 4 },
+    // DERIVED from the language registry, so there is one place a convention is declared.
+    indentByLanguage: SHIPPED_INDENT_BY_LANGUAGE,
+    // Shipped EMPTY, and it MUST be resettable back to empty (FR-022c): a user who maps `.foo` to
+    // Python and then clears it must end up with no mapping, not with the mapping restored.
+    languageByExtension: {},
+    persistUndoHistory: true,
   },
   newProject: {
     startingFolder: 'lastViewed',
@@ -341,6 +366,8 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     : fallback.subWorkspacePathDisplay;
   const warnOnMissingFile =
     typeof v.warnOnMissingFile === 'boolean' ? v.warnOnMissingFile : fallback.warnOnMissingFile;
+  const persistUndoHistory =
+    typeof v.persistUndoHistory === 'boolean' ? v.persistUndoHistory : fallback.persistUndoHistory;
   return {
     openOnClick,
     autoSave,
@@ -351,7 +378,63 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     projectPathDisplay,
     subWorkspacePathDisplay,
     warnOnMissingFile,
+    indent: indentProfile(v.indent, fallback.indent),
+    indentByLanguage: indentMap(v.indentByLanguage, fallback.indentByLanguage),
+    languageByExtension: extensionMap(v.languageByExtension, fallback.languageByExtension),
+    persistUndoHistory,
   };
+}
+
+/** A malformed profile falls back WHOLE — half a profile is not a convention. */
+function indentProfile(v: unknown, fallback: IndentProfile): IndentProfile {
+  if (!isRecord(v)) return { ...fallback };
+  const style = v.style === 'tabs' || v.style === 'spaces' ? v.style : fallback.style;
+  const indentWidth =
+    typeof v.indentWidth === 'number' && v.indentWidth > 0 && v.indentWidth <= 16
+      ? Math.floor(v.indentWidth)
+      : fallback.indentWidth;
+  const tabWidth =
+    typeof v.tabWidth === 'number' && v.tabWidth > 0 && v.tabWidth <= 16
+      ? Math.floor(v.tabWidth)
+      : fallback.tabWidth;
+  return { style, indentWidth, tabWidth };
+}
+
+/**
+ * A keyed map, parsed TOLERANTLY — and an explicit `{}` means EMPTY, not "use the defaults".
+ *
+ * That distinction is the whole of FR-022c. A map that fell back to its shipped value whenever it
+ * was empty could never be cleared: the user would delete every row, save, and watch the rows come
+ * straight back. `terminals.defaultParams` set the precedent; this follows it.
+ *
+ * Individual malformed entries are DROPPED rather than failing the whole map — one bad row in a
+ * hand-edited JSON file must not cost the user the other twenty.
+ */
+function indentMap(
+  v: unknown,
+  fallback: Record<string, IndentProfile>,
+): Record<string, IndentProfile> {
+  if (!isRecord(v)) return cloneIndentMap(fallback);
+  const out: Record<string, IndentProfile> = {};
+  for (const [key, value] of Object.entries(v)) {
+    if (!isRecord(value)) continue; // a row that is not a profile at all
+    if (value.style !== 'tabs' && value.style !== 'spaces') continue; // …or has no style
+    out[key] = indentProfile(value, { style: 'spaces', indentWidth: 2, tabWidth: 4 });
+  }
+  return out;
+}
+
+function extensionMap(v: unknown, fallback: Record<string, string>): Record<string, string> {
+  if (!isRecord(v)) return { ...fallback };
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(v)) {
+    if (typeof value === 'string' && value.length > 0) out[key] = value;
+  }
+  return out;
+}
+
+function cloneIndentMap(m: Record<string, IndentProfile>): Record<string, IndentProfile> {
+  return Object.fromEntries(Object.entries(m).map(([k, p]) => [k, { ...p }]));
 }
 
 /** Tolerant per-field parse of the `newProject` section; bad values fall back to
@@ -431,7 +514,14 @@ function structuredCloneSettings(s: AppSettings): AppSettings {
     behaviour: { ...s.behaviour },
     explorer: cloneExplorer(s.explorer),
     terminals: cloneTerminals(s.terminals),
-    editor: { ...s.editor },
+    editor: {
+      ...s.editor,
+      // Deep-cloned: a shallow copy would hand every caller the SAME map object, and the shipped
+      // defaults are frozen — a mutation would either throw or silently edit everyone's settings.
+      indent: { ...s.editor.indent },
+      indentByLanguage: cloneIndentMap(s.editor.indentByLanguage),
+      languageByExtension: { ...s.editor.languageByExtension },
+    },
     newProject: { ...s.newProject },
     search: { ...s.search },
   };

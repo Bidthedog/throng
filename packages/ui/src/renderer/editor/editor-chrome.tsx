@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactElement } from 'react';
-import { effectiveActivePanelId, resolveAction } from '@throng/core';
+import { effectiveActivePanelId } from '@throng/core';
+import { resolveScoped } from '../keybindings/scope.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useProjects } from '../state/projects-store.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
@@ -44,12 +45,15 @@ function EditorKeybindings({ isSubWorkspace }: { isSubWorkspace: boolean }): nul
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       // Resolve WITH shift to distinguish Ctrl+S (save) from Ctrl+Shift+S (Save-All).
-      const action = resolveAction(keybindings, {
-        key: e.key,
-        ctrl: e.ctrlKey,
-        shift: e.shiftKey,
-        alt: e.altKey,
-      });
+      const live = ref.current.ws.layout;
+      const action = resolveScoped(
+        keybindings,
+        { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey },
+        { tabs: live?.tabs, activeTabId: live?.activeTabId ?? null },
+        // Save is deliberately NOT suppressed by a focused find bar: Ctrl+S must save the file
+        // you are looking at, wherever the caret happens to be.
+        { transientFocus: false },
+      );
       if (action !== 'editor.save' && action !== 'editor.saveAll' && action !== 'editor.saveAs') return;
       // Panel-scoped: only when a workspace Panel — not the Files pane — is active.
       if (getActivePane() !== 'workspace') return;

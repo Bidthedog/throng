@@ -218,16 +218,23 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * current legitimate pair passes while an exact/near duplicate (mean → 0) fails.
  * Value confirmed by the distinctness test.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 4.46892856529523;
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 7.185670705477295;
 
 /**
- * Hard distinctness gate: no two bundled themes may be closer than this mean
- * ΔE00. Calibrated to sit just below the closest legitimate pair
- * (CLOSEST_LEGITIMATE_PAIR_DELTA = Windows Terminal vs VSCode, 4.469 after the
- * 013 search match-highlight tokens joined the 012 active-panel ones in every
- * palette — the pair drifted slightly further apart, so the gate still holds) — see
- * research.md R2. A duplicated/near-cloned theme (mean → 0) fails; every current
- * legitimate pair passes; the recoloured Bash sits ~20 from Matrix.
+ * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A
+ * duplicated/near-cloned theme (mean → 0) fails; every current legitimate pair passes; the
+ * recoloured Bash sits ~20 from Matrix. See research.md R2.
+ *
+ * RE-MEASURED for 016: the closest legitimate pair moved from 4.469 (Windows Terminal vs VSCode)
+ * to 7.186 (throng vs Windows Terminal) when the 13 new tokens joined every palette — FURTHER
+ * APART, because each theme's syntax hues are drawn from its own character rather than shared.
+ * That is the outcome the required `syntax` seed set exists to force: had the palettes been
+ * copy-pasted between themes, those ten tokens would have contributed ΔE00 = 0 to every pair and
+ * dragged the mean to roughly 4.469 × 33/43 ≈ 3.43 — BELOW this gate, and the build would have
+ * failed.
+ *
+ * The gate itself is unchanged at 4.3. It was never loosened, and it did not need tightening: it
+ * still sits below every legitimate pair while a near-clone (mean → 0) fails it by a mile.
  */
 export const DISTINCTNESS_THRESHOLD = 4.3;
 
@@ -267,6 +274,34 @@ export interface ContrastPairing {
   label: string;
 }
 
+/** The ten tokens code is painted with (016, FR-006). */
+export const SYNTAX_TOKENS: readonly string[] = [
+  'syntaxKeyword',
+  'syntaxString',
+  'syntaxComment',
+  'syntaxNumber',
+  'syntaxType',
+  'syntaxFunction',
+  'syntaxVariable',
+  'syntaxOperator',
+  'syntaxPunctuation',
+  'syntaxInvalid',
+];
+
+/**
+ * Every syntax colour, measured on BOTH search-match surfaces (016, FR-007a).
+ *
+ * This is the pairing set that makes FR-007a mean something. A search match is drawn as a
+ * BACKGROUND beneath the code, so highlighted code keeps its colours rather than flattening into
+ * a solid block — which means every one of the ten syntax hues must stay legible on top of both
+ * match surfaces, not merely on the editor body. Generated from the token list rather than typed
+ * out twenty times, so a new syntax token cannot be added without being measured.
+ */
+const SYNTAX_ON_MATCH: readonly ContrastPairing[] = SYNTAX_TOKENS.flatMap((fg) => [
+  { fg, bg: 'searchMatch', min: WCAG_AA_BODY, label: `${fg} on a search match` },
+  { fg, bg: 'searchMatchCurrent', min: WCAG_AA_BODY, label: `${fg} on the current search match` },
+]);
+
 /**
  * The enumerated foreground-on-background pairings measured for every theme
  * (FR-016). Body text at 4.5:1; muted text, gutter, and UI/button components at
@@ -281,6 +316,15 @@ export const CONTRAST_PAIRINGS: readonly ContrastPairing[] = [
   { fg: 'buttonText', bg: 'buttonBg', min: WCAG_AA_LARGE_UI, label: 'button text on button background' },
   { fg: 'buttonHoverText', bg: 'buttonHoverBg', min: WCAG_AA_LARGE_UI, label: 'button hover text on button hover background' },
   { fg: 'buttonText', bg: 'surfaceActive', min: WCAG_AA_LARGE_UI, label: 'button text on active surface' },
+  // The editor status strip (016, FR-010c). SC-007 promises the language indicator is READABLE on
+  // every bundled theme — a promise that was asserted and never measured until this pairing existed.
+  {
+    fg: 'editorStatusStripFg',
+    bg: 'editorStatusStripBg',
+    min: WCAG_AA_BODY,
+    label: 'editor status strip label on its strip background',
+  },
+  ...SYNTAX_ON_MATCH,
 ];
 
 export interface ContrastResult {

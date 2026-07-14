@@ -51,6 +51,27 @@ const OURS_WHILE_FINDING = new Set<ActionId>([
 /**
  * True when a terminal must NOT deliver this key to the running program because throng
  * is going to act on it (FR-010 / FR-014 / SC-002).
+ *
+ * ## Why 016's dispatch SCOPE does not replace this, and must not be made to
+ *
+ * It looks like a hard-coded scope table that `COMMAND_SCOPES` now subsumes, and 016's T093 said
+ * exactly that. It isn't, and here is the difference: scope answers *"is this command live here?"*,
+ * while this answers *"does throng take this key, or does the SHELL?"* — and those are not the same
+ * question, because a key can belong to a command that is live in a terminal and STILL belong to
+ * the program.
+ *
+ * Substituting `resolveAction(kb, ev, 'terminal') !== null` for this would break three things at
+ * once, all of them silently:
+ *
+ *   • `search.replace` is scoped to panels, so it resolves in a terminal — and its default chord is
+ *     **Ctrl+H, which is BACKSPACE**. throng would eat every backspace at the shell.
+ *   • `editor.save` is scoped to panels too, and **Ctrl+S is XOFF**. throng would take it, and the
+ *     user could never pause terminal output again.
+ *   • `search.close` resolves whether or not a bar is open, and it is **Escape** — vim's insert mode,
+ *     a menu, a readline edit. With no find session up, Escape is not ours to take.
+ *
+ * So the default here is DENY: the shell keeps the key unless there is a specific reason to take it.
+ * Scope narrows what may reach this function; it cannot decide what this function decides.
  */
 export function reservedByTerminal(action: ActionId | null, findOpen: boolean): boolean {
   if (action === null) return false;

@@ -5,7 +5,13 @@
  * replace/reassign write plans. Builds on `keybindings.ts` `normalizeToken`; the
  * modal writes the resulting `keybindings.json` via `config.write`. No OS/DOM.
  */
-import { normalizeToken, type ActionId } from './keybindings.js';
+import {
+  COMMAND_SCOPES,
+  normalizeToken,
+  scopesIntersect,
+  type ActionId,
+  type CommandScopes,
+} from './keybindings.js';
 
 /** A captured key event (the modal supplies these from a DOM KeyboardEvent). */
 export interface CaptureEvent {
@@ -79,9 +85,14 @@ export const EXCLUDED_KEYS: ReadonlySet<string> = new Set([
   'Control',
   'Enter',
   'CapsLock',
-  'Tab',
   'NumLock',
 ]);
+// `Tab` and `Shift+Tab` left this set in 016 (F1). They are the universal indent/outdent chords
+// and the spec makes them `editor.indentLines`/`editor.outdentLines`' defaults — impossible while
+// the capture modal rejected them, which would also have made two of the seven commands
+// unrebindable. The constraint existed to protect focus traversal, and FR-017f's focus scoping
+// now preserves that directly: while a transient input surface (013's find bar above all) holds
+// focus, Tab moves within it and never reaches the document.
 
 /**
  * A bindable chord has a non-modifier key (FR-033a — reversed: a single key is now
@@ -118,18 +129,29 @@ export function isReservedChord(token: string): boolean {
 }
 
 /**
- * The other action already bound to `token` (case-insensitive), or null. The
- * action being edited is excluded so re-capturing its own chord is not a conflict.
+ * The other action already bound to `token` **in a context where both are live**, or null
+ * (016, FR-017b1).
+ *
+ * Scope-aware: a chord shared by two commands whose scopes are DISJOINT is not a conflict —
+ * `editor.cutLine` ({editor}) and `file.cut` ({explorer}) legitimately both answer to `Ctrl+X`,
+ * and warning about it would train the user to dismiss the warning that matters. A real clash —
+ * scopes that intersect — still raises the warn → Reassign/Cancel flow (007 FR-034), and is never
+ * silently taken by the last writer.
+ *
+ * The action being edited is excluded, so re-capturing its own chord is not a conflict.
  */
 export function findConflict(
   bindings: Record<string, string[]>,
   token: string,
   exceptAction: ActionId,
+  scopes: CommandScopes = COMMAND_SCOPES,
 ): ActionId | null {
   const norm = normalizeToken(token);
+  const mine = scopes[exceptAction];
   for (const [action, tokens] of Object.entries(bindings)) {
     if (action === exceptAction) continue;
-    if (tokens.some((t) => normalizeToken(t) === norm)) return action as ActionId;
+    if (!tokens.some((t) => normalizeToken(t) === norm)) continue;
+    if (scopesIntersect(mine, scopes[action as ActionId])) return action as ActionId;
   }
   return null;
 }

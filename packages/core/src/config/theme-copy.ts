@@ -135,6 +135,69 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The dot on a tab, panel, or project that has edits not yet written to disk, and the editor file and type pills.',
   },
+  // Syntax highlighting (016). Each names what the colour paints in real code, so a theme author
+  // can picture the result without knowing a single grammar's node names.
+  'colours.syntaxKeyword': {
+    label: 'Keywords',
+    description:
+      'Words the language itself reserves, such as "if", "return", "class" and "function".',
+  },
+  'colours.syntaxString': {
+    label: 'Text literals',
+    description: 'Quoted text written directly into the code, including its quote marks.',
+  },
+  'colours.syntaxComment': {
+    label: 'Comments',
+    description:
+      'Notes written for people rather than the machine — usually quieter than the code around them.',
+  },
+  'colours.syntaxNumber': {
+    label: 'Numbers and constants',
+    description: 'Numeric values written into the code, alongside true, false and null.',
+  },
+  'colours.syntaxType': {
+    label: 'Type names',
+    description: 'The names of classes, interfaces and other types the code declares or refers to.',
+  },
+  'colours.syntaxFunction': {
+    label: 'Function names',
+    description: 'The names of functions and methods, both where they are defined and where they are called.',
+  },
+  'colours.syntaxVariable': {
+    label: 'Variable names',
+    description: 'The names the code gives to its own values, and the properties it reads from them.',
+  },
+  'colours.syntaxOperator': {
+    label: 'Operators',
+    description: 'The symbols that combine values, such as plus, minus, equals and the arrow.',
+  },
+  'colours.syntaxPunctuation': {
+    label: 'Brackets and punctuation',
+    description:
+      'The structural marks that hold code together — brackets, braces, commas and semicolons.',
+  },
+  'colours.syntaxInvalid': {
+    label: 'Broken code',
+    description: 'Text the language cannot make sense of, marked so a typo is visible at a glance.',
+  },
+  // The editor's own status strip (016) — distinct from the application status bar along the very
+  // bottom of the window, which has its own token. The copy has to say so, or a theme author will
+  // paint one and wonder why the other did not change.
+  'colours.editorStatusStripBg': {
+    label: 'Editor status strip surface',
+    description:
+      'The narrow band along the bottom of an editor panel that shows the file language — not the application status bar at the foot of the window.',
+  },
+  'colours.editorStatusStripFg': {
+    label: 'Editor status strip text',
+    description:
+      'The language name printed in the band along the bottom of an editor panel, which must stay readable on it.',
+  },
+  'colours.editorStatusStripHover': {
+    label: 'Editor status strip hover surface',
+    description:
+      'The surface that appears behind the language name when the pointer is over it, showing it can be clicked to change the language.',
+  },
   'colours.searchMatch': {
     label: 'Search match',
     description:

@@ -22,7 +22,13 @@ import { setAtPath } from './metadata.js';
 // The additive upgrade is gated on this version, so without the bump an existing install's theme
 // files would never materialise them — the on-disk record silently drifting from the shipped one,
 // which is the exact drift SC-009 exists to end.
-export const SHIPPED_DEFAULTS_VERSION = 2;
+//
+// Bumped by 016 (2 → 3): ~150 new shipped theme colour values (10 syntax tokens + 3 editor
+// status-strip tokens, across every bundled theme) and the platform-keyed keybinding record. The
+// bump is required by the THEME tokens alone, whatever shape the bindings take: without it an
+// existing install never materialises them and code renders unstyled. ONE bump, one owner —
+// nothing later in this feature bumps it again.
+export const SHIPPED_DEFAULTS_VERSION = 3;
 
 /** The authoritative shipped-defaults record (immutable/frozen once built). */
 export interface ShippedDefaults {

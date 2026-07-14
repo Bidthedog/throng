@@ -8,6 +8,7 @@ import {
   parseAppSettings,
   parseKeybindings,
   resolveColour,
+  type AppSettings,
   ZOOM_STEP,
   ZOOM_MIN_LEVEL,
   ZOOM_MAX_LEVEL,
@@ -19,6 +20,7 @@ import {
   type ShippedDefaults,
   type Theme,
 } from '@throng/core';
+import type { IClipboard } from '@throng/core';
 import { createUiContainer, UI_TYPES } from './composition-root.js';
 import { appIcon } from './app-icon.js';
 import { ShippedDefaultsService } from './shipped-defaults-service.js';
@@ -53,6 +55,8 @@ import { EditorService } from './editor-service.js';
 import { EditorRecovery } from './editor-recovery.js';
 import { EditorCoordinator } from './editor-coordinator.js';
 import { registerEditorIpc } from './editor-ipc.js';
+import { registerClipboardIpc } from './clipboard-ipc.js';
+import type { ClipboardService } from './clipboard-service.js';
 import { WindowsShellDetection, WindowsElevation } from '@throng/platform-windows';
 import { createShellDetectionService } from './shell-detection-service.js';
 import { DaemonEvents } from './daemon-events.js';
@@ -358,9 +362,26 @@ if (isPrimaryInstance)
       border: resolveColour(theme, 'border'),
     });
   pushGhostTheme(initialPayload.theme);
+  /**
+   * Set once the editor coordinator exists (it is built further down, after the daemon).
+   *
+   * FR-027c: turning `persistUndoHistory` OFF must purge what is ALREADY on disk. Waiting for the
+   * next keystroke to overwrite each snapshot would leave the user's cut text lying there for as
+   * long as they left the document alone — and someone who has just turned this off because they cut
+   * a secret into a file is the last person who should have to keep typing to make it go away.
+   */
+  /**
+   * Things that need to react to a settings CHANGE, rather than merely read the current settings.
+   *
+   * The config watcher is started here, but the services that care are built further down (the
+   * editor coordinator needs the daemon first), so they subscribe once they exist.
+   */
+  const onSettingsChanged: Array<(prev: AppSettings, next: AppSettings) => void> = [];
   const broadcast = (payload: ConfigPayload): void => {
+    const previous = currentSettings;
     currentSettings = payload.settings;
     pushGhostTheme(payload.theme);
+    for (const react of onSettingsChanged) react(previous, payload.settings);
     broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:config', payload);
   };
   startConfigWatcher({
@@ -499,6 +520,9 @@ if (isPrimaryInstance)
   const editorRecovery = new EditorRecovery(join(app.getPath('userData'), 'recovery'));
   const editorCoordinator = new EditorCoordinator(editorService, editorRecovery, {
     recoveryDebounceMs: 400,
+    // FR-027c. Read at write time, from the LIVE settings — turning it off must take effect on the
+    // very next snapshot, not on the next restart.
+    persistUndoHistory: () => currentSettings.editor.persistUndoHistory,
     // Soft external-change detection (FR-028): a per-doc folder watch so a file
     // edited/deleted outside throng is reconciled (reload if clean, warn if dirty).
     fileWatcher: new NodeFileWatcher(150),
@@ -516,7 +540,36 @@ if (isPrimaryInstance)
       win.webContents.send('throng:editor:focus', { panelId });
     },
   });
+  /**
+   * FR-027c: turning `persistUndoHistory` OFF purges what is ALREADY on disk.
+   *
+   * At the moment it is turned off — not at the next keystroke. Waiting for the next snapshot to
+   * overwrite each file would leave the user's cut text lying there for as long as they left the
+   * document alone, and someone who has just turned this off because they cut a secret into a file
+   * is the last person who should have to keep typing to be rid of it.
+   */
+  onSettingsChanged.push((previous, next) => {
+    if (previous.editor.persistUndoHistory && !next.editor.persistUndoHistory) {
+      void editorCoordinator.purgePersistedHistories();
+    }
+  });
+  /**
+   * …and again at STARTUP, if the setting is already off.
+   *
+   * The subscriber above only fires on the true → false TRANSITION, which the app can easily never
+   * see: the user turns it off and quits; or edits settings.json while throng is closed; or throng
+   * dies before the purge lands. In every one of those cases the histories sitting on disk — holding
+   * whatever the user cut out of their files — would survive indefinitely, waiting for the panel to
+   * be edited again. A setting that means "do not keep my deleted text on disk" has to be true of
+   * the disk as it is found, not only of the moment it was changed.
+   */
+  if (!currentSettings.editor.persistUndoHistory) {
+    void editorCoordinator.purgePersistedHistories();
+  }
   registerEditorIpc(editorCoordinator);
+  // The OS clipboard, behind the seam (016, FR-013a) — one app-global record of what throng last
+  // copied and what SHAPE it was, so a block cut in one window pastes as a block in another.
+  registerClipboardIpc(container.get<ClipboardService>(UI_TYPES.ClipboardService));
   // Deleting a file that is open in an editor marks that editor dirty (FR-099): the
   // buffer survives so the user can save it back (re-creating the file) or discard.
   filesService.setOnDeleted((absPaths) => editorCoordinator.markDeleted(absPaths));
@@ -537,6 +590,8 @@ if (isPrimaryInstance)
     daemonClient,
     shellDetection: shellDetectionService,
     attachTimeoutMs: settings.attachTimeoutMs,
+    // Through the seam (016, FR-013a) — never Electron's clipboard module directly.
+    clipboard: container.get<IClipboard>(UI_TYPES.Clipboard),
   });
   const daemonEvents = new DaemonEvents(settings.pipeName);
   daemonEvents.start();

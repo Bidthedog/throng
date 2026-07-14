@@ -47,6 +47,40 @@ export {
   unregisterPath,
   unregisterPanel,
 } from './open-registry.js';
+// Language registry, extension-only detection, and bounded indentation inference (016).
+export {
+  type IndentProfile,
+  type LanguageDescriptor,
+  LANGUAGES,
+  PLAIN_TEXT_ID,
+  PLAIN_TEXT_NAME,
+  SHIPPED_INDENT_BY_LANGUAGE,
+  languageById,
+  languageName,
+  isKnownLanguage,
+} from './languages.js';
+export {
+  type LanguageResolution,
+  type LanguageSource,
+  type ResolveLanguageArgs,
+  detectLanguage,
+  resolveLanguage,
+} from './language-detect.js';
+export { type InferredIndent, inferIndent } from './indent-infer.js';
 export { panelUnsaved, tabUnsaved, projectUnsaved } from './indicators.js';
 export { projectRootWouldContainOpenEditor } from './overlap.js';
 export { editorPathParts, toDisplayPath, type EditorPathParts } from './path-display.js';
+// Rectangular (column) selection and column-wise paste (016, US6 · FR-025).
+export {
+  columnAt,
+  isRectangular,
+  offsetAt,
+  padding,
+  rectPaste,
+  rowsOf,
+  type PadStyle,
+  type RectPasteChange,
+  type RowSpan,
+} from './rect-select.js';
+// What a selection seeds 013's find input with (016, FR-025i).
+export { seedFromSelections } from './seed-selection.js';

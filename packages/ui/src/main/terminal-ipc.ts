@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
-import { BrowserWindow, clipboard, ipcMain, Menu, type WebContents } from 'electron';
-import { resolveLaunchSpec } from '@throng/core';
+import { BrowserWindow, ipcMain, Menu, type WebContents } from 'electron';
+import { resolveLaunchSpec, type IClipboard } from '@throng/core';
 import type { TerminalAttachResult } from '@throng/ipc-contract';
 import { RpcTimeoutError, type DaemonClient } from './daemon-client.js';
 import type { ShellDetectionService } from './shell-detection-service.js';
@@ -50,8 +50,18 @@ export function registerTerminalIpc(deps: {
   shellDetection: ShellDetectionService;
   /** Attach budget (008 FR-004): the terminal.attach RPC uses this, not the ping budget. */
   attachTimeoutMs: number;
+  /**
+   * The OS clipboard, THROUGH THE SEAM (016, FR-013a).
+   *
+   * These three call sites used Electron's `clipboard` module directly. Leaving them would have
+   * made the abstraction a fiction — an "every OS clipboard access goes through IClipboard" claim
+   * with three counter-examples in the same process. An ESLint rule now confines that module to
+   * `electron-clipboard.ts`, because the drift these three prove is exactly what happens again
+   * otherwise.
+   */
+  clipboard: IClipboard;
 }): void {
-  const { daemonClient, shellDetection, attachTimeoutMs } = deps;
+  const { daemonClient, shellDetection, attachTimeoutMs, clipboard } = deps;
 
   // Window-close detach backstop (008 FR-008a). When a window (a sub-workspace, or the
   // main window) is torn down, its renderer is destroyed WITHOUT running React effect

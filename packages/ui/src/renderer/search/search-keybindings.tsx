@@ -18,6 +18,7 @@ import {
   type ActionId,
   type Panel,
 } from '@throng/core';
+import { scopeFromKind } from '../keybindings/scope.js';
 import { useKeybindings } from '../config/config-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { getActivePane } from '../workspace/active-pane.js';
@@ -70,12 +71,15 @@ export function SearchKeybindings(): null {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
-      const action = resolveAction(keybindings, {
-        key: e.key,
-        ctrl: e.ctrlKey,
-        shift: e.shiftKey,
-        alt: e.altKey,
-      });
+      // This component has already resolved which panel is active, so it maps that KIND straight
+      // to a scope rather than resolving it a second time. The find bar's own commands are never
+      // suppressed by the focus guard — Escape must close it and Enter must find next, from
+      // inside the bar (FR-017f protects the DOCUMENT from the bar, not the bar from itself).
+      const action = resolveAction(
+        keybindings,
+        { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey },
+        scopeFromKind(activeKind),
+      );
       if (!action || !HANDLED.has(action)) return;
       // Panel commands only apply while the workspace (not the file tree) is active.
       if (getActivePane() !== 'workspace') return;
