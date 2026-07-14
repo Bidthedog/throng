@@ -51,7 +51,10 @@ goal is to pull all of that into a single, simple customisable workspace.
   whole-word toggles, and highlight colours drawn from theme tokens. Terminals are also
   navigable from the keyboard alone — page, line, top, bottom, and jump between matches.
 - **File explorer** — a live, project-scoped file tree with full operations (rename, move,
-  copy, Recycle-Bin delete, per-project hide, editable exclude globs).
+  copy, Recycle-Bin delete, per-project hide, editable exclude globs). Hiding is **reversible**:
+  a project-settings dialog on the pane header lists everything the project hides and lets you
+  un-hide it, marking any path a global exclusion glob *also* excludes — because removing that
+  one will not bring the file back.
 - **Terminal panels** — PowerShell, Git Bash, CMD, and custom shell flavours run inline via
   xterm.js on **detached, daemon-owned PTYs**: they survive UI restarts and reattach with
   scrollback, with safe close/exit handling, a project root lock, optional run-as-admin, and
@@ -62,7 +65,11 @@ goal is to pull all of that into a single, simple customisable workspace.
   shared per file across all windows, unsaved changes show a shared dot, and in-progress edits —
   **and their undo history** — survive a crash via recovery files. Files open from the tree into the
   last active editor; a synced editor mirrors one document across windows, sharing **one undo
-  stack**, so Ctrl+Z in either window reverts an edit made in the other.
+  stack**, so Ctrl+Z in either window reverts an edit made in the other. Files can also be
+  **dragged in from the operating system** — onto an editor, or onto an empty panel, which becomes
+  an editor showing the file. **What can be opened is exactly what can be saved**: symlinks are
+  resolved first, and a file an editor could not write back is refused up front, visibly, rather
+  than opened into a buffer with nowhere to go.
 - **Code editing** — **syntax highlighting** for 31 languages, detected by extension and correctable
   from a **language picker** in the status strip (the choice is remembered per file). A right-click
   **content menu** puts cut/copy/paste, Select All, Undo/Redo and "Set Language…" under the cursor,
@@ -87,6 +94,14 @@ goal is to pull all of that into a single, simple customisable workspace.
   font-family pill** editor; a **global UI⇄JSON toggle** (edit the raw file in the built-in code
   editor) and **immediate-apply** (no Save). Editing a file's raw JSON while it changes on disk
   surfaces a reload / keep-editing choice rather than silently discarding either version.
+- **One way to be told things** — the application has exactly **two** notice models: a
+  *confirmation* (modal, blocking, text-labelled buttons, because the label is the statement of
+  what you are consenting to) and a *notification* (transient, non-blocking, dismissable, where
+  severity governs persistence — an error waits for you, a success clears itself). Nothing else.
+- **Themed everywhere** — the colour picker is drawn from theme tokens rather than the operating
+  system's dialog; menus, inputs, hovers, dialogs and scrollbars each have their own theme token
+  instead of sharing one; numeric settings with a sensible range get sliders; and switching theme
+  repaints every surface with nothing left behind.
 - **Reset controls** — four clearly separated scopes, all reading the same shipped-defaults record,
   so there is exactly one answer to "what did this ship as":
   - **Per item** — a setting or a key binding shows a reset icon **only while it differs from its
