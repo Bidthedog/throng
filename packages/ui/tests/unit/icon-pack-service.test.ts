@@ -109,12 +109,17 @@ describe('IconPackService.listIconPacks — asset loading', () => {
     expect(pack.assets.folder).toEqual({ kind: 'missing' });
   });
 
-  it('a PNG token becomes a data URI (it cannot be themed, but it can be shown)', async () => {
+  it('a PNG token is NOT an icon — it degrades to the glyph rather than being shown', async () => {
+    // SVG only (018 follow-up). An icon now takes the theme's COLOUR and the theme's SIZE, and a raster
+    // can do neither: it keeps whatever colour it was painted with — wrong for most of the fifteen
+    // themes by construction — and it goes soft the moment anybody enlarges it. It was accepted because
+    // accepting it was easy, and every pack that used it looked broken on arrival.
+    //
+    // A non-SVG asset becomes `missing`, which falls DOWN the icon chain to the theme's own glyph. The
+    // pack still loads; only the file that cannot do the job is refused.
     writePack('p', { name: 'p', tokens: { folder: 'folder.png' } }, { 'folder.png': 'PNGDATA' });
     const [pack] = await new IconPackService(root).listIconPacks();
-    const asset = pack.assets.folder;
-    expect(asset.kind).toBe('raster');
-    if (asset.kind === 'raster') expect(asset.dataUri).toMatch(/^data:image\/png;base64,/);
+    expect(pack.assets.folder).toEqual({ kind: 'missing' });
   });
 
   it('glyph tokens need no disk read at all', async () => {

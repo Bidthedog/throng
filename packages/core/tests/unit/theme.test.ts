@@ -27,7 +27,9 @@ describe('Theme token resolution (FR-030)', () => {
     expect(vars['--throng-font-paneTitle-size']).toBe('11px');
     expect(vars['--throng-font-paneTitle-weight']).toBe('600');
     expect(vars['--throng-font-tab-size']).toBe('13px');
-    expect(vars['--throng-font-tab-weight']).toBe('500');
+    // `tab` no longer asks for 500 — a two-weight font renders 500 as regular, so the "touch bolder"
+    // it was asking for was never drawn. A role now says bold or not, and unbold means the base weight.
+    expect(vars['--throng-font-tab-weight']).toBe('400');
     expect(vars['--throng-font-panel-size']).toBe('13px');
     expect(vars['--throng-font-paneText-size']).toBe('13px');
     expect(vars['--throng-font-projectPath-size']).toBe('11px');
@@ -45,12 +47,13 @@ describe('Theme token resolution (FR-030)', () => {
   it('lets a role override family/size/weight independently (#5/#7)', () => {
     const t: Theme = {
       ...THRONG_THEME,
-      typography: { projectName: { family: 'Comic Sans', sizePx: 19, weight: 800 } },
+      typography: { projectName: { family: 'Comic Sans', sizePx: 19, bold: true } },
     };
     const vars = toCssVariables(t);
     expect(vars['--throng-font-projectName-family']).toBe('Comic Sans');
     expect(vars['--throng-font-projectName-size']).toBe('19px');
-    expect(vars['--throng-font-projectName-weight']).toBe('800');
+    // BOLD means the theme's OWN bold number — which is the whole reason `fonts.weights` still exists.
+    expect(vars['--throng-font-projectName-weight']).toBe(String(THRONG_THEME.fonts.weights.bold));
   });
 
   it('emits case/italic/underline per role; paneTitle defaults to UPPER', () => {

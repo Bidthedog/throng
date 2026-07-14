@@ -5,7 +5,7 @@ import {
   themeEditableTokens,
 } from '../../src/config/theme-metadata.js';
 import { assertEveryKeyDescribed, auditRegistry } from '../../src/config/metadata.js';
-import { THRONG_THEME } from '../../src/config/theme.js';
+import { THRONG_THEME, TYPOGRAPHY_ROLES, fieldsForRole } from '../../src/config/theme.js';
 
 describe('THEME_METADATA completeness (FR-038/047)', () => {
   const tokens = themeEditableTokens(THRONG_THEME);
@@ -56,14 +56,42 @@ describe('control-type inference (FR-038)', () => {
 
   it('font family/size/weight/case map to the right controls', () => {
     expect(descriptorForThemeToken('fonts.family').control).toBe('font-family');
-    expect(descriptorForThemeToken('fonts.baseSizePx').control).toBe('font-size');
-    expect(descriptorForThemeToken('fonts.weights.normal').control).toBe('number');
+    // 018 / FR-034: a font SIZE is a slider. It declared bounds (6-96) and still rendered as a bare
+    // text box — the descriptor disagreed with itself, and only the forward guard was watching.
+    expect(descriptorForThemeToken('fonts.baseSizePx').control).toBe('slider');
+    expect(descriptorForThemeToken('fonts.weights.normal').control).toBe('slider'); // 018: weights gained the CSS 100-900 range they never had
     expect(descriptorForThemeToken('typography.editor.family').control).toBe('font-family');
-    expect(descriptorForThemeToken('typography.paneTitle.sizePx').control).toBe('font-size');
-    expect(descriptorForThemeToken('typography.tab.weight').control).toBe('number');
+    expect(descriptorForThemeToken('typography.paneTitle.sizePx').control).toBe('slider');
+    // A ROLE says bold or not — a TOGGLE. A numeric per-role weight promised a granularity that does
+    // not exist: nearly every installed font ships two weights, so 400, 500 and 600 rendered
+    // identically and the slider did nothing for two thirds of its travel. The two numbers those words
+    // MEAN stay numeric, on `fonts.weights`, where a variable font's owner can still tune them.
+    expect(descriptorForThemeToken('typography.tab.bold').control).toBe('toggle');
+    expect(descriptorForThemeToken('fonts.weights.bold').control).toBe('slider');
+    // Every role carries the FULL set, including the two that never existed on a role before.
+    expect(descriptorForThemeToken('typography.tab.strikethrough').control).toBe('toggle');
+    expect(descriptorForThemeToken('typography.dialog.italic').control).toBe('toggle');
     const caseDesc = descriptorForThemeToken('typography.paneTitle.case');
     expect(caseDesc.control).toBe('enum');
     expect(caseDesc.allowedValues).toEqual(['original', 'title', 'lower', 'upper']);
+  });
+
+  it('every typography role offers every attribute (not just the ones its theme pinned)', () => {
+    // The editor used to expose only the fields a theme happened to PIN — so `tab: { weight: 500 }`
+    // offered a weight and a family, and a tab title could not be italicised however much you wanted
+    // to, because its author had not thought to italicise it first. Completeness is a property of the
+    // MODEL, not a shadow of one theme's choices.
+    for (const role of TYPOGRAPHY_ROLES) {
+      // The TERMINAL is not HTML: xterm draws its glyphs on a canvas from a family and a size, and can
+      // honour nothing else. A control that cannot possibly do anything is worse than a missing one.
+      for (const field of fieldsForRole(role)) {
+        const key = `typography.${role}.${field}`;
+        expect(
+          THEME_METADATA.find((d) => d.key === key),
+          `${key} is not editable`,
+        ).toBeDefined();
+      }
+    }
   });
 
   it('every descriptor with allowedValues uses a choice control', () => {

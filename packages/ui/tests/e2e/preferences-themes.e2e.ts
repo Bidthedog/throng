@@ -265,6 +265,7 @@ test('US1: Restore All resets edited built-ins, recreates a deleted built-in, an
       // 3. Delete a built-in — it disappears from the list entirely (FR-005a).
       await pickTheme(prefs, 'Debian');
       await prefs.getByTestId('theme-delete').click();
+      await expect(prefs.getByTestId('theme-delete-confirm')).toBeVisible();
       await prefs.getByTestId('theme-confirm-yes').click();
       await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Debian.json'))).toBe(false);
       await expect.poll(() => prefs.getByTestId('theme-select').locator('option').allTextContents()).not.toContain('Debian');
@@ -311,6 +312,7 @@ test('US2: per-theme restore reverts only that built-in (confirmed); a deleted b
       // recreate control; Restore All is the only way back.
       await pickTheme(prefs, 'Debian');
       await prefs.getByTestId('theme-delete').click();
+      await expect(prefs.getByTestId('theme-delete-confirm')).toBeVisible();
       await prefs.getByTestId('theme-confirm-yes').click();
       await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Debian.json'))).toBe(false);
       await expect
@@ -319,6 +321,7 @@ test('US2: per-theme restore reverts only that built-in (confirmed); a deleted b
       await expect(prefs.getByTestId('theme-recreate')).toHaveCount(0);
 
       await prefs.getByTestId('theme-restore-all').click();
+      await expect(prefs.getByTestId('theme-confirm-dialog')).toBeVisible();
       await prefs.getByTestId('theme-confirm-yes').click();
       await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Debian.json'))).toBe(true);
       await expect
@@ -391,6 +394,7 @@ test('US3: a DELETED built-in name is still reserved for a new theme (FR-007)', 
       // Delete a built-in — its name stays reserved even though it is gone from disk.
       await pickTheme(prefs, 'Debian');
       await prefs.getByTestId('theme-delete').click();
+      await expect(prefs.getByTestId('theme-delete-confirm')).toBeVisible();
       await prefs.getByTestId('theme-confirm-yes').click();
       await expect.poll(() => prefs.getByTestId('theme-select').locator('option').allTextContents()).not.toContain('Debian');
 

@@ -538,3 +538,15 @@ export async function expectNoOrphanConhosts(
 }
 
 export { mkdtempSync, tmpdir, join };
+
+/**
+ * Move a slider the way a HAND does: set the value, then LET GO.
+ *
+ * The slider commits when the pointer comes up, not on a timer and not on every pixel of travel — so a
+ * `fill()` alone is a thumb held down forever, and nothing is written. Releasing is not test ceremony;
+ * it is the gesture, and it is the half these tests used to leave out.
+ */
+export async function setSlider(slider: import('@playwright/test').Locator, value: string): Promise<void> {
+  await slider.fill(value);
+  await slider.evaluate((el) => el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })));
+}

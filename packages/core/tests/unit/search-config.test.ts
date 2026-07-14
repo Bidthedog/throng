@@ -181,6 +181,6 @@ describe('013 as-you-type debounce setting (Principle X, SC-007)', () => {
   it('is exposed in the Settings editor (completeness)', () => {
     const d = SETTINGS_METADATA.filter((x) => x.key === 'search.asYouTypeDebounceMs');
     expect(d.length, 'search.asYouTypeDebounceMs needs exactly one descriptor').toBe(1);
-    expect(d[0]!.control).toBe('number');
+    expect(d[0]!.control).toBe('slider'); // 018: a bounded delay is draggable (FR-032)
   });
 });
