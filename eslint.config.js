@@ -69,6 +69,39 @@ export default tseslint.config(
     rules: { 'no-control-regex': 'off' },
   },
 
+  // The OS clipboard goes through the IClipboard seam (016, FR-013a / SC-011c).
+  //
+  // This guard exists because the seam ALREADY decayed once before it existed: three calls in
+  // `terminal-ipc.ts` reached straight for Electron's `clipboard` module, and "every clipboard
+  // access goes through the abstraction" was a claim with three counter-examples sitting next to
+  // it. Confining the import is what makes the claim checkable rather than aspirational — the next
+  // feature to want the clipboard now has to go through the seam, or fail the build.
+  //
+  // `electron-clipboard.ts` is the one implementation, and the composition root is the one place
+  // allowed to hand it the module.
+  {
+    files: ['packages/ui/src/**/*.{ts,tsx}'],
+    ignores: [
+      'packages/ui/src/main/electron-clipboard.ts',
+      'packages/ui/src/main/composition-root.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'electron',
+              importNames: ['clipboard'],
+              message:
+                "The OS clipboard is behind the IClipboard seam (016, FR-013a). Inject IClipboard instead of importing Electron's clipboard module directly — see packages/ui/src/main/electron-clipboard.ts.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // React renderer: hooks correctness rules. `exhaustive-deps` is advisory
   // (surfaced as a warning, does not fail CI) — the rules-of-hooks check that
   // catches genuine bugs stays an error.
