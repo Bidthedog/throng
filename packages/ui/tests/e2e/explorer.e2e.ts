@@ -217,7 +217,18 @@ test('keyboard shortcuts operate on the tree: Del deletes, F2 renames (US3)', as
       await win.getByTestId('confirm-accept').click();
       await expect(tree.getByText('a.txt', { exact: true })).toHaveCount(0);
 
-      // Select README.md, press F2 → inline rename; commit a new name.
+      // Clicking a.txt OPENED it in an editor, and deleting the file force-dirties that buffer so it
+      // survives and a later save re-creates the file (006, FR-099). The renderer learns that from the
+      // file watcher, asynchronously — so WAIT for the dirty marker rather than racing it. Without this
+      // the test passed or failed on whether the click below beat the watcher, which is not a property
+      // anyone chose. Opening README.md into a dirty editor then legitimately raises the four-choice
+      // unsaved-open prompt (006, US9); keep the buffer and take a new editor.
+      await expect(win.locator('.panel-box__unsaved')).toBeVisible();
+      await tree.getByText('README.md', { exact: true }).click();
+      await win.getByTestId('unsaved-open-new').click();
+
+      // Select README.md, press F2 → inline rename; commit a new name. (The click also returns DOM
+      // focus to the tree, which the dismissed prompt took.)
       await tree.getByText('README.md', { exact: true }).click();
       await win.keyboard.press('F2');
       const rename = tree.locator('input.tree-rename');

@@ -70,13 +70,15 @@ test('the cog reveals exactly Settings / Key Bindings / Themes and is dismissibl
 // styled from `--surface` / `--surface-active`, which must resolve to the theme's
 // tokens rather than silently falling back to a hardcoded literal.
 const cfgRoots: string[] = [];
-function seedThemeSurfaces(surface: string, surfaceActive: string): string {
+function seedThemeSurfaces(surface: string, surfaceActive: string, accent?: string): string {
   const dir = mkdtempSync(join(tmpdir(), 'throng-cfg-chrome-'));
   cfgRoots.push(dir);
   mkdirSync(join(dir, 'themes'), { recursive: true });
+  const colours: Record<string, string> = { surface, surfaceActive };
+  if (accent !== undefined) colours.accent = accent;
   writeFileSync(
     join(dir, 'themes', 'throng.json'),
-    JSON.stringify({ name: 'throng', colours: { surface, surfaceActive } }, null, 2),
+    JSON.stringify({ name: 'throng', colours }, null, 2),
     'utf8',
   );
   return dir;
@@ -86,28 +88,41 @@ test.afterAll(() => {
     rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
 });
 
-test('the cog dropdown menu follows the active theme', async () => {
-  // Distinctive colours, unlike any default and unlike each other.
-  const cfgRoot = seedThemeSurfaces('#ff00aa', '#00cc55');
+test('the cog dropdown menu follows the active theme — and a PRE-SPLIT theme keeps its look (018, FR-008)', async () => {
+  // A theme file carrying ONLY `surface`, `surfaceActive` and `accent` — i.e. a theme authored
+  // BEFORE the 018 surface split, which knows nothing of `menuSurface` or `menuItemHoverSurface`.
+  //
+  // This is the end-to-end proof of FR-008, and it is the reason this test is worth more after the
+  // split than before it. The menus MUST still paint in this theme's own colours. If the fallback
+  // had been written as a CSS `var(--throng-colour-menuSurface, var(--surface))` — which reads
+  // perfectly and is completely dead, because the emitter always defines the property — the user's
+  // hot-pink theme would sprout throng's default blue-grey menus, and this test is what catches it.
+  const cfgRoot = seedThemeSurfaces('#ff00aa', '#00cc55', '#ffcc00');
   const SURFACE = 'rgb(255, 0, 170)';
-  const SURFACE_ACTIVE = 'rgb(0, 204, 85)';
+  const ACCENT = 'rgb(255, 204, 0)';
   await runApp(
     async (_app, win) => {
       await win.getByTestId('title-bar-cog').click();
       const menu = win.getByTestId('cog-menu');
       await expect(menu).toBeVisible();
 
-      // The menu panel paints on the theme's surface, not a hardcoded #1a1f2b.
+      // The menu panel resolves `menuSurface` — absent from this theme — through the split chain to
+      // the theme's OWN surface. Not a hardcoded #1a1f2b, and not throng's default either.
       await expect
         .poll(() => menu.evaluate((el) => getComputedStyle(el).backgroundColor))
         .toBe(SURFACE);
 
-      // A hovered item paints on the theme's active surface, not a white wash.
+      // A hovered item paints on the MENU HIGHLIGHT, which is carved out of `accent`.
+      //
+      // This is a deliberate change from the pre-split behaviour (it used to follow `surfaceActive`)
+      // and it is the whole point of FR-013: the cog menu now highlights exactly as the shared
+      // context menu always has, because there is one menu implementation and the shared one is the
+      // survivor. Two menus that highlighted differently was the defect.
       const item = win.getByTestId('cog-menu-settings');
       await item.hover();
       await expect
         .poll(() => item.evaluate((el) => getComputedStyle(el).backgroundColor))
-        .toBe(SURFACE_ACTIVE);
+        .toBe(ACCENT);
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );

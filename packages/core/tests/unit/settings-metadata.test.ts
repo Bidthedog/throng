@@ -77,9 +77,10 @@ describe('SETTINGS_METADATA control types (FR-028/029)', () => {
   it('matches control to value type', () => {
     expect(byKey.get('editor.autoSave')?.control).toBe('toggle');
     expect(byKey.get('editor.warnOnMissingFile')?.control).toBe('toggle');
-    expect(byKey.get('panes.projects.maxWidth')?.control).toBe('number');
-    expect(byKey.get('behaviour.tabHoverActivateMs')?.control).toBe('number');
-    expect(byKey.get('editor.maxOpenFileBytes')?.control).toBe('number');
+    expect(byKey.get('panes.projects.maxWidth')?.control).toBe('slider'); // 018: a bounded numeric is DRAGGABLE now (FR-032)
+    expect(byKey.get('behaviour.tabHoverActivateMs')?.control).toBe('slider');
+    // A slider now, in 5 MB steps: the objection to it was about the RANGE, and the STEP answers it.
+    expect(byKey.get('editor.maxOpenFileBytes')?.control).toBe('slider');
     // string arrays → array
     expect(byKey.get('explorer.excludeGlobs')?.control).toBe('array');
     expect(byKey.get('terminals.disabledBuiltins')?.control).toBe('array');

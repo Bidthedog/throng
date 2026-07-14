@@ -43,7 +43,7 @@ describe('EditorService save round-trip (006, contracts/editor-service.md)', () 
     await fs.mkdir(join(root, 'sub'));
     await writeFile(file, bytes(BOM, 'one\r\ntwo\r\nthree\r\n'));
 
-    const loaded = await svc.load({ absPath: file, ownerRoot: root });
+    const loaded = await svc.load({ absPath: file, ownerRoot: root, ownerKind: 'project', allProjectRoots: [root] });
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
     expect(loaded.hasBom).toBe(true);
@@ -157,7 +157,7 @@ describe('EditorService save round-trip (006, contracts/editor-service.md)', () 
     const svc = new EditorService(fs, settings({ maxOpenFileBytes: 8 }));
     const file = join(root, 'big.txt');
     await writeFile(file, 'this is definitely more than eight bytes');
-    const loaded = await svc.load({ absPath: file, ownerRoot: root });
+    const loaded = await svc.load({ absPath: file, ownerRoot: root, ownerKind: 'project', allProjectRoots: [root] });
     expect(loaded.ok).toBe(false);
     if (loaded.ok) return;
     expect(loaded.reason).toBe('too-large');
@@ -167,7 +167,7 @@ describe('EditorService save round-trip (006, contracts/editor-service.md)', () 
     const svc = new EditorService(fs, settings());
     const file = join(root, 'bin.dat');
     await writeFile(file, Buffer.from([0x00, 0x01, 0x02, 0x00, 0x7f]));
-    const loaded = await svc.load({ absPath: file, ownerRoot: root });
+    const loaded = await svc.load({ absPath: file, ownerRoot: root, ownerKind: 'project', allProjectRoots: [root] });
     expect(loaded.ok).toBe(false);
     if (loaded.ok) return;
     expect(loaded.reason).toBe('binary');
