@@ -190,3 +190,72 @@ test('a conflicting chord warns and Reassign moves it from the other action', as
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
+
+/**
+ * 016 FR-017b0 · T110 — the SCOPE column.
+ *
+ * `Ctrl+X` appears twice in this list, and that is correct: one entry cuts a LINE in an editor, the
+ * other cuts a FILE in the tree, and they can never both fire. The scope is the only thing on screen
+ * that says so. Without it, a user seeing the duplicate concludes throng is broken and "fixes" it by
+ * rebinding one of the two — breaking something that worked.
+ */
+test('every command shows WHERE it is live, and Ctrl+X coexists on two of them (FR-017b0)', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openKeybindings(app, win);
+
+      // The two commands that share Ctrl+X — shown side by side, each with the scope that makes the
+      // sharing legitimate.
+      await expect(prefs.getByTestId('binding-editor.cutLine-scope')).toHaveText('Editor');
+      await expect(prefs.getByTestId('binding-file.cut-scope')).toHaveText('File Explorer');
+      await expect(prefs.getByTestId('binding-editor.cutLine-chord')).toContainText('Ctrl+X');
+      await expect(prefs.getByTestId('binding-file.cut-chord')).toContainText('Ctrl+X');
+
+      // …and neither is flagged as a clash: no conflict warning is raised anywhere on the tab, and
+      // both keep their chord.
+      await expect(prefs.getByTestId('capture-conflict')).toHaveCount(0);
+
+      // A window-level command reads "Everywhere" — one pill, because listing all three contexts
+      // says the same thing less clearly and would drown the rows that carry real information.
+      const everywhere = prefs.getByTestId('binding-focus.left-scope').locator('.keybinding-scope');
+      await expect(everywhere).toHaveCount(1);
+      await expect(everywhere).toHaveText('Everywhere');
+
+      // …and a command live in the panels but not the file tree gets TWO SEPARATE pills. Joined into
+      // one, "Editor · Terminal" reads as a single exotic scope rather than as two ordinary ones.
+      const panels = prefs.getByTestId('binding-editor.save-scope').locator('.keybinding-scope');
+      await expect(panels).toHaveCount(2);
+      await expect(panels).toHaveText(['Editor', 'Terminal']);
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
+
+test('a REAL clash — scopes that intersect — still warns and never silently steals the chord', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openKeybindings(app, win);
+
+      // Both of these are EDITOR-scoped, so their scopes intersect: this is a genuine clash, and it
+      // must still raise 007 FR-034's warn → Reassign/Cancel.
+      //
+      // This is the journey a scope-aware `findConflict` could quietly destroy. Make it a shade too
+      // permissive — have it answer "no conflict" when it should not — and the last writer silently
+      // takes the chord, which is exactly the behaviour FR-017b2 bans. Nothing else catches that:
+      // the scope table would still be right, the coexistence test above would still pass, and the
+      // only symptom is a binding the user never agreed to give up.
+      await prefs.getByTestId('binding-editor.indentLines').dblclick();
+      await sendChord(prefs, 'x', { ctrlKey: true }); // …Ctrl+X, owned by editor.cutLine
+      await expect(prefs.getByTestId('capture-conflict')).toBeVisible();
+
+      // Cancel keeps BOTH bindings exactly as they were — the chord is not stolen.
+      await prefs.getByTestId('capture-cancel').click();
+      await expect(prefs.getByTestId('capture-modal')).toBeHidden();
+      await expect(prefs.getByTestId('binding-editor.cutLine-chord')).toContainText('Ctrl+X');
+      await expect(prefs.getByTestId('binding-editor.indentLines-chord')).not.toContainText('Ctrl+X');
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});

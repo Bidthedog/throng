@@ -4,7 +4,12 @@ import {
   SETTINGS_INTERNAL_KEYS,
   settingsLeaves,
 } from '../../src/config/settings-metadata.js';
-import { assertEveryKeyDescribed, auditRegistry, leavesOf } from '../../src/config/metadata.js';
+import {
+  assertEveryKeyDescribed,
+  auditRegistry,
+  leavesOf,
+  leavesOfDeclared,
+} from '../../src/config/metadata.js';
 import { DEFAULT_APP_SETTINGS } from '../../src/config/app-settings.js';
 
 describe('SETTINGS_METADATA completeness (FR-047)', () => {
@@ -20,14 +25,21 @@ describe('SETTINGS_METADATA completeness (FR-047)', () => {
   });
 
   it('excludes only the internal version marker from the configurable set', () => {
-    const allLeaves = leavesOf(DEFAULT_APP_SETTINGS);
+    // A declared MAP is ONE leaf (016, F5). Its rows are the user's DATA — `.foo` → Python, Go →
+    // tabs — not fields of the settings schema, so they cannot each carry a descriptor. Walking
+    // into them would demand one for `editor.indentByLanguage.csharp.style`, and a new row a user
+    // added at runtime would make their own configuration fail its own completeness check.
+    const allLeaves = leavesOfDeclared(DEFAULT_APP_SETTINGS, SETTINGS_METADATA);
     const configurable = settingsLeaves();
-    expect(allLeaves).toContain('version');
+    expect(leavesOf(DEFAULT_APP_SETTINGS)).toContain('version');
     expect(configurable).not.toContain('version');
     // Every non-internal leaf is configurable.
     for (const leaf of allLeaves) {
       if (!SETTINGS_INTERNAL_KEYS.includes(leaf)) expect(configurable).toContain(leaf);
     }
+    // …and the maps are leaves in their own right, not doors into the user's rows.
+    expect(allLeaves).toContain('editor.indentByLanguage');
+    expect(allLeaves).not.toContain('editor.indentByLanguage.csharp.style');
   });
 
   it('has unique descriptor keys', () => {

@@ -56,14 +56,24 @@ describe('isBindableChord (FR-033a: any single non-excluded key)', () => {
     expect(isBindableChord('Ctrl')).toBe(false);
     expect(isBindableChord('Meta')).toBe(false);
     expect(isBindableChord('Ctrl+Shift')).toBe(false);
-    // excluded single keys (FR-033a): Esc/Space/Shift/Ctrl/Enter/CapsLock/Tab/NumLock
+    // excluded single keys (FR-033a): Esc/Space/Shift/Ctrl/Enter/CapsLock/NumLock
     for (const k of EXCLUDED_KEYS) expect(isBindableChord(k), k).toBe(false);
     expect(isBindableChord('Escape')).toBe(false);
     expect(isBindableChord('Space')).toBe(false);
     expect(isBindableChord('Enter')).toBe(false);
-    expect(isBindableChord('Tab')).toBe(false);
     expect(isBindableChord('CapsLock')).toBe(false);
     expect(isBindableChord('NumLock')).toBe(false);
+  });
+
+  it('BINDS Tab and Shift+Tab — 016 freed them, because indent/outdent need them (F1)', () => {
+    // They left EXCLUDED_KEYS deliberately. `Tab` is `editor.indentLines`' default and every code
+    // editor uses it; while it was excluded, two of the seven commands were unrebindable and the
+    // shipped default was itself uncapturable. The exclusion existed to protect focus traversal,
+    // and FR-017f's focus guard now protects that directly — while a find bar or any other
+    // transient input has focus, Tab moves within it and never reaches the document.
+    expect(EXCLUDED_KEYS.has('Tab')).toBe(false);
+    expect(isBindableChord('Tab')).toBe(true);
+    expect(isBindableChord('Shift+Tab')).toBe(true);
   });
 
   it('an excluded key IS bindable when combined with a modifier (modifier combos allowed)', () => {
@@ -95,6 +105,28 @@ describe('isReservedChord (FR-032a: OS/window-control denylist)', () => {
     expect(isReservedChord('Ctrl+B')).toBe(false);
     expect(isReservedChord('Ctrl+Meta+L')).toBe(false);
     expect(isReservedChord('Ctrl+Shift+P')).toBe(false);
+  });
+});
+
+describe('findConflict is SCOPE-AWARE (016, FR-017b1)', () => {
+  const bindings = {
+    'editor.cutLine': ['Ctrl+X'], // {editor}
+    'file.cut': ['Ctrl+X'], // {explorer}
+    'editor.indentLines': ['Tab'], // {editor}
+  };
+
+  it('does NOT flag a chord shared by commands whose scopes are DISJOINT', () => {
+    // The headline coexistence: Ctrl+X cuts a LINE in an editor and a FILE in the tree. Warning
+    // about this would train the user to dismiss the warning that matters.
+    expect(findConflict(bindings, 'Ctrl+X', 'editor.cutLine')).toBeNull();
+    expect(findConflict(bindings, 'Ctrl+X', 'file.cut')).toBeNull();
+  });
+
+  it('DOES flag a chord whose commands are live in a common context', () => {
+    // Rebinding indent to Ctrl+X would put two commands on one chord inside the editor — a real
+    // clash, and 007's warn → Reassign/Cancel flow must still fire. A scope-aware check that
+    // wrongly said "no conflict" here would silently reintroduce last-writer-wins.
+    expect(findConflict(bindings, 'Ctrl+X', 'editor.indentLines')).toBe('editor.cutLine');
   });
 });
 

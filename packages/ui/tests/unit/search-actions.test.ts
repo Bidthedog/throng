@@ -8,6 +8,7 @@
  * a find session to take it for.
  */
 import { describe, expect, it } from 'vitest';
+import { COMMAND_SCOPES, type ActionId } from '@throng/core';
 import { reservedByTerminal } from '../../src/renderer/search/search-actions.js';
 
 describe('reservedByTerminal', () => {
@@ -55,5 +56,34 @@ describe('reservedByTerminal', () => {
   it('leaves unrelated actions to their own handlers', () => {
     expect(reservedByTerminal('editor.save', true)).toBe(false);
     expect(reservedByTerminal('focus.cycle', true)).toBe(false);
+  });
+
+  it('is NOT a scope table — being live in a terminal does not make a key throng’s (016)', () => {
+    // The guard against a tempting refactor. 016's dispatch scope answers "is this command live
+    // here?"; this answers "does throng take the key, or does the SHELL?". Every action below is
+    // live in a terminal by COMMAND_SCOPES, and every one of them still belongs to the program:
+    //
+    //   search.replace  → Ctrl+H → BACKSPACE
+    //   editor.save     → Ctrl+S → XOFF
+    //   search.close    → Escape → vim's insert mode, with no find bar up
+    //
+    // Replacing this function with `resolveAction(kb, ev, 'terminal') !== null` would swallow all
+    // three, and the shell would lose backspace. The default is DENY, and it must stay DENY.
+    const liveInATerminalButTheProgram: ActionId[] = [
+      'search.replace',
+      'search.replaceCurrent',
+      'search.replaceAll',
+      'editor.save',
+      'editor.saveAll',
+    ];
+    for (const action of liveInATerminalButTheProgram) {
+      expect(COMMAND_SCOPES[action]).toContain('terminal'); // …scope says it is live here
+      expect(reservedByTerminal(action, true)).toBe(false); // …and the shell keeps the key anyway
+    }
+
+    // Escape, specifically: ours only while there is a find session to take it for.
+    expect(COMMAND_SCOPES['search.close']).toContain('terminal');
+    expect(reservedByTerminal('search.close', false)).toBe(false);
+    expect(reservedByTerminal('search.close', true)).toBe(true);
   });
 });

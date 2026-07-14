@@ -8,6 +8,7 @@ import { NodeFileSystem } from '../../src/main/node-file-system.js';
 import { EditorService } from '../../src/main/editor-service.js';
 import { EditorCoordinator, type DocMeta } from '../../src/main/editor-coordinator.js';
 import { EditorRecovery } from '../../src/main/editor-recovery.js';
+import { editDocument } from './helpers/edit-document.js';
 
 const fs = new NodeFileSystem(async () => {});
 const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -21,6 +22,7 @@ function makeCoordinator(): { coord: EditorCoordinator; recovery: EditorRecovery
   const coord = new EditorCoordinator(service, recovery, {
     recoveryDebounceMs: 10,
     relaySync: () => {},
+    persistUndoHistory: () => true,
   });
   return { coord, recovery };
 }
@@ -47,7 +49,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
-  await rm(recoveryDir, { recursive: true, force: true });
+  await rm(recoveryDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 describe('editor crash recovery (006, FR-041/042/043)', () => {
@@ -55,13 +57,17 @@ describe('editor crash recovery (006, FR-041/042/043)', () => {
     // Session 1: an unsaved new document with in-progress content.
     const s1 = makeCoordinator();
     s1.coord.register(meta('p1', null), '');
-    await s1.coord.notifyDirty(0, { ...meta('p1', null), dirty: true, text: 'work in progress' });
+    editDocument(s1.coord, meta('p1', null), 'work in progress');
     await wait(40); // let the debounced recovery write flush
 
     // Session 2 (simulated relaunch): a fresh coordinator recovers by panelId.
     const s2 = makeCoordinator();
     const recovered = await s2.coord.recover();
-    expect(recovered).toContainEqual({ panelId: 'p1', text: 'work in progress' });
+    // `toMatchObject`, not an exact shape: the snapshot is STRUCTURED since 016 (it also carries the
+    // document version and, unless the user turned it off, the undo history — T088/T089). What this
+    // test is about is the CONTENT surviving a relaunch, and that is what it asserts.
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]).toMatchObject({ panelId: 'p1', text: 'work in progress' });
   });
 
   it('removes the recovery temp on full save (no stale temp)', async () => {
@@ -69,7 +75,7 @@ describe('editor crash recovery (006, FR-041/042/043)', () => {
     const file = join(root, 'doc.txt');
     await writeFile(file, 'seed\n');
     coord.register(meta('p1', file), 'seed\n');
-    await coord.notifyDirty(0, { ...meta('p1', file), dirty: true, text: 'edited\n' });
+    editDocument(coord, meta('p1', file), 'edited\n');
     await wait(40);
     expect(existsSync(join(recoveryDir, encodeURIComponent('p1')))).toBe(true);
 
@@ -83,7 +89,7 @@ describe('editor crash recovery (006, FR-041/042/043)', () => {
   it('removes the recovery temp when the editor is destroyed', async () => {
     const { coord } = makeCoordinator();
     coord.register(meta('p1', null), '');
-    await coord.notifyDirty(0, { ...meta('p1', null), dirty: true, text: 'temp' });
+    editDocument(coord, meta('p1', null), 'temp');
     await wait(40);
     expect(existsSync(join(recoveryDir, encodeURIComponent('p1')))).toBe(true);
     coord.destroy('p1');
@@ -93,8 +99,8 @@ describe('editor crash recovery (006, FR-041/042/043)', () => {
 
   it('cleanupRecovery drops temps for panels that are no longer open', async () => {
     const { coord, recovery } = makeCoordinator();
-    await recovery.write('gone', 'orphan content');
-    await recovery.write('kept', 'live content');
+    await recovery.write('gone', { version: 1, text: 'orphan content' });
+    await recovery.write('kept', { version: 1, text: 'live content' });
     await coord.cleanupRecovery(['kept']);
     expect((await recovery.list()).map((r) => r.panelId).sort()).toEqual(['kept']);
   });
