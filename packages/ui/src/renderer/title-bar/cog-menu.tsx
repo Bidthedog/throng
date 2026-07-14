@@ -1,11 +1,26 @@
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import { useRef, type ReactElement } from 'react';
+
+import { Icon } from '../common/icon.js';
+import { useContextMenu } from '../context-menu-provider.js';
+import type { MenuItem } from '../workspace/context-menu.js';
 
 /**
- * The cog action + its menu (007, FR-005/008/009). Rendered on the **main
- * window only** (the parent gates it with `showCog`). Clicking the cog opens a
- * menu of exactly Settings / Key Bindings / Themes (in that order); choosing one
- * opens the single shared preferences window on that tab. The menu is dismissible
- * without a selection (click-away or Escape).
+ * The cog action + its menu (007, FR-005/008/009). Rendered on the **main window only** (the parent
+ * gates it with `showCog`). Clicking the cog opens a menu of exactly Settings / Key Bindings /
+ * Themes (in that order); choosing one opens the single shared preferences window on that tab.
+ *
+ * 018 / FR-013 — REBUILT ON THE SHARED MENU. This used to be a bespoke re-implementation: its own
+ * markup, its own click-away listener, its own Escape handler, no edge flip, no participation in the
+ * single-menu-open invariant, and a GEAR DRAWN AS A HARD-CODED INLINE VECTOR — which the
+ * constitution prohibits outright, and which is the whole of issue #56.
+ *
+ * The inline gear existed for a reason that is worth recording: the theme had no settings glyph, so
+ * there was nothing to resolve. 018 adds the `settings` icon token, and the same token now serves the
+ * project-settings options icon too. One token, two consumers, no inline artwork.
+ *
+ * What this component is now: a button that opens the shared menu. Flip/clamp, click-away, Escape,
+ * keyboard navigation and the one-menu-at-a-time invariant all come for free, because they are the
+ * shared menu's, and there is only one of it.
  */
 
 const MENU_ITEMS = [
@@ -14,80 +29,53 @@ const MENU_ITEMS = [
   { tab: 'themes', label: 'Themes' },
 ] as const;
 
-/**
- * A standard, uniform settings gear (FR-005/H3) — the conventional 8-tooth cog,
- * not a bespoke/irregular mark. (Bootstrap Icons "gear".)
- */
-function CogGlyph(): ReactElement {
-  return (
-    <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden focusable="false" data-testid="cog-glyph">
-      <path
-        fill="currentColor"
-        d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"
-      />
-      <path
-        fill="currentColor"
-        d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"
-      />
-    </svg>
-  );
-}
-
 export function CogMenu(): ReactElement {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const { openMenu, isOpen } = useContextMenu();
+  const wasOpen = useRef(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (e: MouseEvent): void => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  const choose = (tab: (typeof MENU_ITEMS)[number]['tab']): void => {
-    window.throng?.openPreferences?.(tab);
-    setOpen(false);
+  const open = (): void => {
+    const r = btnRef.current?.getBoundingClientRect();
+    const items: MenuItem[] = MENU_ITEMS.map((item) => ({
+      label: item.label,
+      // The identifiers survive the rebuild. `cog-menu-settings` is how roughly ten preferences
+      // suites reach the preferences window; renaming them would have made this unification a
+      // ten-file test migration (FR-053).
+      testId: `cog-menu-${item.tab}`,
+      // No icon. These three are DESTINATIONS, not actions — and giving all of them the same gear
+      // (the icon of the control that opened the menu) would say nothing at all. The shared menu
+      // renders icons where an item has one; an item that means nothing by having one goes without.
+      onClick: () => window.throng?.openPreferences?.(item.tab),
+    }));
+    // Anchor under the cog, as a drop-down should be. The shared menu flips and clamps from here, so
+    // a cog near the right edge no longer pushes its menu off-screen — which the bespoke one did.
+    openMenu(r?.left ?? 0, r?.bottom ?? 0, items, { testId: 'cog-menu' });
   };
 
   return (
-    <div className="cog-menu" ref={ref}>
+    <div className="cog-menu">
       <button
+        ref={btnRef}
         type="button"
         className="title-bar__action cog-menu__button"
         data-testid="title-bar-cog"
         title="Settings menu"
         aria-label="Settings menu"
         aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        // TOGGLE. The provider closes the open menu on any window `pointerdown` — which fires before
+        // this click — so a plain `onClick={open}` closes the menu and instantly reopens it, and the
+        // cog can never close its own menu. Remember whether one was open when the press began.
+        onPointerDown={() => {
+          wasOpen.current = isOpen;
+        }}
+        onClick={() => {
+          if (!wasOpen.current) open();
+        }}
       >
-        <CogGlyph />
+        <span data-testid="cog-glyph">
+          <Icon token="settings" />
+        </span>
       </button>
-      {open ? (
-        <div className="cog-menu__list" role="menu" data-testid="cog-menu">
-          {MENU_ITEMS.map((item) => (
-            <button
-              key={item.tab}
-              type="button"
-              role="menuitem"
-              className="cog-menu__item"
-              data-testid={`cog-menu-${item.tab}`}
-              onClick={() => choose(item.tab)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }

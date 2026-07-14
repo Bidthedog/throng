@@ -160,6 +160,18 @@ declare global {
       // Editor panels (006): UI-main-owned editor coordination (peer of files.*).
       editor?: {
         load: (req: unknown) => Promise<EditorLoadResult>;
+        /** The OS path of a dragged-in File. '' for a File the renderer synthesised (018 / US9). */
+        getPathForFile: (file: File) => string;
+        /** Ask MAIN whether a dropped path may be opened here — never decided renderer-side. */
+        resolveDrop: (req: {
+          panelId: string;
+          ownerKind: 'project' | 'subworkspace';
+          ownerProjectId?: string;
+          ownerRoot: string | null;
+          allProjectRoots: string[];
+          tabId: string | null;
+          absPath: string;
+        }) => Promise<EditorDropResult>;
         register: (meta: unknown) => void;
         /** Send an edit this view has already applied locally, to the document's authority. */
         dispatch: (req: import('@throng/core').DispatchChangeMsg & Record<string, unknown>) => void;
@@ -240,7 +252,25 @@ export type EditorLoadResult =
       lineEnding: 'lf' | 'crlf' | 'cr';
       relativeFolder: string | null;
     }
-  | { ok: false; reason: 'binary' | 'too-large' | 'io'; error: string };
+  // 018 / US9 — the reasons a load can be REFUSED, kept distinct from the reasons it can FAIL.
+  // `out-of-tree` is a file that exists and is not permitted here; `folder` is not a file at all;
+  // `not-found` is a genuine absence. They used to collapse into `io`, which is how an ownership
+  // refusal came to be announced as a missing file and then suppressed by a preference about missing
+  // files — a rejection that says nothing at all (FR-061).
+  | {
+      ok: false;
+      reason: 'binary' | 'too-large' | 'io' | 'out-of-tree' | 'folder' | 'not-found';
+      error: string;
+    };
+
+/** Result of `window.throng.editor.resolveDrop` — may this dropped path be opened here? (018 / US9.) */
+export type EditorDropResult =
+  | { ok: true; absPath: string }
+  | {
+      ok: false;
+      reason: 'out-of-tree' | 'folder' | 'too-large' | 'io' | 'not-found';
+      error: string;
+    };
 
 /** Result of `window.throng.editor.save`. */
 export type EditorSaveResult =

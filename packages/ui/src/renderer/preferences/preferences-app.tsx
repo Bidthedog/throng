@@ -8,6 +8,10 @@ import {
   useKeybindings,
   writeConfig,
 } from '../config/config-store.js';
+import { ContextMenuProvider } from '../context-menu-provider.js';
+import { useNoDropNavigation } from '../composition-root.js';
+import { ConfirmProvider, useConfirm } from '../confirm-dialog.js';
+import { NotificationProvider } from '../common/notification.js';
 import { ThemeProvider } from '../theme/theme-provider.js';
 import { IconButton } from '../common/icon-button.js';
 import { TitleBar } from '../title-bar/title-bar.js';
@@ -42,11 +46,10 @@ export function isPreferencesTab(value: string | null): value is PreferencesTab 
 function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): ReactElement {
   const [tab, setTab] = useState<PreferencesTab>(initialTab);
   const [mode, setMode] = useState<'ui' | 'json'>('ui'); // global UI⇄JSON toggle (FR-020)
-  // `revert` = feature 007's session undo; `preferences` = feature 015's reset to shipped.
-  const [confirming, setConfirming] = useState<null | 'current' | 'revert' | 'preferences'>(null);
   // A reset that could not be written must never fail silently (FR-006a) — including one
   // fired from a row inside a tab, which is why the reporter is shared through context.
-  const { notice, report, dismiss } = useResetNotice();
+  const { report } = useResetNotice();
+  const confirm = useConfirm();
 
   // Per-tab scroll position. The three editors share ONE scrolling element (the tab panel is a
   // single DOM node whose children swap), so without this the browser carries one tab's scroll
@@ -130,28 +133,63 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
     );
   };
 
+  /**
+   * Ask, on the SHARED confirmation model, keeping the identifiers the reset suite drives.
+   *
+   * FR-052: reset, revert and clear are THREE DIFFERENT QUESTIONS and stay described as such.
+   * Reset asks "what does throng ship?"; revert asks "what did I open this window with?". Feature
+   * 015 only just landed that distinction, and collapsing their strings into one would destroy it.
+   */
+  const ask = (message: string, confirmLabel: string): Promise<boolean> =>
+    confirm({
+      message,
+      confirmLabel,
+      testIds: { dialog: 'prefs-reset-confirm', message: 'prefs-reset-confirm-message' },
+      choices: [
+        { label: 'Cancel', value: 'cancel', testId: 'prefs-reset-confirm-no' },
+        { label: confirmLabel, value: 'accept', testId: 'prefs-reset-confirm-yes' },
+      ],
+    }).then((v) => v === true);
+
   const doResetCurrent = (): void => {
-    // Restored in MAIN, from feature 010's record (FR-011/FR-011b). This used to compute the
-    // defaults document in the renderer from a SECOND set of constants — which had already
-    // drifted from the record once. The app now has exactly one notion of "shipped".
-    const config = window.throng?.config;
-    if (tab === 'settings') run('Resetting the Settings editor', config?.resetSettings?.bind(config));
-    else if (tab === 'keybindings')
-      run('Resetting the Key Bindings editor', config?.resetKeybindings?.bind(config));
-    setConfirming(null);
+    void ask(
+      `Reset the ${currentEditorLabel} editor to its shipped defaults?`,
+      'Reset',
+    ).then((ok) => {
+      if (!ok) return;
+      // Restored in MAIN, from feature 010's record (FR-011/FR-011b). This used to compute the
+      // defaults document in the renderer from a SECOND set of constants — which had already
+      // drifted from the record once. The app now has exactly one notion of "shipped".
+      const config = window.throng?.config;
+      if (tab === 'settings')
+        run('Resetting the Settings editor', config?.resetSettings?.bind(config));
+      else if (tab === 'keybindings')
+        run('Resetting the Key Bindings editor', config?.resetKeybindings?.bind(config));
+    });
   };
 
   /** Feature 007's session undo — back to how the window opened. NOT a defaults reset. */
   const doRevertAll = (): void => {
-    for (const entry of revertAll(snapshotRef.current)) void writeConfig(entry.id, entry.json);
-    setConfirming(null);
+    void ask('Revert every editor to its state when this window opened?', 'Revert all').then(
+      (ok) => {
+        if (!ok) return;
+        for (const entry of revertAll(snapshotRef.current)) void writeConfig(entry.id, entry.json);
+      },
+    );
   };
 
   /** Feature 015's global reset — settings + key bindings + built-in themes, atomically. */
   const doResetPreferences = (): void => {
-    const config = window.throng?.config;
-    run('Resetting all preferences', config?.resetPreferences?.bind(config));
-    setConfirming(null);
+    void ask(
+      // Both halves of the blast radius, so the user is neither misled about what goes nor left
+      // fearing for work that was never at risk (FR-005b/FR-006).
+      'Reset all preferences — settings, key bindings and the built-in themes — to their shipped defaults? Your projects, window layout, workspace state and custom themes are not affected.',
+      'Reset all preferences',
+    ).then((ok) => {
+      if (!ok) return;
+      const config = window.throng?.config;
+      run('Resetting all preferences', config?.resetPreferences?.bind(config));
+    });
   };
 
   return (
@@ -192,7 +230,7 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
                 className="prefs-toolbtn prefs-toolbtn--icon"
                 testId="prefs-reset-current"
                 title={`Reset the ${currentEditorLabel} editor to its defaults`}
-                onClick={() => setConfirming('current')}
+                onClick={doResetCurrent}
               />
             ) : null}
             <IconButton
@@ -200,65 +238,29 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
               className="prefs-toolbtn prefs-toolbtn--icon"
               testId="prefs-reset-preferences"
               title="Reset All Preferences"
-              onClick={() => setConfirming('preferences')}
+              onClick={doResetPreferences}
             />
             <IconButton
               token="retry"
               className="prefs-toolbtn prefs-toolbtn--icon prefs-toolbtn--revert"
               testId="prefs-revert-all"
               title="Revert All Preferences"
-              onClick={() => setConfirming('revert')}
+              onClick={doRevertAll}
             />
           </div>
 
-          {confirming ? (
-            <div className="prefs-confirm" data-testid="prefs-reset-confirm">
-              <span>
-                {confirming === 'current'
-                  ? `Reset the ${currentEditorLabel} editor to its shipped defaults?`
-                  : confirming === 'revert'
-                    ? 'Revert every editor to its state when this window opened?'
-                    : // Both halves of the blast radius, so the user is neither misled about what
-                      // goes nor left fearing for work that was never at risk (FR-005b/FR-006).
-                      'Reset all preferences — settings, key bindings and the built-in themes — to their shipped defaults? Your projects, window layout, workspace state and custom themes are not affected.'}
-              </span>
-              <button
-                type="button"
-                className="prefs-toolbtn"
-                data-testid="prefs-reset-confirm-yes"
-                onClick={
-                  confirming === 'current'
-                    ? doResetCurrent
-                    : confirming === 'revert'
-                      ? doRevertAll
-                      : doResetPreferences
-                }
-              >
-                {confirming === 'current' ? 'Reset' : confirming === 'revert' ? 'Revert all' : 'Reset all preferences'}
-              </button>
-              <button
-                type="button"
-                className="prefs-toolbtn"
-                data-testid="prefs-reset-confirm-no"
-                onClick={() => setConfirming(null)}
-              >
-                Cancel
-              </button>
-            </div>
-          ) : null}
-
-          {notice ? (
-            <div className="prefs-notice" data-testid="prefs-notice" role="alert">
-              <span>{notice}</span>
-              <IconButton
-                token="dismiss"
-                className="prefs-toolbtn prefs-toolbtn--icon"
-                testId="prefs-notice-dismiss"
-                title="Dismiss this message"
-                onClick={dismiss}
-              />
-            </div>
-          ) : null}
+          {/*
+           * 018 / FR-051 — the inline confirm strip and the inline notice strip are GONE.
+           *
+           * They were two of the nine idioms. The strip pushed the layout down rather than sitting
+           * over it, had no overlay, no Escape and no focus trap; and the notice strip's colour came
+           * from `--danger`, a variable defined nowhere, so it rendered a literal #e5534b whatever
+           * the theme was.
+           *
+           * Both are now the shared models — which this window can finally reach, because the
+           * providers are mounted here (FR-054). The identifiers are preserved, so the suites that
+           * drive them did not have to be rewritten.
+           */}
           <div
             className="prefs-tabpanel"
             role="tabpanel"
@@ -294,11 +296,47 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
 }
 
 export function PreferencesApp({ initialTab }: { initialTab: PreferencesTab }): ReactElement {
+  // 018 / FR-061a — the preferences window is a SEPARATE renderer realm with its own root, so it needs
+  // the drop-navigation guard too. Without it, a file dropped anywhere on this window makes the engine
+  // navigate to it, and the preferences session is simply replaced by a view of the dropped file. It has
+  // no drop target of its own; that is exactly why every drop here lands on nothing and would navigate.
+  useNoDropNavigation();
   return (
     <ConfigProvider>
-      <ResetNoticeProvider>
-        <PreferencesShell initialTab={initialTab} />
-      </ResetNoticeProvider>
+      {/*
+       * 018 / FR-018 — mount the SHARED menu provider here.
+       *
+       * The preferences window never mounted it, and that single omission is why the Key Bindings
+       * editor grew a bespoke menu of its own: `useContextMenu()` throws outside a provider, so the
+       * only way to have a menu here was to write another one.
+       *
+       * It costs one line. There is exactly one renderer bundle, routed by query string, so the
+       * provider was always importable and its stylesheet was always loaded — everything it needs
+       * (settings, theme, icon packs) is already in scope. The issue assumed this window was a
+       * separate renderer that could not reach the shared provider. It is not.
+       */}
+      {/*
+       * 018 / FR-054 — the CONFIRMATION model reaches the preferences window at last.
+       *
+       * It was never mounted here, and that single omission is the whole reason the themes surface
+       * grew a RIVAL confirmation dialog: `useConfirm()` throws outside a provider, so the only way
+       * to have a confirmation in this window was to write a second one.
+       *
+       * The notification model comes with it, so a failure in this window is reported exactly as a
+       * failure in any other window is.
+       */}
+      <NotificationProvider>
+        <ConfirmProvider>
+          <ContextMenuProvider>
+            {/* ResetNoticeProvider is a thin ADAPTER over the notification model now — it keeps the
+                `report(operation, result)` shape its callers use, and turns a failed reset into an
+                ordinary notice. It must sit inside the NotificationProvider it delegates to. */}
+            <ResetNoticeProvider>
+              <PreferencesShell initialTab={initialTab} />
+            </ResetNoticeProvider>
+          </ContextMenuProvider>
+        </ConfirmProvider>
+      </NotificationProvider>
     </ConfigProvider>
   );
 }

@@ -23,7 +23,21 @@ export type ControlKind =
   | 'chord' // keybinding chord (edited via the capture modal)
   | 'icon' // theme icon token (pack-aware)
   | 'folder' // editable path + browse-to-pick folder (011, shared folder-picker)
-  | 'map'; // keyed table: key column + typed value columns (016, F5)
+  | 'map' // keyed table: key column + typed value columns (016, F5)
+  /*
+   * 018 / FR-032 — a bounded numeric, edited by DRAGGING as well as typing. Sizes, delays and
+   * widths are far easier to set by dragging than by typing.
+   *
+   * It is an EXPLICIT OPT-IN, not a property inferred from having bounds. An earlier draft rendered
+   * a slider for any numeric declaring both a min and a max — which would have made this member of
+   * a CLOSED vocabulary something no descriptor ever set and no code ever read (dead code, Principle
+   * VIII), and would have forced an invented 2 GiB ceiling onto the maximum-file-size setting purely
+   * so it could take a slider it should never have had: a slider from kilobytes to gigabytes moves in
+   * megabyte jumps per pixel, which is a worse control than the text box it replaces.
+   *
+   * A descriptor declaring `slider` MUST also declare `min`, `max` and `step`.
+   */
+  | 'slider';
 
 /**
  * One column of a `map` control (016). The key column is implicit; these are its VALUE columns,

@@ -12,6 +12,7 @@ import {
   type FieldDescriptor,
 } from '@throng/core';
 import { useKeybindings } from '../config/config-store.js';
+import { useContextMenu } from '../context-menu-provider.js';
 import { debounce, writeConfig } from '../config/write-config.js';
 import { IconButton } from '../common/icon-button.js';
 import { useResetNotice } from './reset-notice.js';
@@ -61,12 +62,17 @@ function groupDescriptors(items: readonly FieldDescriptor[]): {
   return order.map((group) => ({ group, items: byGroup.get(group)! }));
 }
 
-interface ChordMenu {
-  action: ActionId;
-  token: string;
-  x: number;
-  y: number;
-}
+/*
+ * 018 / FR-013 — the chord's right-click menu is REBUILT ON THE SHARED MENU.
+ *
+ * It used to be a bespoke re-implementation: its own markup, its own click-away and Escape
+ * listeners, a raw left/top with NO edge flip (right-click a chord near the bottom of the window and
+ * the menu ran off the screen), no icon on its item, and no participation in the single-menu-open
+ * invariant.
+ *
+ * It also had ZERO end-to-end coverage — the only menu in the application with none. FR-019 makes
+ * that an explicit obligation of this feature, and it is covered now.
+ */
 
 export function KeybindingsTab({
   searchDebounceMs = SEARCH_DEBOUNCE_MS,
@@ -77,7 +83,7 @@ export function KeybindingsTab({
   const entry = useOnEntry().keybindings;
   const { report } = useResetNotice();
   const [capturing, setCapturing] = useState<{ action: ActionId; label: string } | null>(null);
-  const [chordMenu, setChordMenu] = useState<ChordMenu | null>(null);
+  const { openMenu } = useContextMenu();
 
   // `query` drives the input (instant); `applied` drives the filter (debounced) — the same
   // split the Settings tab uses, so typing is never blocked by the filter.
@@ -121,23 +127,27 @@ export function KeybindingsTab({
 
   const removeChord = (action: ActionId, token: string): void => {
     writeBindings(applyRemove(keybindings.bindings, action, token));
-    setChordMenu(null);
   };
 
-  // Dismiss the chord context menu on any outside click / Escape.
-  useEffect(() => {
-    if (!chordMenu) return;
-    const close = (): void => setChordMenu(null);
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setChordMenu(null);
-    };
-    document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', close);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [chordMenu]);
+  /** Open the chord's menu on the SHARED menu — flip/clamp, Escape, click-away and the one-menu
+   *  invariant all come from there, and none of them existed here before. */
+  const openChordMenu = (e: React.MouseEvent, action: ActionId, token: string): void => {
+    e.preventDefault();
+    e.stopPropagation();
+    openMenu(
+      e.clientX,
+      e.clientY,
+      [
+        {
+          label: `Remove “${token}”`,
+          icon: 'destroy',
+          testId: 'binding-context-remove',
+          onClick: () => removeChord(action, token),
+        },
+      ],
+      { testId: 'binding-context-menu' },
+    );
+  };
 
   return (
     <div className="keybindings-tab" data-testid="keybindings-tab">
@@ -217,11 +227,7 @@ export function KeybindingsTab({
                           className="kb-pill"
                           key={c}
                           data-testid={`binding-${d.key}-pill-${i}`}
-                          onContextMenu={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setChordMenu({ action, token: c, x: e.clientX, y: e.clientY });
-                          }}
+                          onContextMenu={(e) => openChordMenu(e, action, c)}
                         >
                           <span className="kb-pill__chord">{c}</span>
                           <IconButton
@@ -265,26 +271,6 @@ export function KeybindingsTab({
           })}
         </section>
       ))}
-
-      {chordMenu ? (
-        <div
-          className="kb-ctx-menu"
-          data-testid="binding-context-menu"
-          role="menu"
-          style={{ left: chordMenu.x, top: chordMenu.y }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            role="menuitem"
-            className="kb-ctx-menu__item"
-            data-testid="binding-context-remove"
-            onClick={() => removeChord(chordMenu.action, chordMenu.token)}
-          >
-            Remove “{chordMenu.token}”
-          </button>
-        </div>
-      ) : null}
 
       {capturing ? (
         <CaptureModal

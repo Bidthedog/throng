@@ -9,6 +9,33 @@ import type { SaveAllScope, SerialisedHistory } from '@throng/core';
 import { senderWebContentsId } from './broadcast.js';
 import type { EditorCoordinator, DocMeta } from './editor-coordinator.js';
 
+/** A project, as MAIN knows it — from the daemon, not from a renderer's say-so. */
+export interface OwnedProject {
+  id: string;
+  rootFolder: string;
+}
+
+/**
+ * The projects, resolved in MAIN (018 / US9).
+ *
+ * The confinement rule is parameterised by two facts: which roots exist, and which one this document
+ * belongs to. If the RENDERER supplies those facts, then the renderer is choosing the rule it is about
+ * to be judged by — it can hand over an empty root list (making "outside every project" vacuously true
+ * of every path on the disk) or name any owner root it likes. The check would then be a formality
+ * performed on the defendant's own evidence.
+ *
+ * It is also not merely a theoretical hole. The renderer's project list is EMPTY until its async load
+ * resolves, so a panel restoring at startup would, entirely honestly, submit `allProjectRoots: []` —
+ * and a sub-workspace editor holding a path inside a project would sail through the very check this
+ * story added to stop it.
+ *
+ * So main asks the daemon. The renderer still says WHICH document and WHICH file; it no longer says
+ * what the rules are.
+ */
+export interface EditorIpcDeps {
+  listProjects: () => Promise<readonly OwnedProject[]>;
+}
+
 function windowIdOf(event: IpcMainInvokeEvent | IpcMainEvent): string {
   return String(senderWebContentsId(event.sender) ?? 0);
 }
@@ -32,10 +59,36 @@ function toMeta(event: IpcMainInvokeEvent | IpcMainEvent, raw: Record<string, un
   };
 }
 
-export function registerEditorIpc(coordinator: EditorCoordinator): void {
-  ipcMain.handle('throng:editor:load', (event, raw: Record<string, unknown>) => {
-    const meta = toMeta(event, raw);
-    if (!meta.absPath) return { ok: false, reason: 'io', error: 'No path to load.' };
+export function registerEditorIpc(coordinator: EditorCoordinator, deps: EditorIpcDeps): void {
+  /**
+   * Replace the renderer's claimed roots with MAIN's own.
+   *
+   * `ownerRoot` is DERIVED from the owning project's id rather than taken on trust, so a renderer
+   * cannot widen its own confinement by naming a root it does not own. If the daemon cannot be asked,
+   * we fail CLOSED: an unknown project list cannot prove a file is in scope, and a check that gives up
+   * and says yes is not a check.
+   */
+  const authoritative = async (meta: DocMeta): Promise<DocMeta | null> => {
+    let projects: readonly OwnedProject[];
+    try {
+      projects = await deps.listProjects();
+    } catch {
+      return null;
+    }
+    const ownerRoot =
+      meta.ownerKind === 'project' && meta.ownerProjectId !== undefined
+        ? (projects.find((p) => p.id === meta.ownerProjectId)?.rootFolder ?? null)
+        : null;
+    return { ...meta, ownerRoot, allProjectRoots: projects.map((p) => p.rootFolder) };
+  };
+
+  ipcMain.handle('throng:editor:load', async (event, raw: Record<string, unknown>) => {
+    const claimed = toMeta(event, raw);
+    if (!claimed.absPath) return { ok: false, reason: 'io', error: 'No path to load.' };
+    const meta = await authoritative(claimed);
+    if (!meta) {
+      return { ok: false, reason: 'io', error: 'The project list is unavailable, so this file cannot be opened.' };
+    }
     return coordinator.load({
       panelId: meta.panelId,
       windowId: meta.windowId,
@@ -44,7 +97,33 @@ export function registerEditorIpc(coordinator: EditorCoordinator): void {
       ownerRoot: meta.ownerRoot,
       allProjectRoots: meta.allProjectRoots,
       tabId: meta.tabId,
-      absPath: meta.absPath,
+      absPath: meta.absPath!,
+    });
+  });
+
+  /**
+   * Decide whether a dropped path may be opened here (018 / US9, FR-057…FR-066).
+   *
+   * THE DECISION IS MADE IN MAIN. The renderer supplies the path the operating system gave it; it does
+   * not supply the verdict. Main resolves the symlinks and applies the SAME confinement rule the save
+   * path applies — so a file that could not be saved is never opened, and the user never types into a
+   * buffer that has nowhere to go (SC-012).
+   *
+   * It resolves ONE path. A drop carries n files, and that loop lives in the renderer, so that a folder
+   * among them is refused individually rather than failing the whole drop (FR-065).
+   */
+  ipcMain.handle('throng:editor:resolveDrop', async (event, raw: Record<string, unknown>) => {
+    const claimed = toMeta(event, raw);
+    if (!claimed.absPath) return { ok: false, reason: 'io', error: 'No path to open.' };
+    const meta = await authoritative(claimed);
+    if (!meta) {
+      return { ok: false, reason: 'not-found', error: 'The project list is unavailable, so this file cannot be opened.' };
+    }
+    return coordinator.resolveDrop({
+      absPath: meta.absPath!,
+      ownerKind: meta.ownerKind,
+      ownerRoot: meta.ownerRoot,
+      allProjectRoots: meta.allProjectRoots,
     });
   });
 

@@ -111,6 +111,60 @@ export async function openFileInTab(ws: Ws, tabId: string, absPath: string): Pro
 }
 
 /**
+ * Open `absPath` into ONE NAMED PANEL — the one the user dropped it on (018 follow-up).
+ *
+ * `openFileInTab` routes to the tab's LAST ACTIVE editor, which is exactly right when the request came
+ * from the tree: the user asked for a file, not for a place. A DROP is the opposite. It is a gesture at
+ * a place, and sending the file to whichever editor happened to be focused a minute ago ignores the
+ * only thing the gesture actually said.
+ *
+ * Everything else is shared with `openFileInTab`, deliberately: the one-buffer rule still focuses an
+ * editor that already holds the file rather than opening a second copy of it, and a DIRTY target still
+ * asks before it is replaced.
+ */
+export async function openFileInPanel(
+  ws: Ws,
+  tabId: string,
+  panelId: string,
+  absPath: string,
+): Promise<void> {
+  // 1) Already open anywhere → focus that one editor (no second buffer, FR-011a).
+  const decision = await window.throng?.editor?.openInto({ absPath });
+  if (decision?.action === 'focus') {
+    focusPanelIfLocal(ws, decision.panelId);
+    return;
+  }
+
+  const actions = getEditorActions(panelId);
+  if (!actions) {
+    // The panel is not an editor yet (or its view has gone). Fall back to the tab-level route rather
+    // than dropping the file on the floor.
+    await openFileInTab(ws, tabId, absPath);
+    return;
+  }
+
+  // 2) Dirty target → the four-choice prompt (US9). Dropping a file onto an editor holding unsaved work
+  //    must not silently discard it just because the gesture was a drag rather than a click.
+  if (actions.isDirty()) {
+    const editorName = getEditorState(panelId)?.displayName ?? 'This editor';
+    const choice = await promptUnsavedOpen(basename(absPath), editorName);
+    if (choice === 'cancel') return;
+    if (choice === 'new') {
+      createDedicatedEditor(ws, tabId, absPath);
+      return;
+    }
+    if (choice === 'save') {
+      const ok = await actions.save();
+      if (!ok) return;
+    }
+  }
+
+  ws.setActivePanel(tabId, panelId);
+  setLastActiveEditor(tabId, panelId);
+  await actions.openFile(absPath);
+}
+
+/**
  * Force `absPath` into a BRAND-NEW dedicated Editor Panel in `tabId` (Open In →
  * "New Editor", FR-072). The caller gates on the file not already being open
  * anywhere (app-wide one-buffer, FR-011a), so no focus/reuse path is needed.

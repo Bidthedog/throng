@@ -12,6 +12,8 @@ import {
   decode,
   encode,
   isProbablyBinary,
+  resolveDrop,
+  type DropDecision,
   resolveSaveConfinement,
   type AppSettings,
   type EditorOwnerKind,
@@ -29,7 +31,18 @@ export type LoadResult =
       lineEnding: LineEndingId;
       relativeFolder: string | null;
     }
-  | { ok: false; reason: 'binary' | 'too-large' | 'io'; error: string };
+  // `out-of-tree` (018 / US9, FR-061): a load refused by the CONFINEMENT rule, and a distinct reason
+  // from `io`. It used to be reported as an io/missing-file error — which the renderer SUPPRESSES when
+  // missing-file warnings are off, making an ownership refusal look like nothing happening at all. A
+  // silent no-op is the one outcome a rejection may never have.
+  | {
+      ok: false;
+      // `not-found` is a genuinely absent file (a dangling symlink, a file deleted mid-drag). It stays
+      // DISTINCT from `out-of-tree`, which is a file that exists and is refused — the two used to be the
+      // same reason, which is how a refusal came to be reported as an absence.
+      reason: 'binary' | 'too-large' | 'io' | 'out-of-tree' | 'folder' | 'not-found';
+      error: string;
+    };
 
 export type SaveReason = 'out-of-tree' | 'no-location' | 'io';
 export type SaveResult =
@@ -40,6 +53,14 @@ export interface LoadRequest {
   absPath: string;
   /** Owning project root (for the relative-folder pill); null for sub-ws-owned. */
   ownerRoot: string | null;
+  /**
+   * The document's ownership, and every loaded project root (018 / US9, SC-012).
+   *
+   * The load path used to take neither, which is precisely why it could not enforce the rule the SAVE
+   * path enforces — and so a file could be opened into an editor that would then refuse to save it.
+   */
+  ownerKind: EditorOwnerKind;
+  allProjectRoots: readonly string[];
 }
 
 export interface SaveRequest {
@@ -59,19 +80,18 @@ export class EditorService {
     private readonly settings: () => AppSettings,
   ) {}
 
-  /** Read + decode a file for the editor. Guards binary and too-large files. */
+  /**
+   * Read + decode a file for the editor.
+   *
+   * 018 / US9: this now runs the SAME confinement rule the save path runs, on the SAME resolved path
+   * (`resolveEntry`). Read scope equals write scope — a file that cannot be saved is never opened, so
+   * the user never types into a buffer that has nowhere to go.
+   */
   async load(req: LoadRequest): Promise<LoadResult> {
     try {
-      const max = this.settings().editor.maxOpenFileBytes;
-      const size = await this.fs.size(req.absPath);
-      if (size > max) {
-        return {
-          ok: false,
-          reason: 'too-large',
-          error: `File is too large to open (${size} bytes; limit ${max}).`,
-        };
-      }
-      const bytes = await this.fs.readBytes(req.absPath);
+      const decision = await this.resolveEntry(req);
+      if (!decision.ok) return decision;
+      const bytes = await this.fs.readBytes(decision.absPath);
       if (isProbablyBinary(bytes)) {
         return { ok: false, reason: 'binary', error: 'This file cannot be opened as text.' };
       }
@@ -82,11 +102,36 @@ export class EditorService {
         encoding: decoded.encoding,
         hasBom: decoded.hasBom,
         lineEnding: decoded.lineEnding,
-        relativeFolder: relativeFolderOf(req.absPath, req.ownerRoot),
+        relativeFolder: relativeFolderOf(decision.absPath, req.ownerRoot),
       };
     } catch (e) {
       return { ok: false, reason: 'io', error: message(e) };
     }
+  }
+
+  /**
+   * Resolve an entry the user is asking to open — from the tree, from a restore, or dropped in from the
+   * operating system — and decide whether it may be.
+   *
+   * THE DECISION IS MADE HERE, IN MAIN. The renderer says "this path was dropped on me"; it does not get
+   * to say whether that is allowed. Symlinks are resolved BEFORE the rule sees the path, because a rule
+   * applied to a link rather than to its target is not a rule (SC-011).
+   *
+   * This is the one place the drop IPC and the load path share, which is what makes "read scope equals
+   * write scope" a fact about the code rather than a promise in a comment.
+   */
+  async resolveEntry(req: LoadRequest): Promise<DropDecision> {
+    const realPath = await this.resolveRealTarget(req.absPath);
+    const stat = await this.fs.stat(realPath);
+    // A folder has no meaningful size to compare against the limit, and `resolveDrop` refuses it before
+    // it would ever look — but reading the size of one is an OS call that can fail, so don't make it.
+    const size = stat.kind === 'folder' ? 0 : await this.fs.size(realPath);
+    return resolveDrop(
+      { realPath, isDirectory: stat.kind === 'folder', size },
+      { ownerKind: req.ownerKind },
+      { ownerRoot: req.ownerRoot, allProjectRoots: req.allProjectRoots },
+      { maxOpenFileBytes: this.settings().editor.maxOpenFileBytes },
+    );
   }
 
   /**

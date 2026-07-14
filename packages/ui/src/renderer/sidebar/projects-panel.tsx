@@ -7,6 +7,8 @@ import {
   type ReactNode,
 } from 'react';
 import { projectRootWouldContainOpenEditor } from '@throng/core';
+import { Icon } from '../common/icon.js';
+import { useErrorNotice } from '../common/notification.js';
 import { useDirtyProjectKey } from '../editor/editor-state.js';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
 import {
@@ -30,7 +32,6 @@ import { useWorkspace } from '../state/workspace-store.js';
 import { useProjects } from '../state/projects-store.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { FolderPicker } from '../common/folder-picker.js';
-import { DismissButton } from '../common/dismiss-button.js';
 
 const MARQUEE_DELAY_MS = 200;
 
@@ -125,6 +126,11 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
     switchProject,
     reorderProjects,
   } = useProjects();
+
+  // 018 / FR-051 — this used to be a bespoke error STRIP rendered inline, one of four across the
+  // main window, each with its own markup, its own dismiss button and its own CSS block.
+  useErrorNotice(error, 'project-error', clearError);
+
   const confirm = useConfirm();
   const settings = useAppSettings();
   const ws = useWorkspace();
@@ -350,24 +356,20 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
             aria-label="New project"
             onClick={openCreate}
           >
-            ＋
+            {/* 018 / FR-014b — this was a hard-coded ＋ character. The theme has shipped an `add`
+                icon token since 007, and every other action control in the app already uses it; this
+                one was simply missed. An icon drawn from a literal is an icon outside the theming
+                system, which is the whole of the constitution's themeable-icon rule. */}
+            <Icon token="add" />
           </button>
           {headerExtra}
         </span>
       </header>
 
       <div className="panel__body">
-      {error ? (
-        <p className="panel__error" data-testid="project-error">
-          <span className="panel__error-text">{error}</span>
-          <DismissButton
-            onDismiss={clearError}
-            title="Dismiss error"
-            className="panel__error-dismiss"
-            testId="project-error-dismiss"
-          />
-        </p>
-      ) : null}
+      {/* 018 / FR-051 — one of four copy-pasted error strips, each with its own markup, its own
+          dismiss button and its own CSS block. It is the shared notification model now (see
+          `useErrorNotice` above), and its identifiers are preserved. */}
 
       {draft ? (
         <form className="project-form" data-testid="project-form" onSubmit={submit}>

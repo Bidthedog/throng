@@ -35,7 +35,7 @@
   padding: 6px 8px;
   border: 1px solid var(--throng-colour-border);
   border-radius: 4px;
-  background: var(--throng-colour-surface);
+  background: var(--throng-colour-inputSurface);
   color: var(--throng-colour-text);
   font-family: inherit;
   font-size: 0.95em;
@@ -83,7 +83,7 @@
   padding: 6px 14px;
   border: 1px solid var(--throng-colour-border);
   border-radius: 4px;
-  background: var(--throng-colour-surface);
+  background: var(--throng-colour-buttonBg);
   color: var(--throng-colour-text);
   font-family: inherit;
   cursor: pointer;
@@ -92,7 +92,7 @@
 .panel-type-form__confirm {
   border-color: var(--throng-colour-accent) !important;
   background: var(--throng-colour-accent) !important;
-  color: #fff !important;
+  color: var(--throng-colour-accentText) !important;
 }
 
 .panel-type-form__confirm:disabled {
@@ -106,27 +106,6 @@
   height: 100%;
 }
 
-.panel-type-form__exit {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 6px 10px;
-  border: 1px solid var(--throng-colour-danger);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--throng-colour-danger) 12%, transparent);
-  color: var(--throng-colour-text);
-  font-size: 0.85em;
-}
-.panel-type-form__exit-text {
-  flex: 1 1 auto;
-}
-.panel-type-form__exit-dismiss {
-  flex: 0 0 auto;
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  padding: 0 2px;
-  line-height: 1;
-  font-size: 1em;
-}
+
+
+

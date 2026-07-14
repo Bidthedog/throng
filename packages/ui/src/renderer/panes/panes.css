@@ -84,7 +84,7 @@
 }
 .pane-collapse:hover {
   color: var(--throng-colour-text);
-  background: var(--throng-colour-surfaceActive);
+  background: var(--throng-colour-hoverSurface);
 }
 .pane-collapse--left {
   left: 5px;
@@ -135,4 +135,11 @@
   color: var(--throng-colour-textMuted);
   font-family: var(--throng-font-family);
   font-size: 11px;
+}
+
+/* 018 / FR-014a — the pane collapse/expand chevrons now come from the theme's `chevron` icon token
+   (they were hard-coded inline vectors). The token's artwork points RIGHT, so the left-facing
+   control is the same themed glyph rotated. Rotating a themed icon keeps it themed. */
+.pane-chevron--left {
+  transform: rotate(180deg);
 }

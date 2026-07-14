@@ -10,9 +10,9 @@ import {
 } from '@dnd-kit/core';
 import { planConfirmations } from '@throng/core';
 import { useSubWorkspaces } from '../state/subworkspaces-store.js';
+import { useErrorNotice } from '../common/notification.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useAppSettings } from '../config/config-store.js';
-import { DismissButton } from '../common/dismiss-button.js';
 
 const dragId = (id: string): string => `subws|${id}`;
 const parseDragId = (id: string): string | null => (id.startsWith('subws|') ? id.slice(6) : null);
@@ -46,6 +46,10 @@ function SubWorkspaceGrip({ id }: { id: string }): ReactElement {
 export function SubworkspacesPanel(): ReactElement {
   const { subWorkspaces, loadedIds, open, rename, recolour, remove, reorder, error, clearError } =
     useSubWorkspaces();
+
+  // 018 / FR-051 — was an inline strip whose CSS was a verbatim copy of the Projects panel's.
+  useErrorNotice(error, 'subworkspace-error', clearError);
+
   const confirm = useConfirm();
   const settings = useAppSettings();
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -145,17 +149,8 @@ export function SubworkspacesPanel(): ReactElement {
       <header className="panel__header">
         <span className="panel__title">Sub-workspaces</span>
       </header>
-      {error !== null ? (
-        <div className="subworkspaces-panel__error" data-testid="subworkspace-error" role="alert">
-          <span className="subworkspaces-panel__error-text">{error}</span>
-          <DismissButton
-            onDismiss={clearError}
-            title="Dismiss error"
-            className="subworkspaces-panel__error-dismiss"
-            testId="subworkspace-error-dismiss"
-          />
-        </div>
-      ) : null}
+      {/* 018 / FR-051 — the third of four copy-pasted error strips. Now the shared model. Its CSS
+          block was a verbatim copy of the Projects panel's, hard-coded #3a1d22 on #ff9aa6 and all. */}
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
         <ul className="subworkspace-list" data-testid="subworkspace-list" ref={listRef}>
           {draggingId !== null && indicatorY !== null ? (

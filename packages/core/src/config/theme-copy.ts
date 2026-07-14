@@ -52,11 +52,60 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   },
   'colours.surface': {
     label: 'Panel surface',
-    description: 'The raised surface of panels, list rows, and cards that sit above the application background.',
+    description: 'The body of a pane or panel — the Files and Folders tree, the workspace panels, the project list.',
   },
   'colours.surfaceActive': {
     label: 'Active surface',
-    description: 'The surface of the selected row, the hovered panel, or a pressed control.',
+    description: 'Whatever is currently chosen: the open project, the active tab, the highlighted row in a tree.',
+  },
+  'colours.menuSurface': {
+    label: 'Menu surface',
+    description: 'The card a drop-down or right-click menu floats on, above whatever it covers.',
+  },
+  'colours.inputSurface': {
+    label: 'Field surface',
+    description: 'The well of a text box, a search field, or a chooser you can type into.',
+  },
+  'colours.hoverSurface': {
+    label: 'Hover surface',
+    description: 'The soft wash under the pointer as it passes over a row or an icon you could click.',
+  },
+  'colours.dialogSurface': {
+    label: 'Dialogue surface',
+    description: 'The card a dialogue or a floating bar is drawn on, lifted clear of the page beneath it.',
+  },
+  'colours.menuItemHoverSurface': {
+    label: 'Menu highlight',
+    description:
+      'The band that follows the pointer down a list of entries. Leave it empty and it takes the open project’s own colour.',
+  },
+  'colours.accentText': {
+    label: 'Text on highlight',
+    description: 'Lettering that has to stay legible while sitting directly on the highlight colour.',
+  },
+  'colours.dangerText': {
+    label: 'Text on a warning',
+    description: 'Wording carried on a red control — the button that deletes, the one you must be able to read.',
+  },
+  // These name the EDITOR's scrollbar, and say so. A setting that claims to colour every scrollbar in
+  // the application, while the only classic bar the application actually draws is the editor's, is a
+  // setting that lies to you every time you change it and see nothing happen. The thumb-hover token was
+  // REMOVED outright: the standard `scrollbar-color` property is the only one we can use without
+  // forcing a layout-shifting classic bar on every surface, and it has no hover state at all — so that
+  // token could never have painted anything, anywhere.
+  'colours.scrollbarTrack': {
+    label: 'Editor scrollbar trough',
+    description:
+      'The channel the editor’s scrollbar slides along. Other surfaces use the thin overlay scrollbars the operating system draws, which take no colour.',
+  },
+  'colours.scrollbarThumb': {
+    label: 'Editor scrollbar handle',
+    description:
+      'The draggable part you grab to move through a long file. Other surfaces use the thin overlay scrollbars the operating system draws, which take no colour.',
+  },
+  'colours.iconColour': {
+    label: 'Icon colour',
+    description: 'Ink for the artwork. Leave it empty and every glyph simply takes the colour of whatever holds it.',
   },
   'colours.text': {
     label: 'Primary text',
@@ -263,82 +312,6 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   },
 
   // — Typography roles —
-  'typography.paneTitle.family': {
-    label: 'Pane heading font family',
-    description: 'The typeface of the uppercase pane headings such as PROJECTS and TERMINALS.',
-  },
-  'typography.paneTitle.sizePx': {
-    label: 'Pane heading font size',
-    description: 'The text height of the uppercase pane headings.',
-  },
-  'typography.paneTitle.weight': {
-    label: 'Pane heading font weight',
-    description: 'The stroke thickness of the uppercase pane headings.',
-  },
-  'typography.paneTitle.case': {
-    label: 'Pane heading letter casing',
-    description: 'Whether the pane headings render in original, capitalised, lower, or upper letters.',
-  },
-  'typography.tab.family': {
-    label: 'Tab label font family',
-    description: 'The typeface of the name shown on each workspace tab.',
-  },
-  'typography.tab.weight': {
-    label: 'Tab label font weight',
-    description: 'The stroke thickness of the name shown on each workspace tab.',
-  },
-  'typography.panel.family': {
-    label: 'Panel heading font family',
-    description: 'The typeface of the title shown at the top of each panel.',
-  },
-  'typography.panel.weight': {
-    label: 'Panel heading font weight',
-    description: 'The stroke thickness of the title shown at the top of each panel.',
-  },
-  'typography.projectName.family': {
-    label: 'Project name font family',
-    description: "The typeface of a project's name in the projects list.",
-  },
-  'typography.projectName.weight': {
-    label: 'Project name font weight',
-    description: "The stroke thickness of a project's name in the projects list.",
-  },
-  'typography.projectPath.family': {
-    label: 'Project path font family',
-    description: "The typeface of the folder path shown beneath a project's name.",
-  },
-  'typography.projectPath.sizePx': {
-    label: 'Project path font size',
-    description: "The text height of the folder path shown beneath a project's name.",
-  },
-  'typography.button.family': {
-    label: 'Button font family',
-    description: 'The typeface of push button labels.',
-  },
-  'typography.button.weight': {
-    label: 'Button font weight',
-    description: 'The stroke thickness of push button labels.',
-  },
-  'typography.editor.family': {
-    label: 'Editor font family',
-    description: 'The typeface of text inside the code editor, a monospace face by default.',
-  },
-  'typography.editor.sizePx': {
-    label: 'Editor font size',
-    description: 'The text height inside the code editor.',
-  },
-  'typography.terminal.family': {
-    label: 'Terminal font family',
-    description: 'The typeface of text inside terminals, a monospace face by default.',
-  },
-  'typography.terminal.sizePx': {
-    label: 'Terminal font size',
-    description: 'The text height inside terminals.',
-  },
-  'typography.paneText.family': {
-    label: 'Pane body font family',
-    description: 'The typeface of inner pane and panel text such as empty-state messages.',
-  },
 
   // — Icons —
   'icons.destroy': {
@@ -514,5 +487,376 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'icons.replaceAll': {
     label: 'Replace all icon',
     description: 'The glyph on the control that swaps every match for the replacement text at once.',
+  },
+  'icons.settings': {
+    label: 'Settings icon',
+    description: 'The gear that opens preferences from the title bar, and a project’s own options from its pane.',
+  },
+  'icons.windowMinimise': {
+    label: 'Minimise window icon',
+    description: 'The mark on the control that drops a window out of sight without closing it.',
+  },
+  'icons.windowMaximise': {
+    label: 'Maximise window icon',
+    description: 'The mark on the control that grows a window to fill the whole display.',
+  },
+  'icons.windowRestore': {
+    label: 'Restore window icon',
+    description: 'The mark on the control that brings a filled window back to the size it was before.',
+  },
+  'icons.windowClose': {
+    label: 'Close window icon',
+    description: 'The mark on the control that shuts a window for good.',
+  },
+  // ── Typography ────────────────────────────────────────────────────────────────────────────────
+  //
+  // Ten roles, seven attributes each. Every role now carries the FULL set, because a role that exposed
+  // only the attributes its author happened to pin was a role you could not italicise, however much you
+  // wanted to. Each description names the surface it paints, so choosing between "tab" and "panel" does
+  // not require you to already know the difference.
+  'typography.paneTitle.family': {
+    label: 'Font',
+    description:
+      'The typeface used for the PROJECTS, TERMINALS and FILES & FOLDERS headings that sit atop each pane. Leave it empty to follow the theme’s base font.',
+  },
+  'typography.paneTitle.sizePx': {
+    label: 'Size',
+    description:
+      'How large the PROJECTS, TERMINALS and FILES & FOLDERS headings that sit atop each pane is drawn, in pixels. Leave it unset to track the theme’s base size.',
+  },
+  'typography.paneTitle.bold': {
+    label: 'Bold',
+    description:
+      'Draw the PROJECTS, TERMINALS and FILES & FOLDERS headings that sit atop each pane in the theme’s bold weight rather than its regular one. Most fonts ship only those two, which is why this is a switch and not a dial.',
+  },
+  'typography.paneTitle.case': {
+    label: 'Casing',
+    description:
+      'Leave the PROJECTS, TERMINALS and FILES & FOLDERS headings that sit atop each pane as written, or force it to Title Case, lower case or UPPER CASE.',
+  },
+  'typography.paneTitle.italic': {
+    label: 'Italic',
+    description:
+      'Slant the PROJECTS, TERMINALS and FILES & FOLDERS headings that sit atop each pane.',
+  },
+  'typography.paneTitle.underline': {
+    label: 'Underline',
+    description:
+      'Rule a line beneath the PROJECTS, TERMINALS and FILES & FOLDERS headings that sit atop each pane.',
+  },
+  'typography.paneTitle.strikethrough': {
+    label: 'Strikethrough',
+    description:
+      'Rule a line straight through the PROJECTS, TERMINALS and FILES & FOLDERS headings that sit atop each pane.',
+  },
+  'typography.tab.family': {
+    label: 'Font',
+    description:
+      'The typeface used for the name on each tab in the tab strip. Leave it empty to follow the theme’s base font.',
+  },
+  'typography.tab.sizePx': {
+    label: 'Size',
+    description:
+      'How large the name on each tab in the tab strip is drawn, in pixels. Leave it unset to track the theme’s base size.',
+  },
+  'typography.tab.bold': {
+    label: 'Bold',
+    description:
+      'Draw the name on each tab in the tab strip in the theme’s bold weight rather than its regular one. Most fonts ship only those two, which is why this is a switch and not a dial.',
+  },
+  'typography.tab.case': {
+    label: 'Casing',
+    description:
+      'Leave the name on each tab in the tab strip as written, or force it to Title Case, lower case or UPPER CASE.',
+  },
+  'typography.tab.italic': {
+    label: 'Italic',
+    description:
+      'Slant the name on each tab in the tab strip.',
+  },
+  'typography.tab.underline': {
+    label: 'Underline',
+    description:
+      'Rule a line beneath the name on each tab in the tab strip.',
+  },
+  'typography.tab.strikethrough': {
+    label: 'Strikethrough',
+    description:
+      'Rule a line straight through the name on each tab in the tab strip.',
+  },
+  'typography.panel.family': {
+    label: 'Font',
+    description:
+      'The typeface used for the name in a panel’s own header bar. Leave it empty to follow the theme’s base font.',
+  },
+  'typography.panel.sizePx': {
+    label: 'Size',
+    description:
+      'How large the name in a panel’s own header bar is drawn, in pixels. Leave it unset to track the theme’s base size.',
+  },
+  'typography.panel.bold': {
+    label: 'Bold',
+    description:
+      'Draw the name in a panel’s own header bar in the theme’s bold weight rather than its regular one. Most fonts ship only those two, which is why this is a switch and not a dial.',
+  },
+  'typography.panel.case': {
+    label: 'Casing',
+    description:
+      'Leave the name in a panel’s own header bar as written, or force it to Title Case, lower case or UPPER CASE.',
+  },
+  'typography.panel.italic': {
+    label: 'Italic',
+    description:
+      'Slant the name in a panel’s own header bar.',
+  },
+  'typography.panel.underline': {
+    label: 'Underline',
+    description:
+      'Rule a line beneath the name in a panel’s own header bar.',
+  },
+  'typography.panel.strikethrough': {
+    label: 'Strikethrough',
+    description:
+      'Rule a line straight through the name in a panel’s own header bar.',
+  },
+  'typography.paneText.family': {
+    label: 'Font',
+    description:
+      'The typeface used for the ordinary text inside a pane — empty states, hints, list rows. Leave it empty to follow the theme’s base font.',
+  },
+  'typography.paneText.sizePx': {
+    label: 'Size',
+    description:
+      'How large the ordinary text inside a pane — empty states, hints, list rows is drawn, in pixels. Leave it unset to track the theme’s base size.',
+  },
+  'typography.paneText.bold': {
+    label: 'Bold',
+    description:
+      'Draw the ordinary text inside a pane — empty states, hints, list rows in the theme’s bold weight rather than its regular one. Most fonts ship only those two, which is why this is a switch and not a dial.',
+  },
+  'typography.paneText.case': {
+    label: 'Casing',
+    description:
+      'Leave the ordinary text inside a pane — empty states, hints, list rows as written, or force it to Title Case, lower case or UPPER CASE.',
+  },
+  'typography.paneText.italic': {
+    label: 'Italic',
+    description:
+      'Slant the ordinary text inside a pane — empty states, hints, list rows.',
+  },
+  'typography.paneText.underline': {
+    label: 'Underline',
+    description:
+      'Rule a line beneath the ordinary text inside a pane — empty states, hints, list rows.',
+  },
+  'typography.paneText.strikethrough': {
+    label: 'Strikethrough',
+    description:
+      'Rule a line straight through the ordinary text inside a pane — empty states, hints, list rows.',
+  },
+  'typography.projectName.family': {
+    label: 'Font',
+    description:
+      'The typeface used for a project’s name in the sidebar list. Leave it empty to follow the theme’s base font.',
+  },
+  'typography.projectName.sizePx': {
+    label: 'Size',
+    description:
+      'How large a project’s name in the sidebar list is drawn, in pixels. Leave it unset to track the theme’s base size.',
+  },
+  'typography.projectName.bold': {
+    label: 'Bold',
+    description:
+      'Draw a project’s name in the sidebar list in the theme’s bold weight rather than its regular one. Most fonts ship only those two, which is why this is a switch and not a dial.',
+  },
+  'typography.projectName.case': {
+    label: 'Casing',
+    description:
+      'Leave a project’s name in the sidebar list as written, or force it to Title Case, lower case or UPPER CASE.',
+  },
+  'typography.projectName.italic': {
+    label: 'Italic',
+    description:
+      'Slant a project’s name in the sidebar list.',
+  },
+  'typography.projectName.underline': {
+    label: 'Underline',
+    description:
+      'Rule a line beneath a project’s name in the sidebar list.',
+  },
+  'typography.projectName.strikethrough': {
+    label: 'Strikethrough',
+    description:
+      'Rule a line straight through a project’s name in the sidebar list.',
+  },
+  'typography.projectPath.family': {
+    label: 'Font',
+    description:
+      'The typeface used for the folder path shown beneath a project’s name. Leave it empty to follow the theme’s base font.',
+  },
+  'typography.projectPath.sizePx': {
+    label: 'Size',
+    description:
+      'How large the folder path shown beneath a project’s name is drawn, in pixels. Leave it unset to track the theme’s base size.',
+  },
+  'typography.projectPath.bold': {
+    label: 'Bold',
+    description:
+      'Draw the folder path shown beneath a project’s name in the theme’s bold weight rather than its regular one. Most fonts ship only those two, which is why this is a switch and not a dial.',
+  },
+  'typography.projectPath.case': {
+    label: 'Casing',
+    description:
+      'Leave the folder path shown beneath a project’s name as written, or force it to Title Case, lower case or UPPER CASE.',
+  },
+  'typography.projectPath.italic': {
+    label: 'Italic',
+    description:
+      'Slant the folder path shown beneath a project’s name.',
+  },
+  'typography.projectPath.underline': {
+    label: 'Underline',
+    description:
+      'Rule a line beneath the folder path shown beneath a project’s name.',
+  },
+  'typography.projectPath.strikethrough': {
+    label: 'Strikethrough',
+    description:
+      'Rule a line straight through the folder path shown beneath a project’s name.',
+  },
+  'typography.editor.family': {
+    label: 'Font',
+    description:
+      'The typeface used for the text you are editing in an Editor panel. Leave it empty to follow the theme’s base font.',
+  },
+  'typography.editor.sizePx': {
+    label: 'Size',
+    description:
+      'How large the text you are editing in an Editor panel is drawn, in pixels. Leave it unset to track the theme’s base size.',
+  },
+  'typography.editor.bold': {
+    label: 'Bold',
+    description:
+      'Draw the text you are editing in an Editor panel in the theme’s bold weight rather than its regular one. Most fonts ship only those two, which is why this is a switch and not a dial.',
+  },
+  'typography.editor.case': {
+    label: 'Casing',
+    description:
+      'Leave the text you are editing in an Editor panel as written, or force it to Title Case, lower case or UPPER CASE.',
+  },
+  'typography.editor.italic': {
+    label: 'Italic',
+    description:
+      'Slant the text you are editing in an Editor panel.',
+  },
+  'typography.editor.underline': {
+    label: 'Underline',
+    description:
+      'Rule a line beneath the text you are editing in an Editor panel.',
+  },
+  'typography.editor.strikethrough': {
+    label: 'Strikethrough',
+    description:
+      'Rule a line straight through the text you are editing in an Editor panel.',
+  },
+  'typography.terminal.family': {
+    label: 'Font',
+    description:
+      'The typeface used for the output and input in a Terminal panel. Leave it empty to follow the theme’s base font.',
+  },
+  'typography.terminal.sizePx': {
+    label: 'Size',
+    description:
+      'How large the output and input in a Terminal panel is drawn, in pixels. Leave it unset to track the theme’s base size.',
+  },
+  'typography.button.family': {
+    label: 'Font',
+    description:
+      'The typeface used for the label on every button in the application. Leave it empty to follow the theme’s base font.',
+  },
+  'typography.button.sizePx': {
+    label: 'Size',
+    description:
+      'How large the label on every button in the application is drawn, in pixels. Leave it unset to track the theme’s base size.',
+  },
+  'typography.button.bold': {
+    label: 'Bold',
+    description:
+      'Draw the label on every button in the application in the theme’s bold weight rather than its regular one. Most fonts ship only those two, which is why this is a switch and not a dial.',
+  },
+  'typography.button.case': {
+    label: 'Casing',
+    description:
+      'Leave the label on every button in the application as written, or force it to Title Case, lower case or UPPER CASE.',
+  },
+  'typography.button.italic': {
+    label: 'Italic',
+    description:
+      'Slant the label on every button in the application.',
+  },
+  'typography.button.underline': {
+    label: 'Underline',
+    description:
+      'Rule a line beneath the label on every button in the application.',
+  },
+  'typography.button.strikethrough': {
+    label: 'Strikethrough',
+    description:
+      'Rule a line straight through the label on every button in the application.',
+  },
+  'typography.dialog.family': {
+    label: 'Font',
+    description:
+      'The typeface used for dialogs, prompts and the whole Preferences window. Leave it empty to follow the theme’s base font.',
+  },
+  'typography.dialog.sizePx': {
+    label: 'Size',
+    description:
+      'How large dialogs, prompts and the whole Preferences window is drawn, in pixels. Leave it unset to track the theme’s base size.',
+  },
+  'typography.dialog.bold': {
+    label: 'Bold',
+    description:
+      'Draw dialogs, prompts and the whole Preferences window in the theme’s bold weight rather than its regular one. Most fonts ship only those two, which is why this is a switch and not a dial.',
+  },
+  'typography.dialog.case': {
+    label: 'Casing',
+    description:
+      'Leave dialogs, prompts and the whole Preferences window as written, or force it to Title Case, lower case or UPPER CASE.',
+  },
+  'typography.dialog.italic': {
+    label: 'Italic',
+    description:
+      'Slant dialogs, prompts and the whole Preferences window.',
+  },
+  'typography.dialog.underline': {
+    label: 'Underline',
+    description:
+      'Rule a line beneath dialogs, prompts and the whole Preferences window.',
+  },
+  'typography.dialog.strikethrough': {
+    label: 'Strikethrough',
+    description:
+      'Rule a line straight through dialogs, prompts and the whole Preferences window.',
+  },
+  // ── Sizes ─────────────────────────────────────────────────────────────────────────────────────
+  'sizes.iconPx': {
+    label: 'Icon size',
+    description:
+      'How large every icon in the application is drawn. Independent of any font size — icons used to grow and shrink with the text of whatever surface they happened to sit on.',
+  },
+  'sizes.scrollbarPx': {
+    label: 'Scrollbar width',
+    description:
+      'How thick a scrollbar is. The browser engine offers only “thin” or “auto” for its own scrollbars, so this is a real measurement rather than a choice between two.',
+  },
+  'colours.errorSurface': {
+    label: 'Error notice background',
+    description:
+      'The card an error message sits on. It has its own colour so a failure stands out from every other card in the application — a red edge on the usual background is a thin line in the corner of the screen, which is not where “your save failed” belongs.',
+  },
+  'colours.errorText': {
+    label: 'Error notice text',
+    description: 'The words on an error card, chosen to read clearly against its background.',
   },
 };

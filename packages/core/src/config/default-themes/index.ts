@@ -8,8 +8,25 @@
  * Authored via {@link makeTheme}, which expands a compact palette into the full
  * colour token set, so each theme is complete without hand-listing 22 colours.
  */
-import { THRONG_THEME, type Theme } from '../theme.js';
+import { THRONG_THEME, TOKEN_PARENT, type Theme } from '../theme.js';
 import { contrastRatio, hexToRgb, relativeLuminance } from '../theme-quality.js';
+
+/**
+ * Derive every carved-out surface role from its parent, reading the parentage from the ONE place it
+ * is stated (`TOKEN_PARENT`).
+ *
+ * A bundled theme supplies the parents (`surface`, `accent`); this expands them into the children.
+ * The result is that every bundled theme is visually IDENTICAL after the split — the roles exist so
+ * that an author *can* differentiate them, not so that throng does.
+ */
+function splitRolesFrom(parents: Record<string, string>): Record<string, string> {
+  const roles: Record<string, string> = {};
+  for (const [token, parent] of Object.entries(TOKEN_PARENT)) {
+    const value = parents[parent];
+    if (value !== undefined) roles[token] = value;
+  }
+  return roles;
+}
 
 const MONO = "Consolas, 'Cascadia Mono', 'Courier New', monospace";
 
@@ -272,6 +289,17 @@ function makeTheme(name: string, p: Palette): Theme {
       textMuted: p.textMuted ?? p.text,
       accent: p.accent,
       danger: p.danger ?? '#e5534b',
+      /*
+       * The ERROR NOTICE's own surface — DERIVED per theme, not copied from one.
+       *
+       * Blending the theme's danger colour into its own background gives a card that is unmistakably
+       * an error AND unmistakably part of THIS theme: dark and wine-coloured on a dark theme, pale and
+       * pink on a light one, without fifteen hand-picked values to keep in step. The foreground is
+       * then chosen for CONTRAST against that surface rather than assumed, so the message is readable
+       * on every one of them — which the previous three-pixel red edge on the ordinary card was not.
+       */
+      errorSurface: mix(p.danger ?? '#e5534b', p.bg, 0.18),
+      errorText: readableOn(mix(p.danger ?? '#e5534b', p.bg, 0.18), p.text),
       success: p.success ?? '#3fb950',
       railBg: p.sidebar ?? p.bg,
       border: p.border ?? p.surface,
@@ -315,6 +343,28 @@ function makeTheme(name: string, p: Palette): Theme {
       editorStatusStripBg: strip.bg,
       editorStatusStripFg: strip.fg,
       editorStatusStripHover: strip.hover,
+      // 018 / FR-001. The roles carved out of the overloaded surface token, each DERIVED from its
+      // parent so every bundled theme looks EXACTLY as it did before the split. That is the point:
+      // the split does not restyle throng, it gives a theme author the second dial they never had.
+      //
+      // The parentage is READ FROM `TOKEN_PARENT`, not restated here. It is one piece of knowledge,
+      // and the resolver and this derivation are the two things that must agree about it — so
+      // writing it out twice is precisely how they would come to disagree.
+      ...splitRolesFrom({ surface: p.surface, accent: p.accent }),
+      // The foreground ON the accent colour — hard-coded as a near-black literal in several places
+      // before 018. `p.bg` is what the button tokens already use for text on accent, so it is the
+      // value that keeps every theme looking the same.
+      accentText: p.bg,
+      // White on the danger red in every palette — which is what all three call sites hard-coded,
+      // so the token preserves every theme's appearance exactly while making it themeable.
+      dangerText: '#ffffff',
+      // 018 / FR-009. Before this, only the terminal's scrollbar was styled at all — it borrowed
+      // `border` for the thumb and `textMuted` for the hover, and hard-coded `transparent` for the
+      // track. Every other scrollable surface rendered the browser engine's default: a light-grey
+      // bar in an otherwise dark application. These keep the terminal's existing colours and give
+      // every other surface the same ones.
+      scrollbarTrack: p.bg,
+      scrollbarThumb: p.border ?? THRONG_THEME.colours.border,
     },
     fonts: {
       family: p.fontFamily ?? THRONG_THEME.fonts.family,
@@ -524,6 +574,44 @@ export const DEFAULT_THEMES: Record<string, Theme> = {
 };
 
 /** All installable default themes, including the built-in `throng` (restore source). */
+
+/** Blend `a` into `b` by `t` (0 = all b, 1 = all a). Both are `#rrggbb`. */
+function mix(a: string, b: string, t: number): string {
+  const parse = (h: string): [number, number, number] => [
+    parseInt(h.slice(1, 3), 16),
+    parseInt(h.slice(3, 5), 16),
+    parseInt(h.slice(5, 7), 16),
+  ];
+  const [ar, ag, ab] = parse(a);
+  const [br, bg, bb] = parse(b);
+  const ch = (x: number, y: number): string =>
+    Math.round(x * t + y * (1 - t))
+      .toString(16)
+      .padStart(2, '0');
+  return `#${ch(ar, br)}${ch(ag, bg)}${ch(ab, bb)}`;
+}
+
+/**
+ * `preferred` if it reads on `surface`; otherwise white or black, whichever does.
+ *
+ * A theme's ordinary text colour usually works on a surface derived from its own background — but
+ * "usually" is not a guarantee, and the one case it fails is the one where the user cannot read the
+ * message telling them what went wrong.
+ */
+function readableOn(surface: string, preferred: string): string {
+  const lum = (h: string): number => {
+    const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+    const f = (v: number): number => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * f(c[0]!) + 0.7152 * f(c[1]!) + 0.0722 * f(c[2]!);
+  };
+  const ratio = (x: string, y: string): number => {
+    const [a, b] = [lum(x), lum(y)].sort((m, n) => n - m) as [number, number];
+    return (a + 0.05) / (b + 0.05);
+  };
+  if (ratio(surface, preferred) >= 4.5) return preferred;
+  return ratio(surface, '#ffffff') >= ratio(surface, '#000000') ? '#ffffff' : '#000000';
+}
+
 export const ALL_DEFAULT_THEMES: Record<string, Theme> = {
   throng: THRONG_THEME,
   ...DEFAULT_THEMES,

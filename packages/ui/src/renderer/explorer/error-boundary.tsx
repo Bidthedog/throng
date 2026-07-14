@@ -17,7 +17,10 @@ export class TreeErrorBoundary extends Component<{ children: ReactNode }, { erro
 
   render(): ReactNode {
     if (this.state.error) {
-      return <div className="explorer__error">File tree failed to render: {this.state.error}</div>;
+      // 018: its OWN class. This is a CRASH FALLBACK — it replaces a subtree that threw, rather than
+      // reporting a failure over one that still works. It is not the notice model's job, and it was
+      // only ever borrowing the error strip's styling.
+      return <div className="explorer__crash">File tree failed to render: {this.state.error}</div>;
     }
     return this.props.children;
   }

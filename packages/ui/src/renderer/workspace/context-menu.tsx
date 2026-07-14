@@ -17,6 +17,15 @@ export interface MenuItem {
   icon?: string;
   /** A nested submenu, shown as a flyout after a hover dwell. Nests to any depth. */
   submenu?: MenuItem[];
+  /**
+   * Override the item's test identifier (default `menu-item-<label>`).
+   *
+   * This exists so a bespoke menu can be folded into this one WITHOUT renaming the identifiers its
+   * tests already assert. The cog menu's `cog-menu-settings` is used by roughly ten end-to-end specs
+   * to reach the preferences window; renaming it would have turned a menu unification into a
+   * ten-file test migration, and the temptation would have been to skip the unification instead.
+   */
+  testId?: string;
 }
 
 const DEFAULT_SUBMENU_DELAY_MS = 100;
@@ -32,6 +41,7 @@ function MenuLevel({
   onClose,
   submenuDelayMs,
   testId,
+  isRoot = false,
   rootRef,
   style,
 }: {
@@ -39,12 +49,135 @@ function MenuLevel({
   onClose: () => void;
   submenuDelayMs: number;
   testId: string;
+  /**
+   * Passed explicitly rather than inferred from `testId === 'context-menu'`, which is how it used to
+   * be decided. That inference broke the moment a folded-in menu (the cog) kept its own root id: the
+   * root would have been treated as a SUBMENU, taking the flyout's positioning and losing the root's
+   * flip/clamp — a bug you would only ever see near a screen edge.
+   */
+  isRoot?: boolean;
   rootRef?: Ref<HTMLUListElement>;
   style?: CSSProperties;
 }): ReactElement {
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [openLabel, setOpenLabel] = useState<string | null>(null);
-  const isRoot = testId === 'context-menu';
+
+  /*
+   * Keyboard navigation (018 / FR-013a).
+   *
+   * This menu handled Escape and nothing else — no arrows, no Enter, no roles. That was survivable
+   * while it was only ever opened by a right-click, but FR-013 folds the COG MENU into it, and the
+   * cog menu today is a list of real <button role="menuitem"> elements that a keyboard user can
+   * reach. Migrating it onto a mouse-only menu would have been an ACCESSIBILITY REGRESSION shipped
+   * under the banner of unifying the menus.
+   *
+   * Roving focus: exactly one item is tabbable at a time and holds DOM focus; the arrows move it.
+   */
+  const itemRefs = useRef<(HTMLLIElement | null)[]>([]);
+  const enabled = items.map((it, i) => (it.disabled ? -1 : i)).filter((i) => i >= 0);
+  /**
+   * NOTHING is active until the user says so.
+   *
+   * This used to start on the first item, and the menu opened with that item FOCUSED — so it looked
+   * highlighted, permanently, whether or not the pointer was anywhere near it. Opening the cog menu
+   * pre-selected "Settings" and the user had to move the mouse away from a highlight they had not
+   * asked for. A menu should open with nothing chosen; a highlight is an answer to a question the user
+   * has not yet asked.
+   *
+   * Keyboard navigation is unaffected: the LIST takes focus on open (so the first arrow key lands in
+   * the menu rather than scrolling the page behind it), and the first Down/Up moves onto a real item.
+   */
+  const NONE = -1;
+  const [active, setActive] = useState<number>(NONE);
+
+  const focusItem = (index: number): void => {
+    setActive(index);
+    itemRefs.current[index]?.focus();
+  };
+
+  const step = (delta: number): void => {
+    if (enabled.length === 0) return;
+    // From "nothing chosen", Down lands on the first item and Up on the last — which is what every
+    // menu on this platform does, and what a keyboard user reaches for without thinking.
+    if (active === NONE) {
+      focusItem((delta > 0 ? enabled[0] : enabled.at(-1))!);
+      return;
+    }
+    const at = enabled.indexOf(active);
+    // Wrap: Down on the last item returns to the first.
+    const next = enabled[(at + delta + enabled.length) % enabled.length]!;
+    focusItem(next);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLUListElement>): void => {
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        e.stopPropagation();
+        step(1);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        e.stopPropagation();
+        step(-1);
+        break;
+      case 'Home':
+        e.preventDefault();
+        if (enabled[0] !== undefined) focusItem(enabled[0]);
+        break;
+      case 'End':
+        e.preventDefault();
+        if (enabled.at(-1) !== undefined) focusItem(enabled.at(-1)!);
+        break;
+      case 'ArrowRight': {
+        const item = items[active];
+        if (item?.submenu?.length) {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpenLabel(item.label);
+        }
+        break;
+      }
+      case 'ArrowLeft':
+        if (openLabel !== null) {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpenLabel(null);
+        }
+        break;
+      case 'Enter':
+      case ' ': {
+        const item = items[active];
+        if (!item || item.disabled) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (item.submenu?.length) {
+          setOpenLabel((cur) => (cur === item.label ? null : item.label));
+          return;
+        }
+        item.onClick?.();
+        onClose();
+        break;
+      }
+      default:
+        break;
+    }
+  };
+
+  // Take focus when the menu opens, so the very first arrow key lands somewhere sensible rather than
+  // scrolling the page behind it.
+  //
+  // Deliberately ON MOUNT ONLY. `enabled` is rebuilt on every render, so depending on it would
+  // re-run this whenever the item list changed — snatching focus back from a submenu the user had
+  // just arrowed into. The ref makes that explicit rather than suppressing the lint rule.
+  const focusedOnOpen = useRef(false);
+  useEffect(() => {
+    if (focusedOnOpen.current) return;
+    focusedOnOpen.current = true;
+    // The LIST, not the first item. Focusing an item would highlight it, and the menu would open with
+    // a choice already made for the user. The list holds the key handler, so the arrows still work.
+    ulRef.current?.focus();
+  }, [enabled]);
 
   // A nested flyout opens to the right (left:100%); if that would push it off the
   // screen (deeply nested menus near the right edge — only a scrollbar showed
@@ -77,15 +210,29 @@ function MenuLevel({
       className={`context-menu${isRoot ? '' : ' context-menu--sub'}${flipX ? ' context-menu--flip-x' : ''}${flipY ? ' context-menu--flip-y' : ''}`}
       style={style}
       data-testid={testId}
+      role="menu"
+      // Focusable, but not in the tab order: it is a focus HOLDER so the arrow keys reach the menu
+      // without any item having to look chosen.
+      tabIndex={-1}
+      onKeyDown={onKeyDown}
       onContextMenu={(e) => e.preventDefault()}
     >
-      {items.map((item) => {
+      {items.map((item, index) => {
         const hasSub = !!item.submenu && item.submenu.length > 0;
         return (
           <li
             key={item.label}
+            ref={(node) => {
+              itemRefs.current[index] = node;
+            }}
             className={`context-menu__item${item.disabled ? ' context-menu__item--disabled' : ''}${hasSub ? ' context-menu__item--parent' : ''}`}
-            data-testid={`menu-item-${item.label}`}
+            data-testid={item.testId ?? `menu-item-${item.label}`}
+            role="menuitem"
+            aria-disabled={item.disabled ?? false}
+            aria-haspopup={hasSub || undefined}
+            // Roving tabindex: one item is reachable, and it is the one that has focus.
+            tabIndex={index === active && !item.disabled ? 0 : -1}
+            onFocus={() => setActive(index)}
             onMouseEnter={() => {
               cancelHover();
               if (hasSub && !item.disabled) {
@@ -112,8 +259,11 @@ function MenuLevel({
             </span>
             <span className="context-menu__label">{item.label}</span>
             {hasSub ? (
+              // The submenu arrow was a literal ▸ character, while the theme has shipped a `chevron`
+              // icon token all along. An icon drawn from a hard-coded glyph is an icon outside the
+              // theming system, which is the whole complaint of FR-014.
               <span className="context-menu__chevron" aria-hidden>
-                ▸
+                <Icon token="chevron" />
               </span>
             ) : null}
             {hasSub && openLabel === item.label ? (
@@ -143,12 +293,15 @@ export function ContextMenu({
   items,
   onClose,
   submenuDelayMs = DEFAULT_SUBMENU_DELAY_MS,
+  testId = 'context-menu',
 }: {
   x: number;
   y: number;
   items: MenuItem[];
   onClose: () => void;
   submenuDelayMs?: number;
+  /** Root test id. A menu folded into this one keeps its own (e.g. `cog-menu`) — see FR-053. */
+  testId?: string;
 }): ReactElement {
   const ref = useRef<HTMLUListElement>(null);
 
@@ -178,14 +331,26 @@ export function ContextMenu({
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onClose();
     };
+    // FR-017a — close when the window loses focus.
+    //
+    // The single-menu-open invariant holds WITHIN a window: the provider keeps one menu state, so
+    // opening any menu replaces any other. It cannot reach ACROSS windows, because throng runs the
+    // main window, each sub-workspace and the preferences window as separate renderer processes —
+    // and coordinating them would need inter-process messaging for no benefit the user can name.
+    //
+    // Closing on blur delivers what "application-wide" was actually reaching for: the user never
+    // sees a menu hanging open in a window they have clicked away from. One listener, no protocol.
+    const onBlur = (): void => onClose();
     const handle = setTimeout(() => {
       window.addEventListener('pointerdown', onPointerDown);
       window.addEventListener('keydown', onKey);
+      window.addEventListener('blur', onBlur);
     }, 0);
     return () => {
       clearTimeout(handle);
       window.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener('blur', onBlur);
     };
   }, [onClose]);
 
@@ -194,7 +359,8 @@ export function ContextMenu({
       items={items}
       onClose={onClose}
       submenuDelayMs={submenuDelayMs}
-      testId="context-menu"
+      testId={testId}
+      isRoot
       rootRef={ref}
       style={{ left: pos.left, top: pos.top }}
     />

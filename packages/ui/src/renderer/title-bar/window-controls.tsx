@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactElement } from 'react';
 
+import { Icon } from '../common/icon.js';
+
 /**
  * The custom title bar's window controls (007, FR-002/004): minimise,
  * maximise/restore, and close, drawn in the renderer (frameless windows) and
@@ -7,41 +9,18 @@ import { useEffect, useState, type ReactElement } from 'react';
  * maximise glyph swaps to a restore glyph while the window is maximised, driven
  * by the `onMaximizeChange` push. Buttons are `no-drag` (title-bar.css) so they
  * remain clickable within the draggable bar.
+ *
+ * 018 / FR-014b — the four glyphs were HARD-CODED INLINE VECTORS and are now theme icon tokens.
+ *
+ * They were originally going to be deferred, on the reading that operating-system window chrome is
+ * not an "action control" under the constitution's themeable-icon rule. That reading is defensible.
+ * It also collides head-on with this feature's own SC-002, which claims that ZERO icons in the
+ * application draw from an inline vector — so deferring them would have made a success criterion
+ * false on the day it shipped, which is precisely the failure this feature exists to close.
+ *
+ * Icon tokens do not participate in the colour-distinctness metric, so the cost against FR-006 was
+ * nothing. There was no good reason to leave them.
  */
-
-function MinimiseGlyph(): ReactElement {
-  return (
-    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden focusable="false">
-      <line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" strokeWidth="1" />
-    </svg>
-  );
-}
-
-function MaximiseGlyph(): ReactElement {
-  return (
-    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden focusable="false">
-      <rect x="1.5" y="1.5" width="7" height="7" fill="none" stroke="currentColor" strokeWidth="1" />
-    </svg>
-  );
-}
-
-function RestoreGlyph(): ReactElement {
-  return (
-    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden focusable="false">
-      <rect x="1.5" y="3" width="5.5" height="5.5" fill="none" stroke="currentColor" strokeWidth="1" />
-      <path d="M3 3 V1.5 H8.5 V7 H7" fill="none" stroke="currentColor" strokeWidth="1" />
-    </svg>
-  );
-}
-
-function CloseGlyph(): ReactElement {
-  return (
-    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden focusable="false">
-      <line x1="1.5" y1="1.5" x2="8.5" y2="8.5" stroke="currentColor" strokeWidth="1" />
-      <line x1="8.5" y1="1.5" x2="1.5" y2="8.5" stroke="currentColor" strokeWidth="1" />
-    </svg>
-  );
-}
 
 export function WindowControls(): ReactElement {
   const [maximized, setMaximized] = useState(false);
@@ -69,7 +48,7 @@ export function WindowControls(): ReactElement {
         aria-label="Minimise"
         onClick={() => controls?.minimize?.()}
       >
-        <MinimiseGlyph />
+        <Icon token="windowMinimise" />
       </button>
       <button
         type="button"
@@ -79,7 +58,7 @@ export function WindowControls(): ReactElement {
         aria-label={maximized ? 'Restore' : 'Maximise'}
         onClick={() => controls?.maximize?.()}
       >
-        {maximized ? <RestoreGlyph /> : <MaximiseGlyph />}
+        {maximized ? <Icon token="windowRestore" /> : <Icon token="windowMaximise" />}
       </button>
       <button
         type="button"
@@ -89,7 +68,7 @@ export function WindowControls(): ReactElement {
         aria-label="Close"
         onClick={() => controls?.close?.()}
       >
-        <CloseGlyph />
+        <Icon token="windowClose" />
       </button>
     </div>
   );

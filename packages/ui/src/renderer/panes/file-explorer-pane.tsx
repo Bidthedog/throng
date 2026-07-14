@@ -1,9 +1,11 @@
-import { type PointerEvent as ReactPointerEvent, type ReactElement } from 'react';
+import { useState, type PointerEvent as ReactPointerEvent, type ReactElement } from 'react';
 import './panes.css';
 import '../explorer/explorer.css';
 import { useProjects } from '../state/projects-store.js';
 import { FileTree } from '../explorer/file-tree.js';
 import { TreeErrorBoundary } from '../explorer/error-boundary.js';
+import { IconButton } from '../common/icon-button.js';
+import { ProjectSettingsDialog } from '../project-settings/project-settings-dialog.js';
 import { setActivePane, useActivePane } from '../workspace/active-pane.js';
 
 /**
@@ -21,6 +23,7 @@ export function FileExplorerPane({
   resizing: boolean;
 }): ReactElement {
   const { activeProject, setProjectHidden } = useProjects();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   // The Files & Folders pane becomes the active pane on click, gating panel
   // shortcuts (Ctrl+S no-ops here) and showing a highlight (FR-015/SC-006).
   const filesActive = useActivePane() === 'files';
@@ -41,7 +44,28 @@ export function FileExplorerPane({
         <div className="panel">
           <header className="panel__header">
             <span className="panel__title">Files &amp; Folders</span>
+            <span className="panel__header-actions">
+              {/* 018 / US8 (FR-041) — the way into the project settings dialog, and the only way back
+                  out of "Hide in this project", which until now was a one-way door.
+
+                  DISABLED, not absent, when there is no project: the spec originally allowed either,
+                  but a control that vanishes teaches the user nothing, while one that is visibly
+                  unavailable explains itself in its hover title. */}
+              <IconButton
+                token="settings"
+                className="panel__action panel__action--icon panel__action--neutral"
+                testId="project-settings-open"
+                title={
+                  activeProject
+                    ? `Project settings — ${activeProject.name}`
+                    : 'Project settings — no project is active'
+                }
+                disabled={!activeProject}
+                onClick={() => setSettingsOpen(true)}
+              />
+            </span>
           </header>
+          {settingsOpen ? <ProjectSettingsDialog onClose={() => setSettingsOpen(false)} /> : null}
           {activeProject ? (
             // key on the project id so a project switch fully remounts the tree
             // with the new root (FR-002).

@@ -22,7 +22,7 @@ import { ExplorerRowContext } from './explorer-context.js';
 import { buildContextMenuItems } from './context-menu-items.js';
 import { useExplorerKeybindings } from './explorer-keybindings.js';
 import { useContextMenu } from '../context-menu-provider.js';
-import { DismissButton } from '../common/dismiss-button.js';
+import { useErrorNotice } from '../common/notification.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { openFileInTab, openFileInNewEditor } from '../editor/editor-open.js';
@@ -95,6 +95,9 @@ export function FileTree({
     reveal,
     drop,
   } = useExplorerData(rootFolder, projectId, treeRef, name, hiddenPaths);
+
+  // 018 / FR-051 — was an inline strip; now the one notification model.
+  useErrorNotice(error, 'explorer-error', clearError);
   const { ref, width, height } = useSize();
   const { openMenu } = useContextMenu();
   const ws = useWorkspace();
@@ -128,6 +131,12 @@ export function FileTree({
     };
     const onDragOver = (e: DragEvent): void => {
       if (!e.dataTransfer) return;
+      // 018 / US9 (FR-063) — this listener is for the tree's OWN drags (moving a file within the
+      // project). An OS file drag is not one, and rewriting its cursor told the user their file was
+      // about to be MOVED out of the folder it lives in — which is not what a drop into Throng does,
+      // and not something Throng could do even if it wanted to. Leave OS drags entirely alone; the
+      // panel's own drop target says `copy`.
+      if (Array.from(e.dataTransfer.types).includes('Files')) return;
       const effect = resolveDragEffect(
         { ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey },
         dragConfigRef.current,
@@ -307,17 +316,7 @@ export function FileTree({
         onNewFolder={() => createFolder(primarySelected)}
         onDelete={() => remove(selectedRelPaths)}
       />
-      {error && (
-        <div className="explorer__error" data-testid="explorer-error" role="alert">
-          <span className="explorer__error-text">{error}</span>
-          <DismissButton
-            onDismiss={clearError}
-            title="Dismiss error"
-            className="explorer__error-dismiss"
-            testId="explorer-error-dismiss"
-          />
-        </div>
-      )}
+      {/* 018 / FR-051 — the second of four copy-pasted error strips. Now the shared model. */}
       <div className="explorer__body" ref={ref} onContextMenu={onEmptyContextMenu}>
         {ready && width > 0 && height > 0 && (
           <Tree<TreeNodeData>

@@ -19,6 +19,13 @@
      always taken and those surfaces never re-themed (FR-030). */
   --surface: var(--bg-panel);
   --surface-active: var(--throng-colour-surfaceActive, #222c3d);
+  /* 018 / FR-051a. This alias was READ in 13 places across three stylesheets and DEFINED NOWHERE,
+     so every `var(--danger, #e5534b)` silently rendered its literal fallback: the preferences
+     notice strip was always #e5534b whatever the theme, and the themes error strip fell through to
+     --accent, making a failure read exactly like a success. Undefined custom properties do not
+     throw and do not warn — they just quietly stop being themeable. A guard now walks the tree and
+     fails on any custom property that is read but never defined. */
+  --danger: var(--throng-colour-danger, #e5534b);
   /* Button style tokens (007, FR-046a). Separate from the generic surface/text
      tokens; fall back to the generic button styling when a theme predates them. */
   --btn-bg: var(--throng-colour-buttonBg, var(--bg-panel));
@@ -39,6 +46,114 @@
 
 * {
   box-sizing: border-box;
+}
+
+/* 018 / FR-009, FR-010 — scrollbars are part of the theme.
+ *
+ * Before this, exactly ONE scrollbar in the whole application was styled: the terminal's. Every
+ * other scrollable surface — the preferences panels, the file tree, the editor, the project and
+ * sub-workspace lists, the menus — rendered the browser engine's default. On a dark theme that is a
+ * light-grey bar in an otherwise dark application, and it is the first thing you see.
+ *
+ * Applied GLOBALLY rather than surface by surface, deliberately: the requirement is "every
+ * scrollable surface", and a per-surface list is a list that the next scrollable surface is not on.
+ *
+ * Deliberately the STANDARD properties only — no global `::-webkit-scrollbar` rules. Defining a
+ * webkit scrollbar pseudo-element switches Chromium into custom-scrollbar mode, which forces a
+ * classic non-overlay bar with a real box on EVERY element in the application. That is a layout
+ * change dressed up as a recolour: it narrows every scrollable container and shifts what is under
+ * the pointer. `scrollbar-color` recolours without touching the box model, which is all this story
+ * asked for.
+ *
+ * The terminal keeps its own `::-webkit` rules (terminal.css) because its scrollbar IS load-bearing
+ * for layout: it must be a classic bar occupying real width, or xterm's fit calculation wraps text
+ * underneath it. It opts out of `scrollbar-color` so those rules still apply, and an E2E MEASURES
+ * the result. */
+/* 018 follow-up — the scrollbar has a WIDTH, and it is the theme's.
+ *
+ * `scrollbar-width` accepts only `auto | thin | none`: the standard property cannot take a
+ * measurement, so "thin" was the only answer the application could give, and it was too thin. The
+ * `::-webkit-scrollbar` pseudo-elements can take one — at the price of switching Chromium to classic
+ * (non-overlay) scrollbars, which occupy real layout width.
+ *
+ * That price is now PAID DELIBERATELY, because it buys the thing the standard property cannot give.
+ * `::-webkit-scrollbar-corner` is transparent because the default corner is an opaque patch of grey
+ * that appeared as a small coloured sliver in the bottom-right of scrollable panels — visible against
+ * any theme far from the browser's default, and the reason this rule exists at all. */
+* {
+  scrollbar-color: var(--throng-colour-scrollbarThumb) var(--throng-colour-scrollbarTrack);
+}
+
+::-webkit-scrollbar {
+  width: var(--throng-size-scrollbar, 12px);
+  height: var(--throng-size-scrollbar, 12px);
+}
+
+::-webkit-scrollbar-track {
+  background: var(--throng-colour-scrollbarTrack);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--throng-colour-scrollbarThumb);
+  border-radius: 6px;
+}
+
+/* THE SLIVER. Chromium fills the square where a horizontal and a vertical bar would meet with an
+   opaque default grey — and it paints it even where only one of the two bars exists. */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* 018 — the drop-down popup of a native <select> is a MENU, and it did not obey the theme.
+ *
+ * Five <select> elements in the app (theme picker, icon pack, panel type, terminal flavour, and
+ * every enum setting) opened a popup that the BROWSER ENGINE rendered, not us: an operating-system
+ * list whose hovered row was highlighted in the SYSTEM accent — blue on a default Windows install,
+ * in the middle of a fully-themed dark application. No stylesheet could reach it. It is the same
+ * defect as the native colour dialog (#64): a menu outside the theming system.
+ *
+ * `appearance: base-select` (Chromium 135+; we are on Electron 43 / Chromium 140) opts the control
+ * out of the OS widget and makes BOTH the button and its picker real, styleable DOM — so the popup
+ * finally becomes ours. This did not exist when the earlier features were written, which is why
+ * they left it alone.
+ *
+ * Everything below deliberately reuses the SAME tokens as every other menu, because it IS one:
+ * `menuSurface` for the card, `menuItemHoverSurface` for the highlight — which, being optional,
+ * follows the active project's colour unless a theme author pins it. */
+select,
+select::picker(select) {
+  appearance: base-select;
+}
+
+select::picker(select) {
+  background: var(--throng-colour-menuSurface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  padding: 4px;
+  color: var(--text);
+  font-family: var(--throng-font-family);
+  font-size: var(--throng-font-size);
+}
+
+select option {
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+}
+
+/* The hovered/keyboard-active row. THIS is the blue that survived — the OS was painting it. */
+select option:hover,
+select option:focus,
+select option:checked {
+  background: var(--throng-colour-menuItemHoverSurface, var(--accent));
+  color: var(--throng-colour-accentText);
+}
+
+/* The tick Chromium puts against the selected option: let the row's own colours carry it. */
+select option::checkmark {
+  color: var(--throng-colour-accentText);
 }
 
 html,
@@ -265,30 +380,9 @@ textarea,
   color: var(--accent);
 }
 
-.panel__error {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin: 8px 12px;
-  padding: 6px 8px;
-  border-radius: 4px;
-  background: #3a1d22;
-  color: #ff9aa6;
-  font-size: 12px;
-}
-.panel__error-text {
-  flex: 1 1 auto;
-}
-.panel__error-dismiss {
-  flex: 0 0 auto;
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  padding: 0 2px;
-  line-height: 1;
-  font-size: 12px;
-}
+
+
+
 
 .panel__hint {
   margin: 12px;
@@ -307,7 +401,7 @@ textarea,
 
 .project-form__field {
   flex: 1 1 100%;
-  background: var(--bg-panel);
+  background: var(--throng-colour-inputSurface);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text);
@@ -321,7 +415,7 @@ textarea,
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--bg-panel);
+  background: var(--throng-colour-inputSurface);
 }
 
 .project-form__buttons {
@@ -350,7 +444,7 @@ textarea,
 .project-form__buttons button[type='submit'] {
   background: var(--accent);
   border-color: var(--accent);
-  color: #06101f;
+  color: var(--throng-colour-accentText);
   font-weight: 600;
 }
 
@@ -388,7 +482,7 @@ textarea,
 
 .project-item--active {
   border-left-color: var(--accent);
-  background: var(--bg-panel);
+  background: var(--throng-colour-surfaceActive);
 }
 
 .project-item__switch {
@@ -470,14 +564,7 @@ textarea,
   padding: 24px;
 }
 
-.restore-notice {
-  margin: 6px;
-  padding: 6px 10px;
-  border-radius: 4px;
-  background: #3a3320;
-  color: #ffe08a;
-  font-size: 12px;
-}
+
 
 /* --- Tab group -------------------------------------------------------- */
 .tab-strip {
@@ -510,7 +597,7 @@ textarea,
 
 .tab-chip--active {
   color: var(--text);
-  background: var(--bg-panel);
+  background: var(--throng-colour-surfaceActive);
   border-top: 2px solid var(--accent);
 }
 
@@ -713,12 +800,12 @@ textarea,
   flex: 0 0 auto;
   margin-left: 6px;
   padding: 1px 6px;
-  border: 1px solid #c0392b;
+  border: 1px solid var(--throng-colour-danger);
   border-radius: 9px;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.06em;
-  color: #e06055;
+  color: var(--throng-colour-danger);
   white-space: nowrap;
 }
 
@@ -811,8 +898,11 @@ textarea,
 }
 
 .panel-box__actions button:hover {
+  /* An icon-button hover, exactly like the explorer toolbar and the pane collapse control — so it
+     takes `hoverSurface`, not the accent-coloured BUTTON hover. Pointing it at buttonHoverBg while
+     keeping `color: var(--text)` painted #e6ebf2 on #6aa3ff: 2.1:1, down from 13:1. */
   color: var(--text);
-  background: var(--bg-panel);
+  background: var(--throng-colour-hoverSurface);
 }
 
 .panel-box__body {
@@ -958,7 +1048,7 @@ textarea,
   padding: 4px;
   list-style: none;
   min-width: 160px;
-  background: var(--bg-panel);
+  background: var(--throng-colour-menuSurface);
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
@@ -989,8 +1079,8 @@ textarea,
 }
 
 .context-menu__item:hover {
-  background: var(--accent);
-  color: #06101f;
+  background: var(--throng-colour-menuItemHoverSurface, var(--accent));
+  color: var(--throng-colour-accentText);
 }
 
 .context-menu__item--disabled {
@@ -1017,7 +1107,7 @@ textarea,
 .modal {
   width: min(420px, 90vw);
   padding: 18px 20px;
-  background: var(--bg-panel);
+  background: var(--throng-colour-dialogSurface);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
@@ -1043,7 +1133,7 @@ textarea,
   align-items: center;
   gap: 14px;
   padding: 26px 34px;
-  background: var(--bg-panel);
+  background: var(--throng-colour-dialogSurface);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
@@ -1108,7 +1198,7 @@ textarea,
 .app-close-table th {
   position: sticky;
   top: 0;
-  background: var(--bg-panel);
+  background: var(--throng-colour-dialogSurface);
   color: var(--text-dim);
   font-weight: 600;
   border-bottom: 1px solid var(--border);
@@ -1219,14 +1309,14 @@ textarea,
 .modal__confirm {
   background: var(--accent);
   border-color: var(--accent);
-  color: #06101f;
+  color: var(--throng-colour-accentText);
   font-weight: 600;
 }
 
 .modal__confirm--danger {
-  background: #d6485a;
-  border-color: #d6485a;
-  color: #fff;
+  background: var(--throng-colour-danger);
+  border-color: var(--throng-colour-danger);
+  color: var(--throng-colour-dangerText);
 }
 
 /* The `.modal__buttons button` selector (0,1,1) outranks the single-class
@@ -1234,12 +1324,12 @@ textarea,
 .modal__buttons button.modal__confirm {
   background: var(--accent);
   border-color: var(--accent);
-  color: #06101f;
+  color: var(--throng-colour-accentText);
 }
 .modal__buttons button.modal__confirm--danger {
-  background: var(--throng-colour-danger, #d6485a);
+  background: var(--throng-colour-danger);
   border-color: var(--throng-colour-danger, #d6485a);
-  color: #fff;
+  color: var(--throng-colour-dangerText);
 }
 .modal__buttons button.modal__confirm--danger:hover {
   filter: brightness(1.08);
@@ -1348,7 +1438,7 @@ textarea,
 }
 .folder-picker__browse {
   flex: 0 0 auto;
-  background: var(--bg-panel);
+  background: var(--throng-colour-buttonBg);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: 4px;
@@ -1361,13 +1451,13 @@ textarea,
   color: var(--text);
 }
 .project-form__buttons button[type='submit'] {
-  background: #3a4656;
-  border-color: #4a5568;
+  background: var(--throng-colour-buttonBg);
+  border-color: var(--border);
   color: var(--text);
   font-weight: 600;
 }
 .project-form__buttons button[type='submit']:hover {
-  background: #44515f;
+  background: var(--throng-colour-buttonHoverBg);
 }
 
 /* Context-menu submenus (FR-023b: "Send to Tab ▸"). */
@@ -1376,8 +1466,21 @@ textarea,
 }
 .context-menu__chevron {
   margin-left: 12px;
+  display: inline-flex;
   font-size: 10px;
   opacity: 0.7;
+}
+
+/* 018 / FR-013a — the keyboard user must be able to SEE where they are.
+ *
+ * The menu grew arrow-key navigation so the cog menu (a list of real focusable buttons today) could
+ * be folded into it without losing keyboard reachability. A roving focus that leaves no visible mark
+ * would trade one accessibility defect for another. */
+.context-menu__item:focus,
+.context-menu__item:focus-visible {
+  outline: none;
+  background: var(--throng-colour-menuItemHoverSurface, var(--accent));
+  color: var(--throng-colour-accentText);
 }
 .context-menu--sub {
   position: absolute;
@@ -1477,31 +1580,9 @@ textarea,
 }
 
 /* Error banner: a failed detach/create persist is surfaced here instead of
-   silently swallowed (mirrors .panel__error). */
-.subworkspaces-panel__error {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin: 6px 12px;
-  padding: 6px 8px;
-  border-radius: 4px;
-  background: #3a1d22;
-  color: #ff9aa6;
-  font-size: 12px;
-}
-.subworkspaces-panel__error-text {
-  flex: 1 1 auto;
-}
-.subworkspaces-panel__error-dismiss {
-  flex: 0 0 auto;
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  padding: 0 2px;
-  line-height: 1;
-  font-size: 12px;
-}
+   silently swallowed (mirrors 
+.subworkspaces
+.subworkspaces
 
 /* Drag-to-reorder affordances (mirror the project list). */
 .subworkspace-item__grip {
@@ -1582,7 +1663,7 @@ textarea,
   min-width: 0;
   color: var(--text);
   font-size: 13px;
-  background: var(--bg-panel);
+  background: var(--throng-colour-inputSurface);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 2px 6px;
@@ -1659,7 +1740,30 @@ textarea,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: inherit;
+  /* 018 / FR-029, FR-030 — the optional icon colour.
+   *
+   * `iconColour` is the one token a theme may leave UNSET, and its absence is its meaning. When it
+   * is unset the emitter writes no custom property at all, so `var(…, inherit)` falls through to
+   * `inherit` and every glyph keeps taking the colour of the control hosting it — exactly as before
+   * this feature, which is what makes FR-029 true: no bundled theme changes appearance on the day
+   * the token lands.
+   *
+   * When a theme DOES set it, every icon resolved from the pack adopts it, in every window. The
+   * bundled artwork is authored with `currentColor`, so colouring the host is what colours the art —
+   * which is why one icon set with an overridable colour beats shipping a black set and a white set
+   * that are still wrong for every theme suiting neither. */
+  color: var(--throng-colour-iconColour, inherit);
+
+  /* 018 follow-up — an icon has its OWN size.
+   *
+   * Every icon was sized in `em`, so it inherited the font size of whatever surface it happened to sit
+   * on. Change the dialog font and the preferences window's icons changed with it: two unrelated things
+   * wired to one control, and no way to make the icons bigger without making the text bigger too. */
+  font-size: var(--throng-size-icon, 16px);
+  width: var(--throng-size-icon, 16px);
+  height: var(--throng-size-icon, 16px);
+  line-height: 1;
+  flex: none;
 }
 
 .icon > svg {
@@ -1677,4 +1781,127 @@ textarea,
   width: 1em;
   height: 1em;
   object-fit: contain;
+}
+
+/* 018 / US6 — THE notification model.
+ *
+ * Six idioms did this job: an inline strip in preferences, four copy-pasted strips in the main
+ * window (each with its own markup AND its own CSS block), a fifth on the themes surface, a
+ * non-dismissable restore notice, and a modal message box for editor notices.
+ *
+ * Two were hard-coded outright; the rest leaned on `--danger`, a variable read in thirteen places
+ * and defined nowhere — so the preferences notice was always #e5534b whatever the theme, and the
+ * themes error strip fell through to `--accent`, rendering a FAILURE in the SUCCESS colour. */
+.notices {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2500;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(420px, 45vw);
+  pointer-events: none;
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--throng-colour-dialogSurface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  color: var(--throng-colour-text);
+  font-size: 12px;
+
+  /* The CARD DOES NOT SWALLOW CLICKS.
+   *
+   * An error notice PERSISTS until dismissed — that is the model, and it is the right model. But the
+   * notices sit in a fixed layer over the bottom-right of the window, which in the preferences window is
+   * squarely on top of the settings rows. A card that took pointer events would therefore park itself
+   * over the very controls the user needs in order to FIX the failure it is reporting, and every click
+   * would land on the message instead. The notice is something to READ; only its dismiss control is
+   * something to press, so only its dismiss control accepts a click. */
+  pointer-events: none;
+}
+
+.notice__dismiss {
+  pointer-events: auto;
+}
+
+/* An ERROR gets its OWN CARD, not a stripe on the usual one.
+ *
+ * The left edge was the whole of it — three pixels of red against `dialogSurface`, the same colour as
+ * every other card in the application. On a dark theme that is a thin line in the bottom corner of a
+ * dark screen, and it is where the message "your save failed" was being put. Severity governs
+ * persistence AND presence: an error looks like an error, in every theme, because its surface says so
+ * rather than a hairline. */
+.notice--error {
+  background: var(--throng-colour-errorSurface);
+  color: var(--throng-colour-errorText);
+  border-color: var(--throng-colour-danger);
+  border-left: 4px solid var(--throng-colour-danger);
+}
+
+.notice--error .notice__title,
+.notice--error .notice__message,
+.notice--error .notice__details {
+  color: var(--throng-colour-errorText);
+}
+
+.notice--success {
+  border-left: 3px solid var(--throng-colour-success);
+}
+
+.notice--info {
+  border-left: 3px solid var(--throng-colour-accent);
+}
+
+.notice__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.notice__message {
+  margin: 0;
+}
+
+.notice__details {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  max-height: 140px;
+  overflow-y: auto;
+  color: var(--text-dim);
+}
+
+.notice__dismiss {
+  flex: 0 0 auto;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.notice__dismiss:hover {
+  color: var(--throng-colour-text);
+}
+
+.notice__title {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 018 — the DIALOG typography role also dresses the modals (confirmations, prompts, the project
+   settings dialog). They are dialogs; they belong to the role called dialog. */
+.modal {
+  font-family: var(--throng-font-dialog-family, var(--throng-font-family));
+  font-size: var(--throng-font-dialog-size, var(--throng-font-size));
+  font-weight: var(--throng-font-dialog-weight, var(--throng-font-weight-normal));
+  text-transform: var(--throng-font-dialog-transform, none);
+  font-style: var(--throng-font-dialog-style, normal);
+  text-decoration: var(--throng-font-dialog-decoration, none);
 }

@@ -18,6 +18,24 @@
   --throng-colour-border: #34363c;
   --throng-colour-statusBarBg: #17181b;
 
+  /* 018 — the split surface roles, the scrollbar trio and the accent foreground.
+   *
+   * These MUST be here. Before the split, the re-pointed rules read `var(--surface, #1a1f2b)` and
+   * `var(--bg-panel)`, and `--bg-panel` itself carried a literal — so every one of them had a floor
+   * to stand on before the provider's effect ran. The split replaced them with FALLBACK-FREE
+   * `var(--throng-colour-menuSurface)` and friends. Without a static value here, every menu, modal,
+   * input and find-bar renders with NO BACKGROUND AT ALL for the frames before the provider mounts,
+   * and the scrollbar rule is invalid so the engine's light-grey default paints instead.
+   *
+   * The runtime values come from the active theme; these are just the floor. */
+  --throng-colour-menuSurface: #1e1f23;
+  --throng-colour-inputSurface: #1e1f23;
+  --throng-colour-hoverSurface: #1e1f23;
+  --throng-colour-dialogSurface: #1e1f23;
+  --throng-colour-accentText: #06101f;
+  --throng-colour-scrollbarTrack: #17181b;
+  --throng-colour-scrollbarThumb: #34363c;
+
   /* fonts */
   --throng-font-family: 'Segoe UI', system-ui, sans-serif;
   --throng-font-size: 13px;

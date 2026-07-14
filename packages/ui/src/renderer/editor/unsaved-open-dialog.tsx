@@ -1,50 +1,43 @@
-import type { ReactElement } from 'react';
+import { useEffect, useRef, type ReactElement } from 'react';
+
+import { useChoose } from '../confirm-dialog.js';
 import { useUnsavedOpenRequest, type UnsavedOpenChoice } from './unsaved-open-store.js';
 
 /**
- * The four-choice unsaved-on-open prompt (006 Phase B, US9). When a file is opened
- * into an editor holding unsaved changes, the user chooses: discard & open, save &
- * open, keep the changes and open in a NEW editor, or cancel. Mounted once in the
- * workspace; driven by {@link useUnsavedOpenRequest}.
+ * The four-choice unsaved-on-open prompt (006 Phase B, US9). When a file is opened into an editor
+ * holding unsaved changes, the user chooses: discard & open, save & open, keep the changes and open
+ * in a NEW editor, or cancel.
+ *
+ * 018 / FR-048a — the widest of the three n-way decision modals, and the clearest demonstration that
+ * arity was the only thing separating them from the binary confirmation. Four buttons instead of
+ * two, and otherwise the same dialog: modal, blocking, text-labelled, consequence-stating.
+ *
+ * Every identifier its suites drive is preserved (FR-053).
  */
 export function UnsavedOpenDialog(): ReactElement | null {
   const req = useUnsavedOpenRequest();
-  if (!req) return null;
-  const choose = (c: UnsavedOpenChoice): void => req.resolve(c);
-  return (
-    <div className="modal-overlay" onClick={() => choose('cancel')}>
-      <div
-        className="modal"
-        role="dialog"
-        aria-modal="true"
-        data-testid="unsaved-open-dialog"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="modal__title">Unsaved changes</h3>
-        <p className="modal__message">
-          <strong>{req.editorName}</strong> has unsaved changes. How do you want to open{' '}
-          <strong>{req.fileName}</strong>?
-        </p>
-        <div className="modal__buttons">
-          <button type="button" data-testid="unsaved-open-cancel" onClick={() => choose('cancel')}>
-            Cancel
-          </button>
-          <button type="button" data-testid="unsaved-open-new" onClick={() => choose('new')}>
-            Open in new editor
-          </button>
-          <button type="button" data-testid="unsaved-open-discard" onClick={() => choose('discard')}>
-            Discard &amp; open
-          </button>
-          <button
-            type="button"
-            className="modal__confirm"
-            data-testid="unsaved-open-save"
-            onClick={() => choose('save')}
-          >
-            Save &amp; open
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  const choose = useChoose();
+  const asked = useRef<typeof req>(null);
+
+  useEffect(() => {
+    if (!req || asked.current === req) return;
+    asked.current = req;
+
+    void choose({
+      title: 'Unsaved changes',
+      message: `${req.editorName} has unsaved changes. How do you want to open ${req.fileName}?`,
+      testIds: { dialog: 'unsaved-open-dialog' },
+      choices: [
+        { label: 'Cancel', value: 'cancel', testId: 'unsaved-open-cancel' },
+        { label: 'Open in new editor', value: 'new', testId: 'unsaved-open-new' },
+        { label: 'Discard & open', value: 'discard', testId: 'unsaved-open-discard' },
+        { label: 'Save & open', value: 'save', testId: 'unsaved-open-save' },
+      ],
+    }).then((v) => {
+      // Dismissal is CANCEL — never a discard. The safe answer is the one that loses no work.
+      req.resolve((v ?? 'cancel') as UnsavedOpenChoice);
+    });
+  }, [req, choose]);
+
+  return null;
 }

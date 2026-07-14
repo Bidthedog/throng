@@ -25,7 +25,7 @@ import { DetachProvider } from './workspace/detach-context.js';
 import { PanelRenameSync } from './workspace/panel-rename-sync.js';
 import { PanelDestroySync } from './workspace/panel-destroy-sync.js';
 import { PanelStateSync } from './workspace/panel-state-sync.js';
-import { RestoreNotice } from './workspace/restore-notice.js';
+import { useErrorNotice } from './common/notification.js';
 import { AppClosePrompt } from './app-close-prompt.js';
 import { useResize } from './util/use-resize.js';
 import { ThemeProvider } from './theme/theme-provider.js';
@@ -271,6 +271,15 @@ function AppTitleBar(): ReactElement {
  */
 function WorkspacePane(): ReactElement {
   const { layout, restoreFailed } = useWorkspace();
+
+  // 018 / FR-051 — the restore notice was the fifth idiom, and the only NON-DISMISSABLE one: a
+  // stateless component with no dismiss path, so the only way to be rid of it was to make the
+  // condition it reported stop being true. It is an ordinary notice now, and it can be dismissed.
+  useErrorNotice(
+    restoreFailed ? 'The previous layout could not be restored; a fresh workspace was opened.' : null,
+    'restore-notice',
+  );
+
   if (!layout) {
     return (
       <main className="pane pane--workspace" data-testid="workspace-pane">
@@ -282,7 +291,10 @@ function WorkspacePane(): ReactElement {
   }
   return (
     <main className="pane pane--workspace" data-testid="workspace-pane" data-project={layout.projectId}>
-      {restoreFailed ? <RestoreNotice /> : null}
+      {/* 018 / FR-051 — the RESTORE NOTICE was the fifth idiom and the only NON-DISMISSABLE one: a
+          stateless component with no dismiss path at all, so the only way to be rid of it was to
+          make the condition it reported stop being true. It is an ordinary notice now, and it can
+          be dismissed like every other. Its colours were hard-coded outright (#3a3320 on #ffe08a). */}
       <TabGroup />
     </main>
   );

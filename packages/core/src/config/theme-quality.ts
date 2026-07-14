@@ -218,23 +218,37 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * current legitimate pair passes while an exact/near duplicate (mean → 0) fails.
  * Value confirmed by the distinctness test.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 7.185670705477295;
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.925410524236476;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A
  * duplicated/near-cloned theme (mean → 0) fails; every current legitimate pair passes; the
  * recoloured Bash sits ~20 from Matrix. See research.md R2.
  *
- * RE-MEASURED for 016: the closest legitimate pair moved from 4.469 (Windows Terminal vs VSCode)
- * to 7.186 (throng vs Windows Terminal) when the 13 new tokens joined every palette — FURTHER
- * APART, because each theme's syntax hues are drawn from its own character rather than shared.
- * That is the outcome the required `syntax` seed set exists to force: had the palettes been
- * copy-pasted between themes, those ten tokens would have contributed ΔE00 = 0 to every pair and
- * dragged the mean to roughly 4.469 × 33/43 ≈ 3.43 — BELOW this gate, and the build would have
- * failed.
+ * This constant is a MEASUREMENT, and it has now been re-derived four times — by 013, by 018, by
+ * 016, and again here where 016 and 018 met. The reason it keeps moving is worth stating plainly,
+ * because every move looks like a regression and none of them is: the metric is a MEAN over the
+ * colour tokens two themes SHARE, so *any* change to the token set moves it, including one that
+ * adds a token whose value is identical everywhere — the denominator changes even when no hue does.
  *
- * The gate itself is unchanged at 4.3. It was never loosened, and it did not need tightening: it
- * still sits below every legitimate pair while a near-clone (mean → 0) fails it by a mile.
+ * The two features enlarged the palette independently and neither's measurement survives the merge:
+ *   - 016 measured 7.186 (throng vs Windows Terminal) with its 13 syntax/status-strip tokens, but
+ *     without 018's.
+ *   - 018 measured 4.403 (Windows Terminal vs VSCode) with its split roles, scrollbar trio,
+ *     `accentText` and the error pair, but without 016's.
+ * Taking either number on faith would have shipped a gate calibrated against a palette that no
+ * longer exists. Re-measured against the MERGED token set — the only palette the application
+ * actually has — the closest legitimate pair is 6.925.
+ *
+ * It lands BETWEEN the two, and that is the expected shape rather than a coincidence: 016's syntax
+ * hues are drawn from each theme's own character and push the palettes apart, while 018's error pair
+ * is DERIVED from every theme's existing `danger` and `bg`, so it adds real separation but less of
+ * it — pulling the mean back down from 7.186 without approaching 018's pre-016 4.403.
+ *
+ * The gate itself is unchanged at 4.3, with 2.63 of headroom. It has never been loosened to
+ * accommodate a measurement, and it was not loosened here: it still sits below the closest
+ * legitimate pair, while a near-clone (mean → 0) fails it by a mile. The constant follows the
+ * measurement, never the other way round.
  */
 export const DISTINCTNESS_THRESHOLD = 4.3;
 

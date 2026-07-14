@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   matchFamilies,
   parseFontStack,
@@ -30,8 +30,25 @@ const CURATED_FONTS = [
   'Cascadia Mono',
 ];
 
+import { ColourField } from '../common/colour-picker.js';
+
 const testId = (key: string): string => `control-${key}`;
 
+/**
+ * 018 / US4 — the colour control.
+ *
+ * This WAS an `<input type="color">`, whose popup is the OPERATING SYSTEM'S OWN COLOUR DIALOG: a
+ * light-grey panel in system fonts, in the middle of a fully-themed dark application. No stylesheet,
+ * attribute or flag can reach it (the CSS that used to sit beside this said as much, and named issue
+ * #64). The only remedy is to stop using the native control.
+ *
+ * It also had NO VALIDATION AT ALL: both the swatch and the hex field committed on every `change`,
+ * so typing `zzz` wrote the string `zzz` into the theme file on disk and the token stopped
+ * rendering. The specification called FR-026 a *preserved* behaviour. It is a bug fix.
+ *
+ * Both identifiers are kept — `control-<key>` and `control-<key>-hex` — because the themes suites
+ * drive the hex field by name.
+ */
 function ColourPicker({
   descriptor,
   value,
@@ -41,24 +58,16 @@ function ColourPicker({
   value: unknown;
   onCommit: (v: unknown) => void;
 }): ReactElement {
-  const hex = typeof value === 'string' ? value : '#000000';
+  const hex = typeof value === 'string' ? value : '';
   return (
-    <span className="ctl ctl--colour">
-      <input
-        type="color"
-        className="ctl__colour-swatch"
-        data-testid={testId(descriptor.key)}
-        value={/^#[0-9a-fA-F]{6}$/.test(hex) ? hex : '#000000'}
-        onChange={(e) => onCommit(e.target.value)}
-      />
-      <input
-        type="text"
-        className="ctl__input ctl__colour-hex"
-        data-testid={`${testId(descriptor.key)}-hex`}
-        value={hex}
-        onChange={(e) => onCommit(e.target.value)}
-      />
-    </span>
+    <ColourField
+      value={hex}
+      testId={testId(descriptor.key)}
+      onCommit={onCommit}
+      // Only a token that DECLARES itself clearable may be emptied — the registry is the authority on
+      // which absences mean something, and the picker is not.
+      clearable={descriptor.clearable === true}
+    />
   );
 }
 
@@ -89,6 +98,31 @@ function FontFamilyPills({
   const [pills, setPills] = useState<string[]>(() => parseFontStack(strValue));
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [flipUp, setFlipUp] = useState(false);
+
+  /**
+   * FR-013 — flip like every other floating surface.
+   *
+   * The typeahead is carved out of "must BE the shared menu" on the record: it is a combobox, a
+   * filtered value picker, not a list of actions. It is NOT carved out of behaving like a floating
+   * surface. It opened straight downward with no measurement at all, so on the last row of a short
+   * window it opened off the bottom of the screen — the list you need is the list you cannot see.
+   *
+   * Its HEIGHT was already clamped (`max-height` + scroll). This is the other half.
+   */
+  useLayoutEffect(() => {
+    if (!open) {
+      setFlipUp(false);
+      return;
+    }
+    const el = listRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    // Measure the UNFLIPPED position, and flip only when there is more room above than below —
+    // flipping into an even smaller gap would trade one clipped list for another.
+    setFlipUp(r.bottom > window.innerHeight && r.top > window.innerHeight - r.bottom);
+  }, [open, query]);
   const ref = useRef<HTMLDivElement>(null);
   const lastCommitted = useRef<string | null>(null);
 
@@ -170,7 +204,11 @@ function FontFamilyPills({
         />
       </div>
       {open && matches.length > 0 ? (
-        <div className="ctl__font-list" data-testid={`${testId(descriptor.key)}-list`}>
+        <div
+          ref={listRef}
+          className={`ctl__font-list${flipUp ? ' ctl__font-list--up' : ''}`}
+          data-testid={`${testId(descriptor.key)}-list`}
+        >
           {matches.map((f) => (
             <button
               type="button"

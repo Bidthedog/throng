@@ -1,4 +1,4 @@
-import { useMemo, useSyncExternalStore, type ReactElement } from 'react';
+import { useEffect, useMemo, useSyncExternalStore, type ReactElement } from 'react';
 import { defaultPanelTypeRegistry, type PanelTypeContext } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
 import {
@@ -14,7 +14,7 @@ import { TerminalInputs } from './terminal-inputs.js';
 import { EditorInputs } from './editor-inputs.js';
 import { clearPanelExit, dismissPanelExit, useVisiblePanelExit } from '../terminal/exit-store.js';
 import { markExplicitRetype } from '../terminal/explicit-retype.js';
-import { DismissButton } from '../common/dismiss-button.js';
+import { useNotify } from '../common/notification.js';
 import './panel-type.css';
 
 /**
@@ -83,19 +83,31 @@ export function PanelTypeForm({
   // exit re-shows it (recurrence, FR-003).
   const lastExit = useVisiblePanelExit(panelId);
 
+  /*
+   * 018 / FR-051 — the terminal-exit notice, through THE notification model.
+   *
+   * It reports as INFO rather than an error: a terminal you told to exit has not failed, and the
+   * message is a courtesy telling you what the shell said on its way out. So it dismisses itself
+   * after five seconds, while a real failure would persist until acknowledged. That is severity
+   * doing its job — and it is the one place in this migration where the old behaviour (a strip that
+   * sat there until you clicked it) was arguably wrong.
+   */
+  const { notify } = useNotify();
+  useEffect(() => {
+    if (!lastExit) return;
+    notify({
+      severity: 'info',
+      message: lastExit.message,
+      testId: `panel-exit-${panelId}`,
+      testIds: { dismiss: `exit-dismiss-${panelId}` },
+      onDismiss: () => dismissPanelExit(panelId),
+    });
+  }, [lastExit, panelId, notify]);
+
   return (
     <div className="panel-type-form" data-testid={`panel-type-form-${panelId}`}>
-      {lastExit ? (
-        <div className="panel-type-form__exit" data-testid={`panel-exit-${panelId}`} role="status">
-          <span className="panel-type-form__exit-text">{lastExit.message}</span>
-          <DismissButton
-            onDismiss={() => dismissPanelExit(panelId)}
-            title="Dismiss notice"
-            className="panel-type-form__exit-dismiss"
-            testId={`exit-dismiss-${panelId}`}
-          />
-        </div>
-      ) : null}
+      {/* 018 / FR-051 — the last of the four copy-pasted error strips. It is the shared notification
+          model now (see the effect above), and its per-panel identifiers are preserved. */}
       <label className="panel-type-form__field">
         <span>Panel Type</span>
         <select
