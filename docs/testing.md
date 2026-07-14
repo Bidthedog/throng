@@ -11,6 +11,27 @@ throng has four test layers, run in order by `npm run test`:
 
 `npm run test` runs all four through `scripts/run-tests.mjs` (see *Temp files* below).
 
+## Type-checking: `tsc -b` does NOT cover the renderer
+
+`npm run typecheck` runs `tsc -b`, which walks the project references — and
+`packages/ui/tsconfig.json` includes only `src/main` and `src/preload`. **The renderer
+(`packages/ui/src/renderer`, every `.tsx`, the whole editor and preferences UI) is built by Vite,
+which strips types without checking them.** A type error there compiles, ships, and fails at runtime.
+
+That hole is real and it has bitten: a call passing the wrong argument shape left the editor's
+keymap rebuilt with an undefined dependency, so Tab and Shift+Tab threw from the moment the user
+changed any key binding — with a green `typecheck`.
+
+Run the renderer's own check as well:
+
+```
+npm run typecheck:renderer
+```
+
+It is **not** yet part of `npm run typecheck`, because it currently reports pre-existing errors in
+the explorer, terminal, search and composition-root modules (tracked separately). Fix those and it
+should be folded into the main gate. Until then, run it by hand before you push renderer changes.
+
 The integration and contract layers spawn real OS processes (node-pty shells,
 directory-lock holders) and **can only run one file at a time** — concurrent
 spawning hits the Windows "AttachConsole failed" limit under load. That is why

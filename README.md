@@ -56,12 +56,22 @@ goal is to pull all of that into a single, simple customisable workspace.
   xterm.js on **detached, daemon-owned PTYs**: they survive UI restarts and reattach with
   scrollback, with safe close/exit handling, a project root lock, optional run-as-admin, and
   no orphaned processes.
-- **Editor panels** — open and edit a project's text files inline via a **CodeMirror** editor
-  (plain text): encoding and line endings are detected and preserved, saves are confined to the
-  project (Ctrl+S / scoped Ctrl+Shift+S Save-All), a dirty file is locked against external
-  changes, one buffer is shared per file across all windows, unsaved changes show a shared dot,
-  and in-progress edits survive a crash via recovery files. Files open from the tree into the
-  last active editor; a synced editor mirrors one document across windows.
+- **Editor panels** — open and edit a project's text files inline via a **CodeMirror** editor:
+  encoding and line endings are detected and preserved, saves are confined to the project (Ctrl+S /
+  scoped Ctrl+Shift+S Save-All), a dirty file is locked against external changes, one buffer is
+  shared per file across all windows, unsaved changes show a shared dot, and in-progress edits —
+  **and their undo history** — survive a crash via recovery files. Files open from the tree into the
+  last active editor; a synced editor mirrors one document across windows, sharing **one undo
+  stack**, so Ctrl+Z in either window reverts an edit made in the other.
+- **Code editing** — **syntax highlighting** for 31 languages, detected by extension and correctable
+  from a **language picker** in the status strip (the choice is remembered per file). A right-click
+  **content menu** puts cut/copy/paste, Select All, Undo/Redo and "Set Language…" under the cursor,
+  so the editor is usable with the mouse alone. **Ctrl+X with no selection cuts the whole line**, and
+  paste remembers the *shape* of what was cut: a cut line comes back as a line, above the caret.
+  **Rectangular (column) selection** by Alt+drag or `Shift+Alt+Arrow` — type, delete, cut and paste
+  operate on every row of the block at once. Indentation follows **the file's own style** wherever it
+  has one, falling back to a per-language default and then a global one, so throng never quietly
+  converts a tab-indented file to spaces.
 - **Custom title bar** — an application-drawn, full-width title bar replaces the OS window
   chrome on every window: the **throng mark** + window identity, minimise/maximise/close, and
   (main window only) a **cog** that opens the preferences window. Sub-workspace windows carry
