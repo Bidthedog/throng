@@ -33,6 +33,14 @@ export default defineConfig({
           if (id.includes('@xterm')) return 'xterm';
           if (/\/(react|react-dom|scheduler)\//.test(id)) return 'react';
           if (id.includes('@dnd-kit')) return 'dnd';
+          // One chunk per language grammar (016, FR-008). The grammars are imported
+          // lazily by id, so a document only ever pays for the language it is in —
+          // but only if each stays a separately-fetchable chunk. Folded into
+          // `vendor` they would all load with the app and blow the 200 ms budget.
+          const grammar = /\/node_modules\/@codemirror\/(lang-[a-z]+)\//.exec(id);
+          if (grammar) return `grammar-${grammar[1]}`;
+          if (id.includes('@codemirror/legacy-modes')) return 'grammar-legacy';
+          if (id.includes('@lezer/')) return 'lezer';
           return 'vendor'; // react-arborist (+ its react-dnd deps), inversify, …
         },
       },

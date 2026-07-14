@@ -22,7 +22,22 @@ export type ControlKind =
   | 'enum'
   | 'chord' // keybinding chord (edited via the capture modal)
   | 'icon' // theme icon token (pack-aware)
-  | 'folder'; // editable path + browse-to-pick folder (011, shared folder-picker)
+  | 'folder' // editable path + browse-to-pick folder (011, shared folder-picker)
+  | 'map'; // keyed table: key column + typed value columns (016, F5)
+
+/**
+ * One column of a `map` control (016). The key column is implicit; these are its VALUE columns,
+ * each reusing an existing control rather than inventing a bespoke one.
+ */
+export interface MapColumn {
+  /** Property of the entry this column edits. Omitted for a scalar-valued map (the value itself). */
+  key?: string;
+  label: string;
+  control: ControlKind;
+  allowedValues?: readonly (string | number)[];
+  min?: number;
+  max?: number;
+}
 
 /** One editor field: a configurable key plus how to render and constrain it. */
 export interface FieldDescriptor {
@@ -44,6 +59,27 @@ export interface FieldDescriptor {
   step?: number;
   /** element control for an 'array' field. */
   itemControl?: ControlKind;
+  /** value columns for a 'map' field — the keyed table's shape (016, F5). */
+  columns?: readonly MapColumn[];
+  /**
+   * What the map's KEY column is called, and what a key IS (016).
+   *
+   * Without this the header said "Key" and the cell showed the raw internal id — so the per-language
+   * indentation table read `csharp`, `cpp`, `powershell`, which are not what those languages are
+   * called. Worse, adding a row meant TYPING one of those ids from memory, with a free-text box that
+   * accepted anything and silently kept whatever you typed.
+   */
+  keyLabel?: string;
+  /** `language` renders keys by their display name and offers a picker; `text` is free entry. */
+  keyKind?: 'language' | 'text';
+  /**
+   * The contexts a keybinding command is live in (016, FR-017b0). Rendered in the Key Bindings
+   * editor so a user seeing `Ctrl+X` on two rows can see WHY it is not a clash — and so the
+   * conflict flow can tell a real collision from a scoped coexistence.
+   *
+   * Keybinding descriptors only; a setting or theme token has no dispatch scope.
+   */
+  scope?: readonly string[];
   /**
    * Empty is a valid value for this field, so the row may offer a **clear** affordance
    * (015, FR-016a).
@@ -64,7 +100,25 @@ export type MetadataRegistry = readonly FieldDescriptor[];
 
 /** The empty value for a field, by control kind — what a **clear** writes (015, FR-016a). */
 export function emptyValueFor(field: FieldDescriptor): unknown {
+  // A map empties to an empty RECORD. Without this arm a clear writes `''` into a
+  // Record<string, …>, the tolerant parser discards it as a non-record, and the clearability
+  // audit — which asks whether the empty value SURVIVES a round-trip — never sees the damage
+  // (016, F6).
+  if (field.control === 'map') return {};
   return field.control === 'array' || field.control === 'multiselect' ? [] : '';
+}
+
+/** True when a field currently holds something a **clear** would remove (015, FR-016a). */
+export function isEmptyValue(field: FieldDescriptor, value: unknown): boolean {
+  if (field.control === 'map') {
+    return !isPlainObject(value) || Object.keys(value).length === 0;
+  }
+  if (Array.isArray(value)) return value.length === 0;
+  return value === '' || value === undefined || value === null;
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
 /**
@@ -83,10 +137,7 @@ export function auditClearable<T extends FieldDescriptor>(
 ): string[] {
   return registry
     .filter((d) => d.clearable === true)
-    .filter((d) => {
-      const back = roundTrip(d);
-      return Array.isArray(back) ? back.length > 0 : back !== '';
-    })
+    .filter((d) => !isEmptyValue(d, roundTrip(d)))
     .map((d) => d.key);
 }
 
@@ -113,6 +164,32 @@ export function leavesOf(obj: unknown, prefix = ''): string[] {
     else out.push(...leavesOf(v, path));
   }
   return out;
+}
+
+/**
+ * Dotted leaf paths, where a key a descriptor DECLARES to be a `map` is ONE leaf (016, F5).
+ *
+ * `leavesOf` recurses into plain objects, so a non-empty keyed map explodes into one leaf per
+ * ENTRY — and the completeness rule then demands an editor descriptor for every entry the user
+ * happens to have. `editor.indentByLanguage` ships non-empty, so without this the build fails.
+ *
+ * Map-ness is DECLARED, never inferred from the value: a map that is empty today is still a map,
+ * and an ordinary settings group that is currently one key deep is still a group.
+ */
+export function leavesOfDeclared(
+  obj: unknown,
+  registry: MetadataRegistry,
+  prefix = '',
+): string[] {
+  const maps = new Set(registry.filter((d) => d.control === 'map').map((d) => d.key));
+  const walk = (value: unknown, path: string): string[] => {
+    if (path && maps.has(path)) return [path];
+    if (isLeaf(value)) return path ? [path] : [];
+    return Object.entries(value as Record<string, unknown>).flatMap(([k, v]) =>
+      walk(v, path ? `${path}.${k}` : k),
+    );
+  };
+  return walk(obj, prefix);
 }
 
 /**

@@ -95,14 +95,43 @@ export const THRONG_THEME: Theme = {
     // subtle offset from the editor body so it reads as a distinct strip.
     editorGutterBg: '#151a23',
     editorGutterFg: '#8b98ac',
+    // Syntax highlighting (016, FR-006/FR-007). Ten tokens, mapped from the grammar's
+    // node types to a colour the theme owns — so highlighting is a THEME concern, not a
+    // hard-coded editor one, and switching theme repaints code live. They are CSS
+    // variables at render time, which is what makes that repaint free.
+    syntaxKeyword: '#7ea8ff',
+    syntaxString: '#8ed09a',
+    // Comments and punctuation are the quietest hues, and that makes them the BINDING constraint:
+    // a match highlight can only be tinted as far as the weakest colour still reads on it. Both
+    // carry deliberate headroom above the floor so the search highlight can stay visible.
+    syntaxComment: '#93a2b8',
+    syntaxNumber: '#e0a878',
+    syntaxType: '#63cfd4',
+    syntaxFunction: '#c8a6f0',
+    syntaxVariable: '#d6deea',
+    syntaxOperator: '#9fb3cc',
+    syntaxPunctuation: '#a3b0c4',
+    syntaxInvalid: '#ff6b6b',
+    // The editor's own status strip (016, FR-010) — the band along the BOTTOM OF AN
+    // EDITOR PANEL carrying the language indicator. Deliberately NOT `statusBarBg`,
+    // which is the application's status bar: different surface, different purpose, and
+    // one letter apart would have been a trap for every future theme author.
+    editorStatusStripBg: '#151a23',
+    editorStatusStripFg: '#a7b4c8',
+    editorStatusStripHover: '#233047',
     // The shared unsaved-changes dot (Panel/Tab/project) + editor file/type pills (006).
     unsavedDot: '#e3b341',
     // In-panel search match highlights (013, FR-019). One pair of surfaces shared by
     // the editor and the terminal: every match is tinted, and the current match takes
     // a stronger tint plus an outline so it reads as "the one you are on". Body text
     // must stay legible on both (SC-005), so bundled themes derive these per palette.
-    searchMatch: '#1c2f4d',
-    searchMatchCurrent: '#2c4a7a',
+    // Re-tuned by 016 (FR-007a): the old surfaces (#1c2f4d / #2c4a7a) were a strong blue, and once
+    // code beneath them became SYNTAX-COLOURED rather than plain text, six of the ten hues fell
+    // below the readable floor on the current match — a blue keyword vanishing into a blue
+    // highlight is precisely the failure FR-007a forbids. Softening them keeps every hue legible
+    // AND leaves the current match MORE visible against the editor surface than it was (1.45:1).
+    searchMatch: '#151e2d',
+    searchMatchCurrent: '#213049',
     searchMatchCurrentBorder: '#6aa3ff',
     // The active Files & Folders pane highlight (006, FR-015/SC-006).
     activePaneHighlight: '#6aa3ff',

@@ -31,12 +31,14 @@ export function useExplorerKeybindings(ops: KeybindingOps): (e: KeyboardEvent) =
         ops.clearClipboard();
         return;
       }
-      const action = resolveAction(keybindings, {
-        key: e.key,
-        ctrl: e.ctrlKey,
-        shift: e.shiftKey,
-        alt: e.altKey,
-      });
+      // Explicitly the EXPLORER scope: this handler is attached to the tree, so by construction
+      // it only fires while the tree has focus. Ctrl+X here cuts a FILE — the same chord cuts a
+      // LINE inside an editor, and the scope is what keeps the two apart (016, FR-017b0).
+      const action = resolveAction(
+        keybindings,
+        { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey },
+        'explorer',
+      );
       if (!action || !action.startsWith('file.')) return;
       e.preventDefault();
       switch (action) {

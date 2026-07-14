@@ -2,6 +2,8 @@ import { useEffect, useRef, type ReactElement } from 'react';
 import { EditorState } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, drawSelection, highlightActiveLine } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { throngHighlighting } from './highlight-style.js';
+import { applyLanguage, languageCompartment } from './editor-language.js';
 
 /**
  * A buffer-only CodeMirror editor (feature 007, US5 — extracted from the 006
@@ -15,9 +17,20 @@ export interface StandaloneEditorProps {
   value: string;
   onChange: (value: string) => void;
   testId?: string;
+  /**
+   * The language to highlight as (016). Defaults to JSON, because every one of this editor's
+   * current users — settings, key bindings, themes — IS JSON, and throng's own configuration files
+   * are among the files a user is most likely to be looking at (FR-001a).
+   */
+  languageId?: string;
 }
 
-export function StandaloneEditor({ value, onChange, testId }: StandaloneEditorProps): ReactElement {
+export function StandaloneEditor({
+  value,
+  onChange,
+  testId,
+  languageId = 'json',
+}: StandaloneEditorProps): ReactElement {
   const container = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -40,6 +53,11 @@ export function StandaloneEditor({ value, onChange, testId }: StandaloneEditorPr
           highlightActiveLine(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           EditorView.lineWrapping,
+          // The preferences JSON editors get the SAME highlighting as any other editor (016,
+          // FR-001a). They are a second CodeMirror view, and a second view is exactly where a
+          // feature like this silently goes missing.
+          languageCompartment.of([]),
+          throngHighlighting,
           EditorView.updateListener.of((u) => {
             if (u.docChanged && !suppressRef.current) onChangeRef.current(u.state.doc.toString());
           }),
@@ -53,6 +71,7 @@ export function StandaloneEditor({ value, onChange, testId }: StandaloneEditorPr
       }),
     });
     viewRef.current = view;
+    void applyLanguage(view, languageId, () => viewRef.current === view);
     return () => {
       view.destroy();
       viewRef.current = null;

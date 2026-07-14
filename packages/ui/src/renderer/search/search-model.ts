@@ -9,6 +9,7 @@
  */
 import { SearchQuery } from '@codemirror/search';
 import type { Text } from '@codemirror/state';
+import { seedFromSelections } from '@throng/core';
 
 /** The visible, session-persistent match toggles (FR-007). Regex is deferred. */
 export interface MatchModes {
@@ -77,12 +78,13 @@ export function countOf(matches: Match[], current: number): SearchCount {
 }
 
 /**
- * The term a selection seeds the find input with (FR-002b): a non-empty, single-line
- * selection only. A multi-line selection is a block of text, not a search term, so it
- * is ignored and find opens with its previous term instead.
+ * The term a ONE-range selection seeds the find input with (013 FR-002b) — the Terminal's case,
+ * where a selection is always a single range.
+ *
+ * The rule itself lives in core ({@link seedFromSelections}), because the EDITOR can now hold a
+ * rectangular block or a multi-cursor set, and the decision of what an ambiguous selection seeds
+ * (nothing — never an arbitrary row of it, FR-025i) has to be the same rule in both places.
  */
 export function seedFrom(selection: string | null | undefined): string {
-  const s = selection ?? '';
-  if (s.length === 0 || s.includes('\n') || s.includes('\r')) return '';
-  return s;
+  return seedFromSelections([selection ?? '']);
 }

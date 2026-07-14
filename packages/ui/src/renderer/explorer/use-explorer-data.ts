@@ -22,6 +22,7 @@ import {
 } from '@throng/core';
 import { useAppSettings } from '../config/config-store.js';
 import { useConfirm } from '../confirm-dialog.js';
+import { useServices } from '../composition-root.js';
 
 /** react-arborist rejects empty-string ids, so the root (relPath "") uses this
  *  non-empty sentinel as its node id; logic keys off `relPath`, not `id`. */
@@ -117,8 +118,27 @@ export function useExplorerData(
 ): ExplorerApi {
   const settings = useAppSettings();
   const confirm = useConfirm();
+  const { documents } = useServices();
   const globs = settings.explorer.excludeGlobs;
   const globsKey = globs.join(' ');
+
+  /**
+   * Carry a document's language override with the file across a move (016, FR-028e).
+   *
+   * `moved: false` simply means the file had no override, which is the common case — it is not a
+   * failure, and neither is a store that cannot be reached. A file operation must never fail
+   * because a preference could not follow it.
+   */
+  const carryOverride = useCallback(
+    (fromRel: string, destDir: string) => {
+      const leaf = fromRel.split(/[\\/]/).pop() ?? fromRel;
+      const to = destDir ? `${destDir}/${leaf}` : leaf;
+      void documents.movePath(projectId, fromRel, to).catch(() => {
+        /* see the doc comment: nothing here is worth failing a move over */
+      });
+    },
+    [documents, projectId],
+  );
 
   const [childrenMap, setChildrenMap] = useState<Map<string, TreeNodeData[]>>(new Map());
   const [initialOpenState, setInitialOpenState] = useState<OpenMap>({ [ROOT_ID]: true });
@@ -173,6 +193,14 @@ export function useExplorerData(
       setReady(true);
       return;
     }
+    // Prune the document rows whose file has vanished (016, FR-028e) — the backstop for files
+    // deleted OUTSIDE throng. Fire-and-forget, deliberately: FR-028e forbids this from sitting on
+    // the path that opens a file, so it must not be awaited before the tree loads. The daemon
+    // checks each ROW against the project folder, so this costs one round-trip and nothing else.
+    void documents.pruneMissing(projectId).catch(() => {
+      /* a store that cannot be pruned is not a reason to fail opening a project */
+    });
+
     void (async () => {
       const persisted = loadPersisted(projectId);
       const map = new Map<string, TreeNodeData[]>();
@@ -196,7 +224,7 @@ export function useExplorerData(
     return () => {
       cancelled = true;
     };
-  }, [rootFolder, projectId, globsKey]);
+  }, [rootFolder, projectId, globsKey, documents]);
 
   // Project-scoped hidden paths (004), applied on top of the global excludeGlobs.
   const hiddenSet = useMemo(() => new Set(hiddenPaths), [hiddenPaths]);
@@ -441,9 +469,17 @@ export function useExplorerData(
       // (FR-070). The old leaf name is the last path segment of the rel path.
       const current = rel.split(/[\\/]/).pop() ?? rel;
       if (next === current) return;
-      void window.throng?.files?.rename?.(rel, next).then(report);
+      void window.throng?.files?.rename?.(rel, next).then((res) => {
+        report(res);
+        // The document's language override follows the FILE, not its name (016, FR-028e).
+        // Without this, renaming a file silently discards the user's explicit choice about it.
+        const parent = rel.includes('/') || rel.includes('\\') ? `${parentRel(rel)}/` : '';
+        void documents.movePath(projectId, rel, `${parent}${next}`).catch(() => {
+          /* no override to carry is the common case, and a failure must not break the rename */
+        });
+      });
     },
-    [report],
+    [report, documents, projectId],
   );
 
   const cut = useCallback((relPaths: string[]) => {
@@ -468,9 +504,12 @@ export function useExplorerData(
       // debounced fs-watch re-read is missed or coalesced (as on a slow CI filesystem).
       if (clipboard.mode === 'cut') {
         const affected = [...new Set([...clipboard.relPaths.map(parentRel), dest])];
-        void window.throng?.files?.move?.(clipboard.relPaths, dest).then((res) => {
+        const moving = clipboard.relPaths;
+        void window.throng?.files?.move?.(moving, dest).then((res) => {
           report(res);
           void reloadDirs(affected);
+          // A move changes the file's project-relative path, so the override moves with it (016).
+          for (const from of moving) carryOverride(from, dest);
         });
         setClipboard(null);
       } else {
@@ -480,7 +519,7 @@ export function useExplorerData(
         });
       }
     },
-    [clipboard, report, reloadDirs],
+    [clipboard, report, reloadDirs, carryOverride],
   );
 
   const remove = useCallback(
@@ -498,9 +537,19 @@ export function useExplorerData(
         danger: true,
       });
       if (!ok) return;
-      void window.throng?.files?.delete?.(items, deleteMode).then(report);
+      void window.throng?.files?.delete?.(items, deleteMode).then((res) => {
+        report(res);
+        // Remove the override with the file (016, FR-028e). Pruning is only an opportunistic
+        // backstop for files deleted OUTSIDE throng — relying on it here would let a file
+        // re-created at the same path silently inherit the deleted file's language.
+        for (const rel of items) {
+          void documents.setState(projectId, rel, null).catch(() => {
+            /* a file with no override is the common case */
+          });
+        }
+      });
     },
-    [confirm, deleteMode, report],
+    [confirm, deleteMode, report, documents, projectId],
   );
 
   // After creating a folder, enter inline rename on it once it appears (FR-033).
@@ -559,9 +608,15 @@ export function useExplorerData(
       const items = dragRelPaths.filter((r) => r !== '');
       if (items.length === 0) return;
       const op = asCopy ? window.throng?.files?.copy : window.throng?.files?.move;
-      void op?.(items, destRelDir).then(report);
+      void op?.(items, destRelDir).then((res) => {
+        report(res);
+        // A MOVE carries the override with the file; a COPY deliberately does not — the copy is a
+        // new document, and inheriting a language the user chose for a different file would be a
+        // guess, not a decision.
+        if (!asCopy) for (const from of items) carryOverride(from, destRelDir);
+      });
     },
-    [report],
+    [report, carryOverride],
   );
 
   return {

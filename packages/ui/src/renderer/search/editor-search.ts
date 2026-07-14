@@ -8,15 +8,15 @@
  * (FR-008) and what keeps encoding / line endings untouched — the document's text is
  * changed in place and the existing save path writes it back exactly as before.
  */
-import { StateEffect, StateField } from '@codemirror/state';
+import { Prec, StateEffect, StateField } from '@codemirror/state';
 import { Decoration, EditorView, type DecorationSet } from '@codemirror/view';
 import type { EditorSearchController } from './search-controller.js';
+import { seedFromSelections } from '@throng/core';
 import {
   countOf,
   editorMatches,
   indexFrom,
   NO_MATCHES,
-  seedFrom,
   stepIndex,
   type Match,
   type MatchModes,
@@ -66,9 +66,18 @@ const highlightField = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
-/** The extension an editor view must carry for search highlights to paint. */
+/**
+ * The extension an editor view must carry for search highlights to paint.
+ *
+ * The match decoration is mounted at LOW precedence, BENEATH the syntax layer (016, FR-007a).
+ * A match is a BACKGROUND and the syntax colour stays the FOREGROUND, so matched code keeps its
+ * highlighting instead of flattening into a solid block — which is what "the match wins" would do,
+ * and what no serious editor does. The two layers are deliberately disjoint in what they set (this
+ * one paints `background`, the highlight style paints `color`), and the explicit precedence is
+ * what keeps that composition from depending on the order extensions happen to be listed in.
+ */
 export const searchHighlightExtension = [
-  highlightField,
+  Prec.low(highlightField),
   EditorView.updateListener.of((update) => {
     if (update.docChanged) docChanged.get(update.view)?.();
   }),
@@ -133,9 +142,18 @@ export function createEditorSearchController(
   return {
     panelKind: 'editor',
 
+    /**
+     * EVERY range, not `selection.main` (FR-025i).
+     *
+     * `main` is one row of a rectangular block — whichever row the drag's head ended on. Seeding
+     * from it would open find searching for an arbitrary line of the user's ten-row block, which is
+     * both wrong and impossible to notice: the find bar is pre-filled with something that came from
+     * the selection, so it looks exactly like it worked.
+     */
     seedFromSelection(): string {
-      const sel = view.state.selection.main;
-      return seedFrom(view.state.sliceDoc(sel.from, sel.to));
+      return seedFromSelections(
+        view.state.selection.ranges.map((range) => view.state.sliceDoc(range.from, range.to)),
+      );
     },
 
     setQuery(nextTerm: string, nextModes: MatchModes): SearchCount {

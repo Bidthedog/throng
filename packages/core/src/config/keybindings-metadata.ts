@@ -5,11 +5,17 @@
  * is edited via the capture modal, not a generic form control. The completeness
  * test asserts every action has a descriptor (FR-047). Pure; zero OS/DOM.
  */
-import type { ActionId } from './keybindings.js';
+import { COMMAND_SCOPES, type ActionId } from './keybindings.js';
 import type { FieldDescriptor, MetadataRegistry } from './metadata.js';
 
+/**
+ * The scope is READ from the command registry, never restated here (016, FR-017b0). Restating it
+ * would create a second place to be wrong: the editor could show `Ctrl+X` as editor-scoped while
+ * dispatch believed otherwise, and the row explaining why two commands coexist would be the row
+ * that lies about it.
+ */
 function chord(key: ActionId, group: string, label: string, description: string): FieldDescriptor {
-  return { key, label, description, group, control: 'chord' };
+  return { key, label, description, group, control: 'chord', scope: [...COMMAND_SCOPES[key]].sort() };
 }
 
 export const KEYBINDINGS_METADATA: MetadataRegistry = [
@@ -101,6 +107,51 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
   chord('editor.save', 'Editor', 'Save', 'Save the active editor document.'),
   chord('editor.saveAll', 'Editor', 'Save all', 'Save all open editor documents in scope.'),
   chord('editor.saveAs', 'Editor', 'Save as', 'Save the active document to a new location.'),
+
+  // Editor text editing (016). These are live only inside an editor, which is why `Cut line`
+  // can share Ctrl+X with the File Explorer's Cut without either shadowing the other.
+  chord(
+    'editor.cutLine',
+    'Editor',
+    'Cut line',
+    'Cut the whole line the cursor sits on when nothing is selected, or just the selection when there is one.',
+  ),
+  chord(
+    'editor.indentLines',
+    'Editor',
+    'Indent',
+    'Indent every line the selection touches, or insert one level of indentation at the cursor.',
+  ),
+  chord(
+    'editor.outdentLines',
+    'Editor',
+    'Outdent',
+    'Remove one level of indentation from every line the selection touches.',
+  ),
+  chord(
+    'editor.columnSelectUp',
+    'Editor',
+    'Column select up',
+    'Extend a rectangular selection one line upwards.',
+  ),
+  chord(
+    'editor.columnSelectDown',
+    'Editor',
+    'Column select down',
+    'Extend a rectangular selection one line downwards.',
+  ),
+  chord(
+    'editor.columnSelectLeft',
+    'Editor',
+    'Column select left',
+    'Extend a rectangular selection one column to the left.',
+  ),
+  chord(
+    'editor.columnSelectRight',
+    'Editor',
+    'Column select right',
+    'Extend a rectangular selection one column to the right.',
+  ),
 
   // Search (013) — one shared find bar routed to the active panel. A terminal
   // searches its scrollback (read-only); an editor searches and replaces its file.

@@ -6,7 +6,7 @@
  * `version` marker has exactly one descriptor (FR-047). Pure; zero OS/DOM.
  */
 import { DEFAULT_APP_SETTINGS } from './app-settings.js';
-import { leavesOf, type FieldDescriptor, type MetadataRegistry } from './metadata.js';
+import { leavesOfDeclared, type FieldDescriptor, type MetadataRegistry } from './metadata.js';
 
 /** Leaves that are internal bookkeeping, not user-configurable settings. */
 export const SETTINGS_INTERNAL_KEYS: readonly string[] = [
@@ -16,9 +16,17 @@ export const SETTINGS_INTERNAL_KEYS: readonly string[] = [
   'newProject.lastProjectFolder',
 ];
 
-/** The configurable settings leaves (every leaf minus the internal keys). */
+/**
+ * The configurable settings leaves (every leaf minus the internal keys).
+ *
+ * A key a descriptor declares to be a `map` is ONE leaf, not one per entry (016, F5) — otherwise
+ * `editor.indentByLanguage`, which ships non-empty, would demand a descriptor per language and
+ * fail the completeness test outright.
+ */
 export function settingsLeaves(): string[] {
-  return leavesOf(DEFAULT_APP_SETTINGS).filter((k) => !SETTINGS_INTERNAL_KEYS.includes(k));
+  return leavesOfDeclared(DEFAULT_APP_SETTINGS, SETTINGS_METADATA).filter(
+    (k) => !SETTINGS_INTERNAL_KEYS.includes(k),
+  );
 }
 
 const CONFIRM_VALUES = ['none', 'single', 'double'] as const;
@@ -165,6 +173,19 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     itemControl: 'text',
     clearable: true, // empty = hide nothing, which is also what it ships as
   },
+  {
+    // The descriptor this setting has ALWAYS lacked (016, F5). It ships as an empty map, so it
+    // yielded zero leaves and slipped past the completeness rule — a JSON-only setting of exactly
+    // the kind the constitution forbids. The `map` control closes it rather than stepping around it.
+    key: 'terminals.defaultParams',
+    label: 'Default flavour parameters',
+    description:
+      'Extra arguments passed to a flavour every time it starts, keyed by flavour id (e.g. pwsh → -NoLogo).',
+    group: 'Terminals',
+    control: 'map',
+    columns: [{ label: 'Arguments', control: 'text' }],
+    clearable: true, // ships empty; empty means "pass nothing extra", a perfectly good answer
+  },
 
   // Editor
   {
@@ -237,6 +258,78 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.warnOnMissingFile',
     label: 'Warn on missing file',
     description: 'Show a popup when an editor’s file is missing or deleted.',
+    group: 'Editor',
+    control: 'toggle',
+  },
+
+  // Indentation (016, FR-018/FR-022). The order of precedence is the requirement: what the FILE
+  // already does beats the language, which beats the global default. A setting NEVER reformats an
+  // existing document (FR-018d) — it decides what the next keystroke inserts.
+  {
+    key: 'editor.indent.style',
+    label: 'Indent with',
+    description:
+      'What a new indent inserts, unless the file already indents differently or its language says otherwise.',
+    group: 'Editor · Indentation',
+    control: 'select',
+    allowedValues: ['spaces', 'tabs'],
+  },
+  {
+    key: 'editor.indent.indentWidth',
+    label: 'Indent width',
+    description: 'How many spaces one indent level inserts.',
+    group: 'Editor · Indentation',
+    control: 'number',
+    min: 1,
+    max: 16,
+  },
+  {
+    key: 'editor.indent.tabWidth',
+    label: 'Tab width',
+    description:
+      'How many columns a literal tab occupies on screen. Display only — it never changes the file’s contents.',
+    group: 'Editor · Indentation',
+    control: 'number',
+    min: 1,
+    max: 16,
+  },
+  {
+    key: 'editor.indentByLanguage',
+    label: 'Indentation by language',
+    description:
+      'Per-language indentation. A file that already indents differently still wins — this decides what a new indent inserts.',
+    group: 'Editor · Indentation',
+    control: 'map',
+    keyLabel: 'Language',
+    keyKind: 'language',
+    columns: [
+      { key: 'style', label: 'Indent with', control: 'select', allowedValues: ['spaces', 'tabs'] },
+      { key: 'indentWidth', label: 'Width', control: 'number', min: 1, max: 16 },
+      { key: 'tabWidth', label: 'Tab width', control: 'number', min: 1, max: 16 },
+    ],
+    // NOT clearable. Emptying it would not "turn off per-language indentation" — it would silently
+    // indent Go with spaces and Python with two. There is no valid empty state here, and offering a
+    // clear affordance would be offering to break the thing (FR-022c).
+  },
+  {
+    key: 'editor.languageByExtension',
+    label: 'Language by file extension',
+    description:
+      'Map a file extension to a language, e.g. “.foo” → Python. Overrides the built-in detection.',
+    group: 'Editor · Languages',
+    control: 'map',
+    keyLabel: 'Extension',
+    keyKind: 'text',
+    columns: [{ label: 'Language', control: 'select' }],
+    // Genuinely clearable: no mapping is a perfectly good state — it is the shipped one — and a
+    // user who added a mapping must be able to take it away again (FR-022c).
+    clearable: true,
+  },
+  {
+    key: 'editor.persistUndoHistory',
+    label: 'Keep undo history after a crash',
+    description:
+      'Restore the undo history along with unsaved changes when the app is reopened after a crash. Removed text lives in the recovery file until then.',
     group: 'Editor',
     control: 'toggle',
   },

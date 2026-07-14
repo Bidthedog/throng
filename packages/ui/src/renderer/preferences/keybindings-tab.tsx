@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import {
+  COMMAND_SCOPES,
   KEYBINDINGS_METADATA,
   applyRemove,
   bindingDiffersFromEntry,
   buildShippedDefaults,
   filterFields,
   isBindingOverridden,
+  scopeNames,
   type ActionId,
   type FieldDescriptor,
 } from '@throng/core';
@@ -181,7 +183,25 @@ export function KeybindingsTab({
                 title="Double-click to add a binding"
               >
                 <div className="settings-row__meta">
-                  <label className="settings-row__label">{d.label}</label>
+                  <label className="settings-row__label">
+                    {d.label}
+                    {/**
+                     * WHERE this command's chord is live (016, FR-017b0).
+                     *
+                     * This is the only thing that explains why `Ctrl+X` appears twice in this list
+                     * without being a mistake: one cuts a LINE in an editor, the other cuts a FILE
+                     * in the tree, and they can never both fire. Without it a user sees a duplicate,
+                     * concludes something is broken, and "fixes" it by rebinding one of the two —
+                     * breaking something that worked perfectly.
+                     */}
+                    <span className="keybinding-scopes" data-testid={`binding-${d.key}-scope`}>
+                      {scopeNames(COMMAND_SCOPES[action]).map((scope) => (
+                        <span className="keybinding-scope" key={scope}>
+                          {scope}
+                        </span>
+                      ))}
+                    </span>
+                  </label>
                   <p className="settings-row__desc">{d.description}</p>
                 </div>
                 <div className="settings-row__control">

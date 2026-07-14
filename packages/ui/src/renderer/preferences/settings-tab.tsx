@@ -6,6 +6,7 @@ import {
   filterFields,
   getAtPath,
   isSettingOverridden,
+  LANGUAGES,
   setAtPath,
   settingDiffersFromEntry,
   type FieldDescriptor,
@@ -123,10 +124,36 @@ export function SettingsTab({
    * already empty — offering "clear" on an empty value is offering a no-op (the same reasoning
    * that hides the reset affordance on a row that is not overridden, FR-004a).
    */
+  /**
+   * Options a descriptor cannot declare statically, because they are discovered at runtime.
+   *
+   * Generalised from a single hard-coded check for the theme list: 016 adds a second such field (the
+   * language column of `editor.languageByExtension`), and a third would have meant a third `d.key
+   * === …` in the JSX. The list of languages is the registry's, so a language added to the registry
+   * appears here without anyone remembering to update a settings file.
+   */
+  const dynamicOptions = (
+    d: FieldDescriptor,
+    themeNames: readonly string[],
+  ): readonly (string | number)[] | undefined => {
+    if (d.key === 'appearance.theme') return themeNames;
+    if (d.key === 'editor.languageByExtension') return LANGUAGES.map((l) => l.id);
+    return undefined;
+  };
+
+  /**
+   * Is there anything TO clear?
+   *
+   * The old rule tested `value !== ''`, which is true of every object — so an already-EMPTY map lit
+   * its clear button, and clicking it did nothing at all. A control that offers an action it cannot
+   * perform teaches the user to distrust the ones that can (016, F6).
+   */
   const canClear = (d: FieldDescriptor): boolean => {
     if (!d.clearable) return false;
     const value = getAtPath(settings, d.key);
-    return Array.isArray(value) ? value.length > 0 : value !== '';
+    if (Array.isArray(value)) return value.length > 0;
+    if (value !== null && typeof value === 'object') return Object.keys(value).length > 0;
+    return value !== '';
   };
 
   return (
@@ -171,7 +198,7 @@ export function SettingsTab({
                 <SettingControl
                   descriptor={d}
                   value={getAtPath(settings, d.key)}
-                  options={d.key === 'appearance.theme' ? themes : undefined}
+                  options={dynamicOptions(d, themes)}
                   onCommit={(v) => commit(d.key, v)}
                 />
               </div>

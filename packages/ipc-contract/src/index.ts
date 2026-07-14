@@ -117,3 +117,22 @@ export type {
   TerminalCwdNotification,
   JsonRpcNotification,
 } from './terminal.js';
+
+// document.* (016) — the per-document language override (contracts/document-state-rpc.md).
+export {
+  DOCUMENT_GET_STATE_METHOD,
+  DOCUMENT_SET_STATE_METHOD,
+  DOCUMENT_MOVE_PATH_METHOD,
+  DOCUMENT_PRUNE_METHOD,
+} from './document.js';
+export type {
+  DocumentStateDto,
+  DocumentGetStateParams,
+  DocumentGetStateResult,
+  DocumentSetStateParams,
+  DocumentSetStateResult,
+  DocumentMovePathParams,
+  DocumentMovePathResult,
+  DocumentPruneParams,
+  DocumentPruneResult,
+} from './document.js';

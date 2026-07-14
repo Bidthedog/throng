@@ -5,16 +5,12 @@
  * EditorCoordinator}; the renderer never touches the filesystem or the lock.
  */
 import { ipcMain, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
-import type { SaveAllScope } from '@throng/core';
+import type { SaveAllScope, SerialisedHistory } from '@throng/core';
 import { senderWebContentsId } from './broadcast.js';
 import type { EditorCoordinator, DocMeta } from './editor-coordinator.js';
 
 function windowIdOf(event: IpcMainInvokeEvent | IpcMainEvent): string {
   return String(senderWebContentsId(event.sender) ?? 0);
-}
-
-function webContentsIdOf(event: IpcMainInvokeEvent | IpcMainEvent): number {
-  return senderWebContentsId(event.sender) ?? 0;
 }
 
 /** Build a DocMeta from a renderer payload, stamping the sender's window id. */
@@ -57,12 +53,58 @@ export function registerEditorIpc(coordinator: EditorCoordinator): void {
     coordinator.register(toMeta(event, raw), text);
   });
 
-  ipcMain.on('throng:editor:notifyDirty', (event, raw: Record<string, unknown>) => {
-    void coordinator.notifyDirty(webContentsIdOf(event), {
-      ...toMeta(event, raw),
-      dirty: raw.dirty === true,
-      text: typeof raw.text === 'string' ? raw.text : '',
+  /**
+   * A view dispatches an edit it has ALREADY shown its user (016, FR-028f).
+   *
+   * The metadata rides along because it is mutable — projects come and go, a Save-As
+   * re-points the file — and the authority's owner must not act on a stale copy of it.
+   * It replaces 006's `notifyDirty`, which pushed the WHOLE DOCUMENT on every keystroke.
+   */
+  ipcMain.on('throng:editor:dispatch', (event, raw: Record<string, unknown>) => {
+    if (typeof raw.panelId !== 'string' || typeof raw.viewId !== 'string') return;
+    if (typeof raw.baseVersion !== 'number') return;
+    coordinator.dispatchChange(toMeta(event, raw), {
+      documentId: raw.panelId,
+      viewId: raw.viewId,
+      changes: raw.changes,
+      baseVersion: raw.baseVersion,
+      selectionBefore: raw.selectionBefore ?? null,
+      mergeClass:
+        raw.mergeClass === 'type' || raw.mergeClass === 'delete' ? raw.mergeClass : null,
     });
+  });
+
+  // Undo/redo are performed by the AUTHORITY, not the view: the stack belongs to the
+  // document, so an Undo pressed in one mirrored view must revert an edit made in the
+  // other (FR-026c). A view-local history could never do that.
+  ipcMain.on('throng:editor:undo', (_event, raw: Record<string, unknown>) => {
+    if (typeof raw.panelId !== 'string' || typeof raw.viewId !== 'string') return;
+    coordinator.undo(raw.panelId, raw.viewId);
+  });
+
+  ipcMain.on('throng:editor:redo', (_event, raw: Record<string, unknown>) => {
+    if (typeof raw.panelId !== 'string' || typeof raw.viewId !== 'string') return;
+    coordinator.redo(raw.panelId, raw.viewId);
+  });
+
+  ipcMain.handle('throng:editor:revert', (_event, panelId: unknown) =>
+    typeof panelId === 'string' ? coordinator.revert(panelId) : false,
+  );
+
+  ipcMain.handle('throng:editor:resync', (_event, panelId: unknown) =>
+    typeof panelId === 'string' ? coordinator.resync(panelId) : null,
+  );
+
+  // Crash-recovered content goes into the AUTHORITY, not into the view that found it (FR-102) —
+  // and so does its undo history, so the past the user is restored to is the one they had when the
+  // app died, not an empty one (FR-027a).
+  ipcMain.handle('throng:editor:restoreRecovered', (_event, raw: Record<string, unknown>) => {
+    if (typeof raw.panelId !== 'string' || typeof raw.text !== 'string') return;
+    coordinator.restoreRecovered(
+      raw.panelId,
+      raw.text,
+      (raw.history as SerialisedHistory | undefined) ?? undefined,
+    );
   });
 
   ipcMain.handle('throng:editor:save', (_event, raw: Record<string, unknown>) =>
@@ -107,18 +149,15 @@ export function registerEditorIpc(coordinator: EditorCoordinator): void {
 
   ipcMain.handle('throng:editor:recover', () => coordinator.recover());
 
+  // One panel's snapshot. A view has no business holding the deleted text of documents it is not
+  // showing (016, FR-027b).
+  ipcMain.handle('throng:editor:recoverOne', (_event, panelId: unknown) =>
+    typeof panelId === 'string' ? coordinator.recoverOne(panelId) : null,
+  );
+
   ipcMain.handle('throng:editor:subWsFiles', () => coordinator.openSubWorkspaceEditorFiles());
 
   ipcMain.on('throng:editor:destroy', (_event, panelId: unknown) => {
     if (typeof panelId === 'string') coordinator.destroy(panelId);
-  });
-
-  ipcMain.on('throng:editor:notifySync', (event, raw: Record<string, unknown>) => {
-    if (typeof raw.panelId !== 'string') return;
-    coordinator.notifySync(webContentsIdOf(event), {
-      panelId: raw.panelId,
-      text: typeof raw.text === 'string' ? raw.text : undefined,
-      dirty: typeof raw.dirty === 'boolean' ? raw.dirty : undefined,
-    });
   });
 }

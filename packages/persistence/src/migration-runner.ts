@@ -5,6 +5,7 @@ import { applyMigrationV3, MIGRATION_V3_VERSION } from './migrations/v3-project-
 import { applyMigrationV4, MIGRATION_V4_VERSION } from './migrations/v4-subworkspace-identity.js';
 import { applyMigrationV5, MIGRATION_V5_VERSION } from './migrations/v5-subworkspace-order.js';
 import { applyMigrationV6, MIGRATION_V6_VERSION } from './migrations/v6-project-hidden.js';
+import { applyMigrationV7, MIGRATION_V7_VERSION } from './migrations/v7-document-state.js';
 
 /** The baseline schema version (no domain tables — only a `_meta` marker). */
 export const BASELINE_VERSION = 1;
@@ -45,6 +46,10 @@ const MIGRATIONS: readonly Migration[] = [
   {
     version: MIGRATION_V6_VERSION,
     up: applyMigrationV6,
+  },
+  {
+    version: MIGRATION_V7_VERSION,
+    up: applyMigrationV7,
   },
 ];
 

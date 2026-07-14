@@ -1,14 +1,26 @@
 /**
  * EditorCoordinator — the app-wide UI-main owner of editor documents (006,
  * contracts/editor-service.md). Holds the open-document registry (one buffer per
- * file everywhere, FR-011a), the current content of every open document (pushed
- * from renderers via `notifyDirty`, so UI main is the single source of truth for
- * Save-All / recovery / cross-window mirror), the dirty-file lock (FR-028), and
- * the recovery temp files (FR-041/042/043). No daemon involvement.
+ * file everywhere, FR-011a), the AUTHORITY for every open document (016, FR-028f —
+ * see below), the soft external-change detection (FR-028), and the recovery temp
+ * files (FR-041/042/043). No daemon involvement.
  *
- * Because UI main holds each document's latest text, Save-All spanning multiple
- * windows, crash recovery, and the cross-window mirror are all served from here
- * without a renderer round-trip for content.
+ * ## One document, one state (016, constitution XI)
+ *
+ * 006 kept each document's text here as a plain string, pushed up from whichever
+ * renderer last edited it (`notifyDirty`) and relayed back out to the others as a
+ * whole-document replace. That made every view a co-equal source of truth, and two
+ * views of one document reconciled peer-to-peer — which Principle XI forbids by
+ * name, and which gave mirrored views separate undo stacks (breaking FR-026c).
+ *
+ * That relay is GONE. Each open document now has a {@link DocumentAuthority}: it
+ * owns the text, orders every change, rebases anything computed against a stale
+ * version, and derives `dirty`. Views are replicas — they echo the user's keystroke
+ * locally at once (typing cannot wait for IPC) and send the change here; what comes
+ * back is the one ordered canonical stream, which every view applies.
+ *
+ * Save-All across windows, crash recovery and the cross-window mirror are all served
+ * from the authority's text, with no renderer round-trip for content.
  */
 import { dirname } from 'node:path';
 import {
@@ -20,17 +32,22 @@ import {
   partitionByPathed,
   registerOpen,
   unregisterPanel,
+  type CanonicalChangeMsg,
+  type DispatchChangeMsg,
   type Disposable,
   type EditorOwnerKind,
   type EncodingId,
   type IFileWatcher,
   type LineEndingId,
   type OpenDecision,
+  type ResetDocumentMsg,
   type SaveAllScope,
   type ScopeEditor,
+  type SerialisedHistory,
 } from '@throng/core';
+import { DocumentAuthority } from './document-authority.js';
 import type { EditorService, LoadResult, SaveResult } from './editor-service.js';
-import type { EditorRecovery } from './editor-recovery.js';
+import type { EditorRecovery, RecoveredDoc, RecoverySnapshot } from './editor-recovery.js';
 
 /** The mutable per-document state UI main tracks. */
 interface CoordDoc {
@@ -45,8 +62,9 @@ interface CoordDoc {
   encoding: EncodingId;
   hasBom: boolean;
   lineEnding: LineEndingId;
-  dirty: boolean;
-  text: string;
+  /** THE document. Its text and its dirty state are read from here, never stored
+   *  beside it — a second copy would be a second owner (constitution XI). */
+  authority: DocumentAuthority;
   /** The backing file was deleted while open (FR-099): the buffer is kept + marked
    *  dirty so a save re-creates it, and re-selecting the tab surfaces the error. */
   fileMissing?: boolean;
@@ -73,22 +91,50 @@ export interface DocMeta {
   lineEnding: LineEndingId;
 }
 
+/**
+ * What UI main sends a renderer about an open document.
+ *
+ * `change` and `reset` are the authority's canonical stream: EVERY view applies them,
+ * the originating one included. The rest are state the views must know about but which
+ * no change describes — a save that made the document clean, a file deleted out from
+ * under it, an external edit to reconcile.
+ */
+export interface EditorSyncMsg {
+  panelId: string;
+  /** One ordered canonical change (016, FR-028f). Applied by every view. */
+  change?: CanonicalChangeMsg;
+  /** The document was REPLACED — a revert, an external reload, or a resync. */
+  reset?: ResetDocumentMsg;
+  /** Derived state changed with no accompanying content change (a save, a delete). */
+  dirty?: boolean;
+  /** The backing file was deleted while open (FR-099). */
+  deleted?: boolean;
+  /** A dirty document's file changed on disk (FR-028) — a one-shot notice. */
+  externalChange?: boolean;
+}
+
 export interface CoordinatorDeps {
   /** Debounce (ms) before an in-progress edit is flushed to its recovery temp. */
   recoveryDebounceMs?: number;
-  /** Relay a mirror message to every OTHER window (Phase E cross-window sync).
-   *  `deleted` marks an open editor dirty because its file was removed (FR-099);
-   *  `externalChange` warns that a dirty file changed on disk (FR-028). */
-  relaySync: (
-    fromWebContentsId: number,
-    msg: {
-      panelId: string;
-      text?: string;
-      dirty?: boolean;
-      deleted?: boolean;
-      externalChange?: boolean;
-    },
-  ) => void;
+  /**
+   * Send a message to renderer windows.
+   *
+   * `excludeWebContentsId` exists for messages a window already knows about; the
+   * canonical change stream passes `-1` so that EVERY window receives it, the
+   * originator included. A view cannot be left out of the stream that defines the
+   * document — that is precisely how it would drift out of step.
+   */
+  relaySync: (excludeWebContentsId: number, msg: EditorSyncMsg) => void;
+  /**
+   * Is `editor.persistUndoHistory` on (FR-027c)? Read at WRITE time, not captured — the user can
+   * turn it off mid-session, and the very next snapshot must respect that.
+   *
+   * REQUIRED, deliberately. It was optional, defaulting to `?? true` — and a privacy setting whose
+   * default is "write the user's deleted text to disk" fails OPEN: any future construction that
+   * forgot to pass it would persist the history regardless of what the user had chosen, silently,
+   * and no test would fail. Making it required means that mistake cannot compile.
+   */
+  persistUndoHistory: () => boolean;
   /** Raise/focus the window+panel that owns an already-open file (FR-011a). */
   focusEditor?: (windowId: string, panelId: string) => void;
   /** Watch a folder for external file changes — powers soft change-detection
@@ -144,14 +190,34 @@ export class EditorCoordinator {
       encoding: result.encoding,
       hasBom: result.hasBom,
       lineEnding: result.lineEnding,
-      dirty: false,
-      text: result.text,
+      authority: new DocumentAuthority(meta.panelId, result.text),
     };
     doc.fileMissing = false; // a successful load means the file exists (FR-099)
     this.docs.set(meta.panelId, doc);
     registerOpen(this.registry, meta.absPath, { panelId: meta.panelId, windowId: meta.windowId });
     this.watchDoc(doc); // soft external-change detection (FR-028)
+    // A new document — every view of this panel adopts it, not just the one that asked. Opening a
+    // file from the tree into a MIRRORED editor must change the file in both windows.
+    this.broadcastReset(doc);
     return result;
+  }
+
+  /**
+   * Restore crash-recovered content into the AUTHORITY, dirty against the file on disk (FR-102).
+   *
+   * Restoring it into the requesting view alone would leave that view disagreeing with the document
+   * it is a replica of, from its very first frame — and the disagreement would be invisible until
+   * the user's next keystroke landed at an offset computed against text nobody else had.
+   */
+  restoreRecovered(panelId: string, text: string, history?: SerialisedHistory): void {
+    const doc = this.docs.get(panelId);
+    if (!doc) return;
+    doc.authority.reset(text, false); // NOT clean: it is precisely what the file does NOT hold
+    // The history is adopted AFTER the reset, because `reset` clears it — the entries it holds
+    // describe a document that has just been replaced. Here they describe the document we are
+    // replacing it WITH, so they are exactly the past the user is entitled to (FR-027a).
+    if (history) doc.authority.restoreHistory(history);
+    this.broadcastReset(doc);
   }
 
   /**
@@ -172,16 +238,18 @@ export class EditorCoordinator {
     for (const doc of this.docs.values()) {
       if (!doc.absPath || doc.fileMissing || !isUnder(doc.absPath)) continue;
       doc.fileMissing = true;
-      doc.dirty = true;
+      // No version of this document is on disk any more, so it is dirty whatever it
+      // holds — and stays dirty until a save re-creates the file (FR-099).
+      doc.authority.markUnsaved();
       // Back up the surviving buffer immediately (not debounced) so it is recoverable
       // even across an immediate restart (FR-102).
       if (doc.recoveryTimer) {
         clearTimeout(doc.recoveryTimer);
         doc.recoveryTimer = undefined;
       }
-      void this.recovery.write(doc.panelId, doc.text);
-      // -1 origin: broadcast to ALL windows (no editing renderer to exclude).
-      this.deps.relaySync(-1, { panelId: doc.panelId, deleted: true });
+      void this.snapshot(doc);
+      // -1: broadcast to ALL windows (no editing renderer to exclude).
+      this.deps.relaySync(-1, { panelId: doc.panelId, deleted: true, dirty: true });
     }
   }
 
@@ -199,8 +267,7 @@ export class EditorCoordinator {
       encoding: meta.encoding,
       hasBom: meta.hasBom,
       lineEnding: meta.lineEnding,
-      dirty: false,
-      text,
+      authority: new DocumentAuthority(meta.panelId, text),
     };
     this.docs.set(meta.panelId, doc);
     if (meta.absPath) {
@@ -224,40 +291,134 @@ export class EditorCoordinator {
   }
 
   /**
-   * A renderer reports an edit (or dirty-state change). Updates the stored text +
-   * metadata, schedules a recovery write, and relays the mirror to other windows.
+   * A view dispatches an edit it has ALREADY shown the user (016, FR-028f).
+   *
+   * The authority orders it, rebases it if it was computed against a superseded
+   * version, and applies it. The canonical result goes to EVERY window — the
+   * originating one included, which is what lets its replica advance its version and
+   * release the next change it has buffered.
    */
-  async notifyDirty(fromWebContentsId: number, payload: DocMeta & { dirty: boolean; text: string }): Promise<void> {
-    let doc = this.docs.get(payload.panelId);
-    if (!doc) {
-      this.register(payload, payload.text);
-      doc = this.docs.get(payload.panelId)!;
+  dispatchChange(meta: DocMeta, change: DispatchChangeMsg): void {
+    const doc = this.docs.get(change.documentId);
+    if (!doc) return; // the buffer was destroyed under a live view — nothing to apply it to
+    this.refreshMeta(doc, meta);
+
+    const canonical = doc.authority.dispatch(change);
+    if (!canonical) {
+      // The document was REPLACED under this change (a revert, an external reload), so it
+      // cannot be rebased and must not be landed. The view that sent it is now holding an
+      // edit to a document that no longer exists: put it back in step.
+      this.broadcastReset(doc);
+      return;
     }
-    // Refresh mutable metadata (roots may change as projects come/go).
-    doc.windowId = payload.windowId;
-    doc.ownerKind = payload.ownerKind;
-    doc.ownerProjectId = payload.ownerProjectId;
-    doc.ownerRoot = payload.ownerRoot;
-    doc.allProjectRoots = [...payload.allProjectRoots];
-    doc.tabId = payload.tabId;
-    doc.encoding = payload.encoding;
-    doc.hasBom = payload.hasBom;
-    doc.lineEnding = payload.lineEnding;
-    if (payload.absPath) doc.absPath = payload.absPath;
-    doc.text = payload.text;
 
-    doc.dirty = payload.dirty;
-    if (!doc.dirty) doc.diskChanged = false; // clean again → clear any pending notice
+    if (!doc.authority.dirty) doc.diskChanged = false; // clean again → clear any pending notice
+    this.scheduleRecovery(doc); // (debounced; independent of dirty — FR-041/053)
+    this.deps.relaySync(-1, { panelId: doc.panelId, change: canonical });
+  }
 
-    // Recovery temp (debounced; independent of dirty — FR-041/053).
+  /**
+   * Undo (or redo) the last change to a document, whichever view made it (FR-026c).
+   *
+   * Invoked from a view, but performed HERE, because the stack belongs to the document.
+   * The recorded cursor set rides back on the canonical message and is restored only in
+   * the view that invoked it (FR-026f).
+   */
+  undo(panelId: string, viewId: string): void {
+    this.applyHistoryStep(panelId, (doc) => doc.authority.undo(viewId));
+  }
+
+  redo(panelId: string, viewId: string): void {
+    this.applyHistoryStep(panelId, (doc) => doc.authority.redo(viewId));
+  }
+
+  /**
+   * Discard every unsaved change, back to the content on disk (FR-075).
+   *
+   * The undo history goes with them — it described text the user has just discarded.
+   * A document whose file was deleted has no saved content to return to, so there is
+   * nothing to revert TO and the request is refused rather than silently blanking it.
+   */
+  revert(panelId: string): boolean {
+    const doc = this.docs.get(panelId);
+    const saved = doc?.authority.savedText;
+    if (!doc || saved === null || saved === undefined) return false;
+
+    doc.authority.reset(saved);
+    this.broadcastReset(doc);
+    if (doc.recoveryTimer) {
+      clearTimeout(doc.recoveryTimer);
+      doc.recoveryTimer = undefined;
+    }
+    void this.recovery.remove(doc.panelId);
+    return true;
+  }
+
+  /** The authority's current state, for a view that is mounting or has fallen out of step. */
+  resync(panelId: string): ResetDocumentMsg | null {
+    const doc = this.docs.get(panelId);
+    if (!doc) return null;
+    return this.stateOf(doc);
+  }
+
+  private applyHistoryStep(
+    panelId: string,
+    step: (doc: CoordDoc) => CanonicalChangeMsg | null,
+  ): void {
+    const doc = this.docs.get(panelId);
+    if (!doc) return;
+    const canonical = step(doc);
+    if (!canonical) return; // nothing left to undo/redo — not an error
     this.scheduleRecovery(doc);
+    this.deps.relaySync(-1, { panelId: doc.panelId, change: canonical });
+  }
 
-    // Cross-window mirror (content + dirty) to other windows (FR-034).
-    this.deps.relaySync(fromWebContentsId, {
-      panelId: doc.panelId,
-      text: doc.text,
-      dirty: doc.dirty,
-    });
+  /**
+   * Refresh the metadata a renderer restates with each change — ownership and routing, which move
+   * as projects come and go.
+   *
+   * ## What is deliberately NOT refreshed, and why
+   *
+   * `encoding`, `hasBom` and `lineEnding` are the FILE's, learnt from its bytes when it was decoded.
+   * They are not a view's to restate, and this used to overwrite them from every dispatched change —
+   * which was a silent data-fidelity bug with a specific victim: a MIRRORED view.
+   *
+   * The second window's panel gets its content from `getContent`, which carries no encoding. Its
+   * config therefore held the app defaults, so the moment its user typed, a CRLF file's ending was
+   * overwritten with LF and its BOM was dropped — and the next save rewrote every line of the file.
+   * Nothing in the edited region would have looked wrong; the whole file would have.
+   *
+   * The bytes decide the encoding. A view does not (FR-023).
+   */
+  private refreshMeta(doc: CoordDoc, meta: DocMeta): void {
+    doc.windowId = meta.windowId;
+    doc.ownerKind = meta.ownerKind;
+    doc.ownerProjectId = meta.ownerProjectId;
+    doc.ownerRoot = meta.ownerRoot;
+    doc.allProjectRoots = [...meta.allProjectRoots];
+    doc.tabId = meta.tabId;
+    if (meta.absPath) doc.absPath = meta.absPath;
+  }
+
+  private stateOf(doc: CoordDoc): ResetDocumentMsg {
+    return {
+      documentId: doc.panelId,
+      text: doc.authority.text,
+      version: doc.authority.version,
+      dirty: doc.authority.dirty,
+    };
+  }
+
+  /**
+   * Tell every view the document was replaced — they drop whatever they had in flight,
+   * because it described the document that has just been discarded.
+   *
+   * This also puts a view that has drifted back in step: the two are the same act. A
+   * replica that has fallen out of step is, precisely, one holding changes to a document
+   * that no longer exists.
+   */
+  private broadcastReset(doc: CoordDoc): void {
+    this.deps.relaySync(-1, { panelId: doc.panelId, reset: this.stateOf(doc) });
   }
 
   /** Save one document's stored content (Ctrl+S). `absPath` sets a new location. */
@@ -288,7 +449,7 @@ export class EditorCoordinator {
 
     const result = await this.service.save({
       absPath: target,
-      text: doc.text,
+      text: doc.authority.text,
       encoding: doc.encoding,
       hasBom: doc.hasBom,
       lineEnding: doc.lineEnding,
@@ -304,7 +465,9 @@ export class EditorCoordinator {
     if (doc.absPath && pathChanged) unregisterPanel(this.registry, doc.panelId);
     doc.absPath = target;
     registerOpen(this.registry, target, { panelId: doc.panelId, windowId: doc.windowId });
-    doc.dirty = false;
+    // What we hold IS what the file holds now — so the document is clean, and an undo past
+    // this point re-dirties it for free (FR-026d).
+    doc.authority.markSaved();
     doc.fileMissing = false; // the save re-created the file (FR-099)
     doc.diskChanged = false; // our own write is the current on-disk version (FR-028)
     if (pathChanged || !doc.watch) this.watchDoc(doc); // (re)watch the saved location
@@ -338,7 +501,7 @@ export class EditorCoordinator {
       editors: scopeEditors,
       activeTabId: ctx.activeTabId,
       activeProjectId: ctx.activeProjectId,
-    }).filter((id) => this.docs.get(id)?.dirty);
+    }).filter((id) => this.docs.get(id)?.authority.dirty);
     const { pathed, unpathed } = partitionByPathed(ids, scopeEditors);
     const saved: string[] = [];
     const failed: { panelId: string; reason: string }[] = [];
@@ -348,14 +511,6 @@ export class EditorCoordinator {
       else failed.push({ panelId, reason: r.reason });
     }
     return { saved, skippedUnpathed: unpathed, failed };
-  }
-
-  /** Relay a cross-window mirror message (renderer → UI main → other windows). */
-  notifySync(fromWebContentsId: number, msg: { panelId: string; text?: string; dirty?: boolean }): void {
-    const doc = this.docs.get(msg.panelId);
-    if (doc && msg.text !== undefined) doc.text = msg.text;
-    if (doc && msg.dirty !== undefined) doc.dirty = msg.dirty;
-    this.deps.relaySync(fromWebContentsId, msg);
   }
 
   /** Tear down a document (Panel destroy/close): stop watching, unregister, clean temp. */
@@ -369,14 +524,41 @@ export class EditorCoordinator {
     void this.recovery.remove(panelId);
   }
 
-  /** Current stored content for a panel, if UI main already holds it (moved
-   *  panel / cross-window mirror / restored doc). Null when not open here. */
+  /**
+   * The authority's current state for a panel (a moved panel, a mirrored view, a restored
+   * doc). Null when no document is open here.
+   *
+   * `version` is what makes a mounting view a REPLICA rather than a second original: it
+   * starts from the authority's version, so the first change it sends is measured against
+   * a document the authority recognises.
+   */
   getContent(
     panelId: string,
-  ): { text: string; dirty: boolean; absPath: string | null; fileMissing: boolean } | null {
+  ): {
+    text: string;
+    dirty: boolean;
+    version: number;
+    absPath: string | null;
+    fileMissing: boolean;
+    encoding: EncodingId;
+    hasBom: boolean;
+    lineEnding: LineEndingId;
+  } | null {
     const doc = this.docs.get(panelId);
     if (!doc) return null;
-    return { text: doc.text, dirty: doc.dirty, absPath: doc.absPath, fileMissing: !!doc.fileMissing };
+    return {
+      text: doc.authority.text,
+      dirty: doc.authority.dirty,
+      version: doc.authority.version,
+      absPath: doc.absPath,
+      fileMissing: !!doc.fileMissing,
+      // The FILE's, learnt from its bytes. A mounting view adopts them rather than assuming the app
+      // defaults — a mirrored view that assumed LF would show the wrong line ending in its status
+      // bar, and offer the wrong one in a Save-As (FR-023).
+      encoding: doc.encoding,
+      hasBom: doc.hasBom,
+      lineEnding: doc.lineEnding,
+    };
   }
 
   /** Open documents summary (indicators / menus). */
@@ -389,7 +571,7 @@ export class EditorCoordinator {
     return [...this.docs.values()].map((d) => ({
       panelId: d.panelId,
       absPath: d.absPath,
-      dirty: d.dirty,
+      dirty: d.authority.dirty,
       ownerKind: d.ownerKind,
     }));
   }
@@ -401,9 +583,30 @@ export class EditorCoordinator {
       .map((d) => ({ filePath: d.absPath as string }));
   }
 
-  /** Launch-time recovery: return in-progress content by panelId (FR-042). */
-  async recover(): Promise<Array<{ panelId: string; text: string }>> {
+  /** Launch-time recovery: in-progress content — and its undo history — by panelId (FR-042/FR-027a). */
+  async recover(): Promise<RecoveredDoc[]> {
     return this.recovery.list();
+  }
+
+  /**
+   * ONE panel's snapshot — what an editor asks for when it mounts (FR-042/FR-027a).
+   *
+   * A view used to fetch the whole recovery directory and pick its own entry out of it, which meant
+   * every renderer received every OTHER document's snapshot too — and, since 016, the undo histories
+   * inside them, holding whatever the user had cut out of those files. The renderer is the least
+   * trusted process in the app and it has no business holding the deleted text of documents it is
+   * not showing. It asks for its own.
+   */
+  async recoverOne(panelId: string): Promise<RecoverySnapshot | null> {
+    return this.recovery.read(panelId);
+  }
+
+  /**
+   * Strip every persisted undo history from disk (FR-027c) — what turning `persistUndoHistory` off
+   * does, at the moment it is turned off rather than at the next keystroke.
+   */
+  async purgePersistedHistories(): Promise<void> {
+    await this.recovery.purgeHistories();
   }
 
   /**
@@ -458,17 +661,41 @@ export class EditorCoordinator {
       if (!doc.fileMissing) this.markDeleted([doc.absPath]);
       return;
     }
-    if (res.text === doc.text) {
+    /**
+     * Has the FILE changed — or merely the buffer? (FR-028.)
+     *
+     * `savedText` is what throng last read from, or wrote to, this path: our belief about what is on
+     * disk. Comparing the disk against THAT answers the only question the notice is entitled to ask.
+     *
+     * It used to compare the disk against the live BUFFER, which is a different question and a
+     * useless one: a document with unsaved changes differs from the disk BY DEFINITION, so every
+     * dirty editor looked externally modified. And because the watch is on the DIRECTORY — it has to
+     * be, or a delete could never be noticed — any event in the folder woke every open document in
+     * it. Saving one file therefore announced "this file changed on disk" on all the others, and
+     * merely having unsaved work was enough to be told, falsely, that somebody else had edited it.
+     *
+     * "Changed on disk" is a claim about the disk. This is what makes it true.
+     */
+    const believedOnDisk = doc.authority.savedText;
+    if (believedOnDisk !== null && res.text === believedOnDisk) {
+      doc.diskChanged = false; // the file is exactly what we last read/wrote — nothing happened
+      return;
+    }
+    if (res.text === doc.authority.text) {
       doc.diskChanged = false; // matches our buffer (incl. our own save) — no diff
       return;
     }
-    if (!doc.dirty) {
+    if (!doc.authority.dirty) {
       // Clean editor: adopt the external content (live reload), stay clean.
-      doc.text = res.text;
+      //
+      // A REPLACEMENT, not a change: the new content has no relationship to the old, so
+      // there is nothing to express as a rebasable edit — and the undo history, which
+      // described the file as it was, is cleared with it (FR-026d).
       doc.encoding = res.encoding;
       doc.hasBom = res.hasBom;
       doc.lineEnding = res.lineEnding;
-      this.deps.relaySync(-1, { panelId: doc.panelId, text: res.text, dirty: false });
+      doc.authority.reset(res.text);
+      this.broadcastReset(doc);
     } else if (!doc.diskChanged) {
       // Dirty editor: warn ONCE that the on-disk file diverged (save will overwrite).
       doc.diskChanged = true;
@@ -476,12 +703,30 @@ export class EditorCoordinator {
     }
   }
 
+  /**
+   * Take the snapshot: the document, and — unless the user has turned it off — its undo history
+   * (FR-027a/FR-027c).
+   *
+   * The ONE place a snapshot is written, so the persistUndoHistory rule cannot be honoured on the
+   * debounced path and forgotten on the immediate one. `persistUndoHistory` governs PERSISTENCE
+   * only: the in-memory history is untouched by it, so turning it off never costs the user an undo
+   * in the session they are in — only the one they would have had after a crash.
+   */
+  private async snapshot(doc: CoordDoc): Promise<void> {
+    const withHistory = this.deps.persistUndoHistory();
+    await this.recovery.write(doc.panelId, {
+      version: doc.authority.version,
+      text: doc.authority.text,
+      ...(withHistory ? { history: doc.authority.serialiseHistory() } : {}),
+    });
+  }
+
   private scheduleRecovery(doc: CoordDoc): void {
     if (doc.recoveryTimer) clearTimeout(doc.recoveryTimer);
     const ms = this.deps.recoveryDebounceMs ?? 400;
     doc.recoveryTimer = setTimeout(() => {
       doc.recoveryTimer = undefined;
-      void this.recovery.write(doc.panelId, doc.text);
+      void this.snapshot(doc);
     }, ms);
   }
 }

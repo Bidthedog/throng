@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactElement } from 'react';
 import type { FieldDescriptor } from '@throng/core';
 import { FolderPicker } from '../common/folder-picker.js';
 import { IconButton } from '../common/icon-button.js';
+import { MapControl } from './map-control.js';
 
 /**
  * Generic descriptor-driven form controls (feature 007, FR-028/029). One control
@@ -38,6 +39,12 @@ export function SettingControl(props: SettingControlProps): ReactElement {
       return <ArrayControl {...props} />;
     case 'folder':
       return <FolderControl {...props} />;
+    // A keyed map (016). WITHOUT this case it falls through to `default:` and renders as a TEXT
+    // FIELD showing "[object Object]" — which is not a crash, not a type error, and not caught by
+    // anything: the descriptor is valid, the control is valid, and the user simply sees nonsense.
+    // That silent degradation is why the default arm is dangerous, and why this case exists.
+    case 'map':
+      return <MapControl {...props} />;
     default:
       // text / colour / font-family / icon / chord fall back to a text field here;
       // richer pickers live in the Themes/Key Bindings tabs (US3/US4).
