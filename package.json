@@ -33,6 +33,7 @@
     "start:ui": "electron packages/ui/dist/main/main.js",
     "lint": "eslint .",
     "typecheck": "tsc -b",
+    "typecheck:renderer": "tsc -p packages/ui/tsconfig.renderer.json",
     "test": "node scripts/run-tests.mjs",
     "pretest:e2e": "npm run build",
     "test:unit": "vitest run --project unit",
