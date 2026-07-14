@@ -37,11 +37,12 @@ beforeEach(async () => {
   const service = new EditorService(fs, () => DEFAULT_APP_SETTINGS);
   coordinator = new EditorCoordinator(service, new EditorRecovery(recoveryDir), {
     relaySync: () => {},
+    persistUndoHistory: () => true,
   });
 });
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
-  await rm(recoveryDir, { recursive: true, force: true });
+  await rm(recoveryDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 describe('app-wide one-buffer registry (006, FR-011a)', () => {

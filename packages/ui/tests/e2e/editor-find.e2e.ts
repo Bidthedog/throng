@@ -282,3 +282,52 @@ test('find is a no-op when no panel is active (spec Edge Cases)', async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+/**
+ * 016 FR-025i · T082 — seed-from-selection meets the new selection kinds.
+ *
+ * The failure these guard against is a silent one: seeding from `selection.main` pre-fills the find
+ * input with SOMETHING that plainly came from the selection, so it looks like it worked — while
+ * actually searching for one arbitrary row of the user's block.
+ */
+test('a ONE-ROW block seeds the find input; a MULTI-ROW block seeds nothing (FR-025i)', async () => {
+  skipIfElevated();
+  const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'SeedProj', root);
+      const pid = await newEditor(win);
+      await typeInto(win, pid, 'alpha\nbeta\ngamma\n');
+
+      // Establish a term, so "seeds nothing" is distinguishable from "seeds empty". The bar stays
+      // OPEN throughout: 013 keeps the term across a re-open on the same panel, and clears it on a
+      // close — so a close here would destroy the very thing this asserts is preserved.
+      await win.keyboard.press('Control+f');
+      await win.getByTestId('find-input').fill('gamma');
+
+      // A MULTI-ROW block seeds NOTHING — find keeps the term it had, exactly as 013 already does
+      // for a multi-line selection. It must never pick one row of the block.
+      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
+      await win.keyboard.press('Control+Home');
+      await win.keyboard.press('Shift+Alt+ArrowDown');
+      await win.keyboard.press('Shift+Alt+ArrowDown');
+      await win.keyboard.press('Shift+Alt+ArrowRight');
+      await win.keyboard.press('Shift+Alt+ArrowRight');
+      await win.keyboard.press('Control+f');
+      await expect(win.getByTestId('find-input')).toHaveValue('gamma');
+
+      // A ONE-ROW block — indistinguishable from an ordinary selection, so it DOES seed.
+      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
+      await win.keyboard.press('Control+Home');
+      await win.keyboard.press('Shift+Alt+ArrowRight');
+      await win.keyboard.press('Shift+Alt+ArrowRight');
+      await win.keyboard.press('Control+f');
+      await expect(win.getByTestId('find-input')).toHaveValue('al');
+
+      // …and the document is untouched by any of it (013 FR-003).
+      expect(await docText(win, pid)).toContain('alpha');
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

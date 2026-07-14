@@ -4,12 +4,19 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openDatabase, runMigrations, LATEST_VERSION } from '@throng/persistence';
 
-// Feature 007 (preferences editor) is entirely file-based config + UI chrome; it
-// adds NO SQLite migration. This guard pins the schema at user_version 6 so that
-// any accidental v7 migration (or a bump to LATEST_VERSION) fails loudly here.
-// See specs/007-preferences-editor/plan.md (Storage: "user_version stays 6").
-
-const PINNED_VERSION = 6;
+/**
+ * REWRITTEN by 016 — the SECOND version pin.
+ *
+ * The spec named ONE guard to retire (`no-editor-migration`). There were two. This one was written
+ * for feature 007 and pinned the same v6 for its own reasons, so it would have failed identically
+ * and for a reason nobody had written down. Finding it was the point of looking; deleting it to
+ * make the migration pass would have thrown away the guard AND the record of why it existed.
+ *
+ * The pin is now a MOVING one: the schema is at whatever `LATEST_VERSION` says, and a fresh store
+ * must actually reach it. That still catches the thing both pins were really for — a migration
+ * added without the version being bumped, or bumped without the migration — while no longer
+ * asserting a number that a later feature is entitled to change.
+ */
 const tempDirs: string[] = [];
 
 function freshDbPath(): string {
@@ -24,17 +31,18 @@ afterEach(() => {
   }
 });
 
-describe('schema version pin (feature 007 adds no migration)', () => {
-  it('LATEST_VERSION is 6', () => {
-    expect(LATEST_VERSION).toBe(PINNED_VERSION);
+describe('the schema version and the migration chain agree', () => {
+  it('LATEST_VERSION is 7 — 016 adds the document_state migration', () => {
+    expect(LATEST_VERSION).toBe(7);
   });
 
-  it('a freshly migrated store reports user_version 6', () => {
+  it('a freshly migrated store actually REACHES LATEST_VERSION', () => {
+    // A migration added without a version bump, or a bump without a migration, fails here.
     const db = openDatabase({ databasePath: freshDbPath() });
     try {
       const result = runMigrations(db);
-      expect(result.to).toBe(PINNED_VERSION);
-      expect(db.pragma('user_version', { simple: true })).toBe(PINNED_VERSION);
+      expect(result.to).toBe(LATEST_VERSION);
+      expect(Number(db.pragma('user_version', { simple: true }))).toBe(LATEST_VERSION);
     } finally {
       db.close();
     }

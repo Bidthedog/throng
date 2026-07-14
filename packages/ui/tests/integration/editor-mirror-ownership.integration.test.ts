@@ -5,15 +5,20 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { DEFAULT_APP_SETTINGS } from '@throng/core';
 import { NodeFileSystem } from '../../src/main/node-file-system.js';
 import { EditorService } from '../../src/main/editor-service.js';
-import { EditorCoordinator, type DocMeta } from '../../src/main/editor-coordinator.js';
+import {
+  EditorCoordinator,
+  type DocMeta,
+  type EditorSyncMsg,
+} from '../../src/main/editor-coordinator.js';
 import { EditorRecovery } from '../../src/main/editor-recovery.js';
+import { editDocument } from './helpers/edit-document.js';
 
 const fs = new NodeFileSystem(async () => {});
 
 let root: string;
 let otherRoot: string;
 let recoveryDir: string;
-let relayCalls: { from: number; msg: { panelId: string; text?: string; dirty?: boolean } }[];
+let relayCalls: { from: number; msg: EditorSyncMsg }[];
 let coord: EditorCoordinator;
 
 function meta(over: Partial<DocMeta> = {}): DocMeta {
@@ -41,36 +46,52 @@ beforeEach(async () => {
   coord = new EditorCoordinator(
     new EditorService(fs, () => DEFAULT_APP_SETTINGS),
     new EditorRecovery(recoveryDir),
-    { recoveryDebounceMs: 10, relaySync: (from, msg) => relayCalls.push({ from, msg }) },
+    {
+      recoveryDebounceMs: 10,
+      relaySync: (from, msg) => relayCalls.push({ from, msg }),
+      persistUndoHistory: () => true,
+    },
   );
 });
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
   await rm(otherRoot, { recursive: true, force: true });
-  await rm(recoveryDir, { recursive: true, force: true });
+  await rm(recoveryDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 describe('cross-window mirror + ownership (006, FR-034/036, SC-021)', () => {
-  it('relays an edit (content + dirty) to other windows, tagged with the origin', async () => {
+  it('broadcasts an edit to EVERY window as one canonical change (016, FR-028f)', () => {
+    // 006 relayed the whole document to every OTHER window, excluding the sender. Both halves of
+    // that are gone. What goes out is the CHANGE, and it goes to every window INCLUDING the one
+    // that sent it: a view that were left out of the stream defining the document could not know
+    // its edit had been accepted, could not learn the version to base its next edit on, and would
+    // drift out of step on its very next keystroke.
     coord.register(meta(), '');
-    await coord.notifyDirty(7, { ...meta(), dirty: true, text: 'shared edit' });
-    // The relay carries the content + dirty and the origin webContents id (so the
-    // broadcast can exclude the sender — no echo, FR-034).
-    expect(relayCalls).toContainEqual({
-      from: 7,
-      msg: { panelId: 'p1', text: 'shared edit', dirty: true },
+    editDocument(coord, meta(), 'shared edit');
+
+    const relayed = relayCalls.filter((c) => c.msg.change);
+    expect(relayed).toHaveLength(1);
+    expect(relayed[0].from).toBe(-1); // -1 excludes nobody
+    expect(relayed[0].msg.change).toMatchObject({
+      documentId: 'p1',
+      kind: 'edit',
+      origin: 'view-1',
+      version: 1,
+      dirty: true,
     });
+    // The document itself lives in UI main, and is read from the authority — never relayed.
+    expect(coord.getContent('p1')?.text).toBe('shared edit');
   });
 
-  it('notifySync passes a mirror message through, excluding the origin window', () => {
+  it('derives dirty from the authority — a view cannot relay it', () => {
+    // A relayed dirty flag would be a second peer-owned value (constitution XI). There is no
+    // channel to send one, and the coordinator would have nowhere to put it.
     coord.register(meta(), 'seed');
-    coord.notifySync(3, { panelId: 'p1', text: 'from other window', dirty: true });
-    expect(relayCalls).toContainEqual({
-      from: 3,
-      msg: { panelId: 'p1', text: 'from other window', dirty: true },
-    });
-    // UI main's stored content reflects the mirrored change.
-    expect(coord.getContent('p1')?.text).toBe('from other window');
+    expect(coord.getContent('p1')?.dirty).toBe(false);
+
+    editDocument(coord, meta(), 'edited');
+    expect(coord.getContent('p1')?.dirty).toBe(true);
+    expect(coord.getContent('p1')?.version).toBe(1);
   });
 
   it('refuses loading another project’s file into a project editor (FR-036/SC-021)', async () => {

@@ -177,3 +177,41 @@ test('a malformed settings.json shows its raw text in the JSON editor for repair
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
+
+// 016 FR-001a / T030: throng's OWN configuration files are JSON, and they are among the files a
+// user is most likely to be looking at. The preferences JSON tabs are a SECOND CodeMirror view —
+// exactly the place a feature added to "the editor" silently fails to arrive.
+test('the preferences JSON editors are syntax-highlighted (FR-001a)', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openSettings(app, win);
+      await prefs.getByTestId('prefs-mode-toggle').click();
+      await expect(prefs.getByTestId('json-tab-settings')).toBeVisible();
+
+      // Distinct token colours — a key, a string and a number are not all the same colour, which
+      // is what plain text would look like.
+      const colours = async (kind: string): Promise<string[]> =>
+        prefs.evaluate((k) => {
+          const spans = document.querySelectorAll(
+            `[data-testid="json-editor-${k}"] .cm-line span`,
+          );
+          const out = new Set<string>();
+          spans.forEach((s) => out.add(getComputedStyle(s).color));
+          return [...out];
+        }, kind);
+
+      await expect.poll(() => colours('settings').then((c) => c.length), { timeout: 8000 }).toBeGreaterThan(1);
+
+      // …and the same for the Key Bindings and Themes documents.
+      await prefs.getByTestId('prefs-tab-keybindings').click();
+      await expect(prefs.getByTestId('json-tab-keybindings')).toBeVisible();
+      await expect.poll(() => colours('keybindings').then((c) => c.length), { timeout: 8000 }).toBeGreaterThan(1);
+
+      await prefs.getByTestId('prefs-tab-themes').click();
+      await expect(prefs.getByTestId('json-tab-theme')).toBeVisible();
+      await expect.poll(() => colours('theme').then((c) => c.length), { timeout: 8000 }).toBeGreaterThan(1);
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});

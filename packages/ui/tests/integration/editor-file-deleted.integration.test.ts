@@ -7,6 +7,7 @@ import { NodeFileSystem } from '../../src/main/node-file-system.js';
 import { EditorService } from '../../src/main/editor-service.js';
 import { EditorCoordinator, type DocMeta } from '../../src/main/editor-coordinator.js';
 import { EditorRecovery } from '../../src/main/editor-recovery.js';
+import { editDocument } from './helpers/edit-document.js';
 
 // FR-099: deleting a file open in an editor marks that editor dirty (keeping the
 // buffer) so a save re-creates it; getContent reports it file-missing so the tab
@@ -43,11 +44,12 @@ beforeEach(async () => {
   coordinator = new EditorCoordinator(service, new EditorRecovery(recoveryDir), {
     recoveryDebounceMs: 5,
     relaySync: (_from, msg) => synced.push(msg),
+    persistUndoHistory: () => true,
   });
 });
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
-  await rm(recoveryDir, { recursive: true, force: true });
+  await rm(recoveryDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 describe('editor whose file is deleted while open (FR-099)', () => {
@@ -76,7 +78,7 @@ describe('editor whose file is deleted while open (FR-099)', () => {
     const file = join(root, 'gone.txt');
     await writeFile(file, 'v1\n');
     coordinator.register(meta('p3', file), 'v1\n');
-    await coordinator.notifyDirty(0, { ...meta('p3', file), dirty: true, text: 'v2\n' });
+    editDocument(coordinator, meta('p3', file), 'v2\n');
     coordinator.markDeleted([file]);
     await rm(file, { force: true }); // the file really is gone
 

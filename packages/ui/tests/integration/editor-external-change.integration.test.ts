@@ -8,6 +8,7 @@ import { NodeFileWatcher } from '../../src/main/node-file-watcher.js';
 import { EditorService } from '../../src/main/editor-service.js';
 import { EditorCoordinator, type DocMeta } from '../../src/main/editor-coordinator.js';
 import { EditorRecovery } from '../../src/main/editor-recovery.js';
+import { editDocument } from './helpers/edit-document.js';
 
 // FR-028 (replaces the removed dirty-file lock): soft external-change detection.
 // A CLEAN editor live-reloads the on-disk change; a DIRTY editor gets a one-shot
@@ -45,12 +46,13 @@ beforeEach(async () => {
   coord = new EditorCoordinator(service, new EditorRecovery(recoveryDir), {
     recoveryDebounceMs: 10,
     relaySync: (_from, msg) => synced.push(msg),
+    persistUndoHistory: () => true,
     fileWatcher: new NodeFileWatcher(20),
   });
 });
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
-  await rm(recoveryDir, { recursive: true, force: true });
+  await rm(recoveryDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 describe('editor soft external-change detection (FR-028)', () => {
@@ -61,9 +63,14 @@ describe('editor soft external-change detection (FR-028)', () => {
     expect(coord.getContent('p1')).toMatchObject({ text: 'v1\n', dirty: false });
 
     await writeFile(file, 'v2-external\n'); // edited by another program
-    const relay = await until(() => synced.find((m) => m.panelId === 'p1' && m.text === 'v2-external\n'));
+    // A REPLACEMENT, not a change: the new content has no relationship to the old, so there is
+    // nothing to express as a rebasable edit — and the undo history, which described the file as it
+    // was, goes with it (FR-026d).
+    const relay = await until(() =>
+      synced.find((m) => m.panelId === 'p1' && m.reset?.text === 'v2-external\n'),
+    );
     expect(relay).toBeTruthy();
-    expect(relay?.dirty).toBe(false);
+    expect(relay?.reset?.dirty).toBe(false);
     expect(coord.getContent('p1')).toMatchObject({ text: 'v2-external\n', dirty: false });
   });
 
@@ -71,7 +78,7 @@ describe('editor soft external-change detection (FR-028)', () => {
     const file = join(root, 'doc.txt');
     await writeFile(file, 'base\n');
     await coord.load({ ...meta('p2', file) });
-    await coord.notifyDirty(0, { ...meta('p2', file), dirty: true, text: 'my unsaved edit\n' });
+    editDocument(coord, meta('p2', file), 'my unsaved edit\n');
     synced.length = 0;
 
     await writeFile(file, 'external edit\n');
@@ -94,5 +101,71 @@ describe('editor soft external-change detection (FR-028)', () => {
     await rm(file, { force: true });
     await until(() => (coord.getContent('p3')?.fileMissing ? true : undefined));
     expect(coord.getContent('p3')).toMatchObject({ fileMissing: true, dirty: true });
+  });
+});
+
+/**
+ * The notice must mean what it says (FR-028).
+ *
+ * "This file changed on disk" is a claim about the DISK. It was being raised whenever the disk
+ * disagreed with the BUFFER — which, for a document with unsaved changes, is true by definition and
+ * says nothing at all. And because the watch is on the DIRECTORY (it has to be, to notice a delete),
+ * any event in the folder woke every open document in it: saving a completely different file raised
+ * "changed on disk" on all of them.
+ *
+ * The comparison has to be against what throng last READ FROM or WROTE TO the disk, which is exactly
+ * what the authority tracks as `savedText`.
+ */
+describe('the "changed on disk" notice is about the DISK, not the buffer', () => {
+  it('does NOT fire on a dirty editor when a DIFFERENT file in the same folder is written', async () => {
+    const mine = join(root, 'mine.txt');
+    const other = join(root, 'other.txt');
+    await writeFile(mine, 'v1\n');
+    await writeFile(other, 'unrelated\n');
+    await coord.load({ ...meta('p1', mine) });
+
+    // Unsaved changes — so the buffer and the disk now differ, legitimately.
+    editDocument(coord, meta('p1', mine), 'v1 plus my unsaved edit\n');
+    expect(coord.getContent('p1')?.dirty).toBe(true);
+
+    // Somebody saves a DIFFERENT file in the same folder. The folder watcher fires; my file has not
+    // been touched.
+    await writeFile(other, 'unrelated, changed\n');
+
+    await new Promise((r) => setTimeout(r, 400)); // …well past the watcher's 20 ms debounce
+    expect(synced.filter((m) => m.panelId === 'p1' && m.externalChange)).toEqual([]);
+    // …and my unsaved work is still exactly where I left it.
+    expect(coord.getContent('p1')?.text).toBe('v1 plus my unsaved edit\n');
+  });
+
+  it('does NOT fire on a dirty editor when the folder is touched but its own file is unchanged', async () => {
+    const file = join(root, 'doc.txt');
+    await writeFile(file, 'v1\n');
+    await coord.load({ ...meta('p1', file) });
+    editDocument(coord, meta('p1', file), 'unsaved\n');
+
+    // A new file appears in the folder — the sort of thing a build, a git checkout, or another
+    // editor's temp file does constantly.
+    await writeFile(join(root, 'appeared.tmp'), 'x');
+
+    await new Promise((r) => setTimeout(r, 400));
+    expect(synced.filter((m) => m.panelId === 'p1' && m.externalChange)).toEqual([]);
+  });
+
+  it('DOES still fire when the file itself genuinely changes underneath a dirty editor', async () => {
+    // The whole point of the notice, and it must survive the fix above.
+    const file = join(root, 'doc.txt');
+    await writeFile(file, 'v1\n');
+    await coord.load({ ...meta('p1', file) });
+    editDocument(coord, meta('p1', file), 'my unsaved edit\n');
+
+    await writeFile(file, 'changed by someone else\n');
+
+    const notice = await until(() =>
+      synced.find((m) => m.panelId === 'p1' && m.externalChange === true),
+    );
+    expect(notice).toBeDefined();
+    // …and the user's unsaved work is untouched: the notice warns, it does not overwrite.
+    expect(coord.getContent('p1')?.text).toBe('my unsaved edit\n');
   });
 });

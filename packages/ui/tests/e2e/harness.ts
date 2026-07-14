@@ -127,6 +127,12 @@ export async function runApp(
         THRONG_PIPE_NAME: pipeName,
         THRONG_CONFIG_ROOT: cfgRoot,
         THRONG_NO_ORPHAN_REAP: '1', // an app-spawned test daemon must not sweep sibling test daemons' trees
+        // Electron's clipboard DOES NOT WORK under this harness — text written to it reads back
+        // empty and `availableFormats()` is empty — so the app under test would have no clipboard
+        // at all, and every clipboard assertion would pass only by expecting nothing. Fill the seam
+        // in-process instead: the tests then prove the FEATURE, and parallel workers stop fighting
+        // over the one global OS clipboard. The shipped path is untouched (016, FR-013a).
+        THRONG_E2E_CLIPBOARD: 'memory',
         // When the app spawns its own daemon, point that daemon at this run's DB
         // (the daemon inherits the app's env) so we never touch the real store.
         ...(opts.skipDaemon ? { THRONG_DATABASE_PATH: join(dataDir, 'throng.db') } : {}),

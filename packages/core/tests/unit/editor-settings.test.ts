@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_APP_SETTINGS, parseAppSettings } from '../../src/config/app-settings.js';
+import { SHIPPED_INDENT_BY_LANGUAGE } from '../../src/editor/languages.js';
 
 describe('editorSettings parser (006, contracts/config-additions.md)', () => {
   it('defaults the whole section when absent', () => {
@@ -14,6 +15,10 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       projectPathDisplay: 'full',
       subWorkspacePathDisplay: 'full',
       warnOnMissingFile: true,
+      indent: { style: 'spaces', indentWidth: 2, tabWidth: 4 },
+      indentByLanguage: SHIPPED_INDENT_BY_LANGUAGE,
+      languageByExtension: {},
+      persistUndoHistory: true,
     });
   });
 
@@ -61,6 +66,64 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       projectPathDisplay: 'name',
       subWorkspacePathDisplay: 'name',
       warnOnMissingFile: false,
+      // Absent from the input above, so they fall back — the section is parsed FIELD BY FIELD, not
+      // all-or-nothing, so an old settings file that predates 016 still gets working indentation.
+      indent: { style: 'spaces', indentWidth: 2, tabWidth: 4 },
+      indentByLanguage: SHIPPED_INDENT_BY_LANGUAGE,
+      languageByExtension: {},
+      persistUndoHistory: true,
+    });
+  });
+
+  describe('indentation (016, FR-018/FR-022)', () => {
+    it('takes a global profile, and falls back FIELD by field on a bad one', () => {
+      const s = parseAppSettings({
+        editor: { indent: { style: 'tabs', indentWidth: 8, tabWidth: 'wide' } },
+      });
+      expect(s.editor.indent).toEqual({ style: 'tabs', indentWidth: 8, tabWidth: 4 });
+    });
+
+    it('rejects a nonsensical width rather than letting it through', () => {
+      // A zero-width indent inserts nothing, and a 500-wide one is not a preference, it is a typo.
+      expect(parseAppSettings({ editor: { indent: { indentWidth: 0 } } }).editor.indent.indentWidth).toBe(2);
+      expect(parseAppSettings({ editor: { indent: { indentWidth: 500 } } }).editor.indent.indentWidth).toBe(2);
+    });
+
+    it('ships the per-language map FROM THE REGISTRY, so Go indents with tabs', () => {
+      const s = parseAppSettings({});
+      expect(s.editor.indentByLanguage.go).toEqual({ style: 'tabs', indentWidth: 4, tabWidth: 4 });
+      expect(s.editor.indentByLanguage.python).toEqual({
+        style: 'spaces',
+        indentWidth: 4,
+        tabWidth: 4,
+      });
+    });
+
+    it('lets an EXPLICIT empty map mean empty — the whole of FR-022c', () => {
+      // The `terminals.defaultParams` precedent. A map that fell back to its shipped value whenever
+      // it was empty could never be cleared: the user deletes every row, saves, and watches them all
+      // come back. `languageByExtension` MUST be clearable.
+      expect(parseAppSettings({ editor: { languageByExtension: {} } }).editor.languageByExtension).toEqual({});
+      expect(parseAppSettings({ editor: { indentByLanguage: {} } }).editor.indentByLanguage).toEqual({});
+    });
+
+    it('DROPS a malformed row instead of failing the whole map', () => {
+      // One bad row in a hand-edited JSON file must not cost the user the other twenty.
+      const s = parseAppSettings({
+        editor: {
+          languageByExtension: { '.foo': 'python', '.bar': 42, '.baz': '' },
+          indentByLanguage: { go: { style: 'tabs', indentWidth: 4, tabWidth: 4 }, bogus: 'nonsense' },
+        },
+      });
+      expect(s.editor.languageByExtension).toEqual({ '.foo': 'python' });
+      expect(s.editor.indentByLanguage).toEqual({ go: { style: 'tabs', indentWidth: 4, tabWidth: 4 } });
+    });
+
+    it('parses persistUndoHistory (default true; honours an explicit false)', () => {
+      expect(parseAppSettings({}).editor.persistUndoHistory).toBe(true);
+      expect(
+        parseAppSettings({ editor: { persistUndoHistory: false } }).editor.persistUndoHistory,
+      ).toBe(false);
     });
   });
 
