@@ -33,6 +33,7 @@ import {
   replaceAll,
   replaceCurrent,
   openFind as openFindOn,
+  type FindPanelKind,
 } from './search-store.js';
 
 /** Only these actions are ours; every other chord falls through untouched. */
@@ -83,7 +84,12 @@ export function SearchKeybindings(): null {
       if (!action || !HANDLED.has(action)) return;
       // Panel commands only apply while the workspace (not the file tree) is active.
       if (getActivePane() !== 'workspace') return;
-      if (!activePanelId || (activeKind !== 'editor' && activeKind !== 'terminal')) return;
+      // PanelKind is an open string (custom panel kinds exist), so a bare `!==` guard cannot
+      // narrow it to the two kinds the find/replace bar serves. Capture the membership as a
+      // value TypeScript can carry into openFind/openFindOn (search-store's FindPanelKind).
+      const findKind: FindPanelKind | null =
+        activeKind === 'editor' ? 'editor' : activeKind === 'terminal' ? 'terminal' : null;
+      if (!activePanelId || !findKind) return;
 
       const controller = getPanelSearch(activePanelId);
       if (!controller) return;
@@ -93,14 +99,14 @@ export function SearchKeybindings(): null {
       switch (action) {
         case 'search.find':
           e.preventDefault();
-          openFind(activePanelId, activeKind);
+          openFind(activePanelId, findKind);
           return;
 
         case 'search.replace':
           // Replace is an editor affordance; on a terminal the chord is inert.
           if (activeKind !== 'editor') return;
           e.preventDefault();
-          openFindOn(activePanelId, activeKind, { replace: true });
+          openFindOn(activePanelId, findKind, { replace: true });
           return;
 
         // The remaining commands act on a live session only — with no bar open they

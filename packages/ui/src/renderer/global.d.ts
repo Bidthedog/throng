@@ -115,6 +115,13 @@ declare global {
           params: string;
           cols: number;
           rows: number;
+          /**
+           * Display labels for the app-close warning (FR-015). UI main's `AttachRequest`
+           * declares and forwards this to the daemon (terminal-ipc.ts), and the preload
+           * bridge passes the request object through as-is — so it travels at runtime; this
+           * type merely completes the bridge's declaration of a field it always carried.
+           */
+          meta?: { projectName?: string; tabName?: string; panelName?: string };
         }) => Promise<TerminalAttachEnvelope>;
         write: (panelId: string, data: string) => Promise<unknown>;
         resize: (panelId: string, cols: number, rows: number, viewId?: string) => Promise<unknown>;

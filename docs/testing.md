@@ -11,26 +11,28 @@ throng has four test layers, run in order by `npm run test`:
 
 `npm run test` runs all four through `scripts/run-tests.mjs` (see *Temp files* below).
 
-## Type-checking: `tsc -b` does NOT cover the renderer
+## Type-checking covers the renderer too
 
-`npm run typecheck` runs `tsc -b`, which walks the project references — and
-`packages/ui/tsconfig.json` includes only `src/main` and `src/preload`. **The renderer
-(`packages/ui/src/renderer`, every `.tsx`, the whole editor and preferences UI) is built by Vite,
-which strips types without checking them.** A type error there compiles, ships, and fails at runtime.
+`npm run typecheck` runs **two** checks: `tsc -b` for the main/preload/core reference graph, then
+`npm run typecheck:renderer` (`tsc -p packages/ui/tsconfig.renderer.json`) for the renderer —
+`packages/ui/src/renderer`, every `.tsx`, the whole editor and preferences UI. The renderer is
+*built* by Vite (which strips types without checking them), so it needs its own `tsc` pass; the gate
+now runs it, and CI's "Lint & type-check" job runs `npm run typecheck`, so a renderer type error
+fails locally and on CI.
 
-That hole is real and it has bitten: a call passing the wrong argument shape left the editor's
-keymap rebuilt with an undefined dependency, so Tab and Shift+Tab threw from the moment the user
-changed any key binding — with a green `typecheck`.
+This was once a hole (issue #82): `tsc -b` walks `packages/ui/tsconfig.json`, which includes only
+`src/main`/`src/preload`, so the renderer was never checked — a type error there compiled, shipped,
+and failed at runtime with a green `typecheck`. It had bitten: a call passing the wrong argument
+shape left the editor's keymap rebuilt with an undefined dependency, so Tab and Shift+Tab threw from
+the moment the user changed any key binding. A guard now keeps the gate honest —
+`packages/ui/tests/unit/renderer-typecheck-gate.test.ts` fails if the renderer check is ever unwired
+from `npm run typecheck`.
 
-Run the renderer's own check as well:
+You can still run just the renderer's check while iterating:
 
 ```
 npm run typecheck:renderer
 ```
-
-It is **not** yet part of `npm run typecheck`, because it currently reports pre-existing errors in
-the explorer, terminal, search and composition-root modules (tracked separately). Fix those and it
-should be folded into the main gate. Until then, run it by hand before you push renderer changes.
 
 The integration and contract layers spawn real OS processes (node-pty shells,
 directory-lock holders) and **can only run one file at a time** — concurrent

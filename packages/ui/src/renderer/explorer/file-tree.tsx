@@ -41,7 +41,7 @@ function rootName(rootFolder: string): string {
 }
 
 /** Measure a container so the virtualised tree gets a concrete width + height. */
-function useSize(): { ref: React.RefObject<HTMLDivElement | null>; width: number; height: number } {
+function useSize(): { ref: React.RefObject<HTMLDivElement>; width: number; height: number } {
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   useEffect(() => {

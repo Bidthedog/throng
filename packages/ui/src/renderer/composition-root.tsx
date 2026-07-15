@@ -132,6 +132,11 @@ export function SubWorkspaceCompositionRoot({ id }: { id: string }): ReactElemen
       projects: new ProjectsClient(bridge),
       workspace: new SubWorkspaceWorkspaceClient(bridge, id),
       subWorkspaces: new SubWorkspacesClient(bridge),
+      // A sub-workspace window MAY hold editor panels (INV-5), and the editor reaches
+      // per-document state (the language override, 016) through `services.documents`.
+      // Omitting it left `useServices().documents` undefined in this realm — a crash the
+      // first time an editor here touched it. The main root has always provided it.
+      documents: new DocumentClient(bridge),
     };
   }, [id]);
   return (

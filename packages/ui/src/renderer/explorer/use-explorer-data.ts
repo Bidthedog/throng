@@ -9,7 +9,14 @@
  * folders-first sort come from the pure core.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import type { NodeApi, OpenMap, TreeApi } from 'react-arborist';
+import type { NodeApi, TreeApi } from 'react-arborist';
+
+/**
+ * react-arborist 3.x no longer exports `OpenMap` from its public entry (it moved to an
+ * internal state slice). Mirror the shape it still uses for `<Tree initialOpenState>` —
+ * a map of node id → open — so our value stays structurally assignable to that prop.
+ */
+type OpenMap = { [id: string]: boolean };
 import {
   isExcluded,
   nextExpandTargets,
