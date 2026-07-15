@@ -32,7 +32,7 @@
     "start:daemon": "node packages/daemon/dist/main.js",
     "start:ui": "electron packages/ui/dist/main/main.js",
     "lint": "eslint .",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b && npm run typecheck:renderer",
     "typecheck:renderer": "tsc -p packages/ui/tsconfig.renderer.json",
     "test": "node scripts/run-tests.mjs",
     "pretest:e2e": "npm run build",
