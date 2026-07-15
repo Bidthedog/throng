@@ -26,4 +26,7 @@ Thumbs.db
 *.stackdump
 test-results/
 playwright-report/
+# Playwright sharding (issue #75): per-shard blob output and the merge job's staging dir.
+blob-report/
+all-blob-reports/
 .last-run.json

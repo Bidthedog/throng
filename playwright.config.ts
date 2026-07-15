@@ -55,6 +55,18 @@ const excludedTags: RegExp[] = [];
 if (!process.env.THRONG_E2E_INCLUDE_ADMIN) excludedTags.push(/@admin/);
 if (!process.env.THRONG_E2E_INCLUDE_QUARANTINE) excludedTags.push(/@quarantine/);
 
+/*
+ * SHARDING (issue #75, part 2). CI splits the suite across N parallel single-worker jobs, each on
+ * its own fresh runner (`--shard=i/N`), and a downstream job MERGES their reports into one — see
+ * .github/workflows/ci.yml. A shard must emit a `blob` report (the only mergeable format) instead
+ * of the human `list`, so `THRONG_E2E_SHARDS` (the shard total, set by the CI matrix) switches the
+ * reporter over. `list` is kept alongside blob so each shard's own log still streams live; the
+ * admin-reminder reporter — a developer nicety — is dropped in this mode, since it has nothing to
+ * add to a machine-merged report. Sharding changes only HOW the suite is distributed and reported;
+ * every gate above (grepInvert, failOnFlakyTests, retries, single-worker) is untouched.
+ */
+const sharded = Number(process.env.THRONG_E2E_SHARDS) > 0;
+
 export default defineConfig({
   testDir: 'packages/ui/tests/e2e',
   testMatch: '**/*.e2e.ts',
@@ -125,7 +137,9 @@ export default defineConfig({
   retries: process.env.THRONG_E2E_RETRIES !== undefined ? Number(process.env.THRONG_E2E_RETRIES) : 2,
   // `list` for normal output + a reporter that reminds, after every run, that the
   // @admin (run-as-admin / de-elevation) tests only verify when run elevated.
-  reporter: [['list'], ['./packages/ui/tests/e2e/admin-reminder.reporter.ts']],
+  reporter: sharded
+    ? [['blob'], ['list']]
+    : [['list'], ['./packages/ui/tests/e2e/admin-reminder.reporter.ts']],
   timeout: 60_000,
   expect: { timeout: 10_000 },
 });
