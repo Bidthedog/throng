@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { createProject, firstPanelId, runApp } from './harness.js';
+import { createProject, firstPanelId, runApp, commitPanelRename } from './harness.js';
 
 // Batch 3 (2026-07-01):
 //  • FR-028 — a Panel created INSIDE a sub-workspace (owned; no project) can open a
@@ -37,7 +37,7 @@ test('a sub-workspace-owned Panel can open a terminal (launches at home, no proj
     // terminal. Commit the auto-rename that a new Panel opens in.
     await child.getByTestId(`panel-add-${a}`).click();
     await expect(child.locator('.panel-box')).toHaveCount(2);
-    await child.keyboard.press('Enter');
+    await commitPanelRename(child);
     const owned = (
       await child.locator('.panel-box').evaluateAll((els) =>
         els.map((el) => (el as HTMLElement).dataset.panelId ?? ''),
@@ -68,7 +68,7 @@ test('a sub-workspace-owned Panel cannot be dragged out; the ghost shows a warni
     // Add an OWNED Panel (belongs to the sub-workspace, not a project).
     await child.getByTestId(`panel-add-${a}`).click();
     await expect(child.locator('.panel-box')).toHaveCount(2);
-    await child.keyboard.press('Enter');
+    await commitPanelRename(child);
     const owned = (
       await child.locator('.panel-box').evaluateAll((els) =>
         els.map((el) => (el as HTMLElement).dataset.panelId ?? ''),

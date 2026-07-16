@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runApp, createProject, panelIds } from './harness.js';
+import { runApp, createProject, panelIds, commitPanelRename } from './harness.js';
 
 // US8 / FR-030/031/033: user config (settings + theme) is read at startup and
 // hot-reloaded when the JSON files change — so edits apply without a restart, and
@@ -73,7 +73,7 @@ test('applies a hand-edited settings.json on startup (confirmations level)', asy
         await createProject(win, 'NoConfirm', 'C:/c/noconfirm');
         const a = (await panelIds(win))[0];
         await win.getByTestId(`panel-add-${a}`).click();
-        await win.keyboard.press('Enter');
+        await commitPanelRename(win);
         await expect(win.locator('.panel-box')).toHaveCount(2);
 
         const [first] = await panelIds(win);

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, reloadWindow } from './harness.js';
+import { runApp, createProject, firstPanelId, panelIds, reloadWindow, commitPanelRename, commitTabRename } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 // 012 US4 (FR-005/006/010, SC-003): focus + per-type zoom survive layout changes.
@@ -44,7 +44,7 @@ test("a panel's zoom and a single active panel survive tab switch, split, and cl
 
       // Tab switch → back: p1's own zoom is unchanged, one panel active.
       await win.getByTestId('tab-add').click();
-      await win.keyboard.press('Enter');
+      await commitTabRename(win);
       await expect(win.locator('.tab-chip')).toHaveCount(2);
       await win.locator('.tab-chip').first().click();
       expect(await panelZoom(win, p1)).toBe(level);
@@ -52,7 +52,7 @@ test("a panel's zoom and a single active panel survive tab switch, split, and cl
 
       // Split (add a sibling panel) → p1's zoom unchanged, exactly one panel active.
       await win.getByTestId(`panel-add-${p1}`).click();
-      await win.keyboard.press('Enter');
+      await commitPanelRename(win);
       await expect(win.locator('.panel-box')).toHaveCount(2);
       expect(await panelZoom(win, p1)).toBe(level);
       await expect(win.locator('.panel-box--active')).toHaveCount(1);
@@ -81,7 +81,7 @@ test('the main window and a detached sub-workspace hold independent active panel
       await createProject(win, 'MainProj', root);
       const p1 = await firstPanelId(win);
       await win.getByTestId(`panel-add-${p1}`).click();
-      await win.keyboard.press('Enter');
+      await commitPanelRename(win);
       await expect(win.locator('.panel-box')).toHaveCount(2);
       await win.waitForTimeout(600); // let the debounced layout save flush before reload
 

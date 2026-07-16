@@ -2,14 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import {
-  runApp,
-  createProject,
-  firstPanelId,
-  panelIds,
-  installResizeProbe,
-  reloadWindow,
-} from './harness.js';
+import { runApp, createProject, firstPanelId, panelIds, installResizeProbe, reloadWindow, commitPanelRename } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 // 012 US2 (per-instance revision, FR-009/012/013, SC-003/005): each panel has its
@@ -47,9 +40,9 @@ test('zooming one editor scales only that editor — its sibling editor and a te
 
       // A second editor and a terminal, so we can prove per-INSTANCE isolation.
       await win.getByTestId(`panel-add-${p1}`).click();
-      await win.keyboard.press('Enter');
+      await commitPanelRename(win);
       await win.getByTestId(`panel-add-${p1}`).click();
-      await win.keyboard.press('Enter');
+      await commitPanelRename(win);
       await expect(win.locator('.panel-box')).toHaveCount(3);
       const [, p2, p3] = await panelIds(win);
       await newEditor(win, p2);

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, commitTabRename } from './harness.js';
 
 // US5 (FR-003/004): the main window has a bottom status bar showing the active
 // project on the left and the active tab · panel on the right, updating
@@ -25,7 +25,7 @@ test('shows the active project, tab and panel, and updates on change', async () 
 
     // Open a second tab; the right side reflects the now-active tab's title.
     await win.getByTestId('tab-add').click();
-    await win.keyboard.press('Enter');
+    await commitTabRename(win);
     const activeTabTitle = await win.locator('.tab-chip--active').evaluate((el) => {
       const count = el.querySelector('.tab-chip__count');
       return (el.textContent ?? '').replace(count?.textContent ?? '', '').trim();

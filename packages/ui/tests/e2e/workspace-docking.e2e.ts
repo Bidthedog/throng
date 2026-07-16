@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
+import { commitPanelRename, commitTabRename } from './harness.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -134,8 +135,9 @@ test('splits a Panel by dragging another onto its edge (no Panel lost)', async (
     const first = (await panelIds(win))[0];
     await win.getByTestId(`panel-add-${first}`).click();
     await expect(win.locator('.panel-box')).toHaveCount(2);
-    // A newly added Panel opens in rename mode; commit it before dragging.
-    await win.keyboard.press('Enter');
+    // A newly added Panel opens in rename mode. Commit it before dragging — a panel with an open
+    // rename input is not draggable, and a blind Enter here can fire before the input mounts.
+    await commitPanelRename(win);
 
     const [a, b] = await panelIds(win);
     // Drag B onto A's bottom edge → a column split forms; both panels survive.
@@ -191,9 +193,9 @@ test('reorders Tabs by dragging', async () => {
     // Each new Tab opens in rename mode; commit the default title before
     // reordering (a Tab being renamed isn't draggable).
     await win.getByTestId('tab-add').click();
-    await win.keyboard.press('Enter');
+    await commitTabRename(win);
     await win.getByTestId('tab-add').click();
-    await win.keyboard.press('Enter');
+    await commitTabRename(win);
     await expect(win.locator('.tab-chip')).toHaveCount(3);
 
     const before = await win.locator('.tab-chip').allInnerTexts();
