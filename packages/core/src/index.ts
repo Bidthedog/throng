@@ -43,7 +43,7 @@ export type {
 } from './config/settings.js';
 
 // User-scoped application configuration (003): abstractions + pure schemas.
-export type { IConfigStore, ConfigDocId, ConfigReadOptions } from './abstractions/config-store.js';
+export type { IConfigStore, ConfigDocId, ConfigReadOptions, WriteOutcome } from './abstractions/config-store.js';
 export type { IFileWatcher, Disposable } from './abstractions/file-watcher.js';
 
 // File Explorer tree (004): OS seams + pure domain.

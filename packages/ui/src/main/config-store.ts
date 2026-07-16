@@ -12,10 +12,51 @@
  */
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { ALL_DEFAULT_THEMES, checkRename, type ConfigDocId, type ConfigReadOptions, type IConfigStore, type ThemeRenameResult } from '@throng/core';
+import { ALL_DEFAULT_THEMES, checkRename, type ConfigDocId, type ConfigReadOptions, type IConfigStore, type ThemeRenameResult, type WriteOutcome } from '@throng/core';
 
 /** Result of a transactional multi-file write (010, FR-012/012a). */
 export type WriteAllResult = { ok: true } | { ok: false; failedPath: string; error: string };
+
+/**
+ * Rename failures that are worth retrying (issue #75).
+ *
+ * On Windows a replace-rename fails with EPERM/EACCES/EBUSY while ANOTHER process holds a
+ * handle on the target without share-delete — Defender, the search indexer, or our own config
+ * watcher reading the file it was just told changed. The handle is released milliseconds later,
+ * so the operation is not really failing, it is arriving early. Every other errno (a missing
+ * source, a bad path) is a real fault and is reported at once rather than retried into a stall.
+ */
+const TRANSIENT_RENAME_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
+
+/** Ceiling on the retry window. Comfortably longer than a scanner's handle (tens of ms), and
+ *  far short of any caller's patience — a write that has not landed in a second has really failed. */
+const RENAME_RETRY_BUDGET_MS = 1_000;
+const RENAME_RETRY_INTERVAL_MS = 20;
+
+/**
+ * `rename`, retried while the target is transiently locked (issue #75).
+ *
+ * Mirrors the bounded rename-poll `windows-directory-lock` already uses for the same class of
+ * Windows handle contention. Bounded so a genuinely stuck handle surfaces as a failure instead
+ * of hanging the write.
+ */
+async function renameWithRetry(from: string, to: string): Promise<void> {
+  const deadline = Date.now() + RENAME_RETRY_BUDGET_MS;
+  for (;;) {
+    try {
+      await rename(from, to);
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code ?? '';
+      if (!TRANSIENT_RENAME_CODES.has(code) || Date.now() >= deadline) throw err;
+      await delay(RENAME_RETRY_INTERVAL_MS);
+    }
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 interface FileSnapshot {
   path: string;
@@ -70,16 +111,21 @@ export class FileConfigStore implements IConfigStore {
     }
   }
 
-  async write<T>(doc: ConfigDocId, value: T): Promise<void> {
+  async write<T>(doc: ConfigDocId, value: T): Promise<WriteOutcome> {
     const path = this.pathOf(doc);
+    let tmp: string | undefined;
     try {
       await mkdir(dirname(path), { recursive: true });
-      const tmp = `${path}.${(this.writeSeq += 1)}.tmp`; // unique per write (no shared-tmp race)
+      tmp = `${path}.${(this.writeSeq += 1)}.tmp`; // unique per write (no shared-tmp race)
       await writeFile(tmp, FileConfigStore.serialize(value), 'utf8');
-      await rename(tmp, path); // atomic replace (libuv MoveFileEx w/ replace on Windows)
+      await renameWithRetry(tmp, path); // atomic replace (libuv MoveFileEx w/ replace on Windows)
+      return { ok: true };
     } catch (err) {
-      // Best-effort: surface the failure without crashing the app (contract).
+      // Never throw (contract) — but never claim success either (issue #75): the caller decides
+      // what a lost edit means. Drop the staged temp so a failed write leaves no litter behind.
       console.error(`[config-store] failed to write ${path}:`, err);
+      if (tmp) await rm(tmp, { force: true }).catch(() => undefined);
+      return { ok: false, error: errorMessage(err) };
     }
   }
 
