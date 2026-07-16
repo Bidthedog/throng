@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
+import { commitPanelRename, commitTabRename } from './harness.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -121,12 +122,12 @@ test('"Send to Tab" submenu moves the panel to the chosen tab', async () => {
     // Two panels in Tab 1 so moving one out doesn't prune the tab.
     const a = await firstPanelId(win);
     await win.getByTestId(`panel-add-${a}`).click();
-    await win.keyboard.press('Enter'); // commit the new panel's inline rename
+    await commitPanelRename(win); // the new panel opens in rename mode
     await expect(win.locator('.panel-box')).toHaveCount(2);
 
     // A second tab to send into.
     await win.getByTestId('tab-add').click();
-    await win.keyboard.press('Enter');
+    await commitTabRename(win);
     await expect(win.locator('.tab-chip')).toHaveCount(2);
     await win.locator('.tab-chip').first().click(); // back to Tab 1
 

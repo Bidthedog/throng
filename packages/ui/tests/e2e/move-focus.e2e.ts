@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, addPanels } from './harness.js';
+import { runApp, createProject, firstPanelId, panelIds, addPanels, commitPanelRename } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 // 012 US3 (FR-015, SC-008/008a): directional + cyclic keyboard focus movement over
@@ -87,7 +87,7 @@ test('move-focus works from a focused terminal and editor, and input routing fol
       await expect(win.getByTestId(`terminal-${p1}`)).toContainText(basename(root), { timeout: 15000 });
 
       await win.getByTestId(`panel-add-${p1}`).click();
-      await win.keyboard.press('Enter');
+      await commitPanelRename(win);
       const [, p2] = await panelIds(win);
       await win.getByTestId(`panel-type-select-${p2}`).selectOption('editor');
       await win.getByTestId(`panel-type-confirm-${p2}`).click();

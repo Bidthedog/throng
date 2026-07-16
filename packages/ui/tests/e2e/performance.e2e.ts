@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
+import { commitPanelRename } from './harness.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -150,7 +151,7 @@ test('shows drop-target feedback promptly once a Panel drag starts (NFR-001/SC-0
       .evaluate((el) => (el as HTMLElement).dataset.panelId ?? '');
     await win.getByTestId(`panel-add-${firstId}`).click();
     await expect(win.locator('.panel-box')).toHaveCount(2);
-    await win.keyboard.press('Enter'); // commit the new Panel's auto-rename
+    await commitPanelRename(win);
 
     const ids = await win
       .locator('.panel-box')

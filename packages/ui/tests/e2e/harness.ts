@@ -298,27 +298,59 @@ export async function addPanels(win: Page, n: number): Promise<void> {
     const first = (await panelIds(win))[0];
     await win.getByTestId(`panel-add-${first}`).click();
     await expect(win.locator('.panel-box')).toHaveCount(before + 1);
-
-    const rename = win.locator('[data-testid^="panel-rename-input-"]');
-    // The new panel opens in rename mode, but its autoFocus input mounts a render AFTER the
-    // panel-box count settles above — so a bare `.count()` here can read 0 before the input has
-    // appeared, skip the commit, and then the input shows up and lingers open past the
-    // toHaveCount(0) below (observed on CI: single-worker, "Expected 0, Received 1"). That is the
-    // exact non-auto-waiting-read race this suite's harness is meant to be free of (017 FR-013a).
-    //
-    // Wait for the input to actually appear before deciding. If a sibling terminal steals focus and
-    // auto-commits it on blur (Race 2 above), it never appears within the window, which is equally
-    // fine — either way we end with no open rename input.
-    const appeared = await rename
-      .waitFor({ state: 'visible', timeout: 5000 })
-      .then(() => true)
-      .catch(() => false);
-    if (appeared) {
-      await expect(rename).toBeFocused();
-      await win.keyboard.press('Enter');
-    }
-    await expect(rename).toHaveCount(0);
+    await commitPanelRename(win);
   }
+}
+
+/**
+ * Close the inline rename a freshly-added Panel opens in — and do not return until no rename
+ * input is open (017 FR-013a). Call this after ANY action that adds a Panel.
+ *
+ * `await expect(win.locator('.panel-box')).toHaveCount(n)` settles as soon as the BOX renders, but
+ * the rename input `autoFocus`es a render LATER. A bare `keyboard.press('Enter')` after the count
+ * therefore fires into the gap: it commits nothing, the input then mounts, and it STAYS OPEN.
+ * `keyboard.press` does not auto-wait, so nothing catches it — the test carries on with an open
+ * text input on the panel header.
+ *
+ * What that breaks is rarely the next assertion, which is what makes it so slippery. A panel whose
+ * header is an open rename input is not draggable: the pointerdown lands in the input instead of
+ * the drag handle, dnd-kit never reaches its activation distance, `draggingPanelId` stays null and
+ * the edge drop-zones — rendered only while a drag is live — never appear. The failure surfaces
+ * 30 seconds later as `waiting for getByTestId('edge-bottom-…') to be visible`, pointing at the
+ * drag helper rather than at the Enter that missed (issue #75; observed on CI shard 3/3).
+ *
+ * 017 fixed this inside {@link addPanels}, but six specs hand-roll the add + blind-Enter sequence
+ * without it. This is that fix, extracted so there is ONE implementation to be right.
+ *
+ * The input also commits on blur, so anything stealing focus back — a live terminal in a sibling
+ * panel — closes it for us and it never appears. That is an equally fine outcome: either way we
+ * return with no open rename input.
+ */
+export async function commitPanelRename(win: Page): Promise<void> {
+  await commitInlineRename(win, 'panel-rename-input-');
+}
+
+/**
+ * The Tab equivalent of {@link commitPanelRename} — `tab-add` opens the new tab in rename mode
+ * (`onNewTab={() => setRenamingTabId(ws.addTab())}`), so a blind Enter after clicking it races the
+ * input's mount exactly the same way.
+ */
+export async function commitTabRename(win: Page): Promise<void> {
+  await commitInlineRename(win, 'tab-rename-input-');
+}
+
+/** Shared implementation: wait for the input, commit it if it opened, return only once it is gone. */
+async function commitInlineRename(win: Page, testIdPrefix: string): Promise<void> {
+  const rename = win.locator(`[data-testid^="${testIdPrefix}"]`);
+  const appeared = await rename
+    .waitFor({ state: 'visible', timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  if (appeared) {
+    await expect(rename).toBeFocused();
+    await win.keyboard.press('Enter');
+  }
+  await expect(rename).toHaveCount(0);
 }
 
 /**

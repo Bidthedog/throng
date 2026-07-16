@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, panelIds } from './harness.js';
+import { runApp, createProject, panelIds, commitPanelRename, commitTabRename } from './harness.js';
 
 // US2 (FR-002): selecting a panel activates + highlights it; each tab remembers
 // its own active panel. (The global-active-on-window-focus case needs a
@@ -11,7 +11,7 @@ test('clicking a panel makes it the active (highlighted) panel', async () => {
 
     const a = (await panelIds(win))[0];
     await win.getByTestId(`panel-add-${a}`).click();
-    await win.keyboard.press('Enter'); // commit the new panel's inline rename
+    await commitPanelRename(win); // the new panel opens in rename mode
     await expect(win.locator('.panel-box')).toHaveCount(2);
     const [first, second] = await panelIds(win);
 
@@ -33,7 +33,7 @@ test('each tab remembers its own active panel', async () => {
     // Tab 1: two panels, make the first active.
     const a = (await panelIds(win))[0];
     await win.getByTestId(`panel-add-${a}`).click();
-    await win.keyboard.press('Enter');
+    await commitPanelRename(win);
     await expect(win.locator('.panel-box')).toHaveCount(2);
     const [first] = await panelIds(win);
     await win.getByTestId(`panel-${first}`).click();
@@ -41,7 +41,7 @@ test('each tab remembers its own active panel', async () => {
 
     // Open a second tab (its own panel becomes active there).
     await win.getByTestId('tab-add').click();
-    await win.keyboard.press('Enter');
+    await commitTabRename(win);
     await expect(win.locator('.tab-chip')).toHaveCount(2);
 
     // Back to Tab 1 → the first panel is still the remembered active one.
