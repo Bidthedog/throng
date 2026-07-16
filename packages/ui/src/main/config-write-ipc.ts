@@ -73,8 +73,10 @@ export async function writeConfigDoc(
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return { ok: false, error: 'not-an-object' };
   }
-  await store.write(id, parsed);
-  return { ok: true };
+  // Report what the store actually did. This used to hardcode {ok:true}, so a write that never
+  // reached disk (a transiently locked target on Windows) was announced as applied: the renderer
+  // published it to `onConfigWritten`, the UI showed the new value, and the edit was gone (#75).
+  return store.write(id, parsed);
 }
 
 /** Wire the `config.write` handler onto `ipcMain` (called from main.ts). */

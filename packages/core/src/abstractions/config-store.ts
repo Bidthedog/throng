@@ -15,6 +15,15 @@ export type ConfigDocId =
   | { kind: 'keybindings' }
   | { kind: 'theme'; name: string };
 
+/**
+ * Outcome of a config write (issue #75).
+ *
+ * A write used to resolve `void`, which left its callers unable to tell a persisted edit from
+ * a lost one — so the IPC layer reported every write as successful and a preference could
+ * vanish silently while the UI showed the new value. The store still never throws; it reports.
+ */
+export type WriteOutcome = { ok: true } | { ok: false; error: string };
+
 export interface ConfigReadOptions {
   /**
    * Create the backing file from `defaults` when it is absent (default true).
@@ -39,8 +48,12 @@ export interface IConfigStore {
     options?: ConfigReadOptions,
   ): Promise<T>;
 
-  /** Persist the document (atomic, pretty JSON). Best-effort; surfaces failure without crashing. */
-  write<T>(doc: ConfigDocId, value: T): Promise<void>;
+  /**
+   * Persist the document (atomic, pretty JSON). Never throws — a failure is REPORTED via the
+   * returned {@link WriteOutcome} so the caller can surface it, rather than being swallowed
+   * and mistaken for success (issue #75).
+   */
+  write<T>(doc: ConfigDocId, value: T): Promise<WriteOutcome>;
 
   /** Absolute path of a config document (diagnostics / watcher wiring). */
   pathOf(doc: ConfigDocId): string;
