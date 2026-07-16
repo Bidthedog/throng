@@ -16,3 +16,21 @@ export {
 export { isBusy, shouldCloseOnOwnerClose, attachDecision } from './lifecycle.js';
 export { resolveShellFile, type ShellProbe, type ShellResolver } from './resolve-shell.js';
 export { canRunAsAdmin, shouldRespawnDaemonElevated, shouldDeElevate } from './elevation.js';
+export {
+  KITTY_DISAMBIGUATE,
+  WIN32_INPUT_MODE,
+  createKittyKeyboardState,
+  kittyKeyboardActive,
+  win32InputActive,
+  applyDecPrivateMode,
+  kittySet,
+  kittyPush,
+  kittyPop,
+  kittyQueryReply,
+  applyKittyCsi,
+  encodeEnterKey,
+  type KittyKeyboardState,
+  type KittyCsiPrefix,
+  type KittyCsiResult,
+  type KeyChord,
+} from './kitty-keyboard.js';
