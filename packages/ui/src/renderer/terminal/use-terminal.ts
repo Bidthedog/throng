@@ -1,5 +1,12 @@
 import { useEffect, useRef, type MutableRefObject } from 'react';
-import { THRONG_THEME } from '@throng/core';
+import {
+  THRONG_THEME,
+  createKittyKeyboardState,
+  applyKittyCsi,
+  applyDecPrivateMode,
+  encodeEnterKey,
+  type KittyCsiPrefix,
+} from '@throng/core';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
@@ -181,17 +188,80 @@ export function useTerminal(opts: UseTerminalOptions): void {
         focus: () => term.focus(),
       };
     }
-    // Hand throng's own chords (find, scrollback navigation) back to the app: returning
-    // false tells xterm not to process the key at all, so it is never written to the pty.
-    // The window-level handler then acts on it. This is the mechanism behind "searching
-    // types nothing at the shell" (SC-002).
+    // Terminal keyboard negotiation state (#90): the kitty flags AND win32-input-mode the
+    // running program has enabled. A modified Enter is reported in CSI-u form while kitty is
+    // active, as a win32-input key event while win32-input-mode is (PowerShell/cmd), else as a
+    // bare \n. Maintained by the CSI handlers registered below and read by the key handler; both
+    // close over this one `let`.
+    let kitty = createKittyKeyboardState();
+
+    // The key handler does three things, in order:
+    //   1. Hand throng's own chords (find, scrollback nav) back to the app — returning false
+    //      tells xterm not to process the key at all, so it never reaches the pty. The
+    //      window-level handler then acts on it ("searching types nothing at the shell", SC-002).
+    //   2. Give a modified Enter a NEWLINE instead of a submit (#90): Shift+Enter / Ctrl+Enter reach
+    //      the pty as whatever the running program understands as a soft line break — a win32-input
+    //      key event under PowerShell/cmd (so PSReadLine inserts the newline AND moves the cursor
+    //      down), a CSI-u sequence if it negotiated the kitty protocol (Claude Code), else a bare
+    //      `\n` (the byte Ctrl+J sends, which raw REPLs newline on). Plain Enter is untouched.
+    //   3. Everything else: let xterm encode it as before.
     //
-    // Read through a REF, never captured: the predicate depends on the user's bindings and
-    // on whether a find bar is open, both of which change while this terminal lives. A
-    // captured copy would keep reserving yesterday's chord and leak today's to the shell.
-    term.attachCustomKeyEventHandler(
-      (e) => !(e.type === 'keydown' && reserveKeyRef.current?.(e) === true),
-    );
+    // reserveKeyRef is read through a REF, never captured: the predicate depends on the user's
+    // bindings and on whether a find bar is open, both of which change while this terminal
+    // lives. A captured copy would keep reserving yesterday's chord and leak today's to the shell.
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== 'keydown') return true; // keyup/keypress: nothing to reserve or re-encode
+      if (reserveKeyRef.current?.(e) === true) return false; // a throng chord — keep it off the pty
+      const seq = encodeEnterKey(
+        { key: e.key, shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey, meta: e.metaKey },
+        kitty,
+      );
+      if (seq !== null) {
+        // Suppress the browser's OWN default for this key BEFORE handing back. Returning false
+        // stops xterm processing but does NOT preventDefault, and Shift+Enter's default action in
+        // xterm's hidden input <textarea> is to insert a newline — which xterm would then transmit
+        // as a stray \r AFTER our sequence (Shift+Enter → `\x1b[13;2u\r`, submitting in Claude).
+        e.preventDefault();
+        void bridge.write(panelId, seq); // we transmit the newline / CSI-u ourselves…
+        return false; // …so xterm must not ALSO send its \r
+      }
+      return true;
+    });
+
+    // Kitty keyboard protocol negotiation (#90). The program turns enhanced key reporting on
+    // and off with `CSI <?|=|>|<> … u` control sequences; xterm 6.0 has no native kitty support
+    // and would silently ignore them, so we parse each and dispatch through applyKittyCsi to
+    // drive `kitty` above. The `?` query is answered (ahead of the CSI c sentinel every
+    // terminal replies to) so the program's handshake detects support and enables the protocol.
+    // Returning true marks the sequence handled. (xterm disposes these with the terminal, like
+    // the OSC 52 handler.)
+    const flatten = (params: (number | number[])[]): number[] =>
+      params.map((p) => (Array.isArray(p) ? (p[0] ?? 0) : p));
+    const onKittyCsi = (prefix: KittyCsiPrefix) => (params: (number | number[])[]): boolean => {
+      const { state, reply } = applyKittyCsi(kitty, prefix, flatten(params));
+      kitty = state;
+      if (reply !== undefined) void bridge.write(panelId, reply);
+      return true;
+    };
+    for (const prefix of ['?', '=', '>', '<'] as const) {
+      term.parser.registerCsiHandler({ prefix, final: 'u' }, onKittyCsi(prefix));
+    }
+
+    // win32-input-mode negotiation (#90 follow-up). PowerShell/PSReadLine and cmd enable DEC
+    // private mode 9001 (`CSI ? 9001 h`) while editing a line — our signal that they read console
+    // KEY events, so a modified Enter must be a win32-input key event (which advances the cursor)
+    // rather than a bare LF (which strands it on the first line). We only SNOOP the mode to drive
+    // `kitty.win32Input`; returning false lets xterm still apply every private mode it owns
+    // (cursor show/hide, alt-screen, bracketed paste, …). 9001 is unknown to xterm, so it is a
+    // harmless no-op there.
+    const onDecPrivateMode =
+      (enable: boolean) =>
+      (params: (number | number[])[]): boolean => {
+        kitty = applyDecPrivateMode(kitty, flatten(params), enable);
+        return false; // observe only — never claim the sequence
+      };
+    term.parser.registerCsiHandler({ prefix: '?', final: 'h' }, onDecPrivateMode(true));
+    term.parser.registerCsiHandler({ prefix: '?', final: 'l' }, onDecPrivateMode(false));
 
     const fit = new FitAddon();
     term.loadAddon(fit);
