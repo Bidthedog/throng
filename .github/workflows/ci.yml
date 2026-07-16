@@ -96,7 +96,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       # Do NOT cancel sibling shards when one fails: we want the full red/green picture, and the
-      # merged report needs every shard's blob present. `merge-e2e` re-derives the single verdict.
+      # merged report needs every shard's blob present. Each shard is its own required check.
       fail-fast: false
       matrix:
         # Three parallel single-worker shards, each on its own fresh 4-vCPU runner. This is the
@@ -194,8 +194,14 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-  # Stitch the shards back into ONE HTML report and ONE pass/fail signal. Make THIS job the
-  # required status check in branch protection: it is green only when every shard passed.
+  # Stitch the shards back into ONE HTML report. This job is a REPORTER, not a gate — it never
+  # fails on a red shard, and it must NOT be a required status check.
+  #
+  # The required checks are the three `E2E (shard i/3)` jobs themselves. Gating on a downstream
+  # merge job instead put its `npm ci` (~2m) on the critical path for no signal the shards don't
+  # already carry: the shards go red on their own, and waiting for a report to tell us so cost
+  # more wall-time than the sharding saved (~11m to green vs ~12m unsharded — issue #75, part 2).
+  # With this job off the path, green arrives with the slowest shard, ~9m.
   merge-e2e:
     name: E2E report (merged)
     # Run even when a shard failed (so the report is always produced), but not when cancelled.
@@ -228,15 +234,16 @@ jobs:
           path: playwright-report/
           retention-days: 14
           if-no-files-found: ignore
-      # The single verdict. `needs.e2e.result` is 'success' only if EVERY matrix shard passed;
-      # any red shard makes this step — and so this one required check — red.
-      - name: Reflect shard outcome
+      # Say which shards failed, for whoever opens the report — but do NOT fail on it. The shard
+      # jobs are the gate; re-reddening here would only add a second, later copy of a signal
+      # branch protection already has, and would drag this job's cost onto the critical path.
+      - name: Note shard outcome
         if: ${{ always() }}
         shell: pwsh
         run: |
           $r = '${{ needs.e2e.result }}'
           if ($r -ne 'success') {
-            Write-Error "One or more E2E shards did not pass (needs.e2e.result = $r)."
-            exit 1
+            Write-Host "::warning::One or more E2E shards did not pass (needs.e2e.result = $r) — see the shard checks."
+          } else {
+            Write-Host "All E2E shards passed."
           }
-          Write-Host "All E2E shards passed."
