@@ -51,12 +51,13 @@ choose the folder you want to work in. Then:
 - **Colour** — pre-seeded with one no other project is using. It's how you tell projects apart at a glance.
 
 Projects **cannot overlap or nest**: throng refuses a folder that sits inside another project's
-root, because that's the isolation guarantee doing its job.
+root, because that's the project isolation guarantee doing its job.
 
 Once created, the project opens with a single tab ("Tab 1") holding a single empty panel
-("Panel 1"), ready to be typed. Click a project to switch to it; **double-click its name to
-rename it**. Removing a project (**✕**) removes it from throng and **deletes nothing on disk** —
-the confirmation says so.
+("Panel 1"), ready to be configured. If more than one project exists, you can click a project
+to switch to it; **double-click its name to rename it**. Removing a project (**✕**) removes it
+from throng, kills all terminals and editors for that project, but **deletes nothing on disk** — the
+confirmation says so.
 
 ## 2. Lay out the workspace
 
@@ -88,9 +89,10 @@ Confirm, and you have a live shell **at the project root**. The panel header sho
 **live working directory**, so you can see where a shell is even when a full-screen program hides
 the prompt.
 
-Terminals belong to the daemon, not the window. **Close throng and they keep running**; reopen it
-and they reattach with their scrollback intact. Closing the app offers you a three-way choice
-about what to do with them, and throng leaves no orphaned processes behind.
+Terminals belong to the project, but are managed by the daemon, not the window. **Close throng and
+they keep running**; reopen it and they reattach with their scrollback intact. Closing the app
+offers you a three-way choice about what to do with them, and throng leaves no orphaned processes
+behind.
 
 Scroll the scrollback from the keyboard without touching the shell: **Shift+PageUp** /
 **Shift+PageDown** by page, **Ctrl+Shift+↑** / **Ctrl+Shift+↓** by line, **Ctrl+Home** /
