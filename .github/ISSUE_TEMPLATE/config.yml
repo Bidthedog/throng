@@ -2,4 +2,4 @@ blank_issues_enabled: false
 contact_links:
   - name: Read CONTRIBUTING.md first
     url: https://github.com/Bidthedog/throng/blob/master/CONTRIBUTING.md
-    about: Every contribution follows the Spec Kit → Bridge → Superpowers lifecycle. An agreed issue is required before any PR.
+    about: Every contribution follows the Spec Kit → Bridge → Superpowers lifecycle. An issue a maintainer has agreed in a comment is required before any PR, and every issue needs one type label and at least one area label.

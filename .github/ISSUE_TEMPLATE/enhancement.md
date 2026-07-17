@@ -1,20 +1,34 @@
 ---
 name: Enhancement
-about: Propose a new capability that fits in roughly one PR. A maintainer must agree this issue before a PR is raised.
+about: Propose a new capability throng does not have today. A maintainer must agree this issue before a PR is raised.
 title: "[Enhancement] "
-labels: ["enhancement", "needs-agreement"]
+labels: ["enhancement"]
 assignees: []
 ---
 
 <!--
-An Enhancement gives a user an ability they do not have today, and lands in
-roughly one PR. If it is large enough to decompose into several issues over
-several PRs, raise a Feature instead. If it changes something that already
-works without adding any ability, raise a Tweak instead.
+An Enhancement gives a user an ability they do not have today. If it changes
+something that already works without adding any ability, raise a Tweak instead.
+If today's behaviour contradicts its own stated intent, that is a Bug.
 
-A maintainer must AGREE this issue (scope + direction) before you begin the
-Spec Kit lifecycle or open a PR.
+throng has no "feature" type. A large ambition is still an Enhancement: the
+`area:*` labels group related work, and anything too big for one PR is split
+into several Enhancements that LINK TO EACH OTHER ("Related to #NN") rather
+than nesting under a parent.
+
+A maintainer must AGREE this issue (scope + direction), in a comment, before
+you begin the Spec Kit lifecycle or open a PR.
+
+TITLE: keep it short and scannable — "[Enhancement] " plus a summary a reader
+can take in at a glance. All the detail belongs in the body below, not the title.
 -->
+
+## Labels
+
+<!-- The `enhancement` type label is applied for you. Add the area(s) yourself — an unlabelled
+     issue drops out of the backlog's filters. See CONTRIBUTING.md#labelling. -->
+
+- [ ] At least one `area:*` label added.
 
 ## Intent (what & why, in human terms)
 
@@ -30,9 +44,10 @@ Spec Kit lifecycle or open a PR.
 <!-- What is in scope? What is explicitly out of scope? Any known constitution touchpoints
      (project isolation, terminals/daemon, OS-abstraction seams, config, layout)? -->
 
-## Parent feature
+## Related issues
 
-<!-- The Feature this belongs to, if there is one: "Part of #NN". Leave blank if it stands alone. -->
+<!-- Link the issues this sits alongside: "Related to #NN". If this is one slice of a larger
+     ambition, link the other slices to each other here — throng has no parent Feature type. -->
 
 ## Acceptance criteria (testable)
 
@@ -44,5 +59,5 @@ Spec Kit lifecycle or open a PR.
 
 ## Maintainer agreement
 
-<!-- Leave blank — a maintainer fills this in. -->
-- [ ] Agreed by maintainer (scope confirmed; `agreed` label applied). Contributor may begin the Spec Kit lifecycle.
+<!-- Leave blank — a maintainer fills this in by agreeing in a comment below. -->
+- [ ] Agreed by maintainer (scope confirmed). Contributor may begin the Spec Kit lifecycle.

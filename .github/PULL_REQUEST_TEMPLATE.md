@@ -7,7 +7,8 @@ Before opening this PR, read CONTRIBUTING.md. PRs will be rejected that do not r
 <!-- A maintainer-AGREED issue is REQUIRED before a PR may be raised. -->
 Closes #
 
-- [ ] This issue exists and was **explicitly agreed by a maintainer** (e.g. `agreed` label) before this PR was opened.
+- [ ] This issue exists and a maintainer **explicitly agreed it in a comment** before this PR was opened.
+- [ ] The issue is **labelled** — exactly one type (`bug` / `enhancement` / `tweak` / `documentation`) and at least one `area:*` — and its title reads `[Type] Summary`. See [Labelling](../CONTRIBUTING.md#labelling).
 
 ## Intent (what & why, in human terms)
 
@@ -43,7 +44,7 @@ paste relevant passing output here
 <!-- Constitution Development Workflow: documentation MUST be brought current in the same change. -->
 
 - [ ] **`README.md`** reflects the **current finite state** of the app (no feature-changelog narration); any superseded description was replaced, not appended. *(N/A if this change alters no user-facing behaviour, setup, architecture, or capabilities.)*
-- [ ] **`ROADMAP.md`** updated — delivered items marked done, and any newly planned items added.
+- [ ] **`docs/`** guides updated where this change affects them — e.g. [`docs/quick-start.md`](../docs/quick-start.md) for user-facing behaviour, [`docs/testing.md`](../docs/testing.md) for the test suite. *(Planned work is tracked in issues and milestones, not in a roadmap document — there is nothing to tick off.)*
 - [ ] **`CONTRIBUTING.md`** updated if the process, toolchain, testing bar, or setup changed.
 
 ## Constitution compliance

@@ -23,16 +23,19 @@ goal is to pull all of that into a single, simple customisable workspace.
 
 ## Platform support
 
-> **Windows only today** (Windows 11 is the first-class target). **macOS and Linux are
-> planned** — see [`ROADMAP.md`](ROADMAP.md). The OS boundary is abstracted so they can be
-> added without reworking the core, but no macOS/Linux build ships yet.
+> **Windows only today** (Windows 11 is the first-class target). **macOS
+> ([#22](https://github.com/Bidthedog/throng/issues/22)) and Linux
+> ([#23](https://github.com/Bidthedog/throng/issues/23)) are planned.** The OS boundary is
+> abstracted so they can be added without reworking the core, but no macOS/Linux build ships yet.
 
 ## Highlights
 
 - **Projects** — isolated per-project contexts with exclusive root folders and a dominant
   colour; create / edit / switch / reorder, stored locally per user.
-- **Dockable workspace** — three panes (project, workspace, and files & folders), unlimited tabs,
-  and drag-to-split panels; the full per-project layout is saved and restored every session.
+- **Dockable workspace** — three panes (projects & sub-workspaces, workspace, and files & folders —
+  the side panes collapse to a labelled rail, by keyboard or chevron, and auto-collapse when the
+  window gets too narrow), unlimited tabs, and drag-to-split panels; the full per-project layout is
+  saved and restored every session.
 - **Multi-window sub-workspaces** — tear tabs or panels off into separate OS windows that
   stay in sync and move as one focus group.
 - **Focus contexts & per-panel zoom** — every window has one visible *active panel*, drawn
@@ -140,7 +143,10 @@ goal is to pull all of that into a single, simple customisable workspace.
   never take the name of a built-in — including one you have deleted. Each preferences tab keeps its own
   scroll position.
 
-What's planned next lives in [`ROADMAP.md`](ROADMAP.md).
+This list is throng as it exists today. **What's planned lives in the
+[issue tracker](https://github.com/Bidthedog/throng/issues)**, grouped by
+[milestone](https://github.com/Bidthedog/throng/milestones) — there is no separate roadmap
+document to fall out of date.
 
 ## Architecture
 
@@ -189,6 +195,9 @@ panels, browse the file tree, and confirm a **Terminal** panel to get a live she
 project root. Stop the daemon with `Ctrl+C` (graceful shutdown releases the pipe and reaps
 its terminals).
 
+**New to the app?** [`docs/quick-start.md`](docs/quick-start.md) walks through it properly —
+first launch to a working project, with the default key bindings.
+
 ## Configuration
 
 No value is hardcoded in business logic; all are injected typed settings with documented
@@ -227,6 +236,7 @@ testing bar.
 
 ## Contributing & licence
 
+- Using throng: [`docs/quick-start.md`](docs/quick-start.md) · all guides: [`docs/`](docs/).
 - How to contribute (process, toolchain, testing bar): [`CONTRIBUTING.md`](CONTRIBUTING.md).
 - Copyright © 2026 Christopher Sebok, licensed **AGPL-3.0** — see [`LICENSE`](LICENSE) and
   [`COPYRIGHT.md`](COPYRIGHT.md).

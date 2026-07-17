@@ -1,6 +1,72 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 3.15.0 → 4.0.0
+Bump rationale: MAJOR. The Documentation-currency rule's mandated artifact `ROADMAP.md` is REMOVED,
+                and the forward-looking list moves to the issue tracker (2026-07-17).
+
+                MINOR was proposed when this amendment was requested, considered, and REJECTED.
+                The versioning policy makes MAJOR "removal or backward-incompatible redefinition of
+                a principle OR GOVERNANCE RULE", and v3.15.0 set the test: a bump is MAJOR when a
+                PREVIOUSLY-STATED guarantee is withdrawn or reversed, the v2.0.0 → v3.0.0 case being
+                one where previously-compliant LAYOUTS became non-compliant. Both limbs are met here,
+                and not marginally:
+
+                  - WITHDRAWN. "`ROADMAP.md` — the single forward-looking list" was a standing
+                    obligation of the Documentation-currency rule (NON-NEGOTIABLE). It is deleted,
+                    not reworded. A rule is removed.
+                  - REVERSED. What was MANDATORY is now FORBIDDEN: the rule newly states the project
+                    MUST NOT maintain a second forward-looking list in a tracked file. A repository
+                    that was compliant under v3.15.0 — one carrying a current ROADMAP.md — is
+                    non-compliant under this version. That is precisely the v3.0.0 shape, with
+                    "repository" in the place of "layout".
+
+                This is the ordinary reading of the project's own policy, and calling it MINOR would
+                make the version line untrustworthy in the one case the policy was written for.
+                Nothing about the APPLICATION changes: no code becomes non-compliant, the eleven
+                principles are untouched in number, name and substance, and every shipped behaviour
+                is unaffected. The blast radius is documentation governance alone — which is why it
+                is MAJOR-by-rule rather than MAJOR-by-consequence.
+
+                The change: two forward-looking lists drift, and a drifted list is worse than none.
+                throng already tracks planned work as labelled issues grouped into milestones — a
+                list that cannot silently rot, because closing the work closes the entry. ROADMAP.md
+                duplicated that list by hand and had already drifted from it (issues #9 and #29 were
+                delivered and closed while the milestone that mirrored them still showed unchecked;
+                WSL support was listed in the v1.0.0 milestone's scope while its issue sat in vNext).
+                The intent the rule protected is PRESERVED and now stated more strongly: future
+                scope MUST NOT live in the README — and now, MUST NOT live in any tracked file.
+
+Modified principles: none. All eleven are untouched — this amendment is confined to Development
+                Workflow & Quality Gates.
+Added sections: none. The Documentation-currency rule gains a `docs/` bullet (the standing user and
+                contributor guides) and an issue-tracker bullet replacing the ROADMAP.md bullet.
+Removed sections: the `ROADMAP.md` artifact requirement, in all three places it was binding —
+                the Documentation-currency rule, the Incremental (staged) delivery rule (deferrals
+                are now surfaced as open labelled issues), and the code-review gate's document list.
+Templates / artifacts reviewed:
+  ✅ .specify/templates/plan-template.md  — Constitution Check is dynamic ("[Gates determined based
+       on constitution file]") and names no document; picks this up automatically. Verified by
+       reading it, not assumed.
+  ✅ .specify/templates/spec-template.md  — zero roadmap/constitution references; no change required.
+  ✅ .specify/templates/tasks-template.md — zero roadmap/constitution references; no change required.
+  ✅ .specify/extensions.yml              — no before/after_constitution hooks registered.
+  ✅ ROADMAP.md                           — DELETED in this change; the file this amendment retires.
+  ✅ README.md                            — the two ROADMAP.md links repointed at the issue tracker
+       and milestones; macOS/Linux now cite issues #22/#23; a new docs/ pointer added.
+  ✅ CONTRIBUTING.md                      — Docs-are-current non-negotiable and lifecycle step 5 now
+       name README / docs/ / CONTRIBUTING; a Labelling section is added (type + area + milestone).
+  ✅ .github/PULL_REQUEST_TEMPLATE.md     — the "ROADMAP.md updated" checklist row is replaced by a
+       docs/ row noting planned work lives in issues, so there is nothing to tick off.
+  ✅ docs/                                — quick-start.md (user guide) and README.md (index) added;
+       the index states where forward-looking work lives, so no reader re-invents a roadmap.
+  ✅ specs/*                              — historical feature records; they cite the constitution
+       version current at their time and are deliberately NOT rewritten. No spec is the source of
+       this amendment, so no spec version citation advances (contrast v3.15.0, which came out of
+       feature 016 and advanced that feature's citations).
+Deferred TODOs: none.
+
+                ---- superseded amendment (historical) ----
 Version change: 3.14.0 → 3.15.0
 Bump rationale: MINOR. Principle XI (Dockable Workspace: Panes, Tabs & Panels) gains an additive
                 "One document, one state" rule (2026-07-13, issue #68, feature 016 FR-028/FR-028d).
@@ -938,8 +1004,8 @@ let it acquire many conflicting truths.
   released increment is internally consistent and violates no principle in its own
   right; (b) the not-yet-delivered remainder is explicitly recorded as a tracked
   deferral in the owning plan's Complexity Tracking, naming the end-state requirement
-  and the feature expected to complete it, and surfaced in the project roadmap
-  (`ROADMAP.md`) as a planned item (the single forward-looking list per the
+  and the feature expected to complete it, and surfaced in the **issue tracker** as an
+  open, labelled issue (the single forward-looking list per the
   Documentation-currency rule); and (c) the end-state requirement is never
   weakened or dropped — only its delivery is sequenced. Introducing a structural seam
   (e.g. a pane shell) ahead of its content is the canonical example. Incremental
@@ -977,9 +1043,13 @@ let it acquire many conflicting truths.
     truthful snapshot of the app as it currently exists.
   - **`CONTRIBUTING.md`** — the contribution process, required/recommended toolchain, testing
     bar, and developer setup, kept consistent with how the project is actually built and tested.
-  - **`ROADMAP.md`** — the single forward-looking list: delivered capabilities marked done and
-    newly planned capabilities added. Anything that is future scope lives here, **not** in the
-    README.
+  - **`docs/`** — the standing guides (user and contributor). Each describes its subject's
+    current state; a guide the change contradicts MUST be corrected in the same change.
+  - **The issue tracker** — the single forward-looking list: delivered capabilities close their
+    issue, and newly planned capabilities are raised as issues. Anything that is future scope
+    lives **there**, **not** in the README or any other document in this repository. The project
+    MUST NOT maintain a second forward-looking list in a tracked file: two lists drift, and a
+    drifted list is worse than none.
   This reconciliation is part of **`/speckit-converge`** and the definition of done: a change
   MUST NOT be considered complete, and a PR MUST NOT be merged, while any of these documents
   disagrees with the shipped behaviour of the change.
@@ -1016,8 +1086,9 @@ let it acquire many conflicting truths.
   unit/integration/E2E layers present (V), SOLID/DRY/YAGNI adherence (VIII),
   constructor DI wired only through each boundary's single composition-root
   container (IX), configuration sourced from injected settings rather than
-  hardcoded (X), that the project documentation (README, CONTRIBUTING,
-  ROADMAP) has been brought current with any user-facing, setup, architecture,
+  hardcoded (X), that the project documentation (README, CONTRIBUTING, the
+  affected `docs/` guides) and the issue tracker have been brought current with any
+  user-facing, setup, architecture,
   or capability change (Documentation currency rule above), and that any newly
   added configurable option is exposed through the visual preference editors and
   covered by the editor-metadata completeness test (Configuration-editor
@@ -1039,4 +1110,4 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 3.15.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-13
+**Version**: 4.0.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-17

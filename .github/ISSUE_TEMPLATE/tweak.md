@@ -2,7 +2,7 @@
 name: Tweak
 about: Propose a small adjustment to behaviour that already works — spacing, copy, a default, an ordering. No new capability. A maintainer must agree this issue before a PR is raised.
 title: "[Tweak] "
-labels: ["tweak", "needs-agreement"]
+labels: ["tweak"]
 assignees: []
 ---
 
@@ -16,10 +16,20 @@ If it gives a user a new ability, raise an Enhancement instead.
 If the current behaviour contradicts its own stated intent, that is not a
 Tweak — it is a Bug, so raise a Bug report.
 
-A maintainer must AGREE this issue before a PR is opened. Tweaks are usually
-small enough to skip the full Spec Kit lifecycle, but they still need an
-agreed issue.
+A maintainer must AGREE this issue, in a comment, before a PR is opened. Tweaks
+are usually small enough to skip the full Spec Kit lifecycle, but they still
+need an agreed issue.
+
+TITLE: keep it short and scannable — "[Tweak] " plus a summary a reader can take
+in at a glance. All the detail belongs in the body below, not the title.
 -->
+
+## Labels
+
+<!-- The `tweak` type label is applied for you. Add the area(s) yourself — an unlabelled issue
+     drops out of the backlog's filters. See CONTRIBUTING.md#labelling. -->
+
+- [ ] At least one `area:*` label added.
 
 ## Current behaviour
 
@@ -45,5 +55,5 @@ agreed issue.
 
 ## Maintainer agreement
 
-<!-- Leave blank — a maintainer fills this in. -->
+<!-- Leave blank — a maintainer fills this in by agreeing in a comment below. -->
 - [ ] Agreed by maintainer. Contributor may proceed (full lifecycle unless trivially small).
