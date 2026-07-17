@@ -10,5 +10,4 @@ Two things deliberately live elsewhere:
 - **What throng is, and its architecture, commands and configuration** — the [README](../README.md).
   It describes the app's current finite state, not its history.
 - **What's planned** — the [issue tracker](https://github.com/Bidthedog/throng/issues), grouped by
-  [milestone](https://github.com/Bidthedog/throng/milestones). There is no roadmap document; a
-  second forward-looking list only drifts from the first.
+  [milestone](https://github.com/Bidthedog/throng/milestones).

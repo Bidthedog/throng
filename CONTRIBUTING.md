@@ -88,7 +88,7 @@ templates apply the type for you; the area is yours to add.
 |---|---|---|
 | **Type** (exactly one) | `bug`, `enhancement`, `tweak`, `documentation` | The type decides the template and the title prefix. |
 | **Area** (one or more) | `area:editor`, `area:explorer`, `area:terminal`, `area:preferences`, `area:themes`, `area:ui-shell`, `area:projects`, `area:vcs`, `area:agents`, `area:extensibility`, `area:infra`, `area:platform` | Where the work lands. Add every area the change touches. |
-| **Milestone** | `v1.0.0`, `v1.0.1`, `vNext` | Maintainers schedule this. `vNext` is a **placeholder for unscheduled work**, not the next release. |
+| **Milestone** | `v1.0.0`, `v1.0.1`, `vNext` etc | Maintainers schedule this. `vNext` is a **placeholder for unscheduled work**, not the next release. |
 
 Choosing the type — stop at the first that matches:
 
