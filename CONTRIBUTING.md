@@ -22,13 +22,14 @@ contributions and bar repeat offenders. Report concerns privately to the maintai
 
 A PR **cannot merge** unless all of these hold:
 
-- [ ] A **GitHub issue exists and a maintainer has explicitly agreed it** (the `agreed` label) before the PR was opened.
+- [ ] A **GitHub issue exists and a maintainer has explicitly agreed it in a comment** on that issue, before the PR was opened. Agreement is a written "agreed" from a maintainer — there is no label for it.
+- [ ] The issue is **labelled** — exactly one type (`bug` / `enhancement` / `tweak` / `documentation`) and at least one `area:*`. See [Labelling](#labelling).
 - [ ] **Authoring** — either produced with the recommended AI toolchain, driven by **Claude Opus 4.8 or a more capable model**, *or* hand-written without AI. Either way every gate below applies.
 - [ ] **Tested at every layer** — unit, integration and E2E observed green (not merely built/type-checked); every user-facing UI change ships passing E2E (constitution V). Hand-written work is tested **at least as thoroughly as the AI workflow produces**.
 - [ ] **For AI / spec-driven changes** — a **fully specified spec** under `specs/<NNN-slug>/` with no `[NEEDS CLARIFICATION]` left, `/speckit-analyze` clean of critical/high findings, and `/speckit-converge` run so code and spec agree.
 - [ ] The PR states **intent and outcomes in plain, human terms**.
 - [ ] The change complies with the **[constitution](.specify/memory/constitution.md)**.
-- [ ] **Docs are current** — `README.md` (finite current state), `ROADMAP.md` (delivered vs planned), and this `CONTRIBUTING.md` if the process changed.
+- [ ] **Docs are current** — `README.md` (finite current state), the `docs/` guides your change affects, and this `CONTRIBUTING.md` if the process changed.
 - [ ] Changes are **squashed into a small number of commits (< 5)**.
 
 ## How contributions are built
@@ -60,11 +61,11 @@ issue (agreed) → /speckit-specify → /speckit-clarify → /speckit-plan → /
               → tests green (unit + integration + e2e) → docs current → pull request
 ```
 
-1. **Issue, agreed** — search first, open with a template, describe *intent* (what a user needs and why), and wait for the `agreed` label. A PR without an agreed issue is closed. *(Trivial typo/link/doc fixes may skip the spec steps but still need an agreed issue.)*
+1. **Issue, agreed** — search first, open with a template, [label it](#labelling), describe *intent* (what a user needs and why), and wait for a maintainer to **agree it in a comment**. A PR without an agreed issue is closed. *(Trivial typo/link/doc fixes may skip the spec steps but still need an agreed issue.)*
 2. **Spec** — `/speckit-specify` then `/speckit-clarify` until every `[NEEDS CLARIFICATION]` is gone and requirements are testable and unambiguous.
 3. **Plan & analyse** — `/speckit-plan` → `/speckit-tasks` → `/speckit-analyze`; resolve every critical/high finding before building.
 4. **Implement (TDD)** — `/speckit-superpowers-bridge` drives Superpowers test-first (Red → Green → Refactor). Hand-writing instead is fine, but apply the same discipline and coverage by hand.
-5. **Converge & document** — `/speckit-converge` until code and artifacts agree, and bring `README` / `ROADMAP` / `CONTRIBUTING` current **in the same change**.
+5. **Converge & document** — `/speckit-converge` until code and artifacts agree, and bring the `README`, the affected `docs/` guides and `CONTRIBUTING` current **in the same change**.
 6. **Pull request** — branch from `master`, complete the whole PR template, link the agreed issue, and attach passing test output.
 
 **Constitution check** — every plan must pass the Constitution Check gate (11 principles).
@@ -76,6 +77,33 @@ injected config (X). Violations must be revised, or justified in the plan's Comp
 **Intent & outcomes** — both spec and PR must let a reviewer who has never seen the code
 restate, in plain language, *what a user needs and why* (intent) and *what changed and how we
 know it works* (outcomes). If they can't, it isn't clear enough yet.
+
+## Labelling
+
+Labels are how the backlog is filtered and picked up, so an unlabelled issue is invisible rather
+than merely untidy. **Every issue carries exactly one type and at least one area.** The issue
+templates apply the type for you; the area is yours to add.
+
+| | Labels | Rule |
+|---|---|---|
+| **Type** (exactly one) | `bug`, `enhancement`, `tweak`, `documentation` | The type decides the template and the title prefix. |
+| **Area** (one or more) | `area:editor`, `area:explorer`, `area:terminal`, `area:preferences`, `area:themes`, `area:ui-shell`, `area:projects`, `area:vcs`, `area:agents`, `area:extensibility`, `area:infra`, `area:platform` | Where the work lands. Add every area the change touches. |
+| **Milestone** | `v1.0.0`, `v1.0.1`, `vNext` | Maintainers schedule this. `vNext` is a **placeholder for unscheduled work**, not the next release. |
+
+Choosing the type — stop at the first that matches:
+
+- **Bug** — shipped behaviour contradicts its own intent: it crashes, returns the wrong result, regresses, or does X where the spec/docs/UI say Y. A one-character fix is still a Bug. "This design is poor" is *not* a Bug.
+- **Enhancement** — adds a capability that does not exist today. After it ships a user can do something they could not do before. Large ambitions are Enhancements too — throng has no "feature" type; `area:*` does the grouping, and related issues are linked to each other in the body.
+- **Tweak** — adjusts something that already works without adding any capability: copy, spacing, colour, ordering, a default. If it were never done, nothing would be *missing* — only slightly worse.
+- **Documentation** — docs-only work. Takes the `documentation` label in place of a type.
+
+The line between Enhancement and Tweak is **new ability, not effort**: "let users pick their font
+size" is an Enhancement; "the default font size should be 14, not 13" is a Tweak. If a request
+contains both a bug and a wish, **split it** — otherwise one of the two is silently dropped when
+the other is done.
+
+**Titles** are `[Type] Summary` — the prefix matches the type label, and the summary is short
+enough to scan in a list. Detail belongs in the body, never the title.
 
 ## Testing
 
