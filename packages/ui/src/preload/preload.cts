@@ -44,6 +44,21 @@ contextBridge.exposeInMainWorld('throng', {
   },
   appCloseChoice: (choice: 'leave' | 'terminate' | 'cancel') =>
     ipcRenderer.send('throng:appClose:choice', choice),
+  // The shutdown drain (019 / FR-010, issue #86): before allowing the close, main asks each
+  // window to settle its deferred writes and AWAITS the ack. Correlated by `requestId` so a
+  // stale ack cannot satisfy a later drain.
+  onAppCloseDrain: (cb: (req: { requestId: string }) => void) => {
+    const handler = (_event: unknown, req: { requestId: string }): void => cb(req);
+    ipcRenderer.on('throng:appClose:drain', handler);
+    // Announce that this window CAN answer, at the only moment that is true: a listener now
+    // exists. Main drains the windows that said this and no others — a window with no preload
+    // (the drag ghost) or one whose script has not evaluated yet never says it, and so is never
+    // waited on. This is what keeps `getAllWindows()` honest without reciting window kinds.
+    ipcRenderer.send('throng:appClose:drainReady');
+    return () => ipcRenderer.removeListener('throng:appClose:drain', handler);
+  },
+  appCloseDrained: (req: { requestId: string }) =>
+    ipcRenderer.send('throng:appClose:drained', req),
   // Cursor-following drag ghost as an OS window (FR-001): start on drag begin,
   // stop on drop. The main process tracks the cursor and positions the window.
   dragGhost: {
@@ -200,6 +215,8 @@ contextBridge.exposeInMainWorld('throng', {
   // (machine-detected built-ins ∪ user-defined), owned by UI main (no daemon).
   terminal: {
     listFlavours: () => ipcRenderer.invoke('throng:terminal:listFlavours'),
+    // The detected built-ins, with nothing subtracted — the settings picker's catalogue (019).
+    listDetectedFlavours: () => ipcRenderer.invoke('throng:terminal:listDetectedFlavours'),
     // Phase C — session commands (request/response → daemon) and push streams.
     attach: (req: unknown) => ipcRenderer.invoke('throng:terminal:attach', req),
     write: (panelId: string, data: string) => ipcRenderer.invoke('throng:terminal:write', panelId, data),
@@ -213,8 +230,6 @@ contextBridge.exposeInMainWorld('throng', {
     list: (projectId?: string) => ipcRenderer.invoke('throng:terminal:list', projectId),
     // Daemon capabilities (FR-025a): { elevated } — gates the "run as admin" control.
     capabilities: () => ipcRenderer.invoke('throng:terminal:capabilities'),
-    contextMenu: (payload: { panelId: string; selection: string }) =>
-      ipcRenderer.invoke('throng:terminal:contextMenu', payload),
     // OSC 52 clipboard-write from a program running inside the terminal (Claude
     // Code, tmux, vim, …). The sandboxed renderer can't reach the OS clipboard, so
     // it relays the decoded text to the main process (Electron clipboard.writeText).
@@ -357,6 +372,8 @@ contextBridge.exposeInMainWorld('throng', {
         dirty?: boolean;
         deleted?: boolean;
         externalChange?: boolean;
+        /** throng moved the file: the document's new absolute path (019, FR-002). */
+        movedTo?: string;
       }) => void,
     ) => {
       const handler = (
@@ -368,6 +385,7 @@ contextBridge.exposeInMainWorld('throng', {
           dirty?: boolean;
           deleted?: boolean;
           externalChange?: boolean;
+          movedTo?: string;
         },
       ): void => cb(msg);
       ipcRenderer.on('throng:editor:sync', handler);

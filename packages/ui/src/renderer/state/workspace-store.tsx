@@ -38,6 +38,7 @@ import {
   type WorkspaceLayout,
 } from '@throng/core';
 import type { WorkspaceClient } from './workspace-client.js';
+import { registerLayoutFlusher, trackLayoutSave } from './layout-saves.js';
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
 
@@ -118,25 +119,35 @@ export function WorkspaceProvider({
   // project switch or unmount rather than being dropped (no silent data loss).
   const pendingSave = useRef<WorkspaceLayout | null>(null);
 
-  const flushSave = useCallback(() => {
+  // RETURNS the save, rather than dropping it with `void` (019 FR-010): a drain that is not
+  // awaited is not a drain — `await` on a void function awaits `undefined` and acks having
+  // settled nothing, which is the very defect #86 reports. Nothing pending resolves
+  // immediately, and a FAILED save still resolves: a write that cannot land must not wedge
+  // the close (it is surfaced through the existing reload path, as before).
+  const flushSave = useCallback(async (): Promise<void> => {
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
     const pending = pendingSave.current;
     pendingSave.current = null;
-    if (pending) {
-      void client.save(pending.projectId, pending).catch(() => {
-        /* surfaced via reload; drag loop stays responsive */
-      });
-    }
+    if (!pending) return;
+    // Tracked as well as awaited: a save is not one hop (a sub-workspace's is two round-trips),
+    // and this same promise is what a concurrent drain must await rather than race.
+    await trackLayoutSave(client.save(pending.projectId, pending));
   }, [client]);
+
+  // Join the window's drain (019 FR-010). Registered for as long as the provider is mounted,
+  // so the close settles this layout wherever it is hosted — main window or sub-workspace (C6).
+  useEffect(() => registerLayoutFlusher(flushSave), [flushSave]);
 
   // Load the active project's layout whenever it changes. Flush any pending save
   // for the OUTGOING project first so switching never drops an in-flight edit.
   useEffect(() => {
     let cancelled = false;
-    flushSave();
+    // Unchanged behaviour: these two fire-and-forget exactly as they did before the drain
+    // gave `flushSave` a return type. `void` states that this caller is not the drain.
+    void flushSave();
     if (!activeProjectId) {
       setLayout(null);
       setRestoreFailed(false);
@@ -159,7 +170,7 @@ export function WorkspaceProvider({
     return () => {
       cancelled = true;
       // On switch/unmount, persist whatever was queued for this project.
-      flushSave();
+      void flushSave();
     };
   }, [activeProjectId, client, flushSave]);
 
@@ -172,9 +183,12 @@ export function WorkspaceProvider({
         const pending = pendingSave.current;
         pendingSave.current = null;
         if (pending) {
-          void client.save(pending.projectId, pending).catch(() => {
-            /* surfaced via reload; drag loop stays responsive */
-          });
+          // The promise is still DROPPED here — the drag loop must not await a save — but it is
+          // no longer dropped on the FLOOR. Once this timer has fired, `flushSave` has nothing
+          // pending to report, so this is the only record that the write exists; without it a
+          // drain arriving now acks a write that is still in flight, and the close that follows
+          // destroys the window mid-round-trip (019 FR-010).
+          void trackLayoutSave(client.save(pending.projectId, pending));
         }
       }, AUTOSAVE_DEBOUNCE_MS);
     },

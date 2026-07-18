@@ -7,37 +7,28 @@
  * path — no explicit Save, no restart.
  */
 import type { ConfigDocId } from '@throng/core';
-import { writeConfig, debounce, type ConfigWriteResult } from '../config/write-config.js';
+import { writeConfig, type ConfigWriteResult } from '../config/write-config.js';
 
 export interface ApplyClient {
   /** Apply a whole document immediately (discrete control change / blur / close). */
   applyNow(value: unknown): Promise<ConfigWriteResult>;
-  /** Apply after the debounce quiets (free-text/number typing). */
-  applyDebounced(value: unknown): void;
-  /** Force a pending debounced apply to run now (e.g. window closing). */
-  flush(): void;
-  /** Drop a pending debounced apply. */
-  cancel(): void;
 }
 
-export function createApplyClient(id: ConfigDocId, debounceMs = 250): ApplyClient {
-  const debounced = debounce((json: string) => {
-    void writeConfig(id, json);
-  }, debounceMs);
-
+/**
+ * This client applies IMMEDIATELY, and always has.
+ *
+ * It once carried a 250ms `applyDebounced`, plus the `flush`/`cancel` that drove it. That
+ * debounce was UNREACHABLE (019 C24): `applyDebounced` had no callers, every write went through
+ * `applyNow` — which cancelled the debounce and wrote at once — and so the flush its callers ran
+ * on unmount had only ever flushed a timer that could not be armed. Four analyses of the shutdown
+ * drain described a deferred write here that never existed. Deleted rather than converted
+ * (Principle VIII): a debounce nobody arms is not a write the drain has to settle, and the
+ * writers that ARE deferred schedule through the write module instead.
+ */
+export function createApplyClient(id: ConfigDocId): ApplyClient {
   return {
     applyNow(value) {
-      debounced.cancel();
       return writeConfig(id, JSON.stringify(value));
-    },
-    applyDebounced(value) {
-      debounced(JSON.stringify(value));
-    },
-    flush() {
-      debounced.flush();
-    },
-    cancel() {
-      debounced.cancel();
     },
   };
 }

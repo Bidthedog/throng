@@ -186,6 +186,13 @@ export function useExplorerData(
   // to ignore react-arborist's spurious empty onSelect on mount, which would
   // otherwise clobber the restored selection.
   const selectionDone = useRef(false);
+  // Open-state to (re)apply once the target nodes exist in the tree (#120): a MOVE
+  // migrates a folder's expansion to its new path by prefix, so the moved folder
+  // stays open where it lands instead of being stranded at the old, path-keyed id.
+  const pendingOpen = useRef<Set<string>>(new Set());
+  // A relPath to select once it appears (#122): after a rename the node's id
+  // changes, so the old selection no longer matches — re-select the NEW path.
+  const pendingSelect = useRef<string | null>(null);
 
   // Restore on project (or exclude-list) change: load the root + every
   // persisted-open folder, then seed react-arborist's initial open-state.
@@ -312,13 +319,19 @@ export function useExplorerData(
   // fs-watch re-read is missed or coalesced. Folders that vanished are dropped; new
   // entries appear. react-arborist keeps open + selected state by id, so
   // expansion/selection are preserved for survivors.
-  const reloadDirs = useCallback(async (dirs?: readonly string[]): Promise<void> => {
+  const reloadDirs = useCallback(async (dirs?: readonly string[]): Promise<Set<string>> => {
     const loaded = childrenMapRef.current;
     const keys = (dirs ?? [...loaded.keys()]).filter((k) => k === '' || loaded.has(k));
-    if (keys.length === 0) return;
+    if (keys.length === 0) return new Set();
     const results = await Promise.all(
       keys.map(async (k) => [k, await fetchRef.current(k)] as const),
     );
+    // The child relPaths that EXIST after this re-read, across every dir we reloaded.
+    // Returned so callers can bound a stale pending open/select target: a move/rename
+    // whose node never materialised must not linger and later act on a same-named
+    // node created at that exact path (Finding 2).
+    const present = new Set<string>();
+    for (const [, kids] of results) if (kids) for (const kid of kids) present.add(kid.relPath);
     setChildrenMap((prev) => {
       const next = new Map(prev);
       let changed = false;
@@ -337,6 +350,7 @@ export function useExplorerData(
       // react-arborist doesn't rebuild and lose open/selection state.
       return changed ? next : prev;
     });
+    return present;
   }, []);
 
   // Live sync (US2): re-read every loaded directory when the watcher reports a change.
@@ -362,6 +376,71 @@ export function useExplorerData(
     },
     [childrenMap],
   );
+
+  // #120 — reconcile the two independent "is it open?" signals so they can never
+  // disagree. react-arborist decides open-ness from its own open map (keyed by id
+  // = relPath), which is NOT migrated when a folder moves and is NOT pruned when a
+  // folder disappears. A stale entry — left by a move, or restored from
+  // localStorage — makes a folder render OPEN while its children were never
+  // loaded: `build(dir)` yields `[]` for an unloaded folder, indistinguishable
+  // from a genuinely empty one, so it wedges open-but-empty and never loads.
+  //
+  // The cure is to make "open" self-healing: whenever react-arborist reports a
+  // folder open but we have not loaded its children, load them. An unloaded folder
+  // thus resolves to its real contents (or provably nothing), and the chevron +
+  // glyph always end up agreeing with what is actually shown.
+  useEffect(() => {
+    const api = treeRef.current;
+    if (!api) return;
+    const walk = (node: NodeApi<TreeNodeData>): void => {
+      for (const child of node.children ?? []) {
+        const rel = child.data.relPath;
+        if (child.data.kind === 'folder' && rel !== '' && child.isOpen && !childrenMap.has(rel)) {
+          void ensureLoaded(rel);
+        }
+        walk(child);
+      }
+    };
+    walk(api.root);
+  }, [data, childrenMap, ensureLoaded, treeRef]);
+
+  // #120 — drain the migrated open-state a MOVE queued (see `drop`). Once the node
+  // exists at its NEW path, open it; the self-healing effect above then loads its
+  // children. Runs on every data change until the target has appeared.
+  useEffect(() => {
+    if (pendingOpen.current.size === 0) return;
+    const api = treeRef.current;
+    if (!api) return;
+    let opened = false;
+    for (const rel of [...pendingOpen.current]) {
+      if (api.get(rel)) {
+        pendingOpen.current.delete(rel);
+        api.open(rel);
+        opened = true;
+      }
+    }
+    // Finding 5 — persist the migrated expansion the instant it applies, so a MOVE
+    // survives an IMMEDIATE close/reload (not only the next user toggle/select). Do it
+    // explicitly and intentionally here rather than leaning on api.open's onToggle
+    // side-effect. Guarded on `opened`, so it fires once per real migration and never on
+    // the no-op runs this effect makes on every unrelated data change — no localStorage
+    // thrash.
+    if (opened) persist(selectedId);
+  }, [data, treeRef, persist, selectedId]);
+
+  // #122 — drain a pending re-selection (see `onRename`). react-arborist re-keys
+  // the renamed node, so the old selectedId no longer matches; re-select the new
+  // path once it appears. Selecting never opens an editor (that only happens on a
+  // row click), so the rename cannot fire an open-file intent.
+  useEffect(() => {
+    const rel = pendingSelect.current;
+    if (rel === null) return;
+    const api = treeRef.current;
+    if (api?.get(rel)) {
+      pendingSelect.current = null;
+      api.select(rel);
+    }
+  }, [data, treeRef]);
 
   const onToggle = useCallback(
     (id: string) => {
@@ -476,17 +555,36 @@ export function useExplorerData(
       // (FR-070). The old leaf name is the last path segment of the rel path.
       const current = rel.split(/[\\/]/).pop() ?? rel;
       if (next === current) return;
+      const parentDir = parentRel(rel); // '' at the root, else the containing dir
+      const newRel = parentDir ? `${parentDir}/${next}` : next;
       void window.throng?.files?.rename?.(rel, next).then((res) => {
         report(res);
+        if (!(res && 'error' in res)) {
+          // #122 — the rename changed the node's id, so the old selection no longer
+          // matches. Keep the renamed file SELECTED at its new path (never opening
+          // an editor). Reconcile the parent dir from the awaited result so the new
+          // node materialises deterministically for the pending-select drain.
+          pendingSelect.current = newRel;
+          const parentLoaded = parentDir === '' || childrenMapRef.current.has(parentDir);
+          void reloadDirs([parentDir]).then((present) => {
+            // Finding 2 — if the renamed node never appears (e.g. it is immediately
+            // deleted, or an external rename moved it again), drop the pending
+            // re-selection so a later node created at that same path isn't spuriously
+            // selected. Only prune when we actually re-read its parent (else absence
+            // isn't proven), and only if a newer op hasn't already superseded it.
+            if (parentLoaded && pendingSelect.current === newRel && !present.has(newRel)) {
+              pendingSelect.current = null;
+            }
+          });
+        }
         // The document's language override follows the FILE, not its name (016, FR-028e).
         // Without this, renaming a file silently discards the user's explicit choice about it.
-        const parent = rel.includes('/') || rel.includes('\\') ? `${parentRel(rel)}/` : '';
-        void documents.movePath(projectId, rel, `${parent}${next}`).catch(() => {
+        void documents.movePath(projectId, rel, newRel).catch(() => {
           /* no override to carry is the common case, and a failure must not break the rename */
         });
       });
     },
-    [report, documents, projectId],
+    [report, documents, projectId, reloadDirs],
   );
 
   const cut = useCallback((relPaths: string[]) => {
@@ -614,16 +712,57 @@ export function useExplorerData(
     (dragRelPaths: string[], destRelDir: string, asCopy: boolean) => {
       const items = dragRelPaths.filter((r) => r !== '');
       if (items.length === 0) return;
+      // #120 — snapshot open folders BEFORE a MOVE so expansion can follow the
+      // folder to its new path. Open-state is keyed by relPath, so a move would
+      // otherwise strand it (the folder lands closed) and leave a stale entry at
+      // the old id. A COPY leaves the original in place, so nothing migrates.
+      const openBefore = asCopy ? [] : snapshotOpen();
       const op = asCopy ? window.throng?.files?.copy : window.throng?.files?.move;
-      void op?.(items, destRelDir).then((res) => {
+      void op?.(items, destRelDir).then(async (res) => {
         report(res);
-        // A MOVE carries the override with the file; a COPY deliberately does not — the copy is a
-        // new document, and inheriting a language the user chose for a different file would be a
-        // guess, not a decision.
-        if (!asCopy) for (const from of items) carryOverride(from, destRelDir);
+        if (!asCopy) {
+          // Whether we can PROVE a moved node's absence after the reload: only if the
+          // destination is loaded (else reloadDirs skips it and can't tell us).
+          const destLoaded = destRelDir === '' || childrenMapRef.current.has(destRelDir);
+          const movedBases: string[] = [];
+          for (const from of items) {
+            const leaf = from.split(/[\\/]/).pop() ?? from;
+            const newBase = destRelDir ? `${destRelDir}/${leaf}` : leaf;
+            movedBases.push(newBase);
+            // The moved folder itself, and every open descendant, migrate by prefix.
+            for (const open of openBefore) {
+              if (open === from || open.startsWith(`${from}/`)) {
+                pendingOpen.current.add(newBase + open.slice(from.length));
+              }
+            }
+            // A MOVE carries the override with the file; a COPY deliberately does not — the copy
+            // is a new document, and inheriting a language the user chose for a different file
+            // would be a guess, not a decision.
+            carryOverride(from, destRelDir);
+          }
+          // Reconcile the moved-from parents + destination from the awaited result,
+          // so the tree converges even if the debounced fs-watch is coalesced
+          // (mirrors paste). This is also what materialises the moved node at its
+          // new path for the pending-open drain to find.
+          const affected = [...new Set([...items.map(parentRel), destRelDir])];
+          const present = await reloadDirs(affected);
+          // Finding 2 — if a moved node never materialised at its destination (deleted
+          // or externally renamed mid-move), drop the open-state we just queued for it.
+          // Left in place it would linger for the whole session and spuriously open a
+          // DIFFERENT folder later created at that exact path.
+          if (destLoaded) {
+            for (const newBase of movedBases) {
+              if (!present.has(newBase)) {
+                for (const t of [...pendingOpen.current]) {
+                  if (t === newBase || t.startsWith(`${newBase}/`)) pendingOpen.current.delete(t);
+                }
+              }
+            }
+          }
+        }
       });
     },
-    [report, carryOverride],
+    [report, carryOverride, snapshotOpen, reloadDirs],
   );
 
   return {

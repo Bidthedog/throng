@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { BrowserWindow, ipcMain, Menu, type WebContents } from 'electron';
+import { ipcMain, type WebContents } from 'electron';
 import { resolveLaunchSpec, type IClipboard } from '@throng/core';
 import type { TerminalAttachResult } from '@throng/ipc-contract';
 import { RpcTimeoutError, type DaemonClient } from './daemon-client.js';
@@ -196,33 +196,11 @@ export function registerTerminalIpc(deps: {
       : daemonClient.call('terminal.capabilities', {}).catch(() => ({ elevated: false })),
   );
 
-  // Native (OS) right-click menu for the inline terminal: Copy the xterm selection,
-  // Paste the clipboard into the live shell.
-  ipcMain.handle(
-    'throng:terminal:contextMenu',
-    (event, payload: { panelId: string; selection: string }) => {
-      const selection = typeof payload?.selection === 'string' ? payload.selection : '';
-      const hasSelection = selection.length > 0;
-      const menu = Menu.buildFromTemplate([
-        {
-          label: 'Copy',
-          enabled: hasSelection,
-          click: () => {
-            if (hasSelection) clipboard.writeText(selection);
-          },
-        },
-        {
-          label: 'Paste',
-          click: () => {
-            const text = clipboard.readText();
-            if (text) void daemonClient.call('terminal.write', { panelId: payload.panelId, data: text }).catch(() => {});
-          },
-        },
-      ]);
-      const win = BrowserWindow.fromWebContents(event.sender) ?? undefined;
-      menu.popup(win ? { window: win } : {});
-    },
-  );
+  // The inline terminal's right-click menu is the app's THEMED ContextMenu, built and
+  // handled in the renderer (terminal-panel.tsx) — Copy writes the xterm selection to the
+  // OS clipboard via `terminal.writeClipboard`, Paste reads `clipboard.paste` and writes it
+  // to the shell via `terminal.write`. The former native (Electron) menu was deleted: it
+  // ignored the theme, which is the whole of the complaint it answered.
 
   // OSC 52 clipboard write (a program inside the terminal — Claude Code, tmux, vim —
   // copies to the system clipboard). The sandboxed renderer decodes the sequence and

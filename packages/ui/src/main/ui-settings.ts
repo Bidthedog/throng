@@ -17,6 +17,17 @@ export const DEFAULT_PING_TIMEOUT_MS = 2000;
  * ping budget for attach is what made a slow shell report a spurious connection timeout.
  */
 export const DEFAULT_ATTACH_TIMEOUT_MS = 15000;
+/**
+ * Shutdown-drain backstop (019 FR-010): the longest the close will wait for a window to ack
+ * that its deferred writes have settled.
+ *
+ * This is **not the mechanism** — the close waits on the ACK. It is the escape hatch for a
+ * renderer that has stopped answering, so an unresponsive window cannot hold the app open
+ * forever. Sized generously (a drain is a handful of small writes) precisely because it must
+ * never be the thing that decides whether the user's layout survives: FR-011 refuses a fix
+ * that depends on a clock.
+ */
+export const DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS = 5000;
 
 export function numberFromEnv(value: string | undefined, fallback: number): number {
   if (value === undefined) return fallback;
@@ -33,5 +44,9 @@ export function readUiSettings(env: NodeJS.ProcessEnv = process.env): IUiSetting
     },
     pingTimeoutMs: numberFromEnv(env.THRONG_PING_TIMEOUT_MS, DEFAULT_PING_TIMEOUT_MS),
     attachTimeoutMs: numberFromEnv(env.THRONG_ATTACH_TIMEOUT_MS, DEFAULT_ATTACH_TIMEOUT_MS),
+    shutdownDrainTimeoutMs: numberFromEnv(
+      env.THRONG_SHUTDOWN_DRAIN_TIMEOUT_MS,
+      DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS,
+    ),
   };
 }

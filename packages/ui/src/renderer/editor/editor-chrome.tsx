@@ -12,6 +12,7 @@ import { UnsavedOpenDialog } from './unsaved-open-dialog.js';
 import { DirtyCloseDialog } from './dirty-close-dialog.js';
 import { EditorNoticeDialog } from './editor-notice-dialog.js';
 import { MissingFileWatcher } from './missing-file-watcher.js';
+import { MovedPathSync } from './moved-path-sync.js';
 
 /**
  * Editor window chrome (006): the editor keybindings (Ctrl+S / Ctrl+Shift+S,
@@ -26,6 +27,9 @@ export function EditorChrome({ isSubWorkspace = false }: { isSubWorkspace?: bool
       <EditorKeybindings isSubWorkspace={isSubWorkspace} />
       <EditorOpenListener />
       <MissingFileWatcher />
+      {/* Every editor panel in this window follows its file into the persisted layout — including
+          the ones in background tabs, which are not mounted to hear it themselves (FR-008). */}
+      <MovedPathSync />
       <UnsavedOpenDialog />
       <DirtyCloseDialog />
       <EditorNoticeDialog />

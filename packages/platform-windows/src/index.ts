@@ -5,6 +5,5 @@ export { NodePtyHost } from './node-pty-host.js';
 export { WindowsDirectoryLock } from './windows-directory-lock.js';
 export { WindowsElevation } from './windows-elevation.js';
 export { WindowsProcessCwd } from './windows-process-cwd.js';
-export { WindowsDeElevator } from './windows-de-elevator.js';
 export { WindowsDeElevatedLauncher } from './windows-de-elevated-launcher.js';
 export { WindowsFontEnumeration } from './windows-font-enumeration.js';

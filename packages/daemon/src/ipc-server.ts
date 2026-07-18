@@ -23,7 +23,11 @@ export class IpcServer {
   private readonly sockets = new Set<Socket>();
 
   constructor(
-    @inject(DAEMON_TYPES.DaemonSettings) private readonly settings: IDaemonSettings,
+    // Only the transport's own settings: the container binds the whole `IDaemonSettings`,
+    // but this class has no business with (say) the PTY agent's budgets, and narrowing
+    // keeps it constructible from just what it uses.
+    @inject(DAEMON_TYPES.DaemonSettings)
+    private readonly settings: Pick<IDaemonSettings, 'pipeName' | 'startupTimeoutMs'>,
     @inject(DAEMON_TYPES.RpcRouter) private readonly router: RpcRouter,
     // Injected by the container; defaulted so tests can construct the server with
     // just settings + router (the terminal events channel is exercised separately).

@@ -14,6 +14,21 @@ export const SETTINGS_INTERNAL_KEYS: readonly string[] = [
   // The folder last chosen for a project — machine bookkeeping that drives the
   // "Last Viewed" picker option (011), not a hand-tuned setting.
   'newProject.lastProjectFolder',
+  // The three terminal-flavour settings, HIDDEN for v1.0.0 pending #67's proper
+  // implementation in vNext. #67 (make flavour editing work through the visual editor)
+  // renders badly and does not work, so its controls must not ship. This is a HIDE, not a
+  // revert: the settings still parse and take effect via a hand-edited settings.json — only
+  // the Settings UI controls are withheld. Their descriptors are kept verbatim in
+  // HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS below and re-exposed in vNext by spreading them back
+  // into SETTINGS_METADATA and deleting these three lines.
+  //
+  // Marking them internal is what keeps the completeness rule (FR-047) satisfied: an internal
+  // leaf is excluded from the configurable set, so it neither demands a descriptor (no
+  // "missing") nor may carry one in the rendered registry (no "unknown") — exactly the
+  // treatment `newProject.lastProjectFolder` above already receives.
+  'terminals.flavours',
+  'terminals.disabledBuiltins',
+  'terminals.defaultParams',
 ];
 
 /**
@@ -113,13 +128,19 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   },
 
   // File Explorer
+  //
+  // 019 US5 / #95 (C1/C2): `explorer.openMode` was DELETED here and in app-settings.ts —
+  // it was rendered, but nothing ever read it. Its job belongs to `editor.openOnClick`
+  // below, which keeps its key (no rename, so no migration of a setting that works) and
+  // is grouped HERE, where users look for it. A descriptor's section comes from `group`,
+  // not from its key prefix (metadata.ts:65), which is what makes that possible.
   {
-    key: 'explorer.openMode',
+    key: 'editor.openOnClick',
     label: 'Open files with',
-    description: 'Whether a single or double click opens a file from the tree.',
+    description: 'Which file-tree click opens a file into the last active editor.',
     group: 'File Explorer',
     control: 'select',
-    allowedValues: ['single', 'double'],
+    allowedValues: ['single', 'double', 'none'],
   },
   {
     key: 'explorer.deleteMode',
@@ -156,46 +177,18 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   },
 
   // Terminals
-  {
-    key: 'terminals.flavours',
-    label: 'Custom terminal flavours',
-    description:
-      'User-defined shells shown in the Flavour dropdown (id, label, file, args, default params).',
-    group: 'Terminals',
-    control: 'array', // items are objects — the array editor renders a per-entry sub-form
-  },
-  {
-    key: 'terminals.disabledBuiltins',
-    label: 'Hidden built-in flavours',
-    description: 'Built-in flavour ids to hide from the Flavour dropdown.',
-    group: 'Terminals',
-    control: 'array',
-    itemControl: 'text',
-    clearable: true, // empty = hide nothing, which is also what it ships as
-  },
-  {
-    // The descriptor this setting has ALWAYS lacked (016, F5). It ships as an empty map, so it
-    // yielded zero leaves and slipped past the completeness rule — a JSON-only setting of exactly
-    // the kind the constitution forbids. The `map` control closes it rather than stepping around it.
-    key: 'terminals.defaultParams',
-    label: 'Default flavour parameters',
-    description:
-      'Extra arguments passed to a flavour every time it starts, keyed by flavour id (e.g. pwsh → -NoLogo).',
-    group: 'Terminals',
-    control: 'map',
-    columns: [{ label: 'Arguments', control: 'text' }],
-    clearable: true, // ships empty; empty means "pass nothing extra", a perfectly good answer
-  },
+  //
+  // The three terminal-flavour controls (`terminals.flavours`, `terminals.disabledBuiltins`,
+  // `terminals.defaultParams`) are WITHHELD from the Settings UI for v1.0.0 pending #67's proper
+  // implementation in vNext — see SETTINGS_INTERNAL_KEYS above. Their descriptors are kept intact
+  // in HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS below (this is a hide, not a revert); the rendered
+  // registry must not carry them, or the completeness rule flags them as descriptors for keys that
+  // are no longer configurable. Re-expose in vNext by spreading that array in here and dropping the
+  // three keys from SETTINGS_INTERNAL_KEYS.
 
   // Editor
-  {
-    key: 'editor.openOnClick',
-    label: 'Open file into editor on',
-    description: 'Which file-tree click opens a file into the last active editor.',
-    group: 'Editor',
-    control: 'select',
-    allowedValues: ['single', 'double', 'none'],
-  },
+  //
+  // `editor.openOnClick` keeps its key but is grouped under File Explorer, above (C2).
   {
     key: 'editor.autoSave',
     label: 'Auto-save',
@@ -386,5 +379,70 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     min: 0,
     max: 1000,
     step: 10,
+  },
+];
+
+/**
+ * The three terminal-flavour descriptors, WITHHELD from {@link SETTINGS_METADATA} for v1.0.0
+ * pending #67's proper implementation in vNext (see {@link SETTINGS_INTERNAL_KEYS}).
+ *
+ * These are kept verbatim rather than deleted so vNext can re-expose the controls by simply
+ * spreading this array back into the rendered registry and dropping the three keys from
+ * SETTINGS_INTERNAL_KEYS — a hide, not a revert. They are NOT part of the rendered registry, so
+ * the completeness rule (FR-047) neither demands nor rejects them; that is the whole point of
+ * marking the keys internal. The underlying record/multiselect/map controls they drive (and the
+ * tolerant parser that reads the settings from a hand-edited settings.json) remain live.
+ */
+export const HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS: MetadataRegistry = [
+  {
+    key: 'terminals.flavours',
+    label: 'Custom terminal flavours',
+    description:
+      'User-defined shells shown in the Flavour dropdown (id, label, file, args, default params).',
+    group: 'Terminals',
+    // A structured RECORD table — one row per flavour, one cell per field (019, FR-018/#67).
+    //
+    // It was `control: 'array'` over items that are OBJECTS, so it fell to the JSON-textarea
+    // fallback: hand-editing raw JSON inside the visual editor, with no per-field validation. And
+    // the control FLIPPED WITH THE VALUE — an empty list rendered as a string-array editor whose
+    // Add appended `''`, which the tolerant parser then dropped. The mode is declared now.
+    control: 'records',
+    idKey: 'id',
+    itemNoun: 'flavour',
+    columns: [
+      { key: 'label', label: 'Label', control: 'text' },
+      { key: 'file', label: 'Executable', control: 'text' },
+      { key: 'args', label: 'Arguments', control: 'text' }, // string[] ↔ space-separated
+      { key: 'defaultParams', label: 'Default params', control: 'text' },
+    ],
+    clearable: true, // no custom flavours is a perfectly good answer — and it is what it ships as
+  },
+  {
+    key: 'terminals.disabledBuiltins',
+    label: 'Hidden built-in flavours',
+    description: 'Built-in flavour ids to hide from the Flavour dropdown.',
+    group: 'Terminals',
+    // A MULTI-SELECT over the built-ins this machine actually detected (019, FR-016/FR-017).
+    //
+    // It was `array` + `itemControl: 'text'`, which asked the user to free-type an id from a set
+    // the app detected at startup and already knows: typo it and the setting silently does nothing,
+    // because nothing is there to say the id is not real (007 FR-029). The options are DYNAMIC —
+    // see contracts/terminal-flavours-ipc.md; the catalogue is the DETECTED set, never the visible
+    // one, or hiding a built-in would be a one-way door.
+    control: 'multiselect',
+    clearable: true, // empty = hide nothing, which is also what it ships as
+  },
+  {
+    // The descriptor this setting has ALWAYS lacked (016, F5). It ships as an empty map, so it
+    // yielded zero leaves and slipped past the completeness rule — a JSON-only setting of exactly
+    // the kind the constitution forbids. The `map` control closes it rather than stepping around it.
+    key: 'terminals.defaultParams',
+    label: 'Default flavour parameters',
+    description:
+      'Extra arguments passed to a flavour every time it starts, keyed by flavour id (e.g. pwsh → -NoLogo).',
+    group: 'Terminals',
+    control: 'map',
+    columns: [{ label: 'Arguments', control: 'text' }],
+    clearable: true, // ships empty; empty means "pass nothing extra", a perfectly good answer
   },
 ];

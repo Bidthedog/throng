@@ -132,6 +132,23 @@
   line-height: 1;
 }
 
+/* Keep a MULTI-CHARACTER themed glyph on ONE line, in every theme.
+ *
+ * A token's glyph is not always a single character, and it can contain a space: `editJson` is the
+ * literal text "{ }". The <Icon> span that draws it is only `--throng-size-icon` (16px) wide and,
+ * since 018, sets its OWN font-size (16px) — so the 14px the button declares above never reaches
+ * the glyph. In the five themes whose ui font is MONOSPACE (Windows Terminal, Bash, VI-VIM, Matrix,
+ * Cyberpunk) the three fixed-width characters overflow that 16px box, and the default
+ * `white-space: normal` then breaks them at the space, stacking "{" over "}" — two lines. Every
+ * proportional-font theme keeps "{ }" narrow enough to fit, which is exactly why only those five
+ * wrapped. `nowrap` forbids the break for ALL themes; re-applying the toolbar's own 14px where it
+ * actually binds (the glyph span) trims the wider monospace glyph back inside the 26px button. This
+ * is a single app-side fix — no theme's icon set is touched. */
+.prefs-toolbtn--icon .icon {
+  font-size: 14px;
+  white-space: nowrap;
+}
+
 /* Feature 015: the per-item affordances (FR-015). Three actions — revert, reset, clear — AFTER
    the control, and all three are present at all times: one that does not currently apply is
    disabled and greyed, never removed. That is what holds the row still. An affordance that comes

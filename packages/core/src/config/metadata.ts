@@ -25,6 +25,20 @@ export type ControlKind =
   | 'folder' // editable path + browse-to-pick folder (011, shared folder-picker)
   | 'map' // keyed table: key column + typed value columns (016, F5)
   /*
+   * 019 / FR-018 — an ARRAY of records, each identified by a declared id field (`terminals.flavours`).
+   *
+   * It is a MODE of the keyed table, not a second table (FR-020): the rows are data with a declared
+   * shape, exactly as `map`'s are, and the only real difference is what identifies a row and that
+   * the order is the user's rather than alphabetical.
+   *
+   * Declared, NEVER inferred from the value. `control: 'array'` let the control type flip with the
+   * data — `[].every(…)` is vacuously true, so an EMPTY `terminals.flavours` rendered as a
+   * string-array control whose Add appended `''` (an empty STRING into an array of OBJECTS, which
+   * the tolerant parser then dropped), and one entry later it was a JSON textarea. A control the
+   * user cannot predict is a control they cannot learn.
+   */
+  | 'records'
+  /*
    * 018 / FR-032 — a bounded numeric, edited by DRAGGING as well as typing. Sizes, delays and
    * widths are far easier to set by dragging than by typing.
    *
@@ -87,6 +101,17 @@ export interface FieldDescriptor {
   /** `language` renders keys by their display name and offers a picker; `text` is free entry. */
   keyKind?: 'language' | 'text';
   /**
+   * `records` only — the property that IDENTIFIES a row (019, FR-018).
+   *
+   * Immutable once created (C13): a flavour id keys `terminals.defaultParams`, so renaming it in
+   * place would silently orphan the parameters keyed to it. To rename, delete and re-add.
+   */
+  idKey?: string;
+  /**
+   * `records` only — what one row IS ('flavour'). It labels the affordances and names the test ids.
+   */
+  itemNoun?: string;
+  /**
    * The contexts a keybinding command is live in (016, FR-017b0). Rendered in the Key Bindings
    * editor so a user seeing `Ctrl+X` on two rows can see WHY it is not a clash — and so the
    * conflict flow can tell a real collision from a scoped coexistence.
@@ -119,7 +144,14 @@ export function emptyValueFor(field: FieldDescriptor): unknown {
   // audit — which asks whether the empty value SURVIVES a round-trip — never sees the damage
   // (016, F6).
   if (field.control === 'map') return {};
-  return field.control === 'array' || field.control === 'multiselect' ? [] : '';
+  // …and a `records` field empties to an empty ARRAY, for the same reason one control-kind over
+  // (019, T036a): without this arm a clear writes `''` into an array-valued setting, the tolerant
+  // parser coerces it straight back to the fallback `[]`, and `auditClearable` — which asks only
+  // whether what comes back is empty — reports success while the document on disk is wrong. That
+  // is the "declaration that is a lie" the audit exists to catch, sailing past the audit.
+  return field.control === 'array' || field.control === 'multiselect' || field.control === 'records'
+    ? []
+    : '';
 }
 
 /** True when a field currently holds something a **clear** would remove (015, FR-016a). */

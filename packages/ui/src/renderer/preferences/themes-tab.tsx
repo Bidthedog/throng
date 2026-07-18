@@ -18,7 +18,7 @@ import {
   type Theme,
 } from '@throng/core';
 import { useActiveTheme, useAppSettings } from '../config/config-store.js';
-import { writeConfig, debounce } from '../config/write-config.js';
+import { writeConfig, scheduleWrite, debounce } from '../config/write-config.js';
 import { createApplyClient } from './apply-client.js';
 import { ThemeTokenControl } from './pickers.js';
 import { RowActions } from './row-actions.js';
@@ -287,24 +287,25 @@ export function ThemesTab(): ReactElement {
     themeRef.current = activeTheme;
   }, [activeTheme]);
 
-  // Debounced write so a colour drag's many change events coalesce into one atomic
-  // write (rather than flooding the file + watcher). The TARGET THEME NAME is captured
-  // when the edit is made, not when the debounce fires: activating another theme (or
-  // Clone, which activates the new theme) within the debounce window would otherwise
-  // land theme A's pending document in theme B's file.
-  const writeTheme = useMemo(
-    () =>
-      debounce((doc: { name: string; theme: Theme }) => {
-        void writeConfig({ kind: 'theme', name: doc.name }, JSON.stringify(doc.theme));
-      }, 150),
-    [],
-  );
-  useEffect(() => () => writeTheme.flush(), [writeTheme]);
-
-  /** Update the optimistic ref and schedule the (debounced) theme-file write. */
+  /**
+   * Update the optimistic ref and schedule the (debounced) theme-file write.
+   *
+   * Debounced so a colour drag's many change events coalesce into one atomic write (rather than
+   * flooding the file + watcher), and scheduled through the write MODULE (019 FR-010, C25) so a
+   * close can settle it — the flush this tab used to do on unmount never ran on the path that
+   * loses the edit, because a closing window is DESTROYED and unmounts nothing.
+   *
+   * The TARGET THEME NAME is still captured when the edit is made, not when the debounce fires:
+   * activating another theme (or Clone, which activates the new theme) within the debounce
+   * window would otherwise land theme A's pending document in theme B's file. That guarantee
+   * (018 FR-023) is now ENFORCED by the module's per-id keying rather than carried by a payload
+   * convention — theme A's pending write is keyed to A and B's to B, so neither displaces the
+   * other.
+   */
   const applyTheme = (next: Theme): void => {
     themeRef.current = next;
-    writeTheme({ name: activeNameRef.current, theme: next });
+    const name = activeNameRef.current;
+    scheduleWrite({ kind: 'theme', name }, () => JSON.stringify(next), 150);
   };
 
   /** Selecting from the dropdown activates that theme (select = activate, FR-035). */

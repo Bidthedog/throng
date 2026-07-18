@@ -42,7 +42,7 @@ import { DocumentIpcService } from './document-service.js';
 import { TerminalEvents } from './terminal-events.js';
 import { TerminalLockManager } from './terminal-lock-manager.js';
 import { TerminalService } from './terminal-service.js';
-import { PtyAgentHost } from './pty-agent-host.js';
+import { DEFAULT_AGENT_BUDGETS, PtyAgentHost } from './pty-agent-host.js';
 
 export { DAEMON_TYPES } from './tokens.js';
 
@@ -71,6 +71,11 @@ function readDaemonSettings(env: NodeJS.ProcessEnv): IDaemonSettings {
   return {
     pipeName: env.THRONG_PIPE_NAME ?? DEFAULT_PIPE_NAME,
     startupTimeoutMs: numberFromEnv(env.THRONG_STARTUP_TIMEOUT_MS, DEFAULT_STARTUP_TIMEOUT_MS),
+    agentConnectTimeoutMs: numberFromEnv(
+      env.THRONG_AGENT_CONNECT_TIMEOUT_MS,
+      DEFAULT_AGENT_BUDGETS.connectMs,
+    ),
+    agentReadyTimeoutMs: numberFromEnv(env.THRONG_AGENT_READY_TIMEOUT_MS, DEFAULT_AGENT_BUDGETS.readyMs),
   };
 }
 
@@ -139,13 +144,39 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
   const agentEntry = fileURLToPath(new URL('./pty-agent-entry.js', import.meta.url));
   const deElevatedLauncher = new WindowsDeElevatedLauncher();
   const agentPipe = `\\\\.\\pipe\\throng.ptyagent.${process.pid}.${randomUUID().slice(0, 8)}`;
-  const deElevatedPty = new PtyAgentHost(agentPipe, (pipe) => {
-    if (elevation.isElevated() && deElevatedLauncher.isAvailable()) {
-      deElevatedLauncher.launch(process.execPath, [agentEntry, pipe]);
-    } else {
-      spawn(process.execPath, [agentEntry, pipe], { stdio: 'ignore', windowsHide: true }).unref();
-    }
-  });
+  // `report` arrives as a PARAMETER of this callback rather than closing over
+  // `deElevatedPty`: the host's constructor invokes `launch` synchronously, before the
+  // const is assigned — a closure reference would be a temporal dead zone.
+  const daemonSettings = container.get<IDaemonSettings>(DAEMON_TYPES.DaemonSettings);
+  const deElevatedPty = new PtyAgentHost(
+    agentPipe,
+    (pipe, report) => {
+      if (elevation.isElevated() && deElevatedLauncher.isAvailable()) {
+        deElevatedLauncher.launch(process.execPath, [agentEntry, pipe], report);
+      } else {
+        // Already medium: a plain spawn. Its stderr is piped for the same reason the
+        // de-elevated shim's is — a launch that fails must be able to say why (FR-015).
+        const child = spawn(process.execPath, [agentEntry, pipe], {
+          stdio: ['ignore', 'ignore', 'pipe'],
+          windowsHide: true,
+        });
+        let stderr = '';
+        // Observe the failure without holding the daemon's loop open: the agent outlives
+        // this call by design. (Piped stderr is a net.Socket; the type is the narrower Readable.)
+        (child.stderr as unknown as { unref?(): void } | null)?.unref?.();
+        child.stderr?.setEncoding('utf8');
+        child.stderr?.on('data', (chunk: string) => {
+          stderr += chunk;
+        });
+        child.on('error', (error: Error) => report(error.message));
+        child.on('exit', (code) => {
+          if (code !== 0) report(stderr.trim() || `exit ${code}`);
+        });
+        child.unref();
+      }
+    },
+    { connectMs: daemonSettings.agentConnectTimeoutMs, readyMs: daemonSettings.agentReadyTimeoutMs },
+  );
   // Test hook: force EVERY terminal through the agent so its plumbing is verifiable
   // at medium integrity (THRONG_FORCE_PTY_AGENT=1).
   const forceAgent = env.THRONG_FORCE_PTY_AGENT === '1';

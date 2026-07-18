@@ -18,6 +18,7 @@ import {
 } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useActiveTheme, useKeybindings } from '../config/config-store.js';
+import { useContextMenu } from '../context-menu-provider.js';
 import { Icon } from '../common/icon.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
@@ -72,6 +73,7 @@ export function TerminalPanel({
 }): ReactElement {
   const ws = useWorkspace();
   const theme = useActiveTheme();
+  const { openMenu } = useContextMenu();
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   // Non-fatal "still starting" state (008 FR-005): set when an attach exceeds its budget,
   // cleared when an attach resolves running. `attempt` is bumped by the retry control to
@@ -124,19 +126,49 @@ export function TerminalPanel({
   const effectiveFontSize = Math.round(font.size * zoomFactor(panelZoomLevel(panel)));
   const apiRef = useRef<TerminalApi | null>(null);
 
-  // Right-click → the native (Electron) Copy / Paste menu, instead of the app's
-  // Panel context menu. Copy uses the xterm selection; Paste writes the clipboard
-  // to the live shell (handled in UI main).
+  // Right-click → the app's THEMED context menu (the shared ContextMenu), so the
+  // terminal's menu matches every other menu in throng rather than the OS-native
+  // Electron menu it used to pop (unstyled, ignoring the theme entirely). The two
+  // actions are unchanged: Copy writes the xterm selection to the OS clipboard;
+  // Paste writes the clipboard into the live shell. Both go through the renderer
+  // seams (terminal.writeClipboard / clipboard.paste + terminal.write) that already
+  // exist, so no native menu is needed.
   const onContextMenu = useCallback(
     (e: ReactMouseEvent): void => {
       e.preventDefault();
       e.stopPropagation();
-      void window.throng?.terminal?.contextMenu?.({
-        panelId: panel.id,
-        selection: apiRef.current?.getSelection() ?? '',
-      });
+      // Capture the selection at open time — the menu items act on what was selected
+      // when the user right-clicked.
+      const selection = apiRef.current?.getSelection() ?? '';
+      openMenu(e.clientX, e.clientY, [
+        {
+          label: 'Copy',
+          icon: 'copy',
+          disabled: selection.length === 0,
+          onClick: () => {
+            void window.throng?.terminal?.writeClipboard?.(selection);
+          },
+        },
+        {
+          label: 'Paste',
+          icon: 'paste',
+          onClick: () => {
+            void (async () => {
+              const entry = await window.throng?.clipboard?.paste();
+              const text = entry?.text ?? '';
+              if (text.length === 0) return;
+              await window.throng?.terminal?.write?.(panel.id, text);
+              apiRef.current?.focus();
+            })().catch((error: unknown) => {
+              // A paste that fails silently looks exactly like a paste of nothing, and the
+              // user tries again and concludes the terminal is broken.
+              console.error('[terminal] paste from the context menu failed', error);
+            });
+          },
+        },
+      ]);
     },
-    [panel.id],
+    [openMenu, panel.id],
   );
 
   useEffect(() => {

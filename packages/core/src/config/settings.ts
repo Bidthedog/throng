@@ -18,6 +18,13 @@ export interface IDaemonSettings {
   pipeName: string;
   /** Maximum time, in milliseconds, the daemon may take to become ready. */
   startupTimeoutMs: number;
+  /** Time, in milliseconds, the de-elevated PTY agent has to connect before the launch is
+   *  declared failed (019 FR-012). */
+  agentConnectTimeoutMs: number;
+  /** Time, in milliseconds, from connect for a started terminal to ack `started` (019 FR-013).
+   *  Separate from the connect budget so a slow connect does not consume the readiness
+   *  allowance (C7) — worst case 30s. */
+  agentReadyTimeoutMs: number;
 }
 
 /** UI main-process configuration (consumed by `ui`). */
@@ -40,6 +47,16 @@ export interface IUiSettings {
    * an error, and never terminates the running session (008 FR-005).
    */
   attachTimeoutMs: number;
+  /**
+   * Maximum time, in milliseconds, to await every window's shutdown drain before closing
+   * anyway (019 FR-010).
+   *
+   * A **BACKSTOP for an unresponsive window, never the mechanism**: the close waits on the
+   * renderer's drain ACK, not on this clock. Issue #86 was a close racing a debounce on a
+   * timer, and widening a timer is that same accident wearing a bigger coat (FR-011) — so
+   * this budget exists only so a wedged renderer cannot hold the app open forever.
+   */
+  shutdownDrainTimeoutMs: number;
 }
 
 /**
