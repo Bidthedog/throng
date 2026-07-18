@@ -46,11 +46,41 @@ export function isElevated(): boolean {
  * respawns an elevated daemon (FR-025b) that routes terminals through the
  * de-elevated agent (FR-025c) — a different process tree those assertions don't
  * hold for. Rather than fail spuriously on an elevated dev machine, skip; the
- * elevated path has its own `@admin` coverage, and CI runs non-elevated so these
- * still execute there. Call at the top of the test body.
+ * elevated path has its own `@admin` coverage.
+ *
+ * Where these actually execute: a **developer's non-elevated run**. NOT in CI — GitHub's
+ * Windows runners run as administrator, so every `skipIfElevated()` spec self-skips there
+ * (019 FR-013a). This docblock used to claim the opposite ("CI runs non-elevated so these
+ * still execute there"), which is why the gap went unnoticed for so long. Treat a green CI
+ * as saying nothing about these specs. Call at the top of the test body.
  */
 export function skipIfElevated(): void {
   test.skip(isElevated(), 'assumes a non-elevated (normal-integrity) daemon; the elevated / de-elevation path is covered by @admin tests');
+}
+
+/** Running on a headless CI runner (GitHub Actions). No interactive desktop. */
+function isHeadlessCi(): boolean {
+  return process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+}
+
+/**
+ * Skip an `@admin` test that needs REAL de-elevation — a terminal launched without run-as-admin
+ * coming up at MEDIUM integrity (FR-024/FR-025c). Dropping integrity from an elevated process
+ * requires an interactive elevated desktop's shell token; GitHub's Windows runners are elevated
+ * but HEADLESS, so de-elevation there falls back to running elevated and the "must run as User"
+ * assertion cannot hold. That is an environment limit, not a product defect — the behaviour is
+ * verified locally via `npm run test:e2e:admin` on a real elevated desktop.
+ *
+ * The no-hang property #94 turns on (`terminal-de-elevation-hang.e2e.ts`) does NOT need this: it
+ * accepts a prompt OR a visible error, both reachable on a headless runner, so it stays in the CI
+ * `@admin` gate (019 FR-013a / SC-008) and keeps `executed >= 1` there. Call after `runApp` opens
+ * the window, once we know the process is elevated.
+ */
+export function skipWithoutInteractiveDesktop(): void {
+  test.skip(
+    isHeadlessCi(),
+    'de-elevation drops integrity only with an interactive elevated desktop; CI runners are headless — run locally via `npm run test:e2e:admin`',
+  );
 }
 
 /**

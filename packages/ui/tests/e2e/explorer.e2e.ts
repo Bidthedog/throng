@@ -13,6 +13,14 @@ const realErrors = (errors: string[]): string[] =>
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runApp, createProject } from './harness.js';
+import type { Locator } from '@playwright/test';
+
+/**
+ * Toggle a folder's expansion via its CHEVRON (#121) — the folder NAME only
+ * selects now, so expansion is driven exclusively by the twisty control.
+ */
+const toggleFolder = (tree: Locator, relPath: string): Promise<void> =>
+  tree.getByTestId(`tree-twisty-${relPath}`).click();
 
 /** Build a known project folder structure on disk. Returns its absolute path. */
 function makeProjectFolder(): string {
@@ -51,8 +59,9 @@ test('renders the active project tree: sorted, excludes hidden, lazy expand', as
       // Subfolders start collapsed.
       await expect(tree.getByText('index.ts', { exact: true })).toHaveCount(0);
 
-      // Click the folder → it expands and its children appear (lazy load).
-      await tree.getByText('src', { exact: true }).click();
+      // Click the folder's chevron → it expands and its children appear (lazy
+      // load). The NAME only selects now (#121); the chevron is the toggle.
+      await toggleFolder(tree, 'src');
       await expect(tree.getByText('index.ts', { exact: true })).toBeVisible();
       await expect(tree.getByText('inner', { exact: true })).toBeVisible();
 
@@ -131,8 +140,8 @@ test('reflects external filesystem changes live, preserving expansion (US2)', as
       const tree = win.getByTestId('file-explorer-tree');
       await expect(tree).toBeVisible();
 
-      // Expand `src` so its directory is loaded + visible.
-      await tree.getByText('src', { exact: true }).click();
+      // Expand `src` (via its chevron, #121) so its directory is loaded + visible.
+      await toggleFolder(tree, 'src');
       await expect(tree.getByText('index.ts', { exact: true })).toBeVisible();
 
       // External create inside the expanded folder → appears live, no refresh.
@@ -184,7 +193,7 @@ test('file operations via context menu + toolbar (US3): delete, new folder, cut/
       await menuItem('Cut').click();
       await tree.getByText('assets', { exact: true }).click({ button: 'right' });
       await menuItem('Paste').click();
-      await tree.getByText('assets', { exact: true }).click(); // expand
+      await toggleFolder(tree, 'assets'); // expand via the chevron (#121)
       // Exactly one README.md remains (under assets) — it MOVED, not copied. The
       // count retries while the watcher re-reads the root and drops the stale row.
       await expect(tree.locator('.tree-label', { hasText: 'README.md' })).toHaveCount(1);
@@ -383,10 +392,13 @@ test('New folder in a collapsed folder expands it and overwrites the selected na
       const tree = win.getByTestId('file-explorer-tree');
       await expect(tree).toBeVisible();
 
-      // Select `src` then collapse it again (still selected, now minimised).
-      await tree.getByText('src', { exact: true }).click(); // expand + select
+      // Select `src` (name click, #121) then expand + collapse it via its chevron,
+      // leaving it selected but minimised.
+      await tree.getByText('src', { exact: true }).click(); // select
+      await expect(tree.locator('.tree-row--selected', { hasText: 'src' })).toBeVisible();
+      await toggleFolder(tree, 'src'); // expand
       await expect(tree.getByText('index.ts', { exact: true })).toBeVisible();
-      await tree.getByText('src', { exact: true }).click(); // collapse
+      await toggleFolder(tree, 'src'); // collapse
       await expect(tree.getByText('index.ts', { exact: true })).toHaveCount(0);
 
       // New folder → src expands and the new folder is in rename mode.
@@ -439,7 +451,7 @@ const installOpenListener = (win: import('@playwright/test').Page): Promise<void
 const openCount = (win: import('@playwright/test').Page): Promise<number> =>
   win.evaluate(() => ((globalThis as Record<string, unknown>).__opens as unknown[]).length);
 
-test('single-click opens a file (default); a folder click toggles, never opens (US4)', async () => {
+test('single-click opens a file (default); the chevron toggles a folder and the name selects, never opening (US4)', async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -456,9 +468,11 @@ test('single-click opens a file (default); a folder click toggles, never opens (
       );
       expect(opens[0].relPath).toBe('a.txt');
 
-      // Clicking a folder toggles it and raises NO open intent.
-      await tree.getByText('src', { exact: true }).click();
+      // A folder never opens into an editor (#121): the chevron toggles it, and
+      // clicking the name only selects — neither raises an open intent.
+      await toggleFolder(tree, 'src');
       await expect(tree.getByText('index.ts', { exact: true })).toBeVisible();
+      await tree.getByText('src', { exact: true }).click(); // name → selects only
       await win.waitForTimeout(150);
       expect(await openCount(win)).toBe(1);
     });
@@ -513,7 +527,7 @@ test('a large folder stays responsive — virtualised rows (polish T061)', async
       const tree = win.getByTestId('file-explorer-tree');
       await expect(tree).toBeVisible();
 
-      await tree.getByText('big', { exact: true }).click(); // expand 800 entries
+      await toggleFolder(tree, 'big'); // expand 800 entries via the chevron (#121)
       await expect(tree.getByText('f-0000.txt', { exact: true })).toBeVisible();
 
       // Virtualised: only a small window of rows is in the DOM, not all 800.
@@ -550,8 +564,8 @@ test('remembers expansion + selection per project; root is selectable', async ()
       const tree = win.getByTestId('file-explorer-tree');
       await expect(tree).toBeVisible();
 
-      // Expand `src` and select README.md in Alpha.
-      await tree.getByText('src', { exact: true }).click();
+      // Expand `src` (via its chevron, #121) and select README.md in Alpha.
+      await toggleFolder(tree, 'src');
       await expect(tree.getByText('index.ts', { exact: true })).toBeVisible();
       await tree.getByText('README.md', { exact: true }).click();
       await expect(tree.locator('.tree-row--selected', { hasText: 'README.md' })).toBeVisible();

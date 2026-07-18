@@ -384,6 +384,46 @@ test('US3: Clone is the sole creation path — prefilled "<source> - Clone" with
   );
 });
 
+test('the mode-toggle glyph stays on ONE line in every monospace-font theme (regression: two-line wrap)', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openThemes(app, win);
+      await waitForSeededList(prefs);
+
+      // The `editJson` token's glyph is the literal text "{ }" — three characters with a SPACE in
+      // the middle. The five bundled themes below are the ones whose ui font is MONOSPACE: their
+      // fixed-width "{ }" overflows the 16px icon box, and the browser's default line-breaking then
+      // splits it at the space, stacking "{" over "}". Every other theme uses a proportional font
+      // that keeps "{ }" narrow enough to fit, which is exactly why only these five wrapped — so
+      // this is the exhaustive at-risk set. The app-side fix (white-space: nowrap on the glyph)
+      // must hold it to a single line in ALL of them without any theme file being touched.
+      const monoThemes = ['Windows Terminal', 'Bash', 'VI-VIM', 'Matrix', 'Cyberpunk'];
+      const glyph = prefs.getByTestId('prefs-mode-toggle').locator('.icon');
+      await expect(glyph).toBeVisible();
+
+      for (const theme of monoThemes) {
+        // Selecting activates the theme; the prefs window repaints live from it, so the glyph is
+        // now rendered in this theme's monospace font.
+        await pickTheme(prefs, theme);
+
+        // The contract that prevents the wrap — deterministic, font-metric-independent, and it
+        // FAILS on the pre-fix code (whose glyph inherited the default `white-space: normal`).
+        await expect(glyph).toHaveCSS('white-space', 'nowrap');
+
+        // ...and the behaviour it buys: the glyph text occupies a single line box, never two.
+        const lineBoxes = await glyph.evaluate((el) => {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          return range.getClientRects().length;
+        });
+        expect(lineBoxes, `mode-toggle glyph occupied ${lineBoxes} line boxes in the "${theme}" theme`).toBe(1);
+      }
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
+
 test('US3: a DELETED built-in name is still reserved for a new theme (FR-007)', async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(

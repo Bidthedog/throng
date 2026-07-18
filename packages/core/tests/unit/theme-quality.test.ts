@@ -12,9 +12,12 @@ import {
   CLOSEST_LEGITIMATE_PAIR_DELTA,
   measureContrast,
   assertInScopeContrast,
+  assertSyntaxBodyContrast,
   knownContrastIssues,
   CONTRAST_PAIRINGS,
   IN_SCOPE_THEMES,
+  BY_DESIGN_LOW_CONTRAST_THEMES,
+  SYNTAX_BODY_MIN,
 } from '../../src/config/theme-quality.js';
 import { ALL_DEFAULT_THEMES } from '../../src/config/default-themes/index.js';
 import { THRONG_THEME, type Theme } from '../../src/config/theme.js';
@@ -93,6 +96,40 @@ describe('contrast (WCAG 2.1 AA over enumerated pairings)', () => {
         expect(r.pass, `${name}: ${r.label} = ${r.ratio.toFixed(2)} (needs ${r.min})`).toBe(true);
       }
     }
+  });
+
+  // 019 / #83: the syntax hues on the editor BODY — a pairing set of their own, hard-gated across
+  // every bundled theme bar the by-design carve-out, so it neither touches nor blocks on the
+  // IN_SCOPE_THEMES scope the pairings above are governed by.
+  it('every bundled theme passes the syntax-on-editor-body gate', () => {
+    expect(() => assertSyntaxBodyContrast(themes)).not.toThrow();
+  });
+
+  it('throws for a gated theme whose syntax hue is illegible on its editor body', () => {
+    const muddy: Theme = {
+      ...ALL_DEFAULT_THEMES.Light,
+      name: 'Light',
+      colours: { ...ALL_DEFAULT_THEMES.Light.colours, syntaxComment: '#fdfdfd', editorBg: '#ffffff' },
+    };
+    expect(() => assertSyntaxBodyContrast([muddy])).toThrow(/Light.*syntaxComment/);
+  });
+
+  it('leaves the by-design low-contrast themes ungated', () => {
+    for (const name of BY_DESIGN_LOW_CONTRAST_THEMES) {
+      const dim: Theme = {
+        ...ALL_DEFAULT_THEMES[name],
+        name,
+        colours: { ...ALL_DEFAULT_THEMES[name].colours, syntaxComment: '#0b0b0b', editorBg: '#000000' },
+      };
+      expect(() => assertSyntaxBodyContrast([dim]), name).not.toThrow();
+    }
+  });
+
+  it('gates the syntax body pairings above the WCAG AA body floor', () => {
+    for (const p of CONTRAST_PAIRINGS.filter((x) => x.bg === 'editorBg' && x.fg.startsWith('syntax'))) {
+      expect(p.min, p.label).toBe(SYNTAX_BODY_MIN);
+    }
+    expect(SYNTAX_BODY_MIN).toBeGreaterThanOrEqual(4.5);
   });
 
   it('throws for an in-scope theme with a deliberately low-contrast pairing', () => {

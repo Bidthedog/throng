@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   SETTINGS_METADATA,
   SETTINGS_INTERNAL_KEYS,
+  HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS,
   settingsLeaves,
 } from '../../src/config/settings-metadata.js';
 import {
@@ -59,7 +60,7 @@ describe('SETTINGS_METADATA control types (FR-028/029)', () => {
     expect(confirm?.control).toBe('select');
     expect(confirm?.allowedValues).toEqual(['none', 'single', 'double']);
 
-    expect(byKey.get('explorer.openMode')?.allowedValues).toEqual(['single', 'double']);
+    expect(byKey.get('editor.openOnClick')?.allowedValues).toEqual(['single', 'double', 'none']);
     expect(byKey.get('explorer.deleteMode')?.allowedValues).toEqual(['recycle', 'permanent']);
     expect(byKey.get('explorer.dragCopyModifier')?.allowedValues).toEqual(['ctrl', 'shift', 'alt']);
     expect(byKey.get('editor.saveAllScope')?.allowedValues).toEqual(['tab', 'project', 'all']);
@@ -83,7 +84,9 @@ describe('SETTINGS_METADATA control types (FR-028/029)', () => {
     expect(byKey.get('editor.maxOpenFileBytes')?.control).toBe('slider');
     // string arrays → array
     expect(byKey.get('explorer.excludeGlobs')?.control).toBe('array');
-    expect(byKey.get('terminals.disabledBuiltins')?.control).toBe('array');
+    // The three terminal-flavour controls are HIDDEN for v1.0.0 (see the dedicated block below):
+    // they are no longer in the rendered registry, so `byKey` does not carry them. Their control
+    // shapes are asserted against HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS instead.
   });
 
   it('groups every descriptor into a labelled section', () => {
@@ -92,6 +95,38 @@ describe('SETTINGS_METADATA control types (FR-028/029)', () => {
       expect(d.label.length, d.key).toBeGreaterThan(0);
       expect(d.description.length, d.key).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('terminal-flavour controls are HIDDEN for v1.0.0 (#67 → vNext)', () => {
+  const rendered = new Map(SETTINGS_METADATA.map((d) => [d.key, d]));
+  const hidden = new Map(HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS.map((d) => [d.key, d]));
+  const HIDDEN_KEYS = [
+    'terminals.flavours',
+    'terminals.disabledBuiltins',
+    'terminals.defaultParams',
+  ] as const;
+
+  it('classifies all three as internal, so they are not in the configurable set', () => {
+    for (const key of HIDDEN_KEYS) {
+      expect(SETTINGS_INTERNAL_KEYS, key).toContain(key);
+      expect(settingsLeaves(), key).not.toContain(key);
+    }
+  });
+
+  it('does not render them: no descriptor in the rendered SETTINGS_METADATA', () => {
+    for (const key of HIDDEN_KEYS) {
+      expect(rendered.has(key), key).toBe(false);
+    }
+  });
+
+  it('keeps their descriptors intact for vNext re-exposure (a hide, not a revert)', () => {
+    // The controls are withheld, not deleted — vNext re-exposes them by spreading this array back
+    // into SETTINGS_METADATA. Assert the shapes survive so a stray deletion is caught here.
+    expect(hidden.get('terminals.flavours')?.control).toBe('records');
+    expect(hidden.get('terminals.flavours')?.idKey).toBe('id');
+    expect(hidden.get('terminals.disabledBuiltins')?.control).toBe('multiselect');
+    expect(hidden.get('terminals.defaultParams')?.control).toBe('map');
   });
 });
 

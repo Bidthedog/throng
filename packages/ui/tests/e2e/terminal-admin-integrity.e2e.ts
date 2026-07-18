@@ -4,7 +4,7 @@ import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { runApp, createProject, firstPanelId } from './harness.js';
-import { adminTest } from './admin.js';
+import { adminTest, skipWithoutInteractiveDesktop } from './admin.js';
 
 // FR-025c (mixed mode): with an ELEVATED daemon, a Terminal confirmed WITHOUT
 // "run as admin" MUST run **de-elevated** (medium integrity / "User"); one confirmed
@@ -109,6 +109,8 @@ async function confirmProbeExit(
 }
 
 adminTest('cmd & PowerShell honour the run-as-admin flag (integrity matrix, FR-025c)', async () => {
+  // De-elevation needs an interactive elevated desktop; headless CI runners can't drop integrity.
+  skipWithoutInteractiveDesktop();
   const root = mkdtempSync(join(tmpdir(), 'throng-admin-int-'));
   try {
     await runApp(async (_app, win) => {
@@ -141,6 +143,8 @@ adminTest('cmd & PowerShell honour the run-as-admin flag (integrity matrix, FR-0
 });
 
 adminTest('git bash launches and honours the run-as-admin flag (FR-024/FR-025c)', async () => {
+  // De-elevation needs an interactive elevated desktop; headless CI runners can't drop integrity.
+  skipWithoutInteractiveDesktop();
   const root = mkdtempSync(join(tmpdir(), 'throng-admin-gitbash-'));
   try {
     await runApp(async (_app, win) => {

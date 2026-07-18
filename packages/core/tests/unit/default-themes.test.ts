@@ -80,6 +80,7 @@ import {
   relativeLuminance,
   assertDistinct,
   assertInScopeContrast,
+  assertSyntaxBodyContrast,
 } from '../../src/config/theme-quality.js';
 
 /** HSL hue (degrees) of a hex colour; NaN for greys. */
@@ -181,6 +182,11 @@ describe('theme-quality guards hold for the shipped set (009, US6)', () => {
   });
   it('Bash, SUBNET and Cyberpunk pass WCAG 2.1 AA contrast', () => {
     expect(() => assertInScopeContrast(themes)).not.toThrow();
+  });
+  // 019/#83: the syntax hues on the editor body are gated across every shipped theme bar the
+  // by-design carve-out — a different pairing set from the one IN_SCOPE_THEMES governs.
+  it('every shipped theme renders code legibly on its own editor body', () => {
+    expect(() => assertSyntaxBodyContrast(themes)).not.toThrow();
   });
   it('ships the dismiss icon token distinct from destroy (009 addition)', () => {
     for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
