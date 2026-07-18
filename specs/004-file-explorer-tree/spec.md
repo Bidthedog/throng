@@ -381,7 +381,11 @@ observable on its own).
 - **FR-027**: The trigger for "open" MUST be a **settings toggle** between **single click**
   (default) and **double click**, hot-reloaded like other settings; in double-click mode a single
   click only selects.
-- **FR-028**: Clicking a **folder** MUST toggle its expansion and MUST NOT raise an open-file intent.
+- **FR-028** *(SUPERSEDED by feature 019, #121 — see `specs/019-v1-bug-sweep/spec.md` FR-032)*:
+  ~~Clicking a **folder** MUST toggle its expansion~~ and MUST NOT raise an open-file intent.
+  **Superseded for the toggle half:** as of feature 019 (#121) only the folder **chevron** toggles
+  expansion — clicking the folder **name** or **glyph** selects only. The "MUST NOT raise an open-file
+  intent" half is unchanged and still holds.
 
 **Architecture & seams** (constitutional)
 
