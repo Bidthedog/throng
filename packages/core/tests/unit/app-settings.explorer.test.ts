@@ -2,9 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { DEFAULT_APP_SETTINGS, parseAppSettings, DEFAULT_EXCLUDE_GLOBS } from '@throng/core';
 
 describe('AppSettings explorer section (004 T004/T005)', () => {
-  it('defaults to single open, recycle delete, and the VS Code exclude list', () => {
+  it('defaults to recycle delete and the VS Code exclude list', () => {
     const e = DEFAULT_APP_SETTINGS.explorer;
-    expect(e.openMode).toBe('single');
     expect(e.deleteMode).toBe('recycle');
     expect(e.excludeGlobs).toEqual([...DEFAULT_EXCLUDE_GLOBS]);
   });
@@ -14,15 +13,13 @@ describe('AppSettings explorer section (004 T004/T005)', () => {
     expect(s.explorer).toEqual(DEFAULT_APP_SETTINGS.explorer);
   });
 
-  it('coerces invalid open/delete modes back to defaults', () => {
-    const s = parseAppSettings({ explorer: { openMode: 'triple', deleteMode: 'nuke' } });
-    expect(s.explorer.openMode).toBe('single');
+  it('coerces an invalid delete mode back to the default', () => {
+    const s = parseAppSettings({ explorer: { deleteMode: 'nuke' } });
     expect(s.explorer.deleteMode).toBe('recycle');
   });
 
-  it('accepts a custom open/delete mode', () => {
-    const s = parseAppSettings({ explorer: { openMode: 'double', deleteMode: 'permanent' } });
-    expect(s.explorer.openMode).toBe('double');
+  it('accepts a custom delete mode', () => {
+    const s = parseAppSettings({ explorer: { deleteMode: 'permanent' } });
     expect(s.explorer.deleteMode).toBe('permanent');
   });
 

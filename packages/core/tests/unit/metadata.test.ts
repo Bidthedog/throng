@@ -6,6 +6,8 @@ import {
   assertEveryKeyDescribed,
   getAtPath,
   setAtPath,
+  emptyValueFor,
+  isEmptyValue,
   type FieldDescriptor,
   type MetadataRegistry,
 } from '../../src/config/metadata.js';
@@ -41,7 +43,7 @@ describe('leavesOf', () => {
     expect(leaves).toContain('confirmations.destroyProject');
     expect(leaves).toContain('panes.projects.maxWidth');
     expect(leaves).toContain('behaviour.tabHoverActivateMs');
-    expect(leaves).toContain('explorer.openMode');
+    expect(leaves).toContain('explorer.deleteMode');
     expect(leaves).toContain('explorer.excludeGlobs'); // array leaf, not descended
     expect(leaves).toContain('terminals.flavours'); // array leaf
     expect(leaves).toContain('editor.autoSave');
@@ -136,5 +138,34 @@ describe('assertEveryKeyDescribed', () => {
   it('throws on an unknown descriptor', () => {
     const reg: MetadataRegistry = [descriptor('a.b'), descriptor('c'), descriptor('zzz')];
     expect(() => assertEveryKeyDescribed(keys, reg)).toThrow(/zzz/);
+  });
+});
+
+/**
+ * 019 / US4 — a `records` field empties to an ARRAY (T036a).
+ *
+ * This is 016's F6 bug about to be re-created by the fix for it. `emptyValueFor` special-cases
+ * `map → {}` and `array`/`multiselect` → `[]`, and EVERYTHING ELSE falls through to `''` — so a
+ * `records` field's clear affordance would write `""` into an array-valued setting.
+ *
+ * `auditClearable` cannot see it: `parseTerminals` coerces `''` back to the fallback `[]`,
+ * `isEmptyValue` sees an empty array and reports success. The audit passes while the document is
+ * wrong — the "declaration that is a lie" the audit exists to prevent, sailing straight past it.
+ */
+describe('emptyValueFor a records field (019, US4)', () => {
+  const recordsField: FieldDescriptor = descriptor('terminals.flavours', {
+    control: 'records',
+    idKey: 'id',
+    itemNoun: 'flavour',
+    clearable: true,
+  });
+
+  it('empties to [] — never to the empty STRING an array-valued setting cannot hold', () => {
+    expect(emptyValueFor(recordsField)).toEqual([]);
+  });
+
+  it('needs no new isEmptyValue arm — the Array.isArray branch already covers it', () => {
+    expect(isEmptyValue(recordsField, [])).toBe(true);
+    expect(isEmptyValue(recordsField, [{ id: 'my-wsl' }])).toBe(false);
   });
 });

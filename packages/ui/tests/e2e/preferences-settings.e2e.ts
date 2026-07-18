@@ -232,6 +232,90 @@ test('the settings search is debounced and has a reset (X) button (FR-049)', asy
   );
 });
 
+/**
+ * 019 US5 / #95 (C1, C2, FR-021/FR-023/FR-024): open-on-click has exactly one owner,
+ * and it lives where users look for it.
+ *
+ * The pure guard (`packages/core/tests/unit/settings-open-on-click-single-owner.test.ts`)
+ * can see that only one claimant is DECLARED; it cannot see DISCOVERABILITY, which is the
+ * whole of C2 — the surviving control keeps the key `editor.openOnClick` (no rename, no
+ * migration of a setting that works) and moves to the File Explorer group, where the inert
+ * `explorer.openMode` used to sit.
+ */
+test('open-on-click is one control, in the File Explorer group, offering none (#95, C2)', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openSettings(app, win);
+
+      // The surviving control sits in File Explorer — where the inert one used to be —
+      // labelled "Open files with", the label the user already knew.
+      const row = prefs.getByTestId('setting-editor.openOnClick');
+      await expect(row).toBeVisible();
+      await expect(row.locator('.settings-row__label')).toHaveText('Open files with');
+      await expect(
+        prefs.getByTestId('settings-group-File Explorer').getByTestId('setting-editor.openOnClick'),
+      ).toHaveCount(1);
+
+      // FR-021: no SECOND control claims the job — anywhere in Preferences.
+      await expect(prefs.getByTestId('setting-explorer.openMode')).toHaveCount(0);
+      await expect(prefs.getByTestId('control-explorer.openMode')).toHaveCount(0);
+
+      // FR-024 / C2: `none` is retained by the survivor and becomes visible for the
+      // first time — the inert control never offered it.
+      const control = prefs.getByTestId('control-editor.openOnClick');
+      await expect(control.locator('option[value="none"]')).toHaveCount(1);
+      await expect(control.locator('option[value="single"]')).toHaveCount(1);
+      await expect(control.locator('option[value="double"]')).toHaveCount(1);
+
+      // …and it still works where it always did.
+      await control.selectOption('none');
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.openOnClick).toBe('none');
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
+
+test('a hand-written explorer.openMode changes nothing, warns nothing, and is stripped (#95, C1)', async () => {
+  const cfgRoot = freshCfgRoot();
+  // A user who set the inert control before the fix. FR-023: it is DROPPED, not migrated —
+  // it never had any effect, so dropping preserves exactly the behaviour they have today
+  // (single click), while migrating would change it.
+  writeFileSync(
+    join(cfgRoot, 'settings.json'),
+    JSON.stringify({ version: 1, explorer: { openMode: 'double', deleteMode: 'permanent' } }),
+    'utf8',
+  );
+  await runApp(
+    async (app, win) => {
+      const warnings: string[] = [];
+      const prefs = await openSettings(app, win);
+      prefs.on('console', (m) => {
+        if (m.type() === 'warning' || m.type() === 'error') warnings.push(m.text());
+      });
+
+      // Changes nothing: the working setting keeps its default (single), untouched by a
+      // stale key that claimed to mean 'double'.
+      await expect(prefs.getByTestId('control-editor.openOnClick')).toHaveValue('single');
+      // …while the neighbours in the same file are honoured as always.
+      await expect(prefs.getByTestId('control-explorer.deleteMode')).toHaveValue('permanent');
+
+      // Warns nothing: an unknown key is ignored in silence, as the tolerant parse
+      // already does for every other unknown key.
+      await expect(prefs.getByTestId('settings-tab')).toBeVisible();
+      expect(warnings.filter((w) => /openMode/i.test(w))).toEqual([]);
+
+      // Stripped on the next write: no migration step, no rewrite pass — the key simply
+      // does not survive a parse, so the first ordinary write drops it.
+      await prefs.getByTestId('control-editor.openOnClick').selectOption('double');
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.openOnClick).toBe('double');
+      expect(readSettings(cfgRoot)?.explorer?.openMode).toBeUndefined();
+      expect(readSettings(cfgRoot)?.explorer?.deleteMode).toBe('permanent');
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
+
 test('an invalid number is not applied and is surfaced; last valid value stays', async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(

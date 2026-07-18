@@ -120,3 +120,85 @@ test('an OSC 52 sequence from inside the terminal writes to the system clipboard
     }
   }
 });
+
+// The terminal's right-click menu is the app's OWN themed ContextMenu (data-testid
+// `context-menu`), not the OS-native Electron menu it used to pop. Playwright cannot
+// even see a native OS menu, so its testid appearing is itself the proof the styling
+// bug is fixed — the menu is now a DOM element drawn from the theme like every other
+// menu. We also drive Paste end-to-end (clipboard → terminal.write) to prove the two
+// actions survived the move off the native menu.
+test('right-clicking the terminal opens the themed in-app menu, and Paste works', async () => {
+  skipIfElevated();
+  const PASTE = 'throngPasteToken99';
+  const pipe = `\\\\.\\pipe\\throng-clipmenu-${process.pid}-${Date.now()}`;
+  const dataDir = mkdtempSync(join(tmpdir(), 'clipmenu-data-'));
+  const cfg = mkdtempSync(join(tmpdir(), 'clipmenu-cfg-'));
+  const userData = mkdtempSync(join(tmpdir(), 'clipmenu-ud-'));
+  const root = mkdtempSync(join(tmpdir(), 'clipmenu-root-'));
+
+  const daemon = spawn(process.execPath, [daemonEntry], {
+    env: { ...process.env, THRONG_PIPE_NAME: pipe, THRONG_DATABASE_PATH: join(dataDir, 'throng.db') },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  await new Promise<void>((res) => daemon.stdout!.on('data', (c: string) => c.includes('listening') && res()));
+
+  let app: ElectronApplication | undefined;
+  try {
+    app = await electron.launch({
+      args: [mainEntry, `--user-data-dir=${userData}`],
+      env: { ...process.env, THRONG_PIPE_NAME: pipe, THRONG_CONFIG_ROOT: cfg },
+    });
+    const win = await app.firstWindow();
+    await app.evaluate(({ dialog }) => {
+      dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });
+    });
+
+    await win.getByTestId('project-new').click();
+    await win.getByTestId('project-root-input').fill(root);
+    await win.getByTestId('project-name-input').fill('ClipMenu');
+    await win.getByTestId('project-save').click();
+    const pid = await win
+      .locator('.panel-box')
+      .first()
+      .evaluate((el) => (el as HTMLElement).dataset.panelId ?? '');
+    await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
+    await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
+    await win.getByTestId(`panel-type-confirm-${pid}`).click();
+    await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: 20000 });
+
+    // Right-click the terminal body → the app's themed menu, with Copy and Paste.
+    await win.getByTestId(`terminal-${pid}`).click({ button: 'right' });
+    await expect(win.getByTestId('context-menu')).toHaveCount(1);
+    await expect(win.getByTestId('menu-item-Copy')).toBeVisible();
+    await expect(win.getByTestId('menu-item-Paste')).toBeVisible();
+
+    // Seed the clipboard (in E2E this is the in-process seam), then Paste. The token is
+    // typed into the shell via terminal.write and PowerShell echoes it, so it lands in
+    // the terminal buffer — proving the Paste action still writes to the live shell.
+    await win.evaluate(
+      (text) => window.throng?.clipboard?.write({ text, mode: 'verbatim' }),
+      PASTE,
+    );
+    await win.getByTestId('menu-item-Paste').click();
+    await expect(win.getByTestId(`terminal-${pid}`)).toContainText(PASTE, { timeout: 15000 });
+  } finally {
+    if (app) {
+      await app
+        .evaluate(({ BrowserWindow }) => {
+          for (const wnd of BrowserWindow.getAllWindows()) if (!wnd.isDestroyed()) wnd.destroy();
+        })
+        .catch(() => {});
+      await new Promise((r) => setTimeout(r, 150));
+      await app.close().catch(() => {});
+    }
+    try {
+      daemon.kill();
+    } catch {
+      /* already gone */
+    }
+    await new Promise((r) => setTimeout(r, 500));
+    for (const d of [dataDir, cfg, userData, root]) {
+      rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  }
+});
