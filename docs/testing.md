@@ -96,9 +96,14 @@ default (`npm run test` runs unit → integration → contract → e2e in order)
 **Elevated runners are capped to 2 workers** (unless `THRONG_E2E_WORKERS` is set).
 An elevated daemon routes terminals through the de-elevated agent (FR-025c), which
 — with slower app/watcher teardown under contention — isn't robust at high
-parallelism, so 6 elevated workers flake. CI and a normal (non-elevated) shell keep
-the full 6. Force a count with `THRONG_E2E_WORKERS=6` (accepting elevated flakiness),
+parallelism, so 6 elevated workers flake. A normal (non-elevated) shell keeps the
+full 6. Force a count with `THRONG_E2E_WORKERS=6` (accepting elevated flakiness),
 or — better — **run the suite from a non-elevated shell** for full-speed, stable runs.
+
+**CI is not the non-elevated case.** GitHub's Windows runners run as administrator,
+so CI is an *elevated* run and pins `THRONG_E2E_WORKERS: 1` explicitly rather than
+taking either default. Don't read a CI worker count or a CI green bar as evidence
+about the non-elevated path — see below for what CI does and does not cover.
 
 Each spec is fully isolated — its own Electron app, daemon, SQLite DB, named pipe
 (unique per process + timestamp), user-data dir, and config root — so files
@@ -135,22 +140,41 @@ file's tests across workers and break any intra-file ordering. There are no
 cross-file dependencies today (each spec sets up and tears down its own world).
 
 The elevated `@admin` E2E (run-as-admin / de-elevation) are separate; run them
-with `npm run test:e2e:admin` from an elevated shell. The normal suite **excludes**
-`@admin` specs (config `grepInvert`), so an elevated dev machine doesn't run them
-here; the admin runner sets `THRONG_E2E_INCLUDE_ADMIN` to opt back in.
+locally with `npm run test:e2e:admin` from an elevated shell. The normal suite
+**excludes** `@admin` specs (config `grepInvert`), so an elevated dev machine doesn't
+run them here; a runner sets `THRONG_E2E_INCLUDE_ADMIN` to opt back in.
+
+**CI runs the `@admin` suite** in its own job (`E2E (@admin, elevated)`), which sets
+`THRONG_E2E_INCLUDE_ADMIN=1` and calls `npx playwright test` directly — never
+`npm run test:e2e:admin`, which exists to hop UAC from a non-elevated shell and is
+both pointless and interactive where the process is already elevated. It is a job
+rather than a step inside `e2e` because the shards split the suite by file: an
+`@admin` step there would run three times, or — if no `@admin` file landed on that
+shard — not at all. One job, one run, one signal. Until that job
+existed, `@admin` specs were excluded from the *only* runner capable of running
+them, and the gap read as covered because a comment claimed a dedicated runner that
+did not exist.
 
 ## Run the suite non-elevated
 
 The terminal E2E assume a **non-elevated (normal-integrity) daemon** — the common
-case (and how CI runs). A non-elevated daemon runs each terminal directly, so its
+case for a user, but **not** how CI runs (CI is elevated; see above). A non-elevated
+daemon runs each terminal directly, so its
 `conhost.exe` is the daemon's own child, the "run as admin" control is disabled,
 and re-typing a panel gets a fresh direct PTY. **If you run the suite from an
 elevated shell**, the app respawns an elevated daemon (FR-025b) that routes every
 terminal through the de-elevated agent (FR-025c) — a different, less parallel-robust
 process tree those assertions don't hold for. Such specs call `skipIfElevated()`
 (see `packages/ui/tests/e2e/admin.ts`) and **skip when elevated**, so an elevated
-run stays green; they still execute on CI / a normal shell. **Prefer a non-elevated
-shell for the full E2E run.**
+run stays green.
+
+**This is why a green CI bar is not full coverage.** CI is elevated, so every
+`skipIfElevated()` spec *self-skips there* — it does not run on CI at all. Those
+assumptions are verified **only** by a developer running the suite from a
+non-elevated shell, which is why a non-elevated run belongs in a PR's evidence and
+why CI cannot be the last word on the non-elevated path. A spec with **no**
+elevation guard does execute on CI normally. **Prefer a non-elevated shell for the
+full E2E run.**
 
 ## A flaky test FAILS the run
 

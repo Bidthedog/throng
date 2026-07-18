@@ -97,6 +97,11 @@ goal is to pull all of that into a single, simple customisable workspace.
   font-family pill** editor; a **global UI⇄JSON toggle** (edit the raw file in the built-in code
   editor) and **immediate-apply** (no Save). Editing a file's raw JSON while it changes on disk
   surfaces a reload / keep-editing choice rather than silently discarding either version.
+  **Terminal flavours** are edited as a **structured table** — one row per flavour, a typed cell per
+  field — rather than hand-written JSON, and **hidden built-in shells** are a **multi-select that
+  still offers the ones you have already hidden**, so un-hiding is the same control as hiding. A
+  flavour's `id` is fixed once created (it keys that flavour's default startup parameters); to
+  rename one, delete it and add it back.
 - **One way to be told things** — the application has exactly **two** notice models: a
   *confirmation* (modal, blocking, text-labelled buttons, because the label is the statement of
   what you are consenting to) and a *notification* (transient, non-blocking, dismissable, where
@@ -132,7 +137,12 @@ goal is to pull all of that into a single, simple customisable workspace.
   the reason. Every theme token
   carries a plain-language label and description in the theme editor, and the bundled themes are
   guarded automatically for pairwise visual distinctness and (for the redesigned Bash, SUBNET and
-  Cyberpunk themes) WCAG AA contrast.
+  Cyberpunk themes) WCAG AA contrast. **Code stays legible on every theme**: each syntax colour is
+  measured against the editor background and must clear **6:1** — a house standard stricter than
+  WCAG AA's 4.5:1, because the search-match highlight can only be as strong as the weakest syntax
+  hue allows — on every bundled theme but the three that are deliberately low-contrast (Matrix,
+  VI-VIM, Gothic). The checked pairings are derived from the token set, so a syntax colour cannot be
+  added without being measured.
 - **Theme restore & creation** — the Themes editor pairs a theme dropdown with one set of actions that
   apply to the selected theme (restore, clone, rename, delete), plus a separate **Restore All Themes to
   Default**. Restore All (behind a confirmation) returns every edited built-in to its shipped values and
@@ -216,6 +226,17 @@ hot-reload. Everything is also editable from the visual **preferences window** (
 which writes those same files and applies changes immediately. The installed-font cache and the
 bundled default-theme source live under `%APPDATA%\throng\`. The config directory is overridable
 via `THRONG_CONFIG_ROOT`.
+
+Your **window and panel layout** is written back as you work, on a short (400ms) debounce, and is
+flushed on every ordinary exit — closing a window, quitting the app, a sign-out or a restart. **A
+known and accepted limit:** a termination the application cannot intercept — `SIGKILL`, *End task* in
+Task Manager, a power loss — can lose **up to the last 400ms** of layout changes. This is a
+deliberate trade, not a defect: dragging a panel emits a continuous stream of layout changes, and
+writing each one straight through would amplify a single drag into hundreds of disk writes. The
+debounce coalesces them. Removing it to close a 400ms window that only an uncatchable kill can open
+would cost every user constant write churn for the entire time they are arranging panels — so please
+do not "fix" it by lowering or deleting the debounce. Every exit path the OS lets us observe already
+drains the pending write before the process goes.
 
 The application ships an immutable, versioned record of its defaults (built-in themes, settings, key
 bindings), generated from the application's own definitions and distributed with the build. It is the
