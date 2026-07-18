@@ -1,0 +1,18 @@
+{
+  "copy": [
+    ".claude/settings.local.json",
+    "node_modules",
+    "packages/*/node_modules"
+  ],
+  "modify": {
+    "files": [],
+    "paths": true,
+    "ports": [],
+    "suffix": {},
+    "context": []
+  },
+  "run": [
+    "npm install"
+  ],
+  "teardown": []
+}
