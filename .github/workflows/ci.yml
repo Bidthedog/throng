@@ -247,3 +247,73 @@ jobs:
           } else {
             Write-Host "All E2E shards passed."
           }
+
+  # 019 (FR-013a / SC-008) — RUN THE @admin SUBSET, on the runner that can actually run it.
+  #
+  # Until this job existed, @admin specs were excluded from the ONLY runner capable of executing
+  # them. GitHub's windows-2022 runners are ELEVATED, which is the precondition #94 needs — and
+  # playwright.config.ts grepInverts @admin unless THRONG_E2E_INCLUDE_ADMIN is set, which nothing
+  # here set. Meanwhile skipIfElevated() specs self-skip here. So the elevated path had ZERO
+  # coverage while docs/testing.md claimed CI ran non-elevated. That is how the hole read as
+  # covered.
+  #
+  # This is its OWN job rather than a step inside `e2e`: the shards split the suite by file, so an
+  # @admin step there would run three times or — if no @admin file landed on that shard — not at
+  # all. One job, one run, one signal.
+  e2e-admin:
+    name: E2E (@admin, elevated)
+    runs-on: windows-2022
+    timeout-minutes: 20
+    env:
+      THRONG_E2E_WORKERS: 1
+      # Clears playwright.config.ts's grepInvert so @admin is SELECTED rather than excluded.
+      THRONG_E2E_INCLUDE_ADMIN: '1'
+      PLAYWRIGHT_JSON_OUTPUT_NAME: admin-report.json
+      # The de-elevation spec's own LAUNCH_BUDGET_MS is 25s, SHORTER than the production worst
+      # case of connect 15s + readiness 15s (019 C7) — a connect at ~14s followed by no ack would
+      # surface at ~29s and be reported as "it hung (#94)", the very failure the spec exists to
+      # detect. 8000/8000 makes the worst case 16s. Production defaults (15000/15000) are
+      # untouched; these are injected settings, not code (Principle X).
+      THRONG_AGENT_CONNECT_TIMEOUT_MS: '8000'
+      THRONG_AGENT_READY_TIMEOUT_MS: '8000'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      # `npx playwright test` DIRECTLY, never `npm run test:e2e:admin`: that script exists to hop
+      # UAC from a non-elevated shell (Start-Process -Verb RunAs) and is pointless — and
+      # interactive (-NoExit) — where the process is already elevated.
+      - name: Run @admin E2E suite (this runner is elevated)
+        shell: pwsh
+        run: |
+          # Quote '@admin': in PowerShell a bare @admin is the splatting operator on an (undefined)
+          # variable $admin, so the tag expands to nothing and Playwright selects zero tests —
+          # which this step's own fail-on-zero guard then reports as an uncovered de-elevation path.
+          npx playwright test --grep '@admin' --workers=1 --reporter=list,json
+          $testsFailed = $LASTEXITCODE -ne 0
+          # A run that selected NOTHING must fail. Playwright exits 0 on an empty selection, so
+          # exit code alone cannot tell "all @admin specs passed" from "no @admin spec ran" — and
+          # SC-008 measures EXECUTED > 0, not exit 0. A green bar bought by an empty selection is
+          # precisely the proof-that-cannot-fail this feature abolishes.
+          if (-not (Test-Path admin-report.json)) { throw 'No @admin JSON report was produced.' }
+          $stats = (Get-Content admin-report.json -Raw | ConvertFrom-Json).stats
+          $executed = $stats.expected + $stats.unexpected + $stats.flaky
+          Write-Host "@admin executed=$executed (expected=$($stats.expected) unexpected=$($stats.unexpected) flaky=$($stats.flaky) skipped=$($stats.skipped))"
+          if ($executed -lt 1) {
+            throw "No @admin test EXECUTED ($($stats.skipped) skipped). This runner is elevated, so an @admin spec that skips or is grep-excluded means the de-elevation path is unverified — the hole 019 FR-013a closes."
+          }
+          if ($testsFailed) { throw 'The @admin E2E suite failed.' }
+      - name: Upload @admin traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-admin
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
