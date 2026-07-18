@@ -34,7 +34,19 @@ const target = process.argv.slice(2).join(' ') || 'terminal-admin-integrity.e2e.
  * Any "zero first-attempt failures" conclusion drawn from it would have been a green bar bought by a
  * retry — the precise laundering this feature exists to abolish.
  */
-const forwarded = ['THRONG_E2E_RETRIES', 'THRONG_E2E_INCLUDE_QUARANTINE', 'THRONG_E2E_WORKERS']
+const forwarded = [
+  'THRONG_E2E_RETRIES',
+  'THRONG_E2E_INCLUDE_QUARANTINE',
+  'THRONG_E2E_WORKERS',
+  // 019 — the de-elevated PTY agent's connect/readiness budgets. The @admin de-elevation
+  // spec's own LAUNCH_BUDGET_MS (25s) is SHORTER than the production worst case of
+  // connect 15s + readiness 15s (C7), so that run injects smaller budgets. Without them
+  // on this list they never arrive, the run silently executes at the 15/15 default, and a
+  // lapse at ~29s is reported as "it hung (#94)" — the very failure the spec exists to
+  // detect. Exactly the class of silence THRONG_E2E_RETRIES was bitten by above.
+  'THRONG_AGENT_CONNECT_TIMEOUT_MS',
+  'THRONG_AGENT_READY_TIMEOUT_MS',
+]
   .filter((name) => process.env[name] !== undefined)
   .map((name) => `$env:${name}='${process.env[name]}'`);
 
