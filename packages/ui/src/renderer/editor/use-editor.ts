@@ -780,6 +780,21 @@ export function useEditor(params: UseEditorParams): void {
       // on disk) so the buffer survives and a save re-creates the file. The tab-open watcher (not
       // this event) raises the notice.
       if (msg.deleted === true) fileMissingRef.current = true;
+      // throng moved the file, and this document went with it (019, FR-002). Its PATH changed and
+      // nothing else did: no dirty flag, no reload, no missing-file notice — it is the same
+      // document, holding the same text, and the user asked for the move.
+      //
+      // This is the VIEW's copy of the path — what the header's file pill renders (AC1) and what a
+      // Ctrl+S saves to. The PERSISTED layout is written by `MovedPathSync`, once per window, for
+      // every editor panel in it: this listener dies with the mount, and a panel in a background tab
+      // is not mounted (FR-008).
+      if (typeof msg.movedTo === 'string') {
+        configRef.current = { ...configRef.current, filePath: msg.movedTo };
+        // The name is what decides the language (FR-002a), and a rename can change the extension:
+        // `notes.txt` renamed to `notes.py` must highlight as Python there and then. Exactly what
+        // a Save-As to a new path does (`writeTo`), for exactly the same reason.
+        refreshLanguage();
+      }
       if (typeof msg.dirty === 'boolean') dirtyRef.current = msg.dirty;
       // The on-disk file changed under our unsaved edits (FR-028) — a soft, one-shot
       // notice (no lock): saving overwrites the external change, revert loads it. The

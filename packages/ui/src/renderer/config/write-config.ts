@@ -75,6 +75,79 @@ export async function writeConfig(id: ConfigDocId, json: string): Promise<Config
   }
 }
 
+/**
+ * Every ARMED debounced write, keyed by document (019 FR-010, issue #86).
+ *
+ * Keyed by `ConfigDocId` rather than held by whoever scheduled it, because the writer is the
+ * wrong place to track this from: a component that is re-rendered rather than unmounted
+ * strands its armed timer, and an unmount flush never runs on that path. The module keeps the
+ * registry, so an orphan is still registered and still settles.
+ *
+ * Per-id keying is also 018 FR-023's captured-at-edit-time guarantee, enforced here rather
+ * than by a payload convention: theme A's pending write is keyed to A and theme B's to B, so
+ * neither displaces the other.
+ */
+const armedWrites = new Map<string, { timer: ReturnType<typeof setTimeout>; fire: () => void }>();
+
+/**
+ * Schedule a debounced config write for `id`, coalescing rapid edits `ms` after the last one.
+ *
+ * `produce` runs at FIRE time and returns the document to write, or **`null` to write
+ * nothing** — the JSON tab needs both: its body parses the edit buffer, and an unparseable
+ * buffer must not reach the config file (007 FR-017), while its echo-suppression and
+ * dirty/external bookkeeping still has to run exactly when it does today. Passing a finished
+ * string instead would have forced all of that to the call site, per keystroke.
+ */
+export function scheduleWrite(id: ConfigDocId, produce: () => string | null, ms: number): void {
+  const key = docKey(id);
+  const armed = armedWrites.get(key);
+  if (armed) clearTimeout(armed.timer);
+
+  const fire = (): void => {
+    armedWrites.delete(key);
+    const json = produce();
+    if (json !== null) void writeConfig(id, json);
+  };
+  armedWrites.set(key, { timer: setTimeout(fire, ms), fire });
+}
+
+/**
+ * Drop `id`'s armed write without firing it.
+ *
+ * Load-bearing for the JSON tab's `reload`: a debounced apply of the edit we are ABANDONING
+ * must not fire afterwards and silently write it back over the document we just adopted.
+ * Without this, adopting an external change is silently clobbered — a silent config
+ * write-back, inside the sweep against silent write-backs.
+ */
+export function cancelWrite(id: ConfigDocId): void {
+  const key = docKey(id);
+  const armed = armedWrites.get(key);
+  if (!armed) return;
+  clearTimeout(armed.timer);
+  armedWrites.delete(key);
+}
+
+/**
+ * Settle every deferred config write this window owns (019 FR-010): fire what is armed, then
+ * await what is in flight.
+ *
+ * THE CHOKEPOINT IS THE DESIGN. Every config write goes through {@link writeConfig}, so the
+ * drain settles the MODULE and counts nothing — not writers, not tabs, not windows. Each
+ * earlier attempt modelled a list and each was wrong, because a design whose correctness
+ * depends on an accurate list is wrong again the next time someone adds a writer. Settling
+ * *n* writes is the same call as settling one, and a window with nothing pending settles
+ * immediately.
+ *
+ * {@link writeChains} is REUSED for the in-flight half: it already tracks each document's tail
+ * (issue #50) and it never asked whether its caller dropped the promise, so it covers the
+ * debounced, the undebounced and the awaited alike. A failure is swallowed, as a flush does —
+ * a write that cannot land must not wedge the close.
+ */
+export async function settleConfigWrites(): Promise<void> {
+  for (const armed of [...armedWrites.values()]) armed.fire();
+  await Promise.all([...writeChains.values()].map((p) => p.catch(() => undefined)));
+}
+
 /** A debounced function with imperative {@link Debounced.cancel}/{@link Debounced.flush}. */
 export interface Debounced<A extends unknown[]> {
   (...args: A): void;

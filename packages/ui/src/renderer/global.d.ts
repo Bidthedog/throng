@@ -43,6 +43,10 @@ declare global {
       onAppClosePrompt?: (cb: (info: AppClosePromptInfo) => void) => () => void;
       onAppCloseClosing?: (cb: (info: { message: string }) => void) => () => void;
       appCloseChoice?: (choice: 'leave' | 'terminate' | 'cancel') => void;
+      // The shutdown drain (019 / FR-010): settle this window's deferred writes and ack.
+      // Correlated by `requestId` so a stale ack cannot satisfy a later drain.
+      onAppCloseDrain?: (cb: (req: { requestId: string }) => void) => () => void;
+      appCloseDrained?: (req: { requestId: string }) => void;
       dragGhost?: {
         start: (kind: 'panel' | 'tab', title: string) => void;
         move: () => void;
@@ -101,6 +105,12 @@ declare global {
       // (machine-detected built-ins ∪ user-defined), served by UI main.
       terminal?: {
         listFlavours: () => Promise<TerminalFlavourDto[]>;
+        /**
+         * The built-ins this machine HAS, with nothing subtracted (019, C10) — the settings
+         * picker's catalogue, so that hiding a built-in is not a one-way door. The panel's Flavour
+         * dropdown must never be built from this: it would offer the flavours the user hid.
+         */
+        listDetectedFlavours?: () => Promise<DetectedFlavourDto[]>;
         attach: (req: {
           panelId: string;
           projectId: string;
@@ -131,7 +141,6 @@ declare global {
         list: (projectId?: string) => Promise<{ sessions: TerminalSessionDto[] }>;
         // Daemon capabilities (FR-025a): { elevated } gates the "run as admin" control.
         capabilities: () => Promise<{ elevated: boolean }>;
-        contextMenu: (payload: { panelId: string; selection: string }) => Promise<unknown>;
         // OSC 52 clipboard write from a program inside the terminal → OS clipboard.
         writeClipboard: (text: string) => Promise<unknown>;
         onOutput: (cb: (e: { panelId: string; data: string }) => void) => () => void;
@@ -241,6 +250,8 @@ declare global {
             dirty?: boolean;
             deleted?: boolean;
             externalChange?: boolean;
+            /** throng moved the file: the document's new absolute path (019, FR-002). */
+            movedTo?: string;
           }) => void,
         ) => () => void;
         onFocus: (cb: (msg: { panelId: string }) => void) => () => void;
@@ -300,6 +311,17 @@ export interface AppClosePromptInfo {
   /** Running-terminal count, or null when the count query failed. */
   count: number | null;
   terminals: AppCloseTerminal[];
+}
+
+/**
+ * One built-in returned by `window.throng.terminal.listDetectedFlavours` (019) — what the machine
+ * HAS. It carries neither `source` nor a resolved `defaultParams`: a picker wants neither, and the
+ * shape says so.
+ */
+export interface DetectedFlavourDto {
+  id: string;
+  label: string;
+  file: string;
 }
 
 /** One Flavour returned by `window.throng.terminal.listFlavours` (mirrors core TerminalFlavour). */

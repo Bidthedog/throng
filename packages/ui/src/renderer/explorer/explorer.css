@@ -139,6 +139,34 @@
   transition: transform 0.1s ease;
 }
 
+/* #121 — the chevron is the SOLE expand/collapse control now, so it must read as
+   one. As a <button> it needs its chrome stripped, a full-height hit target, and
+   a hover affordance that announces "you can click me" (Constitution VI). All
+   theme-driven — no hard-coded colours. */
+button.tree-twisty {
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 3px;
+  /* keep the glyph centred while the box grows to the full row height */
+  line-height: 0;
+}
+
+button.tree-twisty:hover {
+  /* The affordance is the accent-coloured chevron popping over the row's hover
+     surface — accent is not a surface token, and the hover fill uses the hover
+     token (FR-001: surfaceActive is reserved for selected/active). */
+  color: var(--throng-colour-accent);
+  background: var(--throng-colour-hoverSurface);
+}
+
+button.tree-twisty:focus-visible {
+  outline: 1px solid var(--throng-colour-accent);
+  outline-offset: -1px;
+}
+
 .tree-twisty--open {
   transform: rotate(90deg);
 }

@@ -10,15 +10,11 @@ import { SHIPPED_INDENT_BY_LANGUAGE, type IndentProfile } from '../editor/langua
 /** Confirmation depth for a destroy action: none / single / double (wry second). */
 export type ConfirmLevel = 'none' | 'single' | 'double';
 
-/** File-tree open trigger: single click (default) or double click (004, FR-027). */
-export type OpenMode = 'single' | 'double';
-
 /** File delete behaviour: OS Recycle Bin (default, recoverable) or permanent (004, FR-018). */
 export type DeleteMode = 'recycle' | 'permanent';
 
 /** File Explorer tree preferences (004, contracts/config-additions.md). */
 export interface ExplorerSettings {
-  openMode: OpenMode;
   deleteMode: DeleteMode;
   /** Globs hiding entries by root-relative path; default = VS Code files.exclude. */
   excludeGlobs: string[];
@@ -196,7 +192,6 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     submenuHoverMs: 100,
   },
   explorer: {
-    openMode: 'single',
     deleteMode: 'recycle',
     excludeGlobs: [...DEFAULT_EXCLUDE_GLOBS],
     dragCopyModifier: 'ctrl',
@@ -266,8 +261,6 @@ function paneState(v: unknown, fallback: PaneState): PaneState {
 
 function explorerSettings(v: unknown, fallback: ExplorerSettings): ExplorerSettings {
   if (!isRecord(v)) return cloneExplorer(fallback);
-  const openMode: OpenMode =
-    v.openMode === 'single' || v.openMode === 'double' ? v.openMode : fallback.openMode;
   const deleteMode: DeleteMode =
     v.deleteMode === 'recycle' || v.deleteMode === 'permanent' ? v.deleteMode : fallback.deleteMode;
   // An explicit array (even empty = "exclude nothing") is honoured; anything else
@@ -281,14 +274,13 @@ function explorerSettings(v: unknown, fallback: ExplorerSettings): ExplorerSetti
   const dragMoveModifier = DRAG_MODIFIER_KEYS.includes(v.dragMoveModifier as DragModifierKey)
     ? (v.dragMoveModifier as DragModifierKey)
     : fallback.dragMoveModifier;
-  return { openMode, deleteMode, excludeGlobs, dragCopyModifier, dragMoveModifier };
+  return { deleteMode, excludeGlobs, dragCopyModifier, dragMoveModifier };
 }
 
 const DRAG_MODIFIER_KEYS: readonly DragModifierKey[] = ['ctrl', 'shift', 'alt'];
 
 function cloneExplorer(e: ExplorerSettings): ExplorerSettings {
   return {
-    openMode: e.openMode,
     deleteMode: e.deleteMode,
     excludeGlobs: [...e.excludeGlobs],
     dragCopyModifier: e.dragCopyModifier,

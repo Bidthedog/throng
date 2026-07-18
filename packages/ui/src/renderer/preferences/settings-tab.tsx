@@ -11,6 +11,7 @@ import {
   settingDiffersFromEntry,
   type FieldDescriptor,
 } from '@throng/core';
+import type { DetectedFlavourDto } from '../global.js';
 import { useAppSettings } from '../config/config-store.js';
 import { debounce } from '../config/write-config.js';
 import { IconButton } from '../common/icon-button.js';
@@ -111,12 +112,48 @@ export function SettingsTab({
     };
   }, []);
 
-  // Flush any pending debounced apply when the window is unmounted/closed.
-  useEffect(() => () => apply.flush(), [apply]);
+  /**
+   * The built-ins this machine actually has — the hidden-built-ins picker's catalogue (019, C10).
+   *
+   * Fetched once, exactly as the theme list above is, because the answer arrives over IPC and the
+   * form renders before it does. It comes from `listDetectedFlavours`, NOT `listFlavours`: the
+   * latter has already subtracted the hidden ones, so a picker built from it could not offer back
+   * the built-in the user just hid, and hiding would be a one-way door.
+   */
+  const [detected, setDetected] = useState<DetectedFlavourDto[]>([]);
+  useEffect(() => {
+    let active = true;
+    void Promise.resolve(window.throng?.terminal?.listDetectedFlavours?.())
+      .then((list) => {
+        // Detection finding nothing renders an EMPTY picker — never a text box (007 FR-029).
+        if (active && Array.isArray(list)) setDetected(list);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  const commit = (key: string, value: unknown): void => {
-    const next = setAtPath(settings, key, value);
-    void apply.applyNow(next);
+  /**
+   * Apply an edit — and SAY SO when it could not be applied (FR-006a).
+   *
+   * The `ConfigWriteResult` used to be dropped on the floor here (`void apply.applyNow(next)`), so a
+   * write that failed left the form showing a value the settings file does not contain, with nothing
+   * said anywhere: the silent-config-write class of #75, on the way out instead of the way in. The
+   * reporter is the one the reset path has always used — the failure is the same failure, and
+   * "nothing was changed" is a promise the atomic write actually keeps.
+   *
+   * It takes the DESCRIPTOR rather than a bare key because a message has to name the setting the way
+   * the user does. `notify` replaces a notice carrying the same test id, so a control that commits as
+   * you type reports one failure, not one per keystroke.
+   */
+  const commit = (d: FieldDescriptor, value: unknown): void => {
+    const next = setAtPath(settings, d.key, value);
+    void apply.applyNow(next).then(
+      (r) => report(`Saving ${d.label}`, r),
+      // A throw is the bridge itself failing — still a failure, still not silent.
+      () => report(`Saving ${d.label}`, undefined),
+    );
   };
 
   /**
@@ -135,10 +172,23 @@ export function SettingsTab({
   const dynamicOptions = (
     d: FieldDescriptor,
     themeNames: readonly string[],
+    detectedFlavours: readonly DetectedFlavourDto[],
   ): readonly (string | number)[] | undefined => {
     if (d.key === 'appearance.theme') return themeNames;
     if (d.key === 'editor.languageByExtension') return LANGUAGES.map((l) => l.id);
+    // Every detected built-in is offered — INCLUDING the ones currently hidden, which show checked
+    // (019, FR-017). The catalogue is the detected set, never the visible set.
+    if (d.key === 'terminals.disabledBuiltins') return detectedFlavours.map((f) => f.id);
     return undefined;
+  };
+
+  /** What an option's id is CALLED — `cmd` stores, "Command Prompt" reads (019, FR-016). */
+  const dynamicOptionLabels = (
+    d: FieldDescriptor,
+    detectedFlavours: readonly DetectedFlavourDto[],
+  ): Record<string, string> | undefined => {
+    if (d.key !== 'terminals.disabledBuiltins') return undefined;
+    return Object.fromEntries(detectedFlavours.map((f) => [f.id, f.label]));
   };
 
   /**
@@ -198,8 +248,9 @@ export function SettingsTab({
                 <SettingControl
                   descriptor={d}
                   value={getAtPath(settings, d.key)}
-                  options={dynamicOptions(d, themes)}
-                  onCommit={(v) => commit(d.key, v)}
+                  options={dynamicOptions(d, themes, detected)}
+                  optionLabels={dynamicOptionLabels(d, detected)}
+                  onCommit={(v) => commit(d, v)}
                 />
               </div>
               <RowActions
@@ -224,8 +275,8 @@ export function SettingsTab({
                 // Revert and clear are ordinary EDITS — to a remembered value and to an empty one
                 // — so they take the same write path as typing in the box. Only a reset consults
                 // the shipped record, and only a reset needs an IPC channel of its own.
-                onRevert={() => commit(d.key, getAtPath(entry, d.key))}
-                onClear={() => commit(d.key, emptyValueFor(d))}
+                onRevert={() => commit(d, getAtPath(entry, d.key))}
+                onClear={() => commit(d, emptyValueFor(d))}
               />
             </div>
           ))}

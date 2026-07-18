@@ -51,6 +51,10 @@ export type { IFileSystem, DirEntry } from './abstractions/file-system.js';
 export type { IShellIntegration } from './abstractions/shell-integration.js';
 export type { FileNode, NodeKind, RenameResult, DedupeStyle, DragModifiers, DragEffect, ClickAction, ExpandNode, TargetNode } from './explorer/index.js';
 
+// Path identity (019, FR-007): is this the same file, is this file under that folder — asked of
+// paths spelled by different producers (the tree's `/`, `node:path.join`'s `\`). Pure rules.
+export { normaliseForCompare, samePath, isUnderPath } from './fs/path-id.js';
+
 // Terminal shell detection (005 Phase B): OS seam.
 export type { IShellDetection, DetectedShell } from './abstractions/shell-detection.js';
 
@@ -98,7 +102,6 @@ export type {
   ConfirmLevel,
   PaneState,
   ExplorerSettings,
-  OpenMode,
   DeleteMode,
   TerminalSettings,
   TerminalFlavourConfig,
@@ -176,10 +179,15 @@ export {
   WCAG_AA_BODY,
   WCAG_AA_LARGE_UI,
   IN_SCOPE_THEMES,
+  SYNTAX_TOKENS,
+  SYNTAX_BODY_MIN,
+  BY_DESIGN_LOW_CONTRAST_THEMES,
   CONTRAST_PAIRINGS,
+  contrastPairingsFor,
   measureContrast,
   contrastFailures,
   assertInScopeContrast,
+  assertSyntaxBodyContrast,
   knownContrastIssues,
 } from './config/theme-quality.js';
 export type { Rgb, Lab, ClosestPair, ContrastPairing, ContrastResult, KnownContrastIssue } from './config/theme-quality.js';
@@ -414,6 +422,9 @@ export {
   type TerminalValues,
   mergeFlavours,
   type TerminalFlavour,
+  validateFlavourRecord,
+  checkFlavourRecord,
+  type FlavourProblem,
   BUILTIN_FLAVOUR_DEFAULT_PARAMS,
   resolveDefaultParams,
   resolveLaunchSpec,

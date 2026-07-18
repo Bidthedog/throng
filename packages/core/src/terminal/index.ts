@@ -6,6 +6,11 @@ export {
   type TerminalValues,
 } from './panel-type.js';
 export { mergeFlavours, type TerminalFlavour } from './flavour.js';
+export {
+  validateFlavourRecord,
+  checkFlavourRecord,
+  type FlavourProblem,
+} from './flavour-record.js';
 export { BUILTIN_FLAVOUR_DEFAULT_PARAMS, resolveDefaultParams } from './defaults.js';
 export {
   resolveLaunchSpec,

@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { existsSync, statSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell, type WebContents } from 'electron';
 import {
   parseAppSettings,
@@ -248,6 +249,25 @@ function createSubWorkspaceWindow(id: string, bounds?: WindowBounds): BrowserWin
 // Electron's per-user data (recovery temps, window state) lives in %APPDATA%\throng
 // — alongside the daemon's throng.db — instead of the dev-default %APPDATA%\Electron.
 app.setName('throng');
+
+/**
+ * The windows that can answer the shutdown drain (019 FR-010, issue #86) — by webContents id.
+ *
+ * A renderer announces itself the instant it registers the drain handler, at its entry point.
+ * REGISTERED AT MODULE SCOPE, and this is load-bearing rather than tidy: a listener installed
+ * next to the drain itself is installed AFTER `createMainWindow`, and the main window's
+ * announcement — sent while that very `await` is loading its renderer — arrives before anyone
+ * is listening and is dropped forever. Measured: the main window then answered no drain at all,
+ * and the layout tests this feature exists for went red while every other window stayed green.
+ * The listener must exist before a window can, and only module scope guarantees that.
+ */
+const drainableWindows = new Set<number>();
+ipcMain.on('throng:appClose:drainReady', (event) => {
+  const contents = event.sender;
+  if (drainableWindows.has(contents.id)) return; // a reload re-announces; one entry, one cleanup
+  drainableWindows.add(contents.id);
+  contents.once('destroyed', () => drainableWindows.delete(contents.id));
+});
 
 // Single-instance: a second launch focuses the existing window and exits, rather
 // than starting a rival instance that would fracture project/terminal ownership.
@@ -584,6 +604,11 @@ if (isPrimaryInstance)
   // Deleting a file that is open in an editor marks that editor dirty (FR-099): the
   // buffer survives so the user can save it back (re-creating the file) or discard.
   filesService.setOnDeleted((absPaths) => editorCoordinator.markDeleted(absPaths));
+  // Moving one that is open re-points it instead (019, #87): the move is BRACKETED — announced
+  // before the first `fs.move` and again after the last — so the folder watch can never read the
+  // file's absence as a deletion and dirty a buffer nobody edited.
+  filesService.setOnMoveStarted((absPaths) => editorCoordinator.beginMove(absPaths));
+  filesService.setOnMoved((moves) => editorCoordinator.markMoved(moves));
 
   // Terminal flavours (005 Phase B): UI main owns shell detection (inline, like
   // the FS seams above), merging the machine's built-ins with settings.terminals.
@@ -593,6 +618,11 @@ if (isPrimaryInstance)
     configStore,
   });
   ipcMain.handle('throng:terminal:listFlavours', () => shellDetectionService.listFlavours());
+  // The RAW detected built-ins — what this machine HAS, not what it will offer to launch (019,
+  // C10). The settings editor's picker is built from this; the panel's Flavour dropdown never is.
+  ipcMain.handle('throng:terminal:listDetectedFlavours', () =>
+    shellDetectionService.listDetectedFlavours(),
+  );
 
   // Live terminals (005 Phase C): the renderer's terminal.* commands route to the
   // daemon (UI main resolves the launch spec); daemon output/exit notifications
@@ -645,6 +675,82 @@ if (isPrimaryInstance)
       return null; // unknown → warn to be safe
     }
   };
+  // ── The shutdown drain (019 / FR-010, issue #86) ──────────────────────────────────────
+  //
+  // Ask EVERY window to settle its deferred writes, and AWAIT the acks before allowing the
+  // close. The layout blob — split structure AND per-panel zoom — rides a 400ms debounce, and
+  // the ordinary close fired on a 250ms timer, so a decision the user had just watched the app
+  // accept died with the renderer. Terminate All survived only because its prompt detained the
+  // user past the debounce.
+  //
+  // Correctness must not depend on how long a dialog detains someone, so the close now waits
+  // on the ACK, not on a clock. Widening the 250ms timer past the debounce would preserve the
+  // bug's shape and merely widen the accident; FR-011 refuses it explicitly.
+  //
+  // The drain NAMES NO WINDOWS — it asks `getAllWindows()`, exactly as `relaySync` does.
+  // Sub-workspace windows carry their own layout writes on the same close-all cascade (C6);
+  // the preferences window carries config writes and is Electron-parented rather than in the
+  // cascade at all; and the workspace window itself writes config too. Every enumeration
+  // anyone attempted omitted one of them, so this asks the list instead of reciting it.
+  //
+  // What the list is filtered on is CAN THIS WINDOW ANSWER — not what kind of window it is.
+  // `getAllWindows()` also returns the drag ghost: a real BrowserWindow with NO PRELOAD,
+  // loaded from a `data:` URL and merely HIDDEN on drop, so it lives for the rest of the
+  // session. It has no `window.throng`, never registers the drain handler, and can never ack —
+  // asking it cost EVERY subsequent close the full budget, and a session containing one drag
+  // is the ordinary session. The cure is not a list of window kinds (C23 refuses that: every
+  // such list omitted somebody) and not a wider timer (FR-011 refuses that): a window is
+  // drained iff its renderer TOLD US it is listening (`drainableWindows`, populated at module
+  // scope). A window that has not said so has no drain handler, and therefore no deferred write,
+  // to settle — the announcement is sent when the handler is registered, at the renderer's entry
+  // point, before React mounts and so before any write can be scheduled. Ordering, not timing.
+  const drainAllWindows = async (): Promise<void> => {
+    const windows = BrowserWindow.getAllWindows().filter(
+      (w) => !w.isDestroyed() && drainableWindows.has(w.webContents.id),
+    );
+    await Promise.all(
+      windows.map(
+        (win) =>
+          new Promise<void>((resolve) => {
+            const requestId = randomUUID();
+            let settled = false;
+            const done = (why?: string): void => {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              ipcMain.removeListener('throng:appClose:drained', onAck);
+              // …and the same for the death-watch below, whichever of the two fired first. (It
+              // is `once`, so a window that DIED has already dropped it — and its webContents
+              // must not be touched afterwards.)
+              if (!win.isDestroyed()) win.webContents.removeListener('destroyed', onDestroyed);
+              if (why) console.warn(`[throng] app-close: drain ${why}`);
+              resolve();
+            };
+            // Correlated by `requestId`: a stale ack from an earlier drain cannot satisfy
+            // this one.
+            const onAck = (_event: unknown, req: unknown): void => {
+              if ((req as { requestId?: string })?.requestId === requestId) done();
+            };
+            const onDestroyed = (): void => done();
+            // A BACKSTOP, never the mechanism: a wedged or crashed renderer must not hold the
+            // app open forever. A lapsed budget logs and closes anyway.
+            const timer = setTimeout(
+              () => done(`budget lapsed after ${settings.shutdownDrainTimeoutMs}ms — closing anyway`),
+              settings.shutdownDrainTimeoutMs,
+            );
+            ipcMain.on('throng:appClose:drained', onAck);
+            // A window that died mid-drain owes nothing: skip it rather than wait out its budget.
+            win.webContents.once('destroyed', onDestroyed);
+            if (win.isDestroyed()) {
+              done();
+              return;
+            }
+            win.webContents.send('throng:appClose:drain', { requestId });
+          }),
+      ),
+    );
+  };
+
   mainWindow.on('close', (e) => {
     if (allowClose) return;
     e.preventDefault();
@@ -657,7 +763,12 @@ if (isPrimaryInstance)
       if (terminals && terminals.length === 0) {
         // Definitely nothing to warn about: keep the blocking overlay, then quit.
         mainWindow.webContents.send('throng:appClose:closing', { message: 'Closing throng…' });
+        // THE EXIT THAT LOST THE WRITE (#86): no prompt to stall on, so nothing here ever
+        // outlived the 400ms debounce. Drain first, and only then allow the close.
+        await drainAllWindows();
         allowClose = true;
+        // The 250ms beat REMAINS, and is no longer a correctness device: it lets the
+        // "Closing throng…" overlay paint. The close waits on the drain above, not on it.
         setTimeout(() => {
           if (!mainWindow.isDestroyed()) mainWindow.close();
         }, 250);
@@ -680,6 +791,11 @@ if (isPrimaryInstance)
           /* best-effort; still allow the close */
         }
       }
+      // BOTH exits drain — 'terminate' and 'leave' alike. These are the paths that survive
+      // by ACCIDENT today, the prompt having detained the user past the debounce, and a fix
+      // that drained only the broken exit would leave the two halves disagreeing on how long
+      // a dialog must be read for. They agree by construction now.
+      await drainAllWindows();
       allowClose = true;
       mainWindow.close();
     })();

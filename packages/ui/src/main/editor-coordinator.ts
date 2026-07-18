@@ -27,7 +27,10 @@ import {
   createOpenRegistry,
   editorsInScope,
   isOpenAnywhere,
+  isUnderPath,
+  normaliseForCompare,
   openOrFocus,
+  samePath,
   partitionByPathed,
   registerOpen,
   unregisterPanel,
@@ -47,6 +50,7 @@ import {
 import { DocumentAuthority } from './document-authority.js';
 import type { DropDecision } from '@throng/core';
 import type { EditorService, LoadResult, SaveResult } from './editor-service.js';
+import type { MovePair } from './files-service.js';
 import type { EditorRecovery, RecoveredDoc, RecoverySnapshot } from './editor-recovery.js';
 
 /** The mutable per-document state UI main tracks. */
@@ -71,6 +75,9 @@ interface CoordDoc {
   /** A one-shot flag so the "changed on disk" notice fires once per external edit
    *  of a dirty document (FR-028), not on every filesystem event. */
   diskChanged?: boolean;
+  /** THRONG is moving this file right now (019, FR-004): between `beginMove` and
+   *  `markMoved` its absence from `absPath` is the move in progress, not a delete. */
+  movePending?: boolean;
   /** Watch on the doc's folder for external changes (soft detection, FR-028). */
   watch?: Disposable;
   recoveryTimer?: ReturnType<typeof setTimeout>;
@@ -111,6 +118,9 @@ export interface EditorSyncMsg {
   deleted?: boolean;
   /** A dirty document's file changed on disk (FR-028) — a one-shot notice. */
   externalChange?: boolean;
+  /** The document's file MOVED, in-app (019, FR-002). Its new absolute path — and the
+   *  ONLY thing about the document that changed. Not a reload, not a dirty edit. */
+  movedTo?: string;
 }
 
 export interface CoordinatorDeps {
@@ -267,12 +277,11 @@ export class EditorCoordinator {
    */
   markDeleted(deletedAbsPaths: readonly string[]): void {
     if (deletedAbsPaths.length === 0) return;
-    const norm = (p: string): string => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-    const gone = deletedAbsPaths.map(norm);
-    const isUnder = (file: string): boolean => {
-      const f = norm(file);
-      return gone.some((g) => f === g || f.startsWith(g + '/'));
-    };
+    // Identity, not spelling: the deleted paths are `node:path.join`'s (back-slashed) while a doc
+    // holds the tree's (forward-slashed). Same rule as it always was — now the ONE copy of it
+    // (`path-id.ts`), shared with the move signal so the two cannot drift apart (FR-007).
+    const isUnder = (file: string): boolean =>
+      deletedAbsPaths.some((gone) => isUnderPath(file, gone));
     for (const doc of this.docs.values()) {
       if (!doc.absPath || doc.fileMissing || !isUnder(doc.absPath)) continue;
       doc.fileMissing = true;
@@ -288,6 +297,67 @@ export class EditorCoordinator {
       void this.snapshot(doc);
       // -1: broadcast to ALL windows (no editing renderer to exclude).
       this.deps.relaySync(-1, { panelId: doc.panelId, deleted: true, dirty: true });
+    }
+  }
+
+  /**
+   * throng is about to move these paths — open the bracket (019, FR-004).
+   *
+   * A move is not atomic from the watch's point of view: the moment `fs.rename` lands, the folder
+   * watch fires, `onDiskChange` re-reads a path that no longer exists, and `markDeleted` force-
+   * dirties a buffer nobody edited. That window is what #87 is made of, and it is not raced here:
+   * `FilesService` announces the move BEFORE the first `fs.move` and closes it in a `finally`, so
+   * the window is BRACKETED rather than outlasted. No timer, no grace period, no retry (FR-011
+   * condemns exactly that shape one story over).
+   *
+   * The paths are the ones REQUESTED. Which of them actually go is not known yet — that is
+   * `markMoved`'s payload — so this deliberately over-covers: a doc bracketed for a move that
+   * never happened just has its flag cleared when the bracket closes.
+   */
+  beginMove(absPaths: readonly string[]): void {
+    if (absPaths.length === 0) return;
+    for (const doc of this.docs.values()) {
+      const abs = doc.absPath;
+      if (!abs) continue;
+      // A folder's move takes every document beneath it (FR-005) — by IDENTITY, never by raw
+      // spelling: these paths come from `node:path.join`, the doc's came from the tree (FR-007).
+      if (absPaths.some((p) => isUnderPath(abs, p))) doc.movePending = true;
+    }
+  }
+
+  /**
+   * A set of files/folders MOVED, and throng is the one that moved them (019, FR-001/FR-002).
+   *
+   * Every open document named by a pair — or living beneath one — follows its file. This is a
+   * PATH mutation and nothing else: the buffer, its dirty state and its undo history are the same
+   * objects afterwards, because it is the same document (Principle XI). A `load()` here would be
+   * the easy answer and the wrong one — it mints a second original, discards the user's history,
+   * and would make a move look exactly like the delete it is not.
+   *
+   * Nothing here dirties, snapshots or notifies: a move the user asked for is not news (FR-003),
+   * and AC5 asserts that a clean move leaves no recovery snapshot at all. `markDeleted` is
+   * untouched — a file moved by ANOTHER program is still kept, dirty and recoverable (FR-009).
+   */
+  markMoved(moves: readonly MovePair[]): void {
+    for (const doc of this.docs.values()) {
+      // The bracket closes on EVERY doc it opened, moved or not — a flag left set would suppress
+      // the dirtying a genuine external delete is entitled to, for the rest of the session.
+      doc.movePending = false;
+      if (!doc.absPath) continue;
+      const newAbs = movedPathOf(doc.absPath, moves);
+      if (newAbs === null) continue;
+      // The one-buffer registry follows the file: the new path now focuses this editor, and the
+      // old one is free — a stale claim there would refuse a later Save-As onto it (`:480`).
+      // Unregister-then-register is the pair `save()` already uses for Save-As (`:503-505`).
+      unregisterPanel(this.registry, doc.panelId);
+      registerOpen(this.registry, newAbs, { panelId: doc.panelId, windowId: doc.windowId });
+      doc.absPath = newAbs;
+      // The watch is on the doc's FOLDER (`:681-685`), so a cross-folder move MUST re-watch or
+      // the document stops noticing external edits to the file it now points at.
+      this.watchDoc(doc);
+      // -1: every window. A move is a property of the DOCUMENT, so every replica learns it from
+      // the one authority rather than each discovering it for itself (Principle XI).
+      this.deps.relaySync(-1, { panelId: doc.panelId, movedTo: newAbs });
     }
   }
 
@@ -427,6 +497,19 @@ export class EditorCoordinator {
    * Nothing in the edited region would have looked wrong; the whole file would have.
    *
    * The bytes decide the encoding. A view does not (FR-023).
+   *
+   * `absPath` is NOT refreshed either, and for the same reason one story later (019, FR-002 · #87).
+   * It is the AUTHORITY's (contracts/move-signal.md §5): it is set by `load` and by `save`, the two
+   * acts that decide where a document lives, and every other reader of it — the one-buffer registry,
+   * the folder watch, the save target — is kept in step there.
+   *
+   * A view restating it made the re-point REVERSIBLE BY A KEYSTROKE: a change dispatched before the
+   * view received `movedTo` lands after `markMoved`, and it carried the path the file had just left,
+   * raw and unnormalised, with no registry or watch update. `save()` then took `doc.absPath` and
+   * wrote the buffer to the OLD path, re-creating the moved-from file and silently undoing the
+   * user's move. That is #87 itself, arriving through the fix for #87, and it is what AC3 forbids by
+   * name. A view cannot tell the document where it lives, any more than it can tell it what it is
+   * encoded in.
    */
   private refreshMeta(doc: CoordDoc, meta: DocMeta): void {
     doc.windowId = meta.windowId;
@@ -435,7 +518,6 @@ export class EditorCoordinator {
     doc.ownerRoot = meta.ownerRoot;
     doc.allProjectRoots = [...meta.allProjectRoots];
     doc.tabId = meta.tabId;
-    if (meta.absPath) doc.absPath = meta.absPath;
   }
 
   private stateOf(doc: CoordDoc): ResetDocumentMsg {
@@ -698,7 +780,23 @@ export class EditorCoordinator {
       ownerKind: doc.ownerKind,
       allProjectRoots: doc.allProjectRoots,
     });
+    // Re-check, because the READ is an await and the document can be re-pointed inside it (019).
+    // The guard above answers "is this watch stale?" at a moment when it cannot yet be — a move
+    // announced while this load was in flight lands here with `res` describing a path the document
+    // has already left. Acting on it either dirties a document whose file is fine (the `!res.ok`
+    // branch, i.e. #87 by the back door) or, worse, resets a re-pointed document to the OLD file's
+    // content (the clean branch). Both are answers to a question nobody is asking any more.
+    if (doc.absPath !== watchedPath) return;
     if (!res.ok) {
+      // THRONG is moving this file right now (019, FR-004). It is not missing — it is in flight,
+      // and `markMoved` is about to say where it went. Dirtying it here is #87: the buffer goes
+      // dirty behind the user, and the save they then make re-creates the file at the path the
+      // move just emptied, silently undoing it.
+      //
+      // No timer decides this and none may be added: the bracket `FilesService` opens BEFORE the
+      // first `fs.move` and closes in a `finally` owns the whole window, so there is nothing left
+      // to outlast. A grace period here is the `terminate-all` accident in miniature (FR-011).
+      if (doc.movePending) return;
       // Disappeared out from under us (external delete/rename) — same as an in-app
       // delete: keep the buffer, mark dirty + file-missing (FR-099).
       if (!doc.fileMissing) this.markDeleted([doc.absPath]);
@@ -772,4 +870,32 @@ export class EditorCoordinator {
       void this.snapshot(doc);
     }, ms);
   }
+}
+
+/**
+ * Where did this document's file go — if it went anywhere? (FR-002/FR-005.)
+ *
+ * A folder's pair re-points every document beneath it by PREFIX: one pair, N docs. The prefix is
+ * measured on the NORMALISED form, because the doc's path is the tree's forward-slashed spelling
+ * while the pair's is `node:path.join`'s (FR-007). `normaliseForCompare` rewrites separators in
+ * place and drops a trailing one, so slicing at its length always lands on the boundary separator
+ * — the remainder therefore begins with one, whichever way it was spelled.
+ *
+ * The result is spelled the way the DESTINATION is spelled, rather than being a mongrel of the two
+ * (`…\dest\pack/one.txt`). Nothing downstream is hurt by a mixed separator — `toDisplayPath`
+ * rewrites for the pill and every comparison normalises first — but this path is written into the
+ * panel's persisted config verbatim (FR-008), and what lands in the user's config file should be a
+ * path they could have typed.
+ */
+function movedPathOf(absPath: string, moves: readonly MovePair[]): string | null {
+  for (const move of moves) {
+    if (samePath(absPath, move.from)) return move.to;
+    if (isUnderPath(absPath, move.from)) {
+      const to = move.to.replace(/[\\/]+$/, '');
+      const sep = to.includes('\\') ? '\\' : '/';
+      const remainder = absPath.slice(normaliseForCompare(move.from).length);
+      return to + remainder.replace(/[\\/]/g, sep);
+    }
+  }
+  return null;
 }

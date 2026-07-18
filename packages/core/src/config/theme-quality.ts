@@ -12,7 +12,7 @@
  *   AA thresholds (4.5:1 body, 3:1 large/UI). Hard failure for the in-scope
  *   themes only; out-of-scope shortfalls are reported, not thrown.
  */
-import type { Theme } from './theme.js';
+import { THRONG_THEME, type Theme } from './theme.js';
 
 export interface Rgb {
   r: number;
@@ -288,19 +288,46 @@ export interface ContrastPairing {
   label: string;
 }
 
-/** The ten tokens code is painted with (016, FR-006). */
-export const SYNTAX_TOKENS: readonly string[] = [
-  'syntaxKeyword',
-  'syntaxString',
-  'syntaxComment',
-  'syntaxNumber',
-  'syntaxType',
-  'syntaxFunction',
-  'syntaxVariable',
-  'syntaxOperator',
-  'syntaxPunctuation',
-  'syntaxInvalid',
-];
+/** Every `syntax*` token a theme paints code with, sorted for a stable pairing order. */
+function syntaxTokensOf(theme: Theme): string[] {
+  return Object.keys(theme.colours)
+    .filter((token) => token.startsWith('syntax'))
+    .sort();
+}
+
+/**
+ * The tokens code is painted with (016, FR-006), DERIVED from the canonical registry (019, FR-026).
+ *
+ * This was a hand-list of ten names, and the hand-list IS the bug #83 reports: 016 added these
+ * tokens and nobody added the matching pairings, because nothing forced them to. Restating the
+ * names here would leave the same escape hatch one level down — a future `syntaxDecorator` added to
+ * the themes and forgotten here would be invisible to every guard below. `THRONG_THEME` is the
+ * right source: it is the always-complete theme every other theme falls back to, and the one theme
+ * that bypasses `makeTheme`'s legibility lift.
+ */
+export const SYNTAX_TOKENS: readonly string[] = syntaxTokensOf(THRONG_THEME);
+
+/**
+ * The floor for a syntax hue on the editor body (019, C3/FR-025).
+ *
+ * WCAG AA body text (`WCAG_AA_BODY`, 4.5:1) is the FLOOR, not the gate. `makeTheme` already lifts
+ * every syntax seed to 6:1 against `editorBg` (`default-themes/index.ts`, `syntaxAndSearch`),
+ * because a search-match surface can only be tinted as far as the WEAKEST syntax hue still reads on
+ * it: a comment authored at exactly 4.5:1 on the body leaves NO budget and collapses the search
+ * highlight to invisibility. So a 4.5 gate here would be WEAKER than the derivation it exists to
+ * protect — it would admit exactly the theme the lift is written to prevent, and report nothing.
+ * 6.0 is throng's house standard for code on the editor body, and it is what the shipped themes
+ * already meet: all ten tokens across all fifteen bundled themes measure ≥6.01:1.
+ */
+export const SYNTAX_BODY_MIN = 6.0;
+
+/**
+ * Themes whose low contrast is the POINT, not a defect (019, C4/FR-028; #61's policy).
+ *
+ * All three pass the syntax/body gate today, so the carve-out costs nothing right now. It exists so
+ * that a future recolour honouring one of these themes' character is not reported as a defect.
+ */
+export const BY_DESIGN_LOW_CONTRAST_THEMES: readonly string[] = ['Matrix', 'VI-VIM', 'Gothic'];
 
 /**
  * Every syntax colour, measured on BOTH search-match surfaces (016, FR-007a).
@@ -315,6 +342,24 @@ const SYNTAX_ON_MATCH: readonly ContrastPairing[] = SYNTAX_TOKENS.flatMap((fg) =
   { fg, bg: 'searchMatch', min: WCAG_AA_BODY, label: `${fg} on a search match` },
   { fg, bg: 'searchMatchCurrent', min: WCAG_AA_BODY, label: `${fg} on the current search match` },
 ]);
+
+/** A syntax hue measured on the editor body — the background it is painted on nearly always. */
+const syntaxOnBodyPairing = (fg: string): ContrastPairing => ({
+  fg,
+  bg: 'editorBg',
+  min: SYNTAX_BODY_MIN,
+  label: `${fg} on the editor background`,
+});
+
+/**
+ * Every syntax colour, measured on the EDITOR BODY (019, FR-025/#83).
+ *
+ * The existing pairings measure the syntax hues against the two SEARCH-MATCH surfaces only — the
+ * background beneath a handful of characters, occasionally — while `editorBg` is the background for
+ * the overwhelming majority of a source file and was never measured at all. DERIVED from
+ * `SYNTAX_TOKENS` (FR-026), so a token added later is measured without anyone editing a list.
+ */
+const SYNTAX_ON_BODY: readonly ContrastPairing[] = SYNTAX_TOKENS.map(syntaxOnBodyPairing);
 
 /**
  * The enumerated foreground-on-background pairings measured for every theme
@@ -339,7 +384,24 @@ export const CONTRAST_PAIRINGS: readonly ContrastPairing[] = [
     label: 'editor status strip label on its strip background',
   },
   ...SYNTAX_ON_MATCH,
+  ...SYNTAX_ON_BODY,
 ];
+
+/**
+ * The pairings measured for a GIVEN theme: the enumerated set, plus an `editorBg` pairing for any
+ * `syntax*` token the theme carries that the registry does not (FR-026, FR-029).
+ *
+ * The second half is what makes the derivation real rather than merely tidy. `CONTRAST_PAIRINGS` is
+ * derived from `THRONG_THEME` at module load, so a theme that paints code with a token throng has
+ * never heard of would otherwise slip through the same crack #83 reports — the list would simply not
+ * know about it. Derived per theme, it cannot: whatever a theme SHIPS is what gets measured.
+ */
+export function contrastPairingsFor(theme: Theme): readonly ContrastPairing[] {
+  const extra = syntaxTokensOf(theme)
+    .filter((token) => !SYNTAX_TOKENS.includes(token))
+    .map(syntaxOnBodyPairing);
+  return extra.length === 0 ? CONTRAST_PAIRINGS : [...CONTRAST_PAIRINGS, ...extra];
+}
 
 export interface ContrastResult {
   label: string;
@@ -352,7 +414,7 @@ export interface ContrastResult {
 
 /** Measure every enumerated pairing for a theme (colours resolve within the theme). */
 export function measureContrast(theme: Theme): ContrastResult[] {
-  return CONTRAST_PAIRINGS.map((p) => {
+  return contrastPairingsFor(theme).map((p) => {
     const fg = theme.colours[p.fg];
     const bg = theme.colours[p.bg];
     const ratio = fg && bg ? contrastRatio(fg, bg) : 0;
@@ -379,6 +441,37 @@ export function assertInScopeContrast(themes: readonly Theme[]): void {
   }
   if (problems.length) {
     throw new Error(`in-scope theme contrast below WCAG 2.1 AA: ${problems.join('; ')}`);
+  }
+}
+
+/**
+ * Hard gate for the syntax-on-editor-body pairings across EVERY bundled theme bar the by-design
+ * carve-out (019, FR-027/C4): throw if any syntax hue falls below `SYNTAX_BODY_MIN` on the editor
+ * background it is painted on, naming theme, token and measured ratio.
+ *
+ * Deliberately a THROW and deliberately its own gate, for two separate reasons:
+ *   - a report nobody reads is what #83 objects to, so routing these to `knownContrastIssues()`
+ *     would reproduce the defect in the fix. A theme that fails this fails the build;
+ *   - its scope is not `IN_SCOPE_THEMES`, which governs the EXISTING pairings and stays untouched.
+ *     Widening that is #61 (vNext) and is risky, because those themes may fail it today. Separating
+ *     the pairing SETS is what lets this gate cover all fifteen without blocking on #61 — measured,
+ *     every bundled theme already clears it, so gating them all cannot fail the build.
+ */
+export function assertSyntaxBodyContrast(themes: readonly Theme[]): void {
+  const problems: string[] = [];
+  for (const theme of themes) {
+    if (BY_DESIGN_LOW_CONTRAST_THEMES.includes(theme.name)) continue;
+    for (const r of measureContrast(theme)) {
+      if (r.bg !== 'editorBg' || !r.fg.startsWith('syntax') || r.pass) continue;
+      problems.push(
+        `${theme.name}: ${r.fg} on editorBg = ${r.ratio.toFixed(2)}:1 (needs ${r.min}:1)`,
+      );
+    }
+  }
+  if (problems.length) {
+    throw new Error(
+      `syntax colours illegible on the editor body (< ${SYNTAX_BODY_MIN}:1): ${problems.join('; ')}`,
+    );
   }
 }
 

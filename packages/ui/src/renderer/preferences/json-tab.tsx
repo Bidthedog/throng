@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import type { ConfigDocId } from '@throng/core';
-import { writeConfig, debounce } from '../config/write-config.js';
+import { scheduleWrite, cancelWrite } from '../config/write-config.js';
 import { StandaloneEditor } from '../editor/standalone-editor.js';
 
 /**
@@ -49,36 +49,46 @@ export function JsonTab({ docId }: JsonTabProps): ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docKey]);
 
-  const apply = useMemo(
-    () =>
-      debounce((v: string) => {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(v);
-        } catch {
-          setInvalid(true); // not applied; last valid state remains (FR-017)
-          return;
-        }
-        setInvalid(false);
-        // Main canonicalises on write (pretty JSON + trailing newline); record that
-        // exact form so the watcher's echo (readRaw) equals lastApplied and the
-        // buffer is NOT reflowed under the cursor on our own apply (external changes,
-        // which differ, still reload a clean buffer).
-        lastAppliedRef.current = `${JSON.stringify(parsed, null, 2)}\n`;
-        dirtyRef.current = false;
-        // Applying resolves any outstanding conflict: this is the "keep editing,
-        // your next apply overwrites" branch of FR-041.
-        setExternal(null);
-        void writeConfig(docId, v);
-      }, 300),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [docKey],
-  );
+  /**
+   * The apply body, run by the write module at FIRE time (019 C26). Returns the document to
+   * write, or `null` to write NOTHING.
+   *
+   * This stays a thunk rather than a finished JSON string precisely because it is more than a
+   * write: it decides WHETHER to write (an unparseable buffer must not reach the config file,
+   * FR-017), and its echo-suppression and dirty/external bookkeeping must run when the write
+   * does — not per keystroke at the call site, where clearing `dirtyRef` before the write lands
+   * would break FR-041.
+   */
+  const applyBody = (v: string): string | null => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(v);
+    } catch {
+      setInvalid(true); // not applied; last valid state remains (FR-017)
+      return null;
+    }
+    setInvalid(false);
+    // Main canonicalises on write (pretty JSON + trailing newline); record that
+    // exact form so the watcher's echo (readRaw) equals lastApplied and the
+    // buffer is NOT reflowed under the cursor on our own apply (external changes,
+    // which differ, still reload a clean buffer).
+    lastAppliedRef.current = `${JSON.stringify(parsed, null, 2)}\n`;
+    dirtyRef.current = false;
+    // Applying resolves any outstanding conflict: this is the "keep editing,
+    // your next apply overwrites" branch of FR-041.
+    setExternal(null);
+    return v;
+  };
 
   const onChange = (v: string): void => {
     setText(v);
     dirtyRef.current = v !== lastAppliedRef.current;
-    apply(v);
+    // Scheduled through the write MODULE, keyed by document (019 FR-010, C25/C26), so a close
+    // can settle it. It also dissolves the orphan this tab used to strand: the debounce
+    // instance was memoised on `docKey`, so re-rendering with a new `docId` — which is what
+    // happens here, rather than an unmount — minted a fresh one and left the old one's armed
+    // timer to fire with nobody holding it. Per-id keying means there is no instance to mint.
+    scheduleWrite(docId, () => applyBody(v), 300);
   };
 
   // External-change reflection (FR-041). A CLEAN buffer reloads to the on-disk
@@ -105,7 +115,7 @@ export function JsonTab({ docId }: JsonTabProps): ReactElement {
     if (external === null) return;
     // A debounced apply of the edit we are abandoning must not fire afterwards
     // and silently write it back over the document we just adopted.
-    apply.cancel();
+    cancelWrite(docId);
     setText(external);
     lastAppliedRef.current = external;
     dirtyRef.current = false;

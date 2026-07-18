@@ -19,6 +19,13 @@ export interface SettingControlProps {
   value: unknown;
   /** Dynamic option override for a select whose values aren't static (e.g. themes). */
   options?: readonly (string | number)[];
+  /**
+   * What to CALL each dynamic option, where the value is an internal id (019, FR-016).
+   *
+   * The detected built-ins are offered by id — `cmd` is what the setting stores — but `cmd` is not
+   * what Command Prompt is called. The stored value is unchanged; this is display only.
+   */
+  optionLabels?: Readonly<Record<string, string>>;
   /** Apply a valid new value (the tab wires this to the config-write path). */
   onCommit: (value: unknown) => void;
 }
@@ -45,7 +52,11 @@ export function SettingControl(props: SettingControlProps): ReactElement {
     // FIELD showing "[object Object]" — which is not a crash, not a type error, and not caught by
     // anything: the descriptor is valid, the control is valid, and the user simply sees nonsense.
     // That silent degradation is why the default arm is dangerous, and why this case exists.
+    // …and `records` is an ARRAY of records (019, FR-018/FR-020) — the same table in its records
+    // mode, never a second one. It needs this arm for exactly the reason above: without it
+    // `terminals.flavours` does not crash, it renders as a TEXT FIELD full of "[object Object]".
     case 'map':
+    case 'records':
       return <MapControl {...props} />;
     default:
       // text / colour / font-family / icon / chord fall back to a text field here;
@@ -141,19 +152,69 @@ function SelectControl({ descriptor, value, options, onCommit }: SettingControlP
   );
 }
 
-function MultiSelectControl({ descriptor, value, onCommit }: SettingControlProps): ReactElement {
-  const selected = Array.isArray(value) ? value.map(String) : [];
-  const opts = (descriptor.allowedValues ?? []).map(String);
+function MultiSelectControl({
+  descriptor,
+  value,
+  options,
+  optionLabels,
+  onCommit,
+}: SettingControlProps): ReactElement {
+  /**
+   * The tick shows AT ONCE; the stored value catches up — the same reasoning as {@link
+   * ToggleControl}, and the same bug if it is missing.
+   *
+   * A checkbox driven purely by the stored value cannot move until that value has been written to
+   * settings.json, read back through the file watcher and re-parsed into the config store. You
+   * click, nothing happens, and the control reads as broken. The optimistic value is dropped the
+   * instant the real one arrives, so the store always has the last word.
+   */
+  const stored = Array.isArray(value) ? value.map(String) : [];
+  const [optimistic, setOptimistic] = useState<string[] | null>(null);
+  useEffect(() => setOptimistic(null), [value]);
+  const selected = optimistic ?? stored;
+  /*
+   * The DYNAMIC options win where they exist (019, FR-016).
+   *
+   * This control read `descriptor.allowedValues` and nothing else, so it could only ever offer a
+   * set known at authoring time — and `terminals.disabledBuiltins`'s set is the built-ins THIS
+   * MACHINE has, which is discovered at runtime. A control that cannot be told what to offer is a
+   * control the only setting that needs it cannot use.
+   *
+   * An empty catalogue renders an EMPTY PICKER, never a text box: detection finding nothing is not
+   * a reason to ask the user to type an id no one can check (007 FR-029).
+   */
+  const catalogue = (options ?? descriptor.allowedValues ?? []).map(String);
+  /*
+   * A SELECTED value the catalogue does not offer is still offered — so it can be un-selected.
+   *
+   * `selected` only drives `checked`, so a value absent from the catalogue had no control at all: it
+   * was live in the settings file and unreachable from the form. `terminals.disabledBuiltins` makes
+   * that a one-way door across machines — hide `git-bash` where Git is installed, sync settings.json
+   * to a machine without it, and detection never offers the id back. The only way to un-hide it is
+   * the JSON tab, which is the very door C10/FR-017 exists to prevent, one layer up.
+   *
+   * The precedent is {@link SelectControl}, twelve lines above: a current value missing from a
+   * dynamic list is kept visible "so we never silently drop it". Appended, never swapped in — the
+   * catalogue keeps its own order, and the orphans follow it.
+   */
+  const opts = [...catalogue, ...selected.filter((s) => !catalogue.includes(s))];
   const toggle = (o: string): void => {
     const next = selected.includes(o) ? selected.filter((s) => s !== o) : [...selected, o];
+    setOptimistic(next);
     onCommit(next);
   };
   return (
     <div className="ctl ctl--multiselect" data-testid={testId(descriptor.key)}>
       {opts.map((o) => (
         <label key={o} className="ctl__check">
-          <input type="checkbox" checked={selected.includes(o)} onChange={() => toggle(o)} />
-          {o}
+          {/* The VALUE is the id the setting stores; the TEXT is what the thing is called. */}
+          <input
+            type="checkbox"
+            value={o}
+            checked={selected.includes(o)}
+            onChange={() => toggle(o)}
+          />
+          {optionLabels?.[o] ?? o}
         </label>
       ))}
     </div>
