@@ -59,7 +59,7 @@ test('the cog reveals exactly Settings / Key Bindings / Themes and is dismissibl
     await win.getByTestId('title-bar-cog').click();
     const menu = win.getByTestId('cog-menu');
     await expect(menu).toBeVisible();
-    await expect(menu.getByRole('menuitem')).toHaveText(['Settings', 'Key Bindings', 'Themes']);
+    await expect(menu.getByRole('menuitem')).toHaveText(['Settings', 'Key Bindings', 'Themes', 'About throng']);
     // Dismiss without a selection.
     await win.keyboard.press('Escape');
     await expect(menu).toBeHidden();

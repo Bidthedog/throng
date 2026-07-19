@@ -61,11 +61,12 @@ test('the shared menu is keyboard-navigable — arrows move, Enter fires, Escape
       .poll(() => win.evaluate(() => document.activeElement?.getAttribute('data-testid')))
       .toBe('cog-menu-settings');
 
-    // End jumps to the last item; the focus wraps rather than dead-ending.
+    // End jumps to the last item; the focus wraps rather than dead-ending. The cog menu's last item
+    // is "About throng" (020 FR-003), added after Settings / Key Bindings / Themes.
     await win.keyboard.press('End');
     await expect
       .poll(() => win.evaluate(() => document.activeElement?.getAttribute('data-testid')))
-      .toBe('cog-menu-themes');
+      .toBe('cog-menu-about');
 
     await win.keyboard.press('Escape');
     await expect(menu).toBeHidden();
