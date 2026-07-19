@@ -208,6 +208,14 @@ its terminals).
 **New to the app?** [`docs/quick-start.md`](docs/quick-start.md) walks through it properly —
 first launch to a working project, with the default key bindings.
 
+### Installing a packaged build
+
+throng ships as a **self-contained per-user Windows installer** (no admin, no prerequisites) — see
+[`docs/installation.md`](docs/installation.md) to download, verify the checksum, install, upgrade and
+uninstall, and [`docs/releasing.md`](docs/releasing.md) for how a build becomes a versioned, verified,
+published release. The running app shows its version, build id and licence in **Help → About throng**
+(reached from the title-bar cog menu).
+
 ## Configuration
 
 No value is hardcoded in business logic; all are injected typed settings with documented
@@ -257,7 +265,7 @@ testing bar.
 
 ## Contributing & licence
 
-- Using throng: [`docs/quick-start.md`](docs/quick-start.md) · all guides: [`docs/`](docs/).
-- How to contribute (process, toolchain, testing bar): [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- Using throng: [`docs/quick-start.md`](docs/quick-start.md) · installing it: [`docs/installation.md`](docs/installation.md) · all guides: [`docs/`](docs/).
+- How to contribute (process, toolchain, testing bar): [`CONTRIBUTING.md`](CONTRIBUTING.md); how releases are versioned, packaged and published: [`docs/releasing.md`](docs/releasing.md).
 - Copyright © 2026 Christopher Sebok, licensed **AGPL-3.0** — see [`LICENSE`](LICENSE) and
   [`COPYRIGHT.md`](COPYRIGHT.md).
