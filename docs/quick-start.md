@@ -23,7 +23,7 @@ they keep running when the window closes — stop it with `Ctrl+C` when you're d
 ## First launch
 
 throng opens centred on your main display, with an application-drawn title bar reading
-**"throng — No project"**. The window is three panes:
+**"No project — throng"** (every window's title takes the ` — throng` suffix). The window is three panes:
 
 | Pane | What it holds |
 |---|---|
