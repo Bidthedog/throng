@@ -129,6 +129,40 @@ test('the Themes tab has a typeahead over its token rows (FR-021, SC-024)', asyn
   );
 });
 
+test('the Themes tab groups tokens by app area, and search matches a section name (021)', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openPrefs(app, win, 'themes');
+
+      // Tokens render under AREA headings, not one flat "Colours" list (FR-001). General is first and
+      // the Icons section is last; a dense area nests an "Editor · Syntax" sub-group (FR-003a/FR-004).
+      const general = prefs.getByTestId('settings-group-General');
+      const icons = prefs.getByTestId('settings-group-Icons');
+      const syntax = prefs.getByTestId('settings-group-Editor · Syntax');
+      await expect(general).toBeVisible();
+      await expect(syntax).toBeVisible();
+      await expect(icons).toBeVisible();
+      const gy = await general.boundingBox();
+      const iy = await icons.boundingBox();
+      expect(gy!.y).toBeLessThan(iy!.y); // General first, Icons last
+
+      // Section-name search: typing an AREA name returns every token in it — including the syntax
+      // colours, whose own names contain no "editor" (FR-015/FR-016). Terminal tokens are excluded.
+      const search = prefs.getByTestId('themes-search');
+      await search.fill('editor');
+      await expect(prefs.getByTestId('theme-row-colours.syntaxKeyword')).toBeVisible();
+      await expect(prefs.getByTestId('theme-row-colours.editorBg')).toBeVisible();
+      await expect(prefs.getByTestId('theme-row-colours.terminalBg')).toHaveCount(0);
+
+      // Name search still works regardless of group (US3/FR-013).
+      await search.fill('gutter');
+      await expect(prefs.getByTestId('theme-row-colours.editorGutterBg')).toBeVisible();
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
+
 test('the icon section takes part in the Themes search, and is not exempt from it', async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(

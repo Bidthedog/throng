@@ -37,43 +37,41 @@ describe('the split-fallback chain (FR-008)', () => {
   it('resolves a carved-out token to THAT THEME’s parent, not to the built-in default', () => {
     const theme = preSplitTheme({ surface: '#ff0000', surfaceActive: '#00ff00', accent: '#0000ff' });
 
-    // Carved out of `surface` — must inherit the theme's OWN red, never THRONG's #1b2230.
-    expect(resolveSplitColour(theme, 'menuSurface')).toBe('#ff0000');
+    // Carved out of `surface` — must inherit the theme's OWN red, never THRONG's #1b2230. 021 removed
+    // `menuSurface`/`dialogSurface`, so `inputSurface`/`hoverSurface` are the remaining carve-outs.
     expect(resolveSplitColour(theme, 'inputSurface')).toBe('#ff0000');
     expect(resolveSplitColour(theme, 'hoverSurface')).toBe('#ff0000');
-    expect(resolveSplitColour(theme, 'dialogSurface')).toBe('#ff0000');
   });
 
   it('lets an explicit value win over the parent', () => {
-    const theme = preSplitTheme({ surface: '#ff0000', menuSurface: '#123456' });
-    expect(resolveSplitColour(theme, 'menuSurface')).toBe('#123456');
-    expect(resolveSplitColour(theme, 'inputSurface')).toBe('#ff0000');
+    const theme = preSplitTheme({ surface: '#ff0000', inputSurface: '#123456' });
+    expect(resolveSplitColour(theme, 'inputSurface')).toBe('#123456');
+    expect(resolveSplitColour(theme, 'hoverSurface')).toBe('#ff0000');
   });
 
   it('falls through to the built-in default when neither the token nor its parent is set', () => {
     const theme = preSplitTheme({});
-    expect(resolveSplitColour(theme, 'menuSurface')).toBe(THRONG_THEME.colours.menuSurface);
+    expect(resolveSplitColour(theme, 'inputSurface')).toBe(THRONG_THEME.colours.inputSurface);
   });
 
   it('treats an EMPTY or null value as unset, not as a colour', () => {
     // The Themes editor puts this one keystroke away: select the hex field, press Delete. If '' were
-    // treated as "set", the emitter would write `--throng-colour-menuSurface: ''`, which REMOVES the
-    // custom property — and since the re-pointed rules carry no literal fallbacks, every menu in the
-    // application would render with no background at all: white text floating over the workspace.
-    // A null survives a hand-edited theme file the same way.
-    const cleared = preSplitTheme({ surface: '#ff0000', menuSurface: '' });
-    expect(resolveSplitColour(cleared, 'menuSurface')).toBe('#ff0000');
+    // treated as "set", the emitter would write `--throng-colour-inputSurface: ''`, which REMOVES the
+    // custom property — and since the re-pointed rules carry no literal fallbacks, every field in the
+    // application would render with no background at all. A null survives a hand-edited theme file too.
+    const cleared = preSplitTheme({ surface: '#ff0000', inputSurface: '' });
+    expect(resolveSplitColour(cleared, 'inputSurface')).toBe('#ff0000');
 
-    const whitespace = preSplitTheme({ surface: '#ff0000', menuSurface: '   ' });
-    expect(resolveSplitColour(whitespace, 'menuSurface')).toBe('#ff0000');
+    const whitespace = preSplitTheme({ surface: '#ff0000', inputSurface: '   ' });
+    expect(resolveSplitColour(whitespace, 'inputSurface')).toBe('#ff0000');
 
     const nulled = { ...preSplitTheme({ surface: '#ff0000' }) };
-    (nulled.colours as Record<string, unknown>).menuSurface = null;
-    expect(resolveSplitColour(nulled, 'menuSurface')).toBe('#ff0000');
+    (nulled.colours as Record<string, unknown>).inputSurface = null;
+    expect(resolveSplitColour(nulled, 'inputSurface')).toBe('#ff0000');
 
     // And with no parent either, it must still land on a real colour rather than emitting nothing.
-    const bare = preSplitTheme({ menuSurface: '' });
-    expect(resolveSplitColour(bare, 'menuSurface')).toBe(THRONG_THEME.colours.menuSurface);
+    const bare = preSplitTheme({ inputSurface: '' });
+    expect(resolveSplitColour(bare, 'inputSurface')).toBe(THRONG_THEME.colours.inputSurface);
   });
 
   it('keeps every bundled theme visually identical after the split', () => {
@@ -93,27 +91,16 @@ describe('the split-fallback chain (FR-008)', () => {
     const vars = toCssVariables(preSplitTheme({ surface: '#ff0000', accent: '#0000ff' }));
 
     // If the fallback had been written in CSS, these would carry THRONG's defaults and the user's
-    // red theme would sprout blue-grey menus. The whole point of FR-008 is that they do not.
-    expect(vars['--throng-colour-menuSurface']).toBe('#ff0000');
+    // red theme would sprout blue-grey fields. The whole point of FR-008 is that they do not.
     expect(vars['--throng-colour-inputSurface']).toBe('#ff0000');
     expect(vars['--throng-colour-hoverSurface']).toBe('#ff0000');
-    expect(vars['--throng-colour-dialogSurface']).toBe('#ff0000');
   });
 
   it('names a parent for every carved-out token, and only for those', () => {
     // The map is the single statement of this knowledge — the resolver and makeTheme both read it,
-    // so the two cannot drift.
-    //
-    // `menuItemHoverSurface` is NOT here: it is OPTIONAL, and its absence means "follow the active
-    // project's colour", not "inherit the theme's accent". A parent would give it a value, and a
-    // value would pin every menu highlight to the theme — silently demoting the project colour that
-    // Principle I requires to be visually dominant.
-    expect(Object.keys(TOKEN_PARENT).sort()).toEqual([
-      'dialogSurface',
-      'hoverSurface',
-      'inputSurface',
-      'menuSurface',
-    ]);
+    // so the two cannot drift. 021 removed `menuSurface`/`dialogSurface` (the menu/dialog cards were
+    // consolidated back onto `surfaceActive`/`surface`), leaving the two field/hover carve-outs.
+    expect(Object.keys(TOKEN_PARENT).sort()).toEqual(['hoverSurface', 'inputSurface']);
   });
 });
 

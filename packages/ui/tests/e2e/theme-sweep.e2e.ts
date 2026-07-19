@@ -66,7 +66,8 @@ test('every bundled theme repaints every surface; nothing is left stale (SC-004)
           // The app is still painted — this theme resolved, it did not blank the surfaces.
           for (const required of [
             '--throng-colour-surface',
-            '--throng-colour-menuSurface',
+            // 021 / FR-023 folded the menu/dropdown card onto `surfaceActive` (`menuSurface` is gone).
+            '--throng-colour-surfaceActive',
             '--throng-colour-scrollbarThumb',
             '--throng-colour-text',
             '--throng-colour-accent',

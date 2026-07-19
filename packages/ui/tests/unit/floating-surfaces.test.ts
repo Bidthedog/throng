@@ -51,7 +51,7 @@ const REGISTERED: Readonly<Record<string, string>> = {
   '.notices': 'corner-pinned toast stack — max-width clamped; nothing to flip away from',
   '.drag-ghost': 'follows the pointer by design — it is meant to leave the window',
   '.colour-picker':
-    'common/colour-picker.tsx — flips above its swatch when it would open off the bottom (found BY this guard)',
+    'common/colour-picker.tsx — flips + clamps on BOTH axes via clampToViewport (021/FR-036); found BY this guard',
   '.language-picker':
     'editor/language-picker.tsx — CLAMPS its height to the room above its strip; it opens upward from the bottom of its panel, so there is nothing below to flip to (found BY this guard, in 016)',
   '.capture-overlay': 'a full-viewport scrim over the key-capture dialog — nothing to flip away from',

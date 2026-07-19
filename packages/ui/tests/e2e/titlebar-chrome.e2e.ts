@@ -88,17 +88,13 @@ test.afterAll(() => {
     rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
 });
 
-test('the cog dropdown menu follows the active theme — and a PRE-SPLIT theme keeps its look (018, FR-008)', async () => {
-  // A theme file carrying ONLY `surface`, `surfaceActive` and `accent` — i.e. a theme authored
-  // BEFORE the 018 surface split, which knows nothing of `menuSurface` or `menuItemHoverSurface`.
-  //
-  // This is the end-to-end proof of FR-008, and it is the reason this test is worth more after the
-  // split than before it. The menus MUST still paint in this theme's own colours. If the fallback
-  // had been written as a CSS `var(--throng-colour-menuSurface, var(--surface))` — which reads
-  // perfectly and is completely dead, because the emitter always defines the property — the user's
-  // hot-pink theme would sprout throng's default blue-grey menus, and this test is what catches it.
+test('the cog dropdown menu follows the active theme (018/021, FR-008/FR-023)', async () => {
+  // A theme file carrying `surface`, `surfaceActive` and `accent`. 021 (FR-023) folded the menu card
+  // onto `surfaceActive` (the old `menuSurface` is gone), so the cog dropdown — a shared context menu
+  // — paints on the theme's OWN `surfaceActive`. This is the end-to-end proof that the menu card
+  // follows the theme: the user's theme colours reach the menu, not a hardcoded default.
   const cfgRoot = seedThemeSurfaces('#ff00aa', '#00cc55', '#ffcc00');
-  const SURFACE = 'rgb(255, 0, 170)';
+  const SURFACE_ACTIVE = 'rgb(0, 204, 85)';
   const ACCENT = 'rgb(255, 204, 0)';
   await runApp(
     async (_app, win) => {
@@ -106,11 +102,10 @@ test('the cog dropdown menu follows the active theme — and a PRE-SPLIT theme k
       const menu = win.getByTestId('cog-menu');
       await expect(menu).toBeVisible();
 
-      // The menu panel resolves `menuSurface` — absent from this theme — through the split chain to
-      // the theme's OWN surface. Not a hardcoded #1a1f2b, and not throng's default either.
+      // The menu card resolves `surfaceActive` — the theme's own value, not throng's default.
       await expect
         .poll(() => menu.evaluate((el) => getComputedStyle(el).backgroundColor))
-        .toBe(SURFACE);
+        .toBe(SURFACE_ACTIVE);
 
       // A hovered item paints on the MENU HIGHLIGHT, which is carved out of `accent`.
       //

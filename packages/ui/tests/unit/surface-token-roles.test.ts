@@ -151,14 +151,21 @@ describe('the surface token split (FR-001 / SC-001)', () => {
     expect(names.has('--surface'), 'the guard must follow --surface').toBe(true);
   });
 
-  it('paints ONLY pane and panel bodies with the pane token', () => {
+  it('paints ONLY pane/panel bodies and dialog cards with the pane token', () => {
+    // 021 / FR-023 — the surface consolidation gave `surface` a SECOND legitimate job. `menuSurface`
+    // and `dialogSurface` are gone; the menu/dropdown cards folded onto `surfaceActive`, and the
+    // DIALOG/MODAL/NOTICE cards folded back onto `surface`. So the pane token now paints pane bodies,
+    // panel boxes AND those dialog cards — and nothing else. The set is enumerated (not open) so a
+    // NEW, un-audited surface reaching for the pane token still fails, exactly as before.
+    const DIALOG_CARDS =
+      /^\.(modal|notice|capture-modal|colour-picker|find-bar|app-closing__card|terminal-panel__starting|about-root)$|^\.app-close-table th$/;
     const offenders = readsOf(aliasesOf('surface')).filter(
-      (h) => !/^\.pane--\w+$|^\.panel-box$/.test(h.selector),
+      (h) => !/^\.pane--\w+$|^\.panel-box$/.test(h.selector) && !DIALOG_CARDS.test(h.selector),
     );
     const report = offenders.map((h) => `${h.selector} (${h.where})`).sort();
     expect(
       report,
-      `these paint with the PANE token but are not panes:\n${report.join('\n')}`,
+      `these paint with the PANE token but are neither panes nor dialog cards:\n${report.join('\n')}`,
     ).toEqual([]);
   });
 

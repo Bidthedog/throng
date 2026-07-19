@@ -185,6 +185,35 @@ test('the settings search filters by name, description and value (FR-049)', asyn
   );
 });
 
+test('the settings search matches a section (group) name, including nested sub-groups (021)', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openSettings(app, win);
+      const search = prefs.getByTestId('settings-search');
+
+      // Group-only match: `editor.openOnClick` lives in the "File Explorer" group, but neither its key
+      // (`editor.openOnClick`) nor its label contains "explorer". Typing the SECTION name still returns
+      // it — and the rest of that section too (FR-015/FR-017).
+      await search.fill('explorer');
+      await expect(prefs.getByTestId('setting-editor.openOnClick')).toBeVisible();
+      await expect(prefs.getByTestId('setting-explorer.deleteMode')).toBeVisible();
+      // A setting in a different section (Appearance) is not pulled in.
+      await expect.poll(() => rowCount(prefs, 'appearance.theme')).toBe(0);
+
+      // Nested sub-group: typing the PARENT area name "editor" returns settings in its
+      // "Editor · Indentation" sub-group too (SC-007, Settings side).
+      await search.fill('editor');
+      await expect(prefs.getByTestId('setting-editor.indent.style')).toBeVisible();
+
+      // A query that matches nothing still empties the form.
+      await search.fill('zzzznothing');
+      await expect(prefs.getByTestId('settings-search-empty')).toBeVisible();
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
+
 test('the settings search is debounced and has a reset (X) button (FR-049)', async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(

@@ -134,6 +134,59 @@ test('the picker is fully keyboard-operable, with a visible focus indicator (FR-
   );
 });
 
+/** Assert a locator's bounding box sits fully inside the window's viewport. */
+async function expectWithinViewport(page: Page, box: { x: number; y: number; width: number; height: number } | null): Promise<void> {
+  expect(box).not.toBeNull();
+  const vp = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(vp.width + 0.5);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(vp.height + 0.5);
+}
+
+test('the picker opens fully on-screen near the RIGHT edge (021/FR-036)', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openThemes(app, win);
+
+      // Colour controls are right-aligned in their row (`justify-content: flex-end`, min-width 180px),
+      // so a swatch sits near the right edge of the ~780px window. A picker that opened straight down
+      // from `left: 0` used to run off the right side; it must now clamp/flip to stay on-screen.
+      const swatch = prefs.getByTestId('control-colours.accent');
+      await swatch.scrollIntoViewIfNeeded();
+      await swatch.click();
+      const picker = prefs.getByTestId('control-colours.accent-picker');
+      await expect(picker).toBeVisible();
+      await expectWithinViewport(prefs, await picker.boundingBox());
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
+
+test('the picker opens fully on-screen near the BOTTOM edge (021/FR-036)', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openThemes(app, win);
+
+      // Scroll the Themes panel to the bottom and open the LAST colour swatch — its picker would open
+      // off the bottom of the window unless it flips above.
+      await prefs.getByTestId('prefs-panel-themes').evaluate((el) => {
+        el.scrollTop = el.scrollHeight;
+      });
+      const swatches = prefs.locator('.ctl__colour-swatch');
+      const last = swatches.last();
+      await last.scrollIntoViewIfNeeded();
+      await last.click();
+      const picker = prefs.locator('.colour-picker');
+      await expect(picker).toBeVisible();
+      await expectWithinViewport(prefs, await picker.boundingBox());
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
+
 test('the colour applies LIVE and persists — and rapid edits compound into one write (FR-022, FR-023)', async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(
