@@ -1,0 +1,162 @@
+name: Release
+
+# Packaging, clean-machine installer verification, and gated GitHub-Releases publish for throng
+# (feature 020, #21). Windows-only (FR-038), windows-2022 + Node 20 to match CI's native builds so
+# the bundled runtime's ABI matches the daemon's native modules (better-sqlite3, node-pty, koffi).
+#
+# - build-installer + verify-installer run on every push to the packaging branch and on demand, so
+#   the installer is actually built and CLEAN-INSTALLED on a fresh runner (the closest thing to a
+#   clean machine for a GUI app — the runner has a virtual desktop the Electron app needs).
+# - publish runs only for a version tag or an explicit dispatch, and is gated on the `release`
+#   Environment's required reviewers (the human QA sign-off, FR-029) — it cannot be triggered from a
+#   developer machine or an unreviewed branch (FR-037).
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish a GitHub Release (requires the release Environment approval)'
+        type: boolean
+        default: false
+  push:
+    branches: [worktree-21-app-packaging]
+    tags: ['v*']
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  npm_config_loglevel: error
+
+jobs:
+  build-installer:
+    name: Build the per-user installer
+    runs-on: windows-2022
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Read product version
+        id: ver
+        shell: bash
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Package (build + stage runtime + electron-builder NSIS per-user)
+        run: npm run package -- --publish never
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: throng-installer
+          path: dist/installer/*.exe
+          if-no-files-found: error
+
+  verify-installer:
+    name: Verify on a clean machine
+    runs-on: windows-2022
+    timeout-minutes: 30
+    needs: build-installer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build (@throng/core for the verify harness)
+        run: npm run build
+      - name: Download installer
+        uses: actions/download-artifact@v4
+        with:
+          name: throng-installer
+          path: dist/installer
+      - name: Verify install -> launch -> version -> uninstall -> residue
+        shell: bash
+        run: |
+          installer=$(ls dist/installer/*.exe | head -n1)
+          echo "Verifying $installer"
+          node scripts/verify-installer.mjs "$installer" \
+            --expected-version "${{ needs.build-installer.outputs.version }}" \
+            --verdict-out verification-verdict.json
+      - name: Upload verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-verdict
+          path: verification-verdict.json
+          if-no-files-found: warn
+
+  publish:
+    name: Publish GitHub Release (gated)
+    runs-on: windows-2022
+    timeout-minutes: 20
+    needs: [build-installer, verify-installer]
+    # Only for a version tag or an explicit dispatch with publish=true. The Environment's required
+    # reviewers are the human QA sign-off (FR-029); approval gates this job's run.
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build (@throng/core for the gate + checksum)
+        run: npm run build
+      - name: Download installer
+        uses: actions/download-artifact@v4
+        with:
+          name: throng-installer
+          path: dist/installer
+      - name: Download verdict
+        uses: actions/download-artifact@v4
+        with:
+          name: verification-verdict
+          path: .
+      - name: Evaluate publish gates (real version + verified + signed off; refuse re-publish)
+        shell: bash
+        env:
+          THRONG_VERDICT_FILE: verification-verdict.json
+          THRONG_QA_SIGNED_OFF: '1' # the release Environment approval gates this job's run
+          # The release tag this run publishes — the sign-off/version binding (T041a/T038a): the gate
+          # refuses unless the installer filename, package version, verdict-reported version and this
+          # tag all agree, so an approval cannot satisfy the gate for a different build.
+          THRONG_RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          installer=$(ls dist/installer/*.exe | head -n1)
+          export THRONG_INSTALLER_FILE="$installer"
+          version="${{ needs.build-installer.outputs.version }}"
+          if gh release view "v$version" >/dev/null 2>&1; then export THRONG_ALREADY_PUBLISHED=1; fi
+          node scripts/publish-gates.mjs
+        # gh is preinstalled on the runner; GH_TOKEN provided below.
+      - name: Compute checksum (last step reading the bytes) and publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          installer=$(ls dist/installer/*.exe | head -n1)
+          version="${{ needs.build-installer.outputs.version }}"
+          sum=$(node scripts/checksum.mjs "$installer")
+          notes="Automated release of throng v$version.
+
+          **This installer is not code-signed.** Windows will show an \"unrecognised app\" warning
+          (SmartScreen) — click **More info → Run anyway**. Never disable a security feature to install.
+          Verify your download matches the checksum below (\`Get-FileHash <file> -Algorithm SHA256\`).
+
+          | Artifact | SHA-256 |
+          |---|---|
+          | $(basename "$installer") | \`$(echo "$sum" | cut -d' ' -f1)\` |
+
+          Built from ${{ github.sha }}."
+          gh release create "v$version" "$installer" --title "throng v$version" --notes "$notes"
