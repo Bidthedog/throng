@@ -38,7 +38,7 @@
   border-radius: 4px;
 }
 
-.hidden-path:hover {
+:where(body:not([data-window-blurred])) .hidden-path:hover {
   background: var(--throng-colour-hoverSurface);
 }
 

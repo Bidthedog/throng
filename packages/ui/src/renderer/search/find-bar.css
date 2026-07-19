@@ -11,7 +11,7 @@
   flex-direction: column;
   gap: 2px;
   padding: 4px;
-  background: var(--throng-colour-dialogSurface);
+  background: var(--throng-colour-surface);
   border: 1px solid var(--throng-colour-border, #2a3344);
   border-top: none;
   border-right: none;
@@ -63,6 +63,8 @@
 /* Every action control is the same size, whatever glyph a theme gives it: the icons range
  * from a wide emoji to a two-letter "Aa", so the box is fixed and the glyph is centred and
  * scaled to fit inside it rather than being allowed to set the button's dimensions. */
+/* 021 (FR-027) — the find bar's action buttons are Confirm-type (they act on the search), so they
+   consume only the Confirm tokens for rest / hover / pressed — no borrowed accent or border. */
 .find-bar-btn {
   display: inline-flex;
   flex: 0 0 auto;
@@ -75,24 +77,25 @@
   overflow: hidden;
   font-size: 12px;
   line-height: 1;
-  color: var(--throng-colour-buttonText, #e6ebf2);
+  color: var(--throng-colour-confirmButtonText);
   text-align: center;
   cursor: pointer;
-  background: var(--throng-colour-buttonBg, #222c3d);
-  border: 1px solid var(--throng-colour-border, #2a3344);
+  background: var(--throng-colour-confirmButtonBg);
+  border: 1px solid var(--throng-colour-confirmButtonBorder);
   border-radius: 3px;
 }
 
 .find-bar-btn:hover:not(:disabled) {
-  color: var(--throng-colour-buttonHoverText, #10131a);
-  background: var(--throng-colour-buttonHoverBg, #6aa3ff);
+  color: var(--throng-colour-confirmButtonHoverText);
+  background: var(--throng-colour-confirmButtonHoverBg);
+  border-color: var(--throng-colour-confirmButtonHoverBorder);
 }
 
-/* An engaged match-mode toggle reads as pressed. */
+/* An engaged match-mode toggle reads as pressed — the Confirm hover pair. */
 .find-bar-btn--on {
-  color: var(--throng-colour-buttonHoverText, #10131a);
-  background: var(--throng-colour-accent, #6aa3ff);
-  border-color: var(--throng-colour-accent, #6aa3ff);
+  color: var(--throng-colour-confirmButtonHoverText);
+  background: var(--throng-colour-confirmButtonHoverBg);
+  border-color: var(--throng-colour-confirmButtonHoverBorder);
 }
 
 .find-bar-btn:disabled {

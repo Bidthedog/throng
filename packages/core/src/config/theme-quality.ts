@@ -218,7 +218,7 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * current legitimate pair passes while an exact/near duplicate (mean → 0) fails.
  * Value confirmed by the distinctness test.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.925410524236476;
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.343149117829997;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A
@@ -372,9 +372,6 @@ export const CONTRAST_PAIRINGS: readonly ContrastPairing[] = [
   { fg: 'terminalFg', bg: 'terminalBg', min: WCAG_AA_BODY, label: 'terminal text on terminal background' },
   { fg: 'editorFg', bg: 'editorBg', min: WCAG_AA_BODY, label: 'editor text on editor background' },
   { fg: 'editorGutterFg', bg: 'editorGutterBg', min: WCAG_AA_LARGE_UI, label: 'gutter line numbers on gutter background' },
-  { fg: 'buttonText', bg: 'buttonBg', min: WCAG_AA_LARGE_UI, label: 'button text on button background' },
-  { fg: 'buttonHoverText', bg: 'buttonHoverBg', min: WCAG_AA_LARGE_UI, label: 'button hover text on button hover background' },
-  { fg: 'buttonText', bg: 'surfaceActive', min: WCAG_AA_LARGE_UI, label: 'button text on active surface' },
   // The editor status strip (016, FR-010c). SC-007 promises the language indicator is READABLE on
   // every bundled theme — a promise that was asserted and never measured until this pairing existed.
   {

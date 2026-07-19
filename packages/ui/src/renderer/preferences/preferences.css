@@ -90,25 +90,29 @@
   min-width: 8px;
 }
 
+/* 021 (FR-030) — the preferences toolbar buttons are ICON controls (mode toggle, reset, revert),
+   every use is `--icon`. They are in the exclusion set with `IconButton`/window controls: they take
+   the neutral `hoverSurface`, NOT a button-type token. */
 .prefs-toolbtn {
   flex: 0 0 auto;
   align-self: center;
   height: 26px;
   padding: 0 10px;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: 5px;
-  /* Buttons consume the theme's button tokens (007, FR-046a). */
-  background: var(--btn-bg);
-  color: var(--btn-text);
-  font-family: var(--btn-font-family);
-  font-size: var(--btn-font-size);
-  font-weight: var(--btn-font-weight);
+  background: transparent;
+  color: var(--text-dim, var(--text));
+  font-family: var(--throng-font-button-family, var(--throng-font-family));
+  font-size: var(--throng-font-button-size, var(--throng-font-size));
+  font-weight: var(--throng-font-button-weight, var(--throng-font-weight-normal));
   cursor: pointer;
 }
 
-.prefs-toolbtn:hover:not(:disabled) {
-  background: var(--btn-hover-bg);
-  color: var(--btn-hover-text);
+/* 021/FR-035 — hover background gated on window focus; :where() adds zero specificity. */
+:where(body:not([data-window-blurred])) .prefs-toolbtn:hover:not(:disabled) {
+  background: var(--throng-colour-hoverSurface);
+  border-color: var(--border);
+  color: var(--text);
 }
 
 .prefs-toolbtn:disabled {
@@ -261,7 +265,7 @@
   cursor: pointer;
 }
 
-.settings-search__clear:hover {
+:where(body:not([data-window-blurred])) .settings-search__clear:hover {
   color: var(--text);
   background: var(--throng-colour-hoverSurface);
 }
@@ -352,7 +356,9 @@
 .ctl__input,
 .ctl--select,
 .ctl__textarea {
-  background: var(--bg);
+  /* 021 (FR-024) — every field (input / select / textarea, incl. the theme dropdown and the colour
+     hex, which share `.ctl__input`) resolves to the Field Surface, not the app background. */
+  background: var(--throng-colour-inputSurface);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 5px;
@@ -470,7 +476,7 @@
   cursor: pointer;
 }
 
-.kb-pill__x:hover {
+:where(body:not([data-window-blurred])) .kb-pill__x:hover {
   background: var(--throng-colour-danger);
   color: var(--throng-colour-dangerText);
 }
@@ -478,7 +484,7 @@
 
 
 
-.keybinding-row:hover {
+:where(body:not([data-window-blurred])) .keybinding-row:hover {
   background: var(--throng-colour-hoverSurface);
 }
 
@@ -505,7 +511,7 @@
   min-width: 320px;
   max-width: 90vw;
   padding: 18px;
-  background: var(--throng-colour-dialogSurface);
+  background: var(--throng-colour-surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
@@ -550,14 +556,23 @@
   margin-top: 14px;
 }
 
+/* 021 (FR-027) — the capture modal and the name dialog share these buttons. The plain button is the
+   safe dismiss → Cancel; `--primary` (Bind / Create / Rename) is the safe primary → Confirm. Each
+   consumes only its type's six tokens. */
 .capture-modal__btn {
   padding: 6px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--throng-colour-cancelButtonBorder);
   border-radius: 5px;
-  background: transparent;
-  color: var(--text);
+  background: var(--throng-colour-cancelButtonBg);
+  color: var(--throng-colour-cancelButtonText);
   cursor: pointer;
   font-size: 13px;
+}
+
+.capture-modal__btn:hover:not(:disabled) {
+  background: var(--throng-colour-cancelButtonHoverBg);
+  border-color: var(--throng-colour-cancelButtonHoverBorder);
+  color: var(--throng-colour-cancelButtonHoverText);
 }
 
 /*
@@ -633,7 +648,7 @@
   cursor: pointer;
 }
 
-.icon-button:hover:not(:disabled) {
+:where(body:not([data-window-blurred])) .icon-button:hover:not(:disabled) {
   background: var(--throng-colour-hoverSurface);
   border-color: var(--border);
   color: var(--text);
@@ -712,7 +727,8 @@
   padding: 3px 4px;
   border: 1px solid var(--border);
   border-radius: 5px;
-  background: var(--bg);
+  /* 021 (FR-024) — the multi-select font-pill editor is a `.ctl` field surface too. */
+  background: var(--throng-colour-inputSurface);
 }
 
 .ctl__pill {
@@ -755,7 +771,7 @@
   z-index: 20;
   max-height: 200px;
   overflow-y: auto;
-  background: var(--throng-colour-menuSurface);
+  background: var(--throng-colour-surfaceActive);
   border: 1px solid var(--border);
   border-radius: 5px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
@@ -773,7 +789,7 @@
   font-size: 13px;
 }
 
-.ctl__font-item:hover {
+:where(body:not([data-window-blurred])) .ctl__font-item:hover {
   background: var(--throng-colour-menuItemHoverSurface, var(--accent));
   color: var(--throng-colour-accentText);
 }
@@ -1004,8 +1020,9 @@
  * system fonts, in the middle of a fully-themed dark application, which no stylesheet or flag could
  * reach. The only remedy was to stop using the native control.
  *
- * Every surface here comes from a theme token — including the picker's own card, which uses
- * `dialogSurface` because that is exactly what it is. */
+ * Every surface here comes from a theme token — including the picker's own card, which uses the
+ * dialog card `surface` (021 / FR-023 folded the old `dialogSurface` back onto it) because that is
+ * exactly what it is. */
 .ctl--colour {
   position: relative;
   display: inline-flex;
@@ -1036,7 +1053,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px;
-  background: var(--throng-colour-dialogSurface);
+  background: var(--throng-colour-surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
@@ -1181,9 +1198,15 @@
 }
 
 .capture-modal__btn--primary {
-  background: var(--btn-hover-bg);
-  border-color: var(--btn-hover-bg);
-  color: var(--btn-hover-text);
+  background: var(--throng-colour-confirmButtonBg);
+  border-color: var(--throng-colour-confirmButtonBorder);
+  color: var(--throng-colour-confirmButtonText);
+}
+
+.capture-modal__btn--primary:hover:not(:disabled) {
+  background: var(--throng-colour-confirmButtonHoverBg);
+  border-color: var(--throng-colour-confirmButtonHoverBorder);
+  color: var(--throng-colour-confirmButtonHoverText);
 }
 
 /* 018 / FR-013 — the typeahead FLIPS above its field when it would open off the bottom of the window.
@@ -1198,7 +1221,6 @@
    Found by the discovering floating-surface guard, which is the entire argument for writing one: this
    is a surface THIS feature added, and a guard shaped around the surfaces the spec listed would have
    passed while it was broken. */
-.colour-picker--up {
-  top: auto;
-  bottom: calc(100% + 6px);
-}
+/* 021/FR-036 — the picker now flips + clamps on BOTH axes via clampToViewport (JS-computed inline
+   left/top), so the old vertical-only `--up` class is retired. The CSS default below is the
+   pre-measurement position; the inline style overrides it before paint. */

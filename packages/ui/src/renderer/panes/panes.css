@@ -13,8 +13,10 @@
 }
 
 /* The left sidebar's gutter sits before its body; the right explorer's after. */
+/* 021 (FR-025) — the Files & Folders pane is the Side Panel too, so it takes the same Side Panel
+   Background (`sidebarBg`) as `.pane--sidebar` rather than the workspace panel `surface`. */
 .pane--explorer {
-  background: var(--throng-colour-surface);
+  background: var(--throng-colour-sidebarBg);
   border-left: 1px solid var(--throng-colour-border);
 }
 
@@ -82,7 +84,8 @@
   cursor: pointer;
   z-index: 6;
 }
-.pane-collapse:hover {
+/* 021/FR-035 — hover background gated on window focus; :where() adds zero specificity. */
+:where(body:not([data-window-blurred])) .pane-collapse:hover {
   color: var(--throng-colour-text);
   background: var(--throng-colour-hoverSurface);
 }

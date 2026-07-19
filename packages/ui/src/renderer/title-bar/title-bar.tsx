@@ -21,6 +21,8 @@ export interface TitleBarProps {
   showCog?: boolean;
   /** Render only the close control (no minimise/maximise) — fixed-size dialogs (020, FR-003). */
   closeOnly?: boolean;
+  /** Render the minimise control (US9/FR-034). Preferences passes `false` — it cannot minimise. */
+  showMinimise?: boolean;
 }
 
 export function TitleBar({
@@ -28,6 +30,7 @@ export function TitleBar({
   colour,
   showCog = false,
   closeOnly = false,
+  showMinimise = true,
 }: TitleBarProps): ReactElement {
   // A fixed-size dialog has nothing to maximise; double-clicking its bar must be inert.
   const onDoubleClick = (): void => {
@@ -47,7 +50,7 @@ export function TitleBar({
       </div>
       <div className="title-bar__actions">
         {showCog ? <CogMenu /> : null}
-        <WindowControls closeOnly={closeOnly} />
+        <WindowControls closeOnly={closeOnly} showMinimise={showMinimise} />
       </div>
     </header>
   );

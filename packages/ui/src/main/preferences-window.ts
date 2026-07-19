@@ -19,6 +19,22 @@ const PREF_TABS: readonly PreferencesTab[] = ['settings', 'keybindings', 'themes
 /** Channel the prefs renderer listens on to switch tab when the window is reused. */
 export const PREFERENCES_TAB_CHANNEL = 'throng:preferences:tab';
 
+/**
+ * Channel every OTHER window listens on to learn it has been blurred by the app-modal preferences
+ * window (US10/FR-035). The OS `blur` event is not delivered reliably to a disabled window under the
+ * test harness, so this is the deterministic "a child window took focus" signal the hover-suppression
+ * gate needs. `true` when preferences opens, `false` when it closes.
+ */
+export const WINDOW_BLURRED_CHANNEL = 'throng:window:blurred';
+
+/** Tell every window except `except` whether it is now blurred by the app-modal preferences window. */
+function broadcastBlurred(blurred: boolean, except?: BrowserWindow): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (w === except || w.isDestroyed()) continue;
+    w.webContents.send(WINDOW_BLURRED_CHANNEL, blurred);
+  }
+}
+
 export function isPreferencesTab(value: unknown): value is PreferencesTab {
   return typeof value === 'string' && (PREF_TABS as readonly string[]).includes(value);
 }
@@ -77,7 +93,9 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
     parent,
     movable: true,
     resizable: true,
-    title: 'throng — Preferences',
+    // US9/FR-034 — Preferences cannot minimise (no minimise affordance in the renderer either).
+    minimizable: false,
+    title: 'Preferences — throng',
     icon: appIcon(),
     backgroundColor: deps.backgroundColor ?? '#10131a',
     webPreferences: {
@@ -89,6 +107,9 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
   });
   prefsWindow = win;
   wireWindowMaximizeEvents(win);
+  // Flag every other window blurred (US10/FR-035) — they are app-modal-disabled behind this window,
+  // so any stranded CSS :hover on them must stop painting.
+  broadcastBlurred(true, win);
   deps.onOpen?.();
 
   // Minimise/restore-together with the main window (FR-013a) is native to the
@@ -98,6 +119,9 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
   win.on('closed', () => {
     prefsWindow = null;
     enableAllWindows();
+    // Clear the blurred flag on every window (US10/FR-035). The hover gate does not repaint until a
+    // genuine pointermove, so a stranded element stays un-hovered until the user actually moves.
+    broadcastBlurred(false);
     // Return focus to throng so no other application is left overlaying it (FR-013a).
     const main = deps.getMainWindow?.() ?? null;
     if (main && !main.isDestroyed()) main.focus();

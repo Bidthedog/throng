@@ -330,12 +330,29 @@ function makeTheme(name: string, p: Palette): Theme {
       // visibly de-emphasised. Derived per theme so every palette stays legible.
       activePanelBorder: activePanelBorders(p.accent, p.surface, p.text).active,
       activePanelBorderInactive: activePanelBorders(p.accent, p.surface, p.text).inactive,
-      // Button style tokens (007, FR-046a): a raised surface with the theme accent
-      // on hover, hover text flipping to the app background for contrast against it.
-      buttonBg: p.surfaceActive ?? p.surface,
-      buttonText: p.text,
-      buttonHoverBg: p.accent,
-      buttonHoverText: p.bg,
+      // Three-type button model (021, US7, FR-027). Six tokens per type, DERIVED (data-model §6) so
+      // every bundled theme looks exactly as it did at rest: Confirm ← accent/accentText, Destroy ←
+      // danger/dangerText, Cancel ← the former button surface/text (raised surface, accent on hover,
+      // hover text flipping to the app background) with the theme border. `migrateTheme` seeds the
+      // identical values for a legacy user theme on load, so bundled and migrated themes agree.
+      confirmButtonBg: p.accent,
+      confirmButtonHoverBg: p.accent,
+      confirmButtonBorder: p.accent,
+      confirmButtonHoverBorder: p.accent,
+      confirmButtonText: p.bg,
+      confirmButtonHoverText: p.bg,
+      cancelButtonBg: p.surfaceActive ?? p.surface,
+      cancelButtonHoverBg: p.accent,
+      cancelButtonBorder: p.border ?? p.surface,
+      cancelButtonHoverBorder: p.border ?? p.surface,
+      cancelButtonText: p.text,
+      cancelButtonHoverText: p.bg,
+      destroyButtonBg: p.danger ?? '#e5534b',
+      destroyButtonHoverBg: p.danger ?? '#e5534b',
+      destroyButtonBorder: p.danger ?? '#e5534b',
+      destroyButtonHoverBorder: p.danger ?? '#e5534b',
+      destroyButtonText: '#ffffff',
+      destroyButtonHoverText: '#ffffff',
       // Syntax highlighting (016): the theme's own hues, guaranteed readable on the editor body
       // and through a search-match highlight alike (FR-007a).
       ...code.syntax,

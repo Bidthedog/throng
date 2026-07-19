@@ -6,7 +6,7 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: var(--throng-colour-dialogSurface);
+  background: var(--throng-colour-surface);
   color: var(--throng-colour-text);
   /* The shared TitleBar reads its height from this var, which is otherwise only defined on the
      main window's `.throng-root`. Without it here the About bar collapses to its glyph height and
@@ -134,7 +134,7 @@
   padding: 3px 10px;
 }
 
-.about-thirdparty__row:hover {
+:where(body:not([data-window-blurred])) .about-thirdparty__row:hover {
   background: var(--throng-colour-hoverSurface);
 }
 
@@ -171,14 +171,16 @@
    theme tokens. */
 .about-close {
   padding: 6px 16px;
-  border: 1px solid var(--throng-colour-border);
+  border: 1px solid var(--throng-colour-cancelButtonBorder);
   border-radius: 4px;
-  background: var(--throng-colour-buttonBg);
-  color: var(--throng-colour-buttonText);
+  background: var(--throng-colour-cancelButtonBg);
+  color: var(--throng-colour-cancelButtonText);
   font: inherit;
   cursor: pointer;
 }
 
 .about-close:hover {
-  background: var(--throng-colour-buttonHoverBg);
+  background: var(--throng-colour-cancelButtonHoverBg);
+  border-color: var(--throng-colour-cancelButtonHoverBorder);
+  color: var(--throng-colour-cancelButtonHoverText);
 }

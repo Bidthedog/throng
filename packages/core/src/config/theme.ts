@@ -162,11 +162,10 @@ export const THRONG_THEME: Theme = {
     /* The thing currently SELECTED or active. */
     surfaceActive: '#222c3d',
     /* Carved out of `surface` (018, FR-001). Each falls back to its parent for a theme authored
-       before the split — see TOKEN_PARENT. */
-    menuSurface: '#1b2230',
+       before the split — see TOKEN_PARENT. 021 (FR-023) consolidated the menu and dialog cards back
+       onto `surfaceActive` and `surface`, so `menuSurface`/`dialogSurface` are gone. */
     inputSurface: '#1b2230',
     hoverSurface: '#1b2230',
-    dialogSurface: '#1b2230',
     /* NOTE: `menuItemHoverSurface` is deliberately ABSENT — it is an OPTIONAL token (see
        OPTIONAL_THEME_COLOUR_TOKENS). Unset, the hovered menu row follows the ACTIVE PROJECT'S
        dominant colour, which the projects store writes into `--accent` at runtime (Principle I).
@@ -261,12 +260,29 @@ export const THRONG_THEME: Theme = {
     // both). Distinct tokens so a theme can tune each independently.
     activePanelBorder: '#6aa3ff',
     activePanelBorderInactive: '#3f5f8c',
-    // Buttons carry their own style tokens (007, FR-046a) — separate from the
-    // generic surface/text tokens. Hover flips to the accent + the app background.
-    buttonBg: '#222c3d',
-    buttonText: '#e6ebf2',
-    buttonHoverBg: '#6aa3ff',
-    buttonHoverText: '#10131a',
+    // Three-type button model (021, US7, FR-027). Every text dialog/form button resolves to exactly
+    // one type — Confirm (safe primary), Cancel (safe dismiss), Destroy (destructive) — and each type
+    // owns six tokens: bg / hover-bg / border / hover-border / text / hover-text. Derived (data-model
+    // §6) so appearance is unchanged at rest: Confirm ← accent/accentText, Destroy ← danger/dangerText,
+    // Cancel ← the legacy button surface + border. `migrateTheme` seeds the same values on load.
+    confirmButtonBg: '#6aa3ff',
+    confirmButtonHoverBg: '#6aa3ff',
+    confirmButtonBorder: '#6aa3ff',
+    confirmButtonHoverBorder: '#6aa3ff',
+    confirmButtonText: '#06101f',
+    confirmButtonHoverText: '#06101f',
+    cancelButtonBg: '#222c3d',
+    cancelButtonHoverBg: '#6aa3ff',
+    cancelButtonBorder: '#2a3344',
+    cancelButtonHoverBorder: '#2a3344',
+    cancelButtonText: '#e6ebf2',
+    cancelButtonHoverText: '#10131a',
+    destroyButtonBg: '#e5534b',
+    destroyButtonHoverBg: '#e5534b',
+    destroyButtonBorder: '#e5534b',
+    destroyButtonHoverBorder: '#e5534b',
+    destroyButtonText: '#ffffff',
+    destroyButtonHoverText: '#ffffff',
   },
   fonts: {
     family: "'Segoe UI', system-ui, sans-serif",
@@ -464,10 +480,8 @@ export const OPTIONAL_THEME_COLOUR_TOKENS: readonly string[] = Object.freeze([
 ]);
 
 export const TOKEN_PARENT: Readonly<Record<string, string>> = Object.freeze({
-  menuSurface: 'surface',
   inputSurface: 'surface',
   hoverSurface: 'surface',
-  dialogSurface: 'surface',
 });
 
 /**

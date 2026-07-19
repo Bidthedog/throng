@@ -104,8 +104,9 @@
   cursor: pointer;
 }
 
-.title-bar__action:hover,
-.cog-menu__button:hover {
+/* 021/FR-035 — hover background gated on window focus; :where() adds zero specificity. */
+:where(body:not([data-window-blurred])) .title-bar__action:hover,
+:where(body:not([data-window-blurred])) .cog-menu__button:hover {
   background: var(--throng-colour-hoverSurface);
   color: var(--text);
 }
@@ -139,12 +140,12 @@
   cursor: pointer;
 }
 
-.window-control:hover {
+:where(body:not([data-window-blurred])) .window-control:hover {
   background: var(--throng-colour-hoverSurface);
   color: var(--text);
 }
 
-.window-control--close:hover {
+:where(body:not([data-window-blurred])) .window-control--close:hover {
   background: var(--danger, #e14b4b);
   color: var(--throng-colour-dangerText);
 }

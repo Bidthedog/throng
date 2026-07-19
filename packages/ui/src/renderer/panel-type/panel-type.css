@@ -79,20 +79,35 @@
   padding-top: 8px;
 }
 
+/* 021 (FR-027) — the type-selection form's buttons are TYPED: `__clear` is the safe dismiss →
+   Cancel (the base rule); `__confirm` is the safe primary → Confirm. Each consumes only its type's
+   six tokens. */
 .panel-type-form__actions button {
   padding: 6px 14px;
-  border: 1px solid var(--throng-colour-border);
+  border: 1px solid var(--throng-colour-cancelButtonBorder);
   border-radius: 4px;
-  background: var(--throng-colour-buttonBg);
-  color: var(--throng-colour-text);
+  background: var(--throng-colour-cancelButtonBg);
+  color: var(--throng-colour-cancelButtonText);
   font-family: inherit;
   cursor: pointer;
 }
 
+.panel-type-form__actions button.panel-type-form__clear:hover {
+  background: var(--throng-colour-cancelButtonHoverBg);
+  border-color: var(--throng-colour-cancelButtonHoverBorder);
+  color: var(--throng-colour-cancelButtonHoverText);
+}
+
 .panel-type-form__confirm {
-  border-color: var(--throng-colour-accent) !important;
-  background: var(--throng-colour-accent) !important;
-  color: var(--throng-colour-accentText) !important;
+  border-color: var(--throng-colour-confirmButtonBorder) !important;
+  background: var(--throng-colour-confirmButtonBg) !important;
+  color: var(--throng-colour-confirmButtonText) !important;
+}
+
+.panel-type-form__confirm:hover {
+  border-color: var(--throng-colour-confirmButtonHoverBorder) !important;
+  background: var(--throng-colour-confirmButtonHoverBg) !important;
+  color: var(--throng-colour-confirmButtonHoverText) !important;
 }
 
 .panel-type-form__confirm:disabled {

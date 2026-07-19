@@ -74,7 +74,7 @@
   padding: 6px 10px;
   border: 1px solid var(--throng-colour-border);
   border-radius: 6px;
-  background: var(--throng-colour-dialogSurface);
+  background: var(--throng-colour-surface);
   color: var(--throng-colour-text);
   font-size: 12px;
   z-index: 3;
@@ -94,10 +94,10 @@
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
-  background: var(--throng-colour-buttonBg);
-  color: var(--throng-colour-buttonText);
+  background: var(--throng-colour-cancelButtonBg);
+  color: var(--throng-colour-cancelButtonText);
 }
 .terminal-panel__retry:hover {
-  background: var(--throng-colour-buttonHoverBg);
-  color: var(--throng-colour-buttonHoverText);
+  background: var(--throng-colour-cancelButtonHoverBg);
+  color: var(--throng-colour-cancelButtonHoverText);
 }

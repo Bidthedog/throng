@@ -179,7 +179,7 @@ export {
   toCssVariables,
 } from './config/theme.js';
 // Themes editor + icon packs + fonts (007).
-export { THEME_METADATA, buildThemeMetadata, descriptorForThemeToken, themeEditableTokens, mechanicalCopy } from './config/theme-metadata.js';
+export { THEME_METADATA, THEME_AREA_GROUPS, THEME_PROPERTY_VOCABULARY, areaForToken, assertThemeAreaGroups, assertNamingConvention, buildThemeMetadata, descriptorForThemeToken, themeEditableTokens, mechanicalCopy } from './config/theme-metadata.js';
 // Hand-written token copy + theme-quality guards (009).
 export { THEME_TOKEN_COPY, BANNED_ABBREVIATIONS, containsAbbreviation } from './config/theme-copy.js';
 export type { TokenCopy } from './config/theme-copy.js';
@@ -214,7 +214,7 @@ export type { IconPackManifest, IconAsset, LoadedIconPack } from './config/icon-
 export { parseIconPack, resolveIconValue, resolveIconAsset } from './config/icon-pack.js';
 export { sanitiseSvg } from './config/svg-sanitise.js';
 export type { ThemeRenameResult } from './config/theme-ops.js';
-export { isValidThemeName, checkRename, activateTheme } from './config/theme-ops.js';
+export { isValidThemeName, checkRename, activateTheme, migrateTheme, migrateThemeColours } from './config/theme-ops.js';
 export { matchFamilies } from './config/font-typeahead.js';
 export type { SearchableField, SearchableDescriptor } from './config/settings-search.js';
 export { searchTokens, fieldHaystack, matchesQuery, filterFields } from './config/settings-search.js';

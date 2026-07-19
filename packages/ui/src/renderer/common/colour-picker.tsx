@@ -9,6 +9,7 @@ import {
 import { hsvToRgb, parseHex, rgbToHsv, toHex, type Hsv } from '@throng/core';
 
 import { Icon } from './icon.js';
+import { clampToViewport } from './clamp-to-viewport.js';
 
 /**
  * 018 / US4 — the themed colour picker (FR-020 … FR-026).
@@ -54,17 +55,29 @@ export function ColourPicker({
   const rgb = parseHex(value) ?? { r: 0, g: 0, b: 0 };
   const [hsv, setHsv] = useState<Hsv>(() => rgbToHsv(rgb));
   const ref = useRef<HTMLDivElement>(null);
-  const [flipUp, setFlipUp] = useState(false);
+  const [offset, setOffset] = useState<{ left: number; top: number } | null>(null);
 
-  // FR-013 — FLIP, like every other floating surface. The picker anchors under its swatch and opened
-  // straight downward with no measurement, so on a row near the bottom of the window it opened off the
-  // bottom of the screen. The discovering floating-surface guard found this one; a guard written around
-  // the two menus that were listed would not have, which is exactly why FR-013 insists it discover.
+  // FR-013 / FR-036 — FLIP AND CLAMP ON BOTH AXES, via the shared clampToViewport (the same positioner
+  // the context menu uses). The picker used to flip only vertically, so a swatch near the RIGHT edge
+  // opened a picker that ran off the side of the window. It anchors under its control (`.ctl--colour`),
+  // opening below by default and flipping above near the bottom, and now also shifts/flips horizontally
+  // so it always fits. The 6px gap is baked into the anchor rect. Measured before paint so it never
+  // flashes off-screen.
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    const host = el?.parentElement;
+    if (!el || !host) return;
+    const GAP = 6;
     const r = el.getBoundingClientRect();
-    setFlipUp(r.bottom > window.innerHeight && r.top > window.innerHeight - r.bottom);
+    const a = host.getBoundingClientRect();
+    const { left, top } = clampToViewport(
+      { left: a.left, right: a.right, top: a.top - GAP, bottom: a.bottom + GAP },
+      { width: r.width, height: r.height },
+      { width: window.innerWidth, height: window.innerHeight },
+    );
+    // Translate the desired VIEWPORT position into an offset relative to the picker's positioned
+    // ancestor (offsetParent), preserving whatever the current CSS default resolved to.
+    setOffset({ left: el.offsetLeft + (left - r.left), top: el.offsetTop + (top - r.top) });
   }, []);
   const svRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
@@ -164,7 +177,16 @@ export function ColourPicker({
   const pure = toHex(hsvToRgb({ h: hsv.h, s: 1, v: 1 }));
 
   return (
-    <div className={`colour-picker${flipUp ? ' colour-picker--up' : ''}`} ref={ref} data-testid={`${testId}-picker`} role="dialog" aria-label="Choose a colour">
+    <div
+      className="colour-picker"
+      ref={ref}
+      data-testid={`${testId}-picker`}
+      role="dialog"
+      aria-label="Choose a colour"
+      // Inline position overrides the CSS default once measured; `bottom: auto` neutralises the old
+      // upward-flip rule so the computed top always wins.
+      style={offset ? { left: offset.left, top: offset.top, bottom: 'auto' } : undefined}
+    >
       <div
         ref={svRef}
         className="colour-picker__sv"

@@ -278,7 +278,9 @@ async function createMainWindow(
     ...initialWindowOptions(settings, displayInfo, statePath),
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
-    title: 'throng',
+    // Suffix-form brand (US9/FR-033). The renderer overwrites this with the live
+    // `<project · context> — throng` once mounted; this is only the pre-content title.
+    title: 'No project — throng',
     icon: appIcon(),
     backgroundColor: '#10131a',
     // The application draws its own full-width title bar + window controls (007,
@@ -326,7 +328,7 @@ function createSubWorkspaceWindow(id: string, bounds?: WindowBounds): BrowserWin
     ...(bounds ?? { width: 900, height: 640 }),
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
-    title: 'throng — Sub-workspace',
+    title: 'Sub-workspace — throng',
     icon: appIcon(),
     backgroundColor: '#10131a',
     // Sub-workspace windows share the custom title bar (007, FR-007) — no OS frame.

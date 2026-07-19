@@ -26,15 +26,10 @@
      throw and do not warn — they just quietly stop being themeable. A guard now walks the tree and
      fails on any custom property that is read but never defined. */
   --danger: var(--throng-colour-danger, #e5534b);
-  /* Button style tokens (007, FR-046a). Separate from the generic surface/text
-     tokens; fall back to the generic button styling when a theme predates them. */
-  --btn-bg: var(--throng-colour-buttonBg, var(--bg-panel));
-  --btn-text: var(--throng-colour-buttonText, var(--text));
-  --btn-hover-bg: var(--throng-colour-buttonHoverBg, var(--accent));
-  --btn-hover-text: var(--throng-colour-buttonHoverText, var(--text));
-  --btn-font-family: var(--throng-font-button-family, var(--throng-font-family));
-  --btn-font-size: var(--throng-font-button-size, var(--throng-font-size));
-  --btn-font-weight: var(--throng-font-button-weight, var(--throng-font-weight-normal));
+  /* 021 (FR-027) — the generic `--btn-*` aliases are RETIRED. There is no single "the button" style
+     any more: every text dialog/form button is one of three TYPES (Confirm / Cancel / Destroy), and
+     each consumes only its own six `--throng-colour-<type>Button*` tokens directly. The shared button
+     FONT tokens still route through `--throng-font-button-*` at each call site. */
   --sidebar-width: 260px;
   --min-pane: 160px;
   /* Shared header height so the Projects / tab-strip / Files & Folders bottom
@@ -118,15 +113,16 @@
  * they left it alone.
  *
  * Everything below deliberately reuses the SAME tokens as every other menu, because it IS one:
- * `menuSurface` for the card, `menuItemHoverSurface` for the highlight — which, being optional,
- * follows the active project's colour unless a theme author pins it. */
+ * `surfaceActive` for the card (021 / FR-023 folded the old `menuSurface` back onto it),
+ * `menuItemHoverSurface` for the highlight — which, being optional, follows the active project's
+ * colour unless a theme author pins it. */
 select,
 select::picker(select) {
   appearance: base-select;
 }
 
 select::picker(select) {
-  background: var(--throng-colour-menuSurface);
+  background: var(--throng-colour-surfaceActive);
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
@@ -424,28 +420,36 @@ textarea,
   margin-left: auto;
 }
 
+/* 021 (FR-027) — the create-project form's buttons are TYPED: Cancel is the plain dismiss, the
+   submit button is the safe primary Confirm. Each consumes only its own type's six tokens. */
 .project-form__buttons button {
-  /* Buttons consume the theme's button tokens (007, FR-046a). */
-  background: var(--btn-bg);
-  border: 1px solid var(--border);
-  color: var(--btn-text);
+  background: var(--throng-colour-cancelButtonBg);
+  border: 1px solid var(--throng-colour-cancelButtonBorder);
+  color: var(--throng-colour-cancelButtonText);
   border-radius: 4px;
   padding: 5px 12px;
-  font-family: var(--btn-font-family);
-  font-weight: var(--btn-font-weight);
+  font-family: var(--throng-font-button-family, var(--throng-font-family));
+  font-weight: var(--throng-font-button-weight, var(--throng-font-weight-normal));
   cursor: pointer;
 }
 
 .project-form__buttons button:hover {
-  background: var(--btn-hover-bg);
-  color: var(--btn-hover-text);
+  background: var(--throng-colour-cancelButtonHoverBg);
+  border-color: var(--throng-colour-cancelButtonHoverBorder);
+  color: var(--throng-colour-cancelButtonHoverText);
 }
 
 .project-form__buttons button[type='submit'] {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--throng-colour-accentText);
+  background: var(--throng-colour-confirmButtonBg);
+  border-color: var(--throng-colour-confirmButtonBorder);
+  color: var(--throng-colour-confirmButtonText);
   font-weight: 600;
+}
+
+.project-form__buttons button[type='submit']:hover {
+  background: var(--throng-colour-confirmButtonHoverBg);
+  border-color: var(--throng-colour-confirmButtonHoverBorder);
+  color: var(--throng-colour-confirmButtonHoverText);
 }
 
 /* --- Project list ----------------------------------------------------- */
@@ -547,7 +551,7 @@ textarea,
   border-radius: 4px;
 }
 
-.project-item__controls button:hover {
+:where(body:not([data-window-blurred])) .project-item__controls button:hover {
   color: var(--text);
   background: var(--bg-raised);
 }
@@ -897,7 +901,7 @@ textarea,
   line-height: 1;
 }
 
-.panel-box__actions button:hover {
+:where(body:not([data-window-blurred])) .panel-box__actions button:hover {
   /* An icon-button hover, exactly like the explorer toolbar and the pane collapse control — so it
      takes `hoverSurface`, not the accent-coloured BUTTON hover. Pointing it at buttonHoverBg while
      keeping `color: var(--text)` painted #e6ebf2 on #6aa3ff: 2.1:1, down from 13:1. */
@@ -1048,7 +1052,7 @@ textarea,
   padding: 4px;
   list-style: none;
   min-width: 160px;
-  background: var(--throng-colour-menuSurface);
+  background: var(--throng-colour-surfaceActive);
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
@@ -1078,7 +1082,9 @@ textarea,
   flex: 1 1 auto;
 }
 
-.context-menu__item:hover {
+/* 021/FR-035 — hover background gated on window focus (no stranded hover while blurred).
+   :where() carries zero specificity, so the cascade is unchanged. */
+:where(body:not([data-window-blurred])) .context-menu__item:hover {
   background: var(--throng-colour-menuItemHoverSurface, var(--accent));
   color: var(--throng-colour-accentText);
 }
@@ -1107,7 +1113,7 @@ textarea,
 .modal {
   width: min(420px, 90vw);
   padding: 18px 20px;
-  background: var(--throng-colour-dialogSurface);
+  background: var(--throng-colour-surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
@@ -1133,7 +1139,7 @@ textarea,
   align-items: center;
   gap: 14px;
   padding: 26px 34px;
-  background: var(--throng-colour-dialogSurface);
+  background: var(--throng-colour-surface);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
@@ -1198,7 +1204,7 @@ textarea,
 .app-close-table th {
   position: sticky;
   top: 0;
-  background: var(--throng-colour-dialogSurface);
+  background: var(--throng-colour-surface);
   color: var(--text-dim);
   font-weight: 600;
   border-bottom: 1px solid var(--border);
@@ -1289,50 +1295,63 @@ textarea,
   gap: 8px;
 }
 
+/* 021 (FR-027) — the confirmation model's three button ROLES map straight onto the three button
+   TYPES: a plain (non-last) button is the safe dismiss → Cancel; `.modal__confirm` (the last,
+   primary answer) → Confirm; `.modal__confirm--danger` (a destructive answer, last or not) →
+   Destroy. Each consumes only its own type's six tokens — no borrowed accent/danger/border. */
 .modal__buttons button {
-  /* Buttons consume the theme's button tokens (007, FR-046a). */
-  background: var(--btn-bg);
-  border: 1px solid var(--border);
-  color: var(--btn-text);
+  background: var(--throng-colour-cancelButtonBg);
+  border: 1px solid var(--throng-colour-cancelButtonBorder);
+  color: var(--throng-colour-cancelButtonText);
   border-radius: 5px;
   padding: 6px 14px;
-  font-family: var(--btn-font-family);
-  font-weight: var(--btn-font-weight);
+  font-family: var(--throng-font-button-family, var(--throng-font-family));
+  font-weight: var(--throng-font-button-weight, var(--throng-font-weight-normal));
   cursor: pointer;
 }
 
 .modal__buttons button:hover {
-  background: var(--btn-hover-bg);
-  color: var(--btn-hover-text);
+  background: var(--throng-colour-cancelButtonHoverBg);
+  border-color: var(--throng-colour-cancelButtonHoverBorder);
+  color: var(--throng-colour-cancelButtonHoverText);
 }
 
 .modal__confirm {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--throng-colour-accentText);
+  background: var(--throng-colour-confirmButtonBg);
+  border-color: var(--throng-colour-confirmButtonBorder);
+  color: var(--throng-colour-confirmButtonText);
   font-weight: 600;
 }
 
 .modal__confirm--danger {
-  background: var(--throng-colour-danger);
-  border-color: var(--throng-colour-danger);
-  color: var(--throng-colour-dangerText);
+  background: var(--throng-colour-destroyButtonBg);
+  border-color: var(--throng-colour-destroyButtonBorder);
+  color: var(--throng-colour-destroyButtonText);
 }
 
-/* The `.modal__buttons button` selector (0,1,1) outranks the single-class
-   confirm rules above (0,1,0), so re-assert the colours at higher specificity. */
+/* The `.modal__buttons button` selector (0,1,1) outranks the single-class confirm rules above
+   (0,1,0), so re-assert each type at higher specificity — rest AND hover, so a hovered Confirm or
+   Destroy paints its OWN hover pair rather than the Cancel hover the base `button:hover` would give.
+   `--danger` (Destroy) is listed after `--confirm` so a button carrying both classes reads Destroy. */
 .modal__buttons button.modal__confirm {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--throng-colour-accentText);
+  background: var(--throng-colour-confirmButtonBg);
+  border-color: var(--throng-colour-confirmButtonBorder);
+  color: var(--throng-colour-confirmButtonText);
+}
+.modal__buttons button.modal__confirm:hover {
+  background: var(--throng-colour-confirmButtonHoverBg);
+  border-color: var(--throng-colour-confirmButtonHoverBorder);
+  color: var(--throng-colour-confirmButtonHoverText);
 }
 .modal__buttons button.modal__confirm--danger {
-  background: var(--throng-colour-danger);
-  border-color: var(--throng-colour-danger, #d6485a);
-  color: var(--throng-colour-dangerText);
+  background: var(--throng-colour-destroyButtonBg);
+  border-color: var(--throng-colour-destroyButtonBorder);
+  color: var(--throng-colour-destroyButtonText);
 }
 .modal__buttons button.modal__confirm--danger:hover {
-  filter: brightness(1.08);
+  background: var(--throng-colour-destroyButtonHoverBg);
+  border-color: var(--throng-colour-destroyButtonHoverBorder);
+  color: var(--throng-colour-destroyButtonHoverText);
 }
 
 /* --- Tab panel-count badge (FR-045) ---------------------------------- */
@@ -1436,28 +1455,21 @@ textarea,
   flex: 1 1 auto;
   min-width: 0;
 }
+/* 021 (FR-027) — Browse commits a folder choice, so it is a Confirm button. */
 .folder-picker__browse {
   flex: 0 0 auto;
-  background: var(--throng-colour-buttonBg);
-  border: 1px solid var(--border);
-  color: var(--text);
+  background: var(--throng-colour-confirmButtonBg);
+  border: 1px solid var(--throng-colour-confirmButtonBorder);
+  color: var(--throng-colour-confirmButtonText);
   border-radius: 4px;
   padding: 6px 10px;
   cursor: pointer;
   line-height: 1;
 }
 .folder-picker__browse:hover {
-  border-color: var(--text-dim);
-  color: var(--text);
-}
-.project-form__buttons button[type='submit'] {
-  background: var(--throng-colour-buttonBg);
-  border-color: var(--border);
-  color: var(--text);
-  font-weight: 600;
-}
-.project-form__buttons button[type='submit']:hover {
-  background: var(--throng-colour-buttonHoverBg);
+  background: var(--throng-colour-confirmButtonHoverBg);
+  border-color: var(--throng-colour-confirmButtonHoverBorder);
+  color: var(--throng-colour-confirmButtonHoverText);
 }
 
 /* Context-menu submenus (FR-023b: "Send to Tab ▸"). */
@@ -1707,7 +1719,7 @@ textarea,
   border-radius: 4px;
   padding: 2px 6px;
 }
-.subworkspace-item__controls button:hover {
+:where(body:not([data-window-blurred])) .subworkspace-item__controls button:hover {
   color: var(--text);
   background: var(--bg-raised);
 }
@@ -1811,7 +1823,7 @@ textarea,
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--throng-colour-dialogSurface);
+  background: var(--throng-colour-surface);
   box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
   color: var(--throng-colour-text);
   font-size: 12px;
@@ -1833,7 +1845,7 @@ textarea,
 
 /* An ERROR gets its OWN CARD, not a stripe on the usual one.
  *
- * The left edge was the whole of it — three pixels of red against `dialogSurface`, the same colour as
+ * The left edge was the whole of it — three pixels of red against the card `surface`, the same colour as
  * every other card in the application. On a dark theme that is a thin line in the bottom corner of a
  * dark screen, and it is where the message "your save failed" was being put. Severity governs
  * persistence AND presence: an error looks like an error, in every theme, because its surface says so

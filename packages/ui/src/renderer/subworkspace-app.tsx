@@ -12,6 +12,8 @@ import { PanelStateSync } from './workspace/panel-state-sync.js';
 import { EditorChrome } from './editor/editor-chrome.js';
 import { SearchKeybindings } from './search/search-keybindings.js';
 import { TitleBar } from './title-bar/title-bar.js';
+import { windowTitle } from './common/window-title.js';
+import { HoverSuppression } from './common/use-hover-suppression.js';
 import {
   SubWorkspaceWindowContext,
   type SubWorkspaceWindowIdentity,
@@ -54,7 +56,7 @@ function SubWorkspaceTitle({ name }: { name: string }): null {
     const tabs = layout?.tabs.length ?? 0;
     const panels = layout?.tabs.reduce((n, t) => n + countPanels(t.root), 0) ?? 0;
     window.throng?.setTitle?.(
-      `throng — ${name} · ${plural(tabs, 'tab')} · ${plural(panels, 'panel')}`,
+      windowTitle(`${name} · ${plural(tabs, 'tab')} · ${plural(panels, 'panel')}`),
     );
   }, [layout, name]);
   return null;
@@ -119,6 +121,7 @@ export function SubWorkspaceApp({ subWorkspaceId }: { subWorkspaceId: string }):
           activeProjectId={SubWorkspaceWorkspaceClient.layoutProjectId(subWorkspaceId)}
         >
           {identity ? <SubWorkspaceTitle name={identity.name} /> : null}
+          <HoverSuppression />
           <PanelRenameSync />
           <PanelDestroySync />
           <PanelStateSync />
@@ -130,7 +133,7 @@ export function SubWorkspaceApp({ subWorkspaceId }: { subWorkspaceId: string }):
             {/* Sub-workspace custom title bar (007, FR-007): identity + window
                 controls, NO cog (the preferences entry point is main-window only). */}
             <TitleBar
-              identity={`throng — ${identity?.name ?? 'Sub-workspace'}`}
+              identity={windowTitle(identity?.name ?? 'Sub-workspace')}
               colour={identity?.colour}
               showCog={false}
             />
