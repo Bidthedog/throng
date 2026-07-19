@@ -12,8 +12,8 @@ import type {
   IUiSettings,
   ShippedDefaults,
 } from '@throng/core';
-import { buildShippedDefaults } from '@throng/core';
-import { WindowsFontEnumeration } from '@throng/platform-windows';
+import { buildShippedDefaults, defaultPipeName } from '@throng/core';
+import { WindowsFontEnumeration, NodeUserContext } from '@throng/platform-windows';
 import { UI_TYPES } from './tokens.js';
 import { ElectronClipboard } from './electron-clipboard.js';
 import { MemoryClipboard } from './memory-clipboard.js';
@@ -50,7 +50,14 @@ function readConfigSettings(env: NodeJS.ProcessEnv = process.env): IConfigSettin
 
 export function createUiContainer(): Container {
   const container = new Container({ defaultScope: 'Singleton' });
-  container.bind<IUiSettings>(UI_TYPES.UiSettings).toConstantValue(readUiSettings());
+  // Per-user default pipe (020 FR-013): the endpoint is scoped to the current user so two
+  // OS accounts on one machine never collide. The SID/username call sits behind the platform
+  // abstraction (Principle II); `defaultPipeName` (core) is pure. `THRONG_PIPE_NAME` still overrides.
+  const uiUserContext = new NodeUserContext();
+  const uiDefaultPipe = defaultPipeName(uiUserContext.currentUser().userId);
+  container
+    .bind<IUiSettings>(UI_TYPES.UiSettings)
+    .toConstantValue(readUiSettings(process.env, uiDefaultPipe));
   // The OS clipboard seam (016, FR-013a) — bound ONCE, here, at the boundary that owns Electron.
   //
   // Under E2E it is filled in-process instead, because Electron's clipboard DOES NOT WORK in the

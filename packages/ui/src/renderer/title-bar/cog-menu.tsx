@@ -47,6 +47,15 @@ export function CogMenu(): ReactElement {
       // renders icons where an item has one; an item that means nothing by having one goes without.
       onClick: () => window.throng?.openPreferences?.(item.tab),
     }));
+    // About throng (020, FR-003) — the discoverable entry point to the About window. It lives here,
+    // not on a native menu bar: throng draws its own title bar (`frame: false`), so the native
+    // application menu never appears on screen. Like the three above it is a DESTINATION (it opens a
+    // window), so it carries no icon.
+    items.push({
+      label: 'About throng',
+      testId: 'cog-menu-about',
+      onClick: () => window.throng?.about?.open?.(),
+    });
     // Anchor under the cog, as a drop-down should be. The shared menu flips and clamps from here, so
     // a cog near the right edge no longer pushes its menu off-screen — which the bespoke one did.
     openMenu(r?.left ?? 0, r?.bottom ?? 0, items, { testId: 'cog-menu' });

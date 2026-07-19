@@ -41,6 +41,24 @@ export type {
   IWorkspaceSettings,
   IConfigSettings,
 } from './config/settings.js';
+export { defaultPipeName, sanitisePipeToken } from './config/pipe-endpoint.js';
+export { compareVersions, isPlaceholderVersion, matchReleaseVersions } from './config/product-version.js';
+export type { ReleaseVersionSources, VersionMatchResult } from './config/product-version.js';
+export { evaluatePublishGate } from './config/publish-gate.js';
+export type { PublishGateInput, PublishGateResult } from './config/publish-gate.js';
+export { decideLiveTerminalHandoff, resolveLiveTerminalChoice } from './config/install-handoff.js';
+export type {
+  LiveTerminalChoice,
+  LiveTerminalHandoffInput,
+  LiveTerminalHandoffDecision,
+  LiveTerminalChoiceOutcome,
+} from './config/install-handoff.js';
+export {
+  VERIFICATION_STEPS,
+  verdictFromSteps,
+  isVerdictPassingFor,
+} from './config/verification-verdict.js';
+export type { VerificationStep, VerificationVerdict } from './config/verification-verdict.js';
 
 // User-scoped application configuration (003): abstractions + pure schemas.
 export type { IConfigStore, ConfigDocId, ConfigReadOptions, WriteOutcome } from './abstractions/config-store.js';

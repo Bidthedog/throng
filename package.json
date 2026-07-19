@@ -21,9 +21,15 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "tsc -b && npm run generate:defaults && npm run build:renderer --workspace @throng/ui && npm run stamp:build",
+    "build": "tsc -b && npm run generate:defaults && npm run build:renderer --workspace @throng/ui && npm run stamp:build && npm run generate:version && npm run generate:licenses",
     "generate:defaults": "node scripts/generate-shipped-defaults.mjs",
+    "generate:version": "node scripts/generate-version.mjs",
+    "generate:licenses": "node scripts/generate-licenses.mjs",
     "stamp:build": "node scripts/stamp-build.mjs",
+    "stage:runtime": "node scripts/stage-runtime.mjs",
+    "package": "npm run build && npm run stage:runtime && electron-builder --config electron-builder.yml",
+    "verify:installer": "node scripts/verify-installer.mjs",
+    "publish:check": "node scripts/publish-gates.mjs",
     "build:renderer": "npm run build:renderer --workspace @throng/ui",
     "clean": "tsc -b --clean",
     "start": "npm run build && npm run start:ui",
@@ -48,6 +54,7 @@
     "@types/node": "^26.1.0",
     "concurrently": "^10.0.3",
     "electron": "^43.0.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.39.5",
     "eslint-plugin-react-hooks": "^5.2.0",
     "globals": "^16.5.0",
@@ -57,8 +64,12 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "@codemirror/state": "^6.4.0",
     "better-sqlite3": "^12.11.1",
     "inversify": "^8.1.1",
+    "koffi": "^3.1.1",
+    "node-pty": "^1.0.0",
+    "picomatch": "^4.0.5",
     "reflect-metadata": "^0.2.2"
   }
 }

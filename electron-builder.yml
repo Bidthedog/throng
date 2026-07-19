@@ -1,0 +1,105 @@
+# electron-builder configuration for throng's per-user Windows installer (020 FR-007/009/012/038/040).
+# Run from the repo root: `npm run package` (build → stage:runtime → electron-builder).
+#
+# Layout note (FR-009): the daemon runs as a SEPARATE host-Node process (not Electron), loading
+# native modules built against the host-Node ABI. So the app is NOT asar-packed — every package's
+# built output and node_modules ship as plain files under resources/app, preserving the monorepo
+# `packages/*` structure so the UI main can still resolve `../../../daemon/dist/main.js`, and the
+# daemon can resolve its node_modules. A pinned host-Node `node.exe` is bundled as an extra
+# resource (staged by scripts/stage-runtime.mjs) and used to spawn the daemon.
+appId: com.throng.throng
+productName: throng
+copyright: Copyright © 2026 Christopher Sebok
+
+# Never auto-publish from the build. electron-builder tries to publish to GitHub Releases when it
+# detects CI, which both needs a token the build job doesn't have and would bypass our gates.
+# Publishing is a SEPARATE, gated job (.github/workflows/release.yml) — real version + verification
+# + human QA sign-off — that uploads via `gh release create`, not electron-builder.
+publish: null
+
+# CRITICAL (FR-009, "no electron-rebuild"): do NOT rebuild native modules against Electron's ABI.
+# The daemon's natives (better-sqlite3, node-pty, koffi) are built against the HOST-Node ABI and are
+# loaded by the bundled host-Node runtime, never by Electron. electron-builder rebuilds production
+# native deps against Electron by default — which would both break the daemon and require a C++
+# toolchain at package time. Ship the host-ABI binaries exactly as npm installed them.
+npmRebuild: false
+
+# Not asar-packed: the daemon is spawned as a plain-Node child and cannot require from inside an
+# asar archive, and its native .node addons must exist as real files.
+asar: false
+
+directories:
+  output: dist/installer
+
+# Ship each workspace package's built output + manifest, the UI assets, and the (hoisted) runtime
+# node_modules. Dev-only sources, maps, type-build info and tests are excluded.
+files:
+  - package.json
+  - packages/*/dist/**/*
+  - packages/*/package.json
+  - packages/ui/assets/**/*
+  - node_modules/**/*
+  - '!**/*.map'
+  - '!**/*.ts'
+  - '!**/*.tsbuildinfo'
+  - '!**/tests/**'
+  - '!node_modules/.cache/**'
+  - '!node_modules/electron/**'
+  - '!node_modules/electron-builder/**'
+  - '!node_modules/app-builder-*/**'
+  - '!node_modules/@playwright/**'
+  - '!node_modules/playwright*/**'
+  - '!node_modules/vitest/**'
+  - '!node_modules/@vitest/**'
+  - '!node_modules/typescript/**'
+  - '!node_modules/eslint*/**'
+  - '!node_modules/@typescript-eslint/**'
+  # CRITICAL (FR-009 launch): the workspace libraries are imported as BARE specifiers
+  # (`import … from '@throng/core'`) by both the UI main and the daemon. In the dev tree those
+  # resolve through node_modules/@throng/* symlinks into packages/* — but electron-builder DROPS
+  # those symlinks when it packs, so the packaged app has no node_modules/@throng/* and Node ESM
+  # fails with ERR_MODULE_NOT_FOUND at startup. Map each library's built output + manifest into a
+  # real node_modules/@throng/<pkg> so bare-specifier resolution works in the installed app.
+  # (The daemon is loaded by relative path and needs no entry; nothing imports @throng/ui.)
+  - from: packages/core
+    to: node_modules/@throng/core
+    filter: ['package.json', 'dist/**/*']
+  - from: packages/ipc-contract
+    to: node_modules/@throng/ipc-contract
+    filter: ['package.json', 'dist/**/*']
+  - from: packages/persistence
+    to: node_modules/@throng/persistence
+    filter: ['package.json', 'dist/**/*']
+  - from: packages/platform-windows
+    to: node_modules/@throng/platform-windows
+    filter: ['package.json', 'dist/**/*']
+
+# The Electron main entry, injected into the packaged app's package.json.
+extraMetadata:
+  main: packages/ui/dist/main/main.js
+
+# The bundled host-Node runtime + the licence, placed under the install's resources/ dir.
+extraResources:
+  - from: packages/ui/build/resources/runtime
+    to: runtime
+  - from: LICENSE
+    to: LICENSE
+
+win:
+  target: nsis
+  icon: packages/ui/assets/throng.ico
+
+# Per-user (no administrator) install (FR-012/040). The uninstaller "also delete my data" checkbox
+# (FR-021) and the install-time downgrade refusal (FR-016a) are added via a custom NSIS include in
+# a follow-up task (packages/ui/build/installer.nsh).
+nsis:
+  perMachine: false
+  oneClick: false
+  allowElevation: false
+  # Let the user pick the install folder (the wizard shows a directory page). Per-user still, so no
+  # admin rights and the default stays %LOCALAPPDATA%\Programs\throng.
+  allowToChangeInstallationDirectory: true
+  artifactName: throng-setup-${version}.${ext}
+  shortcutName: throng
+  # Custom NSIS: downgrade refusal (FR-016a) + the uninstall "also delete my data" checkbox (FR-021).
+  include: packaging/installer.nsh

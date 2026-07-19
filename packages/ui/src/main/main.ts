@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, statSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell, type WebContents } from 'electron';
 import {
@@ -24,6 +24,7 @@ import {
 import type { IClipboard } from '@throng/core';
 import { createUiContainer, UI_TYPES } from './composition-root.js';
 import { appIcon } from './app-icon.js';
+import { isSafeExternalUrl } from './external-url.js';
 import { ShippedDefaultsService } from './shipped-defaults-service.js';
 import { broadcastToWindows, senderWebContentsId } from './broadcast.js';
 import { readConfigPayload, startConfigWatcher, type ConfigPayload } from './config-watcher.js';
@@ -38,6 +39,8 @@ import {
   isPreferencesTab,
   type PreferencesWindowDeps,
 } from './preferences-window.js';
+import { buildAppMenu } from './app-menu.js';
+import { openAbout, type AboutWindowDeps } from './about-window.js';
 import { acquireSingleInstance } from './single-instance.js';
 import { ensureDaemon } from './daemon-lifecycle.js';
 import { DaemonRpcError, type DaemonClient } from './daemon-client.js';
@@ -85,6 +88,102 @@ async function invokeDaemon(
 
 function resolveFromHere(relativePath: string): string {
   return fileURLToPath(new URL(relativePath, import.meta.url));
+}
+
+/**
+ * The daemon's stamped build id (020, FR-006) — the SAME `dist/BUILD_ID` file the
+ * daemon-staleness check reads (daemon-lifecycle). Shown in the About dialog beside
+ * the product version so two builds of one version stay distinguishable. Returns
+ * 'unknown' when the build was not stamped (a partial tsc-only build).
+ */
+function readBuildId(buildIdPath: string): string {
+  try {
+    return readFileSync(buildIdPath, 'utf8').trim() || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * The full AGPL-3.0 licence text for the About dialog (020, FR-003a) — read from the
+ * repo-root `LICENSE` in dev, and from the packaged copy at run time. The candidates
+ * are tried in order; the licence is never pasted into source. Falls back to a
+ * pointer at the canonical URL if no copy is found.
+ */
+function readLicenseText(candidates: string[]): string {
+  for (const path of candidates) {
+    try {
+      return readFileSync(path, 'utf8');
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return 'Licence text unavailable in this build. See https://www.gnu.org/licenses/agpl-3.0.html';
+}
+
+/**
+ * The single authoritative product version + author for the About dialog (020, FR-001/003).
+ *
+ * NOT `app.getVersion()`: running unpackaged (`electron packages/ui/dist/main/main.js`) that
+ * returns Electron's OWN version (e.g. 43.0.0), not the product's. The product version lives in
+ * exactly one place — the ROOT `package.json` `version` — which electron-builder also injects as
+ * the packaged app's manifest, so reading it directly is correct in dev AND when packaged. The
+ * copyright holder is that manifest's `author` (kept in one place, not hardcoded in the renderer).
+ */
+function readProductInfo(candidates: string[]): {
+  version: string;
+  author: string;
+  repoUrl: string;
+} {
+  for (const path of candidates) {
+    try {
+      const pkg = JSON.parse(readFileSync(path, 'utf8')) as {
+        version?: string;
+        author?: unknown;
+        repository?: string | { url?: string };
+      };
+      const author =
+        typeof pkg.author === 'string'
+          ? pkg.author
+          : ((pkg.author as { name?: string } | undefined)?.name ?? '');
+      // Canonical https repo URL from package.json `repository` (git+https://x.git -> https://x).
+      const rawRepo = typeof pkg.repository === 'string' ? pkg.repository : (pkg.repository?.url ?? '');
+      const repoUrl = rawRepo
+        .replace(/^git\+/, '')
+        .replace(/^git:\/\//, 'https://')
+        .replace(/\.git$/, '')
+        .replace(/#.*$/, '');
+      if (pkg.version) return { version: pkg.version, author, repoUrl };
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return { version: '0.0.0', author: '', repoUrl: '' };
+}
+
+/** One shipped third-party dependency in the About dialog's licence list (020, FR-003a). */
+interface ThirdPartyLicence {
+  name: string;
+  version: string;
+  license: string;
+  licenseUrl: string;
+  projectUrl: string;
+}
+
+/**
+ * The third-party licence manifest shown in the About dialog (020, FR-003a) — generated at build
+ * time by scripts/generate-licenses.mjs from the shipped runtime dependencies. Read from the UI's
+ * built output (dev and packaged). Missing → an empty list rather than a crash.
+ */
+function readThirdPartyLicences(candidates: string[]): ThirdPartyLicence[] {
+  for (const path of candidates) {
+    try {
+      return JSON.parse(readFileSync(path, 'utf8')) as ThirdPartyLicence[];
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return [];
 }
 
 /**
@@ -291,9 +390,9 @@ const isPrimaryInstance = acquireSingleInstance(app, () => {
 
 if (isPrimaryInstance)
   app.whenReady().then(async () => {
-  // No application commands exist in the bootstrap, so remove Electron's
-  // auto-generated native menu bar (File/Edit/View/Window/Help). A real
-  // in-window menu is part of the later workspace UI (FR-007).
+  // Clear Electron's auto-generated File/Edit/View bar up front. The real
+  // application menu — a single Help → About throng item (020, FR-003) — is built
+  // and set below, once its dependencies (the resolved paths + main window) exist.
   Menu.setApplicationMenu(null);
 
   const container = createUiContainer();
@@ -448,6 +547,60 @@ if (isPrimaryInstance)
   ipcMain.on('throng:preferences:open', (_event, tab: unknown) => {
     openPreferences(isPreferencesTab(tab) ? tab : 'settings', preferencesDeps);
   });
+
+  // Nullable ref to the main window, for the About menu's parent (see below). The
+  // `const mainWindow` further down is in its temporal dead zone while the menu is
+  // being wired, so the About window cannot read it directly.
+  let mainWindowRef: BrowserWindow | null = null;
+
+  // About throng (020, FR-003/FR-003a): the cog menu's "About throng" item opens the
+  // shared app-modal About window. The product version + author are read from the ROOT
+  // package.json (the single source, FR-001) — deliberately NOT app.getVersion(), which
+  // returns Electron's own version when unpackaged (see readProductInfo); the build id
+  // from the daemon's stamped BUILD_ID (FR-006); and the full AGPL-3.0 licence from the
+  // bundled LICENSE (FR-003a). None of these is hardcoded in the renderer.
+  const productInfo = readProductInfo([
+    resolveFromHere('../../../../package.json'),
+    join(app.getAppPath(), 'package.json'),
+  ]);
+  const aboutInfo = {
+    version: productInfo.version,
+    author: productInfo.author,
+    repoUrl: productInfo.repoUrl,
+    buildId: readBuildId(resolveFromHere('../../../daemon/dist/BUILD_ID')),
+    licenseText: readLicenseText([
+      resolveFromHere('../../../../LICENSE'),
+      join(app.getAppPath(), 'LICENSE'),
+      join(process.resourcesPath, 'LICENSE'),
+    ]),
+    thirdParty: readThirdPartyLicences([
+      resolveFromHere('../third-party-licenses.json'),
+      join(app.getAppPath(), 'packages/ui/dist/third-party-licenses.json'),
+    ]),
+  };
+  ipcMain.handle('throng:about:get', () => aboutInfo);
+  // The licence link opens in the user's default browser — no in-app navigation, so
+  // the sandboxed About window is never replaced by a view of gnu.org (https only).
+  ipcMain.on('throng:openExternal', (_event, url: unknown) => {
+    if (isSafeExternalUrl(url)) void shell.openExternal(url);
+  });
+  // The application menu is set NOW (early), but the main window is created further
+  // below, so the About window's parent is resolved through a nullable ref rather
+  // than the later `const mainWindow` — the menu is clickable before that const is
+  // initialised, and reading it then is a temporal-dead-zone crash. The ref is
+  // assigned the moment the main window exists (see below); until then About opens
+  // unparented, which is harmless.
+  const aboutDeps: AboutWindowDeps = {
+    indexHtml: resolveFromHere('../renderer/index.html'),
+    preloadPath: resolveFromHere('../preload/preload.cjs'),
+    getMainWindow: () =>
+      mainWindowRef && !mainWindowRef.isDestroyed() ? mainWindowRef : null,
+  };
+  Menu.setApplicationMenu(buildAppMenu(() => openAbout(aboutDeps)));
+  // The DISCOVERABLE entry point (020, FR-003): the cog menu's "About throng" item.
+  // throng draws its own title bar (`frame: false`), so the native application menu
+  // above never renders on screen — the cog is where users actually reach About.
+  ipcMain.on('throng:about:open', () => openAbout(aboutDeps));
 
   // Renderer asks for the daemon health.ping outcome through the preload bridge.
   ipcMain.handle('throng:getDaemonStatus', () => daemonClient.getStatus());
@@ -647,6 +800,10 @@ if (isPrimaryInstance)
   const windowManager = new WindowManager();
   const mainWindow = await createMainWindow(settings, displayInfo, statePath);
   windowManager.registerMain(mainWindow);
+  // Now the main window exists, the About menu can parent to it (see the nullable
+  // ref above — set here so a menu click before this point opens About unparented
+  // rather than crashing on the not-yet-initialised `const mainWindow`).
+  mainWindowRef = mainWindow;
 
   // App-close warning with running terminals (FR-015). Intercept the main window
   // close: if the daemon reports running sessions, ask the renderer for the

@@ -1,0 +1,184 @@
+/*
+ * The About window surface (020, FR-003 / FR-003a). Every colour derives from the
+ * active theme's tokens (var(--throng-*)) — no hardcoded colours (constitution).
+ */
+.about-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--throng-colour-dialogSurface);
+  color: var(--throng-colour-text);
+  /* The shared TitleBar reads its height from this var, which is otherwise only defined on the
+     main window's `.throng-root`. Without it here the About bar collapses to its glyph height and
+     the window controls are clipped — define it so the bar renders at full height. */
+  --title-bar-height: 38px;
+}
+
+/* In the About realm the title bar is a normal column child (the main window positions it
+   absolutely and offsets its shell down; About has no such shell). Keep it in flow so it sits at
+   full height above the body rather than overlapping it. */
+.about-root .title-bar {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.about-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0; /* let the licence region shrink and scroll rather than overflow */
+  padding: 16px 20px 20px;
+  overflow: hidden;
+}
+
+.about-product {
+  margin: 0;
+  font-size: 20px;
+  font-weight: var(--throng-font-weight-bold);
+  color: var(--throng-colour-text);
+}
+
+.about-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.about-meta dt {
+  color: var(--throng-colour-textMuted);
+  font-weight: var(--throng-font-weight-normal);
+}
+
+.about-meta dd {
+  margin: 0;
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  color: var(--throng-colour-text);
+}
+
+/* Version + build id are selectable so they can be copied into a bug report
+   (FR-003) — the app-wide `user-select: none` (theme.css) is lifted here. */
+.about-selectable {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+.about-copyright {
+  margin: 0;
+  color: var(--throng-colour-textMuted);
+}
+
+.about-repo {
+  margin: -4px 0 0;
+  font-size: 12px;
+}
+
+.about-licence-link {
+  color: var(--throng-colour-accent);
+  text-decoration: none;
+}
+
+.about-licence-link:hover {
+  text-decoration: underline;
+}
+
+/* A caption above each scroll region (Licence / Third-party packages). */
+.about-section-label {
+  margin: 0;
+  color: var(--throng-colour-textMuted);
+  font-size: 12px;
+  font-weight: var(--throng-font-weight-bold);
+}
+
+/* The full AGPL-3.0 licence text: read-only, scrollable, selectable (FR-003a). A
+   read-only textarea is inherently non-editable and, per theme.css, selectable. The
+   window is sized so the authored ≤79-column lines fit without horizontal scrolling. */
+.about-licence-text {
+  flex: 2 1 0;
+  min-height: 120px;
+  width: 100%;
+  resize: none;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 4px;
+  background: var(--throng-colour-inputSurface);
+  color: var(--throng-colour-text);
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre;
+}
+
+/* The shipped third-party packages, each with a live licence link (FR-003a). A boxed,
+   read-only, scrollable region styled to match the licence box — but built from real
+   anchors so the licence links are clickable (a <textarea> could not carry links). */
+.about-thirdparty {
+  flex: 1 1 0;
+  min-height: 90px;
+  overflow-y: auto;
+  padding: 4px 0;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 4px;
+  background: var(--throng-colour-inputSurface);
+  font-size: 12px;
+}
+
+.about-thirdparty__row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 3px 10px;
+}
+
+.about-thirdparty__row:hover {
+  background: var(--throng-colour-hoverSurface);
+}
+
+.about-thirdparty__name {
+  color: var(--throng-colour-accent);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.about-thirdparty__name:hover,
+.about-thirdparty__licence:hover {
+  text-decoration: underline;
+}
+
+.about-thirdparty__version {
+  color: var(--throng-colour-textMuted);
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+}
+
+.about-thirdparty__licence {
+  color: var(--throng-colour-accent);
+  text-decoration: none;
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+}
+
+.about-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* A dialog-decision control (constitution exception): a text label, colours from
+   theme tokens. */
+.about-close {
+  padding: 6px 16px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 4px;
+  background: var(--throng-colour-buttonBg);
+  color: var(--throng-colour-buttonText);
+  font: inherit;
+  cursor: pointer;
+}
+
+.about-close:hover {
+  background: var(--throng-colour-buttonHoverBg);
+}

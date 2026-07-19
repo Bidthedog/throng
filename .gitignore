@@ -30,3 +30,6 @@ playwright-report/
 blob-report/
 all-blob-reports/
 .last-run.json
+
+# Installer verification verdict (020): a generated CI artifact, not source.
+verification-verdict.json

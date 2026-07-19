@@ -162,6 +162,30 @@ contextBridge.exposeInMainWorld('throng', {
     ipcRenderer.on('throng:preferences:tab', handler);
     return () => ipcRenderer.removeListener('throng:preferences:tab', handler);
   },
+  // About throng (020, FR-003/FR-003a): the About surface pulls the product version,
+  // build id and full licence text from main (never hardcoded in the renderer), and
+  // opens the licence link in the user's default browser.
+  about: {
+    // Cog → About throng (020, FR-003): create-or-focus the single shared, app-modal
+    // About window. This is the discoverable entry point — throng draws its own title
+    // bar (`frame: false`), so the native application menu never renders on screen.
+    open: () => ipcRenderer.send('throng:about:open'),
+    get: (): Promise<{
+      version: string;
+      author: string;
+      repoUrl: string;
+      buildId: string;
+      licenseText: string;
+      thirdParty: Array<{
+        name: string;
+        version: string;
+        license: string;
+        licenseUrl: string;
+        projectUrl: string;
+      }>;
+    }> => ipcRenderer.invoke('throng:about:get'),
+    openExternal: (url: string) => ipcRenderer.send('throng:openExternal', url),
+  },
   // User config (settings + active theme): pull on mount, then subscribe to
   // hot-reload pushes when the JSON files change (FR-030/031/033).
   config: {

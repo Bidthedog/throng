@@ -7,6 +7,11 @@ import type { IUiSettings } from '@throng/core';
  * isolation.
  */
 
+/**
+ * Last-resort pipe name when neither `THRONG_PIPE_NAME` nor a per-user default is supplied
+ * (020 FR-013). The composition root passes a per-user derived default (`defaultPipeName`);
+ * this constant only guards direct calls that predate that wiring.
+ */
 export const DEFAULT_PIPE_NAME = '\\\\.\\pipe\\throng.daemon';
 export const DEFAULT_WINDOW_WIDTH = 1280;
 export const DEFAULT_WINDOW_HEIGHT = 800;
@@ -35,9 +40,12 @@ export function numberFromEnv(value: string | undefined, fallback: number): numb
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-export function readUiSettings(env: NodeJS.ProcessEnv = process.env): IUiSettings {
+export function readUiSettings(
+  env: NodeJS.ProcessEnv = process.env,
+  fallbackPipeName: string = DEFAULT_PIPE_NAME,
+): IUiSettings {
   return {
-    pipeName: env.THRONG_PIPE_NAME ?? DEFAULT_PIPE_NAME,
+    pipeName: env.THRONG_PIPE_NAME ?? fallbackPipeName,
     window: {
       width: numberFromEnv(env.THRONG_WINDOW_WIDTH, DEFAULT_WINDOW_WIDTH),
       height: numberFromEnv(env.THRONG_WINDOW_HEIGHT, DEFAULT_WINDOW_HEIGHT),

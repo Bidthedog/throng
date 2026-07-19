@@ -19,10 +19,20 @@ export interface TitleBarProps {
   colour?: string;
   /** Render the cog action + preferences entry point — main window only (FR-005/007). */
   showCog?: boolean;
+  /** Render only the close control (no minimise/maximise) — fixed-size dialogs (020, FR-003). */
+  closeOnly?: boolean;
 }
 
-export function TitleBar({ identity, colour, showCog = false }: TitleBarProps): ReactElement {
-  const onDoubleClick = (): void => window.throng?.window?.maximize?.();
+export function TitleBar({
+  identity,
+  colour,
+  showCog = false,
+  closeOnly = false,
+}: TitleBarProps): ReactElement {
+  // A fixed-size dialog has nothing to maximise; double-clicking its bar must be inert.
+  const onDoubleClick = (): void => {
+    if (!closeOnly) window.throng?.window?.maximize?.();
+  };
 
   return (
     <header className="title-bar" data-testid="title-bar">
@@ -37,7 +47,7 @@ export function TitleBar({ identity, colour, showCog = false }: TitleBarProps): 
       </div>
       <div className="title-bar__actions">
         {showCog ? <CogMenu /> : null}
-        <WindowControls />
+        <WindowControls closeOnly={closeOnly} />
       </div>
     </header>
   );
