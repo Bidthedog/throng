@@ -13,7 +13,7 @@ import type {
   IProjectStore,
   IUserContext,
 } from '@throng/core';
-import { ProjectService, countPanels } from '@throng/core';
+import { ProjectService, countPanels, defaultPipeName } from '@throng/core';
 import {
   WindowsPlatformInfo,
   NodeUserContext,
@@ -53,6 +53,11 @@ export { DAEMON_TYPES } from './tokens.js';
  * selects OS implementations (Principle II) and assembles the object graph —
  * including registering every JSON-RPC method into the router.
  */
+/**
+ * Last-resort pipe name when neither `THRONG_PIPE_NAME` nor a per-user default is supplied
+ * (020 FR-013). Production passes a per-user derived default (`defaultPipeName`); this only
+ * guards a direct `readDaemonSettings` call that omits the fallback.
+ */
 const DEFAULT_PIPE_NAME = '\\\\.\\pipe\\throng.daemon';
 const DEFAULT_STARTUP_TIMEOUT_MS = 5000;
 
@@ -67,9 +72,12 @@ function defaultDatabasePath(env: NodeJS.ProcessEnv): string {
   return join(base, 'throng', 'throng.db');
 }
 
-function readDaemonSettings(env: NodeJS.ProcessEnv): IDaemonSettings {
+function readDaemonSettings(
+  env: NodeJS.ProcessEnv,
+  fallbackPipeName: string = DEFAULT_PIPE_NAME,
+): IDaemonSettings {
   return {
-    pipeName: env.THRONG_PIPE_NAME ?? DEFAULT_PIPE_NAME,
+    pipeName: env.THRONG_PIPE_NAME ?? fallbackPipeName,
     startupTimeoutMs: numberFromEnv(env.THRONG_STARTUP_TIMEOUT_MS, DEFAULT_STARTUP_TIMEOUT_MS),
     agentConnectTimeoutMs: numberFromEnv(
       env.THRONG_AGENT_CONNECT_TIMEOUT_MS,
@@ -88,15 +96,21 @@ function readPersistenceSettings(env: NodeJS.ProcessEnv): IPersistenceSettings {
 export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Container {
   const container = new Container({ defaultScope: 'Singleton' });
 
-  container.bind<IDaemonSettings>(DAEMON_TYPES.DaemonSettings).toConstantValue(readDaemonSettings(env));
-  container
-    .bind<IPersistenceSettings>(DAEMON_TYPES.PersistenceSettings)
-    .toConstantValue(readPersistenceSettings(env));
-
-  // OS abstractions (Principle II) — the only place that selects implementations.
+  // OS abstractions (Principle II) — the only place that selects implementations. The user
+  // context is resolved first so the per-user pipe default (below) can derive from its token.
   container.bind<IPlatformInfo>(DAEMON_TYPES.PlatformInfo).toConstantValue(new WindowsPlatformInfo());
   const userContext = new NodeUserContext();
   container.bind<IUserContext>(DAEMON_TYPES.UserContext).toConstantValue(userContext);
+
+  // Per-user default pipe (020 FR-013): derived from the injected user token so the daemon and
+  // UI rendezvous on a per-user endpoint with no machine-wide collision. THRONG_PIPE_NAME overrides.
+  const daemonDefaultPipe = defaultPipeName(userContext.currentUser().userId);
+  container
+    .bind<IDaemonSettings>(DAEMON_TYPES.DaemonSettings)
+    .toConstantValue(readDaemonSettings(env, daemonDefaultPipe));
+  container
+    .bind<IPersistenceSettings>(DAEMON_TYPES.PersistenceSettings)
+    .toConstantValue(readPersistenceSettings(env));
 
   // Durable store (opened once; migrations run by main on startup).
   const persistenceSettings = container.get<IPersistenceSettings>(DAEMON_TYPES.PersistenceSettings);

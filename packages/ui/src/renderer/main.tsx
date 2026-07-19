@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { CompositionRoot, SubWorkspaceCompositionRoot } from './composition-root.js';
 import { parseWindowIdentity } from './window-identity.js';
 import { PreferencesApp, isPreferencesTab } from './preferences/preferences-app.js';
+import { AboutApp } from './about/about-app.js';
 import { settleConfigWrites } from './config/write-config.js';
 import { settleLayoutSaves } from './state/layout-saves.js';
 import './theme.css';
@@ -66,11 +67,13 @@ function registerMouseZoom(): void {
 const container = document.getElementById('root');
 if (!container) throw new Error('Renderer root element #root not found');
 
-const prefsTab = new URLSearchParams(window.location.search).get('prefs');
+const search = new URLSearchParams(window.location.search);
+const prefsTab = search.get('prefs');
+const aboutParam = search.get('about');
 const identity = parseWindowIdentity(window.location.search);
 
-// Mouse-driven zoom applies to the workspace windows, not the preferences window.
-if (prefsTab === null) registerMouseZoom();
+// Mouse-driven zoom applies to the workspace windows, not the preferences/About windows.
+if (prefsTab === null && aboutParam === null) registerMouseZoom();
 
 // The drain applies to EVERY window — that is the whole point of it (C22/C23).
 registerShutdownDrain();
@@ -79,6 +82,8 @@ createRoot(container).render(
   <StrictMode>
     {prefsTab !== null ? (
       <PreferencesApp initialTab={isPreferencesTab(prefsTab) ? prefsTab : 'settings'} />
+    ) : aboutParam !== null ? (
+      <AboutApp />
     ) : identity.kind === 'subworkspace' ? (
       <SubWorkspaceCompositionRoot id={identity.id} />
     ) : (

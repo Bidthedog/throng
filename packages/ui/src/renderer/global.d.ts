@@ -38,6 +38,26 @@ declare global {
       onPreferencesTab?: (
         cb: (tab: 'settings' | 'keybindings' | 'themes') => void,
       ) => () => void;
+      // About throng (020, FR-003): version + build id + full licence for the About
+      // surface, plus opening the licence link in the user's default browser.
+      about?: {
+        open: () => void;
+        get: () => Promise<{
+          version: string;
+          author: string;
+          repoUrl: string;
+          buildId: string;
+          licenseText: string;
+          thirdParty: Array<{
+            name: string;
+            version: string;
+            license: string;
+            licenseUrl: string;
+            projectUrl: string;
+          }>;
+        }>;
+        openExternal: (url: string) => void;
+      };
       // App-close warning when terminals are running (005 / FR-015).
       onAppCloseBegin?: (cb: () => void) => () => void;
       onAppClosePrompt?: (cb: (info: AppClosePromptInfo) => void) => () => void;

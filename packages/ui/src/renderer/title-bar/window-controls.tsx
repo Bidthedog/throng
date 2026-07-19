@@ -22,7 +22,16 @@ import { Icon } from '../common/icon.js';
  * nothing. There was no good reason to leave them.
  */
 
-export function WindowControls(): ReactElement {
+export interface WindowControlsProps {
+  /**
+   * When true, render ONLY the close control — no minimise/maximise. Used by fixed-size dialog
+   * windows (e.g. About, 020 FR-003) that cannot be minimised or maximised, so offering those
+   * controls would be dead chrome.
+   */
+  closeOnly?: boolean;
+}
+
+export function WindowControls({ closeOnly = false }: WindowControlsProps): ReactElement {
   const [maximized, setMaximized] = useState(false);
   const controls = window.throng?.window;
 
@@ -40,26 +49,30 @@ export function WindowControls(): ReactElement {
 
   return (
     <div className="window-controls" data-testid="window-controls">
-      <button
-        type="button"
-        className="window-control"
-        data-testid="window-min"
-        title="Minimise"
-        aria-label="Minimise"
-        onClick={() => controls?.minimize?.()}
-      >
-        <Icon token="windowMinimise" />
-      </button>
-      <button
-        type="button"
-        className="window-control"
-        data-testid="window-max"
-        title={maximized ? 'Restore' : 'Maximise'}
-        aria-label={maximized ? 'Restore' : 'Maximise'}
-        onClick={() => controls?.maximize?.()}
-      >
-        {maximized ? <Icon token="windowRestore" /> : <Icon token="windowMaximise" />}
-      </button>
+      {closeOnly ? null : (
+        <>
+          <button
+            type="button"
+            className="window-control"
+            data-testid="window-min"
+            title="Minimise"
+            aria-label="Minimise"
+            onClick={() => controls?.minimize?.()}
+          >
+            <Icon token="windowMinimise" />
+          </button>
+          <button
+            type="button"
+            className="window-control"
+            data-testid="window-max"
+            title={maximized ? 'Restore' : 'Maximise'}
+            aria-label={maximized ? 'Restore' : 'Maximise'}
+            onClick={() => controls?.maximize?.()}
+          >
+            {maximized ? <Icon token="windowRestore" /> : <Icon token="windowMaximise" />}
+          </button>
+        </>
+      )}
       <button
         type="button"
         className="window-control window-control--close"

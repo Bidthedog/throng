@@ -1,10 +1,35 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { connect, type Socket } from 'node:net';
 import { dirname, join } from 'node:path';
 import process from 'node:process';
 import { HEALTH_PING_METHOD, type HealthPongResult, type JsonRpcResponse } from '@throng/ipc-contract';
 import { shouldRespawnDaemonElevated } from '@throng/core';
+
+/**
+ * Resolve the executable that runs the daemon (020 FR-009). The daemon MUST run on host Node,
+ * never Electron, because its native modules (better-sqlite3, node-pty, koffi) are built against
+ * the host-Node ABI ("no electron-rebuild") and crash under Electron's Node.
+ *
+ * Order: an explicit `nodePath` (tests) → the **bundled runtime** shipped inside a packaged install
+ * (`<resourcesPath>/runtime/node.exe`, staged by scripts/stage-runtime.mjs) → the host Node that
+ * launched `npm start` (dev) → `node` on PATH. `process.resourcesPath` is only set in a packaged
+ * Electron app, so in dev and in tests this falls through to the existing behaviour. Pure and
+ * unit-testable: `resourcesPath` and `fileExists` are injected.
+ */
+export function resolveDaemonNodeExe(
+  explicit: string | undefined,
+  resourcesPath: string | undefined,
+  fileExists: (path: string) => boolean,
+  env: NodeJS.ProcessEnv,
+): string {
+  if (explicit) return explicit;
+  if (resourcesPath) {
+    const bundled = join(resourcesPath, 'runtime', 'node.exe');
+    if (fileExists(bundled)) return bundled;
+  }
+  return env.npm_node_execpath ?? 'node';
+}
 
 /**
  * Persistent detached daemon lifecycle for the UI main (005 Phase C / US3,
@@ -161,10 +186,12 @@ export async function ensureDaemon(opts: EnsureDaemonOptions): Promise<EnsureDae
   // UI process. Strip ELECTRON_RUN_AS_NODE from the inherited env: if the UI itself
   // was launched that way it must NOT leak to the daemon.
   const { ELECTRON_RUN_AS_NODE: _drop, ...inheritedEnv } = process.env;
-  // Prefer the exact host Node that launched `npm start` (npm sets this), else
-  // `node` on PATH. Never process.execPath — under Electron that is electron.exe,
-  // whose Node ABI the daemon's native modules are not built for.
-  const nodeExe = opts.nodePath ?? inheritedEnv.npm_node_execpath ?? 'node';
+  const nodeExe = resolveDaemonNodeExe(
+    opts.nodePath,
+    (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath,
+    existsSync,
+    inheritedEnv,
+  );
   const child = spawn(nodeExe, [opts.daemonEntry], {
     detached: true,
     stdio: 'ignore',
