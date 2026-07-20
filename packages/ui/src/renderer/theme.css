@@ -43,42 +43,53 @@
   box-sizing: border-box;
 }
 
-/* 018 / FR-009, FR-010 — scrollbars are part of the theme.
+/* 021 / US7 (base-only) — button TYPOGRAPHY is the theme's, on EVERY button.
  *
- * Before this, exactly ONE scrollbar in the whole application was styled: the terminal's. Every
- * other scrollable surface — the preferences panels, the file tree, the editor, the project and
- * sub-workspace lists, the menus — rendered the browser engine's default. On a dark theme that is a
- * light-grey bar in an otherwise dark application, and it is the first thing you see.
+ * The three button TYPES (Confirm / Cancel / Destroy) differ only by COLOUR; their TYPOGRAPHY is one
+ * shared `button` role — family, size, weight (the Bold toggle), casing, italic and under/strike. That
+ * role must reach ALL buttons, not the two attributes (family + weight) each call site happened to
+ * wire, which is why size / casing / italic / decoration reached nothing and the theme's button font
+ * controls appeared dead. So it is declared ONCE here, on `button`, rather than repeated per selector —
+ * where the next button added is the one left off the list. Individual rules still paint their type's
+ * colours (and may restate family/weight to the same vars); everything they don't set falls through to
+ * this. The primary buttons deliberately no longer hard-code `font-weight: 600` — the Bold toggle owns
+ * that now, uniformly, or it would be dead for Confirm the way it was for everything.
  *
- * Applied GLOBALLY rather than surface by surface, deliberately: the requirement is "every
- * scrollable surface", and a per-surface list is a list that the next scrollable surface is not on.
- *
- * Deliberately the STANDARD properties only — no global `::-webkit-scrollbar` rules. Defining a
- * webkit scrollbar pseudo-element switches Chromium into custom-scrollbar mode, which forces a
- * classic non-overlay bar with a real box on EVERY element in the application. That is a layout
- * change dressed up as a recolour: it narrows every scrollable container and shifts what is under
- * the pointer. `scrollbar-color` recolours without touching the box model, which is all this story
- * asked for.
- *
- * The terminal keeps its own `::-webkit` rules (terminal.css) because its scrollbar IS load-bearing
- * for layout: it must be a classic bar occupying real width, or xterm's fit calculation wraps text
- * underneath it. It opts out of `scrollbar-color` so those rules still apply, and an E2E MEASURES
- * the result. */
-/* 018 follow-up — the scrollbar has a WIDTH, and it is the theme's.
- *
- * `scrollbar-width` accepts only `auto | thin | none`: the standard property cannot take a
- * measurement, so "thin" was the only answer the application could give, and it was too thin. The
- * `::-webkit-scrollbar` pseudo-elements can take one — at the price of switching Chromium to classic
- * (non-overlay) scrollbars, which occupy real layout width.
- *
- * That price is now PAID DELIBERATELY, because it buys the thing the standard property cannot give.
- * `::-webkit-scrollbar-corner` is transparent because the default corner is an opaque patch of grey
- * that appeared as a small coloured sliver in the bottom-right of scrollable panels — visible against
- * any theme far from the browser's default, and the reason this rule exists at all. */
-* {
-  scrollbar-color: var(--throng-colour-scrollbarThumb) var(--throng-colour-scrollbarTrack);
+ * Icon-only buttons carry no text of their own, but their GLYPH does — `.icon` resets casing / italic /
+ * decoration and sizes the glyph from `--throng-size-icon`, so an uppercase or underlined button theme
+ * never mangles a "{ }" / "Aa" glyph. */
+button {
+  font-family: var(--throng-font-button-family, var(--throng-font-family));
+  font-size: var(--throng-font-button-size, var(--throng-font-size));
+  font-weight: var(--throng-font-button-weight, var(--throng-font-weight-normal));
+  text-transform: var(--throng-font-button-transform, none);
+  font-style: var(--throng-font-button-style, normal);
+  text-decoration: var(--throng-font-button-decoration, none);
 }
 
+/* 018 / FR-009, FR-010 — scrollbars are part of the theme; 021 follow-up (#130) — and so is their WIDTH.
+ *
+ * Before 018 exactly ONE scrollbar in the application was styled: the terminal's. Every other
+ * scrollable surface — the preferences panels, the file tree, the editor, the project and
+ * sub-workspace lists, the menus — rendered the browser engine's default light-grey bar.
+ *
+ * Two mutually-exclusive machineries exist for styling a scrollbar, and Chromium honours only ONE per
+ * element: the STANDARD `scrollbar-color`/`scrollbar-width` properties, OR the legacy
+ * `::-webkit-scrollbar-*` pseudo-elements — the moment `scrollbar-color` is anything but `auto` on an
+ * element, its `::-webkit-scrollbar` rules are IGNORED. 018 chose the standard `scrollbar-color` on
+ * `*` for colour, because it recolours without touching the box model. But `scrollbar-width` accepts
+ * only `auto | thin | none` — it cannot take a measurement — so the theme's px WIDTH could never
+ * apply through it, and the global `scrollbar-color` simultaneously made the `::-webkit-scrollbar`
+ * width rule below inert everywhere. That is #130: the width was emitted and referenced but reached
+ * NO scrollbar bar the terminal's (which alone opted back out).
+ *
+ * So the whole application now takes the LEGACY path, exactly as the terminal always did: NO global
+ * `scrollbar-color` (its presence is precisely what silenced the width), colours from
+ * `::-webkit-scrollbar-thumb`/`-track`, width from `::-webkit-scrollbar`. The price the standard
+ * property avoided is now PAID DELIBERATELY and app-wide: these are classic non-overlay bars that
+ * occupy real layout width — which is the only way a px width can mean anything, and what #130 asks
+ * for (every pane, modal, list, editor, terminal). The terminal's own `::-webkit` rules (terminal.css)
+ * still apply and an E2E MEASURES the resulting bar. */
 ::-webkit-scrollbar {
   width: var(--throng-size-scrollbar, 12px);
   height: var(--throng-size-scrollbar, 12px);
@@ -443,7 +454,6 @@ textarea,
   background: var(--throng-colour-confirmButtonBg);
   border-color: var(--throng-colour-confirmButtonBorder);
   color: var(--throng-colour-confirmButtonText);
-  font-weight: 600;
 }
 
 .project-form__buttons button[type='submit']:hover {
@@ -1320,7 +1330,6 @@ textarea,
   background: var(--throng-colour-confirmButtonBg);
   border-color: var(--throng-colour-confirmButtonBorder);
   color: var(--throng-colour-confirmButtonText);
-  font-weight: 600;
 }
 
 .modal__confirm--danger {
@@ -1776,6 +1785,12 @@ textarea,
   height: var(--throng-size-icon, 16px);
   line-height: 1;
   flex: none;
+  /* 021 / US7 — a glyph is not prose. The base `button` typography (and dialog casing) would otherwise
+     reach an icon-only button's glyph: an UPPER-case theme turns the "Aa"/"ab" match-mode glyphs into
+     "AA"/"AB", and an underline theme rules a line under every icon. A glyph carries none of those. */
+  text-transform: none;
+  font-style: normal;
+  text-decoration: none;
 }
 
 .icon > svg {

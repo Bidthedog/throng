@@ -143,8 +143,18 @@ export function isThemeTokenOverridden(
 ): boolean {
   if (!shipped) return false;
   const shippedValue = ownAtPath(shipped, key);
-  if (shippedValue === undefined) return false;
-  return !deepEqual(ownAtPath(current, key), shippedValue);
+  const currentValue = ownAtPath(current, key);
+  // A theme field whose shipped leaf is UNSET has "inherit" as its default, not "no default". This is
+  // the crucial difference from settings and bindings, where a missing path means the key is not real
+  // and therefore not resettable. Here the editable token set is DERIVED FROM THE SCHEMA — every
+  // typography override (`typography.<role>.<field>`, the button role included) and the optional colour
+  // tokens (`iconColour`, `menuItemHoverSurface`) ship unset — so a missing leaf means the default is
+  // inherit. Pinning a concrete value IS an override; Reset returns it to inherit by clearing the leaf
+  // (writing `undefined`, which `toCssVariables` and JSON-persistence both fold back to the base). Read
+  // literally as "no shipped value → not resettable", this reported a permanently-disabled Reset for
+  // every button typography field and every optional colour, on every theme — issue this pass fixes.
+  if (shippedValue === undefined) return currentValue !== undefined;
+  return !deepEqual(currentValue, shippedValue);
 }
 
 /** True iff the token at `key` differs from the value it held when the window opened. */

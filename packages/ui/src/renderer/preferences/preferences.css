@@ -120,36 +120,31 @@
   cursor: default;
 }
 
-/* Icon-only toolbar buttons (H3, FR-023/024): square, glyph-centred, no text. */
+/* Icon-only toolbar buttons (H3, FR-023/024): square, glyph-centred, no text. The box SCALES with the
+   theme's icon size (021 / #icon-size). The whole point of the "Icon size" control is that it moves the
+   chrome's icons — the preferences toolbar's top actions included — which it could NOT while this pinned
+   a fixed 14px glyph in a fixed 26px box: the top action icons never changed. Box = glyph + breathing
+   room, so it grows with the setting and a wider monospace glyph still fits. */
 .prefs-toolbtn--icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
+  width: calc(var(--throng-size-icon, 16px) + 10px);
+  height: calc(var(--throng-size-icon, 16px) + 10px);
   padding: 0;
-}
-
-/* The mode toggle and the reset controls render a themed GLYPH, not an inline SVG
-   (constitution v3.12.0) — size it like the old icon so the toolbar keeps its rhythm. */
-.prefs-toolbtn--icon {
-  font-size: 14px;
   line-height: 1;
 }
 
 /* Keep a MULTI-CHARACTER themed glyph on ONE line, in every theme.
  *
- * A token's glyph is not always a single character, and it can contain a space: `editJson` is the
- * literal text "{ }". The <Icon> span that draws it is only `--throng-size-icon` (16px) wide and,
- * since 018, sets its OWN font-size (16px) — so the 14px the button declares above never reaches
- * the glyph. In the five themes whose ui font is MONOSPACE (Windows Terminal, Bash, VI-VIM, Matrix,
- * Cyberpunk) the three fixed-width characters overflow that 16px box, and the default
- * `white-space: normal` then breaks them at the space, stacking "{" over "}" — two lines. Every
- * proportional-font theme keeps "{ }" narrow enough to fit, which is exactly why only those five
- * wrapped. `nowrap` forbids the break for ALL themes; re-applying the toolbar's own 14px where it
- * actually binds (the glyph span) trims the wider monospace glyph back inside the 26px button. This
- * is a single app-side fix — no theme's icon set is touched. */
+ * A token's glyph is not always one character and can contain a space: `editJson` is the literal text
+ * "{ }". In the five themes whose ui font is MONOSPACE (Windows Terminal, Bash, VI-VIM, Matrix,
+ * Cyberpunk) three fixed-width characters can overflow the glyph box, and the default `white-space:
+ * normal` then breaks them at the space, stacking "{" over "}". `nowrap` forbids that for ALL themes.
+ * The glyph now takes its size from the base `.icon` rule (`--throng-size-icon`) — there is deliberately
+ * NO font-size pin here, because that pin is exactly what stopped the "Icon size" control from reaching
+ * these icons. The box above grows with the icon so the wider glyph still fits. */
 .prefs-toolbtn--icon .icon {
-  font-size: 14px;
   white-space: nowrap;
 }
 

@@ -393,6 +393,13 @@ function makeTheme(name: string, p: Palette): Theme {
       editor: { family: mono, sizePx: 14 },
       terminal: { family: mono, sizePx: 14 },
     },
+    // The non-colour measurements (018 follow-up) — icon edge and scrollbar width. Every bundled theme
+    // carries the SAME concrete defaults throng ships, spelled out rather than left to inherit. Not for
+    // appearance (these ARE throng's 16 / 12, so nothing renders differently) but so the Themes editor's
+    // per-token Reset has a shipped baseline to return to: without a `sizes` leaf on the theme,
+    // `isThemeTokenOverridden` saw no shipped value and reported Reset permanently disabled for icon size
+    // and scrollbar width on every bundled theme — the exact defect this pass fixes.
+    sizes: { ...THRONG_THEME.sizes },
     icons: { ...THRONG_THEME.icons },
   };
 }

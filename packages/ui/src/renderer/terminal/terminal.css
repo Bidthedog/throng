@@ -36,22 +36,18 @@
    scrollbar in the application, and it borrowed `border` for its thumb and
    `textMuted` for the hover because it had no tokens of its own. It has them now,
    and so does every other scrollable surface. */
-/* Opt OUT of the standard `scrollbar-color` property that theme.css sets on `*`.
+/* Pin this element to the LEGACY webkit scrollbar machinery — a DEFENSIVE no-op today, load-bearing
+ * against tomorrow.
  *
- * This is not belt-and-braces — it is load-bearing. Chromium honours EITHER the standard
- * scrollbar properties OR the `::-webkit-scrollbar-*` pseudo-elements: once `scrollbar-color` is
- * anything but `auto` on an element, the webkit rules below are IGNORED. The global theming rule
- * would therefore have silently converted this classic 12px bar into a thin overlay one — and an
- * overlay bar has no layout width, so xterm's fit calculation would wrap terminal text UNDERNEATH
- * the scrollbar. That is precisely the defect FR-011 exists to prevent, introduced by the very
- * change that was supposed to be a recolour.
- *
- * `auto` hands this element back to the webkit rules; they carry the theme tokens themselves, so
- * nothing is lost but the standard property. The E2E MEASURES the resulting bar. */
+ * Chromium honours EITHER the standard `scrollbar-color`/`scrollbar-width` properties OR the
+ * `::-webkit-scrollbar-*` pseudo-elements: the moment `scrollbar-color` is anything but `auto` on an
+ * element, its webkit rules are IGNORED. Since #130 the whole application takes the webkit path (no
+ * global `scrollbar-color` any more — theme.css), so this `auto` currently changes nothing. It stays
+ * because the terminal's classic 12px bar is LOAD-BEARING for layout in a way no other surface's is:
+ * xterm's fit calculation depends on the bar taking real width, and an overlay bar would wrap terminal
+ * text UNDERNEATH it (the FR-011 defect). If a future change ever reintroduces a `scrollbar-color`
+ * higher up, this keeps the terminal on the webkit bar the E2E MEASURES. */
 .terminal-panel .xterm-viewport {
-  /* The global `scrollbar-color` would put Chromium back into STANDARD-scrollbar mode and discard the
-     `::-webkit` rules — which now carry the width for the whole application. An overlay bar has no
-     layout width, and xterm's fit calculation would then wrap terminal text UNDERNEATH it. */
   scrollbar-color: auto;
 }
 

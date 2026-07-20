@@ -264,17 +264,34 @@ function NumberControl({ descriptor, value, onCommit }: SettingControlProps): Re
    */
   const commitDrag = (): void => {
     const n = dragging;
-    setDragging(null);
-    if (n !== null && n !== value) onCommit(n);
+    if (n === null) return;
+    if (n === value) {
+      // No change — nothing will come back through `value`, so release the local hold now.
+      setDragging(null);
+      return;
+    }
+    // #131 — DO NOT clear `dragging` here. The write is debounced through the settings file and the file
+    // watcher, so `value` lags the release by a few frames; clearing the local value now makes `shown`
+    // fall back to the pre-commit `value` for exactly that window, and the thumb visibly SNAPS BACK to
+    // the old position before jumping forward when the write lands. Keep SHOWING the dropped position
+    // and let the sync effect below release the hold once the committed value actually arrives in
+    // `value`. Debounce the value write, not the control's displayed position.
+    onCommit(n);
   };
 
-  // Sync from the live value when not being edited.
+  // Sync from the live value when it changes upstream. A NEW `value` means either the committed drag
+  // write has landed or something changed the setting externally — both are the moment to release any
+  // local drag hold and re-sync the field. Keyed on `value` ALONE (not `dragging`): during an active
+  // drag `value` does not change — the slider only commits on release — so this never fires mid-gesture
+  // and cannot fight the thumb. It fires when the debounced write returns, handing the thumb back to
+  // `value` seamlessly (the committed position equals what was being shown), which is the #131 fix.
   useEffect(() => {
-    if (!focused.current && dragging === null) {
+    setDragging(null);
+    if (!focused.current) {
       setText(display(value));
       setInvalid(false);
     }
-  }, [value, dragging]);
+  }, [value]);
 
   const parse = (raw: string): number | null => {
     // `parseGrouped` is the exact inverse of `formatGrouped` for the active locale, so the
