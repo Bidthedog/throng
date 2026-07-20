@@ -6,7 +6,7 @@
 
 **Status**: Draft
 
-**Input**: GitHub issue #84 — "[Enhancement] Group theme tokens by the area they colour" — plus an expanded refactor agreed on 2026-07-19: a theme-key **naming/description convention**, **surface consolidation**, a **three-type button model**, applying **Field Surface** to every field, a **window-title convention** with Preferences no longer minimisable, two behavioural **bug fixes** (stranded hover; clipped colour picker), and a **standing usage guard** that every token is used and tested. The area-grouping and section-search work (US1–US4) shipped first; this rewrite folds the follow-on refactor into the same feature (#84 / PR #135), which means the original "byte-identical / nothing renamed" contract (former FR-011/FR-012, SC-004/SC-006) is deliberately dropped and replaced by a migration.
+**Input**: GitHub issue #84 — "[Enhancement] Group theme tokens by the area they colour" — plus an expanded refactor agreed on 2026-07-19: a theme-key **naming/description convention**, **surface consolidation**, a **three-type button model**, applying **Field Surface** to every field, a **window-title convention** with Preferences no longer minimisable, two behavioural **bug fixes** (stranded hover; clipped colour picker), and a **standing usage guard** that every token is used and tested. The area-grouping and section-search work (US1–US4) shipped first; this rewrite folds the follow-on refactor into the same feature (#84 / PR #135), which means the original "byte-identical / nothing renamed" contract (former FR-011/FR-012, SC-004/SC-006) is deliberately dropped and replaced by a migration. A further **follow-up defect pass (2026-07-20)** — US12–US15 / FR-037–FR-043 — fixes reset for inherit-based fields, wires up controls that did nothing (icon size in the Preferences chrome, scrollbar width app-wide **#130**, button typography on every button), makes the Preferences window **non-modal**, and stops sliders snapping back (**#131**).
 
 ## Clarifications
 
@@ -39,6 +39,15 @@
 - Q: The Files & Folders root stays "hovered" when Themes is opened from the cog menu. → A: **Hover visuals MUST NOT persist** when the main window loses focus or a menu/child window opens; they show only while the pointer is genuinely over the element.
 - Q: Window titles and chrome. → A: Every window title (OS + in-app) uses the **suffix form `<Name> — throng`** (was the prefix `throng — <Name>`); the **Preferences window is not minimisable** (no minimise control, non-minimizable at OS level) — Maximise/Restore and Close remain.
 - Q: How to keep keys from sprawling again? → A: A **standing usage guard** — every token must have ≥1 live consumer AND ≥1 test asserting it is applied, and must obey the naming/description convention; violations fail the build.
+
+### Session 2026-07-20 (follow-up defects)
+
+- Q: The "Set to default value" affordance never enables for icon size, scrollbar width, or button typography. → A: The reset predicate wrongly treated a field the theme leaves **unset** as not resettable; such a field's default is *inherit*, so it is overridden once the user pins a value and Reset clears it back (FR-037). Bundled themes now also carry concrete size defaults (FR-038).
+- Q: The icon-size control doesn't move the preferences window's own top action icons. → A: Those icons were pinned at 14px; they now honour the icon-size token (FR-039).
+- Q: Scrollbar width affects no scrollbars (#130). → A: A global `scrollbar-color` forced overlay scrollbars that ignore the webkit width; the app now uses classic webkit bars app-wide so the width reaches every surface — modals, editors, terminals (FR-040).
+- Q: Button font size / bold / casing / italic / underline / strikethrough apply to no buttons. → A: The shared `button` typography role now applies to **all** text buttons; primary buttons no longer hard-code weight; icon glyphs are shielded. **Base only** — the three types share one typography and differ by colour (no per-type typography overrides) — chosen to fix the bug without re-introducing key sprawl (FR-041).
+- Q: The Preferences window should stay on top but let me use the main window while editing themes. → A: Make it **non-modal** — parented (stays above main) but no longer disabling other windows (FR-042). Supersedes 007's app-modal behaviour.
+- Q: Preference sliders snap back to the old value on release (#131). → A: The displayed position followed the debounced write; it now holds the dropped value until the write lands — debounce the write, not the display (FR-043).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -167,6 +176,58 @@ A colour swatch opened near the right or bottom edge of the window currently cli
 
 ---
 
+### User Story 12 - Every editable field can be reset to its default (Priority: P1, bug) — follow-up 2026-07-20
+
+Several theme controls showed a permanently-disabled "Set to default value" affordance: icon size and scrollbar width on any bundled theme, and every button typography field on every theme. The reset predicate treated a field the theme leaves **unset** (its default is *inherit*) as "not resettable" — conflating "the default is inherit" with "not a real field". After this change, a field whose shipped default is unset is **overridden once the user pins a concrete value**, and Reset returns it to inherit (clearing the leaf); fields with concrete defaults (icon size, scrollbar width — now carried by every bundled theme) reset to that concrete value.
+
+**Independent Test**: On a bundled theme, change icon size and a button typography attribute → both Reset affordances enable → click each → the value returns to its default and the affordance disables.
+
+**Acceptance Scenarios**:
+
+1. **Given** a bundled theme with an edited icon size, **When** I open its row, **Then** Reset is enabled and restores the shipped size (16).
+2. **Given** any theme with button *italic* toggled on, **When** I open its row, **Then** Reset is enabled and clears the override back to inherit.
+
+---
+
+### User Story 13 - Theme controls that did nothing now take effect (Priority: P1, bug) — follow-up 2026-07-20
+
+Three theme controls were emitted as CSS variables but consumed by nothing (or overridden): **icon size** never reached the preferences toolbar's top action icons (pinned at 14px); **scrollbar width** reached no scrollbar but the terminal's (a global `scrollbar-color` put Chromium in overlay mode, which ignores the webkit width — #130); **button font/weight/casing/italic/underline/strikethrough** reached no button (each call site wired only family + weight). After this change all three apply everywhere they should.
+
+**Independent Test**: Change icon size → the preferences toolbar icons resize. Change scrollbar width → scrollbars across the app (modals, editor, lists, terminal) resize. Set button casing to UPPER → every button label uppercases (icon glyphs do not).
+
+**Acceptance Scenarios**:
+
+1. **Given** a larger icon size, **When** applied, **Then** the preferences toolbar's top action icons grow with it.
+2. **Given** a larger scrollbar width, **When** applied, **Then** an arbitrary scrollable surface shows a classic bar of that width (not a 0-width overlay).
+3. **Given** button Bold / casing / italic / underline set, **When** applied, **Then** every text button reflects them and no icon glyph is mangled.
+
+---
+
+### User Story 14 - Edit a theme while using the app (Priority: P1) — follow-up 2026-07-20
+
+The Preferences window was app-modal: opening it disabled every other window, so a theme could not be watched against a live, interactive application while being edited. After this change Preferences is **non-modal** — it floats above the main window (parented, so it stays on top) but the main window and sub-workspaces stay fully interactive, so theme edits can be previewed against real use.
+
+**Independent Test**: Open Preferences → the main window is still enabled (interactive) and the Preferences window is parented above it; interacting with the main window does not hide Preferences.
+
+**Acceptance Scenarios**:
+
+1. **Given** Preferences is open, **When** I click into the main window, **Then** it responds and Preferences stays above it.
+2. **Given** Preferences is open, **When** I read the window state, **Then** the main window reports enabled (non-modal).
+
+---
+
+### User Story 15 - Sliders don't snap back on release (Priority: P2, bug, #131) — follow-up 2026-07-20
+
+Releasing a preference slider made the thumb briefly jump back to the previous value, then forward to the dropped one: the displayed position followed the **debounced write** rather than local UI state, so it rendered the stale value until the write round-tripped. After this change the thumb holds the dropped position immediately; only the value *write* is debounced, not the control's displayed position.
+
+**Independent Test**: Drag a slider and release → the thumb stays at the dropped position with no visible revert; the value persists.
+
+**Acceptance Scenarios**:
+
+1. **Given** a slider dragged to a new value, **When** I release, **Then** the thumb stays where I dropped it and never shows the old value.
+
+---
+
 ### Edge Cases
 
 - **`surface` (former `panelSurface`, #62)** stays a known overload; after Files & Folders leaves it, it colours workspace panel-boxes and dialogs. Its overload resolution remains #62's problem.
@@ -237,6 +298,16 @@ A colour swatch opened near the right or bottom edge of the window currently cli
 - **FR-035**: Hover visuals MUST NOT persist when the main window loses focus or a menu/child window opens; a hover state stranded by an overlay closing MUST NOT be shown. Hover visuals appear only while the pointer is genuinely over the element.
 - **FR-036**: The colour picker MUST always open **fully within the viewport**, flipping and clamping on both axes, reusing the **shared viewport-positioning helper** also used by the context menu (extracted from the current context-menu logic).
 
+### Functional Requirements — follow-up defects (2026-07-20)
+
+- **FR-037**: The per-token **Reset** predicate MUST treat a theme field whose **shipped value is unset** as having an *inherit* default rather than "not resettable": such a field is **overridden** exactly when the current theme pins a concrete value, and Reset MUST return it to inherit by clearing the leaf. Fields with a concrete shipped default reset to that value. (This is specific to theme tokens, whose editable set is derived from the schema; the settings/keybindings predicates — where a missing path means "not a real key" — are unchanged.)
+- **FR-038**: Every **bundled theme** MUST carry the non-colour **size** measurements (`sizes.iconPx`, `sizes.scrollbarPx`) with the same concrete defaults `throng` ships (16 / 12), so the per-token Reset has a concrete baseline on every theme. This changes no appearance (the values are throng's own).
+- **FR-039**: The **icon size** token (`sizes.iconPx`) MUST size the **preferences window's own chrome icons** (the toolbar's top action icons), not only the main window's — no surface may pin a fixed icon size that the control cannot move.
+- **FR-040** (#130): The theme's **scrollbar width** MUST apply to **every** scrollbar in the application (panes, modals, lists, editor, terminal). Because the standard `scrollbar-width` property cannot take a pixel measurement and the standard `scrollbar-color` property silences the `::-webkit-scrollbar` pseudo-elements that can, the application MUST style scrollbars via the **legacy webkit pseudo-elements app-wide** (classic non-overlay bars that occupy real layout width) and MUST NOT set a global `scrollbar-color`. A guard MUST fail the build on any real (non-`auto`) `scrollbar-color`.
+- **FR-041**: The shared **button typography** role MUST apply to **all** text buttons — family, size, weight (the Bold toggle), casing, italic and under/strike — declared once so no button is left with only a subset. No text button may hard-code a font weight (which would defeat the Bold toggle). Icon-only buttons' **glyphs** MUST be shielded from casing/italic/decoration and sized from the icon-size token. (Base-only: the three button *types* share one typography and differ only by colour — no per-type typography overrides.)
+- **FR-042**: The **Preferences** window MUST be **non-modal**: opening it MUST NOT disable any other window. It stays **parented** to the main window (so it floats above it and minimises/restores with it) while the main window and sub-workspaces remain interactive. *(Supersedes the app-modal `setEnabled(false)` behaviour of 007 FR-013/FR-014; FR-034's non-minimisable rule is unchanged.)*
+- **FR-043** (#131): A slider's **displayed position** MUST reflect the pointer immediately and hold the dropped value until the committed write round-trips back; only the **value write** may be debounced. The control MUST NOT render the pre-commit value during the debounce window (no snap-back).
+
 ### Key Entities
 
 - **Area group**: as FR-003 (unchanged), plus the nested `General · Buttons · {Confirm, Cancel, Destroy}` sub-groups.
@@ -264,6 +335,12 @@ A colour swatch opened near the right or bottom edge of the window currently cli
 - **SC-013**: After opening Themes from the cog menu, the Files & Folders root shows no hover visual while Preferences is open.
 - **SC-014**: A colour picker opened at any window edge stays fully within the viewport.
 - **SC-015**: **Automated** — 100% of token labels match `<Context> <Property>` with `<Property>` from the fixed vocabulary, and 100% of descriptions pass the machine-checkable rules (≥20 chars, not self-referential, ≠ mechanical copy) — enforced by the convention guard, build-failing. **Reviewed** — the human-judged qualities (present tense, names a *real* UI element) are confirmed by author + code-review, not claimed as automated; the guard cannot verify tense or element-existence.
+- **SC-016** (FR-037/FR-038): On a bundled theme, both an icon-size edit and a button-typography edit make Reset **enabled**, and clicking it returns the value to its default (concrete 16/12 for sizes, inherit for typography) and disables Reset — 0% of these fields report a permanently-disabled Reset.
+- **SC-017** (FR-039): Changing the icon size **visibly resizes the preferences toolbar's top action icons**; no icon in the chrome is pinned to a fixed size the control cannot move.
+- **SC-018** (FR-040 / #130): An **arbitrary** scrollable surface shows a classic bar whose measured layout width equals the theme's scrollbar width (a 0-width overlay is a failure); the build fails on any real global `scrollbar-color`.
+- **SC-019** (FR-041): 100% of text buttons reflect the button typography role's size/weight/casing/italic/decoration; 0% of icon glyphs are cased/underlined/italicised by it; no text button hard-codes a font weight.
+- **SC-020** (FR-042): With Preferences open, the main window reports **enabled** (non-modal) and Preferences is parented above it.
+- **SC-021** (FR-043 / #131): A slider dragged and released never renders the pre-commit value; the thumb holds the dropped position and the value persists.
 
 ## Assumptions
 

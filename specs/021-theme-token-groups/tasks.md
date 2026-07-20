@@ -343,6 +343,30 @@ within the viewport.
 - [x] T052 Full green gate: `npm run lint`, `npm run typecheck`, `npm run test:unit`, and the touched E2E
   specs (`npm run build` then `npx playwright test`) all pass; capture the numbers for the report.
 
+## Phase 16 — Follow-up defects (2026-07-20, US12–US15 / FR-037–FR-043)
+
+A defect pass on the same feature/PR after the user's second review. Root-caused via systematic-debugging
+(see data-model §11); each fix RED → green.
+
+- [x] T053 [P] Reset for inherit-based fields (FR-037, US12): `isThemeTokenOverridden` (core) treats a
+  shipped-unset leaf as "default = inherit" — overridden iff the current theme pins a concrete value; reset
+  clears back to inherit. RED: `overridden.test.ts` cases (shipped-unset accent; `typography.button.italic`).
+- [x] T054 [P] Sizes baseline (FR-038, US12): `makeTheme` emits `sizes: {...THRONG_THEME.sizes}` on every
+  bundled theme. RED: `default-themes.test.ts` asserts every bundled theme carries `sizes.iconPx/scrollbarPx`.
+- [x] T055 Icon size in Preferences chrome (FR-039, US13): `.prefs-toolbtn--icon` honours `--throng-size-icon`
+  (unpin 14px; box scales). Guard: `button-typography-coverage.test.ts` sibling + `.icon` size via base rule.
+- [x] T056 Scrollbar width app-wide (FR-040, US13, #130): drop global `scrollbar-color`; classic webkit bars
+  carry colour + width everywhere. RED: `scrollbars.e2e.ts` measures an arbitrary surface's bar width; unit
+  `scrollbar-webkit-coverage.test.ts` forbids any real `scrollbar-color`.
+- [x] T057 Button typography app-wide (FR-041, US13, base-only): base `button {}` consumes all six font vars;
+  `.icon` resets casing/italic/decoration; remove hard `font-weight:600`. Guard: `button-typography-coverage.test.ts`.
+- [x] T058 Non-modal Preferences (FR-042, US14): remove `setEnabled(false)`/`enableAllWindows`; keep `parent`.
+  RED: `titlebar-chrome.e2e.ts` asserts `main.isEnabled()===true` while prefs open.
+- [x] T059 Slider no snap-back (FR-043, US15, #131): `NumberControl` holds the dropped value until the write
+  round-trips (sync effect keyed on `[value]`). Existing `preferences-slider.e2e.ts` proves the persist path.
+- [x] T060 [P] Docs: spec (US12–15, FR-037–043, SC-016–021, clarifications), data-model §11, quick-start
+  (non-modal note). Full green gate re-run (unit 1311, integration+contract 401, touched E2E 21).
+
 ---
 
 ## Dependencies & order
