@@ -158,10 +158,28 @@ describe('theme-token overridden / differs-from-entry (#76)', () => {
       expect(isThemeTokenOverridden(base, undefined, 'colours.surface')).toBe(false);
     });
 
-    it('is false for a token the shipped theme does not have', () => {
-      const shippedNoAccent: Theme = { ...base, colours: { surface: '#111' } };
-      const cur: Theme = { ...base, colours: { surface: '#111', accent: '#zzz' } };
-      expect(isThemeTokenOverridden(cur, shippedNoAccent, 'colours.accent')).toBe(false);
+    it('treats a shipped-UNSET field as overridden once the user pins a value (inherit-based reset)', () => {
+      // Typography overrides (button included) and the optional colour tokens ship UNSET — their
+      // default is "inherit", not a concrete value. The editable token set is derived from the schema,
+      // so a MISSING shipped leaf here means "the default is inherit", NOT "not a real field / not
+      // resettable" (which is what it means for a setting or a binding). Pinning a concrete value IS an
+      // override, and Reset returns it to inherit by clearing the leaf. Without this, every button
+      // typography field and every optional colour would report a permanently-disabled Reset.
+      const shippedUnset: Theme = { ...base, colours: { surface: '#111' } }; // no accent leaf
+      const pinned: Theme = { ...base, colours: { surface: '#111', accent: '#2a2' } };
+      expect(isThemeTokenOverridden(pinned, shippedUnset, 'colours.accent')).toBe(true);
+      // …and NOT overridden while the user leaves it unset, matching shipped:
+      expect(isThemeTokenOverridden(shippedUnset, shippedUnset, 'colours.accent')).toBe(false);
+    });
+
+    it('offers reset for a typography override the theme leaves unset (button font, casing, italic…)', () => {
+      // `button: {}` — every attribute inherits the base font. Toggling italic on is an override the
+      // user must be able to undo; the shipped leaf is undefined, so this is the exact case that used
+      // to report Reset disabled for all seven button typography fields on every theme.
+      const shippedT: Theme = { ...base, typography: { button: {} } };
+      const pinned: Theme = { ...base, typography: { button: { italic: true } } };
+      expect(isThemeTokenOverridden(pinned, shippedT, 'typography.button.italic')).toBe(true);
+      expect(isThemeTokenOverridden(shippedT, shippedT, 'typography.button.italic')).toBe(false);
     });
 
     it('never resolves inherited prototype keys', () => {

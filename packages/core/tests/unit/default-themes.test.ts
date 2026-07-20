@@ -67,6 +67,17 @@ describe('DEFAULT_THEMES (FR-044/046, SC-007)', () => {
     }
   });
 
+  it('every bundled theme carries the sizes baseline so per-token Reset has a shipped value (#130 follow-up)', () => {
+    // `sizes.iconPx` / `sizes.scrollbarPx` are concrete measurements with concrete defaults. Left off
+    // the theme, the Themes editor's Reset had no shipped leaf to compare against or restore, so it was
+    // permanently disabled on every bundled theme (it only worked on `throng`, which carries the block).
+    // The values are throng's own, so no theme renders differently — this is purely a reset baseline.
+    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
+      expect(theme.sizes?.iconPx, `${name}.sizes.iconPx`).toBe(THRONG_THEME.sizes?.iconPx);
+      expect(theme.sizes?.scrollbarPx, `${name}.sizes.scrollbarPx`).toBe(THRONG_THEME.sizes?.scrollbarPx);
+    }
+  });
+
   it('THRONG_THEME.colours has exactly the expected token count (D1 — no silent drift)', () => {
     expect(Object.keys(THRONG_THEME.colours)).toHaveLength(EXPECTED_COLOUR_TOKEN_COUNT);
     for (const token of BUTTON_TOKENS) expect(THRONG_THEME.colours[token], token).toBeTruthy();
