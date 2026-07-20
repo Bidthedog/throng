@@ -55,15 +55,16 @@ function props(body: string): Set<string> {
 }
 
 describe('button typography coverage (021 / US7)', () => {
-  it('the base `button` rule consumes ALL six shared button font tokens', () => {
+  it('a TEXT-button rule consumes ALL six shared button font tokens', () => {
     // family + size + weight + transform (casing) + style (italic) + decoration (under/strike). Wiring
     // only family + weight — the old state — is exactly why size / casing / italic / decoration were dead.
-    const base = rules().find((r) => r.selectors.includes('button'));
-    expect(base, 'no bare `button {}` rule carries the shared button typography').toBeDefined();
-    const body = base?.body ?? '';
+    // The rule is scoped to text-only dialog buttons (`.modal__buttons button` is the canonical one).
+    const textRule = rules().find((r) => r.selectors.includes('.modal__buttons button'));
+    expect(textRule, 'no text-button rule carries the shared button typography').toBeDefined();
+    const body = textRule?.body ?? '';
     const expectVar = (property: string, token: string): void => {
       const re = new RegExp(`${property}\\s*:\\s*var\\(\\s*--throng-font-button-${token}`);
-      expect(re.test(body), `button rule must set ${property} from --throng-font-button-${token}`).toBe(true);
+      expect(re.test(body), `text-button rule must set ${property} from --throng-font-button-${token}`).toBe(true);
     };
     expectVar('font-family', 'family');
     expectVar('font-size', 'size');
@@ -73,11 +74,32 @@ describe('button typography coverage (021 / US7)', () => {
     expectVar('text-decoration', 'decoration');
   });
 
-  it('`.icon` neutralises casing / italic / decoration so a button-font theme never mangles a glyph', () => {
+  it('NEVER puts button typography on a broad `button` selector (the leak regression)', () => {
+    // A bare `button { … --throng-font-button-* }` reaches EVERY clickable control — tabs, project rows,
+    // menu/picker items, icon buttons — and `text-decoration` propagates unstoppably onto their children
+    // (icon glyphs, count spans), which is the exact leak this pass fixed. Button typography must live on
+    // the specific text-button selectors, never on `button` alone.
+    const offenders: string[] = [];
+    for (const rule of rules()) {
+      const usesButtonFont = /--throng-font-button-/.test(rule.body);
+      if (!usesButtonFont) continue;
+      for (const sel of rule.selectors) {
+        // A selector that is exactly `button` (optionally with a pseudo) — i.e. not scoped by a class.
+        if (/^button(\b|:|\[|$)/.test(sel) && !sel.includes('.') && !sel.includes(' ')) {
+          offenders.push(sel);
+        }
+      }
+    }
+    expect(offenders, `button typography on a broad selector leaks onto non-buttons:\n${offenders.join('\n')}`).toEqual([]);
+  });
+
+  it('`.icon` neutralises casing / italic so an inherited text style never mangles a glyph', () => {
     const iconRule = rules().find((r) => r.selectors.includes('.icon'));
     expect(iconRule, 'no `.icon` rule found').toBeDefined();
     const p = props(iconRule?.body ?? '');
-    for (const property of ['text-transform', 'font-style', 'text-decoration']) {
+    // NB: text-decoration is deliberately NOT reset — it propagates and cannot be cancelled on a child;
+    // the fix is to keep decoration off icon-bearing elements entirely (see the leak-regression test).
+    for (const property of ['text-transform', 'font-style']) {
       expect(p.has(property), `.icon must reset ${property} (a glyph is not prose)`).toBe(true);
     }
   });

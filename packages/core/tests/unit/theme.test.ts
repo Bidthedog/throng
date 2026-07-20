@@ -47,13 +47,20 @@ describe('Theme token resolution (FR-030)', () => {
   it('lets a role override family/size/weight independently (#5/#7)', () => {
     const t: Theme = {
       ...THRONG_THEME,
-      typography: { projectName: { family: 'Comic Sans', sizePx: 19, bold: true } },
+      typography: { projectName: { family: 'Comic Sans', sizePx: 19, weight: 700 } },
     };
     const vars = toCssVariables(t);
     expect(vars['--throng-font-projectName-family']).toBe('Comic Sans');
     expect(vars['--throng-font-projectName-size']).toBe('19px');
-    // BOLD means the theme's OWN bold number — which is the whole reason `fonts.weights` still exists.
-    expect(vars['--throng-font-projectName-weight']).toBe(String(THRONG_THEME.fonts.weights.bold));
+    // WEIGHT is the role's own explicit number (100–900); unset would track fonts.weights.normal.
+    expect(vars['--throng-font-projectName-weight']).toBe('700');
+  });
+
+  it('an unset role weight tracks the base normal weight', () => {
+    const vars = toCssVariables(THRONG_THEME);
+    // `tab` pins no weight → base normal (400); `paneTitle` ships 600.
+    expect(vars['--throng-font-tab-weight']).toBe(String(THRONG_THEME.fonts.weights.normal));
+    expect(vars['--throng-font-paneTitle-weight']).toBe('600');
   });
 
   it('emits case/italic/underline per role; paneTitle defaults to UPPER', () => {

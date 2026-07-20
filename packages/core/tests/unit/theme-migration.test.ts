@@ -97,3 +97,65 @@ describe('migrateTheme (021, FR-031/032)', () => {
     expect(out.colours.confirmButtonBg).toBe('#abcdef');
   });
 });
+
+describe('migrateTheme — 021 follow-up (active highlight, weight, dialog, editor)', () => {
+  it('consolidates activePaneHighlight onto activePanelBorder (drops the old key)', () => {
+    const t = legacyTheme();
+    t.colours.activePaneHighlight = '#abc123';
+    // activePanelBorder absent → seeded from the highlight, then the old key dropped.
+    const out = migrateTheme(t);
+    expect(out.colours.activePaneHighlight).toBeUndefined();
+    expect(out.colours.activePanelBorder).toBe('#abc123');
+  });
+
+  it('keeps an existing activePanelBorder over the old highlight (author value wins)', () => {
+    const t = legacyTheme();
+    t.colours.activePaneHighlight = '#abc123';
+    t.colours.activePanelBorder = '#654321';
+    const out = migrateTheme(t);
+    expect(out.colours.activePanelBorder).toBe('#654321');
+    expect(out.colours.activePaneHighlight).toBeUndefined();
+  });
+
+  it('converts a role bold boolean to the exact numeric weight it used to resolve to', () => {
+    const t = legacyTheme();
+    t.fonts = { ...THRONG_THEME.fonts, weights: { normal: 350, bold: 720 } };
+    t.typography = { panel: { bold: true }, tab: { bold: false } };
+    const out = migrateTheme(t);
+    expect(out.typography?.panel).toEqual({ weight: 720 });
+    expect(out.typography?.tab).toEqual({ weight: 350 });
+  });
+
+  it('leaves an explicit role weight untouched and is idempotent on typography', () => {
+    const t = legacyTheme();
+    t.typography = { panel: { weight: 500 } };
+    const once = migrateTheme(t);
+    expect(once.typography?.panel).toEqual({ weight: 500 });
+    expect(migrateTheme(once).typography).toEqual(once.typography);
+  });
+
+  it('drops the retired dialog role', () => {
+    const t = legacyTheme();
+    t.typography = { dialog: { sizePx: 20, bold: true }, panel: {} };
+    const out = migrateTheme(t);
+    expect(out.typography?.dialog).toBeUndefined();
+    expect(out.typography?.panel).toBeDefined();
+  });
+
+  it('strips casing/italic/underline/strikethrough from the editor role (keeps family/size/weight)', () => {
+    const t = legacyTheme();
+    t.typography = {
+      editor: {
+        family: 'Fira Code',
+        sizePx: 15,
+        bold: true,
+        case: 'upper',
+        italic: true,
+        underline: true,
+        strikethrough: true,
+      },
+    };
+    const out = migrateTheme(t);
+    expect(out.typography?.editor).toEqual({ family: 'Fira Code', sizePx: 15, weight: THRONG_THEME.fonts.weights.bold });
+  });
+});

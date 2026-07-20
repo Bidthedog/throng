@@ -86,15 +86,16 @@ describe('control-type inference (FR-038)', () => {
     expect(descriptorForThemeToken('fonts.weights.normal').control).toBe('slider'); // 018: weights gained the CSS 100-900 range they never had
     expect(descriptorForThemeToken('typography.editor.family').control).toBe('font-family');
     expect(descriptorForThemeToken('typography.paneTitle.sizePx').control).toBe('slider');
-    // A ROLE says bold or not — a TOGGLE. A numeric per-role weight promised a granularity that does
-    // not exist: nearly every installed font ships two weights, so 400, 500 and 600 rendered
-    // identically and the slider did nothing for two thirds of its travel. The two numbers those words
-    // MEAN stay numeric, on `fonts.weights`, where a variable font's owner can still tune them.
-    expect(descriptorForThemeToken('typography.tab.bold').control).toBe('toggle');
+    // A ROLE's weight is a SLIDER on the real CSS 100-900 scale (021) — it was a boolean toggle, which
+    // could render a role lighter than a sibling when the theme's bold weight was low. The base weights
+    // it inherits (`fonts.weights.*`) are sliders on the same scale.
+    expect(descriptorForThemeToken('typography.tab.weight').control).toBe('slider');
+    expect(descriptorForThemeToken('typography.tab.weight').min).toBe(100);
+    expect(descriptorForThemeToken('typography.tab.weight').max).toBe(900);
     expect(descriptorForThemeToken('fonts.weights.bold').control).toBe('slider');
-    // Every role carries the FULL set, including the two that never existed on a role before.
+    // Every non-editor/terminal role carries the FULL decoration set.
     expect(descriptorForThemeToken('typography.tab.strikethrough').control).toBe('toggle');
-    expect(descriptorForThemeToken('typography.dialog.italic').control).toBe('toggle');
+    expect(descriptorForThemeToken('typography.panel.italic').control).toBe('toggle');
     const caseDesc = descriptorForThemeToken('typography.paneTitle.case');
     expect(caseDesc.control).toBe('enum');
     expect(caseDesc.allowedValues).toEqual(['original', 'title', 'lower', 'upper']);
@@ -176,10 +177,12 @@ describe('area grouping (021, FR-001..FR-009)', () => {
     expect(g('colours.searchMatch')).toBe('Search');
     expect(g('colours.railBg')).toBe('Main panel / workspace');
     expect(g('colours.sidebarBg')).toBe('Projects / sidebar');
-    expect(g('colours.activePaneHighlight')).toBe('File Explorer');
+    // 021 follow-up: the File Explorer's separate highlight folded onto the one active-pane token.
+    expect(g('colours.activePanelBorder')).toBe('Main panel / workspace');
     expect(g('typography.projectName.family')).toBe('Projects / sidebar');
     expect(g('typography.editor.family')).toBe('Editor');
-    expect(g('typography.dialog.italic')).toBe('Preferences');
+    // The base button typography lives in its own General · Buttons subsection (021 follow-up).
+    expect(g('typography.button.weight')).toBe('General · Buttons');
     expect(g('icons.terminal')).toBe('Icons');
   });
 

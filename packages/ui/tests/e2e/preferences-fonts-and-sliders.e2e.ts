@@ -115,51 +115,62 @@ test('EVERY typography role offers EVERY attribute — including the two it neve
     async (app, win) => {
       const prefs = await openThemesTab(app, win);
       // `tab` used to expose a weight and a family and nothing else, so a tab title could not be
-      // italicised however much you wanted to.
+      // italicised however much you wanted to. Every non-editor/terminal role now offers the full set,
+      // with a WEIGHT slider in place of the old Bold toggle (021 follow-up).
       for (const key of [
         'typography.tab.italic',
         'typography.tab.underline',
         'typography.tab.strikethrough',
         'typography.tab.case',
         'typography.tab.sizePx',
-        'typography.tab.bold',
+        'typography.tab.weight',
         'typography.tab.family',
       ]) {
         await expect(prefs.getByTestId(`control-${key}`), `${key} is not editable`).toHaveCount(1);
       }
-      // And the role that did not exist at all: the preferences window you are standing in.
-      await expect(prefs.getByTestId('control-typography.dialog.family')).toHaveCount(1);
+      // The retired `dialog` role is gone — the preferences window inherits the base application font.
+      await expect(prefs.getByTestId('control-typography.dialog.family')).toHaveCount(0);
+      // And the editor sheds casing/decoration (source text is not prose) — those controls are absent.
+      for (const gone of ['case', 'italic', 'underline', 'strikethrough']) {
+        await expect(
+          prefs.getByTestId(`control-typography.editor.${gone}`),
+          `editor.${gone} must be gone`,
+        ).toHaveCount(0);
+      }
     },
     { env: { THRONG_CONFIG_ROOT: cfg } },
   );
 });
 
-test('a role says BOLD OR NOT — a toggle, not a weight nobody’s font can draw', async () => {
+test('a role WEIGHT is a slider on the real 100-900 scale (021 follow-up)', async () => {
   const cfg = freshCfg();
   await runApp(
     async (app, win) => {
       const prefs = await openThemesTab(app, win);
-      const bold = prefs.getByTestId('control-typography.tab.bold');
-      await expect(bold).toHaveAttribute('type', 'checkbox');
-      await bold.check();
-      await expect.poll(() => readTheme(cfg, 'throng').typography?.tab?.bold).toBe(true);
+      // The old Bold CHECKBOX could render a role lighter than a sibling when the theme's bold weight was
+      // set low; it is now a slider that says exactly what weight it will apply.
+      const weight = prefs.getByTestId('control-typography.tab.weight-slider');
+      await expect(weight).toBeVisible();
+      await expect(weight).toHaveAttribute('min', '100');
+      await expect(weight).toHaveAttribute('max', '900');
+      await setSlider(weight, '700');
+      await expect.poll(() => readTheme(cfg, 'throng').typography?.tab?.weight).toBe(700);
 
-      // The two numbers that "regular" and "bold" MEAN are still numeric, and still granular — which
-      // is where a variable font's owner tunes them.
+      // The base weights remain sliders on the same scale — what every unset role inherits.
       await expect(prefs.getByTestId('control-fonts.weights.bold-slider')).toHaveCount(1);
     },
     { env: { THRONG_CONFIG_ROOT: cfg } },
   );
 });
 
-test('the DIALOG role themes the preferences window itself', async () => {
+test('the preferences window inherits the BASE application font (no separate dialog font)', async () => {
   const cfg = freshCfg();
   await runApp(
     async (app, win) => {
       const prefs = await openThemesTab(app, win);
-      // The window you are standing in answered to no role at all: change the font and nothing happened,
-      // which reads as a broken control rather than a missing one.
-      await setSlider(prefs.getByTestId('control-typography.dialog.sizePx-slider'), '18');
+      // The `dialog` role was retired: the preferences window is no longer themed apart from the app, so
+      // changing the BASE font size moves the window with everything else.
+      await setSlider(prefs.getByTestId('control-fonts.baseSizePx-slider'), '18');
       await expect
         .poll(() =>
           prefs.evaluate(() => {

@@ -7,8 +7,11 @@ const REMOVED_TOKENS = ['menuSurface', 'dialogSurface', 'buttonBg', 'buttonText'
 const BUTTON_TOKENS = ['confirm', 'cancel', 'destroy'].flatMap((t) =>
   ['Bg', 'HoverBg', 'Border', 'HoverBorder', 'Text', 'HoverText'].map((v) => `${t}Button${v}`),
 );
-/** 56 pre-refactor − 6 removed + 18 typed button tokens = 68 (D1). */
-const EXPECTED_COLOUR_TOKEN_COUNT = 68;
+/** 56 pre-refactor − 6 removed + 18 typed button tokens = 68; follow-up dropped `activePaneHighlight`
+ *  (consolidated onto `activePanelBorder`) → 67 (D1). */
+const EXPECTED_COLOUR_TOKEN_COUNT = 67;
+/** Tokens removed AFTER the fixture was captured — stripped from the fixture before non-drift compare. */
+const REMOVED_SINCE_FIXTURE = ['activePaneHighlight'];
 
 const EXPECTED = [
   'Light',
@@ -88,8 +91,10 @@ describe('DEFAULT_THEMES (FR-044/046, SC-007)', () => {
     // The ONLY colour changes are the deliberate button derivations. Every other token — across all 15
     // bundled themes — is byte-identical to its pre-refactor value (captured in the fixture).
     for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
-      const expected = (PRE_REFACTOR as Record<string, Record<string, string>>)[name];
+      const expected = { ...(PRE_REFACTOR as Record<string, Record<string, string>>)[name] };
       expect(expected, `fixture missing ${name}`).toBeDefined();
+      // Tokens removed since the fixture was captured are not part of the non-drift guarantee.
+      for (const k of REMOVED_SINCE_FIXTURE) delete expected[k];
       const surviving: Record<string, string> = {};
       for (const [k, v] of Object.entries(theme.colours)) {
         if (!BUTTON_TOKENS.includes(k)) surviving[k] = v;
