@@ -14,9 +14,20 @@ import { Compartment } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import { PLAIN_TEXT_ID, resolveLanguage, type LanguageResolution } from '@throng/core';
 import { loadLanguage } from './language-loaders.js';
+import { functionHighlightFor } from './function-highlight.js';
 
 /** The slot the active grammar occupies in every editor view. */
 export const languageCompartment = new Compartment();
+
+/**
+ * The slot the legacy-language function-name overlay occupies (021, #84 follow-up).
+ *
+ * Swapped in the SAME dispatch as {@link languageCompartment} (see `applyLanguage`): it holds the
+ * overlay for a legacy StreamLanguage language and nothing for every first-class grammar, so a panel
+ * re-pointed from Ruby to JavaScript loses the overlay exactly as it gains the JS grammar — the two
+ * can never disagree for a frame.
+ */
+export const functionHighlightCompartment = new Compartment();
 
 const resolutions = new Map<string, LanguageResolution>();
 const listeners = new Set<() => void>();
@@ -150,6 +161,12 @@ export async function applyLanguage(
    */
   if (!stillMounted()) return;
   view.dispatch({
-    effects: languageCompartment.reconfigure(support ? support : []),
+    effects: [
+      languageCompartment.reconfigure(support ? support : []),
+      // Legacy StreamLanguage languages get the function-name overlay; every first-class grammar
+      // gets [], which is what keeps this from ever double-decorating a JS/TS/Python editor whose
+      // grammar already colours functions (021, #84 follow-up).
+      functionHighlightCompartment.reconfigure(functionHighlightFor(languageId)),
+    ],
   });
 }

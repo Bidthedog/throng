@@ -16,12 +16,12 @@
   color: var(--text);
   display: flex;
   flex-direction: column;
-  font-family: var(--throng-font-dialog-family, var(--throng-font-family));
-  font-size: var(--throng-font-dialog-size, var(--throng-font-size));
-  font-weight: var(--throng-font-dialog-weight, var(--throng-font-weight-normal));
-  text-transform: var(--throng-font-dialog-transform, none);
-  font-style: var(--throng-font-dialog-style, normal);
-  text-decoration: var(--throng-font-dialog-decoration, none);
+  /* 021 follow-up — the Preferences window inherits the BASE application font. There is no separate
+     "dialogue font" any more (that role was retired): the app reads as one typographic whole, and a
+     font change in Settings moves the preferences chrome with everything else. */
+  font-family: var(--throng-font-family);
+  font-size: var(--throng-font-size);
+  font-weight: var(--throng-font-weight-normal);
 }
 
 /* Inputs and buttons do not inherit font by default — they take the OS widget font unless told

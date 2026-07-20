@@ -218,7 +218,7 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * current legitimate pair passes while an exact/near duplicate (mean → 0) fails.
  * Value confirmed by the distinctness test.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.343149117829997;
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.290753065156039;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A

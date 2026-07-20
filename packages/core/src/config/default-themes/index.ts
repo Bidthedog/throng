@@ -323,11 +323,11 @@ function makeTheme(name: string, p: Palette): Theme {
       searchMatch: code.match,
       searchMatchCurrent: code.current,
       searchMatchCurrentBorder: code.border,
-      activePaneHighlight: p.accent,
-      // Active-panel focus context (012, FR-002 / SC-001): a contrast-guaranteed
-      // accent marks the active panel when the window is foreground; a dimmed
-      // variant marks it when the window is background — still identifiable but
-      // visibly de-emphasised. Derived per theme so every palette stays legible.
+      // Active-pane highlight (012, FR-002 / SC-001; 021 consolidated the File Explorer's separate
+      // highlight onto this one token): a contrast-guaranteed accent marks the active pane/panel when
+      // the window is foreground; a dimmed variant marks it when the window is background — still
+      // identifiable but visibly de-emphasised. Derived per theme so every palette stays legible. At
+      // runtime the active project's colour paints it (Principle I); this is the no-project fallback.
       activePanelBorder: activePanelBorders(p.accent, p.surface, p.text).active,
       activePanelBorderInactive: activePanelBorders(p.accent, p.surface, p.text).inactive,
       // Three-type button model (021, US7, FR-027). Six tokens per type, DERIVED (data-model §6) so

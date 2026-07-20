@@ -32,12 +32,17 @@
 
 /* Active Files & Folders pane highlight (006, FR-015/SC-006). Drawn as an overlay
  * pseudo-element so the border renders ABOVE the tree-row selection box rather than
- * behind it (a parent's inset box-shadow paints under child backgrounds) — FR-071. */
+ * behind it (a parent's inset box-shadow paints under child backgrounds) — FR-071.
+ *
+ * 021 follow-up: this is the SAME active-pane highlight the workspace panels use (one token
+ * app-wide), and it follows the same rule (Principle I): when a project is open the pane sets
+ * `--active-pane-colour` to that project's colour inline, so the border takes the project colour;
+ * with no project it falls through to the shared `activePanelBorder` token. */
 .pane-explorer__body--active::after {
   content: '';
   position: absolute;
   inset: 0;
-  border: 2px solid var(--throng-colour-activePaneHighlight, #6aa3ff);
+  border: 2px solid var(--active-pane-colour, var(--throng-colour-activePanelBorder, #6aa3ff));
   pointer-events: none;
   z-index: 5;
 }

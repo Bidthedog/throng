@@ -51,28 +51,28 @@ export interface TokenCopy {
 const ROLE_CONTEXT: Record<TypographyRole, string> = {
   paneTitle: 'Pane Title',
   tab: 'Tab',
-  panel: 'Panel',
+  // The workspace PANEL's own header bar — named "Panel Header" so it reads as a header, distinct from
+  // "Pane Text" (a panel's body) and "Pane Title" (the sidebar pane headings).
+  panel: 'Panel Header',
   paneText: 'Pane Text',
   projectName: 'Project Name',
   projectPath: 'Project Path',
   editor: 'Editor',
   terminal: 'Terminal',
   button: 'Button',
-  dialog: 'Dialogue',
 };
 
 /** The concrete surface each role paints, woven into every field description. */
 const ROLE_SURFACE: Record<TypographyRole, string> = {
-  paneTitle: 'the PROJECTS, TERMINALS and FILES & FOLDERS headings that sit atop each pane',
+  paneTitle: 'the PROJECTS, TERMINALS and FILES & FOLDERS headings that sit atop each sidebar pane',
   tab: 'the name on each tab in the tab strip',
-  panel: 'the name in a panel’s own header bar',
-  paneText: 'the ordinary text inside a pane — empty states, hints and list rows',
+  panel: 'the name in a workspace panel’s own header bar',
+  paneText: 'the body text of every pane and panel — empty states, hints and list rows (never a header)',
   projectName: 'a project’s name in the sidebar list',
   projectPath: 'the folder path shown beneath a project’s name',
   editor: 'the text you are editing in an Editor panel',
   terminal: 'the output and input in a Terminal panel',
-  button: 'the label on every button in the application',
-  dialog: 'dialogs, prompts and the whole Preferences window',
+  button: 'the label on every text button in the application',
 };
 
 /** field → (property suffix for the label, description template built from the role surface). */
@@ -85,10 +85,10 @@ const FIELD_COPY: Record<string, { property: string; describe: (surface: string)
     property: 'Font Size',
     describe: (s) => `How large ${s} is drawn, in pixels. Leave it unset to track the theme’s base size.`,
   },
-  bold: {
-    property: 'Bold',
+  weight: {
+    property: 'Weight',
     describe: (s) =>
-      `Draw ${s} in the theme’s bold weight rather than its regular one. Most fonts ship only those two, which is why this is a switch and not a dial.`,
+      `How heavy ${s} is drawn, from 100 to 900. Leave it unset to track the theme’s base weight. Most fonts ship only two weights, so nearby values can look identical unless the font is variable.`,
   },
   case: {
     property: 'Casing',
@@ -156,20 +156,21 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   },
   'colours.dangerText': {
     label: 'Danger Text',
-    description: 'Wording carried on a red control — the button that deletes, the one you must be able to read.',
+    description:
+      'The text or glyph on a red danger background WHILE HOVERED — the window Close button’s ✕ and the “remove” ✕ on a keybinding — kept readable against the red. It shows only on that hover.',
   },
   // These name the EDITOR's scrollbar, and say so. A setting that claims to colour every scrollbar in
   // the application, while the only classic bar the application actually draws is the editor's, is a
   // setting that lies to you every time you change it and see nothing happen.
   'colours.scrollbarTrack': {
-    label: 'Editor Scrollbar Track',
+    label: 'Scrollbar Track',
     description:
-      'The channel the editor’s scrollbar slides along. Other surfaces use the thin overlay scrollbars the operating system draws, which take no colour.',
+      'The channel a scrollbar slides along, on every scrollable surface in the application — panes, lists, editors, dialogs and the terminal.',
   },
   'colours.scrollbarThumb': {
-    label: 'Editor Scrollbar Thumb',
+    label: 'Scrollbar Thumb',
     description:
-      'The draggable part you grab to move through a long file. Other surfaces use the thin overlay scrollbars the operating system draws, which take no colour.',
+      'The draggable part you grab to move through a long list or file — on every scrollbar in the application.',
   },
   'colours.iconColour': {
     label: 'Icon Colour',
@@ -185,7 +186,8 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   },
   'colours.accent': {
     label: 'Primary Accent',
-    description: 'The dominant highlight for focused controls, links, the selected tab, and the active pane marker.',
+    description:
+      'The default highlight for focused controls, links and selected items. Note: while a project is open the app paints most of these with THAT project’s own colour instead, so this shows through mainly when no project is open.',
   },
   'colours.danger': {
     label: 'Danger Accent',
@@ -193,7 +195,8 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   },
   'colours.success': {
     label: 'Success Accent',
-    description: 'The colour of confirmations, healthy status indicators, and completed states.',
+    description:
+      'The green cue for a healthy state: the small “loaded this session” dot on a project or sub-workspace row, and the edge of a success notice.',
   },
   'colours.railBg': {
     label: 'Collapsed Rail Background',
@@ -329,19 +332,15 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The line drawn around the match you are presently on, keeping it identifiable even on a busy surface.',
   },
-  'colours.activePaneHighlight': {
-    label: 'Active Pane Highlight',
-    description: 'The emphasis marking the focused entry in the files and folders pane.',
-  },
   'colours.activePanelBorder': {
-    label: 'Active Panel Border',
+    label: 'Active Pane Highlight',
     description:
-      'The outline around the panel that currently receives keyboard input, while its window is in the foreground.',
+      'The outline marking the pane or panel you are working in — the Files and Folders pane and workspace panels alike. While a project is open it is painted with THAT project’s colour, so this value shows mainly when no project is open.',
   },
   'colours.activePanelBorderInactive': {
-    label: 'Inactive Panel Border',
+    label: 'Inactive Pane Highlight',
     description:
-      'The dimmed outline marking the panel that will receive input once its window returns to the foreground.',
+      'The dimmed active-pane highlight, shown while this window is in the background so the marker stays visible without competing for attention.',
   },
   // — Buttons (021, US7). Three types, six tokens each — replacing the single legacy button pair. —
   'colours.confirmButtonBg': {

@@ -8,7 +8,11 @@
 import type { AppSettings } from './app-settings.js';
 import type { Theme } from './theme.js';
 
-/** The six colour tokens 021 removes (menu/dialog surfaces + the four legacy button tokens). */
+/**
+ * The colour tokens 021 removes: the menu/dialog surfaces, the four legacy button tokens, and — in the
+ * follow-up pass — `activePaneHighlight`, consolidated onto `activePanelBorder` (one active-pane
+ * highlight app-wide).
+ */
 const REMOVED_COLOUR_TOKENS = [
   'menuSurface',
   'dialogSurface',
@@ -16,6 +20,7 @@ const REMOVED_COLOUR_TOKENS = [
   'buttonText',
   'buttonHoverBg',
   'buttonHoverText',
+  'activePaneHighlight',
 ] as const;
 
 /** True for a genuinely-set colour value — a non-blank string (an empty/whitespace value means "unset"). */
@@ -67,8 +72,54 @@ export function migrateThemeColours(colours: Record<string, string>): Record<str
   seed('cancelButtonBorder', src.border);
   seed('cancelButtonHoverBorder', src.border);
 
+  // The active-pane highlight consolidation (021 follow-up): the File Explorer's `activePaneHighlight`
+  // folds onto `activePanelBorder`. Seed the survivor from it only if the survivor is unset (an author's
+  // explicit panel-border value wins), then the key is dropped below with the other removed tokens.
+  seed('activePanelBorder', src.activePaneHighlight);
+
   // Drop the removed keys AFTER deriving (derive-before-drop).
   for (const token of REMOVED_COLOUR_TOKENS) delete out[token];
+  return out;
+}
+
+/** The default base weights a role's `bold` boolean used to resolve to (theme.ts `fonts.weights`). */
+const DEFAULT_BOLD_WEIGHT = 600;
+const DEFAULT_NORMAL_WEIGHT = 400;
+
+/**
+ * Migrate one theme's `typography` to the 021 follow-up model, idempotently and losslessly:
+ *
+ *  - a role's boolean `bold` becomes a numeric `weight` (the exact weight it used to resolve to, read
+ *    from this theme's own `fonts.weights`), so nothing renders differently;
+ *  - the retired `dialog` role is dropped (dialogs now inherit the base font);
+ *  - the editor sheds casing/italic/underline/strikethrough (source text is not prose).
+ *
+ * A role already carrying an explicit `weight` is left untouched (a re-run is a no-op).
+ */
+export function migrateThemeTypography(
+  typography: Record<string, Record<string, unknown>> | undefined,
+  fonts: { weights?: { normal?: number; bold?: number } } | undefined,
+): Record<string, Record<string, unknown>> | undefined {
+  if (typography === undefined || typography === null) return typography;
+  const boldWeight = fonts?.weights?.bold ?? DEFAULT_BOLD_WEIGHT;
+  const normalWeight = fonts?.weights?.normal ?? DEFAULT_NORMAL_WEIGHT;
+
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const [role, spec] of Object.entries(typography)) {
+    if (role === 'dialog') continue; // retired
+    const next: Record<string, unknown> = { ...(spec ?? {}) };
+    if (typeof next.bold === 'boolean' && next.weight === undefined) {
+      next.weight = next.bold ? boldWeight : normalWeight;
+    }
+    delete next.bold;
+    if (role === 'editor') {
+      delete next.case;
+      delete next.italic;
+      delete next.underline;
+      delete next.strikethrough;
+    }
+    out[role] = next;
+  }
   return out;
 }
 
@@ -79,7 +130,14 @@ export function migrateThemeColours(colours: Record<string, string>): Record<str
  */
 export function migrateTheme(raw: Theme): Theme {
   const colours = (raw.colours ?? {}) as Record<string, string>;
-  return { ...raw, colours: migrateThemeColours(colours) };
+  const typography = migrateThemeTypography(
+    raw.typography as Record<string, Record<string, unknown>> | undefined,
+    raw.fonts,
+  );
+  const next: Theme = { ...raw, colours: migrateThemeColours(colours) };
+  if (typography === undefined) delete (next as { typography?: unknown }).typography;
+  else next.typography = typography as Theme['typography'];
+  return next;
 }
 
 /** A theme name is a safe single path segment (no separators/reserved chars). */

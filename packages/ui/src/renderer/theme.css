@@ -43,22 +43,28 @@
   box-sizing: border-box;
 }
 
-/* 021 / US7 (base-only) — button TYPOGRAPHY is the theme's, on EVERY button.
+/* 021 / US7 (base-only) — the `button` typography role, applied to the TEXT buttons ONLY.
  *
  * The three button TYPES (Confirm / Cancel / Destroy) differ only by COLOUR; their TYPOGRAPHY is one
- * shared `button` role — family, size, weight (the Bold toggle), casing, italic and under/strike. That
- * role must reach ALL buttons, not the two attributes (family + weight) each call site happened to
- * wire, which is why size / casing / italic / decoration reached nothing and the theme's button font
- * controls appeared dead. So it is declared ONCE here, on `button`, rather than repeated per selector —
- * where the next button added is the one left off the list. Individual rules still paint their type's
- * colours (and may restate family/weight to the same vars); everything they don't set falls through to
- * this. The primary buttons deliberately no longer hard-code `font-weight: 600` — the Bold toggle owns
- * that now, uniformly, or it would be dead for Confirm the way it was for everything.
+ * shared `button` role — family, size, weight, casing, italic and under/strike — declared ONCE here so
+ * size/casing/italic/decoration actually reach a button (each call site had wired only family+weight).
  *
- * Icon-only buttons carry no text of their own, but their GLYPH does — `.icon` resets casing / italic /
- * decoration and sizes the glyph from `--throng-size-icon`, so an uppercase or underlined button theme
- * never mangles a "{ }" / "Aa" glyph. */
-button {
+ * It is scoped to the TEXT-ONLY dialog/form buttons deliberately, NOT to the `button` element. `button`
+ * caught every clickable control — tabs, project rows, menu items, icon buttons — and `text-decoration`
+ * PROPAGATES: an ancestor's underline paints straight through a descendant and a child's
+ * `text-decoration: none` cannot cancel it, so an underlined button theme underlined project names,
+ * the tab/panel counts, action-icon glyphs and picker rows, none of which are dialog buttons. The three
+ * typed buttons are text-only by construction, so applying the full role (decoration included) to just
+ * their selectors is safe and reaches exactly what "button typography" should. Icon-bearing controls
+ * (`folder-picker__browse`, `find-bar-btn`, `IconButton`, window/toolbar controls) are excluded — they
+ * carry a glyph, not prose. Primary buttons no longer hard-code `font-weight` — the weight role owns it
+ * uniformly. */
+.modal__buttons button,
+.project-form__buttons button,
+.panel-type-form__actions button,
+.panel-type-form__confirm,
+.panel-type-form__clear,
+.capture-modal__btn {
   font-family: var(--throng-font-button-family, var(--throng-font-family));
   font-size: var(--throng-font-button-size, var(--throng-font-size));
   font-weight: var(--throng-font-button-weight, var(--throng-font-weight-normal));
@@ -1543,10 +1549,17 @@ textarea,
   font-style: var(--throng-font-panel-style);
   text-decoration: var(--throng-font-panel-decoration);
 }
+/* Pane Text is the BODY text of every pane and panel — empty states, hints and list rows — so it must
+   reach the sidebar's empty-list messages too (021 follow-up): before this, the empty PANEL placeholder
+   answered to Pane Text but the empty Projects / Sub-workspaces lists in the sidebar did not, so "all
+   panes share the same body text" was not actually true. It deliberately does NOT reach a pane/panel
+   HEADER — those are the `paneTitle` (sidebar headings) and `panel` (Panel Header) roles. */
 .panel-box__placeholder,
 .panel-type-form,
 .workspace-empty,
-.pane-explorer__empty {
+.pane-explorer__empty,
+.project-list__empty,
+.subworkspace-list__empty {
   font-family: var(--throng-font-paneText-family);
   font-size: var(--throng-font-paneText-size);
   font-weight: var(--throng-font-paneText-weight);
@@ -1785,12 +1798,14 @@ textarea,
   height: var(--throng-size-icon, 16px);
   line-height: 1;
   flex: none;
-  /* 021 / US7 — a glyph is not prose. The base `button` typography (and dialog casing) would otherwise
-     reach an icon-only button's glyph: an UPPER-case theme turns the "Aa"/"ab" match-mode glyphs into
-     "AA"/"AB", and an underline theme rules a line under every icon. A glyph carries none of those. */
+  /* 021 — a glyph is not prose. If a text role a glyph sits inside is cased or italicised (say a list
+     row whose Pane Text is set to UPPER or italic), those INHERIT onto the glyph — an "Aa"/"ab"
+     match-mode glyph would recase, a "{ }" glyph would slant — so the glyph resets them. `text-decoration`
+     is deliberately NOT reset here: it PROPAGATES from an ancestor and a descendant cannot cancel it, so
+     the fix for underline is to never apply it to an icon-bearing element (button typography is scoped to
+     text-only buttons for exactly that reason), not to pretend a reset here would undo it. */
   text-transform: none;
   font-style: normal;
-  text-decoration: none;
 }
 
 .icon > svg {
@@ -1922,13 +1937,11 @@ textarea,
   font-weight: 600;
 }
 
-/* 018 — the DIALOG typography role also dresses the modals (confirmations, prompts, the project
-   settings dialog). They are dialogs; they belong to the role called dialog. */
+/* 021 follow-up — modals (confirmations, prompts, the project settings dialog) inherit the BASE
+   application font. The separate `dialog` typography role was retired: a dialog is not a place that
+   should answer to its own font, so it reads as the rest of the application does. */
 .modal {
-  font-family: var(--throng-font-dialog-family, var(--throng-font-family));
-  font-size: var(--throng-font-dialog-size, var(--throng-font-size));
-  font-weight: var(--throng-font-dialog-weight, var(--throng-font-weight-normal));
-  text-transform: var(--throng-font-dialog-transform, none);
-  font-style: var(--throng-font-dialog-style, normal);
-  text-decoration: var(--throng-font-dialog-decoration, none);
+  font-family: var(--throng-font-family);
+  font-size: var(--throng-font-size);
+  font-weight: var(--throng-font-weight-normal);
 }

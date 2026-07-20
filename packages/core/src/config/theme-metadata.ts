@@ -64,10 +64,10 @@ export function mechanicalCopy(key: string): { label: string; description: strin
   const ROLE_FIELD_COPY: Record<string, { label: string; description: string }> = {
     family: { label: 'Font', description: 'The typeface. Leave it empty to use the theme’s base font.' },
     sizePx: { label: 'Size', description: 'Size in pixels. Leave it unset to track the theme’s base size.' },
-    bold: {
-      label: 'Bold',
+    weight: {
+      label: 'Weight',
       description:
-        'Bold or not. How bold “bold” is comes from the theme’s Bold weight — most fonts ship only two weights, so this is the only distinction they can actually draw.',
+        'Font weight from 100 to 900. Leave it unset to track the theme’s base weight. Most fonts ship only two weights, so nearby values can look identical unless the font is variable.',
     },
     case: { label: 'Casing', description: 'Leave the text as written, or force Title, lower or UPPER case.' },
     italic: { label: 'Italic', description: 'Slant the text.' },
@@ -228,16 +228,19 @@ const TYPOGRAPHY_AREA: Record<string, string> = {
   paneText: 'Main panel / workspace',
   projectName: 'Projects / sidebar',
   projectPath: 'Projects / sidebar',
-  button: 'General',
-  dialog: 'Preferences',
+  // The base button typography lives in its OWN sub-group so it renders as "General · Buttons" ABOVE
+  // the three per-type colour blocks (`General · Buttons · Confirm/Cancel/Destroy`). The `dialog` role
+  // was retired in 021 (dialogs inherit the base font), so it no longer appears here.
+  button: 'General · Buttons',
 };
 
 /** The non-prefix colours whose home is a specific pane (021, data-model §2). */
 const COLOUR_AREA: Record<string, string> = {
+  // 021 consolidated the File Explorer's `activePaneHighlight` onto `activePanelBorder`, so the active
+  // pane/panel highlight is one token filed here.
   activePanelBorder: 'Main panel / workspace',
   activePanelBorderInactive: 'Main panel / workspace',
   railBg: 'Main panel / workspace',
-  activePaneHighlight: 'File Explorer',
   sidebarBg: 'Projects / sidebar',
 };
 
@@ -336,14 +339,13 @@ export function descriptorForThemeToken(key: string): FieldDescriptor {
   // (6-96, step 1) while still rendering as a bare text box: the bounds were there, the control was
   // not, and only the forward half of the guard was watching.
   else if (field === 'sizePx' || field === 'baseSizePx') control = 'slider';
-  // A ROLE says BOLD OR NOT — a toggle, because that is the only distinction nearly every installed
-  // font can actually make. Asked for weight 500, a two-weight font renders regular, so 400, 500 and
-  // 600 all looked identical and the slider appeared to do nothing for two thirds of its travel.
-  //
-  // `fonts.weights.normal` / `.bold` stay numeric sliders on the real CSS 100-900 scale: they are what
-  // 'regular' and 'bold' MEAN, and the owner of a variable font can still tune them there — which is
-  // the one place the granularity is real.
-  else if (field === 'bold' && isRole) control = 'toggle';
+  // A ROLE's WEIGHT is a slider on the real CSS 100-900 scale (021). It was a boolean `bold` toggle,
+  // on the theory that a two-weight font makes 400/500/600 render identically — true, but that is the
+  // font's limit to expose, not ours to hide: a checkbox that could render a role LIGHTER than a
+  // sibling (when the theme's bold weight was set low) was a worse answer than a slider that says
+  // exactly what it will do. Unset → the role tracks `fonts.weights.normal`. `fonts.weights.normal` /
+  // `.bold` remain sliders on the same scale — the base weights every unset role inherits.
+  else if (field === 'weight' && isRole) control = 'slider';
   else if (field === 'normal' || field === 'bold') control = 'slider';
   else if (field === 'case') {
     control = 'enum';
@@ -377,7 +379,7 @@ export function descriptorForThemeToken(key: string): FieldDescriptor {
     ...(control === 'slider' && field === 'sizePx' ? { min: 6, max: roleSizeMax(key), step: 1 } : {}),
     ...(control === 'slider' && field === 'iconPx' ? { min: 10, max: 32, step: 1 } : {}),
     ...(control === 'slider' && field === 'scrollbarPx' ? { min: 6, max: 24, step: 1 } : {}),
-    ...(control === 'slider' && (field === 'normal' || field === 'bold')
+    ...(control === 'slider' && (field === 'normal' || field === 'bold' || field === 'weight')
       ? { min: 100, max: 900, step: 100 }
       : {}),
   };
@@ -429,6 +431,24 @@ export function themeEditableTokens(theme: Theme): string[] {
  * shows General first, Icons last, `Editor` before `Editor · Syntax`, and tokens within an area in
  * their theme-declared order. An unplaced token's sentinel area sorts to the end (rank = length).
  */
+// Deliberate order among groups that share a parent area. Alphabetical is right everywhere EXCEPT the
+// button family: the desired order is the base typography subsection first, then Confirm, Cancel,
+// Destroy — not the alphabetical Cancel, Confirm, Destroy. A tiny explicit rank does that; every other
+// group keeps the alphabetical tie-break (so `Editor` still precedes `Editor · Syntax`, and the plain
+// `General` group still precedes `General · Buttons…`).
+const BUTTON_GROUP_ORDER: Readonly<Record<string, number>> = {
+  'General · Buttons': 0,
+  'General · Buttons · Confirm': 1,
+  'General · Buttons · Cancel': 2,
+  'General · Buttons · Destroy': 3,
+};
+function groupTieBreak(a: string, b: string): number {
+  const ra = BUTTON_GROUP_ORDER[a];
+  const rb = BUTTON_GROUP_ORDER[b];
+  if (ra !== undefined && rb !== undefined) return ra - rb;
+  return a.localeCompare(b);
+}
+
 export function buildThemeMetadata(theme: Theme): FieldDescriptor[] {
   const rank = (group: string): number => {
     const i = THEME_AREA_GROUPS.indexOf(parentArea(group));
@@ -439,7 +459,7 @@ export function buildThemeMetadata(theme: Theme): FieldDescriptor[] {
     .sort(
       (a, b) =>
         rank(a.d.group) - rank(b.d.group) ||
-        a.d.group.localeCompare(b.d.group) ||
+        groupTieBreak(a.d.group, b.d.group) ||
         a.i - b.i,
     )
     .map((x) => x.d);
