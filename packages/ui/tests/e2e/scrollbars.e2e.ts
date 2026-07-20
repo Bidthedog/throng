@@ -14,11 +14,8 @@ import { createProject, firstPanelId, runApp } from './harness.js';
  * light-grey bar in an otherwise dark application.
  */
 
-test('every scrollable surface takes its scrollbar colours from the theme (FR-010)', async () => {
+test('every scrollable surface gets a classic themed bar of the theme WIDTH (FR-010 / #130)', async () => {
   await runApp(async (_app, win) => {
-    // The rule is applied globally (`*`), not per-surface, so any element proves it — and proving it
-    // on an arbitrary element is exactly the point: the requirement is "every scrollable surface",
-    // and the next one somebody adds is covered without anyone remembering to add it to a list.
     // The provider writes the custom properties onto :root in an effect, so poll rather than
     // sampling the first frame. An UNDEFINED custom property resolves to the empty string — which
     // is exactly what would leave the engine's light-grey default bar in place, so "" is the
@@ -31,11 +28,32 @@ test('every scrollable surface takes its scrollbar colours from the theme (FR-01
 
     await expect.poll(() => token('--throng-colour-scrollbarTrack')).toMatch(/^#|rgb/);
     await expect.poll(() => token('--throng-colour-scrollbarThumb')).toMatch(/^#|rgb/);
+    await expect.poll(() => token('--throng-size-scrollbar')).toMatch(/\d/);
 
-    // And the global rule actually applies them, rather than leaving the engine's `auto`.
-    await expect
-      .poll(() => win.evaluate(() => getComputedStyle(document.body).scrollbarColor))
-      .not.toBe('auto');
+    // #130 — the theme's px WIDTH must reach an ARBITRARY scrollable surface, not just the terminal.
+    // This is the regression this test exists to catch: with the old global `scrollbar-color` on `*`,
+    // Chromium rendered STANDARD overlay bars everywhere, which have NO layout width and ignore the
+    // `::-webkit-scrollbar { width }` rule — so changing the theme's scrollbar width moved nothing.
+    // Classic (webkit) bars occupy REAL layout width, so `offsetWidth − clientWidth` on a force-scrolled
+    // throwaway element IS the bar's width. An overlay/inert bar measures 0 — the #130 failure — and a
+    // classic bar measures the theme width. Proving it on an arbitrary element is the point: "every
+    // scrollable surface", covered without a per-surface list to forget the next one from.
+    const measured = await win.evaluate(() => {
+      const probe = document.createElement('div');
+      probe.style.cssText =
+        'position:absolute;top:-9999px;left:-9999px;width:100px;height:100px;overflow-y:scroll';
+      probe.innerHTML = '<div style="height:400px"></div>';
+      document.body.appendChild(probe);
+      const width = probe.offsetWidth - probe.clientWidth;
+      probe.remove();
+      return width;
+    });
+    const themeWidth = Number.parseInt(await token('--throng-size-scrollbar'), 10);
+    expect(themeWidth, 'the theme must define a concrete scrollbar width').toBeGreaterThan(0);
+    expect(
+      measured,
+      'an arbitrary scrollable surface must show a CLASSIC bar of the theme width, not a 0-width overlay (#130)',
+    ).toBe(themeWidth);
   });
 });
 

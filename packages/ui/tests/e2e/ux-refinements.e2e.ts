@@ -226,8 +226,8 @@ test('window title shows the active project + Tab · Panel, no path or totals (F
     const getTitle = (): Promise<string> =>
       app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle());
 
-    // Active project + its Tab · Panel context, nothing else.
-    await expect.poll(getTitle, { timeout: 5000 }).toBe('throng — TitleB · Tab 1 · Panel 1');
+    // Active project + its Tab · Panel context, nothing else (021 suffix form, FR-033).
+    await expect.poll(getTitle, { timeout: 5000 }).toBe('TitleB · Tab 1 · Panel 1 — throng');
     const title = await getTitle();
     expect(title).not.toContain('C:/c/b'); // no path
     expect(title).not.toMatch(/\d+ (projects|tabs|panels)/); // no totals

@@ -13,8 +13,10 @@
 }
 
 /* The left sidebar's gutter sits before its body; the right explorer's after. */
+/* 021 (FR-025) — the Files & Folders pane is the Side Panel too, so it takes the same Side Panel
+   Background (`sidebarBg`) as `.pane--sidebar` rather than the workspace panel `surface`. */
 .pane--explorer {
-  background: var(--throng-colour-surface);
+  background: var(--throng-colour-sidebarBg);
   border-left: 1px solid var(--throng-colour-border);
 }
 
@@ -30,12 +32,17 @@
 
 /* Active Files & Folders pane highlight (006, FR-015/SC-006). Drawn as an overlay
  * pseudo-element so the border renders ABOVE the tree-row selection box rather than
- * behind it (a parent's inset box-shadow paints under child backgrounds) — FR-071. */
+ * behind it (a parent's inset box-shadow paints under child backgrounds) — FR-071.
+ *
+ * 021 follow-up: this is the SAME active-pane highlight the workspace panels use (one token
+ * app-wide), and it follows the same rule (Principle I): when a project is open the pane sets
+ * `--active-pane-colour` to that project's colour inline, so the border takes the project colour;
+ * with no project it falls through to the shared `activePanelBorder` token. */
 .pane-explorer__body--active::after {
   content: '';
   position: absolute;
   inset: 0;
-  border: 2px solid var(--throng-colour-activePaneHighlight, #6aa3ff);
+  border: 2px solid var(--active-pane-colour, var(--throng-colour-activePanelBorder, #6aa3ff));
   pointer-events: none;
   z-index: 5;
 }
@@ -82,7 +89,8 @@
   cursor: pointer;
   z-index: 6;
 }
-.pane-collapse:hover {
+/* 021/FR-035 — hover background gated on window focus; :where() adds zero specificity. */
+:where(body:not([data-window-blurred])) .pane-collapse:hover {
   color: var(--throng-colour-text);
   background: var(--throng-colour-hoverSurface);
 }

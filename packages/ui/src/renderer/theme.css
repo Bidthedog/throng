@@ -26,15 +26,10 @@
      throw and do not warn — they just quietly stop being themeable. A guard now walks the tree and
      fails on any custom property that is read but never defined. */
   --danger: var(--throng-colour-danger, #e5534b);
-  /* Button style tokens (007, FR-046a). Separate from the generic surface/text
-     tokens; fall back to the generic button styling when a theme predates them. */
-  --btn-bg: var(--throng-colour-buttonBg, var(--bg-panel));
-  --btn-text: var(--throng-colour-buttonText, var(--text));
-  --btn-hover-bg: var(--throng-colour-buttonHoverBg, var(--accent));
-  --btn-hover-text: var(--throng-colour-buttonHoverText, var(--text));
-  --btn-font-family: var(--throng-font-button-family, var(--throng-font-family));
-  --btn-font-size: var(--throng-font-button-size, var(--throng-font-size));
-  --btn-font-weight: var(--throng-font-button-weight, var(--throng-font-weight-normal));
+  /* 021 (FR-027) — the generic `--btn-*` aliases are RETIRED. There is no single "the button" style
+     any more: every text dialog/form button is one of three TYPES (Confirm / Cancel / Destroy), and
+     each consumes only its own six `--throng-colour-<type>Button*` tokens directly. The shared button
+     FONT tokens still route through `--throng-font-button-*` at each call site. */
   --sidebar-width: 260px;
   --min-pane: 160px;
   /* Shared header height so the Projects / tab-strip / Files & Folders bottom
@@ -48,42 +43,59 @@
   box-sizing: border-box;
 }
 
-/* 018 / FR-009, FR-010 — scrollbars are part of the theme.
+/* 021 / US7 (base-only) — the `button` typography role, applied to the TEXT buttons ONLY.
  *
- * Before this, exactly ONE scrollbar in the whole application was styled: the terminal's. Every
- * other scrollable surface — the preferences panels, the file tree, the editor, the project and
- * sub-workspace lists, the menus — rendered the browser engine's default. On a dark theme that is a
- * light-grey bar in an otherwise dark application, and it is the first thing you see.
+ * The three button TYPES (Confirm / Cancel / Destroy) differ only by COLOUR; their TYPOGRAPHY is one
+ * shared `button` role — family, size, weight, casing, italic and under/strike — declared ONCE here so
+ * size/casing/italic/decoration actually reach a button (each call site had wired only family+weight).
  *
- * Applied GLOBALLY rather than surface by surface, deliberately: the requirement is "every
- * scrollable surface", and a per-surface list is a list that the next scrollable surface is not on.
- *
- * Deliberately the STANDARD properties only — no global `::-webkit-scrollbar` rules. Defining a
- * webkit scrollbar pseudo-element switches Chromium into custom-scrollbar mode, which forces a
- * classic non-overlay bar with a real box on EVERY element in the application. That is a layout
- * change dressed up as a recolour: it narrows every scrollable container and shifts what is under
- * the pointer. `scrollbar-color` recolours without touching the box model, which is all this story
- * asked for.
- *
- * The terminal keeps its own `::-webkit` rules (terminal.css) because its scrollbar IS load-bearing
- * for layout: it must be a classic bar occupying real width, or xterm's fit calculation wraps text
- * underneath it. It opts out of `scrollbar-color` so those rules still apply, and an E2E MEASURES
- * the result. */
-/* 018 follow-up — the scrollbar has a WIDTH, and it is the theme's.
- *
- * `scrollbar-width` accepts only `auto | thin | none`: the standard property cannot take a
- * measurement, so "thin" was the only answer the application could give, and it was too thin. The
- * `::-webkit-scrollbar` pseudo-elements can take one — at the price of switching Chromium to classic
- * (non-overlay) scrollbars, which occupy real layout width.
- *
- * That price is now PAID DELIBERATELY, because it buys the thing the standard property cannot give.
- * `::-webkit-scrollbar-corner` is transparent because the default corner is an opaque patch of grey
- * that appeared as a small coloured sliver in the bottom-right of scrollable panels — visible against
- * any theme far from the browser's default, and the reason this rule exists at all. */
-* {
-  scrollbar-color: var(--throng-colour-scrollbarThumb) var(--throng-colour-scrollbarTrack);
+ * It is scoped to the TEXT-ONLY dialog/form buttons deliberately, NOT to the `button` element. `button`
+ * caught every clickable control — tabs, project rows, menu items, icon buttons — and `text-decoration`
+ * PROPAGATES: an ancestor's underline paints straight through a descendant and a child's
+ * `text-decoration: none` cannot cancel it, so an underlined button theme underlined project names,
+ * the tab/panel counts, action-icon glyphs and picker rows, none of which are dialog buttons. The three
+ * typed buttons are text-only by construction, so applying the full role (decoration included) to just
+ * their selectors is safe and reaches exactly what "button typography" should. Icon-bearing controls
+ * (`folder-picker__browse`, `find-bar-btn`, `IconButton`, window/toolbar controls) are excluded — they
+ * carry a glyph, not prose. Primary buttons no longer hard-code `font-weight` — the weight role owns it
+ * uniformly. */
+.modal__buttons button,
+.project-form__buttons button,
+.panel-type-form__actions button,
+.panel-type-form__confirm,
+.panel-type-form__clear,
+.capture-modal__btn {
+  font-family: var(--throng-font-button-family, var(--throng-font-family));
+  font-size: var(--throng-font-button-size, var(--throng-font-size));
+  font-weight: var(--throng-font-button-weight, var(--throng-font-weight-normal));
+  text-transform: var(--throng-font-button-transform, none);
+  font-style: var(--throng-font-button-style, normal);
+  text-decoration: var(--throng-font-button-decoration, none);
 }
 
+/* 018 / FR-009, FR-010 — scrollbars are part of the theme; 021 follow-up (#130) — and so is their WIDTH.
+ *
+ * Before 018 exactly ONE scrollbar in the application was styled: the terminal's. Every other
+ * scrollable surface — the preferences panels, the file tree, the editor, the project and
+ * sub-workspace lists, the menus — rendered the browser engine's default light-grey bar.
+ *
+ * Two mutually-exclusive machineries exist for styling a scrollbar, and Chromium honours only ONE per
+ * element: the STANDARD `scrollbar-color`/`scrollbar-width` properties, OR the legacy
+ * `::-webkit-scrollbar-*` pseudo-elements — the moment `scrollbar-color` is anything but `auto` on an
+ * element, its `::-webkit-scrollbar` rules are IGNORED. 018 chose the standard `scrollbar-color` on
+ * `*` for colour, because it recolours without touching the box model. But `scrollbar-width` accepts
+ * only `auto | thin | none` — it cannot take a measurement — so the theme's px WIDTH could never
+ * apply through it, and the global `scrollbar-color` simultaneously made the `::-webkit-scrollbar`
+ * width rule below inert everywhere. That is #130: the width was emitted and referenced but reached
+ * NO scrollbar bar the terminal's (which alone opted back out).
+ *
+ * So the whole application now takes the LEGACY path, exactly as the terminal always did: NO global
+ * `scrollbar-color` (its presence is precisely what silenced the width), colours from
+ * `::-webkit-scrollbar-thumb`/`-track`, width from `::-webkit-scrollbar`. The price the standard
+ * property avoided is now PAID DELIBERATELY and app-wide: these are classic non-overlay bars that
+ * occupy real layout width — which is the only way a px width can mean anything, and what #130 asks
+ * for (every pane, modal, list, editor, terminal). The terminal's own `::-webkit` rules (terminal.css)
+ * still apply and an E2E MEASURES the resulting bar. */
 ::-webkit-scrollbar {
   width: var(--throng-size-scrollbar, 12px);
   height: var(--throng-size-scrollbar, 12px);
@@ -118,15 +130,16 @@
  * they left it alone.
  *
  * Everything below deliberately reuses the SAME tokens as every other menu, because it IS one:
- * `menuSurface` for the card, `menuItemHoverSurface` for the highlight — which, being optional,
- * follows the active project's colour unless a theme author pins it. */
+ * `surfaceActive` for the card (021 / FR-023 folded the old `menuSurface` back onto it),
+ * `menuItemHoverSurface` for the highlight — which, being optional, follows the active project's
+ * colour unless a theme author pins it. */
 select,
 select::picker(select) {
   appearance: base-select;
 }
 
 select::picker(select) {
-  background: var(--throng-colour-menuSurface);
+  background: var(--throng-colour-surfaceActive);
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
@@ -424,28 +437,35 @@ textarea,
   margin-left: auto;
 }
 
+/* 021 (FR-027) — the create-project form's buttons are TYPED: Cancel is the plain dismiss, the
+   submit button is the safe primary Confirm. Each consumes only its own type's six tokens. */
 .project-form__buttons button {
-  /* Buttons consume the theme's button tokens (007, FR-046a). */
-  background: var(--btn-bg);
-  border: 1px solid var(--border);
-  color: var(--btn-text);
+  background: var(--throng-colour-cancelButtonBg);
+  border: 1px solid var(--throng-colour-cancelButtonBorder);
+  color: var(--throng-colour-cancelButtonText);
   border-radius: 4px;
   padding: 5px 12px;
-  font-family: var(--btn-font-family);
-  font-weight: var(--btn-font-weight);
+  font-family: var(--throng-font-button-family, var(--throng-font-family));
+  font-weight: var(--throng-font-button-weight, var(--throng-font-weight-normal));
   cursor: pointer;
 }
 
 .project-form__buttons button:hover {
-  background: var(--btn-hover-bg);
-  color: var(--btn-hover-text);
+  background: var(--throng-colour-cancelButtonHoverBg);
+  border-color: var(--throng-colour-cancelButtonHoverBorder);
+  color: var(--throng-colour-cancelButtonHoverText);
 }
 
 .project-form__buttons button[type='submit'] {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--throng-colour-accentText);
-  font-weight: 600;
+  background: var(--throng-colour-confirmButtonBg);
+  border-color: var(--throng-colour-confirmButtonBorder);
+  color: var(--throng-colour-confirmButtonText);
+}
+
+.project-form__buttons button[type='submit']:hover {
+  background: var(--throng-colour-confirmButtonHoverBg);
+  border-color: var(--throng-colour-confirmButtonHoverBorder);
+  color: var(--throng-colour-confirmButtonHoverText);
 }
 
 /* --- Project list ----------------------------------------------------- */
@@ -547,7 +567,7 @@ textarea,
   border-radius: 4px;
 }
 
-.project-item__controls button:hover {
+:where(body:not([data-window-blurred])) .project-item__controls button:hover {
   color: var(--text);
   background: var(--bg-raised);
 }
@@ -897,7 +917,7 @@ textarea,
   line-height: 1;
 }
 
-.panel-box__actions button:hover {
+:where(body:not([data-window-blurred])) .panel-box__actions button:hover {
   /* An icon-button hover, exactly like the explorer toolbar and the pane collapse control — so it
      takes `hoverSurface`, not the accent-coloured BUTTON hover. Pointing it at buttonHoverBg while
      keeping `color: var(--text)` painted #e6ebf2 on #6aa3ff: 2.1:1, down from 13:1. */
@@ -1048,7 +1068,7 @@ textarea,
   padding: 4px;
   list-style: none;
   min-width: 160px;
-  background: var(--throng-colour-menuSurface);
+  background: var(--throng-colour-surfaceActive);
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
@@ -1078,7 +1098,9 @@ textarea,
   flex: 1 1 auto;
 }
 
-.context-menu__item:hover {
+/* 021/FR-035 — hover background gated on window focus (no stranded hover while blurred).
+   :where() carries zero specificity, so the cascade is unchanged. */
+:where(body:not([data-window-blurred])) .context-menu__item:hover {
   background: var(--throng-colour-menuItemHoverSurface, var(--accent));
   color: var(--throng-colour-accentText);
 }
@@ -1107,7 +1129,7 @@ textarea,
 .modal {
   width: min(420px, 90vw);
   padding: 18px 20px;
-  background: var(--throng-colour-dialogSurface);
+  background: var(--throng-colour-surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
@@ -1133,7 +1155,7 @@ textarea,
   align-items: center;
   gap: 14px;
   padding: 26px 34px;
-  background: var(--throng-colour-dialogSurface);
+  background: var(--throng-colour-surface);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
@@ -1198,7 +1220,7 @@ textarea,
 .app-close-table th {
   position: sticky;
   top: 0;
-  background: var(--throng-colour-dialogSurface);
+  background: var(--throng-colour-surface);
   color: var(--text-dim);
   font-weight: 600;
   border-bottom: 1px solid var(--border);
@@ -1289,50 +1311,62 @@ textarea,
   gap: 8px;
 }
 
+/* 021 (FR-027) — the confirmation model's three button ROLES map straight onto the three button
+   TYPES: a plain (non-last) button is the safe dismiss → Cancel; `.modal__confirm` (the last,
+   primary answer) → Confirm; `.modal__confirm--danger` (a destructive answer, last or not) →
+   Destroy. Each consumes only its own type's six tokens — no borrowed accent/danger/border. */
 .modal__buttons button {
-  /* Buttons consume the theme's button tokens (007, FR-046a). */
-  background: var(--btn-bg);
-  border: 1px solid var(--border);
-  color: var(--btn-text);
+  background: var(--throng-colour-cancelButtonBg);
+  border: 1px solid var(--throng-colour-cancelButtonBorder);
+  color: var(--throng-colour-cancelButtonText);
   border-radius: 5px;
   padding: 6px 14px;
-  font-family: var(--btn-font-family);
-  font-weight: var(--btn-font-weight);
+  font-family: var(--throng-font-button-family, var(--throng-font-family));
+  font-weight: var(--throng-font-button-weight, var(--throng-font-weight-normal));
   cursor: pointer;
 }
 
 .modal__buttons button:hover {
-  background: var(--btn-hover-bg);
-  color: var(--btn-hover-text);
+  background: var(--throng-colour-cancelButtonHoverBg);
+  border-color: var(--throng-colour-cancelButtonHoverBorder);
+  color: var(--throng-colour-cancelButtonHoverText);
 }
 
 .modal__confirm {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--throng-colour-accentText);
-  font-weight: 600;
+  background: var(--throng-colour-confirmButtonBg);
+  border-color: var(--throng-colour-confirmButtonBorder);
+  color: var(--throng-colour-confirmButtonText);
 }
 
 .modal__confirm--danger {
-  background: var(--throng-colour-danger);
-  border-color: var(--throng-colour-danger);
-  color: var(--throng-colour-dangerText);
+  background: var(--throng-colour-destroyButtonBg);
+  border-color: var(--throng-colour-destroyButtonBorder);
+  color: var(--throng-colour-destroyButtonText);
 }
 
-/* The `.modal__buttons button` selector (0,1,1) outranks the single-class
-   confirm rules above (0,1,0), so re-assert the colours at higher specificity. */
+/* The `.modal__buttons button` selector (0,1,1) outranks the single-class confirm rules above
+   (0,1,0), so re-assert each type at higher specificity — rest AND hover, so a hovered Confirm or
+   Destroy paints its OWN hover pair rather than the Cancel hover the base `button:hover` would give.
+   `--danger` (Destroy) is listed after `--confirm` so a button carrying both classes reads Destroy. */
 .modal__buttons button.modal__confirm {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--throng-colour-accentText);
+  background: var(--throng-colour-confirmButtonBg);
+  border-color: var(--throng-colour-confirmButtonBorder);
+  color: var(--throng-colour-confirmButtonText);
+}
+.modal__buttons button.modal__confirm:hover {
+  background: var(--throng-colour-confirmButtonHoverBg);
+  border-color: var(--throng-colour-confirmButtonHoverBorder);
+  color: var(--throng-colour-confirmButtonHoverText);
 }
 .modal__buttons button.modal__confirm--danger {
-  background: var(--throng-colour-danger);
-  border-color: var(--throng-colour-danger, #d6485a);
-  color: var(--throng-colour-dangerText);
+  background: var(--throng-colour-destroyButtonBg);
+  border-color: var(--throng-colour-destroyButtonBorder);
+  color: var(--throng-colour-destroyButtonText);
 }
 .modal__buttons button.modal__confirm--danger:hover {
-  filter: brightness(1.08);
+  background: var(--throng-colour-destroyButtonHoverBg);
+  border-color: var(--throng-colour-destroyButtonHoverBorder);
+  color: var(--throng-colour-destroyButtonHoverText);
 }
 
 /* --- Tab panel-count badge (FR-045) ---------------------------------- */
@@ -1436,28 +1470,21 @@ textarea,
   flex: 1 1 auto;
   min-width: 0;
 }
+/* 021 (FR-027) — Browse commits a folder choice, so it is a Confirm button. */
 .folder-picker__browse {
   flex: 0 0 auto;
-  background: var(--throng-colour-buttonBg);
-  border: 1px solid var(--border);
-  color: var(--text);
+  background: var(--throng-colour-confirmButtonBg);
+  border: 1px solid var(--throng-colour-confirmButtonBorder);
+  color: var(--throng-colour-confirmButtonText);
   border-radius: 4px;
   padding: 6px 10px;
   cursor: pointer;
   line-height: 1;
 }
 .folder-picker__browse:hover {
-  border-color: var(--text-dim);
-  color: var(--text);
-}
-.project-form__buttons button[type='submit'] {
-  background: var(--throng-colour-buttonBg);
-  border-color: var(--border);
-  color: var(--text);
-  font-weight: 600;
-}
-.project-form__buttons button[type='submit']:hover {
-  background: var(--throng-colour-buttonHoverBg);
+  background: var(--throng-colour-confirmButtonHoverBg);
+  border-color: var(--throng-colour-confirmButtonHoverBorder);
+  color: var(--throng-colour-confirmButtonHoverText);
 }
 
 /* Context-menu submenus (FR-023b: "Send to Tab ▸"). */
@@ -1522,10 +1549,17 @@ textarea,
   font-style: var(--throng-font-panel-style);
   text-decoration: var(--throng-font-panel-decoration);
 }
+/* Pane Text is the BODY text of every pane and panel — empty states, hints and list rows — so it must
+   reach the sidebar's empty-list messages too (021 follow-up): before this, the empty PANEL placeholder
+   answered to Pane Text but the empty Projects / Sub-workspaces lists in the sidebar did not, so "all
+   panes share the same body text" was not actually true. It deliberately does NOT reach a pane/panel
+   HEADER — those are the `paneTitle` (sidebar headings) and `panel` (Panel Header) roles. */
 .panel-box__placeholder,
 .panel-type-form,
 .workspace-empty,
-.pane-explorer__empty {
+.pane-explorer__empty,
+.project-list__empty,
+.subworkspace-list__empty {
   font-family: var(--throng-font-paneText-family);
   font-size: var(--throng-font-paneText-size);
   font-weight: var(--throng-font-paneText-weight);
@@ -1707,7 +1741,7 @@ textarea,
   border-radius: 4px;
   padding: 2px 6px;
 }
-.subworkspace-item__controls button:hover {
+:where(body:not([data-window-blurred])) .subworkspace-item__controls button:hover {
   color: var(--text);
   background: var(--bg-raised);
 }
@@ -1764,6 +1798,14 @@ textarea,
   height: var(--throng-size-icon, 16px);
   line-height: 1;
   flex: none;
+  /* 021 — a glyph is not prose. If a text role a glyph sits inside is cased or italicised (say a list
+     row whose Pane Text is set to UPPER or italic), those INHERIT onto the glyph — an "Aa"/"ab"
+     match-mode glyph would recase, a "{ }" glyph would slant — so the glyph resets them. `text-decoration`
+     is deliberately NOT reset here: it PROPAGATES from an ancestor and a descendant cannot cancel it, so
+     the fix for underline is to never apply it to an icon-bearing element (button typography is scoped to
+     text-only buttons for exactly that reason), not to pretend a reset here would undo it. */
+  text-transform: none;
+  font-style: normal;
 }
 
 .icon > svg {
@@ -1811,7 +1853,7 @@ textarea,
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--throng-colour-dialogSurface);
+  background: var(--throng-colour-surface);
   box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
   color: var(--throng-colour-text);
   font-size: 12px;
@@ -1833,7 +1875,7 @@ textarea,
 
 /* An ERROR gets its OWN CARD, not a stripe on the usual one.
  *
- * The left edge was the whole of it — three pixels of red against `dialogSurface`, the same colour as
+ * The left edge was the whole of it — three pixels of red against the card `surface`, the same colour as
  * every other card in the application. On a dark theme that is a thin line in the bottom corner of a
  * dark screen, and it is where the message "your save failed" was being put. Severity governs
  * persistence AND presence: an error looks like an error, in every theme, because its surface says so
@@ -1895,13 +1937,11 @@ textarea,
   font-weight: 600;
 }
 
-/* 018 — the DIALOG typography role also dresses the modals (confirmations, prompts, the project
-   settings dialog). They are dialogs; they belong to the role called dialog. */
+/* 021 follow-up — modals (confirmations, prompts, the project settings dialog) inherit the BASE
+   application font. The separate `dialog` typography role was retired: a dialog is not a place that
+   should answer to its own font, so it reads as the rest of the application does. */
 .modal {
-  font-family: var(--throng-font-dialog-family, var(--throng-font-family));
-  font-size: var(--throng-font-dialog-size, var(--throng-font-size));
-  font-weight: var(--throng-font-dialog-weight, var(--throng-font-weight-normal));
-  text-transform: var(--throng-font-dialog-transform, none);
-  font-style: var(--throng-font-dialog-style, normal);
-  text-decoration: var(--throng-font-dialog-decoration, none);
+  font-family: var(--throng-font-family);
+  font-size: var(--throng-font-size);
+  font-weight: var(--throng-font-weight-normal);
 }

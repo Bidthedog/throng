@@ -3,7 +3,7 @@ import { EditorState } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, drawSelection, highlightActiveLine } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { throngHighlighting } from './highlight-style.js';
-import { applyLanguage, languageCompartment } from './editor-language.js';
+import { applyLanguage, functionHighlightCompartment, languageCompartment } from './editor-language.js';
 
 /**
  * A buffer-only CodeMirror editor (feature 007, US5 — extracted from the 006
@@ -58,6 +58,10 @@ export function StandaloneEditor({
           // feature like this silently goes missing.
           languageCompartment.of([]),
           throngHighlighting,
+          // The legacy-language function-name overlay (021, #84 follow-up) — after throngHighlighting
+          // so its decoration nests inside the syntax span and its inline colour wins. Empty until a
+          // legacy language is applied; the config editors are JSON, so it stays empty here.
+          functionHighlightCompartment.of([]),
           EditorView.updateListener.of((u) => {
             if (u.docChanged && !suppressRef.current) onChangeRef.current(u.state.doc.toString());
           }),

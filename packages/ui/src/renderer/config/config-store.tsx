@@ -9,6 +9,7 @@ import {
 import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
+  migrateTheme,
   parseAppSettings,
   parseKeybindings,
   THRONG_THEME,
@@ -63,6 +64,18 @@ function toPackMap(raw: unknown): Record<string, LoadedIconPack> {
   return map;
 }
 
+/**
+ * Turn a theme document read from disk into the in-memory {@link Theme} (021, FR-031/032). The raw
+ * document is MIGRATED first — deriving the typed button tokens from ITS OWN colours and shedding the
+ * removed surfaces — so a theme authored before 021 gains the new model from its own palette rather
+ * than inheriting throng's; the throng defaults then fill any token the theme still omits.
+ */
+function toTheme(raw: unknown): Theme {
+  if (!raw || typeof raw !== 'object') return THRONG_THEME;
+  const migrated = migrateTheme(raw as Theme);
+  return { ...THRONG_THEME, ...migrated } as Theme;
+}
+
 function toState(
   payload:
     | { settings?: unknown; theme?: unknown; keybindings?: unknown; iconPacks?: unknown }
@@ -72,10 +85,7 @@ function toState(
   if (!payload) return DEFAULT_STATE;
   return {
     settings: payload.settings ? parseAppSettings(payload.settings) : DEFAULT_APP_SETTINGS,
-    theme:
-      payload.theme && typeof payload.theme === 'object'
-        ? ({ ...THRONG_THEME, ...(payload.theme as Partial<Theme>) } as Theme)
-        : THRONG_THEME,
+    theme: toTheme(payload.theme),
     keybindings: payload.keybindings ? parseKeybindings(payload.keybindings) : DEFAULT_KEYBINDINGS,
     iconPacks: toPackMap(payload.iconPacks),
     loaded: true,
@@ -118,7 +128,7 @@ export function ConfigProvider({ children }: { children: ReactNode }): ReactElem
         if (id.kind === 'keybindings') return { ...prev, keybindings: parseKeybindings(parsed) };
         // A theme write only changes what is on screen when it IS the theme on screen.
         if (id.kind === 'theme' && id.name === prev.settings.appearance.theme && parsed && typeof parsed === 'object') {
-          return { ...prev, theme: { ...THRONG_THEME, ...(parsed as Partial<Theme>) } as Theme };
+          return { ...prev, theme: toTheme(parsed) };
         }
         return prev;
       });

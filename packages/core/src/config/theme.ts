@@ -31,19 +31,18 @@ export interface ThemeFontRole {
   family?: string;
   sizePx?: number;
   /**
-   * Bold, or not. NOT a number — and that is the point.
+   * The font WEIGHT for this role, as a number (100–900). Unset → inherit the base weight
+   * (`fonts.weights.normal`).
    *
-   * A per-role numeric weight promised a granularity that does not exist. Almost every font installed
-   * on a desktop ships exactly TWO weights, regular and bold; asked for 500, the browser picks the
-   * nearest one it has, so 400, 500 and 600 all render identically and the slider appears to do
-   * nothing for two thirds of its travel. Only a variable font interpolates, and you cannot know from
-   * here whether the user has one.
-   *
-   * So the ROLE says bold or not, honestly, and the two numbers that "bold" and "regular" actually MEAN
-   * live once, on `fonts.weights` — where a variable font's owner can still tune them, and where the
-   * granularity is real.
+   * This was a boolean `bold` that resolved to the theme's two `fonts.weights` numbers. That hid a real
+   * control and produced a genuine defect: on a theme whose `weights.bold` was set low, turning a role
+   * "bold" could render it LIGHTER than a sibling role's inherited normal weight, and there was no way
+   * to ask for a specific weight at all. The caveat the boolean guarded is still true — most desktop
+   * fonts ship only two weights, so 400/500/600 can render identically — but that is the FONT's limit
+   * to expose, not ours to hide behind a checkbox: a variable font honours every step, and the slider
+   * lets its owner use them. A role left unset simply tracks `fonts.weights.normal`.
    */
-  bold?: boolean;
+  weight?: number;
   /** Letter casing: original | title (Capitalised Words) | lower | UPPER. */
   case?: TextCase;
   italic?: boolean;
@@ -68,11 +67,10 @@ export type TypographyRole =
   | 'projectPath' // a project's path subtitle
   | 'editor' // inline editor text (CodeMirror) — monospace by default (006)
   | 'terminal' // inline terminal text (xterm) — monospace by default (006)
-  | 'button' // buttons carry their own typography role (007, FR-046a)
-  // Dialogs and the preferences window. Added because the preferences window's own text answered to no
-  // role at all: you could restyle every surface in the application EXCEPT the one you were standing in
-  // while you did it, and changing the font there appeared to do nothing.
-  | 'dialog';
+  | 'button'; // buttons carry their own typography role (007, FR-046a)
+// The `dialog` role was RETIRED in 021: dialogs and the preferences window now simply inherit the base
+// application font (there is no separate "dialog font" to keep in step), so `.modal`/`.prefs-root` fall
+// through to `--throng-font-*`. One fewer role, and the app reads as one typographic whole.
 
 /** Every typography role, so the editor can offer the FULL set of controls on each. */
 export const TYPOGRAPHY_ROLES: readonly TypographyRole[] = [
@@ -85,7 +83,6 @@ export const TYPOGRAPHY_ROLES: readonly TypographyRole[] = [
   'editor',
   'terminal',
   'button',
-  'dialog',
 ];
 
 /**
@@ -99,7 +96,7 @@ export const TYPOGRAPHY_ROLES: readonly TypographyRole[] = [
 export const TYPOGRAPHY_FIELDS: readonly string[] = [
   'family',
   'sizePx',
-  'bold',
+  'weight',
   'case',
   'italic',
   'underline',
@@ -116,9 +113,20 @@ export const TYPOGRAPHY_FIELDS: readonly string[] = [
  */
 export const TERMINAL_FONT_FIELDS: readonly string[] = ['family', 'sizePx'];
 
+/**
+ * The EDITOR is code, and code is not prose (021).
+ *
+ * Casing, italics, underline and strikethrough on source text are noise, not theming — the same
+ * argument the terminal makes, one attribute richer because the editor CAN honour a weight and a size.
+ * So the editor carries family, size and weight only; the four decoration/casing controls are gone.
+ */
+export const EDITOR_FONT_FIELDS: readonly string[] = ['family', 'sizePx', 'weight'];
+
 /** The attributes a given role can actually honour. */
 export function fieldsForRole(role: TypographyRole): readonly string[] {
-  return role === 'terminal' ? TERMINAL_FONT_FIELDS : TYPOGRAPHY_FIELDS;
+  if (role === 'terminal') return TERMINAL_FONT_FIELDS;
+  if (role === 'editor') return EDITOR_FONT_FIELDS;
+  return TYPOGRAPHY_FIELDS;
 }
 
 /** An icon value: a glyph string, or an image referenced by a pack-relative filename (007). */
@@ -162,11 +170,10 @@ export const THRONG_THEME: Theme = {
     /* The thing currently SELECTED or active. */
     surfaceActive: '#222c3d',
     /* Carved out of `surface` (018, FR-001). Each falls back to its parent for a theme authored
-       before the split — see TOKEN_PARENT. */
-    menuSurface: '#1b2230',
+       before the split — see TOKEN_PARENT. 021 (FR-023) consolidated the menu and dialog cards back
+       onto `surfaceActive` and `surface`, so `menuSurface`/`dialogSurface` are gone. */
     inputSurface: '#1b2230',
     hoverSurface: '#1b2230',
-    dialogSurface: '#1b2230',
     /* NOTE: `menuItemHoverSurface` is deliberately ABSENT — it is an OPTIONAL token (see
        OPTIONAL_THEME_COLOUR_TOKENS). Unset, the hovered menu row follows the ACTIVE PROJECT'S
        dominant colour, which the projects store writes into `--accent` at runtime (Principle I).
@@ -253,20 +260,39 @@ export const THRONG_THEME: Theme = {
     searchMatch: '#151e2d',
     searchMatchCurrent: '#213049',
     searchMatchCurrentBorder: '#6aa3ff',
-    // The active Files & Folders pane highlight (006, FR-015/SC-006).
-    activePaneHighlight: '#6aa3ff',
-    // The active-panel focus context indicator (012, FR-002). Two states: the
-    // foreground treatment when this window is the foreground OS window, and a
-    // dimmed inactive treatment when it is background (the indicator persists in
-    // both). Distinct tokens so a theme can tune each independently.
+    // The ACTIVE-PANE highlight — the outline marking the pane/panel you are working in (012, FR-002;
+    // 021 consolidated the File Explorer's separate `activePaneHighlight` onto this one token so the
+    // whole app marks the active pane the same way). While a project is open the highlight is painted
+    // with that project's dominant colour at runtime (Principle I — the project colour must dominate),
+    // so this value is the FALLBACK shown when no project colour applies; the dimmed variant marks the
+    // pane when this window is in the background.
     activePanelBorder: '#6aa3ff',
     activePanelBorderInactive: '#3f5f8c',
-    // Buttons carry their own style tokens (007, FR-046a) — separate from the
-    // generic surface/text tokens. Hover flips to the accent + the app background.
-    buttonBg: '#222c3d',
-    buttonText: '#e6ebf2',
-    buttonHoverBg: '#6aa3ff',
-    buttonHoverText: '#10131a',
+    // Three-type button model (021, US7, FR-027). Every text dialog/form button resolves to exactly
+    // one type — Confirm (safe primary), Cancel (safe dismiss), Destroy (destructive) — and each type
+    // owns six tokens: bg / hover-bg / border / hover-border / text / hover-text. Derived (data-model
+    // §6) so appearance is unchanged at rest: Confirm ← accent/accentText, Destroy ← danger/dangerText,
+    // Cancel ← the legacy button surface + border. `migrateTheme` seeds the same values on load.
+    // Order within each type — BG, Border, Text, then their Hover counterparts — is the order the
+    // Themes editor renders them in (the registry preserves this key order), grouped resting-then-hover.
+    confirmButtonBg: '#6aa3ff',
+    confirmButtonBorder: '#6aa3ff',
+    confirmButtonText: '#06101f',
+    confirmButtonHoverBg: '#6aa3ff',
+    confirmButtonHoverBorder: '#6aa3ff',
+    confirmButtonHoverText: '#06101f',
+    cancelButtonBg: '#222c3d',
+    cancelButtonBorder: '#2a3344',
+    cancelButtonText: '#e6ebf2',
+    cancelButtonHoverBg: '#6aa3ff',
+    cancelButtonHoverBorder: '#2a3344',
+    cancelButtonHoverText: '#10131a',
+    destroyButtonBg: '#e5534b',
+    destroyButtonBorder: '#e5534b',
+    destroyButtonText: '#ffffff',
+    destroyButtonHoverBg: '#e5534b',
+    destroyButtonHoverBorder: '#e5534b',
+    destroyButtonHoverText: '#ffffff',
   },
   fonts: {
     family: "'Segoe UI', system-ui, sans-serif",
@@ -277,17 +303,17 @@ export const THRONG_THEME: Theme = {
   // baseSizePx rescales tab/panel/body/project text); paneTitle + projectPath pin
   // their own smaller sizes intentionally.
   typography: {
-    paneTitle: { sizePx: 11, bold: true, case: 'upper' },
-    // `tab` and `button` used to ask for weight 500 — "a touch bolder than body". With a two-weight
-    // font, which is nearly all of them, 500 renders as regular: the touch was never there.
+    // Weights ship EXPLICITLY on the roles that read bold (021): the headers, panel titles and project
+    // names keep their 600 so the app looks exactly as before, but the control is now a weight slider,
+    // resettable and adjustable, not a checkbox. `tab` and `editor` ship unset — they track the base
+    // normal weight until an author moves their slider.
+    paneTitle: { sizePx: 11, weight: 600, case: 'upper' },
     tab: {},
-    panel: { bold: true },
+    panel: { weight: 600 },
     paneText: {},
-    projectName: { bold: true },
+    projectName: { weight: 600 },
     projectPath: { sizePx: 11 },
     button: {},
-    // Dialogs and the preferences window — themeable at last.
-    dialog: {},
     // Editor + terminal default to a monospace face (006, FR-074). Overridable per
     // theme like any other role; sizes pin 14px intentionally.
     editor: { family: "Consolas, 'Courier New', monospace", sizePx: 14 },
@@ -464,10 +490,8 @@ export const OPTIONAL_THEME_COLOUR_TOKENS: readonly string[] = Object.freeze([
 ]);
 
 export const TOKEN_PARENT: Readonly<Record<string, string>> = Object.freeze({
-  menuSurface: 'surface',
   inputSurface: 'surface',
   hoverSurface: 'surface',
-  dialogSurface: 'surface',
 });
 
 /**
@@ -561,7 +585,6 @@ export function toCssVariables(theme: Theme): Record<string, string> {
 
   const fonts = { ...THRONG_THEME.fonts, ...theme.fonts };
   const baseWeight = fonts.weights?.normal ?? THRONG_THEME.fonts.weights.normal;
-  const boldWeight = fonts.weights?.bold ?? THRONG_THEME.fonts.weights.bold;
   vars['--throng-font-family'] = fonts.family;
   vars['--throng-font-size'] = `${fonts.baseSizePx}px`;
   vars['--throng-font-weight-normal'] = String(baseWeight);
@@ -581,8 +604,8 @@ export function toCssVariables(theme: Theme): Record<string, string> {
     const family = s.family && s.family.trim().length > 0 ? s.family : fonts.family;
     vars[`--throng-font-${role}-family`] = family;
     vars[`--throng-font-${role}-size`] = `${s.sizePx ?? fonts.baseSizePx}px`;
-    // Bold means the theme's OWN bold number — which is what makes `fonts.weights` worth having.
-    vars[`--throng-font-${role}-weight`] = String(s.bold ? boldWeight : baseWeight);
+    // The role's OWN weight if it pins one (a number, 100–900), else the base normal weight.
+    vars[`--throng-font-${role}-weight`] = String(s.weight ?? baseWeight);
     vars[`--throng-font-${role}-transform`] = caseToTransform[s.case ?? fonts.case ?? 'original'];
     vars[`--throng-font-${role}-style`] = (s.italic ?? fonts.italic) ? 'italic' : 'normal';
     vars[`--throng-font-${role}-decoration`] = decoration(

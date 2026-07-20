@@ -323,19 +323,36 @@ function makeTheme(name: string, p: Palette): Theme {
       searchMatch: code.match,
       searchMatchCurrent: code.current,
       searchMatchCurrentBorder: code.border,
-      activePaneHighlight: p.accent,
-      // Active-panel focus context (012, FR-002 / SC-001): a contrast-guaranteed
-      // accent marks the active panel when the window is foreground; a dimmed
-      // variant marks it when the window is background — still identifiable but
-      // visibly de-emphasised. Derived per theme so every palette stays legible.
+      // Active-pane highlight (012, FR-002 / SC-001; 021 consolidated the File Explorer's separate
+      // highlight onto this one token): a contrast-guaranteed accent marks the active pane/panel when
+      // the window is foreground; a dimmed variant marks it when the window is background — still
+      // identifiable but visibly de-emphasised. Derived per theme so every palette stays legible. At
+      // runtime the active project's colour paints it (Principle I); this is the no-project fallback.
       activePanelBorder: activePanelBorders(p.accent, p.surface, p.text).active,
       activePanelBorderInactive: activePanelBorders(p.accent, p.surface, p.text).inactive,
-      // Button style tokens (007, FR-046a): a raised surface with the theme accent
-      // on hover, hover text flipping to the app background for contrast against it.
-      buttonBg: p.surfaceActive ?? p.surface,
-      buttonText: p.text,
-      buttonHoverBg: p.accent,
-      buttonHoverText: p.bg,
+      // Three-type button model (021, US7, FR-027). Six tokens per type, DERIVED (data-model §6) so
+      // every bundled theme looks exactly as it did at rest: Confirm ← accent/accentText, Destroy ←
+      // danger/dangerText, Cancel ← the former button surface/text (raised surface, accent on hover,
+      // hover text flipping to the app background) with the theme border. `migrateTheme` seeds the
+      // identical values for a legacy user theme on load, so bundled and migrated themes agree.
+      confirmButtonBg: p.accent,
+      confirmButtonHoverBg: p.accent,
+      confirmButtonBorder: p.accent,
+      confirmButtonHoverBorder: p.accent,
+      confirmButtonText: p.bg,
+      confirmButtonHoverText: p.bg,
+      cancelButtonBg: p.surfaceActive ?? p.surface,
+      cancelButtonHoverBg: p.accent,
+      cancelButtonBorder: p.border ?? p.surface,
+      cancelButtonHoverBorder: p.border ?? p.surface,
+      cancelButtonText: p.text,
+      cancelButtonHoverText: p.bg,
+      destroyButtonBg: p.danger ?? '#e5534b',
+      destroyButtonHoverBg: p.danger ?? '#e5534b',
+      destroyButtonBorder: p.danger ?? '#e5534b',
+      destroyButtonHoverBorder: p.danger ?? '#e5534b',
+      destroyButtonText: '#ffffff',
+      destroyButtonHoverText: '#ffffff',
       // Syntax highlighting (016): the theme's own hues, guaranteed readable on the editor body
       // and through a search-match highlight alike (FR-007a).
       ...code.syntax,
@@ -376,6 +393,13 @@ function makeTheme(name: string, p: Palette): Theme {
       editor: { family: mono, sizePx: 14 },
       terminal: { family: mono, sizePx: 14 },
     },
+    // The non-colour measurements (018 follow-up) — icon edge and scrollbar width. Every bundled theme
+    // carries the SAME concrete defaults throng ships, spelled out rather than left to inherit. Not for
+    // appearance (these ARE throng's 16 / 12, so nothing renders differently) but so the Themes editor's
+    // per-token Reset has a shipped baseline to return to: without a `sizes` leaf on the theme,
+    // `isThemeTokenOverridden` saw no shipped value and reported Reset permanently disabled for icon size
+    // and scrollbar width on every bundled theme — the exact defect this pass fixes.
+    sizes: { ...THRONG_THEME.sizes },
     icons: { ...THRONG_THEME.icons },
   };
 }

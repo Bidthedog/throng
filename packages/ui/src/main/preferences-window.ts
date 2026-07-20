@@ -1,12 +1,15 @@
 /**
  * preferences-window — the single shared, frameless, movable preferences
- * BrowserWindow (feature 007, FR-010/013/013a/014). It is **parented to the main
- * window** so it floats above throng's own windows only (not above other OS apps)
- * and minimises/restores with the main window; opening it makes every other window
- * non-interactive (`setEnabled(false)`, app-modal) yet the preferences window
- * itself stays movable to reveal them (FR-014). On close the main window is
- * refocused so no other application is left overlaying throng (FR-013a).
- * Re-invoking the cog focuses the one window and switches its tab (FR-010).
+ * BrowserWindow (feature 007, FR-010/013/013a/014; made NON-MODAL in 021). It is
+ * **parented to the main window**, so it floats above throng's own windows only (not
+ * above other OS apps) and minimises/restores with the main window — and, being a
+ * parented child, it STAYS ABOVE the main window even when the user clicks back into it.
+ * It is deliberately NOT app-modal: every other window stays INTERACTIVE while it is
+ * open, so a theme can be edited and its effect watched on the live application at the
+ * same time (which is the whole point of floating over throng rather than blocking it).
+ * On close, focus returns to the main window so no other application is left overlaying
+ * throng (FR-013a). Re-invoking the cog focuses the one window and switches its tab
+ * (FR-010).
  */
 import { BrowserWindow } from 'electron';
 import { wireWindowMaximizeEvents } from './window-controls-ipc.js';
@@ -18,6 +21,22 @@ const PREF_TABS: readonly PreferencesTab[] = ['settings', 'keybindings', 'themes
 
 /** Channel the prefs renderer listens on to switch tab when the window is reused. */
 export const PREFERENCES_TAB_CHANNEL = 'throng:preferences:tab';
+
+/**
+ * Channel every OTHER window listens on to learn it has been blurred by the app-modal preferences
+ * window (US10/FR-035). The OS `blur` event is not delivered reliably to a disabled window under the
+ * test harness, so this is the deterministic "a child window took focus" signal the hover-suppression
+ * gate needs. `true` when preferences opens, `false` when it closes.
+ */
+export const WINDOW_BLURRED_CHANNEL = 'throng:window:blurred';
+
+/** Tell every window except `except` whether it is now blurred by the app-modal preferences window. */
+function broadcastBlurred(blurred: boolean, except?: BrowserWindow): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (w === except || w.isDestroyed()) continue;
+    w.webContents.send(WINDOW_BLURRED_CHANNEL, blurred);
+  }
+}
 
 export function isPreferencesTab(value: unknown): value is PreferencesTab {
   return typeof value === 'string' && (PREF_TABS as readonly string[]).includes(value);
@@ -40,13 +59,6 @@ export interface PreferencesWindowDeps {
 
 let prefsWindow: BrowserWindow | null = null;
 
-/** Re-enable every still-living window (called when preferences closes). */
-function enableAllWindows(): void {
-  for (const w of BrowserWindow.getAllWindows()) {
-    if (!w.isDestroyed()) w.setEnabled(true);
-  }
-}
-
 /**
  * Create-or-focus the single preferences window on `tab`. Idempotent: a second
  * call focuses the existing window and switches its tab (FR-010/011).
@@ -59,10 +71,6 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
     return prefsWindow;
   }
 
-  // App-modal: disable every existing window before creating the prefs window, so
-  // the prefs window is the only interactive surface (FR-013).
-  for (const w of BrowserWindow.getAllWindows()) w.setEnabled(false);
-
   const mainWindow = deps.getMainWindow?.() ?? null;
   const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
 
@@ -72,12 +80,16 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
     minWidth: 420,
     minHeight: 360,
     frame: false,
-    // Parented to the main window: floats above throng's own windows only (not
-    // globally always-on-top) and minimises/restores with it (FR-013/013a).
+    // Parented to the main window: it floats above throng's own windows only (not globally
+    // always-on-top, so never above other OS apps), stays above the main window even when the user
+    // clicks into it, and minimises/restores with it (FR-013/013a). Deliberately NOT modal — every
+    // other window stays interactive (021), so throng can be used while a theme is being edited.
     parent,
     movable: true,
     resizable: true,
-    title: 'throng — Preferences',
+    // US9/FR-034 — Preferences cannot minimise (no minimise affordance in the renderer either).
+    minimizable: false,
+    title: 'Preferences — throng',
     icon: appIcon(),
     backgroundColor: deps.backgroundColor ?? '#10131a',
     webPreferences: {
@@ -89,6 +101,9 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
   });
   prefsWindow = win;
   wireWindowMaximizeEvents(win);
+  // Flag every other window blurred (US10/FR-035) — they are app-modal-disabled behind this window,
+  // so any stranded CSS :hover on them must stop painting.
+  broadcastBlurred(true, win);
   deps.onOpen?.();
 
   // Minimise/restore-together with the main window (FR-013a) is native to the
@@ -97,7 +112,9 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
 
   win.on('closed', () => {
     prefsWindow = null;
-    enableAllWindows();
+    // Clear the blurred flag on every window (US10/FR-035). The hover gate does not repaint until a
+    // genuine pointermove, so a stranded element stays un-hovered until the user actually moves.
+    broadcastBlurred(false);
     // Return focus to throng so no other application is left overlaying it (FR-013a).
     const main = deps.getMainWindow?.() ?? null;
     if (main && !main.isDestroyed()) main.focus();

@@ -116,3 +116,64 @@ describe('filterFields', () => {
     expect(filterFields('nosuchsetting', FIELDS, valueOf)).toEqual([]);
   });
 });
+
+/**
+ * Section-name search (021, FR-015/016/017). A query that matches a field's GROUP returns the field
+ * even when its own name/description/value do not contain the query — so typing a section name returns
+ * the whole section, and a parent-area name reaches its nested "Parent · Child" sub-groups. The group
+ * is optional: a group-less field behaves exactly as before.
+ */
+const EDITOR_BG: SearchableField = {
+  key: 'colours.editorBg',
+  label: 'Editor background',
+  description: 'The editor surface colour.',
+  group: 'Editor',
+};
+const SYNTAX_KEYWORD: SearchableField = {
+  // Deliberately named so that NEITHER its key, label, description NOR value contains "editor" —
+  // only its group ("Editor · Syntax") does. This is the token the section search must still find.
+  key: 'colours.syntaxKeyword',
+  label: 'Syntax keyword',
+  description: 'Keyword hue.',
+  group: 'Editor · Syntax',
+};
+const TERMINAL_FG: SearchableField = {
+  key: 'colours.terminalFg',
+  label: 'Terminal foreground',
+  description: 'The terminal text colour.',
+  group: 'Terminal',
+};
+const GROUPED = [EDITOR_BG, SYNTAX_KEYWORD, TERMINAL_FG];
+const groupedValue = (f: SearchableField): unknown =>
+  ({ 'colours.editorBg': '#101010', 'colours.syntaxKeyword': '#7ea8ff', 'colours.terminalFg': '#d6deea' } as Record<string, unknown>)[f.key];
+
+describe('section-name search (021, FR-015/016/017)', () => {
+  it('includes the group in the haystack, lowercased', () => {
+    expect(fieldHaystack(EDITOR_BG, '#101010')).toContain('editor');
+    expect(fieldHaystack(SYNTAX_KEYWORD, '#7ea8ff')).toContain('editor · syntax');
+  });
+
+  it('matches a field by its section name even when its own name does not contain the query', () => {
+    // "Syntax keyword" contains no "editor" — only its group does. FR-015.
+    expect(matchesQuery('editor', SYNTAX_KEYWORD, '#7ea8ff')).toBe(true);
+  });
+
+  it('returns every field of a section for its group name, including nested sub-groups', () => {
+    // "editor" matches group "Editor" AND (as a substring) "Editor · Syntax"; Terminal is excluded.
+    expect(filterFields('editor', GROUPED, groupedValue)).toEqual([EDITOR_BG, SYNTAX_KEYWORD]);
+  });
+
+  it('unions section matches with name matches, each field once (no duplicates)', () => {
+    // "keyword" matches SYNTAX_KEYWORD by name; "terminal" matches TERMINAL_FG by name+group.
+    expect(filterFields('keyword terminal', GROUPED, groupedValue)).toEqual([SYNTAX_KEYWORD, TERMINAL_FG]);
+    // A query hitting both a field's name and its group still yields that field exactly once.
+    expect(filterFields('terminal', GROUPED, groupedValue)).toEqual([TERMINAL_FG]);
+  });
+
+  it('leaves a group-less field behaving exactly as before (no throw, group adds nothing)', () => {
+    // THEME/HOVER/GLOBS declare no group.
+    expect(() => fieldHaystack(THEME, 'throng')).not.toThrow();
+    expect(fieldHaystack(THEME, 'throng')).not.toContain('undefined');
+    expect(filterFields('theme', FIELDS, valueOf)).toEqual([THEME]);
+  });
+});

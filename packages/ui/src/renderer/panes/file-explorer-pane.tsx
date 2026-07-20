@@ -1,4 +1,9 @@
-import { useState, type PointerEvent as ReactPointerEvent, type ReactElement } from 'react';
+import {
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type ReactElement,
+} from 'react';
 import './panes.css';
 import '../explorer/explorer.css';
 import { useProjects } from '../state/projects-store.js';
@@ -39,6 +44,14 @@ export function FileExplorerPane({
         className={`pane-explorer__body${filesActive ? ' pane-explorer__body--active' : ''}`}
         data-testid="files-pane"
         data-active-pane={filesActive}
+        // Principle I: the active-pane highlight follows the open project's colour (021 — the same rule
+        // the workspace panels use). Set the colour inline only while this pane is the active one AND a
+        // project is open; otherwise the CSS falls through to the shared `activePanelBorder` token.
+        style={
+          filesActive && activeProject?.colour
+            ? ({ '--active-pane-colour': activeProject.colour } as CSSProperties)
+            : undefined
+        }
         onPointerDown={() => setActivePane('files')}
       >
         <div className="panel">

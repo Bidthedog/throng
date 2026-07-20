@@ -29,9 +29,14 @@ export interface WindowControlsProps {
    * controls would be dead chrome.
    */
   closeOnly?: boolean;
+  /** Render the minimise control (US9/FR-034). Preferences passes `false` — it is non-minimisable. */
+  showMinimise?: boolean;
 }
 
-export function WindowControls({ closeOnly = false }: WindowControlsProps): ReactElement {
+export function WindowControls({
+  closeOnly = false,
+  showMinimise = true,
+}: WindowControlsProps): ReactElement {
   const [maximized, setMaximized] = useState(false);
   const controls = window.throng?.window;
 
@@ -49,18 +54,23 @@ export function WindowControls({ closeOnly = false }: WindowControlsProps): Reac
 
   return (
     <div className="window-controls" data-testid="window-controls">
+      {/* About (closeOnly) shows only Close. Otherwise: Preferences passes showMinimise={false}
+          — non-minimisable (US9/FR-034), so no minimise affordance; max is always offered. Main +
+          sub-workspace keep both. */}
       {closeOnly ? null : (
         <>
-          <button
-            type="button"
-            className="window-control"
-            data-testid="window-min"
-            title="Minimise"
-            aria-label="Minimise"
-            onClick={() => controls?.minimize?.()}
-          >
-            <Icon token="windowMinimise" />
-          </button>
+          {showMinimise ? (
+            <button
+              type="button"
+              className="window-control"
+              data-testid="window-min"
+              title="Minimise"
+              aria-label="Minimise"
+              onClick={() => controls?.minimize?.()}
+            >
+              <Icon token="windowMinimise" />
+            </button>
+          ) : null}
           <button
             type="button"
             className="window-control"

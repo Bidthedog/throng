@@ -14,6 +14,8 @@ import { ConfirmProvider, useConfirm } from '../confirm-dialog.js';
 import { NotificationProvider } from '../common/notification.js';
 import { ThemeProvider } from '../theme/theme-provider.js';
 import { IconButton } from '../common/icon-button.js';
+import { windowTitle } from '../common/window-title.js';
+import { HoverSuppression } from '../common/use-hover-suppression.js';
 import { TitleBar } from '../title-bar/title-bar.js';
 import { ResetNoticeProvider, useResetNotice, type ResetOutcome } from './reset-notice.js';
 import { OnEntryProvider, type OnEntryConfig } from './on-entry.js';
@@ -108,6 +110,13 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
     }
   }, [loaded, settings, keybindings, theme, activeName]);
 
+  // US9/FR-033 — drive the OS window title to the suffix form. The shared index.html carries
+  // `<title>throng</title>`, which Electron uses as the window title; without this the Preferences
+  // window's OS title (taskbar) would read a bare "throng" while its in-app titlebar reads correctly.
+  useEffect(() => {
+    document.title = windowTitle('Preferences');
+  }, []);
+
   // Reused window: the main process pushes a tab switch when the cog is clicked
   // again while the window is already open (FR-010/011).
   useEffect(() => {
@@ -196,7 +205,8 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
     <ThemeProvider theme={theme}>
       <OnEntryProvider value={onEntry}>
       <div className="prefs-root" data-testid="preferences-window">
-        <TitleBar identity="throng — Preferences" showCog={false} />
+        <HoverSuppression />
+        <TitleBar identity={windowTitle('Preferences')} showCog={false} showMinimise={false} />
         <div className="prefs-body">
           <div className="prefs-tabbar" role="tablist" aria-label="Preferences sections">
             {TABS.map((t) => (

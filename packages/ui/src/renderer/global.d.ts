@@ -58,6 +58,8 @@ declare global {
         }>;
         openExternal: (url: string) => void;
       };
+      // A window is told when the app-modal preferences window blurs/unblurs it (US10/FR-035).
+      onWindowBlurred?: (cb: (blurred: boolean) => void) => () => void;
       // App-close warning when terminals are running (005 / FR-015).
       onAppCloseBegin?: (cb: () => void) => () => void;
       onAppClosePrompt?: (cb: (info: AppClosePromptInfo) => void) => () => void;

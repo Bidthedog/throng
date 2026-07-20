@@ -64,10 +64,10 @@ export function mechanicalCopy(key: string): { label: string; description: strin
   const ROLE_FIELD_COPY: Record<string, { label: string; description: string }> = {
     family: { label: 'Font', description: 'The typeface. Leave it empty to use the theme’s base font.' },
     sizePx: { label: 'Size', description: 'Size in pixels. Leave it unset to track the theme’s base size.' },
-    bold: {
-      label: 'Bold',
+    weight: {
+      label: 'Weight',
       description:
-        'Bold or not. How bold “bold” is comes from the theme’s Bold weight — most fonts ship only two weights, so this is the only distinction they can actually draw.',
+        'Font weight from 100 to 900. Leave it unset to track the theme’s base weight. Most fonts ship only two weights, so nearby values can look identical unless the font is variable.',
     },
     case: { label: 'Casing', description: 'Leave the text as written, or force Title, lower or UPPER case.' },
     italic: { label: 'Italic', description: 'Slant the text.' },
@@ -85,6 +85,96 @@ export function mechanicalCopy(key: string): { label: string; description: strin
     label: humanise(field),
     description: `The ${group.toLowerCase()} ${humanise(field).toLowerCase()}.`,
   };
+}
+
+/**
+ * The closed vocabulary of label-suffix **properties** (021, US5, FR-018/019/020, data-model §3).
+ *
+ * A token's label is `"<Context> <Property>"`, and the `<Property>` — the closing word(s) — must be
+ * drawn from this list. It carries ONE word per concept, deliberately: `Text` (never `Foreground`)
+ * is the only foreground-colour property; `Font Size` is only for a typography size while `Size`
+ * (non-font pixel dimensions) and `Width` name different measurements; `Surface` is the fill of a
+ * card/panel/field, distinct from the window-wide `Background`. Multi-word entries are listed so the
+ * guard can close a label on them (`Hover Background`, `Gutter Text`, …).
+ */
+export const THEME_PROPERTY_VOCABULARY: readonly string[] = [
+  'Background',
+  'Hover Background',
+  'Text',
+  'Hover Text',
+  'Border',
+  'Hover Border',
+  'Surface',
+  'Cursor',
+  'Selection',
+  'Gutter Background',
+  'Gutter Text',
+  'Highlight',
+  'Marker',
+  'Track',
+  'Thumb',
+  'Accent',
+  'Width',
+  'Font Size',
+  'Size',
+  'Font',
+  'Weight',
+  'Bold',
+  'Italic',
+  'Underline',
+  'Strikethrough',
+  'Casing',
+];
+
+/** A description that merely restates that the token is a colour token — the pre-009 self-reference. */
+const SELF_REFERENTIAL_DESCRIPTION = /["“]?.+["”]? colour token/i;
+
+/** Build the `^<Context> <Property>$` label matcher from the vocabulary (longest property first). */
+function namingLabelPattern(): RegExp {
+  const props = [...THEME_PROPERTY_VOCABULARY]
+    .sort((a, b) => b.length - a.length)
+    .map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return new RegExp(`^([A-Z][\\w&]*(?: [A-Za-z&]+)*) (${props.join('|')})$`);
+}
+
+/** A token whose label is a named noun (an icon or the icon-ink colour), exempt from the property suffix. */
+function isNamedIconToken(key: string): boolean {
+  return key.startsWith('icons.') || key === 'colours.iconColour';
+}
+
+/**
+ * Throw, naming every token whose label/description breaks the naming convention (021, US5,
+ * FR-018/019/020). Labels must be `"<Context> <Property>"` in Title Case with `<Property>` drawn
+ * from {@link THEME_PROPERTY_VOCABULARY} and a non-empty context; icon labels are exempt from the
+ * property suffix (they are named nouns) but must still be non-empty and capitalised. Descriptions
+ * must be present-tense sentences of at least 20 characters that name a concrete UI element, are not
+ * self-referential, and are not the mechanically-derived copy for the key.
+ */
+export function assertNamingConvention(registry: MetadataRegistry): void {
+  const labelRe = namingLabelPattern();
+  const bad: string[] = [];
+  for (const d of registry) {
+    const label = d.label ?? '';
+    if (isNamedIconToken(d.key)) {
+      if (label.trim().length === 0 || !/^[A-Z]/.test(label.trim())) {
+        bad.push(`${d.key}: icon label "${label}" must be capitalised and non-empty`);
+      }
+    } else if (!labelRe.test(label)) {
+      bad.push(`${d.key}: label "${label}" is not "<Context> <Property>" (Property ∈ vocabulary)`);
+    }
+
+    const description = d.description ?? '';
+    if (description.trim().length < 20) {
+      bad.push(`${d.key}: description "${description}" is too short to name an element`);
+    } else if (SELF_REFERENTIAL_DESCRIPTION.test(description)) {
+      bad.push(`${d.key}: description "${description}" is self-referential`);
+    } else if (description === mechanicalCopy(d.key).description) {
+      bad.push(`${d.key}: description merely restates the identifier`);
+    }
+  }
+  if (bad.length) {
+    throw new Error(`theme copy violates the naming convention:\n${bad.join('\n')}`);
+  }
 }
 
 /**
@@ -107,24 +197,138 @@ export function roleSizeMax(key: string): number {
   return Math.max(8, Math.round(BASE_FONT_MAX_PX * ratio));
 }
 
+/**
+ * The closed, ordered set of Themes-editor **area** groups (021, FR-003/FR-004). General first (it
+ * explains the areas that follow); Icons last (rendered by the icon section). A dense area may nest a
+ * `"<Area> · <Sub>"` sub-group (e.g. `Editor · Syntax`); only the PARENT area is a member here.
+ */
+export const THEME_AREA_GROUPS: readonly string[] = [
+  'General',
+  'Editor',
+  'Main panel / workspace',
+  'Sub-workspace',
+  'Terminal',
+  'File Explorer',
+  'Preferences',
+  'Projects / sidebar',
+  'Search',
+  'Icons',
+];
+
+/** The area a token takes when NO rule places it — outside {@link THEME_AREA_GROUPS}, so the guard flags it. */
+const UNASSIGNED_AREA = '(unassigned)';
+
+/** typography role → area (021, data-model §2). */
+const TYPOGRAPHY_AREA: Record<string, string> = {
+  editor: 'Editor',
+  terminal: 'Terminal',
+  paneTitle: 'Main panel / workspace',
+  tab: 'Main panel / workspace',
+  panel: 'Main panel / workspace',
+  paneText: 'Main panel / workspace',
+  projectName: 'Projects / sidebar',
+  projectPath: 'Projects / sidebar',
+  // The base button typography lives in its OWN sub-group so it renders as "General · Buttons" ABOVE
+  // the three per-type colour blocks (`General · Buttons · Confirm/Cancel/Destroy`). The `dialog` role
+  // was retired in 021 (dialogs inherit the base font), so it no longer appears here.
+  button: 'General · Buttons',
+};
+
+/** The non-prefix colours whose home is a specific pane (021, data-model §2). */
+const COLOUR_AREA: Record<string, string> = {
+  // 021 consolidated the File Explorer's `activePaneHighlight` onto `activePanelBorder`, so the active
+  // pane/panel highlight is one token filed here.
+  activePanelBorder: 'Main panel / workspace',
+  activePanelBorderInactive: 'Main panel / workspace',
+  railBg: 'Main panel / workspace',
+  sidebarBg: 'Projects / sidebar',
+};
+
+/**
+ * The genuinely application-wide colours — the ONLY way a colour reaches General (FR-005). Listed
+ * explicitly rather than defaulted, so a NEW colour token that fits no rule falls through to the
+ * sentinel and fails the guard instead of being silently absorbed into General (SC-003).
+ */
+const GENERAL_COLOURS: ReadonlySet<string> = new Set([
+  'accent', 'accentText', 'appBg', 'border', 'danger', 'dangerText', 'errorSurface', 'errorText',
+  'hoverSurface', 'inputSurface', 'menuItemHoverSurface', 'scrollbarThumb', 'scrollbarTrack',
+  'statusBarBg', 'success',
+  // `surface`/`surfaceActive` are the present-day, overloaded former `panelSurface` (#62) — no single
+  // dominant area, so General is their home (FR-014). 021 removed `menuSurface`/`dialogSurface` and the
+  // four legacy `button*` tokens; the 18 typed button tokens live under General · Buttons (§2, Buttons).
+  'surface', 'surfaceActive', 'text', 'textMuted', 'unsavedDot',
+]);
+
+/**
+ * The app AREA a theme token belongs to (021, FR-001/FR-007). Returns `undefined` for a token no rule
+ * places — there is NO silent default. `descriptorForThemeToken` turns that into the sentinel group,
+ * so an unplaced (typically new) token fails {@link assertThemeAreaGroups}, forcing its author to
+ * declare where it appears. Icons form their own area; the icon-COLOUR token rides with them.
+ */
+export function areaForToken(key: string): string | undefined {
+  if (key.startsWith('icons.') || key === 'colours.iconColour') return 'Icons';
+  if (key.startsWith('typography.')) return TYPOGRAPHY_AREA[key.split('.')[1] ?? ''];
+  if (key.startsWith('fonts.')) return 'General'; // base fonts are app-wide (data-model §2)
+  // The size tokens are placed EXPLICITLY, not by a `sizes.*` blanket — so a NEW size token fails the
+  // guard rather than silently defaulting to General (SC-003). Both current ones are app-wide sizing;
+  // `iconPx` stays in the General list (not the Icons area) because it is a slider rendered inline,
+  // and an 'Icons' group here would collide with the icon section's own 'Icons' heading.
+  if (key === 'sizes.iconPx' || key === 'sizes.scrollbarPx') return 'General';
+  if (key.startsWith('colours.')) {
+    const name = lastSegment(key);
+    // The three-type button model (021, FR-027): each token nests under its type's sub-group so the
+    // Themes editor renders Confirm / Cancel / Destroy as distinct blocks within General.
+    const button = /^(confirm|cancel|destroy)Button/.exec(name);
+    if (button) {
+      const type = button[1];
+      return `General · Buttons · ${type.charAt(0).toUpperCase()}${type.slice(1)}`;
+    }
+    if (name.startsWith('syntax')) return 'Editor · Syntax';
+    if (name.startsWith('editor')) return 'Editor';
+    if (name.startsWith('terminal')) return 'Terminal';
+    if (name.startsWith('searchMatch')) return 'Search';
+    if (name in COLOUR_AREA) return COLOUR_AREA[name];
+    if (GENERAL_COLOURS.has(name)) return 'General';
+  }
+  return undefined;
+}
+
+/** The parent area of a (possibly `"Area · Sub"`) group string. */
+function parentArea(group: string): string {
+  return group.split(' · ')[0];
+}
+
+/**
+ * Throw, naming every descriptor whose area is outside {@link THEME_AREA_GROUPS} (021, FR-009/FR-010).
+ * Combined with {@link assertEveryKeyDescribed} (exactly one descriptor per token) this makes each
+ * token belong to exactly one group drawn from the closed set — and, because an unplaced token carries
+ * the {@link UNASSIGNED_AREA} sentinel, adding a token without assigning it an area fails the build.
+ */
+export function assertThemeAreaGroups(registry: MetadataRegistry): void {
+  const allowed = new Set(THEME_AREA_GROUPS);
+  const bad = registry
+    .filter((d) => !allowed.has(parentArea(d.group)))
+    .map((d) => `${d.key} → ${d.group}`);
+  if (bad.length) {
+    throw new Error(`theme tokens with an unknown area group: ${bad.join(', ')}`);
+  }
+}
+
 /** Infer the descriptor for one theme token path (copy from the hand-written catalogue). */
 export function descriptorForThemeToken(key: string): FieldDescriptor {
   const copy = THEME_TOKEN_COPY[key] ?? mechanicalCopy(key);
+  // 021 — the group is the app AREA the token relates to, not its type. Unplaced → sentinel (guard fails).
+  const group = areaForToken(key) ?? UNASSIGNED_AREA;
 
   if (key.startsWith('colours.')) {
-    return { key, label: copy.label, description: copy.description, group: 'Colours', control: 'colour' };
+    return { key, label: copy.label, description: copy.description, group, control: 'colour' };
   }
   if (key.startsWith('icons.')) {
-    return { key, label: copy.label, description: copy.description, group: 'Icons', control: 'icon' };
+    return { key, label: copy.label, description: copy.description, group, control: 'icon' };
   }
 
   // Fonts + typography roles share the same field inference.
   const field = lastSegment(key);
-  let group = 'Fonts';
-  if (key.startsWith('typography.')) {
-    const role = key.split('.')[1] ?? '';
-    group = `Typography: ${humanise(role)}`;
-  }
 
   let control: ControlKind;
   let allowedValues: readonly (string | number)[] | undefined;
@@ -135,14 +339,13 @@ export function descriptorForThemeToken(key: string): FieldDescriptor {
   // (6-96, step 1) while still rendering as a bare text box: the bounds were there, the control was
   // not, and only the forward half of the guard was watching.
   else if (field === 'sizePx' || field === 'baseSizePx') control = 'slider';
-  // A ROLE says BOLD OR NOT — a toggle, because that is the only distinction nearly every installed
-  // font can actually make. Asked for weight 500, a two-weight font renders regular, so 400, 500 and
-  // 600 all looked identical and the slider appeared to do nothing for two thirds of its travel.
-  //
-  // `fonts.weights.normal` / `.bold` stay numeric sliders on the real CSS 100-900 scale: they are what
-  // 'regular' and 'bold' MEAN, and the owner of a variable font can still tune them there — which is
-  // the one place the granularity is real.
-  else if (field === 'bold' && isRole) control = 'toggle';
+  // A ROLE's WEIGHT is a slider on the real CSS 100-900 scale (021). It was a boolean `bold` toggle,
+  // on the theory that a two-weight font makes 400/500/600 render identically — true, but that is the
+  // font's limit to expose, not ours to hide: a checkbox that could render a role LIGHTER than a
+  // sibling (when the theme's bold weight was set low) was a worse answer than a slider that says
+  // exactly what it will do. Unset → the role tracks `fonts.weights.normal`. `fonts.weights.normal` /
+  // `.bold` remain sliders on the same scale — the base weights every unset role inherits.
+  else if (field === 'weight' && isRole) control = 'slider';
   else if (field === 'normal' || field === 'bold') control = 'slider';
   else if (field === 'case') {
     control = 'enum';
@@ -176,7 +379,7 @@ export function descriptorForThemeToken(key: string): FieldDescriptor {
     ...(control === 'slider' && field === 'sizePx' ? { min: 6, max: roleSizeMax(key), step: 1 } : {}),
     ...(control === 'slider' && field === 'iconPx' ? { min: 10, max: 32, step: 1 } : {}),
     ...(control === 'slider' && field === 'scrollbarPx' ? { min: 6, max: 24, step: 1 } : {}),
-    ...(control === 'slider' && (field === 'normal' || field === 'bold')
+    ...(control === 'slider' && (field === 'normal' || field === 'bold' || field === 'weight')
       ? { min: 100, max: 900, step: 100 }
       : {}),
   };
@@ -221,9 +424,45 @@ export function themeEditableTokens(theme: Theme): string[] {
   return out;
 }
 
-/** Build the theme metadata registry from a theme's editable token set. */
+/**
+ * Build the theme metadata registry from a theme's editable token set, **ordered by area** (021,
+ * FR-004): descriptors are stably sorted by `(index of area in THEME_AREA_GROUPS, group string,
+ * original token order)`. So the renderer — which emits one section per group in registry order —
+ * shows General first, Icons last, `Editor` before `Editor · Syntax`, and tokens within an area in
+ * their theme-declared order. An unplaced token's sentinel area sorts to the end (rank = length).
+ */
+// Deliberate order among groups that share a parent area. Alphabetical is right everywhere EXCEPT the
+// button family: the desired order is the base typography subsection first, then Confirm, Cancel,
+// Destroy — not the alphabetical Cancel, Confirm, Destroy. A tiny explicit rank does that; every other
+// group keeps the alphabetical tie-break (so `Editor` still precedes `Editor · Syntax`, and the plain
+// `General` group still precedes `General · Buttons…`).
+const BUTTON_GROUP_ORDER: Readonly<Record<string, number>> = {
+  'General · Buttons': 0,
+  'General · Buttons · Confirm': 1,
+  'General · Buttons · Cancel': 2,
+  'General · Buttons · Destroy': 3,
+};
+function groupTieBreak(a: string, b: string): number {
+  const ra = BUTTON_GROUP_ORDER[a];
+  const rb = BUTTON_GROUP_ORDER[b];
+  if (ra !== undefined && rb !== undefined) return ra - rb;
+  return a.localeCompare(b);
+}
+
 export function buildThemeMetadata(theme: Theme): FieldDescriptor[] {
-  return themeEditableTokens(theme).map(descriptorForThemeToken);
+  const rank = (group: string): number => {
+    const i = THEME_AREA_GROUPS.indexOf(parentArea(group));
+    return i < 0 ? THEME_AREA_GROUPS.length : i;
+  };
+  return themeEditableTokens(theme)
+    .map((key, i) => ({ d: descriptorForThemeToken(key), i }))
+    .sort(
+      (a, b) =>
+        rank(a.d.group) - rank(b.d.group) ||
+        groupTieBreak(a.d.group, b.d.group) ||
+        a.i - b.i,
+    )
+    .map((x) => x.d);
 }
 
 export const THEME_METADATA: MetadataRegistry = buildThemeMetadata(THRONG_THEME);

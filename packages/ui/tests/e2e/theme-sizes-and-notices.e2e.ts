@@ -144,21 +144,23 @@ test('an ERROR notice has its own background, in every theme', async () => {
         const notice = win.getByTestId('project-error');
         await expect(notice).toBeVisible();
 
-        // It used to sit on `dialogSurface` — the same colour as every other card in the application —
+        // It used to sit on the ordinary card colour — the same as every other card in the application —
         // with a three-pixel red edge as its only claim on your attention. On a dark theme that is a
-        // hairline in the corner of a dark screen, which is not where "this failed" belongs.
+        // hairline in the corner of a dark screen, which is not where "this failed" belongs. (021 folded
+        // the old `dialogSurface` onto `surface`, so the ordinary card colour is now `surface`.)
         const measured = await win.evaluate(() => {
           const el = document.querySelector('[data-testid="project-error"]');
           const root = getComputedStyle(document.documentElement);
           return {
             background: el ? getComputedStyle(el).backgroundColor : '',
-            dialog: root.getPropertyValue('--throng-colour-dialogSurface').trim(),
+            card: root.getPropertyValue('--throng-colour-surface').trim(),
             errorSurface: root.getPropertyValue('--throng-colour-errorSurface').trim(),
           };
         });
         expect(measured.background).not.toBe('');
+        expect(measured.card).not.toBe('');
         // NOT the ordinary card colour.
-        expect(measured.background.replace(/\s/g, '')).not.toBe(measured.dialog.replace(/\s/g, ''));
+        expect(measured.background.replace(/\s/g, '')).not.toBe(measured.card.replace(/\s/g, ''));
         // Every bundled theme DERIVES one from its own danger colour and its own background, so none
         // of them is left with an error nobody can see.
         expect(measured.errorSurface).toMatch(/^#|rgb/);

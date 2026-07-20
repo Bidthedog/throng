@@ -139,11 +139,11 @@
   background: var(--throng-colour-editorStatusStripHover, #233047);
 }
 
-/* 018 / FR-001 — a POPOVER, so it takes the MENU surface, not the PANE one.
-   `surface` is the pane/panel body token. This picker is a floating list, which is what
-   `menuSurface` exists for: a theme author who darkens their panes should not find every popup in
-   the application darkening with them. The two ship the same colour today, which is precisely why
-   this went unnoticed — the split is a second dial, not a restyle. */
+/* 018 / FR-001 — a POPOVER, so it takes the ACTIVE (menu/dropdown) surface, not the PANE one.
+   `surface` is the pane/panel body token. This picker is a floating list, so it takes
+   `surfaceActive` — the card colour every menu/dropdown shares (021 / FR-023 folded the old
+   `menuSurface` back onto it): a theme author who darkens their panes should not find every popup in
+   the application darkening with them. */
 .language-picker {
   position: absolute;
   right: 4px;
@@ -153,16 +153,18 @@
   max-height: 260px;
   display: flex;
   flex-direction: column;
-  background: var(--throng-colour-menuSurface, #1b2230);
+  background: var(--throng-colour-surfaceActive, #222c3d);
   border: 1px solid var(--throng-colour-border, #2a3344);
   border-radius: 4px;
   box-shadow: 0 6px 18px rgb(0 0 0 / 35%);
 }
 
+/* The filter is a FORM FIELD, so it takes Field Surface like every other input (021 — controls use the
+   form-element styling, never a pane/app background). */
 .language-picker__filter {
   margin: 6px;
   padding: 4px 6px;
-  background: var(--throng-colour-appBg, #10131a);
+  background: var(--throng-colour-inputSurface, #1b2230);
   color: var(--throng-colour-text, #e6ebf2);
   border: 1px solid var(--throng-colour-border, #2a3344);
   border-radius: 3px;
@@ -188,14 +190,22 @@
   cursor: pointer;
 }
 
-/* A HOVER is not a SELECTION (018 / FR-001). `surfaceActive` says "this is the one you are on";
-   hovering a row you have not chosen says no such thing, and painting both the same is how the two
-   became one token in the first place. */
-.language-picker__item:hover {
-  background: var(--throng-colour-hoverSurface, #1b2230);
+/* 021 — every dropdown/menu shares ONE highlight: the hovered row takes the Menu Highlight (which
+   follows the open project's colour unless a theme pins it) and the text-on-highlight colour, exactly
+   as the context menu, the native <select> popup and the font picker do. The CURRENT language is still
+   marked separately by its accent-coloured, heavier text, so hover and selection stay distinguishable. */
+:where(body:not([data-window-blurred])) .language-picker__item:hover {
+  background: var(--throng-colour-menuItemHoverSurface, var(--accent, #6aa3ff));
+  color: var(--throng-colour-accentText, #06101f);
 }
 
 .language-picker__item--current {
   color: var(--throng-colour-accent, #6aa3ff);
   font-weight: 600;
+}
+
+/* Hover STILL wins over the current-marker's accent text — you must be able to read the row you are
+   pointing at against the highlight. */
+:where(body:not([data-window-blurred])) .language-picker__item--current:hover {
+  color: var(--throng-colour-accentText, #06101f);
 }

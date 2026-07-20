@@ -44,7 +44,12 @@ import { showEditorNotice } from './editor-notice-store.js';
 import { isMissingReason, showMissingFilesNotice } from './editor-missing-notice.js';
 import { buildFileChangedNotice } from './file-changed-notice.js';
 import { throngHighlighting } from './highlight-style.js';
-import { claimLanguage, languageCompartment, removePanelLanguage } from './editor-language.js';
+import {
+  claimLanguage,
+  functionHighlightCompartment,
+  languageCompartment,
+  removePanelLanguage,
+} from './editor-language.js';
 import { loadDocumentOverride, toRelPath } from './language-override.js';
 import { registerEditorView, unregisterEditorView } from './editor-views.js';
 import { DocumentReplica } from './document-replica.js';
@@ -665,6 +670,12 @@ export function useEditor(params: UseEditorParams): void {
           // tab is drawn. Re-decided whenever the file, its language, or the setting changes.
           indentCompartment.of(indentExtensions(currentIndent())),
           throngHighlighting,
+          // The legacy-language function-name overlay (021, #84 follow-up). Placed AFTER
+          // throngHighlighting on purpose: a lower-precedence mark decoration nests INSIDE the
+          // syntax-highlight span, so its inline colour paints the innermost element and wins over
+          // the `variableName` colour underneath. Empty until a legacy language is applied
+          // (`applyLanguage` reconfigures it); first-class grammars keep it empty.
+          functionHighlightCompartment.of([]),
           // In-panel find/replace (013): paints the match decorations. The bar drives
           // it through the controller registered below; CodeMirror's own search panel
           // is deliberately not used (its controls could not be theme-token driven).

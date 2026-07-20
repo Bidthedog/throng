@@ -8,6 +8,7 @@ import {
   type Ref,
 } from 'react';
 import { Icon } from '../common/icon.js';
+import { clampToViewport } from '../common/clamp-to-viewport.js';
 
 export interface MenuItem {
   label: string;
@@ -307,20 +308,21 @@ export function ContextMenu({
 
   // Keep the root menu fully on-screen (FR-089): when it would overflow the right
   // edge, open it to the LEFT of the cursor; when it would overflow the bottom,
-  // open it ABOVE the cursor — then clamp so no part is off-screen. Measured before
-  // paint (useLayoutEffect) so it never flashes off-screen.
+  // open it ABOVE the cursor — then clamp so no part is off-screen. The cursor is a
+  // POINT anchor (zero-size rect). Shared with the colour picker via clampToViewport
+  // (US11/FR-036). Measured before paint (useLayoutEffect) so it never flashes off-screen.
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: x, top: y });
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    let left = x + r.width > vw ? x - r.width : x; // flip left near the right edge
-    let top = y + r.height > vh ? y - r.height : y; // flip up near the bottom edge
-    left = Math.max(0, Math.min(left, vw - r.width));
-    top = Math.max(0, Math.min(top, vh - r.height));
-    setPos({ left, top });
+    setPos(
+      clampToViewport(
+        { left: x, top: y, right: x, bottom: y },
+        { width: r.width, height: r.height },
+        { width: window.innerWidth, height: window.innerHeight },
+      ),
+    );
   }, [x, y, items]);
 
   useEffect(() => {

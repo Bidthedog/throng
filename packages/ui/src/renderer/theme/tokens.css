@@ -23,18 +23,41 @@
    * These MUST be here. Before the split, the re-pointed rules read `var(--surface, #1a1f2b)` and
    * `var(--bg-panel)`, and `--bg-panel` itself carried a literal — so every one of them had a floor
    * to stand on before the provider's effect ran. The split replaced them with FALLBACK-FREE
-   * `var(--throng-colour-menuSurface)` and friends. Without a static value here, every menu, modal,
-   * input and find-bar renders with NO BACKGROUND AT ALL for the frames before the provider mounts,
-   * and the scrollbar rule is invalid so the engine's light-grey default paints instead.
+   * `var(--throng-colour-*Surface)` reads. Without a static value here, every menu, modal, input and
+   * find-bar renders with NO BACKGROUND AT ALL for the frames before the provider mounts, and the
+   * scrollbar rule is invalid so the engine's light-grey default paints instead.
+   *
+   * 021 (FR-023) folded the menu and dialog cards back onto `surfaceActive`/`surface`, so
+   * `menuSurface`/`dialogSurface` are gone from the token set and no longer need a floor here.
    *
    * The runtime values come from the active theme; these are just the floor. */
-  --throng-colour-menuSurface: #1e1f23;
   --throng-colour-inputSurface: #1e1f23;
   --throng-colour-hoverSurface: #1e1f23;
-  --throng-colour-dialogSurface: #1e1f23;
   --throng-colour-accentText: #06101f;
   --throng-colour-scrollbarTrack: #17181b;
   --throng-colour-scrollbarThumb: #34363c;
+
+  /* 021 (FR-027) — the three-type button model. Each text dialog/form button resolves to exactly one
+   * type and consumes only that type's six tokens; these are the pre-mount floor (the provider
+   * overwrites them from the active theme), matching the THRONG_THEME defaults. */
+  --throng-colour-confirmButtonBg: #6aa3ff;
+  --throng-colour-confirmButtonHoverBg: #6aa3ff;
+  --throng-colour-confirmButtonBorder: #6aa3ff;
+  --throng-colour-confirmButtonHoverBorder: #6aa3ff;
+  --throng-colour-confirmButtonText: #06101f;
+  --throng-colour-confirmButtonHoverText: #06101f;
+  --throng-colour-cancelButtonBg: #222c3d;
+  --throng-colour-cancelButtonHoverBg: #6aa3ff;
+  --throng-colour-cancelButtonBorder: #2a3344;
+  --throng-colour-cancelButtonHoverBorder: #2a3344;
+  --throng-colour-cancelButtonText: #e6ebf2;
+  --throng-colour-cancelButtonHoverText: #10131a;
+  --throng-colour-destroyButtonBg: #e5534b;
+  --throng-colour-destroyButtonHoverBg: #e5534b;
+  --throng-colour-destroyButtonBorder: #e5534b;
+  --throng-colour-destroyButtonHoverBorder: #e5534b;
+  --throng-colour-destroyButtonText: #ffffff;
+  --throng-colour-destroyButtonHoverText: #ffffff;
 
   /* fonts */
   --throng-font-family: 'Segoe UI', system-ui, sans-serif;

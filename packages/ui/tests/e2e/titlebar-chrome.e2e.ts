@@ -8,8 +8,10 @@ import { runApp } from './harness.js';
 /**
  * US1 (007 Phase A): the application-drawn title bar replaces the OS chrome — a
  * full-width bar above the panes bar with working window controls and a cog that
- * opens the single shared, always-on-top, movable preferences window on the
- * matching tab; the main + sub windows are non-interactive while it is open.
+ * opens the single shared, parented, movable preferences window on the matching
+ * tab. 021 made that window NON-MODAL: the main + sub windows stay INTERACTIVE while
+ * it is open (it floats above the main window rather than blocking it), so a theme
+ * can be edited and watched on the live application at once.
  */
 
 /** State of the earliest-created (main) window, read in the main process. */
@@ -88,17 +90,13 @@ test.afterAll(() => {
     rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
 });
 
-test('the cog dropdown menu follows the active theme — and a PRE-SPLIT theme keeps its look (018, FR-008)', async () => {
-  // A theme file carrying ONLY `surface`, `surfaceActive` and `accent` — i.e. a theme authored
-  // BEFORE the 018 surface split, which knows nothing of `menuSurface` or `menuItemHoverSurface`.
-  //
-  // This is the end-to-end proof of FR-008, and it is the reason this test is worth more after the
-  // split than before it. The menus MUST still paint in this theme's own colours. If the fallback
-  // had been written as a CSS `var(--throng-colour-menuSurface, var(--surface))` — which reads
-  // perfectly and is completely dead, because the emitter always defines the property — the user's
-  // hot-pink theme would sprout throng's default blue-grey menus, and this test is what catches it.
+test('the cog dropdown menu follows the active theme (018/021, FR-008/FR-023)', async () => {
+  // A theme file carrying `surface`, `surfaceActive` and `accent`. 021 (FR-023) folded the menu card
+  // onto `surfaceActive` (the old `menuSurface` is gone), so the cog dropdown — a shared context menu
+  // — paints on the theme's OWN `surfaceActive`. This is the end-to-end proof that the menu card
+  // follows the theme: the user's theme colours reach the menu, not a hardcoded default.
   const cfgRoot = seedThemeSurfaces('#ff00aa', '#00cc55', '#ffcc00');
-  const SURFACE = 'rgb(255, 0, 170)';
+  const SURFACE_ACTIVE = 'rgb(0, 204, 85)';
   const ACCENT = 'rgb(255, 204, 0)';
   await runApp(
     async (_app, win) => {
@@ -106,11 +104,10 @@ test('the cog dropdown menu follows the active theme — and a PRE-SPLIT theme k
       const menu = win.getByTestId('cog-menu');
       await expect(menu).toBeVisible();
 
-      // The menu panel resolves `menuSurface` — absent from this theme — through the split chain to
-      // the theme's OWN surface. Not a hardcoded #1a1f2b, and not throng's default either.
+      // The menu card resolves `surfaceActive` — the theme's own value, not throng's default.
       await expect
         .poll(() => menu.evaluate((el) => getComputedStyle(el).backgroundColor))
-        .toBe(SURFACE);
+        .toBe(SURFACE_ACTIVE);
 
       // A hovered item paints on the MENU HIGHLIGHT, which is carved out of `accent`.
       //
@@ -155,7 +152,7 @@ test('window controls maximise/restore (button + double-click) and minimise', as
   });
 });
 
-test('cog opens the single shared preferences window on the matching tab; app-modal + movable', async () => {
+test('cog opens the single shared preferences window on the matching tab; non-modal + movable', async () => {
   await runApp(async (app, win) => {
     // Settings → the prefs window opens on the Settings tab.
     await win.getByTestId('title-bar-cog').click();
@@ -167,10 +164,11 @@ test('cog opens the single shared preferences window on the matching tab; app-mo
     await expect(prefs.getByTestId('preferences-window')).toBeVisible();
     await expect(prefs.getByTestId('prefs-tab-settings')).toHaveAttribute('aria-selected', 'true');
 
-    // Exactly one preferences window; the main window is non-interactive but the
-    // preferences window remains movable (FR-013/014). Post-2026-07-08: the prefs
-    // window is PARENTED to the main window and is NOT globally always-on-top
-    // (FR-013 — above throng only, not above other OS apps).
+    // Exactly one preferences window; it is NON-MODAL (021) — the main window stays
+    // INTERACTIVE (enabled) so the app can be used while a theme is edited — yet the
+    // prefs window is PARENTED to the main window, which keeps it ABOVE the main window
+    // without being globally always-on-top (FR-013 — above throng only, not above other
+    // OS apps). It remains movable (FR-014).
     const modal = await app.evaluate(({ BrowserWindow }) => {
       const wins = BrowserWindow.getAllWindows().sort((a, b) => a.id - b.id);
       const [main, ...rest] = wins;
@@ -184,20 +182,20 @@ test('cog opens the single shared preferences window on the matching tab; app-mo
       };
     });
     expect(modal.windowCount).toBe(2);
-    expect(modal.mainEnabled).toBe(false);
+    expect(modal.mainEnabled).toBe(true); // 021: non-modal — the main window stays interactive
     expect(modal.prefsMovable).toBe(true);
-    expect(modal.prefsAlwaysOnTop).toBe(false); // FR-013: not globally on top
-    expect(modal.prefsParentIsMain).toBe(true); // FR-013: parented to the main window
+    expect(modal.prefsAlwaysOnTop).toBe(false); // FR-013: not globally on top; parenting keeps it above main
+    expect(modal.prefsParentIsMain).toBe(true); // FR-013: parented to the main window (floats above it)
 
-    // Re-invoking focuses the SAME window and switches its tab (FR-010/011). The
-    // main window is OS-disabled, but its renderer JS still runs, so drive it
-    // through the bridge directly.
+    // Re-invoking focuses the SAME window and switches its tab (FR-010/011). The main
+    // window is interactive now, but driving it through the bridge is still the most
+    // direct way to re-invoke regardless of which window holds focus.
     await win.evaluate(() => window.throng?.openPreferences?.('themes'));
     await expect(prefs.getByTestId('prefs-tab-themes')).toHaveAttribute('aria-selected', 'true');
     expect((await mainWindowState(app)).windowCount).toBe(2); // still one prefs window
 
-    // Closing preferences re-enables the main window and returns focus to it
-    // (FR-013a — no other-app window is left overlaying throng).
+    // Closing preferences returns focus to the main window (FR-013a — no other-app
+    // window is left overlaying throng). It was interactive throughout (non-modal).
     await prefs.getByTestId('window-close').click();
     await expect.poll(async () => (await mainWindowState(app)).windowCount).toBe(1);
     expect((await mainWindowState(app)).enabled).toBe(true);
@@ -215,7 +213,7 @@ test('cog opens the single shared preferences window on the matching tab; app-mo
 // NB: "minimise/restore together with the main window" (FR-013a) is delivered by
 // the native `parent` window relationship asserted above (prefsParentIsMain) — a
 // parented child minimises/returns with its parent at the OS level. It is not
-// re-asserted as a standalone E2E because programmatically minimising/restoring an
-// app-modal (disabled) main window is not deterministic under the Playwright/Electron
-// harness (the OS window-state round-trip doesn't fire reliably); the parenting that
-// produces the behaviour IS verified structurally.
+// re-asserted as a standalone E2E because programmatically minimising/restoring the
+// main window and observing the child follow is not deterministic under the
+// Playwright/Electron harness (the OS window-state round-trip doesn't fire reliably);
+// the parenting that produces the behaviour IS verified structurally.

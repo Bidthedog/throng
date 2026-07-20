@@ -16,8 +16,9 @@ test('window title shows active project · Tab · Panel (no path, no totals); st
   await runApp(async (app, win) => {
     await createProject(win, 'Titler', 'C:/code/titler');
 
-    // Title bar: "throng — Titler · Tab 1 · Panel 1" — no path, no totals, no admin.
-    await expect.poll(() => title(app), { timeout: 5000 }).toBe('throng — Titler · Tab 1 · Panel 1');
+    // Title bar (021 suffix form, FR-033): "Titler · Tab 1 · Panel 1 — throng" — no path, no totals,
+    // no admin, brand LAST.
+    await expect.poll(() => title(app), { timeout: 5000 }).toBe('Titler · Tab 1 · Panel 1 — throng');
     const t = await title(app);
     expect(t).not.toContain('(C:/code/titler)'); // path removed
     expect(t).not.toMatch(/\d+ (projects|tabs|panels)/); // totals removed
@@ -33,7 +34,10 @@ test('window title gains a [ADMIN] marker when elevated', async () => {
   await runApp(
     async (app) => {
       await expect.poll(() => title(app), { timeout: 5000 }).toContain('[ADMIN]');
-      expect(await title(app)).toContain('throng — No project');
+      // Suffix form (021): "No project [ADMIN] — throng" — [ADMIN] folded in before the brand suffix.
+      const t = await title(app);
+      expect(t).toContain('No project');
+      expect(t.endsWith(' — throng')).toBe(true);
     },
     { env: { THRONG_FAKE_ELEVATED: '1' } },
   );

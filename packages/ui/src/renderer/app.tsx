@@ -26,6 +26,8 @@ import { PanelRenameSync } from './workspace/panel-rename-sync.js';
 import { PanelDestroySync } from './workspace/panel-destroy-sync.js';
 import { PanelStateSync } from './workspace/panel-state-sync.js';
 import { useErrorNotice } from './common/notification.js';
+import { windowTitle } from './common/window-title.js';
+import { HoverSuppression } from './common/use-hover-suppression.js';
 import { AppClosePrompt } from './app-close-prompt.js';
 import { useResize } from './util/use-resize.js';
 import { ThemeProvider } from './theme/theme-provider.js';
@@ -65,7 +67,8 @@ function TitleManager(): null {
     const project = activeProject?.name ?? 'No project';
     const context = layout ? activeContextLabel(layout) : '';
     const label = [project, context].filter(Boolean).join(' · ');
-    window.throng?.setTitle?.(`throng — ${label}${elevated ? ' [ADMIN]' : ''}`);
+    // Fold [ADMIN] into the middle BEFORE the suffix, so the title still ends ` — throng`.
+    window.throng?.setTitle?.(windowTitle(`${label}${elevated ? ' [ADMIN]' : ''}`));
   }, [activeProject, layout, elevated]);
   return null;
 }
@@ -259,9 +262,9 @@ function AppTitleBar(): ReactElement {
   const { elevated } = useCapabilities();
   const project = activeProject?.name ?? 'No project';
   const context = layout ? activeContextLabel(layout) : '';
-  const identity = `throng — ${[project, context].filter(Boolean).join(' · ')}${
-    elevated ? ' [ADMIN]' : ''
-  }`;
+  const identity = windowTitle(
+    `${[project, context].filter(Boolean).join(' · ')}${elevated ? ' [ADMIN]' : ''}`,
+  );
   return <TitleBar identity={identity} colour={activeProject?.colour} showCog />;
 }
 
@@ -517,6 +520,7 @@ export function App(): ReactElement {
               )}
             </aside>
             <TitleManager />
+            <HoverSuppression />
             <PanelRenameSync />
             <PanelDestroySync />
             <PanelStateSync />

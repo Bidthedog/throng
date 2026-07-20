@@ -35,7 +35,9 @@
   line-height: 1;
 }
 
-.explorer-toolbar__btn:hover:not(:disabled) {
+/* :where(body:not([data-window-blurred])) gates the HOVER BACKGROUND on window focus (021/FR-035 —
+   no stranded hover while blurred). :where() adds zero specificity, so the cascade is unchanged. */
+:where(body:not([data-window-blurred])) .explorer-toolbar__btn:hover:not(:disabled) {
   background: var(--throng-colour-hoverSurface);
   color: var(--throng-colour-text);
 }
@@ -99,7 +101,7 @@
   user-select: none;
 }
 
-.tree-row:hover {
+:where(body:not([data-window-blurred])) .tree-row:hover {
   background: var(--throng-colour-hoverSurface);
 }
 
@@ -154,7 +156,7 @@ button.tree-twisty {
   line-height: 0;
 }
 
-button.tree-twisty:hover {
+:where(body:not([data-window-blurred])) button.tree-twisty:hover {
   /* The affordance is the accent-coloured chevron popping over the row's hover
      surface — accent is not a surface token, and the hover fill uses the hover
      token (FR-001: surfaceActive is reserved for selected/active). */

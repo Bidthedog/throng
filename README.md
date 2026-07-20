@@ -90,8 +90,11 @@ goal is to pull all of that into a single, simple customisable workspace.
   artwork drawn for the size being rendered.
 - **Preferences editor** — a single preferences window (floating above throng's own windows,
   minimising and restoring with the main window) with visual **Settings**, **Key Bindings**, and
-  **Themes** editors: type-matched controls, a **typeahead search** over Settings that matches any
-  typed word against a setting's name, description or current value (with an inline reset); a
+  **Themes** editors: type-matched controls, with the Themes editor's tokens **grouped by the area of
+  the app they colour** (General, Editor, Terminal, File Explorer…, syntax colours under an
+  *Editor · Syntax* sub-group, icons last); a **typeahead search** across Settings and Themes that
+  matches any typed word against a field's name, description, current value **or its section name** —
+  so typing a section name returns everything in that section (with an inline reset); a
   press-to-capture shortcut binder that **adds** multiple chords per action (any single non-reserved
   key allowed), each chord a deletable pill; colour / size / icon pickers and a **multi-select
   font-family pill** editor; a **global UI⇄JSON toggle** (edit the raw file in the built-in code
@@ -107,8 +110,9 @@ goal is to pull all of that into a single, simple customisable workspace.
   what you are consenting to) and a *notification* (transient, non-blocking, dismissable, where
   severity governs persistence — an error waits for you, a success clears itself). Nothing else.
 - **Themed everywhere** — the colour picker is drawn from theme tokens rather than the operating
-  system's dialog; menus, inputs, hovers, dialogs and scrollbars each have their own theme token
-  instead of sharing one; numeric settings with a sensible range get sliders; and switching theme
+  system's dialog; inputs, hovers and scrollbars each have their own theme token, menus and dialogs
+  share the active- and panel-surface tokens, and text buttons come in three themeable types
+  (confirm, cancel, destroy); numeric settings with a sensible range get sliders; and switching theme
   repaints every surface with nothing left behind.
 - **Reset controls** — four clearly separated scopes, all reading the same shipped-defaults record,
   so there is exactly one answer to "what did this ship as":

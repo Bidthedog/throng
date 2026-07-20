@@ -23,7 +23,7 @@ they keep running when the window closes — stop it with `Ctrl+C` when you're d
 ## First launch
 
 throng opens centred on your main display, with an application-drawn title bar reading
-**"throng — No project"**. The window is three panes:
+**"No project — throng"** (every window's title takes the ` — throng` suffix). The window is three panes:
 
 | Pane | What it holds |
 |---|---|
@@ -147,7 +147,9 @@ They're listed under Projects in the sidebar, where **⧉** opens and **✕** de
 ## 7. Make it yours
 
 Click the **cog** in the title bar and choose **Settings**, **Key Bindings** or **Themes**. All
-three are tabs of one preferences window that floats above throng and minimises with it.
+three are tabs of one preferences window that floats above throng and minimises with it. It stays
+on top but **does not block the app** — keep using throng while you edit a theme and watch each
+change land live.
 
 **Changes apply immediately — there is no Save button and no restart.** Toggles and dropdowns
 apply at once; typed values apply a moment after you stop typing.

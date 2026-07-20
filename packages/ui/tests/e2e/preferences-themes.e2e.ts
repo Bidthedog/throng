@@ -209,31 +209,31 @@ test('an existing comma stack loads back as ordered pills (H4, FR-038b)', async 
   );
 });
 
-test('button colour + font tokens appear in the editor and apply live to buttons (H5, FR-046a)', async () => {
+test('the three-type button tokens appear in the editor and apply live (021, US7, FR-027)', async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
-      // The four button colour tokens are exposed as colour controls; the button
-      // typography role exposes the (pill) font control.
-      await expect(prefs.getByTestId('control-colours.buttonBg-hex')).toBeVisible();
-      await expect(prefs.getByTestId('control-colours.buttonHoverBg-hex')).toBeVisible();
+      // The three button TYPES each expose their six colour tokens; the button typography role
+      // exposes the (pill) font control. Spot one representative colour token from each type.
+      await expect(prefs.getByTestId('control-colours.confirmButtonBg-hex')).toBeVisible();
+      await expect(prefs.getByTestId('control-colours.cancelButtonBg-hex')).toBeVisible();
+      await expect(prefs.getByTestId('control-colours.destroyButtonBg-hex')).toBeVisible();
       await expect(prefs.getByTestId('control-typography.button.family')).toBeVisible();
 
-      // Edit buttonBg → saved + reflected in the live CSS var + a real button.
-      await prefs.getByTestId('control-colours.buttonBg-hex').fill('#123456');
-      await expect.poll(() => readTheme(cfgRoot, 'throng')?.colours?.buttonBg).toBe('#123456');
+      // Edit confirmButtonBg → saved + reflected in the live CSS var. (The live BUTTON render across
+      // all three types, rest + hover, is proven end-to-end in theme-buttons.e2e.ts.)
+      await prefs.getByTestId('control-colours.confirmButtonBg-hex').fill('#123456');
+      await expect.poll(() => readTheme(cfgRoot, 'throng')?.colours?.confirmButtonBg).toBe('#123456');
       await expect
         .poll(() =>
           prefs.evaluate(() =>
-            getComputedStyle(document.documentElement).getPropertyValue('--throng-colour-buttonBg').trim(),
+            getComputedStyle(document.documentElement)
+              .getPropertyValue('--throng-colour-confirmButtonBg')
+              .trim(),
           ),
         )
         .toBe('#123456');
-      // A real .prefs-toolbtn now renders with the button background.
-      await expect
-        .poll(() => prefs.getByTestId('prefs-mode-toggle').evaluate((el) => getComputedStyle(el).backgroundColor))
-        .toBe('rgb(18, 52, 86)');
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );

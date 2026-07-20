@@ -1,6 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_THEMES, ALL_DEFAULT_THEMES } from '../../src/config/default-themes/index.js';
 import { THRONG_THEME } from '../../src/config/theme.js';
+import PRE_REFACTOR from './fixtures/pre-refactor-theme-colours.json';
+
+const REMOVED_TOKENS = ['menuSurface', 'dialogSurface', 'buttonBg', 'buttonText', 'buttonHoverBg', 'buttonHoverText'];
+const BUTTON_TOKENS = ['confirm', 'cancel', 'destroy'].flatMap((t) =>
+  ['Bg', 'HoverBg', 'Border', 'HoverBorder', 'Text', 'HoverText'].map((v) => `${t}Button${v}`),
+);
+/** 56 pre-refactor − 6 removed + 18 typed button tokens = 68; follow-up dropped `activePaneHighlight`
+ *  (consolidated onto `activePanelBorder`) → 67 (D1). */
+const EXPECTED_COLOUR_TOKEN_COUNT = 67;
+/** Tokens removed AFTER the fixture was captured — stripped from the fixture before non-drift compare. */
+const REMOVED_SINCE_FIXTURE = ['activePaneHighlight'];
 
 const EXPECTED = [
   'Light',
@@ -47,12 +58,48 @@ describe('DEFAULT_THEMES (FR-044/046, SC-007)', () => {
     }
   });
 
-  it('every default theme populates the button style tokens (H5, FR-046a)', () => {
+  it('every default theme populates the 18 typed button tokens and drops the 6 removed (021, US7)', () => {
     for (const [name, theme] of Object.entries(DEFAULT_THEMES)) {
-      for (const token of ['buttonBg', 'buttonText', 'buttonHoverBg', 'buttonHoverText']) {
+      for (const token of BUTTON_TOKENS) {
         expect(theme.colours[token], `${name}.colours.${token}`).toBeTruthy();
       }
+      for (const token of REMOVED_TOKENS) {
+        expect(theme.colours[token], `${name}.colours.${token} must be removed`).toBeUndefined();
+      }
       expect(theme.typography?.button, `${name}.typography.button`).toBeDefined();
+    }
+  });
+
+  it('every bundled theme carries the sizes baseline so per-token Reset has a shipped value (#130 follow-up)', () => {
+    // `sizes.iconPx` / `sizes.scrollbarPx` are concrete measurements with concrete defaults. Left off
+    // the theme, the Themes editor's Reset had no shipped leaf to compare against or restore, so it was
+    // permanently disabled on every bundled theme (it only worked on `throng`, which carries the block).
+    // The values are throng's own, so no theme renders differently — this is purely a reset baseline.
+    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
+      expect(theme.sizes?.iconPx, `${name}.sizes.iconPx`).toBe(THRONG_THEME.sizes?.iconPx);
+      expect(theme.sizes?.scrollbarPx, `${name}.sizes.scrollbarPx`).toBe(THRONG_THEME.sizes?.scrollbarPx);
+    }
+  });
+
+  it('THRONG_THEME.colours has exactly the expected token count (D1 — no silent drift)', () => {
+    expect(Object.keys(THRONG_THEME.colours)).toHaveLength(EXPECTED_COLOUR_TOKEN_COUNT);
+    for (const token of BUTTON_TOKENS) expect(THRONG_THEME.colours[token], token).toBeTruthy();
+    for (const token of REMOVED_TOKENS) expect(THRONG_THEME.colours[token], token).toBeUndefined();
+  });
+
+  it('(SC-006′, F2) non-drift: every surviving token keeps its exact pre-refactor value', () => {
+    // The ONLY colour changes are the deliberate button derivations. Every other token — across all 15
+    // bundled themes — is byte-identical to its pre-refactor value (captured in the fixture).
+    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
+      const expected = { ...(PRE_REFACTOR as Record<string, Record<string, string>>)[name] };
+      expect(expected, `fixture missing ${name}`).toBeDefined();
+      // Tokens removed since the fixture was captured are not part of the non-drift guarantee.
+      for (const k of REMOVED_SINCE_FIXTURE) delete expected[k];
+      const surviving: Record<string, string> = {};
+      for (const [k, v] of Object.entries(theme.colours)) {
+        if (!BUTTON_TOKENS.includes(k)) surviving[k] = v;
+      }
+      expect(surviving, `${name} surviving colours drifted`).toEqual(expected);
     }
   });
 
