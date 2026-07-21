@@ -47,7 +47,7 @@ import { ensureDaemon } from './daemon-lifecycle.js';
 import { DaemonRpcError, type DaemonClient } from './daemon-client.js';
 import { ElectronDisplayInfo } from './electron-display-info.js';
 import { loadWindowState, saveWindowState } from './window-state.js';
-import { registerGhostIpc, setGhostTheme } from './ghost-window.js';
+import { registerGhostIpc, setGhostTheme, disposeGhost } from './ghost-window.js';
 import { WindowManager } from './window-manager.js';
 import { NodeFileSystem } from './node-file-system.js';
 import { resolvePickerDefaultPath } from './pick-folder.js';
@@ -824,6 +824,14 @@ if (isPrimaryInstance)
   const windowManager = new WindowManager();
   const mainWindow = await createMainWindow(settings, displayInfo, statePath, themeBackground());
   windowManager.registerMain(mainWindow);
+  // When the main window is gone, tear down the drag ghost (#110). The ghost is a real
+  // BrowserWindow loaded once and only HIDDEN between drags, so after any drag it outlives
+  // every real window and — being hidden, not closed — keeps `window-all-closed` from firing,
+  // so `app.quit()` (below) is never reached and the process lingers. `will-quit`/`before-quit`
+  // cannot host this: they are downstream of the quit that the live ghost prevents. Disposing on
+  // the main window's `closed` (its children are closed by the WindowManager on the same event)
+  // lets the last window's close actually end the app.
+  mainWindow.on('closed', () => disposeGhost());
   // Now the main window exists, the About menu can parent to it (see the nullable
   // ref above — set here so a menu click before this point opens About unparented
   // rather than crashing on the not-yet-initialised `const mainWindow`).

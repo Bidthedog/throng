@@ -177,6 +177,27 @@ function stopGhost(): void {
   if (ghost && !ghost.isDestroyed()) ghost.hide();
 }
 
+/**
+ * Destroy the persistent ghost window and stop its poll timer (#110).
+ *
+ * The ghost is loaded ONCE and merely HIDDEN between drags (see {@link stopGhost} and the file
+ * header), so once a session has performed a single drag the ghost lives on — a real, hidden
+ * `BrowserWindow` that nothing ever closes. A hidden window is not a CLOSED window, so it keeps
+ * `getAllWindows()` non-empty and `app`'s `window-all-closed` from ever firing: after any drag the
+ * app never reaches `app.quit()` and the process lingers in Task Manager. This is the one place the
+ * ghost is torn down; call it when the app is shutting down (the main window's `closed`) so the last
+ * real window closing can actually end the app. Idempotent, and the next drag lazily recreates it.
+ */
+export function disposeGhost(): void {
+  if (timer) {
+    clearInterval(timer);
+    timer = null;
+  }
+  if (ghost && !ghost.isDestroyed()) ghost.destroy();
+  ghost = null;
+  ghostReady = Promise.resolve();
+}
+
 /** Wire the drag-ghost IPC. Call once at app startup. */
 export function registerGhostIpc(): void {
   ipcMain.on('throng:ghost:start', (_event, payload: GhostPayload) => {

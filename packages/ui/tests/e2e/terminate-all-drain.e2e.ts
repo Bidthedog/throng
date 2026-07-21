@@ -903,6 +903,64 @@ test('#86 FR-011: an ORDINARY close after a DRAG still closes promptly — the g
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// #110: the PROCESS, not the window. The test above deliberately measured the window close and
+// noted (`:876`) that the app's process outliving it is a *separate* defect — the hidden ghost
+// keeps `window-all-closed` from firing, so `app.quit()` is never reached and throng lingers in
+// Task Manager after every session that contained a single drag. This measures exactly that:
+// after a drag, an ORDINARY close must let the process exit on its own.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+test('#110: after a DRAG, an ordinary close lets the PROCESS exit — the hidden ghost must not keep it alive', async () => {
+  skipIfElevated();
+  const root = makeProject();
+  const dataDir = mkdtempSync(join(tmpdir(), 'throng-gex-data-'));
+  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-gex-user-'));
+  try {
+    await runApp(
+      async (app, win) => {
+        await createProject(win, 'GhostExit', root);
+        const pid = await firstPanelId(win);
+
+        // The gesture that opens the mute, hidden ghost window for the rest of the session.
+        await dragPanelOnce(app, win, pid);
+        expect(
+          await app.evaluate(ghostExists),
+          'the drag must leave a ghost window alive and hidden, or this test proves nothing',
+        ).toBe(true);
+
+        // Let the drag's own layout write settle so a write riding the shutdown cannot be what
+        // holds (or releases) the process — this test is about the ghost, not about a pending write.
+        await win.waitForTimeout(1500);
+
+        // Watch the ELECTRON PROCESS, not a window. #110 is precisely that the process survives
+        // every window: with the ghost alive, `window-all-closed` never fires and `app.quit()` is
+        // never called, so the process never exits.
+        const proc = app.process();
+        const exited = new Promise<boolean>((resolve) => proc.once('exit', () => resolve(true)));
+
+        // Prefetch the handle (a CDP round-trip) before starting the close.
+        const mainHandle = await app.browserWindow(win);
+        await mainHandle.evaluate((w) => w.close()); // the ORDINARY close path (no terminals → no prompt)
+
+        const didExit = await Promise.race([
+          exited,
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 15_000)),
+        ]);
+        expect(
+          didExit,
+          'the app process must exit on its own after an ordinary close, even with a drag ghost alive (#110)',
+        ).toBe(true);
+      },
+      { dataDir, userDataDir },
+    );
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // AC4 / SC-005 claim the override survives EITHER exit. Only Terminate All was ever measured
 // (`:182`). This measures the other one, and is expected GREEN on the first run: the mechanism
 // says it cannot fail. If it is ever RED, #86 is wider than it was reproduced to be.
