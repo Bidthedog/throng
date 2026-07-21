@@ -22,6 +22,7 @@ import { useWorkspace } from '../state/workspace-store.js';
 import { useServices } from '../composition-root.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useEditorDirty } from '../editor/editor-state.js';
+import { disposeEditor } from '../editor/use-editor.js';
 import { useDetach } from './detach-context.js';
 import { useSubWorkspaceWindow } from './subworkspace-window-context.js';
 import { destroySubWorkspace } from './destroy-sub-workspace.js';
@@ -468,6 +469,24 @@ export function TabGroup(): ReactElement {
     }
   };
 
+  // Tear down the editor documents a Tab destroy removes for good. Their state lives
+  // in UI-main keyed by panelId — the one-buffer registry, the machine-wide dirty-file
+  // lock and the recovery temp — and DELIBERATELY survives a panel unmount (a document
+  // moved between tabs/windows must not be destroyed, use-editor.ts:918-931). So a Tab
+  // destroy, which drops the panels for good, has to dispose them itself exactly as a
+  // Panel destroy does (panel-placeholder.tsx:268); `ws.closeTab` is a pure layout op
+  // and never would. Without this the file stays "open" forever and can never be
+  // reopened in another editor until the daemon restarts (issue #145). `killsSession`
+  // mirrors the Panel path: a LOCAL destroy of a *synced* project editor in a
+  // sub-workspace keeps the document alive in the project (FR-006a / FR-021).
+  const releaseTabEditors = (tab: Tab): void => {
+    const inSubWorkspace = subWin !== null;
+    for (const p of collectPanels(tab.root)) {
+      const killsSession = !inSubWorkspace || p.originProjectId === layout.projectId;
+      if (p.kind === 'editor' && killsSession) disposeEditor(p.id);
+    }
+  };
+
   const confirmCloseTab = async (tabId: string): Promise<void> => {
     const tab = layout.tabs.find((t) => t.id === tabId);
     if (!tab) return;
@@ -515,6 +534,7 @@ export function TabGroup(): ReactElement {
       });
       if (!sure) return;
     }
+    releaseTabEditors(tab);
     ws.closeTab(tabId);
   };
 
@@ -543,6 +563,7 @@ export function TabGroup(): ReactElement {
       });
       if (!sure) return;
     }
+    for (const t of others) releaseTabEditors(t);
     ws.closeOtherTabs(tabId);
   };
 
