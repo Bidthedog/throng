@@ -1,9 +1,12 @@
 /**
  * WindowManager (US7 / Constitution XI): tracks the main window plus detached
- * sub-workspace windows as a single focus/raise group. Focusing any window raises
- * the whole group to the foreground together (shared effective Z-order) WITHOUT
- * changing each window's minimise state (minimise/restore stay independent).
- * Closing the main window closes all sub-workspace windows (application exit).
+ * sub-workspace windows. Every window is an INDEPENDENT top-level window (issue
+ * #138): focusing any of them — main or sub-workspace — raises ONLY that window
+ * and leaves every other window's Z-order untouched. Neither direction drags the
+ * other forward: focusing a sub-workspace never raises the main window, and
+ * focusing the main window never raises the sub-workspaces. Raising never changes
+ * a window's minimise state (minimise/restore stay independent). Closing the main
+ * window still closes all sub-workspace windows (application exit).
  *
  * Decoupled from Electron via {@link ManagedWindow} so it is unit-testable; the
  * real impl passes Electron BrowserWindows (which satisfy the interface).
@@ -18,17 +21,17 @@ export interface ManagedWindow {
 }
 
 export class WindowManager {
-  private main: ManagedWindow | null = null;
   private readonly children = new Map<string, ManagedWindow>();
   private raising = false;
   // Child ids most-recently-focused first → the visual top-to-bottom order, used
   // to resolve which overlapping window is under the cursor (drop hit-test).
   private recentFocus: string[] = [];
 
-  /** Register the main window: focusing raises the group; closing closes all children. */
+  /** Register the main window: focusing raises only it; closing closes all children. */
   registerMain(win: ManagedWindow): void {
-    this.main = win;
-    win.on('focus', () => this.raiseGroup(win));
+    // The main window is independent too — focusing it must not drag the
+    // sub-workspace windows forward (issue #138).
+    win.on('focus', () => this.raiseOne(win));
     win.on('closed', () => this.closeChildren());
   }
 
@@ -38,7 +41,9 @@ export class WindowManager {
     this.recentFocus = [id, ...this.recentFocus.filter((x) => x !== id)];
     win.on('focus', () => {
       this.recentFocus = [id, ...this.recentFocus.filter((x) => x !== id)];
-      this.raiseGroup(win);
+      // A sub-workspace window is independent: raise only itself, never the main
+      // window or its siblings (issue #138).
+      this.raiseOne(win);
     });
     win.on('closed', () => {
       this.children.delete(id);
@@ -72,21 +77,15 @@ export class WindowManager {
   }
 
   /**
-   * Bring the whole group forward together, preserving each window's minimise
-   * state. The `focused` window (if any) is raised **last** so it ends up on top
-   * of the group — a sub-workspace is only above the main window while it has
-   * focus, not permanently "always on top".
+   * Raise a single window to the top of the Z-order without focusing, un-minimising
+   * or disturbing any other window (issue #138). The re-entry guard stops a
+   * `moveTop`-triggered focus event from recursing.
    */
-  raiseGroup(focused?: ManagedWindow): void {
+  raiseOne(win: ManagedWindow): void {
     if (this.raising) return; // guard against focus events fired while raising
     this.raising = true;
     try {
-      const raisable = (win: ManagedWindow): boolean => !win.isDestroyed() && !win.isMinimized();
-      for (const win of this.allWindows()) {
-        if (win !== focused && raisable(win)) win.moveTop();
-      }
-      // Raise the focused window last so it sits at the very top of the group.
-      if (focused && raisable(focused)) focused.moveTop();
+      if (!win.isDestroyed() && !win.isMinimized()) win.moveTop();
     } finally {
       this.raising = false;
     }
@@ -98,10 +97,5 @@ export class WindowManager {
       if (!win.isDestroyed()) win.close();
     }
     this.children.clear();
-  }
-
-  private *allWindows(): IterableIterator<ManagedWindow> {
-    if (this.main && !this.main.isDestroyed()) yield this.main;
-    yield* this.children.values();
   }
 }
