@@ -34,6 +34,7 @@ import { useEditorState } from '../editor/editor-state.js';
 import { setLastActiveEditor } from '../editor/last-active-editor.js';
 import { getEditorActions } from '../editor/editor-actions.js';
 import { disposeEditor } from '../editor/use-editor.js';
+import { clearTerminalViewState } from '../terminal/terminal-view-state.js';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
 
 const EDGES: Edge[] = ['top', 'right', 'bottom', 'left'];
@@ -209,6 +210,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
       if (!ok) return;
       if (killsSession && panelHasLiveTerminal(panel.id)) {
         void window.throng?.terminal?.kill?.(panel.id);
+        clearTerminalViewState(panel.id); // the session is gone — don't leak its saved scroll/selection
       }
       await destroySubWorkspace(services.subWorkspaces, subWin.id);
       return;

@@ -17,6 +17,7 @@ import {
 } from '../search/terminal-search.js';
 import type { SearchCount } from '../search/search-model.js';
 import { shouldDropScrollback } from './clear-detect.js';
+import { saveTerminalViewState, takeTerminalViewState } from './terminal-view-state.js';
 import { parseOsc52 } from './osc52.js';
 import { TerminalOutputGate } from './output-gate.js';
 import { consumeExplicitRetype } from './explicit-retype.js';
@@ -438,6 +439,30 @@ export function useTerminal(opts: UseTerminalOptions): void {
         // Scrollback is applied — open the gate and flush any live output that
         // arrived during the attach window, in order, after the backlog.
         for (const chunk of gate.release()) writeChunk(chunk);
+        // Restore the scroll offset + selection the user left before this view was
+        // torn down (issue 144, follow-up). Deferred behind an empty write so it runs
+        // AFTER the replayed backlog has been parsed (xterm writes are async), and
+        // measured from the buffer bottom so live output that grew the scrollback
+        // while detached doesn't throw the position off.
+        const savedTerminalView = takeTerminalViewState(panelId);
+        if (savedTerminalView) {
+          term.write('', () => {
+            if (disposed) return;
+            const buffer = term.buffer.active;
+            if (savedTerminalView.offsetFromBottom > 0) {
+              term.scrollToLine(Math.max(0, buffer.baseY - savedTerminalView.offsetFromBottom));
+            }
+            const sel = savedTerminalView.selection;
+            if (sel) {
+              // getSelectionPosition() is 1-based; select()/selectLines() are 0-based.
+              if (sel.start.y === sel.end.y) {
+                term.select(sel.start.x - 1, sel.start.y - 1, Math.max(1, sel.end.x - sel.start.x));
+              } else {
+                term.selectLines(sel.start.y - 1, sel.end.y - 1);
+              }
+            }
+          });
+        }
         if (res.status === 'exited') {
           onExitRef.current({ code: res.exit?.code ?? null, unexpected: true });
         } else {
@@ -511,6 +536,14 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // cleanup is backstopped by the main process (FR-008a).
       void bridge.detach?.(panelId, viewId);
       cleanupSearch?.();
+      // Remember the scroll offset + selection before the xterm is disposed, so the
+      // next mount of this terminal (tab/panel/project switch) can restore them
+      // (issue 144, follow-up). Offset is measured from the buffer bottom.
+      const activeBuffer = term.buffer.active;
+      saveTerminalViewState(panelId, {
+        offsetFromBottom: Math.max(0, activeBuffer.baseY - activeBuffer.viewportY),
+        selection: term.getSelectionPosition() ?? undefined,
+      });
       term.dispose();
       termRef.current = null;
       if (opts.apiRef) opts.apiRef.current = null;

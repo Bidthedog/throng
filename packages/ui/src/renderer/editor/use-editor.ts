@@ -14,6 +14,7 @@ import { defaultKeymap } from '@codemirror/commands';
 import {
   columnSelectHeld,
   DEFAULT_BINDING_PLATFORM,
+  effectiveActivePanelId,
   effectiveIndent,
   inferIndent,
   PLAIN_TEXT_ID,
@@ -52,6 +53,12 @@ import {
 } from './editor-language.js';
 import { loadDocumentOverride, toRelPath } from './language-override.js';
 import { registerEditorView, unregisterEditorView } from './editor-views.js';
+import {
+  clampSelection,
+  clearEditorViewState,
+  saveEditorViewState,
+  takeEditorViewState,
+} from './editor-view-state.js';
 import { DocumentReplica } from './document-replica.js';
 import {
   columnBlockField,
@@ -106,6 +113,9 @@ export interface UseEditorParams {
   /** Origin project id (undefined for sub-workspace-owned). */
   ownerProjectId?: string;
   container: HTMLDivElement | null;
+  /** Called once the document's content has been adopted into the view, so the panel
+   *  can drop its loading skeleton (issue 132 follow-up). */
+  onReady?: () => void;
 }
 
 const win = (): typeof window.throng | undefined => window.throng;
@@ -155,6 +165,8 @@ function commandsFor(deps: {
 
 export function useEditor(params: UseEditorParams): void {
   const { panel, tabId, projectRoot, rootless, ownerProjectId, container } = params;
+  const onReadyRef = useRef(params.onReady);
+  onReadyRef.current = params.onReady;
   const ws = useWorkspace();
   const { projects } = useProjects();
   const settings = useAppSettings().editor;
@@ -171,6 +183,16 @@ export function useEditor(params: UseEditorParams): void {
   metaRef.current = { projectRoot, rootless, ownerProjectId, tabId, projects, settings, title: panel.title, tabTitle, documents };
 
   const viewRef = useRef<EditorView | null>(null);
+  // The document position to scroll back to the top on this mount (issue #144). Held so
+  // it can be RE-asserted after the async language/indent reconfigure, which re-renders
+  // and would otherwise drop the restored viewport back to the top.
+  const pendingScrollAnchorRef = useRef<number | null>(null);
+  // Whether this panel is the active panel of the active tab — read through a ref so
+  // the (async) initialise can take keyboard focus on mount only when it should (#144).
+  const activeTab = ws.layout?.tabs.find((t) => t.id === tabId);
+  const isActivePanelRef = useRef(false);
+  isActivePanelRef.current =
+    ws.layout?.activeTabId === tabId && !!activeTab && effectiveActivePanelId(activeTab) === panel.id;
   const configRef = useRef<EditorPanelConfig>((panel.config ?? {}) as EditorPanelConfig);
   const keybindingsRef = useRef(keybindings);
   keybindingsRef.current = keybindings;
@@ -384,7 +406,18 @@ export function useEditor(params: UseEditorParams): void {
     }).then(() => {
       // The language decides the indentation when the file itself has none to read, so the two are
       // resolved together — not in two effects that could disagree for a frame.
-      if (isCurrent()) refreshIndent();
+      if (!isCurrent()) return;
+      refreshIndent();
+      // Re-assert a pending restored scroll AFTER the language + indent reconfigure
+      // (issue #144). Those reconfigures re-render a frame after `initialise` scrolled the
+      // viewport and would otherwise drop it back to the top. Doc-position based, so
+      // re-applying is idempotent. One-shot: cleared so a later user-driven language
+      // change does not yank the viewport.
+      const anchor = pendingScrollAnchorRef.current;
+      if (anchor != null && anchor <= view.state.doc.length) {
+        pendingScrollAnchorRef.current = null;
+        view.dispatch({ effects: EditorView.scrollIntoView(anchor, { y: 'start' }) });
+      }
     });
   };
 
@@ -711,6 +744,17 @@ export function useEditor(params: UseEditorParams): void {
       }),
     });
     viewRef.current = view;
+    // Track the first visible line's DOCUMENT position so the scroll can be persisted on
+    // unmount (issue #144). Reading `scrollDOM.scrollTop` in the unmount cleanup can come
+    // back 0 (the element is being torn out of layout), so keep the last scrolled anchor
+    // here instead — and as a document position, not a pixel offset, so it restores
+    // through CodeMirror's own scroll machinery (see editor-view-state.ts).
+    let lastScrollAnchor = 0;
+    const onScroll = (): void => {
+      const v = viewRef.current;
+      if (v) lastScrollAnchor = v.lineBlockAtHeight(v.scrollDOM.scrollTop).from;
+    };
+    view.scrollDOM.addEventListener('scroll', onScroll, { passive: true });
     // The status strip and the language picker live OUTSIDE this view and must be able to
     // reconfigure it when the user picks a language (016).
     registerEditorView(panelId, view);
@@ -833,10 +877,30 @@ export function useEditor(params: UseEditorParams): void {
       if (cancelled) return;
       replica.reset(state.version);
       dirtyRef.current = state.dirty;
+      // Restore the caret/selection the user left when this document was last shown
+      // here (issue #144). Clamped to the incoming text so a document that changed on
+      // disk between unmount and remount cannot point the selection out of bounds.
+      const savedView = takeEditorViewState(panelId);
+      const restoredSelection = savedView
+        ? clampSelection(savedView.selection, state.text.length)
+        : undefined;
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: state.text },
+        ...(restoredSelection ? { selection: EditorSelection.fromJSON(restoredSelection) } : {}),
         annotations: fromAuthority.of(true),
       });
+      // Restore the scroll position (issue #144) by scrolling the line that was at the
+      // top back to the top, THROUGH CodeMirror's own scroll machinery — so its
+      // virtualised viewport re-renders to match (a raw `scrollDOM.scrollTop` write moves
+      // the scroller but leaves CodeMirror rendering the old lines). Its own transaction,
+      // so the effect's document position is clipped against the now-full document rather
+      // than the still-empty pre-insert one. Stashed so `refreshLanguage` re-asserts it
+      // after its async reconfigure, which would otherwise drop the viewport.
+      if (savedView && savedView.scrollAnchor > 0) {
+        const anchor = Math.min(savedView.scrollAnchor, state.text.length);
+        pendingScrollAnchorRef.current = anchor;
+        view.dispatch({ effects: EditorView.scrollIntoView(anchor, { y: 'start' }) });
+      }
       ready = true;
       for (const msg of queued.splice(0)) {
         if (msg.change && msg.change.version > state.version) applyChange(msg.change);
@@ -845,6 +909,16 @@ export function useEditor(params: UseEditorParams): void {
       publishState();
       reinferIndent(state.text); // what does THIS file already do? (FR-018a)
       refreshLanguage(); // the document's identity is now known — highlight it
+      onReadyRef.current?.(); // content adopted — the panel can drop its loading skeleton
+      // When RESTORING a previously-shown editor (a project/tab switch: it was unmounted
+      // and now remounts with saved view state), take keyboard focus so the restored
+      // caret is live (issue #144) — nothing else routes DOM focus into a programmatic
+      // remount. Gated on `savedView` so this fires ONLY on a restore: a FRESH open (e.g.
+      // single-clicking a file in the tree) has no saved state, and there the tree must
+      // keep focus so F2-rename still reaches it (an editor open does not move DOM focus).
+      // Also gated on being the active panel so a background tab / inactive split never
+      // steals focus.
+      if (savedView && isActivePanelRef.current) view.focus();
     };
 
     void (async () => {
@@ -917,6 +991,13 @@ export function useEditor(params: UseEditorParams): void {
 
     return () => {
       cancelled = true;
+      // Remember where the caret/viewport were before the view is torn down, so the
+      // next mount of this document (tab/panel/project switch) can restore them (#144).
+      view.scrollDOM.removeEventListener('scroll', onScroll);
+      saveEditorViewState(panelId, {
+        selection: view.state.selection.toJSON(),
+        scrollAnchor: lastScrollAnchor,
+      });
       offSync?.();
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
       unregisterPanelFocus(panelId);
@@ -937,6 +1018,8 @@ export function useEditor(params: UseEditorParams): void {
 export function disposeEditor(panelId: string): void {
   removeEditorState(panelId);
   unregisterEditorActions(panelId);
+  // The document is gone — don't leak its saved caret (issue 144).
+  clearEditorViewState(panelId);
   win()?.editor?.destroy(panelId);
 }
 
