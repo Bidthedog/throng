@@ -1,9 +1,10 @@
-import { useState, type CSSProperties, type ReactElement } from 'react';
+import { useCallback, useState, type CSSProperties, type ReactElement } from 'react';
 import { zoomFactor, panelZoomLevel, type Panel } from '@throng/core';
 import { useEditor } from './use-editor.js';
 import { FindBar } from '../search/find-bar.js';
 import { StatusStrip } from './status-strip.js';
 import { toRelPath } from './language-override.js';
+import { PanelSkeleton, useDelayedFlag } from '../common/loading.js';
 import './editor.css';
 
 /**
@@ -27,7 +28,14 @@ export function EditorPanel({
   ownerProjectId?: string;
 }): ReactElement {
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
-  useEditor({ panel, tabId, projectRoot, rootless, ownerProjectId, container });
+  // Show a themed skeleton over the empty view until its content is adopted, so a
+  // switch shows a loading placeholder rather than a blank editor that fills in
+  // (issue 132 follow-up). `giveUp` is a safety net so the skeleton can never stick
+  // if the ready signal is somehow missed.
+  const [loaded, setLoaded] = useState(false);
+  const onReady = useCallback(() => setLoaded(true), []);
+  const giveUp = useDelayedFlag(4000);
+  useEditor({ panel, tabId, projectRoot, rootless, ownerProjectId, container, onReady });
   // Per-panel editor zoom (012, per-instance): this panel's own zoom factor scales
   // only its CodeMirror text (editor.css `calc(... * var(--throng-zoom-editor))`).
   // Presentation only — file content, encoding and line endings are untouched.
@@ -43,6 +51,7 @@ export function EditorPanel({
         style={zoomStyle}
         ref={setContainer}
       />
+      {!loaded && !giveUp && <PanelSkeleton testId={`editor-skeleton-${panel.id}`} />}
       {/* The one shared find bar (013); renders only while find is open on this panel. */}
       <FindBar panelId={panel.id} />
       {/* The language indicator (016, FR-010) — the ONLY way to see what the editor detected, and
