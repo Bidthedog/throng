@@ -1,0 +1,107 @@
+/*
+ * Loading affordances (issue 132 follow-up) — a themed spinner and skeleton
+ * placeholders, so a section that is still loading shows an intentional themed
+ * shape rather than flashing empty/default content then popping in.
+ *
+ * Everything draws from the theme's semantic aliases (defined on :root in
+ * theme.css), so it re-themes with the rest of the app and never paints a literal.
+ */
+
+.throng-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.throng-spinner__ring {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  animation: throng-spin 0.7s linear infinite;
+}
+@keyframes throng-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* A themed placeholder block. Shimmers between two surface tones so it reads as
+   "content is arriving here" rather than a blank gap. */
+/* Shimmer between the raised background and the border tone. Deliberately NOT the
+   pane `surface` token — that is reserved for actual pane/panel bodies (FR-001). */
+.throng-skeleton {
+  display: block;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-raised) 25%,
+    var(--border) 37%,
+    var(--bg-raised) 63%
+  );
+  background-size: 400% 100%;
+  animation: throng-shimmer 1.4s ease infinite;
+}
+@keyframes throng-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+
+/* The app-ready gate: fills the shell region (between title bar and status bar)
+   with the themed app background while config + projects load, so the window is a
+   calm themed surface that then reveals the fully-formed UI — never a flash of
+   empty panels populating one by one. */
+.throng-root .throng-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--status-bar-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+.throng-root:has(.title-bar) .throng-loading {
+  top: var(--title-bar-height);
+}
+
+/* The shell stays MOUNTED while the app-ready gate is up (so panels can pre-load
+   behind it and reveal fully-formed), but is hidden. `.throng-shell` sets an
+   explicit `display: grid`, which out-specifies the UA `[hidden]` rule — so restore
+   the hide here, at higher specificity. */
+.throng-shell[hidden] {
+  display: none;
+}
+
+/* A skeleton that fills its host panel (editor/terminal/explorer body) while that
+   panel's own content streams in. Sits above the empty surface, below real content. */
+.throng-panel-skeleton {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  /* The app background, not the pane `surface` token (reserved for pane bodies,
+     FR-001) — an opaque themed cover over the not-yet-loaded panel content. */
+  background: var(--bg);
+  pointer-events: none;
+}
+.throng-panel-skeleton__line {
+  height: 12px;
+  flex: 0 0 auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .throng-spinner__ring {
+    animation-duration: 1.8s;
+  }
+  .throng-skeleton {
+    animation: none;
+  }
+}

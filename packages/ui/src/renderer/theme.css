@@ -6,8 +6,17 @@
      whole UI re-themes (and hot-reloads) from themes/<name>.json. Literals are
      fallbacks for before the ThemeProvider applies the tokens. --accent is the
      active project's colour, overridden at runtime by the projects store. */
-  --bg: var(--throng-colour-appBg, #10131a);
-  --bg-raised: var(--throng-colour-sidebarBg, #161b25);
+  /* The pre-theme fallback is `transparent`, NOT a dark literal (issue 132). Every
+     window's native `backgroundColor` is already resolved from the SAVED theme's
+     appBg (see main.ts), so before the theme tokens are applied to <html> the body
+     is transparent and that correct (e.g. light) window background shows through —
+     rather than an opaque dark `#10131a` painting over it and flashing black. Once
+     the preload or ThemeProvider sets `--throng-colour-appBg` the body becomes the
+     identical opaque colour, seamlessly. `tokens.css` deliberately does not floor
+     appBg/sidebarBg because a single static colour cannot be right for both a light
+     and a dark saved theme. */
+  --bg: var(--throng-colour-appBg, transparent);
+  --bg-raised: var(--throng-colour-sidebarBg, transparent);
   --bg-panel: var(--throng-colour-surface, #1b2230);
   --border: var(--throng-colour-border, #2a3344);
   --text: var(--throng-colour-text, #e6ebf2);

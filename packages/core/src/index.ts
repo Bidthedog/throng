@@ -169,7 +169,7 @@ export {
   normalizeToken,
   resolveAction,
 } from './config/keybindings.js';
-export type { Theme, ThemeFonts, IconValue, TextCase, TypographyRole, ThemeFontRole } from './config/theme.js';
+export type { Theme, ThemeFonts, IconValue, TextCase, TypographyRole, ThemeFontRole, ThemeBootstrap } from './config/theme.js';
 export {
   THRONG_THEME,
   OPTIONAL_THEME_COLOUR_TOKENS,
@@ -177,6 +177,7 @@ export {
   resolveColour,
   resolveSplitColour,
   toCssVariables,
+  themeBootstrap,
 } from './config/theme.js';
 // Themes editor + icon packs + fonts (007).
 export { THEME_METADATA, THEME_AREA_GROUPS, THEME_PROPERTY_VOCABULARY, areaForToken, assertThemeAreaGroups, assertNamingConvention, buildThemeMetadata, descriptorForThemeToken, themeEditableTokens, mechanicalCopy } from './config/theme-metadata.js';

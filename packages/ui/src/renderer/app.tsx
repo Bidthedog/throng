@@ -31,7 +31,13 @@ import { HoverSuppression } from './common/use-hover-suppression.js';
 import { AppClosePrompt } from './app-close-prompt.js';
 import { useResize } from './util/use-resize.js';
 import { ThemeProvider } from './theme/theme-provider.js';
-import { useActiveTheme, useAppSettings, useKeybindings } from './config/config-store.js';
+import {
+  useActiveTheme,
+  useAppSettings,
+  useConfigLoaded,
+  useKeybindings,
+} from './config/config-store.js';
+import { Spinner, useDelayedFlag } from './common/loading.js';
 import { StatusBar } from './statusbar/status-bar.js';
 import { Chevron } from './panes/chevron.js';
 import { VerticalPanelStack } from './panes/vertical-panel-stack.js';
@@ -303,8 +309,47 @@ function WorkspacePane(): ReactElement {
   );
 }
 
+/**
+ * Whether the shell has the data it needs to render fully-formed (issue 132
+ * follow-up). Both signals are single mount-time IPC round-trips: the config
+ * payload (theme, settings, keybindings AND icon packs) and the project list.
+ * Holding the shell until both land means the window never shows the default theme
+ * being corrected, the project list flashing "No projects yet" then filling, or
+ * every icon swapping from a fallback glyph to its pack art — all three resolve
+ * from these two loads. Bounded by a timeout so a slow/unreachable daemon falls
+ * through to the eager render rather than hanging the window.
+ */
+function useAppReady(): boolean {
+  const configLoaded = useConfigLoaded();
+  const { loading: projectsLoading } = useProjects();
+  const dataReady = configLoaded && !projectsLoading;
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    if (dataReady) return undefined;
+    const timer = setTimeout(() => setTimedOut(true), 3000);
+    return () => clearTimeout(timer);
+  }, [dataReady]);
+  return dataReady || timedOut;
+}
+
+/**
+ * The themed holding surface shown while {@link useAppReady} is false. It is just
+ * the app background (the preload already painted the saved theme), so a fast load
+ * shows a calm themed frame and then the finished UI. A spinner appears only if the
+ * wait outlasts a short delay, so a normal-speed launch never flashes one.
+ */
+function AppLoading(): ReactElement {
+  const showSpinner = useDelayedFlag(250);
+  return (
+    <div className="throng-loading" data-testid="app-loading" aria-busy>
+      {showSpinner ? <Spinner label="Loading throng" /> : null}
+    </div>
+  );
+}
+
 export function App(): ReactElement {
   const { activeProject } = useProjects();
+  const appReady = useAppReady();
   const { workspace } = useServices();
   // Side panes share a 250px min; the max is user-configurable per pane in
   // settings.json (panes.projects.maxWidth / panes.fileExplorer.maxWidth).
@@ -458,10 +503,12 @@ export function App(): ReactElement {
         <DetachProvider>
         <div className="throng-root">
           <AppTitleBar />
+          {!appReady ? <AppLoading /> : null}
           <div
             ref={shellRef}
             className={`throng-shell${sidebarWidth.dragging || explorerWidth.dragging ? ' throng-shell--no-anim' : ''}`}
             data-testid="throng-shell"
+            hidden={!appReady}
             style={{ gridTemplateColumns: `${leftCol} 1fr ${rightCol}` }}
           >
             {/* The collapse button is absolutely pinned to the pane's top-outer
