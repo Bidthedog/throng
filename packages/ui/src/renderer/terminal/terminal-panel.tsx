@@ -159,19 +159,10 @@ export function TerminalPanel({
         {
           label: 'Paste',
           icon: 'paste',
-          onClick: () => {
-            void (async () => {
-              const entry = await window.throng?.clipboard?.paste();
-              const text = entry?.text ?? '';
-              if (text.length === 0) return;
-              await window.throng?.terminal?.write?.(panel.id, text);
-              apiRef.current?.focus();
-            })().catch((error: unknown) => {
-              // A paste that fails silently looks exactly like a paste of nothing, and the
-              // user tries again and concludes the terminal is broken.
-              console.error('[terminal] paste from the context menu failed', error);
-            });
-          },
+          // The SAME paste route as Ctrl+V / Shift+Insert (#142): one implementation reads the
+          // clipboard and writes it to the shell exactly once, so no gesture can double-paste and
+          // the menu can never drift from the keyboard path.
+          onClick: () => apiRef.current?.paste(),
         },
       ]);
     },

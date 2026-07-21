@@ -202,3 +202,97 @@ test('right-clicking the terminal opens the themed in-app menu, and Paste works'
     }
   }
 });
+
+// #142: Ctrl+V must paste the clipboard into the terminal — and EXACTLY once. xterm 6.0 has
+// no key-driven paste: it pastes only from a DOM `paste` event, which Chromium fires from Ctrl+V
+// only when the app menu supplies an Edit role — and throng ships a Help-only menu, so Ctrl+V did
+// nothing at all. (The same xterm also binds its paste handler to BOTH the hidden textarea and its
+// parent element, so a single native paste is written to the pty twice — the "double paste" half of
+// the report.) We assert the fix at the pty boundary rather than by reading the buffer: intercept
+// the `throng:terminal:write` IPC in the main process and count how many writes carried the token.
+// Nothing pastes → 0 (the old bug); a correct single paste → exactly 1; a double paste → 2.
+test('#142: Ctrl+V pastes the clipboard into the terminal exactly once', async () => {
+  skipIfElevated();
+  const PASTE = 'throngCtrlVToken77';
+  const pipe = `\\\\.\\pipe\\throng-ctrlv-${process.pid}-${Date.now()}`;
+  const dataDir = mkdtempSync(join(tmpdir(), 'ctrlv-data-'));
+  const cfg = mkdtempSync(join(tmpdir(), 'ctrlv-cfg-'));
+  const userData = mkdtempSync(join(tmpdir(), 'ctrlv-ud-'));
+  const root = mkdtempSync(join(tmpdir(), 'ctrlv-root-'));
+
+  const daemon = spawn(process.execPath, [daemonEntry], {
+    env: { ...process.env, THRONG_PIPE_NAME: pipe, THRONG_DATABASE_PATH: join(dataDir, 'throng.db') },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  await new Promise<void>((res) => daemon.stdout!.on('data', (c: string) => c.includes('listening') && res()));
+
+  let app: ElectronApplication | undefined;
+  try {
+    app = await electron.launch({
+      args: [mainEntry, `--user-data-dir=${userData}`],
+      env: { ...process.env, THRONG_PIPE_NAME: pipe, THRONG_CONFIG_ROOT: cfg },
+    });
+    const win = await app.firstWindow();
+    await app.evaluate(({ dialog }) => {
+      dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });
+    });
+
+    await win.getByTestId('project-new').click();
+    await win.getByTestId('project-root-input').fill(root);
+    await win.getByTestId('project-name-input').fill('CtrlV');
+    await win.getByTestId('project-save').click();
+    const pid = await win
+      .locator('.panel-box')
+      .first()
+      .evaluate((el) => (el as HTMLElement).dataset.panelId ?? '');
+    await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
+    await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
+    await win.getByTestId(`panel-type-confirm-${pid}`).click();
+    await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: 20000 });
+
+    // Seed the clipboard (in E2E this is the in-process seam), focus the terminal, and press Ctrl+V.
+    await win.evaluate((text) => window.throng?.clipboard?.write({ text, mode: 'verbatim' }), PASTE);
+    // Focus xterm's own hidden input surface directly — a click on the panel does not reliably move
+    // keyboard focus onto it under Playwright, and the key must reach xterm's key handler to be pasted.
+    const xtermInput = win.locator(`[data-testid="terminal-${pid}"] .xterm-helper-textarea`);
+    await xtermInput.focus();
+    await expect(xtermInput).toBeFocused();
+    await win.keyboard.press('Control+V');
+
+    // It must reach the shell at all — the old bug was that Ctrl+V did nothing. `toContainText`
+    // matches on `textContent`, which is where xterm's DOM renderer puts the glyphs (its `innerText`
+    // is empty because the row spans are absolutely positioned).
+    await expect(win.getByTestId(`terminal-${pid}`)).toContainText(PASTE, { timeout: 15000 });
+
+    // …and EXACTLY once. A double paste (xterm binds its paste handler to both the textarea and its
+    // parent element) writes the token to the pty twice, echoing as two adjacent copies. Count on the
+    // visible rows only — NOT the whole terminal, whose `.xterm-accessibility` mirror would duplicate
+    // every glyph and make a single paste read as two. Give any second paste time to echo first.
+    const tokenCount = (): Promise<number> =>
+      win
+        .locator(`[data-testid="terminal-${pid}"] .xterm-rows`)
+        .textContent()
+        .then((t) => (t?.match(new RegExp(PASTE, 'g')) ?? []).length);
+    await win.waitForTimeout(1000);
+    expect(await tokenCount()).toBe(1);
+  } finally {
+    if (app) {
+      await app
+        .evaluate(({ BrowserWindow }) => {
+          for (const wnd of BrowserWindow.getAllWindows()) if (!wnd.isDestroyed()) wnd.destroy();
+        })
+        .catch(() => {});
+      await new Promise((r) => setTimeout(r, 150));
+      await app.close().catch(() => {});
+    }
+    try {
+      daemon.kill();
+    } catch {
+      /* already gone */
+    }
+    await new Promise((r) => setTimeout(r, 500));
+    for (const d of [dataDir, cfg, userData, root]) {
+      rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  }
+});
