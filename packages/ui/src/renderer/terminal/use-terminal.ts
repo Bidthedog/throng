@@ -32,6 +32,21 @@ export interface TerminalApi {
   getSelection(): string;
   /** Move DOM focus into the terminal's input surface (012, move-focus). */
   focus(): void;
+  /**
+   * Paste the OS clipboard into the live shell exactly once (#142). The single paste route shared
+   * by Ctrl+V, Shift+Insert and the right-click menu — see the paste handling in the mount effect.
+   */
+  paste(): void;
+}
+
+/**
+ * A paste chord: Ctrl+V or Shift+Insert (#142). Ctrl+Shift+V and Alt combinations are left to the
+ * shell. `e.key` is `'v'` (no Shift) but we accept `'V'` defensively; Shift+Insert reports `'Insert'`.
+ */
+function isPasteChord(e: KeyboardEvent): boolean {
+  if (e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === 'v' || e.key === 'V')) return true;
+  if (e.shiftKey && !e.ctrlKey && !e.altKey && e.key === 'Insert') return true;
+  return false;
 }
 
 export interface UseTerminalOptions {
@@ -183,12 +198,43 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // PowerShell output. (cls/clear is handled separately via isScreenClear.)
     });
     termRef.current = term;
+
+    // The one paste route (#142). Reads the OS clipboard through the seam and writes it to the pty
+    // ONCE, then restores focus. Shared by Ctrl+V, Shift+Insert (both in the key handler below) and
+    // the right-click menu (via the api handle), so a single paste gesture inserts the clipboard
+    // exactly once. A failing paste is logged, not swallowed silently: a paste that fails invisibly
+    // looks exactly like a paste of nothing, and the user retries and concludes the terminal is broken.
+    const pasteFromClipboard = async (): Promise<void> => {
+      try {
+        const entry = await window.throng?.clipboard?.paste();
+        const text = entry?.text ?? '';
+        if (text.length === 0) return;
+        await bridge.write(panelId, text);
+        term.focus();
+      } catch (error) {
+        console.error('[terminal] paste failed', error);
+      }
+    };
+
     if (opts.apiRef) {
       opts.apiRef.current = {
         getSelection: () => term.getSelection(),
         focus: () => term.focus(),
+        paste: () => void pasteFromClipboard(),
       };
     }
+
+    // xterm 6.0 binds its own `paste` handler to BOTH the hidden textarea and its parent element
+    // (`this.element`); the textarea is a descendant, so a single native paste bubbles through both
+    // and is written to the pty TWICE (#142 "double paste"). We own paste explicitly (above/below),
+    // so xterm's DOM-paste path must not run at all. A capture-phase listener on the container fires
+    // before either of xterm's descendant listeners; stopping immediate propagation neutralises both.
+    // The right-click menu and Ctrl+V do not depend on this event, so nothing legitimate is lost.
+    const swallowNativePaste = (ev: ClipboardEvent): void => {
+      ev.stopImmediatePropagation();
+      ev.preventDefault();
+    };
+    container.addEventListener('paste', swallowNativePaste, true);
     // Terminal keyboard negotiation state (#90): the kitty flags AND win32-input-mode the
     // running program has enabled. A modified Enter is reported in CSI-u form while kitty is
     // active, as a win32-input key event while win32-input-mode is (PowerShell/cmd), else as a
@@ -213,6 +259,16 @@ export function useTerminal(opts: UseTerminalOptions): void {
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true; // keyup/keypress: nothing to reserve or re-encode
       if (reserveKeyRef.current?.(e) === true) return false; // a throng chord — keep it off the pty
+      // Paste (#142): Ctrl+V / Shift+Insert. xterm 6.0 has no key-driven paste (it pastes only from a
+      // DOM `paste` event, which Chromium fires from Ctrl+V only with an Edit-menu role throng does
+      // not ship), so Ctrl+V did nothing. Do the paste ourselves — exactly once — and keep the chord
+      // off the pty so it types no literal `v` / Ctrl+V (0x16). Checked AFTER reserveKey so a user who
+      // rebinds this chord to a throng action still wins.
+      if (isPasteChord(e)) {
+        e.preventDefault();
+        void pasteFromClipboard();
+        return false;
+      }
       const seq = encodeEnterKey(
         { key: e.key, shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey, meta: e.metaKey },
         kitty,
@@ -525,6 +581,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       applyResizeRef.current = null;
       if (resizeTimer !== undefined) clearTimeout(resizeTimer);
       clearInterval(repaintTimer);
+      container.removeEventListener('paste', swallowNativePaste, true); // issue 142 paste seam
       observer.disconnect();
       offOutput();
       offGrid();
