@@ -18,6 +18,17 @@ export interface PanelExitInfo {
   unexpected?: boolean;
 }
 
+/**
+ * Severity for the notice that surfaces a panel exit (issue #143). An UNEXPECTED
+ * end — a crash or a launch/attach failure (e.g. a non-admin terminal refused
+ * while throng runs elevated) — is a real failure and must render as a red
+ * `error` notice. A clean/requested exit is a courtesy `info` notice that
+ * auto-dismisses. Never `success` (green): an exit is never a success.
+ */
+export function noticeSeverityForExit(info: PanelExitInfo): 'error' | 'info' {
+  return info.unexpected ? 'error' : 'info';
+}
+
 const lastExit = new Map<string, PanelExitInfo>();
 const dismissed = new Set<string>();
 const listeners = new Set<() => void>();

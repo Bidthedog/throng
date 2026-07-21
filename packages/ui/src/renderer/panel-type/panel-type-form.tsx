@@ -12,7 +12,12 @@ import { useFlavours } from './use-flavours.js';
 import { useCapabilities } from './use-capabilities.js';
 import { TerminalInputs } from './terminal-inputs.js';
 import { EditorInputs } from './editor-inputs.js';
-import { clearPanelExit, dismissPanelExit, useVisiblePanelExit } from '../terminal/exit-store.js';
+import {
+  clearPanelExit,
+  dismissPanelExit,
+  noticeSeverityForExit,
+  useVisiblePanelExit,
+} from '../terminal/exit-store.js';
 import { markExplicitRetype } from '../terminal/explicit-retype.js';
 import { useNotify } from '../common/notification.js';
 import './panel-type.css';
@@ -96,7 +101,7 @@ export function PanelTypeForm({
   useEffect(() => {
     if (!lastExit) return;
     notify({
-      severity: 'info',
+      severity: noticeSeverityForExit(lastExit),
       message: lastExit.message,
       testId: `panel-exit-${panelId}`,
       testIds: { dismiss: `exit-dismiss-${panelId}` },

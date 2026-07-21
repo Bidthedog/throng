@@ -25,6 +25,7 @@ import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-foc
 import { setPanelExit } from './exit-store.js';
 import { useTerminal, type TerminalApi } from './use-terminal.js';
 import { FindBar } from '../search/find-bar.js';
+import { PanelSkeleton, useDelayedFlag } from '../common/loading.js';
 import { reservedByTerminal } from '../search/search-actions.js';
 import { getFindState, updateCount } from '../search/search-store.js';
 import type { SearchCount } from '../search/search-model.js';
@@ -75,10 +76,16 @@ export function TerminalPanel({
   const theme = useActiveTheme();
   const { openMenu } = useContextMenu();
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
+  // Safety net: never let the loading skeleton stick if the attach signal is missed.
+  const giveUpSkeleton = useDelayedFlag(4000);
   // Non-fatal "still starting" state (008 FR-005): set when an attach exceeds its budget,
   // cleared when an attach resolves running. `attempt` is bumped by the retry control to
   // re-run the attach (a reattach, idempotent by session reuse) — never a revert or kill.
   const [stillStarting, setStillStarting] = useState(false);
+  // Show a themed skeleton over the blank xterm until the session attaches and its
+  // scrollback is streamed in, so a switch shows a loading placeholder rather than a
+  // blank panel that fills in (issue 132 follow-up).
+  const [attached, setAttached] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const config = (panel.config ?? {}) as Partial<TerminalPanelConfig>;
   const xtermTheme = useMemo(() => buildXtermTheme(theme), [theme]);
@@ -190,9 +197,14 @@ export function TerminalPanel({
       end(`Terminal exited (code ${code ?? '—'})`, code, unexpected),
     [end],
   );
-  const onError = useCallback((message: string) => end(message), [end]);
+  // A launch/attach failure (e.g. a non-admin terminal refused while elevated) is
+  // an unexpected end, so it surfaces as a red error notice, not a neutral one (#143).
+  const onError = useCallback((message: string) => end(message, null, true), [end]);
   const onStillStarting = useCallback(() => setStillStarting(true), []);
-  const onAttached = useCallback(() => setStillStarting(false), []);
+  const onAttached = useCallback(() => {
+    setStillStarting(false);
+    setAttached(true); // session live + scrollback replayed — drop the loading skeleton
+  }, []);
   const onRetry = useCallback(() => {
     setStillStarting(false);
     setAttempt((n) => n + 1); // re-run the attach effect → reattach (idempotent by reuse)
@@ -239,6 +251,7 @@ export function TerminalPanel({
         onContextMenu={onContextMenu}
         style={{ background: xtermTheme.background }}
       />
+      {!attached && !giveUpSkeleton && <PanelSkeleton testId={`terminal-skeleton-${panel.id}`} />}
       {/* The one shared find bar (013); renders only while find is open on this panel. */}
       <FindBar panelId={panel.id} />
       {stillStarting ? (
