@@ -9,6 +9,7 @@ import {
   parseAppSettings,
   parseKeybindings,
   resolveColour,
+  themeBootstrap,
   type AppSettings,
   ZOOM_STEP,
   ZOOM_MIN_LEVEL,
@@ -272,6 +273,7 @@ async function createMainWindow(
   settings: IUiSettings,
   displayInfo: ElectronDisplayInfo,
   statePath: string,
+  backgroundColor: string,
 ): Promise<BrowserWindow> {
   const saved = loadWindowState(statePath);
   const window = new BrowserWindow({
@@ -282,7 +284,9 @@ async function createMainWindow(
     // `<project · context> — throng` once mounted; this is only the pre-content title.
     title: 'No project — throng',
     icon: appIcon(),
-    backgroundColor: '#10131a',
+    // The saved theme's app background, so the window never flashes a hardcoded
+    // dark before the themed content paints (issue 132).
+    backgroundColor,
     // The application draws its own full-width title bar + window controls (007,
     // FR-001/002); there is no OS-drawn title bar in addition.
     frame: false,
@@ -323,14 +327,19 @@ interface WindowBounds {
   height: number;
 }
 
-function createSubWorkspaceWindow(id: string, bounds?: WindowBounds): BrowserWindow {
+function createSubWorkspaceWindow(
+  id: string,
+  backgroundColor: string,
+  bounds?: WindowBounds,
+): BrowserWindow {
   const window = new BrowserWindow({
     ...(bounds ?? { width: 900, height: 640 }),
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
     title: 'Sub-workspace — throng',
     icon: appIcon(),
-    backgroundColor: '#10131a',
+    // The saved theme's app background — no dark flash before the content paints (issue 132).
+    backgroundColor,
     // Sub-workspace windows share the custom title bar (007, FR-007) — no OS frame.
     frame: false,
     webPreferences: {
@@ -471,6 +480,16 @@ if (isPrimaryInstance)
     iconPackService.listIconPacks(),
   );
   let currentSettings = initialPayload.settings;
+  // The active theme, kept fresh by `broadcast` below. Every window's preload pulls
+  // it SYNCHRONOUSLY before first paint and applies it to <html>, so no window or
+  // modal ever flashes the default theme before the saved one resolves (issue 132).
+  let currentTheme = initialPayload.theme;
+  ipcMain.on('throng:theme:bootstrap', (event) => {
+    event.returnValue = themeBootstrap(currentTheme);
+  });
+  // The window `backgroundColor` shown before the web contents paint must also match
+  // the saved theme (not a hardcoded dark), or a light theme flashes dark first.
+  const themeBackground = (): string => resolveColour(currentTheme, 'appBg');
   // Keep the OS-level drag ghost (a separate window that can't consume the app's
   // CSS vars) styled from the active theme so it follows the theme instead of
   // staying the default blue (FR-030). Seed it now + refresh on every config change.
@@ -501,6 +520,7 @@ if (isPrimaryInstance)
   const broadcast = (payload: ConfigPayload): void => {
     const previous = currentSettings;
     currentSettings = payload.settings;
+    currentTheme = payload.theme; // keep the pre-paint bootstrap snapshot current (issue 132)
     pushGhostTheme(payload.theme);
     for (const react of onSettingsChanged) react(previous, payload.settings);
     broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:config', payload);
@@ -542,6 +562,7 @@ if (isPrimaryInstance)
   const preferencesDeps: PreferencesWindowDeps = {
     indexHtml: resolveFromHere('../renderer/index.html'),
     preloadPath: resolveFromHere('../preload/preload.cjs'),
+    backgroundColor: themeBackground,
     // Resolved lazily at open time: `mainWindow` is created further below in this
     // same startup scope, so this closure captures the current main window (FR-013/013a).
     getMainWindow: () => (mainWindow.isDestroyed() ? null : mainWindow),
@@ -595,6 +616,7 @@ if (isPrimaryInstance)
   const aboutDeps: AboutWindowDeps = {
     indexHtml: resolveFromHere('../renderer/index.html'),
     preloadPath: resolveFromHere('../preload/preload.cjs'),
+    backgroundColor: themeBackground,
     getMainWindow: () =>
       mainWindowRef && !mainWindowRef.isDestroyed() ? mainWindowRef : null,
   };
@@ -800,7 +822,7 @@ if (isPrimaryInstance)
   // The main window plus every detached sub-workspace window form a single
   // focus/raise group; closing the main window closes them all (Constitution XI).
   const windowManager = new WindowManager();
-  const mainWindow = await createMainWindow(settings, displayInfo, statePath);
+  const mainWindow = await createMainWindow(settings, displayInfo, statePath, themeBackground());
   windowManager.registerMain(mainWindow);
   // Now the main window exists, the About menu can parent to it (see the nullable
   // ref above — set here so a menu click before this point opens About unparented
@@ -994,7 +1016,7 @@ if (isPrimaryInstance)
         /* fall back to the default size if the bounds can't be read */
       }
 
-      const win = createSubWorkspaceWindow(id, restored);
+      const win = createSubWorkspaceWindow(id, themeBackground(), restored);
       windowManager.registerChild(id, win);
 
       // Persist bounds on move/resize (debounced) and on close (FR-017a).
@@ -1119,7 +1141,7 @@ if (isPrimaryInstance)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      void createMainWindow(settings, displayInfo, statePath).then((w) =>
+      void createMainWindow(settings, displayInfo, statePath, themeBackground()).then((w) =>
         windowManager.registerMain(w),
       );
     }

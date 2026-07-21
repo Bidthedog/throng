@@ -47,7 +47,9 @@ export interface PreferencesWindowDeps {
   indexHtml: string;
   /** Absolute path to the sandboxed preload script. */
   preloadPath: string;
-  backgroundColor?: string;
+  /** The saved theme's app-background colour, resolved lazily at open time so the
+   *  window never flashes a hardcoded dark before its themed content paints (issue 132). */
+  backgroundColor?: () => string;
   /** The current main window — used to parent the prefs window (FR-013) and to
    *  refocus throng when it closes (FR-013a). Resolved lazily at open time. */
   getMainWindow?: () => BrowserWindow | null;
@@ -91,7 +93,7 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
     minimizable: false,
     title: 'Preferences — throng',
     icon: appIcon(),
-    backgroundColor: deps.backgroundColor ?? '#10131a',
+    backgroundColor: deps.backgroundColor?.() ?? '#10131a',
     webPreferences: {
       preload: deps.preloadPath,
       contextIsolation: true,

@@ -4,6 +4,54 @@
 // outcome to the landing page (US3, T030).
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
+/**
+ * Theme bootstrap (issue 132) — kill the flash of the default theme.
+ *
+ * The renderer reads the saved theme asynchronously over config IPC AFTER React
+ * mounts, so every window/modal painted its first frame in the built-in default
+ * theme and then swapped — a visible flash on the main window, sub-workspace
+ * windows, the preferences editor and every modal. The preload runs in the
+ * renderer's context BEFORE its scripts and before first paint, so here we pull the
+ * active theme SYNCHRONOUSLY from main and apply it to `<html>` — CSS custom
+ * properties (allowed by the page CSP's `style-src 'unsafe-inline'`) plus the
+ * `data-theme` attribute — so the very first frame is already the saved theme. The
+ * renderer's ThemeProvider re-applies the same values on mount (a no-op visually)
+ * and keeps handling hot-reload. An inline `<script>` could not do this: the CSP is
+ * `script-src 'self'`, which blocks inline scripts — the preload is the only
+ * pre-paint hook available.
+ */
+function applyBootstrapTheme(): void {
+  let boot: { name?: unknown; vars?: unknown } | undefined;
+  try {
+    boot = ipcRenderer.sendSync('throng:theme:bootstrap') as typeof boot;
+  } catch {
+    // Main not ready or no handler — the renderer still themes itself on mount; only
+    // the pre-paint guard is lost, so we degrade to the old behaviour rather than crash.
+    return;
+  }
+  if (!boot || typeof boot !== 'object') return;
+  const vars = boot.vars;
+  const name = boot.name;
+
+  const paint = (): boolean => {
+    const root = document.documentElement;
+    if (!root) return false;
+    if (vars && typeof vars === 'object') {
+      for (const [prop, value] of Object.entries(vars as Record<string, string>)) {
+        if (typeof value === 'string') root.style.setProperty(prop, value);
+      }
+    }
+    if (typeof name === 'string') root.dataset.theme = name;
+    return true;
+  };
+
+  // `document.documentElement` exists this early in an Electron renderer, but if the
+  // document is somehow not ready yet, apply as soon as it is (still before paint).
+  if (!paint()) document.addEventListener('DOMContentLoaded', paint, { once: true });
+}
+
+applyBootstrapTheme();
+
 contextBridge.exposeInMainWorld('throng', {
   // The host OS family, so the renderer can render paths with native separators
   // (FR-101) — Windows uses '\\', everything else '/'.

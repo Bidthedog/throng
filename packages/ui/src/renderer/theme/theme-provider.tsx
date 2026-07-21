@@ -1,12 +1,20 @@
 import { useEffect, type ReactElement, type ReactNode } from 'react';
 import { THRONG_THEME, toCssVariables, type Theme } from '@throng/core';
+import { useConfigLoaded } from '../config/config-store.js';
 import './tokens.css';
 
 /**
  * Applies the active theme's tokens as CSS custom properties on the document root
- * (FR-030). This first iteration applies the built-in "throng" theme; the
- * config-store + hot-reload wiring (T033–T039) will later feed the user's selected
- * theme and re-apply on change. Components consume `var(--throng-*)`.
+ * (FR-030). Components consume `var(--throng-*)`, and the theme re-applies on every
+ * change (hot-reload).
+ *
+ * The preload has already painted the SAVED theme onto `<html>` before this
+ * renderer's first frame (issue 132). Until the config has loaded, `theme` is still
+ * the bundled default, so applying it here would overwrite that correct paint with
+ * the default theme and flash — visibly so on a custom saved theme. So the effect
+ * waits for the config to load before it touches the document; the preload's paint
+ * carries the first frames, and once the real theme is known this applies it (a
+ * visual no-op when it matches what the preload painted).
  */
 export function ThemeProvider({
   theme = THRONG_THEME,
@@ -15,7 +23,9 @@ export function ThemeProvider({
   theme?: Theme;
   children: ReactNode;
 }): ReactElement {
+  const loaded = useConfigLoaded();
   useEffect(() => {
+    if (!loaded) return;
     const root = document.documentElement;
     const vars = toCssVariables(theme);
 
@@ -43,6 +53,6 @@ export function ThemeProvider({
     for (const name of Array.from(root.style)) {
       if (name.startsWith('--throng-') && !(name in vars)) root.style.removeProperty(name);
     }
-  }, [theme]);
+  }, [theme, loaded]);
   return <>{children}</>;
 }

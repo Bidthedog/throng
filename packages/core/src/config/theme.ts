@@ -615,3 +615,21 @@ export function toCssVariables(theme: Theme): Record<string, string> {
   }
   return vars;
 }
+
+/** The resolved theme, ready to apply to a document root before its first paint. */
+export interface ThemeBootstrap {
+  /** The active theme's name, for `:root[data-theme="…"]` and test hooks. */
+  name: string;
+  /** The full `--throng-*` custom-property map (see {@link toCssVariables}). */
+  vars: Record<string, string>;
+}
+
+/**
+ * Build the pre-paint snapshot of a theme (issue 132). The main process hands this
+ * to each window's preload SYNCHRONOUSLY, which applies it to `<html>` before the
+ * renderer's first frame — so no window or modal ever flashes the default theme
+ * before the saved one resolves over async config IPC.
+ */
+export function themeBootstrap(theme: Theme): ThemeBootstrap {
+  return { name: theme.name, vars: toCssVariables(theme) };
+}

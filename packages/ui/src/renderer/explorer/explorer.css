@@ -85,6 +85,8 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
+  /* Anchor for the loading skeleton that fills the body while the tree loads. */
+  position: relative;
 }
 
 /* react-arborist rows: it absolutely-positions each row via the `style` prop

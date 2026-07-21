@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { THRONG_THEME, resolveColour, resolveIconAsset, toCssVariables, type Theme } from '@throng/core';
+import {
+  THRONG_THEME,
+  resolveColour,
+  resolveIconAsset,
+  themeBootstrap,
+  toCssVariables,
+  type Theme,
+} from '@throng/core';
 
 describe('Theme token resolution (FR-030)', () => {
   it('resolves a present colour token', () => {
@@ -162,5 +169,28 @@ describe('Theme token resolution (FR-030)', () => {
     expect(vars['--throng-font-family']).toBe('Mono');
     expect(vars['--throng-font-size']).toBe('15px');
     expect(vars['--throng-font-weight-bold']).toBe('700');
+  });
+});
+
+describe('themeBootstrap (issue 132 — pre-paint theme snapshot)', () => {
+  it('carries the theme name and its full CSS-var map', () => {
+    const boot = themeBootstrap(THRONG_THEME);
+    expect(boot.name).toBe(THRONG_THEME.name);
+    expect(boot.vars).toEqual(toCssVariables(THRONG_THEME));
+  });
+
+  it('reflects a saved theme (not the default) so the first paint matches it', () => {
+    const saved: Theme = {
+      name: 'Daylight',
+      colours: { appBg: '#ffffff', surface: '#f4f4f4', text: '#101010' },
+      fonts: THRONG_THEME.fonts,
+      icons: {},
+    };
+    const boot = themeBootstrap(saved);
+    expect(boot.name).toBe('Daylight');
+    expect(boot.vars['--throng-colour-appBg']).toBe('#ffffff');
+    // Tokens the saved theme omits still resolve (merged over the defaults), so no
+    // property is ever missing at first paint.
+    expect(boot.vars['--throng-colour-danger']).toBe(THRONG_THEME.colours.danger);
   });
 });

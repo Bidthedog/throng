@@ -28,6 +28,7 @@ import { useWorkspace } from '../state/workspace-store.js';
 import { openFileInTab, openFileInNewEditor } from '../editor/editor-open.js';
 import { getLastActiveEditor } from '../editor/last-active-editor.js';
 import { getEditorState } from '../editor/editor-state.js';
+import { PanelSkeleton } from '../common/loading.js';
 import { collectPanels, normaliseFolder, resolveDragEffect } from '@throng/core';
 import type { MenuItem } from '../workspace/context-menu.js';
 
@@ -318,6 +319,12 @@ export function FileTree({
       />
       {/* 018 / FR-051 — the second of four copy-pasted error strips. Now the shared model. */}
       <div className="explorer__body" ref={ref} onContextMenu={onEmptyContextMenu}>
+        {!ready && (
+          <PanelSkeleton
+            testId="explorer-skeleton"
+            lines={['70%', '52%', '80%', '44%', '64%', '38%', '58%']}
+          />
+        )}
         {ready && width > 0 && height > 0 && (
           <Tree<TreeNodeData>
             ref={treeRef}
