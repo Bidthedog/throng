@@ -21,7 +21,7 @@ class FakeWindow implements ManagedWindow {
 }
 
 describe('WindowManager', () => {
-  it('raises the whole group (main + children) when any window is focused', () => {
+  it('raises ONLY the focused sub-workspace window, leaving the main window untouched (#138)', () => {
     const wm = new WindowManager();
     const main = new FakeWindow();
     const a = new FakeWindow();
@@ -30,28 +30,25 @@ describe('WindowManager', () => {
     wm.registerChild('a', a);
     wm.registerChild('b', b);
 
-    a.emit('focus'); // focusing a child raises everyone
-    expect(main.moveTop).toHaveBeenCalledTimes(1);
+    a.emit('focus'); // activating a child must NOT drag the main window (or siblings) forward
     expect(a.moveTop).toHaveBeenCalledTimes(1);
-    expect(b.moveTop).toHaveBeenCalledTimes(1);
+    expect(main.moveTop).not.toHaveBeenCalled();
+    expect(b.moveTop).not.toHaveBeenCalled();
   });
 
-  it('raises the focused window last so it ends up on top of the group', () => {
+  it('raises ONLY the main window when it is focused, leaving sub-workspaces untouched (#138)', () => {
     const wm = new WindowManager();
-    const order: string[] = [];
     const main = new FakeWindow();
     const a = new FakeWindow();
-    main.moveTop = vi.fn(() => order.push('main'));
-    a.moveTop = vi.fn(() => order.push('a'));
+    const b = new FakeWindow();
     wm.registerMain(main);
     wm.registerChild('a', a);
+    wm.registerChild('b', b);
 
-    main.emit('focus'); // focusing main → main must be raised LAST (on top)
-    expect(order.at(-1)).toBe('main');
-
-    order.length = 0;
-    a.emit('focus'); // focusing the child → the child ends up on top, not the main
-    expect(order.at(-1)).toBe('a');
+    main.emit('focus'); // the main window is independent too — its focus raises only itself
+    expect(main.moveTop).toHaveBeenCalledTimes(1);
+    expect(a.moveTop).not.toHaveBeenCalled();
+    expect(b.moveTop).not.toHaveBeenCalled();
   });
 
   it('does not raise a minimised window (independent minimise)', () => {
@@ -62,9 +59,11 @@ describe('WindowManager', () => {
     wm.registerChild('c', child);
     child.minimized = true;
 
+    child.emit('focus'); // even when focused, a minimised window is not moved to the top
+    expect(child.moveTop).not.toHaveBeenCalled();
+
     main.emit('focus');
     expect(main.moveTop).toHaveBeenCalledTimes(1);
-    expect(child.moveTop).not.toHaveBeenCalled(); // stays minimised
   });
 
   it('closes all sub-workspace windows when the main window closes', () => {
@@ -110,14 +109,13 @@ describe('WindowManager', () => {
 
   it('does not infinitely recurse if moveTop re-fires focus', () => {
     const wm = new WindowManager();
-    const main = new FakeWindow();
     const child = new FakeWindow();
-    // Simulate moveTop re-emitting focus (which would loop without the guard).
+    // Simulate moveTop re-emitting focus on the same window (which would loop
+    // without the guard, since each window's focus now raises itself).
     child.moveTop = vi.fn(() => child.emit('focus'));
-    wm.registerMain(main);
     wm.registerChild('c', child);
 
-    expect(() => main.emit('focus')).not.toThrow();
+    expect(() => child.emit('focus')).not.toThrow();
     expect(child.moveTop).toHaveBeenCalledTimes(1); // guard prevents re-entry
   });
 });
