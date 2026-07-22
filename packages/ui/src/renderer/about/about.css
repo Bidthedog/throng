@@ -126,6 +126,13 @@
   font-size: 12px;
 }
 
+/* US4 (#139) — the loading affordance shown while the third-party list is fetched. */
+.about-thirdparty__loading {
+  padding: 8px 10px;
+  opacity: 0.6;
+  font-style: italic;
+}
+
 .about-thirdparty__row {
   display: grid;
   grid-template-columns: 1fr auto auto;

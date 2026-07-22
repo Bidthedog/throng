@@ -35,13 +35,13 @@ interface ThirdPartyLicence {
   projectUrl: string;
 }
 
+// US4 (#139) — the STATIC identity paints immediately; the third-party list loads separately.
 interface AboutInfo {
   version: string;
   author: string;
   repoUrl: string;
   buildId: string;
   licenseText: string;
-  thirdParty: ThirdPartyLicence[];
 }
 
 const AGPL_URL = 'https://www.gnu.org/licenses/agpl-3.0.html';
@@ -54,13 +54,22 @@ function AboutShell(): ReactElement {
     repoUrl: '',
     buildId: '',
     licenseText: '',
-    thirdParty: [],
   });
+  // US4 (#139) — the third-party list loads asynchronously, after the static content has painted;
+  // `loading` shows an affordance until it resolves. Closing the dialog before it resolves drops
+  // the result via the `active` guard (FR-016), so no orphaned work updates a torn-down view.
+  const [thirdParty, setThirdParty] = useState<ThirdPartyLicence[]>([]);
+  const [thirdPartyLoading, setThirdPartyLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
     void window.throng?.about?.get?.().then((received) => {
       if (active && received) setInfo(received);
+    });
+    void window.throng?.about?.getThirdParty?.().then((list) => {
+      if (!active) return;
+      if (list) setThirdParty(list);
+      setThirdPartyLoading(false);
     });
     return () => {
       active = false;
@@ -141,7 +150,7 @@ function AboutShell(): ReactElement {
               live licence links the requirement asks for — but a read-only, scrollable box styled
               to match the licence box, each row a package with a live link to its licence. */}
           <span className="about-section-label">
-            Third-party packages ({info.thirdParty.length})
+            Third-party packages{thirdPartyLoading ? '' : ` (${thirdParty.length})`}
           </span>
           <div
             className="about-thirdparty"
@@ -149,7 +158,12 @@ function AboutShell(): ReactElement {
             role="list"
             aria-label="Third-party packages and licences"
           >
-            {info.thirdParty.map((p) => (
+            {thirdPartyLoading ? (
+              <div className="about-thirdparty__loading" data-testid="about-thirdparty-loading">
+                Loading third-party packages…
+              </div>
+            ) : (
+              thirdParty.map((p) => (
               <div className="about-thirdparty__row" role="listitem" key={`${p.name}@${p.version}`}>
                 {p.projectUrl ? (
                   <a
@@ -177,7 +191,8 @@ function AboutShell(): ReactElement {
                   <span className="about-thirdparty__licence">{p.license}</span>
                 )}
               </div>
-            ))}
+              ))
+            )}
           </div>
 
           <div className="about-actions">

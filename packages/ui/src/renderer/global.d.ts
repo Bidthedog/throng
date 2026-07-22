@@ -42,20 +42,23 @@ declare global {
       // surface, plus opening the licence link in the user's default browser.
       about?: {
         open: () => void;
+        // US4 (#139) — static identity only; the third-party list is fetched via getThirdParty().
         get: () => Promise<{
           version: string;
           author: string;
           repoUrl: string;
           buildId: string;
           licenseText: string;
-          thirdParty: Array<{
+        }>;
+        getThirdParty: () => Promise<
+          Array<{
             name: string;
             version: string;
             license: string;
             licenseUrl: string;
             projectUrl: string;
-          }>;
-        }>;
+          }>
+        >;
         openExternal: (url: string) => void;
       };
       // A window is told when the app-modal preferences window blurs/unblurs it (US10/FR-035).

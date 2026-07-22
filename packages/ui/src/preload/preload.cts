@@ -224,20 +224,24 @@ contextBridge.exposeInMainWorld('throng', {
     // About window. This is the discoverable entry point — throng draws its own title
     // bar (`frame: false`), so the native application menu never renders on screen.
     open: () => ipcRenderer.send('throng:about:open'),
+    // US4 (#139): the STATIC identity — fast, paints the dialog immediately. The third-party
+    // packages list is fetched separately via getThirdParty() so the dialog never blocks on it.
     get: (): Promise<{
       version: string;
       author: string;
       repoUrl: string;
       buildId: string;
       licenseText: string;
-      thirdParty: Array<{
+    }> => ipcRenderer.invoke('throng:about:get'),
+    getThirdParty: (): Promise<
+      Array<{
         name: string;
         version: string;
         license: string;
         licenseUrl: string;
         projectUrl: string;
-      }>;
-    }> => ipcRenderer.invoke('throng:about:get'),
+      }>
+    > => ipcRenderer.invoke('throng:about:getThirdParty'),
     openExternal: (url: string) => ipcRenderer.send('throng:openExternal', url),
   },
   // A window learns it has been blurred by the app-modal preferences window (US10/FR-035) — the
