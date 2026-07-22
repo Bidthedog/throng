@@ -162,8 +162,17 @@ describe('what the file does OUTRANKS what the settings say (FR-018a)', () => {
   });
 
   it('falls back to the GLOBAL default when neither the file nor the language has an opinion', () => {
-    const effective = effectiveIndent({ inferred: null, languageId: 'plaintext', settings });
+    // A language with no registered indent convention (json ships none) — with nothing inferred it
+    // falls all the way through to the global default. (Plain text now DOES carry a convention of its
+    // own, four spaces, so it is no longer the opinion-less case — see below.)
+    const effective = effectiveIndent({ inferred: null, languageId: 'json', settings });
     expect(effective).toEqual(settings.indent);
     expect(indentUnitOf(effective)).toBe('  ');
+  });
+
+  it('plain text carries its own four-space convention', () => {
+    const effective = effectiveIndent({ inferred: null, languageId: 'plaintext', settings });
+    expect(effective).toEqual({ style: 'spaces', indentWidth: 4, tabWidth: 4 });
+    expect(indentUnitOf(effective)).toBe('    ');
   });
 });
