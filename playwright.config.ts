@@ -137,9 +137,26 @@ export default defineConfig({
   retries: process.env.THRONG_E2E_RETRIES !== undefined ? Number(process.env.THRONG_E2E_RETRIES) : 2,
   // `list` for normal output + a reporter that reminds, after every run, that the
   // @admin (run-as-admin / de-elevation) tests only verify when run elevated.
+  /*
+   * Sharded (CI): blob (mergeable) + list (live log) + json (machine-classifiable). The json
+   * report is what lets CI tell a GENUINE test flake/failure apart from a pure INFRA fault
+   * (issue #75). `failOnFlakyTests` still reddens a run whose report shows `flaky > 0` or
+   * `unexpected > 0`; but a non-zero exit with `flaky === 0 && unexpected === 0` is a worker /
+   * global-teardown fault that no test owns and no retry absorbs — CI retries the shard once for
+   * that case ONLY (see .github/workflows/ci.yml → "Run E2E shard"). The json report is the
+   * evidence for that narrow, safe distinction; it can never turn a real test flake green.
+   */
   reporter: sharded
-    ? [['blob'], ['list']]
+    ? [['blob'], ['list'], ['json', { outputFile: process.env.THRONG_E2E_JSON_OUT ?? 'shard-report.json' }]]
     : [['list'], ['./packages/ui/tests/e2e/admin-reminder.reporter.ts']],
-  timeout: 60_000,
+  // 30s per test (issue #75). 60s was too generous: when a test genuinely wedges (a window that
+  // never opens, a renderer that never settles), the old budget let it sit for a full minute
+  // before failing AND — because Playwright applies the test timeout to worker teardown too — gave
+  // a hung app a second 60s to blow the *worker-teardown* budget, which surfaces as "1 error was
+  // not a part of any test" (no retry absorbs it). 30s still clears the slowest legitimate journey
+  // (the multi-window theme/detach specs land ~5-9s) with headroom, and halves how long a real
+  // wedge can stall the suite. The harness force-kills a wedged app well inside this now
+  // (shutdownApp, packages/ui/tests/e2e/harness.ts), so teardown never rides the budget out.
+  timeout: 30_000,
   expect: { timeout: 10_000 },
 });

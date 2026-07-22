@@ -88,7 +88,10 @@ export async function stubFolderDialog(app: ElectronApplication, pickedPath?: st
  */
 export async function reloadWindow(win: Page): Promise<void> {
   await win.evaluate(() => location.reload());
-  await win.waitForLoadState('load');
+  // Bounded (issue #75): a bare waitForLoadState defaults to the whole test timeout, so a reload
+  // that never fires `load` hung the full budget as an unnamed timeout. 15s is generous for a
+  // renderer reload and turns a genuine stall into a fast, named failure.
+  await win.waitForLoadState('load', { timeout: 15_000 });
 }
 
 /**
@@ -176,37 +179,100 @@ export async function runApp(
   }
 }
 
+/** How long the graceful shutdown gets before we force-kill the Electron process tree. */
+const SHUTDOWN_GRACE_MS = 15_000;
+
 /**
- * Tear down the Electron app without teardown hangs. The main window intercepts
- * its `close` event to show the app-close warning (FR-015) — so a plain
- * `app.close()` (especially with a sub-workspace window also open) stalls waiting
- * on a prompt Playwright never answers, and the windows "hang around". We instead
- * **destroy** every BrowserWindow in the main process (destroy fires no `close`
- * event, bypassing the handshake), which triggers `window-all-closed → app.quit()`,
- * with a short settle between the sub-workspace windows and the main window. Then
- * `app.close()` just finalises the already-exiting process.
+ * Force-kill an OS process and its entire child tree, best-effort and BOUNDED.
+ *
+ * On Windows this is `taskkill /T /F` (whole tree, unconditional) — the only reliable way to reap
+ * a wedged Electron app together with its renderer/GPU/utility children and any conhost it spawned.
+ * A missing process (already exited) or an access error is swallowed: this is a last-resort cleanup,
+ * never an assertion.
+ */
+export function forceKillProcessTree(pid: number): void {
+  try {
+    if (process.platform === 'win32') {
+      execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], {
+        stdio: 'ignore',
+        timeout: 10_000,
+        windowsHide: true,
+      });
+    } else {
+      try {
+        process.kill(-pid, 'SIGKILL'); // negative pid → the process group
+      } catch {
+        process.kill(pid, 'SIGKILL');
+      }
+    }
+  } catch {
+    /* already gone, or no permission — best effort, by design */
+  }
+}
+
+/**
+ * Tear down the Electron app without teardown hangs. Two distinct hazards, both closed here:
+ *
+ * 1) **The close handshake.** The main window intercepts its `close` event to show the app-close
+ *    warning (FR-015) — so a plain `app.close()` (especially with a sub-workspace window also open)
+ *    stalls waiting on a prompt Playwright never answers, and the windows "hang around". We
+ *    **destroy** every BrowserWindow in the main process (destroy fires no `close` event, bypassing
+ *    the handshake), which triggers `window-all-closed → app.quit()`, with a short settle between
+ *    the sub-workspace windows and the main window.
+ *
+ * 2) **A wedged app hanging WORKER teardown (issue #75).** When a test times out, Playwright runs
+ *    this teardown against an app that may already be wedged — a stuck renderer that never answers
+ *    `evaluate`, an undead child keeping the process alive. An unbounded `app.close()` then rides
+ *    out the *worker-teardown* budget and Playwright reports "1 error was not a part of any test" —
+ *    a NON-test error that NO retry absorbs and that hard-reds the shard. So the graceful path is
+ *    RACED against a deadline; if it does not complete, we force-kill the whole Electron process
+ *    tree. Teardown is thereby bounded by construction and can never blow the worker budget.
  */
 async function shutdownApp(app: ElectronApplication): Promise<void> {
-  // 1) Destroy detached sub-workspace windows first (the child windows), 2) settle,
-  // 3) destroy whatever remains (the main window) — mirrors the manual "switch
-  // focus, close both windows with a beat between" that avoids the hang.
-  await app
-    .evaluate(({ BrowserWindow }) => {
-      const wins = BrowserWindow.getAllWindows();
-      // Heuristic: the earliest-created window is the main one; destroy the rest first.
-      const [main, ...children] = wins.sort((a, b) => a.id - b.id);
-      for (const w of children) if (!w.isDestroyed()) w.destroy();
-      return main?.id ?? null;
-    })
-    .catch(() => null);
-  await new Promise((r) => setTimeout(r, 200));
-  await app
-    .evaluate(({ BrowserWindow }) => {
-      for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.destroy();
-    })
-    .catch(() => {});
-  await new Promise((r) => setTimeout(r, 150));
-  await app.close().catch(() => {});
+  // The app may ALREADY have exited on its own — many specs trigger the app's own quit (TERMINATE
+  // ALL / an ordinary close that drains and quits) in the test body. Once the Electron process is
+  // gone, Playwright's `app.process()` throws ("Cannot read properties of undefined"), so read the
+  // pid defensively: no process ⇒ nothing to force-kill, and the graceful path below no-ops fast.
+  let pid: number | undefined;
+  try {
+    pid = app.process().pid;
+  } catch {
+    pid = undefined;
+  }
+  // The graceful path: destroy detached sub-workspace windows first (the child windows), settle,
+  // then destroy whatever remains (the main window) — mirrors the manual "switch focus, close both
+  // windows with a beat between" that avoids the handshake hang — then finalise with app.close().
+  const graceful = (async () => {
+    await app
+      .evaluate(({ BrowserWindow }) => {
+        const wins = BrowserWindow.getAllWindows();
+        // Heuristic: the earliest-created window is the main one; destroy the rest first.
+        const [main, ...children] = wins.sort((a, b) => a.id - b.id);
+        for (const w of children) if (!w.isDestroyed()) w.destroy();
+        return main?.id ?? null;
+      })
+      .catch(() => null);
+    await new Promise((r) => setTimeout(r, 200));
+    await app
+      .evaluate(({ BrowserWindow }) => {
+        for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.destroy();
+      })
+      .catch(() => {});
+    await new Promise((r) => setTimeout(r, 150));
+    await app.close().catch(() => {});
+  })();
+
+  const settledGracefully = await Promise.race([
+    graceful.then(() => true),
+    new Promise<boolean>((r) => setTimeout(() => r(false), SHUTDOWN_GRACE_MS)),
+  ]);
+
+  if (!settledGracefully && pid !== undefined) {
+    forceKillProcessTree(pid);
+    // The process is gone now, so this resolves immediately and lets Playwright observe the exit
+    // rather than waiting on its own internal kill timeout.
+    await app.close().catch(() => {});
+  }
 }
 
 /** Kill a detached daemon the APP spawned: ask it for its pid via health.ping. */

@@ -48,8 +48,19 @@ function nativeBg(app: ElectronApplication, which: 'main' | 'newest'): Promise<s
   }, which);
 }
 
-/** Destroy the newest window (a child: About / preferences / sub-workspace) without close-handler hangs. */
+/**
+ * Destroy the newest window (a child: About / preferences / sub-workspace) without close-handler
+ * hangs — and DO NOT return until Playwright has observed it actually close.
+ *
+ * The bug this closes (issue #75, theme-flash flake): the test destroys a child window and then
+ * *immediately* clicks the cog to open the next one. Destroy is asynchronous, so the reopen could
+ * race an incompletely-torn-down window — the cog click landed while focus was mid-transfer, the
+ * menu never opened, and `app.waitForEvent('window')` then hung the full test timeout (the 60s
+ * attempt-1 hang on run 29909576080). Waiting for the window count to actually drop makes each
+ * open start from a settled single-window state.
+ */
 async function closeNewest(app: ElectronApplication): Promise<void> {
+  const before = app.windows().length;
   await app
     .evaluate(({ BrowserWindow }) => {
       const wins = BrowserWindow.getAllWindows().sort((a, b) => a.id - b.id);
@@ -57,6 +68,7 @@ async function closeNewest(app: ElectronApplication): Promise<void> {
       if (child && wins.length > 1 && !child.isDestroyed()) child.destroy();
     })
     .catch(() => {});
+  await expect.poll(() => app.windows().length, { timeout: 10_000 }).toBeLessThan(before);
 }
 
 /**
@@ -93,10 +105,15 @@ test('every window kind follows the saved LIGHT theme — no dark canvas flash (
         // ABOUT window (a fresh app-modal BrowserWindow): same three invariants on cold open.
         await win.getByTestId('title-bar-cog').click();
         const [about] = await Promise.all([
-          app.waitForEvent('window'),
+          app.waitForEvent('window', { timeout: 15_000 }),
           win.getByTestId('cog-menu-about').click(),
         ]);
-        await about.waitForLoadState('domcontentloaded');
+        // Bound every child-window readiness wait (issue #75). A bare waitForLoadState defaults to
+        // the whole test timeout, so a child window that opens but stalls before domcontentloaded
+        // hung the full 30s as an unnamed timeout — the exact non-diagnosable shape run 29909576080
+        // showed. An explicit budget turns any recurrence into a fast, named failure that also
+        // cannot ride out the worker-teardown budget.
+        await about.waitForLoadState('domcontentloaded', { timeout: 15_000 });
         expect(await colorScheme(about)).toBe('light');
         expect((await inlineAppBg(about)).toLowerCase()).toBe(LIGHT_APP_BG);
         expect((await nativeBg(app, 'newest')).toLowerCase()).toBe(LIGHT_APP_BG);
@@ -105,10 +122,10 @@ test('every window kind follows the saved LIGHT theme — no dark canvas flash (
         // PREFERENCES window.
         await win.getByTestId('title-bar-cog').click();
         const [prefs] = await Promise.all([
-          app.waitForEvent('window'),
+          app.waitForEvent('window', { timeout: 15_000 }),
           win.getByTestId('cog-menu-themes').click(),
         ]);
-        await prefs.waitForLoadState('domcontentloaded');
+        await prefs.waitForLoadState('domcontentloaded', { timeout: 15_000 });
         await expect(prefs.getByTestId('themes-tab')).toBeVisible();
         expect(await colorScheme(prefs)).toBe('light');
         expect((await nativeBg(app, 'newest')).toLowerCase()).toBe(LIGHT_APP_BG);
@@ -119,10 +136,10 @@ test('every window kind follows the saved LIGHT theme — no dark canvas flash (
         await reloadWindow(win);
         await expect(win.getByTestId('subworkspace-name-sw1')).toHaveText('Detached A');
         const [child] = await Promise.all([
-          app.waitForEvent('window'),
+          app.waitForEvent('window', { timeout: 15_000 }),
           win.getByTestId('subworkspace-open-sw1').click(),
         ]);
-        await child.waitForLoadState('domcontentloaded');
+        await child.waitForLoadState('domcontentloaded', { timeout: 15_000 });
         await child.waitForSelector('.throng-shell', { timeout: 8000 });
         expect(await colorScheme(child)).toBe('light');
         expect((await inlineAppBg(child)).toLowerCase()).toBe(LIGHT_APP_BG);

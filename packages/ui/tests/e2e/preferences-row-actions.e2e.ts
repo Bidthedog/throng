@@ -332,9 +332,13 @@ test('the Key Bindings typeahead narrows by name AND by chord (FR-017, SC-019)',
       await expect(zoomIn).toHaveCount(0);
 
       // By CHORD — the thing you actually remember when you want to know what a key does.
+      // Best-effort read of the (currently filtered-out) chord: bound it (issue #75). The list is
+      // empty here from the 'zzzznothing' query above, so this testid is absent; without a timeout
+      // the read auto-waits the whole per-test budget before the .catch — fine at 60s, a 30s
+      // timeout at 30s. A short bound keeps it a best-effort read.
       const chords: string[] = (await prefs
         .getByTestId('binding-zoom.in-chord')
-        .textContent()
+        .textContent({ timeout: 2000 })
         .catch(() => '')) as string;
       await prefs.getByTestId('keybindings-search-clear').click();
       await expect(search).toHaveValue('');

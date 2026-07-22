@@ -96,7 +96,11 @@ test('the tooltips that already showed CONTENT are untouched (FR-010)', async ()
     const id = await firstPanelId(win);
     // The panel-type marker still names the type — it is an action/content tooltip, not an
     // instruction list, and #57 does not touch it.
-    await win.getByTestId(`panel-type-terminal-${id}`).click().catch(() => {});
+    // Best-effort probe of the panel-type marker: bound it (issue #75). Without an explicit
+    // timeout a click on an absent testid auto-waits the whole per-test budget before the .catch
+    // swallows it — invisible at 60s, but at 30s it consumed the test before the real assertion
+    // below ever ran. A short bound keeps the probe best-effort and fast.
+    await win.getByTestId(`panel-type-terminal-${id}`).click({ timeout: 2000 }).catch(() => {});
     // The add/close buttons keep their action-naming titles (constitution: themeable icon controls).
     await expect(win.getByTestId(`panel-add-${id}`)).toHaveAttribute('title', /.+/);
   });
