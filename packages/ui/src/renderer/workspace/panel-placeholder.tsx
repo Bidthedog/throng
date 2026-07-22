@@ -30,6 +30,7 @@ import { edgeDropId, panelDragId, useDragState } from './drag-state.js';
 import { setActivePane } from './active-pane.js';
 import { useWindowFocus } from './use-window-focus.js';
 import { useTerminalCwd } from '../terminal/cwd-store.js';
+import { useTerminalTitle } from '../terminal/title-store.js';
 import { useEditorState } from '../editor/editor-state.js';
 import { setLastActiveEditor } from '../editor/last-active-editor.js';
 import { getEditorActions } from '../editor/editor-actions.js';
@@ -122,6 +123,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   // visible even when a full-screen program hides the prompt. Undefined for
   // non-terminal panels (no cwd is ever pushed for their id).
   const terminalCwd = useTerminalCwd(panel.id);
+  // US10 (#89): a terminal's live window title replaces the panel name in the header when present.
+  const terminalTitle = useTerminalTitle(panel.id);
 
   // Removal verb per ownership + location (011, FR-030/031). Inside a sub-workspace a
   // Panel backed by a real project (`originProject` resolved above) is a mirrored VIEW:
@@ -465,7 +468,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
           />
         ) : (
           <span className="panel-box__title" data-testid={`panel-title-${panel.id}`}>
-            {panel.title}
+            {panel.kind === 'terminal' && terminalTitle ? terminalTitle : panel.title}
           </span>
         )}
         {panel.kind === 'terminal' && terminalCwd ? (

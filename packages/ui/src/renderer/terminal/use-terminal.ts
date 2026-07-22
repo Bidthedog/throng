@@ -19,6 +19,7 @@ import type { SearchCount } from '../search/search-model.js';
 import { shouldDropScrollback } from './clear-detect.js';
 import { saveTerminalViewState, takeTerminalViewState } from './terminal-view-state.js';
 import { parseOsc52 } from './osc52.js';
+import { setTerminalTitle, clearTerminalTitle } from './title-store.js';
 import { TerminalOutputGate } from './output-gate.js';
 import { consumeExplicitRetype } from './explicit-retype.js';
 
@@ -217,6 +218,11 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // PowerShell output. (cls/clear is handled separately via isScreenClear.)
     });
     termRef.current = term;
+
+    // US10 (#89) — surface the live window title the shell/program announces via OSC 0/2. xterm
+    // disposes this handler with the terminal (like the other on* handlers here), so no manual
+    // cleanup is needed beyond dropping the stored title on dispose (below).
+    term.onTitleChange((title) => setTerminalTitle(panelId, title));
 
     // The one paste route (#142). Reads the OS clipboard through the seam and writes it to the pty
     // ONCE, then restores focus. Shared by Ctrl+V, Shift+Insert (both in the key handler below) and
@@ -623,6 +629,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
         offsetFromBottom: Math.max(0, activeBuffer.baseY - activeBuffer.viewportY),
         selection: term.getSelectionPosition() ?? undefined,
       });
+      clearTerminalTitle(panelId); // US10 (#89): the header falls back to the panel name
       term.dispose();
       termRef.current = null;
       if (opts.apiRef) opts.apiRef.current = null;
