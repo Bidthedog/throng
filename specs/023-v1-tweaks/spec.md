@@ -8,11 +8,11 @@
 
 **Input**: User description: "Pull all \"Tweaks\" for the v1.0.0 milestone, then create a new worktree and create a single spec for all the tweaks."
 
-**Source issues**: #125, #126, #139, #140, #158 (v1.0.0 `tweak`s) and #137, #141, #154, #156, #89, #152, #155, #85 (v1.0.0 `enhancement`s).
+**Source issues**: #125, #126, #139, #140, #158 (v1.0.0 `tweak`s) and #137, #141, #154, #156, #89 (v1.0.0 `enhancement`s).
 
 ## Overview
 
-This feature bundles the remaining v1.0.0 backlog into one spec: five small **Tweaks** (US1–US5 — polish that adds no new capability) and eight **Enhancements** (US6–US13 — new, user-visible capability). Each user story is **independently shippable**; the single spec exists to plan and track them together, not to force them into one PR.
+This feature bundles the remaining v1.0.0 backlog into one spec: five small **Tweaks** (US1–US5 — polish that adds no new capability) and five **Enhancements** (US6–US10 — new, user-visible capability). Each user story is **independently shippable**; the single spec exists to plan and track them together, not to force them into one PR.
 
 | Story | Issue | Type | Area | One-liner |
 |-------|-------|------|------|-----------|
@@ -26,11 +26,10 @@ This feature bundles the remaining v1.0.0 backlog into one spec: five small **Tw
 | US8 | #154 | enhancement | editor/prefs | Preference: "Save Document Scroll Position" (scroll scoped per document) |
 | US9 | #156 | enhancement | file explorer | "Copy Path" submenu (absolute/relative × Windows/Linux slashes) |
 | US10 | #89 | enhancement | terminal | Show the terminal's live window title in its header |
-| US11 | #152 | enhancement | editor/terminal/prefs | Word-wrap toggle per instance + a terminal status bar + editor/terminal default-wrap preferences |
-| US12 | #155 | enhancement | editor/terminal | Drag & drop a file/folder into a terminal or editor to paste its path |
-| US13 | #85 | enhancement | file explorer | Undo/redo a tree file **move / rename / delete** (delete via restore) |
 
-The Tweaks (US1–US5) carry a **no behaviour regressions** constraint. The Enhancements (US6–US13) add capability and each obeys the constitution's cross-cutting rules — the platform seam for OS reveals (Principle II), one-document-one-state (#68), and the scope-based keybinding dispatch — called out per story below.
+US11–US13 (#152, #155, #85) were descoped to **spec 024** (`feature/S024-editor-terminal-enhancements`).
+
+The Tweaks (US1–US5) carry a **no behaviour regressions** constraint. The Enhancements (US6–US10) add capability and each obeys the constitution's cross-cutting rules — the platform seam for OS reveals (Principle II), one-document-one-state (#68), and the scope-based keybinding dispatch — called out per story below.
 
 ## Clarifications
 
@@ -39,12 +38,12 @@ The Tweaks (US1–US5) carry a **no behaviour regressions** constraint. The Enha
 - Q: US2 (#140) — when double-clicking a directory row in Single select mode, what should "open" the directory do? → A: Toggle its expansion **in place** — expand the folder's children in the tree if collapsed, collapse it if already expanded (the standard file-tree gesture, mirroring the chevron). It does **not** drill in / re-root the tree.
 - Q: Do US1 (shortcuts) and US3 (icons) cover the **cog dropdown menu** (Settings / Key Bindings / Themes / About), or only right-click context menus? → A: **Include the cog dropdown.** Every menu built on the shared `MenuItem`/`ContextMenu` component is in scope — icons for all such menus (US3), and shortcut brackets for any cog item whose command has a bound shortcut (US1).
 - Q: US5 (#158) — where does "Open in OS Explorer" go when a row has no editor "Open In" targets (folders / target-less files)? → A: **Always route it through the one "Open In" submenu** (reuse the same submenu as the container). Where editor targets exist (files) they appear beneath; where they don't (folders), the submenu simply omits them and contains just "Open in OS Explorer". The previous top-level "Open in OS File Explorer" row is relocated into this submenu.
-- Q: US13 (#85) — is **rename** (and **delete**) undo/redo in scope alongside **move**? → A: **Yes to both.** US13's undo/redo covers **move, rename, and delete**. Delete-undo **restores** the removed item — from the **OS recycle bin**, through the file-system seam — under the same validate-before-apply rule; if the content can no longer be recovered, the undo is **refused with an explanation** and changes nothing. Issue #85 updated to match.
-- Q: US13 (#85) — where does a deleted item come back from on undo — OS recycle bin or an app-managed staging area? → A: The **OS recycle bin**, via the platform seam. Tree deletes route to the system trash; undo restores from it by original path (the seam keeps macOS/Linux trash open later). If the item is no longer in the recycle bin, the undo is refused with an explanation.
+- Q: US13 (#85) — is **rename** (and **delete**) undo/redo in scope alongside **move**? → A: **Yes to both.** US13's undo/redo covers **move, rename, and delete**. Delete-undo **restores** the removed item — from the **OS recycle bin**, through the file-system seam — under the same validate-before-apply rule; if the content can no longer be recovered, the undo is **refused with an explanation** and changes nothing. Issue #85 updated to match. (moved to spec 024)
+- Q: US13 (#85) — where does a deleted item come back from on undo — OS recycle bin or an app-managed staging area? → A: The **OS recycle bin**, via the platform seam. Tree deletes route to the system trash; undo restores from it by original path (the seam keeps macOS/Linux trash open later). If the item is no longer in the recycle bin, the undo is refused with an explanation. (moved to spec 024)
 
 ### Session 2026-07-22 (second pass)
 
-- Q: US11 (#152) — default word-wrap state for a new editor/terminal instance? → A: Default **On**, via **two separate persisted preferences** — an **"Editor default word wrap"** and a **"Terminal default word wrap"**, each defaulting to **On**. A new instance starts at its type's preference; the per-instance status-bar toggle overrides it for **that instance only** (in-memory, not persisted). This **supersedes** #152's original "per-instance only, no preference" note.
+- Q: US11 (#152) — default word-wrap state for a new editor/terminal instance? → A: Default **On**, via **two separate persisted preferences** — an **"Editor default word wrap"** and a **"Terminal default word wrap"**, each defaulting to **On**. A new instance starts at its type's preference; the per-instance status-bar toggle overrides it for **that instance only** (in-memory, not persisted). This **supersedes** #152's original "per-instance only, no preference" note. (moved to spec 024)
 - Q: US10 (#89) — how does the live terminal title coexist with the panel's own name in the header? → A: The reported title **replaces** the name when present; when the title is empty the header shows the **panel name** (a single label, title-led). Matches FR-033.
 - Q: US6 (#137) — one editor-title "Open in OS Explorer" item, or two? → A: **Two**, but reinterpreted: **(1) "Reveal File"** reveals the open file in throng's **in-app Files & Folders view** (expand ancestors + select/scroll to it in the explorer tree) — **not** the OS Explorer; **(2) "Open in OS Explorer"** opens the **OS** file manager at the file's folder (via the platform seam). Issue #137 updated to reflect the in-app-reveal vs OS-reveal split.
 - Q: US5/US9 — where do the "Open In" and "Copy Path" submenus sit in the Files & Folders menu? → A: **Adjacent, "Open In" above "Copy Path", grouped near the bottom** (after the file operations). More broadly: **context menus SHOULD be organised into sensible, visually-separated SECTION GROUPS** (e.g. clipboard ops / creation / location actions), which requires the shared `ContextMenu` to support **section separators**. This is a **cross-cutting menu-structure requirement** spanning US1/US3/US5/US9 (see FR-018a) and may warrant its own tracking issue.
@@ -222,62 +221,6 @@ The terminal panel header reflects the **live window title** the terminal report
 
 ---
 
-### User Story 11 - Per-instance word-wrap toggle (+ terminal status bar) (#152, Priority: P11)
-
-Word wrap can be toggled **per editor instance and per terminal instance** from that panel's **status bar**. Editors gain a wrap toggle on their existing status bar; **terminals gain a new status bar** (they have none today) hosting the same toggle. Two **persisted preferences** set the starting state — an **"Editor default word wrap"** and a **"Terminal default word wrap"**, each defaulting to **On** — so a new instance begins wrapped (or not, if its type's preference is off). The **per-instance toggle overrides** its instance's state **in-memory only** — a killed-and-reopened instance returns to its type's default preference, not the last toggled value. Editors use Monaco wrapping; terminals use xterm reflow. The new terminal status bar is a prerequisite and MAY be split into its own linked issue during planning if too large for one PR.
-
-**Why this priority**: Useful readability control, but the largest of the enhancements (needs a new terminal status-bar surface + two settings).
-
-**Independent Test**: A fresh editor and terminal start at their type's default-wrap preference (On by default); toggling one editor/terminal wraps only that instance; kill and reopen → back to the type's default preference (the toggle is not persisted); changing a default preference affects newly-opened instances of that type.
-
-**Acceptance Scenarios**:
-
-1. **Given** the default preferences (each defaulting to **On**), **When** a new editor or terminal opens, **Then** it starts at its type's default-wrap preference.
-2. **Given** an editor panel, **When** its status-bar wrap toggle is used, **Then** wrapping turns on/off for that editor only.
-3. **Given** a terminal panel, **When** its (new) status-bar wrap toggle is used, **Then** wrapping turns on/off for that terminal only.
-4. **Given** multiple editors/terminals, **When** one instance is toggled, **Then** no other instance is affected.
-5. **Given** any instance, **When** it is killed and reopened, **Then** it returns to its type's default-wrap **preference** (the per-instance toggle is not persisted).
-6. **Given** a change to the "Editor default word wrap" or "Terminal default word wrap" preference, **When** a new instance of that type opens, **Then** it starts at the new default.
-
----
-
-### User Story 12 - Drag & drop a file/folder to paste its path (#155, Priority: P12)
-
-Dragging a file or folder onto a **terminal** inserts its path into the terminal input; onto an **editor** inserts its path into the document at the drop point. The path defaults to the OS-native absolute path, **quoted if it contains spaces** so it is usable on a command line. This is distinct from dropping onto an **empty** panel to *open* the file (#114/#115) — a drop onto an editor/terminal's **content** pastes the path; a drop onto an empty panel keeps the existing open/convert behaviour.
-
-**Why this priority**: A natural gesture that removes copy-paste friction; must be reconciled with existing drop-to-open behaviour.
-
-**Independent Test**: Drag a file onto a terminal → its path appears in the input; drag a folder onto an editor → its path inserts at the drop point; a path with spaces is quoted; a drop onto an empty panel still opens/converts (#114/#115).
-
-**Acceptance Scenarios**:
-
-1. **Given** a terminal, **When** a file or folder is dropped onto its content, **Then** the item's path is inserted into the terminal input.
-2. **Given** an editor, **When** a file or folder is dropped onto its content, **Then** the item's path is inserted into the document at the drop point.
-3. **Given** a path containing spaces, **When** it is inserted, **Then** it is quoted so it is usable on a command line.
-4. **Given** an empty panel, **When** a file is dropped, **Then** the existing open/convert behaviour runs (#114/#115), not path-paste.
-
----
-
-### User Story 13 - Undo/redo file operations in the File Explorer (#85, Priority: P13)
-
-With the File Explorer focused, `Ctrl+Z` undoes the last file-system operation performed **from the tree** — a **move** (cut+paste or drag-move), a **rename**, or a **delete** — and `Ctrl+Y` / `Ctrl+Shift+Z` redoes it. A move/rename returns the item to its previous path; a **delete is undone by restoring** the removed item (from the **OS recycle bin**, via the platform seam) to its original path — deletes from the tree therefore route to the system trash, not an unrecoverable hard delete. The chord resolves by **scope** (`{explorer}` vs `{editor}`), so `Ctrl+Z` in an editor still undoes text. Every entry is **validated before it is applied** and **refused with an explanation, changing nothing**, when the world no longer matches (path renamed/deleted/replaced, or a deleted item's content can no longer be recovered). An open editor on the affected file **follows the change** (one-document-one-state, #68). The stack is **bounded and per-project**. All operations go through the file-system seam (Principle II).
-
-**Why this priority**: The most complex enhancement — a destructive-operation undo (now including delete-restore) that must never clobber; deliberately last, and the most likely to split into linked issues.
-
-**Independent Test**: Cut/paste, rename, and delete an item from the tree; `Ctrl+Z` (tree focused) reverses each — the moved/renamed item returns to its previous path and the deleted item is restored; `Ctrl+Y` re-applies; `Ctrl+Z` with an editor focused undoes text, not a file op; an entry whose world changed (or an unrecoverable delete) is refused and changes nothing; an open editor follows the reversal without going dirty.
-
-**Acceptance Scenarios**:
-
-1. **Given** a file cut and pasted into another folder, **When** `Ctrl+Z` is pressed with the tree focused, **Then** the file is back at its origin on disk and in the tree.
-2. **Given** a drag-move or a **rename**, **When** `Ctrl+Z` (tree focused), **Then** it is undone (the item returns to its previous path); **and** `Ctrl+Y` re-applies it.
-3. **Given** a **delete** performed from the tree, **When** `Ctrl+Z` (tree focused), **Then** the item is **restored** to its original path (from the OS recycle bin); **and** `Ctrl+Y` deletes it again.
-4. **Given** an editor has focus, **When** `Ctrl+Z` is pressed, **Then** text is undone — never a file operation (scope table).
-5. **Given** an undo entry whose world has changed (path taken by something else, or a deleted item's content unrecoverable), **When** it is applied, **Then** it is **refused with an explanation** and **nothing changes** (never overwrites).
-6. **Given** an open editor on the affected file, **When** the operation is undone, **Then** the editor follows it and does not go dirty or warn.
-7. **Given** the undo stack, **When** it grows, **Then** it is bounded and per-project (an operation in one project is not undoable from another).
-
----
-
 ### Edge Cases
 
 - **US1**: A command bound to a chord/multi-key sequence — the bracketed text must render the whole first binding, not a truncated fragment. A very long shortcut string must not push the menu to an unreadable width.
@@ -288,11 +231,9 @@ With the File Explorer focused, `Ctrl+Z` undoes the last file-system operation p
 - **US4**: The packages list fails to load — the failure is surfaced within the dialog (the dialog itself still works); this is explicitly a Tweak, not error-handling for a broken list, so a graceful "couldn't load" state is acceptable and total absence of the list is out of scope to fix here.
 - **US4**: The dialog is reopened quickly after being closed mid-load — a fresh load starts cleanly without leaking the cancelled one.
 - **US5**: A **folder** (or a target-less file) — its "Open In" submenu intentionally contains **only** "Open in OS Explorer" (a single-item submenu is by design here); the editor targets are omitted as irrelevant, and the OS-Explorer action is never lost.
-- **US6/US13**: On a platform whose reveal seam is not implemented, the reveal/undo path degrades cleanly (the action is unavailable or reports it), never a hard-coded Windows call in shared code.
+- **US6**: On a platform whose reveal seam is not implemented, the reveal path degrades cleanly (the action is unavailable or reports it), never a hard-coded Windows call in shared code.
 - **US7/US8**: The two preferences interact with #144 (switch-away-and-back restore) and #68 (one document, one state) — US7's reuse and US8's in-place reset MUST NOT create a second document state nor break #144's restore.
 - **US10**: A terminal that never reports a title, and one that reports a pathological multi-kilobyte or escape-laden title — the header shows the panel name in the first case and capped plain text in the second, never broken layout or injected markup.
-- **US12**: A drop that lands ambiguously between an empty region and content, or onto a panel type that is neither editor nor terminal — resolve deterministically to either path-paste (content) or the existing open/convert (empty), never both.
-- **US13**: Concurrent/rapid ops, a move/rename/delete whose source project is closed before undo, and a **delete whose content can no longer be recovered** (the item was purged from the recycle bin) — the per-project bounded stack refuses cleanly with an explanation rather than acting across projects, on a vanished context, or restoring content it no longer has.
 
 ## Requirements *(mandatory)*
 
@@ -362,28 +303,9 @@ With the File Explorer focused, `Ctrl+Z` undoes the last file-system operation p
 - **FR-033**: The terminal panel header MUST reflect the live window title reported via OSC 0/2 (`onTitleChange`), updating as it changes, and MUST fall back to the panel's own name when the reported title is empty. Non-terminal panels are unaffected.
 - **FR-034**: The reported title MUST be rendered as **length-capped plain text** — never markup or escape-sequence passthrough (it is untrusted PTY output) — and is renderer-side display state only (no persistence, no daemon/session change).
 
-**US11 — per-instance word-wrap toggle (#152)**
-
-- **FR-035**: Each **editor** panel's status bar and each **terminal** panel (via a **new** terminal status bar) MUST carry a word-wrap toggle that turns wrapping on/off for **that instance only** (editor: Monaco wrap; terminal: xterm reflow).
-- **FR-035a**: Two **persisted preferences** MUST set the starting word-wrap state — **"Editor default word wrap"** and **"Terminal default word wrap"**, each defaulting to **On**. A new editor/terminal instance MUST start at its **type's** preference.
-- **FR-036**: The per-instance toggle MUST override in-memory only — toggling one instance MUST NOT affect any other, and a killed-and-reopened instance MUST return to its type's default-wrap **preference** (not the last toggled value).
-
-**US12 — drag & drop to paste a path (#155)**
-
-- **FR-037**: Dropping a file/folder onto a **terminal's** content MUST insert its path into the terminal input; dropping onto an **editor's** content MUST insert its path into the document at the drop point.
-- **FR-038**: The inserted path defaults to the OS-native absolute path and MUST be **quoted when it contains spaces**; a drop onto an **empty** panel MUST keep the existing open/convert behaviour (#114/#115), not path-paste.
-
-**US13 — undo a file move (#85)**
-
-- **FR-039**: With the File Explorer focused, `Ctrl+Z` MUST undo the last tree operation — a **move** (cut+paste or drag-move), a **rename**, or a **delete** — and `Ctrl+Y` / `Ctrl+Shift+Z` MUST redo it; the chord MUST resolve by **scope** so `Ctrl+Z` in an editor still undoes text.
-- **FR-040**: Tree deletes MUST route to the **OS recycle bin** (not an unrecoverable hard delete), and a **delete** MUST be undone by **restoring** the removed item from the recycle bin to its original path **through the file-system seam**; a move/rename is undone by returning the item to its previous path.
-- **FR-041**: Every undo entry MUST be **validated before it is applied** and **refused with an explanation, changing nothing**, when the world no longer matches what it describes (path renamed/deleted/replaced, or a deleted item's content no longer recoverable) — it MUST never overwrite.
-- **FR-042**: An undone operation MUST **re-point any open editor** on the affected file so it follows the change without going dirty or warning (one-document-one-state, #68); all operations MUST go through the file-system seam (Principle II).
-- **FR-043**: The undo stack MUST be **bounded and per-project**. Rename and delete are **in scope** (delete via restore); no other file-system operation is undoable by this story.
-
 **Cross-cutting**
 
-- **FR-018**: No change in this feature may regress existing behaviour; each user story (tweak or enhancement) MUST be independently verifiable, and surfaces it does not touch MUST behave identically to today. Every user-facing story MUST ship passing E2E coverage (constitution Principle V), and OS-specific behaviour (US6, US13) MUST go through the platform seam with contract tests (Principle II).
+- **FR-018**: No change in this feature may regress existing behaviour; each user story (tweak or enhancement) MUST be independently verifiable, and surfaces it does not touch MUST behave identically to today. Every user-facing story MUST ship passing E2E coverage (constitution Principle V), and OS-specific behaviour (US6) MUST go through the platform seam with contract tests (Principle II).
 - **FR-018a** (menu structure, spans US1/US3/US5/US9): The shared `ContextMenu` MUST support **visual section separators**, and menus with several logical groups MUST be organised into **sensible, visually-separated sections** (e.g. clipboard operations, item creation, location actions). In the **Files & Folders** menu specifically, **"Open In"** and **"Copy Path"** sit **adjacently ("Open In" first)** in a location-actions group near the **bottom** of the menu; the file operations (Rename/Cut/Copy/Paste/New/Delete) keep their existing relative order. A separator MUST be non-interactive and MUST NOT disturb the icon/label/shortcut alignment of real items.
 
 ### Key Entities
@@ -398,8 +320,6 @@ With the File Explorer focused, `Ctrl+Z` undoes the last file-system operation p
 - **Document scroll position**: scroll kept per document (US8); restored on in-place reopen only when the preference is On; independent of #144's per-panel view-state restore.
 - **Path form**: one of absolute/relative × Windows/Linux-slash renderings of an item's path (US9), relative to the project root.
 - **Terminal window title**: the live OSC-reported title of a terminal (US10) — untrusted PTY text, length-capped, renderer-side, distinct from the panel's own name.
-- **Word-wrap state**: a per-instance, in-memory on/off flag for an editor or terminal (US11) that overrides — and on reopen resets to — its type's **default-wrap preference** ("Editor default word wrap" / "Terminal default word wrap", each defaulting On).
-- **File-op-undo entry**: a per-project, bounded record of a tree **move, rename, or delete** that US13 can reverse — a move/rename by returning the item to its previous path, a delete by restoring it from the **OS recycle bin** — but only after validating the world still matches (and the content is still recoverable); otherwise refused.
 
 ## Success Criteria *(mandatory)*
 
@@ -418,15 +338,12 @@ With the File Explorer focused, `Ctrl+Z` undoes the last file-system operation p
 - **SC-011** (US9): For any file or folder, each of the four "Copy Path" forms places the correct path on the clipboard; relative forms are correct against the project root; the "Copy Path" submenu sits directly below "Open In" in the location group.
 - **SC-011a** (menu structure, FR-018a): The Files & Folders menu reads as sensible separated sections — file operations, creation, and a bottom location group with "Open In" then "Copy Path"; separators are non-interactive and no item's icon/label/shortcut alignment is disturbed.
 - **SC-012** (US10): A terminal's header reflects its reported title within one render of an OSC title change, falls back to the panel name when empty, and is never broken or made to render markup by hostile title output.
-- **SC-013** (US11): A new editor/terminal starts at its type's default-wrap preference (On by default); toggling word wrap on one editor or terminal affects only that instance; a reopened instance is back at its type's default preference; both editor and terminal expose the toggle on a status bar.
-- **SC-014** (US12): Dropping a file/folder onto a terminal or editor's content inserts its (space-quoted where needed) path at the drop point; dropping onto an empty panel still opens/converts (#114/#115).
-- **SC-015** (US13): A tree **move, rename, and delete** are each undone and redone from the tree (delete via restore); `Ctrl+Z` in an editor never touches a file op; an entry whose world changed — or an unrecoverable delete — is refused with an explanation and changes nothing; an open editor follows an undone op without going dirty; the stack is bounded and per-project.
 
 ## Assumptions
 
-- Scope is the thirteen `v1.0.0` issues pulled in at the user's request: five `tweak`s (#125, #126, #139, #140, #158) and eight `enhancement`s (#137, #141, #154, #156, #89, #152, #155, #85). All are treated as agreed by virtue of that instruction; all are assigned.
-- These are **independently shippable** — the bundle exists to plan and track together, not to merge as one PR. The three largest enhancements (**US11** #152 new terminal status bar, **US12** #155 drag-drop reconciliation, **US13** #85 undo-with-validation) MAY be split into their own linked issues/branches during planning if too large for one PR; the spec notes this rather than forcing one implementation shape.
-- Cross-cutting constitutional rules apply and are called out per story: the platform seam for OS reveals/moves (Principle II — US6, US13), one-document-one-state (#68 — US7, US13), #144's switch-restore (US8), and scope-based keybinding dispatch (US13).
+- Scope is the ten `v1.0.0` issues delivered here at the user's request: five `tweak`s (#125, #126, #139, #140, #158) and five `enhancement`s (#137, #141, #154, #156, #89). All are treated as agreed by virtue of that instruction; all are assigned. The three largest enhancements (#152, #155, #85) were **split out to spec 024** (`feature/S024-editor-terminal-enhancements`) so these ten could ship first (PR #151).
+- These are **independently shippable** — the bundle exists to plan and track together, not to merge as one PR.
+- Cross-cutting constitutional rules apply and are called out per story: the platform seam for OS reveals (Principle II — US6), one-document-one-state (#68 — US7), and #144's switch-restore (US8).
 - The shared context-menu (`MenuItem` / `ContextMenu`) plumbing already supports an optional `icon` token and shortcut display is an additive render concern — no new menu framework is introduced.
 - Expansion of the theme icon-token set is tracked separately (issue #127) and is a **dependency, not a blocker**: US3 reuses existing tokens and records gaps rather than adding new tokens here.
 - "First binding" for US1 means the first entry in the command's ordered binding list as the keybinding system already orders them.
