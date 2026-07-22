@@ -20,6 +20,7 @@ import {
   setActiveTab as opSetActiveTab,
   renameTab as opRenameTab,
   renamePanel as opRenamePanel,
+  resetPanelName as opResetPanelName,
   closeTab as opCloseTab,
   closeOtherTabs as opCloseOtherTabs,
   resizeSplit as opResizeSplit,
@@ -76,6 +77,7 @@ export interface WorkspaceContextValue {
   resetZoom(panelId: string): void;
   renameTab(tabId: string, title: string): void;
   renamePanel(panelId: string, title: string): void;
+  resetPanelName(panelId: string): void;
   closeTab(tabId: string): void;
   closeOtherTabs(tabId: string): void;
   resizeSplit(tabId: string, path: number[], sizes: number[]): void;
@@ -249,6 +251,7 @@ export function WorkspaceProvider({
       resetZoom: (panelId) => apply((l) => opResetZoom(l, panelId)),
       renameTab: (tabId, title) => apply((l) => opRenameTab(l, tabId, title)),
       renamePanel: (panelId, title) => apply((l) => opRenamePanel(l, panelId, title)),
+      resetPanelName: (panelId) => apply((l) => opResetPanelName(l, panelId)),
       closeTab: (tabId) => apply((l) => opCloseTab(l, tabId)),
       closeOtherTabs: (tabId) => apply((l) => opCloseOtherTabs(l, tabId)),
       resizeSplit: (tabId, path, sizes) => apply((l) => opResizeSplit(l, tabId, path, sizes)),

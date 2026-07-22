@@ -498,6 +498,7 @@ export {
   setActiveTab,
   renameTab,
   renamePanel,
+  resetPanelName,
   closeTab,
   closeOtherTabs,
   resizeSplit,

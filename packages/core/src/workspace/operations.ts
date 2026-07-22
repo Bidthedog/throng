@@ -276,9 +276,21 @@ export function renameTab(layout: WorkspaceLayout, tabId: string, title: string)
 
 function renameInNode(node: LayoutNode, panelId: string, title: string): LayoutNode {
   if (isPanel(node)) {
-    return node.id === panelId ? { ...node, title } : node;
+    // Capturing defaultTitle the FIRST time (not on re-renames) is what lets Reset Name restore the
+    // original placeholder rather than an intermediate custom name.
+    return node.id === panelId
+      ? { ...node, title, titleIsCustom: true, defaultTitle: node.defaultTitle ?? node.title }
+      : node;
   }
   return { ...node, children: node.children.map((c) => renameInNode(c, panelId, title)) };
+}
+
+function resetNameInNode(node: LayoutNode, panelId: string): LayoutNode {
+  if (isPanel(node)) {
+    if (node.id !== panelId || !node.titleIsCustom) return node;
+    return { ...node, title: node.defaultTitle ?? node.title, titleIsCustom: false };
+  }
+  return { ...node, children: node.children.map((c) => resetNameInNode(c, panelId)) };
 }
 
 /** Rename a Panel anywhere in the tree (ignores blank titles) — FR-037. */
@@ -292,6 +304,17 @@ export function renamePanel(
   return {
     ...layout,
     tabs: layout.tabs.map((tab) => ({ ...tab, root: renameInNode(tab.root, panelId, trimmed) })),
+  };
+}
+
+/**
+ * Reset a renamed Panel back to the default it was created with — the "Reset Name" companion to
+ * {@link renamePanel}. A no-op on a panel that was never renamed.
+ */
+export function resetPanelName(layout: WorkspaceLayout, panelId: string): WorkspaceLayout {
+  return {
+    ...layout,
+    tabs: layout.tabs.map((tab) => ({ ...tab, root: resetNameInNode(tab.root, panelId) })),
   };
 }
 
