@@ -11,7 +11,8 @@ import { Icon } from '../common/icon.js';
 import { clampToViewport } from '../common/clamp-to-viewport.js';
 
 export interface MenuItem {
-  label: string;
+  /** The row's text. Required for a real action item; omitted for a `separator`. */
+  label?: string;
   onClick?: () => void;
   disabled?: boolean;
   /** Theme icon token shown before the label (e.g. 'rename', 'send', 'destroy'). */
@@ -24,6 +25,11 @@ export interface MenuItem {
   shortcut?: string;
   /** A nested submenu, shown as a flyout after a hover dwell. Nests to any depth. */
   submenu?: MenuItem[];
+  /**
+   * A non-interactive section divider (FR-018a) rather than an action. When set, the item renders
+   * as a horizontal rule and carries no label/icon/shortcut/action; keyboard navigation skips it.
+   */
+  separator?: boolean;
   /**
    * Override the item's test identifier (default `menu-item-<label>`).
    *
@@ -81,7 +87,8 @@ function MenuLevel({
    * Roving focus: exactly one item is tabbable at a time and holds DOM focus; the arrows move it.
    */
   const itemRefs = useRef<(HTMLLIElement | null)[]>([]);
-  const enabled = items.map((it, i) => (it.disabled ? -1 : i)).filter((i) => i >= 0);
+  // Separators (FR-018a) and disabled items are not keyboard-navigable.
+  const enabled = items.map((it, i) => (it.disabled || it.separator ? -1 : i)).filter((i) => i >= 0);
   /**
    * NOTHING is active until the user says so.
    *
@@ -141,7 +148,7 @@ function MenuLevel({
         if (item?.submenu?.length) {
           e.preventDefault();
           e.stopPropagation();
-          setOpenLabel(item.label);
+          setOpenLabel(item.label ?? null);
         }
         break;
       }
@@ -159,7 +166,7 @@ function MenuLevel({
         e.preventDefault();
         e.stopPropagation();
         if (item.submenu?.length) {
-          setOpenLabel((cur) => (cur === item.label ? null : item.label));
+          setOpenLabel((cur) => (cur === item.label ? null : (item.label ?? null)));
           return;
         }
         item.onClick?.();
@@ -225,6 +232,10 @@ function MenuLevel({
       onContextMenu={(e) => e.preventDefault()}
     >
       {items.map((item, index) => {
+        // FR-018a — a section divider: non-interactive, no role="menuitem", skipped by navigation.
+        if (item.separator) {
+          return <li key={`sep-${index}`} className="context-menu__separator" role="separator" aria-hidden />;
+        }
         const hasSub = !!item.submenu && item.submenu.length > 0;
         return (
           <li
@@ -243,7 +254,7 @@ function MenuLevel({
             onMouseEnter={() => {
               cancelHover();
               if (hasSub && !item.disabled) {
-                hoverTimer.current = setTimeout(() => setOpenLabel(item.label), submenuDelayMs);
+                hoverTimer.current = setTimeout(() => setOpenLabel(item.label ?? null), submenuDelayMs);
               } else {
                 setOpenLabel(null);
               }
@@ -254,7 +265,7 @@ function MenuLevel({
               if (hasSub) {
                 e.stopPropagation();
                 cancelHover();
-                setOpenLabel((cur) => (cur === item.label ? null : item.label)); // click toggles
+                setOpenLabel((cur) => (cur === item.label ? null : (item.label ?? null))); // click toggles
                 return;
               }
               item.onClick?.();

@@ -53,18 +53,30 @@ export function buildContextMenuItems(args: {
     items.push({ label: 'Copy', shortcut: sc('file.copy'), onClick: () => ops.copy(targets) });
   }
   items.push({ label: 'Paste', disabled: clipboard === null, shortcut: sc('file.paste'), onClick: () => ops.paste(node) });
+
+  // Create section.
+  items.push({ separator: true });
   items.push({ label: 'New File', icon: 'add', onClick: () => ops.newFile(node) });
   items.push({ label: 'New Folder', icon: 'newFolder', onClick: () => ops.newFolder(node) });
+
+  // Destructive section.
   if (!isRoot) {
+    items.push({ separator: true });
     items.push({ label: 'Delete', icon: 'destroy', shortcut: sc('file.delete'), onClick: () => ops.remove(targets) });
   }
-  // A single, consistently-named OS reveal for BOTH files and folders (FR-107).
-  // Files ALSO get an "Open In" submenu of editor targets only (no reveal duplicate).
-  if (openIn && openIn.length > 0) {
-    items.push({ label: 'Open In', icon: 'send', submenu: openIn });
-  }
-  items.push({ label: 'Open in OS File Explorer', onClick: () => ops.reveal(node.relPath) });
+
+  // Location section (US5/#158, FR-018a): a single "Open In" submenu, "Open in OS Explorer" FIRST,
+  // with the editor "Open In" targets (for files) beneath. Folders get just the OS reveal.
+  items.push({ separator: true });
+  const openInItems: MenuItem[] = [
+    { label: 'Open in OS File Explorer', icon: 'send', onClick: () => ops.reveal(node.relPath) },
+    ...(openIn ?? []),
+  ];
+  items.push({ label: 'Open In', icon: 'send', submenu: openInItems });
+
+  // Hide section.
   if (!isRoot) {
+    items.push({ separator: true });
     items.push({ label: 'Hide in this project', onClick: () => ops.hide(node.relPath) });
   }
   return items;
