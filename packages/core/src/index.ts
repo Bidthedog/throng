@@ -125,6 +125,7 @@ export type {
   TerminalFlavourConfig,
   EditorSettings,
   EditorOpenOnClick,
+  EditorOpenTarget,
   SaveAllScopeSetting,
   DefaultLineEnding,
   EditorPathDisplay,
