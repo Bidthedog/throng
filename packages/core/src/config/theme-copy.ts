@@ -632,6 +632,57 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Close window icon',
     description: 'The mark on the control that shuts a window for good.',
   },
+  'icons.cut': {
+    label: 'Cut icon',
+    description:
+      'The glyph on the menu row that lifts the selected text or files onto the clipboard and removes them from where they were.',
+  },
+  'icons.copy': {
+    label: 'Copy icon',
+    description:
+      'The glyph on the menu row that places the selected text or files onto the clipboard, leaving the originals in place.',
+  },
+  'icons.paste': {
+    label: 'Paste icon',
+    description:
+      'The glyph on the menu row that drops whatever the clipboard holds in at the cursor or the chosen folder.',
+  },
+  'icons.selectAll': {
+    label: 'Select all icon',
+    description: 'The glyph on the menu row that highlights the whole document at once, ready to act on together.',
+  },
+  'icons.undo': {
+    label: 'Undo icon',
+    description: 'The glyph on the editor menu row that steps the last change back out of the document.',
+  },
+  'icons.redo': {
+    label: 'Redo icon',
+    description: 'The glyph on the editor menu row that reapplies a change you had just stepped back out.',
+  },
+  'icons.language': {
+    label: 'Set language icon',
+    description: 'The glyph on the editor menu row that opens the picker for which language colours and folds the file.',
+  },
+  'icons.keybindings': {
+    label: 'Key bindings icon',
+    description: 'The glyph on the title-bar menu row that opens the editor for the keyboard shortcuts you can rebind.',
+  },
+  'icons.themes': {
+    label: 'Themes icon',
+    description: 'The glyph on the title-bar menu row that opens the editor for the colours, fonts, and glyphs the app wears.',
+  },
+  'icons.about': {
+    label: 'About icon',
+    description: 'The glyph on the title-bar menu row that opens the window naming the release and its build details.',
+  },
+  'icons.hide': {
+    label: 'Hide entry icon',
+    description: 'The glyph on the tree menu row that drops a file or folder out of view for this project only.',
+  },
+  'icons.resetName': {
+    label: 'Reset name icon',
+    description: 'The glyph on the menu row that returns a renamed tab or project to the name it started with.',
+  },
   // ── Sizes ─────────────────────────────────────────────────────────────────────────────────────
   'sizes.iconPx': {
     label: 'Icon Size',

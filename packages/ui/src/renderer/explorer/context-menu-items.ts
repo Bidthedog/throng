@@ -51,13 +51,12 @@ export function buildContextMenuItems(args: {
   const items: MenuItem[] = [];
   if (!isRoot) {
     items.push({ label: 'Rename', icon: 'rename', shortcut: sc('file.rename'), onClick: () => ops.beginRename(node.relPath) });
-    // US3 (#126): the clipboard actions have NO theme icon token yet (no cut/copy/paste tokens in
-    // the shipped set) → left iconless and recorded for the separate icon-token work (#127). The
-    // icon column is still reserved, so the rows stay aligned (FR-012).
-    items.push({ label: 'Cut', shortcut: sc('file.cut'), onClick: () => ops.cut(targets) });
-    items.push({ label: 'Copy', shortcut: sc('file.copy'), onClick: () => ops.copy(targets) });
+    // 023 (#127): the clipboard actions now have their own theme tokens (cut/copy/paste), so the
+    // reserved icon column finally renders a glyph rather than sitting blank.
+    items.push({ label: 'Cut', icon: 'cut', shortcut: sc('file.cut'), onClick: () => ops.cut(targets) });
+    items.push({ label: 'Copy', icon: 'copy', shortcut: sc('file.copy'), onClick: () => ops.copy(targets) });
   }
-  items.push({ label: 'Paste', disabled: clipboard === null, shortcut: sc('file.paste'), onClick: () => ops.paste(node) });
+  items.push({ label: 'Paste', icon: 'paste', disabled: clipboard === null, shortcut: sc('file.paste'), onClick: () => ops.paste(node) });
 
   // Create section.
   items.push({ separator: true });
@@ -86,21 +85,25 @@ export function buildContextMenuItems(args: {
     const copyText = (text: string): void => {
       void window.throng?.clipboard?.write({ text, mode: 'verbatim' });
     };
+    // Every form copies a path to the clipboard, so the whole group — parent and each leaf — carries
+    // the shared `copy` glyph (023): the row is a copy action whichever form the user picks.
     items.push({
       label: 'Copy Path',
+      icon: 'copy',
       submenu: [
-        { label: 'Absolute (Windows \\)', onClick: () => copyText(forms.absWin) },
-        { label: 'Absolute (Linux /)', onClick: () => copyText(forms.absLinux) },
-        { label: 'Relative (Windows \\)', onClick: () => copyText(forms.relWin) },
-        { label: 'Relative (Linux /)', onClick: () => copyText(forms.relLinux) },
+        { label: 'Absolute (Windows \\)', icon: 'copy', onClick: () => copyText(forms.absWin) },
+        { label: 'Absolute (Linux /)', icon: 'copy', onClick: () => copyText(forms.absLinux) },
+        { label: 'Relative (Windows \\)', icon: 'copy', onClick: () => copyText(forms.relWin) },
+        { label: 'Relative (Linux /)', icon: 'copy', onClick: () => copyText(forms.relLinux) },
       ],
     });
   }
 
-  // Hide section. No 'hide' token in the shipped set yet → iconless, recorded for #127.
+  // Hide section (023, #127): the 'hide' token now exists — a circled slash reading as "kept out of
+  // this project's view".
   if (!isRoot) {
     items.push({ separator: true });
-    items.push({ label: 'Hide in this project', onClick: () => ops.hide(node.relPath) });
+    items.push({ label: 'Hide in this project', icon: 'hide', onClick: () => ops.hide(node.relPath) });
   }
   return items;
 }
