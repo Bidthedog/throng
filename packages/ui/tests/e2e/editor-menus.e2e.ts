@@ -38,10 +38,10 @@ test('Open In submenu holds editor targets; a top-level OS reveal; disables an o
       const tree = win.getByTestId('file-explorer-tree');
       await tree.getByText('a.txt', { exact: true }).click({ button: 'right' });
 
-      // The OS reveal is a single top-level item (FR-107), NOT inside Open In.
-      await expect(item(win, 'Open in OS File Explorer')).toBeVisible();
-      // Open In now holds only the editor targets (click opens the flyout).
+      // US5 (#158): the OS reveal is now the FIRST item INSIDE the "Open In" submenu, not top-level.
+      await expect(item(win, 'Open in OS File Explorer')).toHaveCount(0); // no longer top-level
       await item(win, 'Open In').click();
+      await expect(item(win, 'Open in OS File Explorer')).toBeVisible(); // first item of the submenu
       await expect(win.locator('.context-menu__item', { hasText: 'Last Active Editor' }).last()).toBeVisible();
 
       // Choose This editor → the file opens into the editor.

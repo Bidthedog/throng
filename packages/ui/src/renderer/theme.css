@@ -1118,6 +1118,15 @@ textarea,
   color: currentColor;
 }
 
+/* FR-018a — a non-interactive section divider grouping menu items into sensible sections. */
+.context-menu__separator {
+  height: 0;
+  margin: 4px 6px;
+  padding: 0;
+  border-top: 1px solid var(--throng-colour-border);
+  list-style: none;
+}
+
 /* 021/FR-035 — hover background gated on window focus (no stranded hover while blurred).
    :where() carries zero specificity, so the cascade is unchanged. */
 :where(body:not([data-window-blurred])) .context-menu__item:hover {
