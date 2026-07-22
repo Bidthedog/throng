@@ -362,6 +362,34 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                       })();
                     },
                   },
+                  // US6 (#137) — for a panel backed by an on-disk file: reveal it in throng's own
+                  // Files & Folders tree, and open its folder in the OS file manager (via the seam).
+                  ...(editorUi?.filePath
+                    ? [
+                        {
+                          label: 'Reveal File',
+                          onClick: () => {
+                            window.dispatchEvent(
+                              new CustomEvent('throng:reveal-in-tree', {
+                                detail: { absPath: editorUi.filePath },
+                              }),
+                            );
+                          },
+                        },
+                        {
+                          label: 'Open in OS Explorer',
+                          onClick: () => {
+                            const abs = (editorUi.filePath ?? '').replace(/\\/g, '/');
+                            const root = (editorUi.ownerRoot ?? '').replace(/\\/g, '/').replace(/\/+$/, '');
+                            const rel =
+                              root && abs.toLowerCase().startsWith(`${root.toLowerCase()}/`)
+                                ? abs.slice(root.length + 1)
+                                : null;
+                            if (rel !== null) void window.throng?.files?.reveal?.(rel);
+                          },
+                        },
+                      ]
+                    : []),
                 ]
               : []),
             {

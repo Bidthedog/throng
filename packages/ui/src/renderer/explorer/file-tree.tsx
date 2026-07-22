@@ -94,8 +94,31 @@ export function FileTree({
     createFolder,
     createFile,
     reveal,
+    revealInTree,
     drop,
   } = useExplorerData(rootFolder, projectId, treeRef, name, hiddenPaths);
+
+  // US6 (#137) — the editor "Reveal File" action asks the tree to reveal a file by its absolute
+  // path; do so only when the file belongs to THIS project's root (paths compared case-insensitively
+  // and slash-agnostically, since Windows is case-insensitive).
+  useEffect(() => {
+    const handler = (e: Event): void => {
+      const abs = (e as CustomEvent).detail?.absPath as string | undefined;
+      if (!abs) return;
+      const norm = (p: string): string => p.replace(/\\/g, '/').replace(/\/+$/, '');
+      const rootN = norm(rootFolder);
+      const absN = norm(abs);
+      const rel =
+        absN.toLowerCase() === rootN.toLowerCase()
+          ? ''
+          : absN.toLowerCase().startsWith(`${rootN.toLowerCase()}/`)
+            ? absN.slice(rootN.length + 1)
+            : null;
+      if (rel) void revealInTree(rel);
+    };
+    window.addEventListener('throng:reveal-in-tree', handler);
+    return () => window.removeEventListener('throng:reveal-in-tree', handler);
+  }, [rootFolder, revealInTree]);
 
   // 018 / FR-051 — was an inline strip; now the one notification model.
   useErrorNotice(error, 'explorer-error', clearError);
