@@ -163,6 +163,14 @@ function commandsFor(deps: {
   };
 }
 
+/**
+ * US8 (#154): a document's scroll anchor, keyed by absolute path, saved when it is switched away
+ * from IN PLACE and restored on reopen when "Save Document Scroll Position" is on. Module-level so
+ * it survives a document swap within the same editor view. Distinct from #144's per-panel view
+ * state (switching tabs/projects/panels), which is unchanged.
+ */
+const docScrollByPath = new Map<string, number>();
+
 export function useEditor(params: UseEditorParams): void {
   const { panel, tabId, projectRoot, rootless, ownerProjectId, container } = params;
   const onReadyRef = useRef(params.onReady);
@@ -187,6 +195,11 @@ export function useEditor(params: UseEditorParams): void {
   // it can be RE-asserted after the async language/indent reconfigure, which re-renders
   // and would otherwise drop the restored viewport back to the top.
   const pendingScrollAnchorRef = useRef<number | null>(null);
+  // US8 (#154): the live scroll anchor (updated by the scroll listener) so an in-place open can
+  // save the OUTGOING document's position; and a flag set by openFile so the next document RESET
+  // applies the US8 scroll policy (reset to top, or restore the incoming document's saved scroll).
+  const currentScrollAnchorRef = useRef(0);
+  const pendingOpenScrollRef = useRef<{ path: string; restore: boolean } | null>(null);
   // Whether this panel is the active panel of the active tab — read through a ref so
   // the (async) initialise can take keyboard focus on mount only when it should (#144).
   const activeTab = ws.layout?.tabs.find((t) => t.id === tabId);
@@ -438,6 +451,15 @@ export function useEditor(params: UseEditorParams): void {
   // UI main replaces the document and broadcasts the replacement to every view of it,
   // so there is nothing to apply here — this view receives it like any other.
   const openFile = async (absPath: string): Promise<void> => {
+    // US8 (#154): opening a DIFFERENT file IN PLACE. Save the outgoing document's scroll anchor
+    // (only when the pref is on) and flag the incoming document RESET so it applies the scroll
+    // policy — restore the incoming file's saved anchor (on), or reset to the top (off).
+    const outgoing = configRef.current.filePath;
+    if (outgoing && outgoing !== absPath) {
+      const restore = metaRef.current.settings.saveDocumentScroll;
+      if (restore) docScrollByPath.set(outgoing, currentScrollAnchorRef.current);
+      pendingOpenScrollRef.current = { path: absPath, restore };
+    }
     const loaded = await win()?.editor?.load({ ...buildMeta(), absPath });
     if (loaded && loaded.ok === true) {
       configRef.current = {
@@ -752,7 +774,10 @@ export function useEditor(params: UseEditorParams): void {
     let lastScrollAnchor = 0;
     const onScroll = (): void => {
       const v = viewRef.current;
-      if (v) lastScrollAnchor = v.lineBlockAtHeight(v.scrollDOM.scrollTop).from;
+      if (v) {
+        lastScrollAnchor = v.lineBlockAtHeight(v.scrollDOM.scrollTop).from;
+        currentScrollAnchorRef.current = lastScrollAnchor; // US8 (#154): visible to openFile
+      }
     };
     view.scrollDOM.addEventListener('scroll', onScroll, { passive: true });
     // The status strip and the language picker live OUTSIDE this view and must be able to
@@ -811,6 +836,18 @@ export function useEditor(params: UseEditorParams): void {
         changes: { from: 0, to: target.state.doc.length, insert: reset.text },
         annotations: fromAuthority.of(true),
       });
+      // US8 (#154): this reset carries the content of an in-place OPEN (openFile set the flag just
+      // before it loaded). Apply the scroll policy — restore the incoming file's saved anchor (pref
+      // on), else reset to the top. A revert/reload of the SAME file leaves the flag null → scroll
+      // untouched. The flag (not a path match) is the signal: the reset can arrive before openFile
+      // has recorded the new path.
+      const pendingOpen = pendingOpenScrollRef.current;
+      if (pendingOpen) {
+        pendingOpenScrollRef.current = null;
+        const anchorRaw = pendingOpen.restore ? (docScrollByPath.get(pendingOpen.path) ?? 0) : 0;
+        const anchor = Math.min(anchorRaw, target.state.doc.length);
+        target.dispatch({ effects: EditorView.scrollIntoView(anchor, { y: 'start' }) });
+      }
       publishState();
       reinferIndent(reset.text); // a different document — read what IT does (FR-018a)
       refreshLanguage(); // …and re-highlight it

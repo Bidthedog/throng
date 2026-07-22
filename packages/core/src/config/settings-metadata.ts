@@ -206,6 +206,15 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     control: 'toggle',
   },
   {
+    // US8 (#154).
+    key: 'editor.saveDocumentScroll',
+    label: 'Save Document Scroll Position',
+    description:
+      'Remember each document’s scroll position: reopening a file in the same editor restores where you were, instead of starting at the top.',
+    group: 'Editor',
+    control: 'toggle',
+  },
+  {
     key: 'editor.autoSaveDebounceMs',
     label: 'Auto-save delay',
     description: 'Debounce (ms) after typing stops before an auto-save writes.',
