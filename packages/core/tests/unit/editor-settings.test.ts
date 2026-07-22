@@ -19,6 +19,8 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       indentByLanguage: SHIPPED_INDENT_BY_LANGUAGE,
       languageByExtension: {},
       persistUndoHistory: true,
+      openTarget: 'lastActive',
+      saveDocumentScroll: false,
     });
   });
 
@@ -72,6 +74,8 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       indentByLanguage: SHIPPED_INDENT_BY_LANGUAGE,
       languageByExtension: {},
       persistUndoHistory: true,
+      openTarget: 'lastActive',
+      saveDocumentScroll: false,
     });
   });
 
