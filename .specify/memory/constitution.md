@@ -1,6 +1,54 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 4.0.0 → 4.1.0
+Bump rationale: MINOR. Strengthens Principle V (Test-First Quality Discipline) with an additive
+                sub-rule that distinguishes an INFRASTRUCTURE fault (owned by no test) from a test
+                FLAKE (2026-07-22, issue #75). No principle is removed or redefined; the strict
+                flaky-test gate is untouched.
+
+                Considered MAJOR and rejected, on the project's own test: MAJOR is the removal or
+                backward-incompatible redefinition of a principle or governance rule — the case
+                where a PREVIOUSLY-STATED guarantee is withdrawn or reversed. Nothing here is
+                withdrawn. "A test that fails and then passes on re-run is flaky, not fixed" stands
+                verbatim and still governs every TEST. What is ADDED is a rule for a case that rule
+                never named: a fault that belongs to no test at all (a worker/global-teardown crash,
+                a wedged app blowing the teardown budget) — zero failed, zero flaky, yet non-zero
+                exit, which no test-level retry can absorb. Naming and bounding that class is
+                materially expanded, additive guidance → MINOR, in the exact lineage of v3.13.0 →
+                v3.14.0, which likewise strengthened Principle V with a rule for how a test RUN is
+                conducted. A run compliant under v4.0.0 remains compliant under v4.1.0.
+
+                The rule closes a real hole: run 29909576080 reddened master with 121 passed / 1
+                flaky and a "Worker teardown timeout … 1 error was not a part of any test", where a
+                wedged Electron app blew Playwright's worker-teardown budget. The strict gate had no
+                vocabulary for a non-test fault, so an infra crash and a genuine defect were
+                indistinguishable — both simply "red", inviting the very re-run-until-green habit the
+                flaky rule forbids. The sub-rule gives the harness a bounded, auditable path for the
+                infra class WITHOUT loosening the gate for tests.
+Modified principles: V "Test-First Quality Discipline" (added the infrastructure-fault sub-rule to
+                the "A test run MUST be executed once" block, and requires the harness to bound its
+                own teardown). Title and every existing rule unchanged.
+Added sections: none. Removed sections: none.
+Templates / artifacts reviewed:
+  ✅ .specify/templates/plan-template.md  — Constitution Check is dynamic ("[Gates determined based
+       on constitution file]"); the new sub-rule is picked up automatically. No edit needed.
+  ✅ .specify/templates/spec-template.md  — principle-agnostic; no change required.
+  ✅ .specify/templates/tasks-template.md — principle-agnostic; no change required.
+  ✅ .specify/extensions.yml              — no before/after_constitution hooks registered.
+  ✅ playwright.config.ts                 — the strict gate (failOnFlakyTests, retries-for-diagnosis)
+       is unchanged; a machine-classifiable `json` reporter is added in sharded mode so CI can
+       evidence the zero-unexpected/zero-flaky condition the sub-rule gates the retry on.
+  ✅ .github/workflows/ci.yml + scripts/ci-e2e-shard.ps1 — implement the sub-rule: retry a shard
+       once ONLY when its report shows 0 unexpected AND 0 flaky, comment the retry on the tracking
+       issue (#75), and stay red otherwise.
+  ✅ packages/ui/tests/e2e/harness.ts     — bounds its own teardown (force-kills a wedged app tree),
+       satisfying the "prevent at source" clause; covered by harness-shutdown.e2e.ts.
+  ✅ specs/*                              — historical records; not rewritten. No spec is the source
+       of this amendment, so no spec version citation advances.
+Deferred TODOs: none.
+
+                ---- superseded amendment (historical) ----
 Version change: 3.15.0 → 4.0.0
 Bump rationale: MAJOR. The Documentation-currency rule's mandated artifact `ROADMAP.md` is REMOVED,
                 and the forward-looking list moves to the issue tracker (2026-07-17).
@@ -711,6 +759,21 @@ Red-Green-Refactor cycle.
     fixed**. It MUST be investigated and either fixed or explicitly tracked — never
     absorbed into a green bar by repetition, and never used as a reason to re-run a
     suite until it happens to pass.
+  - **A fault owned by NO test is infrastructure, not a flake, and is governed separately.**
+    The flaky-test rule above governs a TEST — one that fails and then passes on its own retry.
+    A distinct failure mode is a fault that belongs to no test at all: a worker- or
+    global-teardown crash, a wedged application that blows the runner's teardown budget, a
+    harness/environment error the reporter records as "not a part of any test". Such a fault
+    carries **zero failed and zero flaky** tests yet still exits non-zero, and **no test-level
+    retry can absorb it** — so, left ungoverned, it reddens the bar with no defect in the code
+    under test to fix. This class MAY be retried **once**, at the shard level, and ONLY this
+    class: the retry MUST be gated on the run's own report showing **zero unexpected AND zero
+    flaky** results, so it can never turn a genuine test flake or failure green — those remain
+    bound by the strict rule above. Every such infra retry MUST be **surfaced** — logged in the
+    run and recorded against a tracking issue — so the harness's own flakiness stays visible and
+    is driven down exactly as a test flake would be. And the harness MUST **bound its own
+    teardown** (force-terminating a wedged application within a deadline) so this fault is
+    prevented at source, not merely retried.
 - Abstraction contracts (Principle II) MUST have contract tests that any
   OS-specific implementation is verified against.
 - Process lifecycle behaviour (spawn, detach, tag, persist, idle-close,
@@ -1110,4 +1173,4 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 4.0.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-17
+**Version**: 4.1.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-22
