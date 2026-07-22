@@ -24,9 +24,9 @@ import type { MenuItem } from '../workspace/context-menu.js';
  */
 
 const MENU_ITEMS = [
-  { tab: 'settings', label: 'Settings' },
-  { tab: 'keybindings', label: 'Key Bindings' },
-  { tab: 'themes', label: 'Themes' },
+  { tab: 'settings', label: 'Settings', icon: 'settings' },
+  { tab: 'keybindings', label: 'Key Bindings', icon: 'keybindings' },
+  { tab: 'themes', label: 'Themes', icon: 'themes' },
 ] as const;
 
 export function CogMenu(): ReactElement {
@@ -42,18 +42,19 @@ export function CogMenu(): ReactElement {
       // suites reach the preferences window; renaming them would have made this unification a
       // ten-file test migration (FR-053).
       testId: `cog-menu-${item.tab}`,
-      // No icon. These three are DESTINATIONS, not actions — and giving all of them the same gear
-      // (the icon of the control that opened the menu) would say nothing at all. The shared menu
-      // renders icons where an item has one; an item that means nothing by having one goes without.
+      // 023 — each row now carries a glyph naming its DESTINATION (gear / keyboard / palette), so the
+      // menu no longer reads as one gear beside three blank rows. They are distinct icons, not the
+      // opening gear repeated, so each says which window it opens.
+      icon: item.icon,
       onClick: () => window.throng?.openPreferences?.(item.tab),
     }));
     // About throng (020, FR-003) — the discoverable entry point to the About window. It lives here,
     // not on a native menu bar: throng draws its own title bar (`frame: false`), so the native
-    // application menu never appears on screen. Like the three above it is a DESTINATION (it opens a
-    // window), so it carries no icon.
+    // application menu never appears on screen. Its circled-information glyph reads as "about".
     items.push({
       label: 'About throng',
       testId: 'cog-menu-about',
+      icon: 'about',
       onClick: () => window.throng?.about?.open?.(),
     });
     // Anchor under the cog, as a drop-down should be. The shared menu flips and clamps from here, so

@@ -409,6 +409,35 @@ export const THRONG_THEME: Theme = {
     windowMaximise: '☐',
     windowRestore: '❐',
     windowClose: '✕',
+    /* 023 / #126–#127. The editor content menu and terminal menu drew Cut/Copy/Paste and the rest
+       against tokens the shipped set never had, so every one resolved to an empty glyph — the icon
+       column was reserved but blank. These are the clipboard + editing actions those menus need.
+       Cut is scissors; Copy is a distinct doubled-page (NOT `detach` ⧉, which tears a panel out);
+       Paste is a clipboard. Select All is a filled grid (NOT `editVisual` ▤, the preferences
+       toggle). Undo/Redo are plain directional arrows kept clear of `revert` ↶, `retry` ↻ and
+       `send` ↪ so no two ever read the same in one menu. */
+    cut: '✂',
+    copy: '⎘',
+    paste: '📋',
+    selectAll: '▦',
+    undo: '↩',
+    redo: '⤼',
+    // The editor's "Set Language…" item (016, FR-010) — a speaking head reads as "which language",
+    // and never collides with a file-type glyph in the same menu.
+    language: '🗣',
+    /* 023. The cog menu's Key Bindings / Themes / About rows were destinations with no glyph, so
+       three of its four rows sat blank beside `settings` ⚙. A keyboard for the bindings editor, a
+       palette for the theme editor, and a circled information mark for the About window. */
+    keybindings: '⌨',
+    themes: '🎨',
+    about: 'ⓘ',
+    // The explorer's "Hide in this project" row (004) had no token either — a circled slash reads as
+    // "kept out of view", distinct from every other glyph in the tree menu.
+    hide: '⊘',
+    /* 023. Reserved for a "Reset Name" menu item the workspace will add — return a renamed tab or
+       project to its original name. A rotated arrow that is NOT `retry` ↻ (re-run a failed action),
+       `revert` ↶ (undo one preference) or `undo` ↩ (editor undo), so the four never blur together. */
+    resetName: '↺',
   },
 };
 

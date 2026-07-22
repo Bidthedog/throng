@@ -59,6 +59,10 @@ function copyOrCut(args: ContentMenuArgs, remove: boolean): void {
 export function editorContentMenu(args: ContentMenuArgs): MenuItem[] {
   const { view, panelId, viewId } = args;
 
+  // Cut/Copy/Paste/Select All/Undo/Redo keep FIXED native chords and are deliberately NOT on the
+  // rebindable command list (keybindings.ts, FR-017c) — there is no ActionId to resolve, so the
+  // shortcuts shown here are the literal native bindings the editor is wired to (Ctrl+X/C/V/A and
+  // Mod-z / Mod-y in use-editor.ts). They are display-only, matching what the user actually presses.
   return [
     // Never disabled for want of a selection (FR-012b): with none, they act on the caret's whole
     // line. A greyed-out Copy on the line the user just right-clicked is a refusal to do the
@@ -66,16 +70,19 @@ export function editorContentMenu(args: ContentMenuArgs): MenuItem[] {
     {
       label: 'Cut',
       icon: 'cut',
+      shortcut: 'Ctrl+X',
       onClick: () => copyOrCut(args, true),
     },
     {
       label: 'Copy',
       icon: 'copy',
+      shortcut: 'Ctrl+C',
       onClick: () => copyOrCut(args, false),
     },
     {
       label: 'Paste',
       icon: 'paste',
+      shortcut: 'Ctrl+V',
       onClick: () => {
         void (async () => {
           const entry = await win()?.clipboard?.paste();
@@ -91,6 +98,8 @@ export function editorContentMenu(args: ContentMenuArgs): MenuItem[] {
     },
     {
       label: 'Select All',
+      icon: 'selectAll',
+      shortcut: 'Ctrl+A',
       onClick: () => {
         view.dispatch({ selection: EditorSelection.single(0, view.state.doc.length) });
         view.focus();
@@ -98,16 +107,21 @@ export function editorContentMenu(args: ContentMenuArgs): MenuItem[] {
     },
     {
       label: 'Undo',
+      icon: 'undo',
+      shortcut: 'Ctrl+Z',
       onClick: () => win()?.editor?.undo({ panelId, viewId }),
     },
     {
       label: 'Redo',
+      icon: 'redo',
+      shortcut: 'Ctrl+Y',
       onClick: () => win()?.editor?.redo({ panelId, viewId }),
     },
     {
       // The second of the two entry points FR-010 asks for; the status strip is the other, and both
-      // open the SAME picker.
+      // open the SAME picker. No keyboard shortcut — it is reachable only from the two menus.
       label: 'Set Language…',
+      icon: 'language',
       onClick: () => requestLanguagePicker(panelId),
     },
   ];

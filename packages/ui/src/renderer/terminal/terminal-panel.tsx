@@ -169,6 +169,11 @@ export function TerminalPanel({
         {
           label: 'Paste',
           icon: 'paste',
+          // The paste chord is FIXED (Ctrl+V / Shift+Insert, #142) and lives in the terminal key
+          // handler, not the rebindable keybindings — so the shortcut shown is the literal native
+          // chord, matching what the user presses. Copy has no chord of its own (Ctrl+C is the
+          // shell's interrupt), so it carries no shortcut.
+          shortcut: 'Ctrl+V',
           // The SAME paste route as Ctrl+V / Shift+Insert (#142): one implementation reads the
           // clipboard and writes it to the shell exactly once, so no gesture can double-paste and
           // the menu can never drift from the keyboard path.
