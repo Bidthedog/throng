@@ -48,6 +48,7 @@ import { DaemonRpcError, type DaemonClient } from './daemon-client.js';
 import { ElectronDisplayInfo } from './electron-display-info.js';
 import { loadWindowState, saveWindowState } from './window-state.js';
 import { registerGhostIpc, setGhostTheme, disposeGhost } from './ghost-window.js';
+import { revealWhenPainted } from './reveal-when-painted.js';
 import { WindowManager } from './window-manager.js';
 import { NodeFileSystem } from './node-file-system.js';
 import { resolvePickerDefaultPath } from './pick-folder.js';
@@ -287,6 +288,12 @@ async function createMainWindow(
     // The saved theme's app background, so the window never flashes a hardcoded
     // dark before the themed content paints (issue 132).
     backgroundColor,
+    // Create HIDDEN and reveal only once the renderer has painted its first (already-themed) frame
+    // — see `revealWhenPainted`. Without this a frameless window on Windows shows an EMPTY BLACK frame
+    // before any paint, on every theme: the whole-window flash of issue 132 that the token paint and
+    // colour-scheme work could not touch (the content was themed; the WINDOW was visible before it had
+    // painted anything at all).
+    show: false,
     // The application draws its own full-width title bar + window controls (007,
     // FR-001/002); there is no OS-drawn title bar in addition.
     frame: false,
@@ -302,6 +309,7 @@ async function createMainWindow(
   // non-interactive so the prefs window stays the only interactive surface (FR-013).
   if (isPreferencesOpen()) window.setEnabled(false);
   if (saved?.maximized) window.maximize();
+  revealWhenPainted(window);
 
   // Persist window geometry on close so size + position are restored (FR-047).
   window.on('close', () => {
@@ -340,6 +348,8 @@ function createSubWorkspaceWindow(
     icon: appIcon(),
     // The saved theme's app background — no dark flash before the content paints (issue 132).
     backgroundColor,
+    // Hidden until painted, so it never flashes an empty black frame on open (issue 132).
+    show: false,
     // Sub-workspace windows share the custom title bar (007, FR-007) — no OS frame.
     frame: false,
     webPreferences: {
@@ -351,6 +361,7 @@ function createSubWorkspaceWindow(
   });
   wireWindowMaximizeEvents(window);
   if (isPreferencesOpen()) window.setEnabled(false); // stay app-modal (FR-013)
+  revealWhenPainted(window);
   void window.loadFile(resolveFromHere('../renderer/index.html'), { query: { sw: id } });
   return window;
 }
@@ -522,6 +533,14 @@ if (isPrimaryInstance)
     currentSettings = payload.settings;
     currentTheme = payload.theme; // keep the pre-paint bootstrap snapshot current (issue 132)
     pushGhostTheme(payload.theme);
+    // A window's native `backgroundColor` is fixed at creation, so a live theme switch (dark → light)
+    // leaves every OPEN window backed by the old colour — which flashes on the next repaint/reload
+    // and behind the web contents. Re-point each window's backing to the new theme's appBg so an
+    // already-open window never flashes the previous theme (issue 132).
+    const nextBg = themeBackground();
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.setBackgroundColor(nextBg);
+    }
     for (const react of onSettingsChanged) react(previous, payload.settings);
     broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:config', payload);
   };

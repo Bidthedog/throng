@@ -21,7 +21,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron';
  * pre-paint hook available.
  */
 function applyBootstrapTheme(): void {
-  let boot: { name?: unknown; vars?: unknown } | undefined;
+  let boot: { name?: unknown; vars?: unknown; colorScheme?: unknown } | undefined;
   try {
     boot = ipcRenderer.sendSync('throng:theme:bootstrap') as typeof boot;
   } catch {
@@ -32,6 +32,7 @@ function applyBootstrapTheme(): void {
   if (!boot || typeof boot !== 'object') return;
   const vars = boot.vars;
   const name = boot.name;
+  const colorScheme = boot.colorScheme;
 
   const paint = (): boolean => {
     const root = document.documentElement;
@@ -42,6 +43,11 @@ function applyBootstrapTheme(): void {
       }
     }
     if (typeof name === 'string') root.dataset.theme = name;
+    // The document's colour-scheme, from the SAVED theme's lightness (issue 132). Set inline so it
+    // overrides the stylesheet's fallback BEFORE first paint — otherwise Chromium paints its viewport
+    // canvas backdrop dark on a light theme (over the native background), which is the flash of black
+    // that the token paint + themed native background alone never removed.
+    if (colorScheme === 'light' || colorScheme === 'dark') root.style.colorScheme = colorScheme;
     return true;
   };
 

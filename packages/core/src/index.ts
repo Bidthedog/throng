@@ -178,6 +178,7 @@ export {
   resolveSplitColour,
   toCssVariables,
   themeBootstrap,
+  themeColorScheme,
 } from './config/theme.js';
 // Themes editor + icon packs + fonts (007).
 export { THEME_METADATA, THEME_AREA_GROUPS, THEME_PROPERTY_VOCABULARY, areaForToken, assertThemeAreaGroups, assertNamingConvention, buildThemeMetadata, descriptorForThemeToken, themeEditableTokens, mechanicalCopy } from './config/theme-metadata.js';

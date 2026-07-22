@@ -1,5 +1,5 @@
 import { useEffect, type ReactElement, type ReactNode } from 'react';
-import { THRONG_THEME, toCssVariables, type Theme } from '@throng/core';
+import { THRONG_THEME, toCssVariables, themeColorScheme, type Theme } from '@throng/core';
 import { useConfigLoaded } from '../config/config-store.js';
 import './tokens.css';
 
@@ -36,6 +36,13 @@ export function ThemeProvider({
     // Which theme is actually on screen — readable from CSS (`:root[data-theme="Matrix"]`), from the
     // devtools, and from a test that needs to know the switch has LANDED rather than guess at when.
     root.dataset.theme = theme.name;
+
+    // The document's colour-scheme follows the theme's lightness (issue 132). The preload already set
+    // this inline before first paint from the same derivation; re-affirming it here keeps a live theme
+    // switch (dark → light hot-reload) in step, so Chromium's canvas backdrop and native controls track
+    // the new theme instead of staying dark. Setting `root.style.colorScheme` (inline) overrides the
+    // stylesheet's fallback.
+    root.style.colorScheme = themeColorScheme(theme);
 
     /*
      * 018 — REMOVE the properties this theme no longer emits.

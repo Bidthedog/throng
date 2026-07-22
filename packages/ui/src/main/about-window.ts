@@ -10,6 +10,7 @@
 import { BrowserWindow } from 'electron';
 import { wireWindowMaximizeEvents } from './window-controls-ipc.js';
 import { appIcon } from './app-icon.js';
+import { revealWhenPainted } from './reveal-when-painted.js';
 
 export interface AboutWindowDeps {
   /** Absolute path to the renderer index.html (loaded with `?about=1`). */
@@ -65,6 +66,8 @@ export function openAbout(deps: AboutWindowDeps): BrowserWindow {
     title: 'About — throng',
     icon: appIcon(),
     backgroundColor: deps.backgroundColor?.() ?? '#10131a',
+    // Hidden until painted so the About window never flashes an empty black frame on open (issue 132).
+    show: false,
     webPreferences: {
       preload: deps.preloadPath,
       contextIsolation: true,
@@ -74,6 +77,7 @@ export function openAbout(deps: AboutWindowDeps): BrowserWindow {
   });
   aboutWindow = win;
   wireWindowMaximizeEvents(win);
+  revealWhenPainted(win);
 
   win.on('closed', () => {
     aboutWindow = null;
