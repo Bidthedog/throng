@@ -302,7 +302,14 @@ export function useExplorerData(
         clearInterval(timer);
         return;
       }
-      api?.select(id);
+      // `{ focus: false }` — HIGHLIGHT the open file's row without moving KEYBOARD FOCUS into the tree
+      // (issue 144). react-arborist's `select` otherwise dispatches a focus to the node, and its
+      // row renderer `.focus()`es that row in an effect whenever the node is focused — so this
+      // programmatic sync (which runs on every load, project switch and tab switch, to keep the tree
+      // highlight in step with the active editor) would yank DOM focus OUT of the editor and into
+      // "Files & Folders" every time, overriding the active-panel focus. Selection is a highlight; it
+      // must not steal the caret.
+      api?.select(id, { focus: false });
     }, 50);
     // Safety stop after ~12s so the interval can't leak.
     const stop = setTimeout(() => clearInterval(timer), 12_000);
@@ -438,7 +445,9 @@ export function useExplorerData(
     const api = treeRef.current;
     if (api?.get(rel)) {
       pendingSelect.current = null;
-      api.select(rel);
+      // `{ focus: false }` — re-highlight the renamed node without stealing keyboard focus into the
+      // tree (issue 144); this is a programmatic re-select, not a user click.
+      api.select(rel, { focus: false });
     }
   }, [data, treeRef]);
 

@@ -18,7 +18,7 @@ import { useProjects } from './state/projects-store.js';
 import { WorkspaceProvider, useWorkspace } from './state/workspace-store.js';
 import { useServices } from './composition-root.js';
 import { TabGroup } from './workspace/tab-group.js';
-import { focusPanel } from './workspace/panel-focus.js';
+import { focusPanel, requestPanelFocus } from './workspace/panel-focus.js';
 import { setActivePane } from './workspace/active-pane.js';
 import { chordKey, isBackquote } from './config/chord-key.js';
 import { DetachProvider } from './workspace/detach-context.js';
@@ -253,6 +253,40 @@ function KeybindingsHandler({
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [keybindings]);
+  return null;
+}
+
+/**
+ * Route DOM focus into the active panel when the user SWITCHES tabs or projects (issue 144).
+ *
+ * The active editor restores its caret on remount, but making that caret LIVE needs DOM focus — and
+ * on a PROJECT switch the click lands on the (focusable) project button in the sidebar while the new
+ * project's editor mounts behind an async layout load, so a focus fired inside that mount is lost in
+ * the churn (position comes back; the caret does not). This watches the SETTLED layout instead: when
+ * the active tab changes between two real tabs — a tab OR project switch — it asks the active panel to
+ * take focus as soon as it is mounted ({@link requestPanelFocus} parks the request until then).
+ *
+ * The trigger is a change of ACTIVE TAB, which is exactly what a project/tab switch does and a plain
+ * file-open does NOT: opening a file in the tree replaces the active editor's document but keeps the
+ * active tab, so this never fires there and the tree stays focused for F2-rename (the constraint that
+ * shaped the mount-time gate in use-editor.ts). Opening the first project (null→tab) is a genuine,
+ * user-initiated navigation — startup auto-opens nothing, so the first non-null tab is always a click
+ * — so it fires there too. A panel that is a bare placeholder registers no focus callback, so
+ * requesting its focus is a harmless no-op; only a real input surface (editor/terminal) is focused.
+ */
+function PanelFocusSync(): null {
+  const { layout } = useWorkspace();
+  const activeTabId = layout?.activeTabId ?? null;
+  const activeTab = layout?.tabs.find((t) => t.id === activeTabId);
+  const activePanelId = activeTab ? effectiveActivePanelId(activeTab) : null;
+  const prevTabRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevTabRef.current;
+    prevTabRef.current = activeTabId;
+    if (activeTabId !== null && prev !== activeTabId && activePanelId) {
+      requestPanelFocus(activePanelId);
+    }
+  }, [activeTabId, activePanelId]);
   return null;
 }
 
@@ -571,6 +605,7 @@ export function App(): ReactElement {
             <PanelRenameSync />
             <PanelDestroySync />
             <PanelStateSync />
+            <PanelFocusSync />
             <EditorChrome />
             <SearchKeybindings />
             <KeybindingsHandler onToggleProjects={toggleLeft} onToggleExplorer={toggleRight} />

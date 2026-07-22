@@ -8,6 +8,7 @@ import {
   type ReactElement,
 } from 'react';
 import {
+  effectiveActivePanelId,
   resolveAction,
   resolveColour,
   zoomFactor,
@@ -62,17 +63,26 @@ function terminalFont(theme: Theme): { family: string; size: number } {
  */
 export function TerminalPanel({
   panel,
+  tabId,
   projectRoot,
   rootless = false,
   meta,
 }: {
   panel: Panel;
+  /** The tab this terminal lives in — needed to tell whether it is the active panel (issue 144). */
+  tabId: string;
   projectRoot: string | null;
   /** Sub-workspace-owned Panel: launch at the user's home directory (FR-028). */
   rootless?: boolean;
   meta?: { projectName?: string; tabName?: string; panelName?: string };
 }): ReactElement {
   const ws = useWorkspace();
+  // Whether this terminal is the active panel of the active tab — read through a ref so the terminal's
+  // (async) attach focus sees the CURRENT active panel and never steals focus when it isn't (issue 144).
+  const activeTab = ws.layout?.tabs.find((t) => t.id === tabId);
+  const isActivePanelRef = useRef(false);
+  isActivePanelRef.current =
+    ws.layout?.activeTabId === tabId && !!activeTab && effectiveActivePanelId(activeTab) === panel.id;
   const theme = useActiveTheme();
   const { openMenu } = useContextMenu();
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
@@ -231,6 +241,7 @@ export function TerminalPanel({
     searchDecorations,
     onSearchCount,
     reserveKey,
+    isActive: () => isActivePanelRef.current,
   });
 
   return (

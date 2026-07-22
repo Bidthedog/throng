@@ -18,9 +18,9 @@
  */
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
+import { runApp, createProject, firstPanelId, panelIds, reloadWindow } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 function makeProject(): string {
@@ -91,6 +91,124 @@ test('the scroll position is restored and the editor re-focuses on switch back (
       await win.keyboard.type('Z');
       const lines = await docLines(win, pid);
       expect(lines.filter((l) => l.includes('Z')).join()).toContain('row-199Z');
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  }
+});
+
+/** Click a project's switch button (by name) and wait for it to become the active project. */
+async function switchToProject(win: Page, name: string): Promise<void> {
+  await win.locator('.project-item', { hasText: name }).locator('.project-item__switch').click();
+  await expect(win.locator('.project-item', { hasText: name })).toHaveClass(/project-item--active/);
+}
+
+test('the editor takes focus on switching to a project whose editor mounts fresh (issue 144)', async () => {
+  skipIfElevated();
+  // The remaining #144 defect: the mount-time focus is gated on saved SESSION view-state so a plain
+  // file-open leaves the tree focusable (for F2-rename). But switching to a project whose active
+  // editor has NOT been mounted this session — the common "reopen an existing project after a
+  // restart" case — has no saved view-state either, so that gate declined to focus it. A deliberate
+  // PROJECT switch must move the caret into the target editor; a tree file-open must not. The two
+  // are told apart by whether the ACTIVE TAB changed, which is what the fix keys on.
+  const rootA = makeProject(); // lines.txt: AAAA / BBBB / CCCC / DDDD
+  const rootB = mkdtempSync(join(tmpdir(), 'throng-caret-b-'));
+  writeFileSync(join(rootB, 'other.txt'), 'other\n');
+  try {
+    await runApp(async (_app, win) => {
+      // ProjA with an editor showing lines.txt.
+      await createProject(win, 'ProjA', rootA);
+      const pidA = await firstPanelId(win);
+      await newEditor(win, pidA);
+      await win.getByTestId(`editor-${pidA}`).click();
+      await win.getByTestId('file-explorer-tree').getByText('lines.txt', { exact: true }).click();
+      await expect(win.getByTestId(`editor-${pidA}`).locator('.cm-content')).toContainText('CCCC', {
+        timeout: 8000,
+      });
+      await createProject(win, 'ProjB', rootB);
+
+      // Renderer restart wipes the session's saved editor view-state, and startup auto-opens NO
+      // project — so opening ProjA below mounts its editor FRESH (no saved caret). That is precisely
+      // the "reopen an existing project" case the earlier one-shot skipped (it only focused a panel
+      // that had already been mounted-and-unmounted this session).
+      await reloadWindow(win);
+      await expect(win.getByTestId('workspace-no-project')).toBeVisible({ timeout: 8000 });
+
+      // Open ProjA — its editor mounts fresh and must take keyboard focus WITHOUT a click.
+      await switchToProject(win, 'ProjA');
+      const content = win.getByTestId(`editor-${pidA}`).locator('.cm-content');
+      await expect(content).toContainText('CCCC', { timeout: 8000 });
+      await expect(win.getByTestId(`editor-${pidA}`).locator('.cm-editor')).toHaveClass(
+        /cm-focused/,
+        { timeout: 4000 },
+      );
+      // The keystroke routes into that editor (fresh mount → caret at document start).
+      await win.keyboard.type('Z');
+      const lines = await docLines(win, pidA);
+      expect(lines[0]).toBe('ZAAAA');
+    });
+  } finally {
+    rmSync(rootA, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    rmSync(rootB, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  }
+});
+
+test('a terminal in the tab does NOT steal focus from the active editor on switch-back (issue 144)', async () => {
+  skipIfElevated();
+  // The user's exact report: if a tab contains a terminal, that terminal grabs keyboard focus on a
+  // tab/project switch regardless of which panel is active — because a terminal `focus()`es itself
+  // unconditionally on mount AND on its (late, async) attach. Here the ACTIVE panel is the editor, but
+  // the tab also holds a terminal; on switch-back the editor must keep focus.
+  const root = makeProject();
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'MixProj', root);
+      const editorPid = await firstPanelId(win);
+      await newEditor(win, editorPid);
+      await win.getByTestId(`editor-${editorPid}`).click();
+      await win.getByTestId('file-explorer-tree').getByText('lines.txt', { exact: true }).click();
+      await expect(win.getByTestId(`editor-${editorPid}`).locator('.cm-content')).toContainText('CCCC', {
+        timeout: 8000,
+      });
+
+      // Add a sibling terminal panel (so the tab is [editor, terminal]).
+      await win.getByTestId(`panel-add-${editorPid}`).click();
+      await expect(win.locator('.panel-box')).toHaveCount(2);
+      const termPid = (await panelIds(win)).find((id) => id !== editorPid)!;
+      // Commit the new panel's inline rename if it opened, so the type picker is reachable.
+      await win.keyboard.press('Enter').catch(() => undefined);
+      await win.getByTestId(`panel-type-select-${termPid}`).selectOption('terminal');
+      await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
+      await win.getByTestId(`panel-type-confirm-${termPid}`).click();
+      // Wait for the shell to be live (prompt shows the project root) so the attach focus has fired.
+      await expect(win.getByTestId(`terminal-${termPid}`)).toContainText(basename(root), {
+        timeout: 20000,
+      });
+
+      // Make the EDITOR the active panel, then switch tabs away and back.
+      await win.getByTestId(`editor-${editorPid}`).click();
+      await win.getByTestId('tab-add').click();
+      await expect(win.locator('.tab-chip')).toHaveCount(2);
+      await win.locator('.tab-chip').nth(0).click();
+
+      // Both panels remount; wait for the terminal to re-attach (its late focus fires here) AND the
+      // editor content to be back, THEN assert the EDITOR — the active panel — holds keyboard focus.
+      await expect(win.getByTestId(`terminal-${termPid}`)).toContainText(basename(root), {
+        timeout: 20000,
+      });
+      await expect(win.getByTestId(`editor-${editorPid}`).locator('.cm-content')).toContainText('CCCC', {
+        timeout: 8000,
+      });
+      await expect(win.getByTestId(`editor-${editorPid}`).locator('.cm-editor')).toHaveClass(
+        /cm-focused/,
+        { timeout: 6000 },
+      );
+      // And the terminal is NOT the focused surface.
+      const termFocused = await win
+        .getByTestId(`terminal-${termPid}`)
+        .locator('.xterm')
+        .evaluate((el) => el.classList.contains('focus'));
+      expect(termFocused).toBe(false);
     });
   } finally {
     rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
