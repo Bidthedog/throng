@@ -776,7 +776,7 @@ export function useEditor(params: UseEditorParams): void {
       const v = viewRef.current;
       if (v) {
         lastScrollAnchor = v.lineBlockAtHeight(v.scrollDOM.scrollTop).from;
-        currentScrollAnchorRef.current = lastScrollAnchor; // US8 (#154): visible to openFile
+        currentScrollAnchorRef.current = lastScrollAnchor; // US8 (issue 154): visible to openFile
       }
     };
     view.scrollDOM.addEventListener('scroll', onScroll, { passive: true });
