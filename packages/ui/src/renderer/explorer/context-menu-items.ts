@@ -49,6 +49,9 @@ export function buildContextMenuItems(args: {
   const items: MenuItem[] = [];
   if (!isRoot) {
     items.push({ label: 'Rename', icon: 'rename', shortcut: sc('file.rename'), onClick: () => ops.beginRename(node.relPath) });
+    // US3 (#126): the clipboard actions have NO theme icon token yet (no cut/copy/paste tokens in
+    // the shipped set) → left iconless and recorded for the separate icon-token work (#127). The
+    // icon column is still reserved, so the rows stay aligned (FR-012).
     items.push({ label: 'Cut', shortcut: sc('file.cut'), onClick: () => ops.cut(targets) });
     items.push({ label: 'Copy', shortcut: sc('file.copy'), onClick: () => ops.copy(targets) });
   }
@@ -69,12 +72,12 @@ export function buildContextMenuItems(args: {
   // with the editor "Open In" targets (for files) beneath. Folders get just the OS reveal.
   items.push({ separator: true });
   const openInItems: MenuItem[] = [
-    { label: 'Open in OS File Explorer', icon: 'send', onClick: () => ops.reveal(node.relPath) },
+    { label: 'Open in OS File Explorer', icon: 'folderOpen', onClick: () => ops.reveal(node.relPath) },
     ...(openIn ?? []),
   ];
   items.push({ label: 'Open In', icon: 'send', submenu: openInItems });
 
-  // Hide section.
+  // Hide section. No 'hide' token in the shipped set yet → iconless, recorded for #127.
   if (!isRoot) {
     items.push({ separator: true });
     items.push({ label: 'Hide in this project', onClick: () => ops.hide(node.relPath) });
