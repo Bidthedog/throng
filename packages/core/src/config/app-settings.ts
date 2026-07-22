@@ -71,6 +71,8 @@ export interface EditorSettings {
   openTarget: EditorOpenTarget;
   /** Write on edit-settle without an explicit Ctrl+S. */
   autoSave: boolean;
+  /** US8 (#154): remember a document's scroll position across in-place reopens (default off). */
+  saveDocumentScroll: boolean;
   /** Debounce (ms) after typing stops before an auto-save writes (FR-060). */
   autoSaveDebounceMs: number;
   /** Default scope of a Ctrl+Shift+S Save-All. */
@@ -212,6 +214,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     openOnClick: 'single',
     openTarget: 'lastActive',
     autoSave: false,
+    saveDocumentScroll: false,
     autoSaveDebounceMs: 300,
     saveAllScope: 'project',
     defaultLineEnding: 'lf',
@@ -344,6 +347,8 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     ? (v.openTarget as EditorOpenTarget)
     : fallback.openTarget;
   const autoSave = typeof v.autoSave === 'boolean' ? v.autoSave : fallback.autoSave;
+  const saveDocumentScroll =
+    typeof v.saveDocumentScroll === 'boolean' ? v.saveDocumentScroll : fallback.saveDocumentScroll;
   const autoSaveDebounceMs =
     typeof v.autoSaveDebounceMs === 'number' && v.autoSaveDebounceMs >= 0
       ? v.autoSaveDebounceMs
@@ -374,6 +379,7 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     openOnClick,
     openTarget,
     autoSave,
+    saveDocumentScroll,
     autoSaveDebounceMs,
     saveAllScope,
     defaultLineEnding,
