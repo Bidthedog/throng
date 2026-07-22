@@ -58,6 +58,8 @@ export interface ExplorerApi {
   onRename: (args: { id: string; name: string }) => void;
   expandStep: () => void;
   collapseAll: () => void;
+  /** US6 (#137): reveal a file in this tree by its root-relative path (expand ancestors + select). */
+  revealInTree: (relPath: string) => Promise<void>;
   // Selection + operations (US3).
   selectedRelPaths: string[];
   primarySelected: TargetNode | null;
@@ -519,6 +521,28 @@ export function useExplorerData(
     persist(selectedId);
   }, [treeRef, selectedId, persist]);
 
+  // US6 (#137) — reveal a file IN THIS TREE: lazily load and open each ancestor (shallow → deep so
+  // each level's children exist before the next opens), then select and scroll to the file.
+  const revealInTree = useCallback(
+    async (relPath: string): Promise<void> => {
+      if (!treeRef.current || !relPath) return;
+      const ancestors: string[] = [];
+      for (let p = parentRel(relPath); p !== ''; p = parentRel(p)) ancestors.unshift(p);
+      for (const dir of ancestors) {
+        await ensureLoaded(dir);
+        treeRef.current?.open(dir);
+      }
+      const parent = parentRel(relPath);
+      if (parent) await ensureLoaded(parent);
+      const a = treeRef.current;
+      if (!a || !a.get(relPath)) return;
+      a.select(relPath, { focus: true });
+      a.scrollTo(relPath);
+      persist(relPath);
+    },
+    [treeRef, ensureLoaded, persist],
+  );
+
   // --- File operations (US3). All mutations go through the sandboxed files.*
   // bridge (confinement + naming enforced in the main process); the live-sync
   // watcher then refreshes the tree. Errors surface in the pane's error banner. ---
@@ -785,6 +809,7 @@ export function useExplorerData(
     onRename,
     expandStep,
     collapseAll,
+    revealInTree,
     selectedRelPaths,
     primarySelected,
     clipboard,
