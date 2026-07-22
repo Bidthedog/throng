@@ -605,7 +605,9 @@ if (isPrimaryInstance)
     resolveFromHere('../../../../package.json'),
     join(app.getAppPath(), 'package.json'),
   ]);
-  const aboutInfo = {
+  // US4 (#139) — the STATIC identity paints the About dialog immediately; the third-party
+  // packages list is read separately, on demand, so the dialog never blocks on it.
+  const aboutStatic = {
     version: productInfo.version,
     author: productInfo.author,
     repoUrl: productInfo.repoUrl,
@@ -615,12 +617,18 @@ if (isPrimaryInstance)
       join(app.getAppPath(), 'LICENSE'),
       join(process.resourcesPath, 'LICENSE'),
     ]),
-    thirdParty: readThirdPartyLicences([
+  };
+  ipcMain.handle('throng:about:get', () => aboutStatic);
+  // Read the third-party list lazily and memoise it — this is what the dialog fetches AFTER it has
+  // painted (FR-015). Its content is unchanged from before the split (FR-017).
+  let thirdPartyCache: ReturnType<typeof readThirdPartyLicences> | null = null;
+  ipcMain.handle('throng:about:getThirdParty', () => {
+    thirdPartyCache ??= readThirdPartyLicences([
       resolveFromHere('../third-party-licenses.json'),
       join(app.getAppPath(), 'packages/ui/dist/third-party-licenses.json'),
-    ]),
-  };
-  ipcMain.handle('throng:about:get', () => aboutInfo);
+    ]);
+    return thirdPartyCache;
+  });
   // The licence link opens in the user's default browser — no in-app navigation, so
   // the sandboxed About window is never replaced by a view of gnu.org (https only).
   ipcMain.on('throng:openExternal', (_event, url: unknown) => {
