@@ -126,9 +126,12 @@ const BY_ID = new Map(LANGUAGES.map((l) => [l.id, l]));
  * keep in step, and the first one to drift would silently indent Go with spaces.
  */
 export const SHIPPED_INDENT_BY_LANGUAGE: Readonly<Record<string, IndentProfile>> = Object.freeze(
-  Object.fromEntries(
-    LANGUAGES.filter((l) => l.indent !== undefined).map((l) => [l.id, { ...l.indent! }]),
-  ),
+  Object.fromEntries([
+    ...LANGUAGES.filter((l) => l.indent !== undefined).map((l) => [l.id, { ...l.indent! }]),
+    // Plain text has no registry descriptor, but it still gets a convention: four spaces. A file
+    // that already indents (with tabs or a different width) overrules this, per effectiveIndent.
+    [PLAIN_TEXT_ID, { ...FOUR_SPACES }],
+  ]),
 );
 
 export function languageById(id: string): LanguageDescriptor | undefined {
