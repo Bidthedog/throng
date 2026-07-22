@@ -11,8 +11,12 @@ describe('explorer open-on-click decision (004 T055/T057)', () => {
     expect(decideClick('double', 'file', 2)).toBe('open');
   });
 
-  it('a folder always toggles, never opens', () => {
-    expect(decideClick('single', 'folder', 1)).toBe('toggle');
+  // US2 (#140): a folder toggles its expansion on DOUBLE-click, and only selects on single —
+  // single-click select-only is #121, double-click toggle is #140. Never opens.
+  it('a folder toggles on double-click and selects on single (any open-on-click mode)', () => {
+    expect(decideClick('single', 'folder', 1)).toBe('select');
+    expect(decideClick('single', 'folder', 2)).toBe('toggle');
+    expect(decideClick('double', 'folder', 1)).toBe('select');
     expect(decideClick('double', 'folder', 2)).toBe('toggle');
   });
 });

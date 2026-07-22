@@ -43,12 +43,16 @@ export function TreeRow({
   // open-on-click mode (FR-026/027/028). A folder click SELECTS only — the
   // chevron (below) is the sole expand/collapse control (#121).
   const act = (clickCount: 1 | 2): void => {
-    if (isFolder) return; // #121: name/glyph select only; the chevron toggles
     const openOnClick = row?.openOnClick ?? 'single';
-    if (openOnClick === 'none') return; // click never opens; use Enter or Open In
-    if (decideClick(openOnClick, 'file', clickCount) === 'open') {
-      row?.onOpenFile(data.relPath);
+    const action = decideClick(openOnClick, data.kind, clickCount);
+    // US2 (#140): a folder toggles its expansion on a DOUBLE-click (single-click still selects
+    // only, #121); the root never collapses (FR-004). Independent of the file open-on-click mode.
+    if (action === 'toggle') {
+      if (!isRoot) node.toggle();
+      return;
     }
+    if (openOnClick === 'none') return; // a file click never opens here; use Enter or Open In
+    if (action === 'open') row?.onOpenFile(data.relPath);
   };
   const onClick = (e: MouseEvent): void => {
     if (e.ctrlKey || e.metaKey || e.shiftKey) return; // multi-select gesture
