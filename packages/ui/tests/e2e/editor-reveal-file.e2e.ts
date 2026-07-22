@@ -38,9 +38,9 @@ test('editor "Reveal File" selects the open file in the Files & Folders tree (#1
 
       // Editor title menu → "Reveal File" → the tree re-expands to and selects the file.
       await win.getByTestId(`panel-handle-${editorPid}`).click({ button: 'right' });
-      await expect(win.getByTestId('menu-item-Reveal File')).toBeVisible();
+      await expect(win.getByTestId('menu-item-Reveal File in Files & Folders')).toBeVisible();
       await expect(win.getByTestId('menu-item-Open in OS Explorer')).toBeVisible();
-      await win.getByTestId('menu-item-Reveal File').click();
+      await win.getByTestId('menu-item-Reveal File in Files & Folders').click();
 
       await expect(tree.getByText('deep.txt', { exact: true })).toBeVisible();
       await expect(tree.locator('.tree-row--selected')).toContainText('deep.txt');

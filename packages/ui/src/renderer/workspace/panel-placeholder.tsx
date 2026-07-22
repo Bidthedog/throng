@@ -125,6 +125,14 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const terminalCwd = useTerminalCwd(panel.id);
   // US10 (#89): a terminal's live window title replaces the panel name in the header when present.
   const terminalTitle = useTerminalTitle(panel.id);
+  // The name shown in the header and its hover tooltip. Precedence: a user RENAME wins over
+  // everything (#89 follow-up — a rename must not be overridden by the shell's OSC title); otherwise
+  // a terminal shows its live window title; otherwise the default placeholder. "Reset Name" clears
+  // the custom mark, which drops a terminal back to showing its live title.
+  const effectiveTitle =
+    panel.titleIsCustom || panel.kind !== 'terminal'
+      ? panel.title
+      : (terminalTitle ?? panel.title);
 
   // Removal verb per ownership + location (011, FR-030/031). Inside a sub-workspace a
   // Panel backed by a real project (`originProject` resolved above) is a mirrored VIEW:
@@ -310,13 +318,21 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
          * The title goes on the HEADER rather than on the inner span: put it on the span and the
          * tooltip would change meaning as the pointer moved two pixels sideways.
          */
-        title={panel.title}
+        title={effectiveTitle}
         onDoubleClick={() => setRenaming(true)}
         onContextMenu={(e) => {
           e.preventDefault();
           const others = (ws.layout?.tabs ?? []).filter((t) => t.id !== tabId);
           openMenu(e.clientX, e.clientY, [
             { label: 'Rename', icon: 'rename', onClick: () => setRenaming(true) },
+            // Undo a rename back to the panel's default name (a terminal then shows its live title
+            // again). Disabled when there is nothing to reset.
+            {
+              label: 'Reset Name',
+              icon: 'resetName',
+              disabled: !(panel.titleIsCustom ?? false),
+              onClick: () => ws.resetPanelName(panel.id),
+            },
             // Per-panel zoom (012) — zoom THIS panel's text independently of others.
             {
               label: 'Zoom',
@@ -367,7 +383,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                   ...(editorUi?.filePath
                     ? [
                         {
-                          label: 'Reveal File',
+                          label: 'Reveal File in Files & Folders',
                           onClick: () => {
                             window.dispatchEvent(
                               new CustomEvent('throng:reveal-in-tree', {
@@ -496,7 +512,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
           />
         ) : (
           <span className="panel-box__title" data-testid={`panel-title-${panel.id}`}>
-            {panel.kind === 'terminal' && terminalTitle ? terminalTitle : panel.title}
+            {effectiveTitle}
           </span>
         )}
         {panel.kind === 'terminal' && terminalCwd ? (
