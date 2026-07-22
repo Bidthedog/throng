@@ -143,6 +143,15 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     allowedValues: ['single', 'double', 'none'],
   },
   {
+    // US7 (#141) — where an opened file lands.
+    key: 'editor.openTarget',
+    label: 'Open files in',
+    description: 'Where an opened file lands: the last active editor (reused), or a new editor panel.',
+    group: 'File Explorer',
+    control: 'select',
+    allowedValues: ['lastActive', 'new'],
+  },
+  {
     key: 'explorer.deleteMode',
     label: 'Delete files to',
     description: 'Send deleted files to the OS Recycle Bin, or delete permanently.',

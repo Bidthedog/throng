@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import { collectPanels, isPanel, type LayoutNode } from '@throng/core';
+import { collectPanels, isPanel, type EditorOpenTarget, type LayoutNode } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
+import { useAppSettings } from '../config/config-store.js';
 import { getEditorActions } from './editor-actions.js';
 import { getEditorState } from './editor-state.js';
 import { getLastActiveEditor, setLastActiveEditor } from './last-active-editor.js';
@@ -16,10 +17,12 @@ import { promptUnsavedOpen } from './unsaved-open-store.js';
  */
 export function EditorOpenListener(): null {
   const ws = useWorkspace();
+  // US7 (#141): the default open target for a file-tree open (last active editor, or a new one).
+  const openTarget = useAppSettings().editor.openTarget;
   useEffect(() => {
     const handler = (e: Event): void => {
       const detail = (e as CustomEvent).detail as { absPath?: string } | undefined;
-      if (detail?.absPath) void openFileIntoEditor(ws, detail.absPath);
+      if (detail?.absPath) void openFileIntoEditor(ws, detail.absPath, openTarget);
     };
     window.addEventListener('throng:open-file', handler);
     // UI main raised this window to focus an already-open file's editor (FR-011a).
@@ -28,7 +31,7 @@ export function EditorOpenListener(): null {
       window.removeEventListener('throng:open-file', handler);
       offFocus?.();
     };
-  }, [ws]);
+  }, [ws, openTarget]);
   return null;
 }
 
@@ -46,9 +49,9 @@ function editorPanelsInTab(root: LayoutNode): string[] {
     .map((p) => p.id);
 }
 
-async function openFileIntoEditor(ws: Ws, absPath: string): Promise<void> {
+async function openFileIntoEditor(ws: Ws, absPath: string, openTarget: EditorOpenTarget): Promise<void> {
   const tabId = ws.layout?.activeTabId;
-  if (tabId) await openFileInTab(ws, tabId, absPath);
+  if (tabId) await openFileInTab(ws, tabId, absPath, openTarget);
 }
 
 /**
@@ -57,8 +60,14 @@ async function openFileIntoEditor(ws: Ws, absPath: string): Promise<void> {
  * routes into the tab's last active editor (creating its dedicated editor if none,
  * FR-010), prompting on a dirty target (US9).
  */
-export async function openFileInTab(ws: Ws, tabId: string, absPath: string): Promise<void> {
-  // 1) Already open anywhere → focus that one editor (no second buffer, FR-011a).
+export async function openFileInTab(
+  ws: Ws,
+  tabId: string,
+  absPath: string,
+  openTarget: EditorOpenTarget = 'lastActive',
+): Promise<void> {
+  // 1) Already open anywhere → focus that one editor (no second buffer, FR-011a / one-doc-one-state
+  //    #68). This holds regardless of the open-target preference (US7 / FR-027).
   const decision = await window.throng?.editor?.openInto({ absPath });
   if (decision?.action === 'focus') {
     focusPanelIfLocal(ws, decision.panelId);
@@ -70,6 +79,13 @@ export async function openFileInTab(ws: Ws, tabId: string, absPath: string): Pro
   const tab = layout.tabs.find((t) => t.id === tabId);
   if (!tab) return;
   if (layout.activeTabId !== tabId) ws.setActiveTab(tabId);
+
+  // US7 (#141): with "New Editor", a not-yet-open file lands in a NEW editor panel each time,
+  // rather than reusing the tab's last active editor.
+  if (openTarget === 'new') {
+    openFileInNewEditor(ws, tabId, absPath);
+    return;
+  }
 
   // 2) Resolve the target editor: the tab's last active editor, else any editor in
   //    the tab, else create the tab's single dedicated editor (FR-010).

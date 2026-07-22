@@ -49,6 +49,9 @@ export interface TerminalSettings {
 /** File-tree click that opens a file into the last active editor (006, FR-009). */
 export type EditorOpenOnClick = 'single' | 'double' | 'none';
 
+/** Default target when opening a file (US7, #141): reuse the last active editor, or a new one. */
+export type EditorOpenTarget = 'lastActive' | 'new';
+
 /** Scope a `Ctrl+Shift+S` Save-All covers (006, FR-023). */
 export type SaveAllScopeSetting = 'tab' | 'project' | 'all';
 
@@ -64,6 +67,8 @@ export type EditorPathDisplay = 'full' | 'name';
 export interface EditorSettings {
   /** How a file-tree click opens into the last active editor. */
   openOnClick: EditorOpenOnClick;
+  /** Where an opened file lands (US7, #141): the last active editor, or a new editor panel. */
+  openTarget: EditorOpenTarget;
   /** Write on edit-settle without an explicit Ctrl+S. */
   autoSave: boolean;
   /** Debounce (ms) after typing stops before an auto-save writes (FR-060). */
@@ -117,6 +122,7 @@ const STARTING_FOLDER_MODES: readonly StartingFolderMode[] = ['profile', 'lastVi
 
 const CONFIRM_LEVELS: readonly ConfirmLevel[] = ['none', 'single', 'double'];
 const EDITOR_OPEN_ON_CLICK: readonly EditorOpenOnClick[] = ['single', 'double', 'none'];
+const EDITOR_OPEN_TARGETS: readonly EditorOpenTarget[] = ['lastActive', 'new'];
 const SAVE_ALL_SCOPES: readonly SaveAllScopeSetting[] = ['tab', 'project', 'all'];
 const LINE_ENDINGS: readonly DefaultLineEnding[] = ['lf', 'crlf', 'cr'];
 const PATH_DISPLAYS: readonly EditorPathDisplay[] = ['full', 'name'];
@@ -204,6 +210,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   editor: {
     openOnClick: 'single',
+    openTarget: 'lastActive',
     autoSave: false,
     autoSaveDebounceMs: 300,
     saveAllScope: 'project',
@@ -333,6 +340,9 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
   const openOnClick = EDITOR_OPEN_ON_CLICK.includes(v.openOnClick as EditorOpenOnClick)
     ? (v.openOnClick as EditorOpenOnClick)
     : fallback.openOnClick;
+  const openTarget = EDITOR_OPEN_TARGETS.includes(v.openTarget as EditorOpenTarget)
+    ? (v.openTarget as EditorOpenTarget)
+    : fallback.openTarget;
   const autoSave = typeof v.autoSave === 'boolean' ? v.autoSave : fallback.autoSave;
   const autoSaveDebounceMs =
     typeof v.autoSaveDebounceMs === 'number' && v.autoSaveDebounceMs >= 0
@@ -362,6 +372,7 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     typeof v.persistUndoHistory === 'boolean' ? v.persistUndoHistory : fallback.persistUndoHistory;
   return {
     openOnClick,
+    openTarget,
     autoSave,
     autoSaveDebounceMs,
     saveAllScope,
