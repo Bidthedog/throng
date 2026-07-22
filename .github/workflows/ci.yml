@@ -117,6 +117,11 @@ jobs:
       # Non-empty => playwright.config.ts switches this shard's reporter to the mergeable `blob`
       # format (the shard total, supplied so the config can log it). `merge-e2e` stitches them back.
       THRONG_E2E_SHARDS: ${{ strategy.job-total }}
+      # Where the per-shard JSON report lands. ci-e2e-shard.ps1 reads its `stats` to tell a genuine
+      # test flake/failure (stays red) apart from a pure infra fault (retried once) — issue #75.
+      THRONG_E2E_JSON_OUT: shard-report.json
+      # Lets the retry step comment on the tracking issue when an infra fault is auto-retried.
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -175,8 +180,14 @@ jobs:
       # `--shard=i/N` runs this shard's slice only; Playwright splits by FILE (fullyParallel is
       # false), so a describe.serial file stays whole on one shard. The blob reporter writes
       # blob-report/report-<shard>.zip, uploaded below for `merge-e2e` to stitch together.
-      - name: Run E2E shard
-        run: npm run test:e2e -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+      # Run this shard under the issue-#75 flake policy: a genuine test flake/failure (report shows
+      # flaky>0 or unexpected>0) stays RED — the strict gate (failOnFlakyTests, Principle V) is
+      # untouched. Only a PURE INFRA fault (non-zero exit with 0 flaky AND 0 unexpected — a worker/
+      # global-teardown crash no test owns, which no retry absorbs) is retried once. The classifier
+      # cannot turn a real test flake green; see scripts/ci-e2e-shard.ps1 and the constitution.
+      - name: Run E2E shard (flake-policy aware)
+        shell: pwsh
+        run: ./scripts/ci-e2e-shard.ps1 -Shard "${{ matrix.shard }}/${{ strategy.job-total }}"
       - name: Upload blob report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
