@@ -89,7 +89,9 @@ export function PanelBody({ panel, tabId }: { panel: Panel; tabId: string }): Re
       tabName: layout?.tabs.find((t) => t.id === tabId)?.title,
       panelName: panel.title,
     };
-    return <TerminalPanel panel={panel} projectRoot={root} rootless={ownedBySub} meta={meta} />;
+    return (
+      <TerminalPanel panel={panel} tabId={tabId} projectRoot={root} rootless={ownedBySub} meta={meta} />
+    );
   }
   if (panel.kind === 'editor') {
     // 018 / US9 — do not load a file until the PROJECT LIST is known.

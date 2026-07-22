@@ -101,6 +101,17 @@ export interface UseTerminalOptions {
    * reserving them is what keeps them out of the running program (FR-010 / FR-014).
    */
   reserveKey?: (e: KeyboardEvent) => boolean;
+  /**
+   * Whether this terminal is the ACTIVE panel of the active tab, read at focus time (issue 144).
+   *
+   * A terminal used to `term.focus()` unconditionally on mount AND on attach (the latter fires late,
+   * after an async round-trip), so switching to a tab that merely CONTAINS a terminal handed keyboard
+   * focus to that terminal regardless of which panel was active — the last-mounting/last-attaching
+   * terminal always won. Gating both focus calls on this predicate means only the active panel takes
+   * focus; the shared panel-focus authority (PanelFocusSync → requestPanelFocus) routes focus on a
+   * switch. Absent (undefined) → keep the old always-focus behaviour.
+   */
+  isActive?: () => boolean;
 }
 
 /**
@@ -139,6 +150,14 @@ export function useTerminal(opts: UseTerminalOptions): void {
   reserveKeyRef.current = opts.reserveKey;
   decorationsRef.current = opts.searchDecorations;
   onSearchCountRef.current = opts.onSearchCount;
+  // Read the active-panel predicate through a ref so the (async) attach focus below sees the CURRENT
+  // active panel, not the one at mount time (issue 144).
+  const isActiveRef = useRef(opts.isActive);
+  isActiveRef.current = opts.isActive;
+  /** Focus the terminal ONLY when it is the active panel (issue 144). Default true when unset. */
+  const focusIfActive = (term: Terminal): void => {
+    if (isActiveRef.current?.() ?? true) term.focus();
+  };
 
   const termRef = useRef<Terminal | null>(null);
   // Re-measure-and-resize callback, published by the main effect so the font/zoom
@@ -351,7 +370,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
     }
 
     term.open(container);
-    term.focus();
+    focusIfActive(term); // only the active panel grabs focus on mount (issue 144)
     try {
       fit.fit();
     } catch {
@@ -522,7 +541,10 @@ export function useTerminal(opts: UseTerminalOptions): void {
         if (res.status === 'exited') {
           onExitRef.current({ code: res.exit?.code ?? null, unexpected: true });
         } else {
-          term.focus();
+          // Attach resolves asynchronously and LATE — this used to be the last focus call of all, so a
+          // background terminal in a multi-panel tab stole focus from the active panel on every switch.
+          // Focus only when this terminal is still the active panel (issue 144).
+          focusIfActive(term);
         }
       })
       .catch((err: unknown) => {
