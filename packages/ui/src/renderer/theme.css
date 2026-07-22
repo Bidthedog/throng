@@ -1107,6 +1107,17 @@ textarea,
   flex: 1 1 auto;
 }
 
+/* US1 (#125) — the command's first keyboard binding, after the label. Smaller than the 13px label
+   (FR-005) and pushed to the right; the label's flex:1 keeps it right-aligned. currentColor so it
+   follows the item colour on hover/focus like the icon does. */
+.context-menu__shortcut {
+  flex: 0 0 auto;
+  margin-left: 16px;
+  font-size: 11px;
+  opacity: 0.6;
+  color: currentColor;
+}
+
 /* 021/FR-035 — hover background gated on window focus (no stranded hover while blurred).
    :where() carries zero specificity, so the cascade is unchanged. */
 :where(body:not([data-window-blurred])) .context-menu__item:hover {

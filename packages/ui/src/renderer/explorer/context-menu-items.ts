@@ -6,7 +6,7 @@
  */
 import type { MenuItem } from '../workspace/context-menu.js';
 import type { ClipboardState } from './use-explorer-data.js';
-import type { TargetNode } from '@throng/core';
+import { firstBinding, type Keybindings, type TargetNode } from '@throng/core';
 
 export interface ContextMenuOps {
   beginRename: (relPath: string) => void;
@@ -30,8 +30,14 @@ export function buildContextMenuItems(args: {
   /** Editor "Open In" targets for a file (006, FR-011a) — appended under Open In,
    *  after OS File Explorer. Absent for folders/root. */
   openIn?: MenuItem[];
+  /** Live keybindings (US1, #125) — the first bound chord of each file.* action is shown in
+   *  brackets on its menu item. Absent → no shortcuts (unchanged rendering). */
+  keybindings?: Keybindings;
 }): MenuItem[] {
-  const { node, selectedRelPaths, clipboard, ops, openIn } = args;
+  const { node, selectedRelPaths, clipboard, ops, openIn, keybindings } = args;
+  // US1 (#125): the first bound chord for an explorer command, or undefined (→ no brackets).
+  const sc = (action: string): string | undefined =>
+    keybindings ? firstBinding(keybindings, action as never) : undefined;
   const isRoot = node.relPath === '';
   // Operate on the whole selection when the right-clicked node is part of it;
   // otherwise just on that node.
@@ -42,15 +48,15 @@ export function buildContextMenuItems(args: {
 
   const items: MenuItem[] = [];
   if (!isRoot) {
-    items.push({ label: 'Rename', icon: 'rename', onClick: () => ops.beginRename(node.relPath) });
-    items.push({ label: 'Cut', onClick: () => ops.cut(targets) });
-    items.push({ label: 'Copy', onClick: () => ops.copy(targets) });
+    items.push({ label: 'Rename', icon: 'rename', shortcut: sc('file.rename'), onClick: () => ops.beginRename(node.relPath) });
+    items.push({ label: 'Cut', shortcut: sc('file.cut'), onClick: () => ops.cut(targets) });
+    items.push({ label: 'Copy', shortcut: sc('file.copy'), onClick: () => ops.copy(targets) });
   }
-  items.push({ label: 'Paste', disabled: clipboard === null, onClick: () => ops.paste(node) });
+  items.push({ label: 'Paste', disabled: clipboard === null, shortcut: sc('file.paste'), onClick: () => ops.paste(node) });
   items.push({ label: 'New File', icon: 'add', onClick: () => ops.newFile(node) });
   items.push({ label: 'New Folder', icon: 'newFolder', onClick: () => ops.newFolder(node) });
   if (!isRoot) {
-    items.push({ label: 'Delete', icon: 'destroy', onClick: () => ops.remove(targets) });
+    items.push({ label: 'Delete', icon: 'destroy', shortcut: sc('file.delete'), onClick: () => ops.remove(targets) });
   }
   // A single, consistently-named OS reveal for BOTH files and folders (FR-107).
   // Files ALSO get an "Open In" submenu of editor targets only (no reveal duplicate).
