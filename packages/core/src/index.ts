@@ -168,6 +168,7 @@ export {
   eventToToken,
   normalizeToken,
   resolveAction,
+  firstBinding,
 } from './config/keybindings.js';
 export type { Theme, ThemeFonts, IconValue, TextCase, TypographyRole, ThemeFontRole, ThemeBootstrap } from './config/theme.js';
 export {

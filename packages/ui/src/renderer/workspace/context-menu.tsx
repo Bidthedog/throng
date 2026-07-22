@@ -16,6 +16,12 @@ export interface MenuItem {
   disabled?: boolean;
   /** Theme icon token shown before the label (e.g. 'rename', 'send', 'destroy'). */
   icon?: string;
+  /**
+   * The command's first keyboard shortcut, shown in brackets after the label in smaller text
+   * (US1, #125) — e.g. `Ctrl+C`. Resolved live from the keybindings at the build site via
+   * `firstBinding`; absent when the command is unbound (no brackets, no layout shift).
+   */
+  shortcut?: string;
   /** A nested submenu, shown as a flyout after a hover dwell. Nests to any depth. */
   submenu?: MenuItem[];
   /**
@@ -259,6 +265,13 @@ function MenuLevel({
               {item.icon ? <Icon token={item.icon} /> : ''}
             </span>
             <span className="context-menu__label">{item.label}</span>
+            {item.shortcut ? (
+              // US1 (#125): the command's first binding, in smaller text after the label. Only
+              // rendered when present, so an unbound item is byte-identical to before (FR-004).
+              <span className="context-menu__shortcut" data-testid={`menu-shortcut-${item.label}`}>
+                ({item.shortcut})
+              </span>
+            ) : null}
             {hasSub ? (
               // The submenu arrow was a literal ▸ character, while the theme has shipped a `chevron`
               // icon token all along. An icon drawn from a hard-coded glyph is an icon outside the

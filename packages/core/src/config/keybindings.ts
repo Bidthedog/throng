@@ -344,6 +344,16 @@ export function resolveAction(
   return null;
 }
 
+/**
+ * The FIRST bound chord token for a command (US1, #125), or undefined if it is unbound. Context
+ * menus render this in brackets after the label (e.g. "Copy (Ctrl+C)"). Tokens are already the
+ * display form the keybindings editor shows, so no formatting is applied; only the first is used
+ * even when a command has several (FR-002).
+ */
+export function firstBinding(kb: Keybindings, action: ActionId): string | undefined {
+  return kb.bindings[action]?.[0];
+}
+
 /** Two commands that want the same chord in a context where both are live (FR-017b1). */
 export interface ChordCollision {
   token: string;

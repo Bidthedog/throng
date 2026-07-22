@@ -23,7 +23,7 @@ import { buildContextMenuItems } from './context-menu-items.js';
 import { useExplorerKeybindings } from './explorer-keybindings.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { useErrorNotice } from '../common/notification.js';
-import { useAppSettings } from '../config/config-store.js';
+import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { openFileInTab, openFileInNewEditor } from '../editor/editor-open.js';
 import { getLastActiveEditor } from '../editor/last-active-editor.js';
@@ -101,6 +101,7 @@ export function FileTree({
   useErrorNotice(error, 'explorer-error', clearError);
   const { ref, width, height } = useSize();
   const { openMenu } = useContextMenu();
+  const keybindings = useKeybindings(); // US1 (#125): file.* shortcuts shown on the menu items
   const ws = useWorkspace();
   const explorerSettings = useAppSettings().explorer;
 
@@ -239,10 +240,11 @@ export function FileTree({
         clipboard,
         ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile },
         openIn,
+        keybindings,
       });
       openMenu(event.clientX, event.clientY, items);
     },
-    [selectedRelPaths, clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, openMenu, ws, rootFolder, createFolder, createFile],
+    [selectedRelPaths, clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, openMenu, ws, rootFolder, createFolder, createFile, keybindings],
   );
 
   // Right-clicking empty space (below the rows) opens a menu targeting the ROOT —
@@ -257,10 +259,11 @@ export function FileTree({
         selectedRelPaths: [],
         clipboard,
         ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile },
+        keybindings,
       });
       openMenu(event.clientX, event.clientY, items);
     },
-    [clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, createFolder, createFile, openMenu],
+    [clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, createFolder, createFile, openMenu, keybindings],
   );
   const cutPaths = useMemo(
     () => new Set(clipboard?.mode === 'cut' ? clipboard.relPaths : []),
