@@ -4,9 +4,18 @@ import {
   resolveColour,
   resolveIconAsset,
   themeBootstrap,
+  themeColorScheme,
   toCssVariables,
   type Theme,
 } from '@throng/core';
+
+/** A theme carrying only an appBg (everything else falls back to the default). */
+const themeWithBg = (appBg: string): Theme => ({
+  name: 'T',
+  colours: { appBg },
+  fonts: THRONG_THEME.fonts,
+  icons: {},
+});
 
 describe('Theme token resolution (FR-030)', () => {
   it('resolves a present colour token', () => {
@@ -192,5 +201,28 @@ describe('themeBootstrap (issue 132 — pre-paint theme snapshot)', () => {
     // Tokens the saved theme omits still resolve (merged over the defaults), so no
     // property is ever missing at first paint.
     expect(boot.vars['--throng-colour-danger']).toBe(THRONG_THEME.colours.danger);
+  });
+
+  it('carries the derived colour-scheme so the pre-paint document matches (issue 132)', () => {
+    // A dark appBg → dark scheme; a light appBg → light scheme. This is what stops Chromium
+    // painting a dark canvas backdrop over a light window (the flash).
+    expect(themeBootstrap(THRONG_THEME).colorScheme).toBe('dark');
+    expect(themeBootstrap(themeWithBg('#ffffff')).colorScheme).toBe('light');
+  });
+});
+
+describe('themeColorScheme (issue 132 — light/dark from appBg)', () => {
+  it('reads a light theme as light and a dark theme as dark', () => {
+    expect(themeColorScheme(themeWithBg('#ffffff'))).toBe('light');
+    expect(themeColorScheme(themeWithBg('#f5f6f8'))).toBe('light'); // bundled "Light"
+    expect(themeColorScheme(themeWithBg('#10131a'))).toBe('dark'); // bundled default
+    expect(themeColorScheme(THRONG_THEME)).toBe('dark');
+  });
+
+  it('supports 3-digit hex and tolerates an unparseable appBg as dark', () => {
+    expect(themeColorScheme(themeWithBg('#fff'))).toBe('light');
+    expect(themeColorScheme(themeWithBg('#000'))).toBe('dark');
+    // A hand-edited/empty appBg must never throw; it resolves through the default (dark).
+    expect(themeColorScheme(themeWithBg(''))).toBe('dark');
   });
 });

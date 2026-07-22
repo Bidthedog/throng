@@ -14,6 +14,7 @@
 import { BrowserWindow } from 'electron';
 import { wireWindowMaximizeEvents } from './window-controls-ipc.js';
 import { appIcon } from './app-icon.js';
+import { revealWhenPainted } from './reveal-when-painted.js';
 
 export type PreferencesTab = 'settings' | 'keybindings' | 'themes';
 
@@ -94,6 +95,8 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
     title: 'Preferences — throng',
     icon: appIcon(),
     backgroundColor: deps.backgroundColor?.() ?? '#10131a',
+    // Hidden until painted so the preferences window never flashes an empty black frame (issue 132).
+    show: false,
     webPreferences: {
       preload: deps.preloadPath,
       contextIsolation: true,
@@ -103,6 +106,7 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
   });
   prefsWindow = win;
   wireWindowMaximizeEvents(win);
+  revealWhenPainted(win);
   // Flag every other window blurred (US10/FR-035) — they are app-modal-disabled behind this window,
   // so any stranded CSS :hover on them must stop painting.
   broadcastBlurred(true, win);

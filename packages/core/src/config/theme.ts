@@ -616,12 +616,49 @@ export function toCssVariables(theme: Theme): Record<string, string> {
   return vars;
 }
 
+/**
+ * The relative luminance (WCAG) of a `#rgb` / `#rrggbb` colour — self-contained so `theme.ts` need
+ * not import `theme-quality.ts`, which imports `theme.ts` back for `THRONG_THEME` (a runtime cycle).
+ * An unparseable value returns 0 (treated as dark — the bundled default), never throws.
+ */
+function hexLuminance(hex: string): number {
+  const s = hex.trim().replace(/^#/, '');
+  const full = s.length === 3 ? s.replace(/(.)/g, '$1$1') : s;
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return 0;
+  const chan = (v: number): number => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const r = chan(parseInt(full.slice(0, 2), 16));
+  const g = chan(parseInt(full.slice(2, 4), 16));
+  const b = chan(parseInt(full.slice(4, 6), 16));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/**
+ * Whether a theme reads as LIGHT or DARK, from the luminance of its app background (issue 132).
+ *
+ * This drives the document's CSS `color-scheme`, and that property governs the colour Chromium
+ * paints its viewport CANVAS BACKDROP — the layer BEHIND the (transparent-until-themed) `<html>`.
+ * A hardcoded `color-scheme: dark` kept that backdrop near-black on a LIGHT theme, and the backdrop
+ * composites OVER the window's native `backgroundColor` — so every window flashed black on load and
+ * around any repaint, however correct the native background and the pre-paint token paint were.
+ * Deriving the scheme from appBg makes the backdrop match the theme, which is what finally removes
+ * the flash: the themed native bg and the preload token-paint were necessary but never sufficient
+ * without it.
+ */
+export function themeColorScheme(theme: Theme): 'light' | 'dark' {
+  return hexLuminance(resolveColour(theme, 'appBg')) > 0.5 ? 'light' : 'dark';
+}
+
 /** The resolved theme, ready to apply to a document root before its first paint. */
 export interface ThemeBootstrap {
   /** The active theme's name, for `:root[data-theme="…"]` and test hooks. */
   name: string;
   /** The full `--throng-*` custom-property map (see {@link toCssVariables}). */
   vars: Record<string, string>;
+  /** `light` | `dark`, for the document's `color-scheme` (issue 132; see {@link themeColorScheme}). */
+  colorScheme: 'light' | 'dark';
 }
 
 /**
@@ -631,5 +668,5 @@ export interface ThemeBootstrap {
  * before the saved one resolves over async config IPC.
  */
 export function themeBootstrap(theme: Theme): ThemeBootstrap {
-  return { name: theme.name, vars: toCssVariables(theme) };
+  return { name: theme.name, vars: toCssVariables(theme), colorScheme: themeColorScheme(theme) };
 }
