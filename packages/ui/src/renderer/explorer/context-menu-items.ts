@@ -6,7 +6,7 @@
  */
 import type { MenuItem } from '../workspace/context-menu.js';
 import type { ClipboardState } from './use-explorer-data.js';
-import { firstBinding, type Keybindings, type TargetNode } from '@throng/core';
+import { firstBinding, pathForms, type Keybindings, type TargetNode } from '@throng/core';
 
 export interface ContextMenuOps {
   beginRename: (relPath: string) => void;
@@ -33,8 +33,10 @@ export function buildContextMenuItems(args: {
   /** Live keybindings (US1, #125) — the first bound chord of each file.* action is shown in
    *  brackets on its menu item. Absent → no shortcuts (unchanged rendering). */
   keybindings?: Keybindings;
+  /** The project's absolute root path (US9, #156) — used to render the "Copy Path" forms. */
+  projectRoot?: string;
 }): MenuItem[] {
-  const { node, selectedRelPaths, clipboard, ops, openIn, keybindings } = args;
+  const { node, selectedRelPaths, clipboard, ops, openIn, keybindings, projectRoot } = args;
   // US1 (#125): the first bound chord for an explorer command, or undefined (→ no brackets).
   const sc = (action: string): string | undefined =>
     keybindings ? firstBinding(keybindings, action as never) : undefined;
@@ -76,6 +78,24 @@ export function buildContextMenuItems(args: {
     ...(openIn ?? []),
   ];
   items.push({ label: 'Open In', icon: 'send', submenu: openInItems });
+
+  // US9 (#156): "Copy Path" submenu, directly below "Open In" in the location group (FR-018a).
+  // Four forms — absolute/relative × Windows(\)/Linux(/); relative is against the project root.
+  if (projectRoot !== undefined) {
+    const forms = pathForms(projectRoot, node.relPath);
+    const copyText = (text: string): void => {
+      void window.throng?.clipboard?.write({ text, mode: 'verbatim' });
+    };
+    items.push({
+      label: 'Copy Path',
+      submenu: [
+        { label: 'Absolute (Windows \\)', onClick: () => copyText(forms.absWin) },
+        { label: 'Absolute (Linux /)', onClick: () => copyText(forms.absLinux) },
+        { label: 'Relative (Windows \\)', onClick: () => copyText(forms.relWin) },
+        { label: 'Relative (Linux /)', onClick: () => copyText(forms.relLinux) },
+      ],
+    });
+  }
 
   // Hide section. No 'hide' token in the shipped set yet → iconless, recorded for #127.
   if (!isRoot) {

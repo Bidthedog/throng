@@ -112,6 +112,7 @@ export {
   resolveDragEffect,
   DEFAULT_DRAG_MODIFIERS,
   decideClick,
+  pathForms,
   nextExpandTargets,
 } from './explorer/index.js';
 export type { DragModifierKey, DragModifierConfig } from './explorer/index.js';

@@ -241,6 +241,7 @@ export function FileTree({
         ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile },
         openIn,
         keybindings,
+        projectRoot: rootFolder,
       });
       openMenu(event.clientX, event.clientY, items);
     },
@@ -260,10 +261,11 @@ export function FileTree({
         clipboard,
         ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile },
         keybindings,
+        projectRoot: rootFolder,
       });
       openMenu(event.clientX, event.clientY, items);
     },
-    [clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, createFolder, createFile, openMenu, keybindings],
+    [clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, createFolder, createFile, openMenu, keybindings, rootFolder],
   );
   const cutPaths = useMemo(
     () => new Set(clipboard?.mode === 'cut' ? clipboard.relPaths : []),
