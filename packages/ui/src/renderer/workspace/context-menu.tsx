@@ -166,7 +166,9 @@ function MenuLevel({
         e.preventDefault();
         e.stopPropagation();
         if (item.submenu?.length) {
-          setOpenLabel((cur) => (cur === item.label ? null : (item.label ?? null)));
+          // Idempotent OPEN, never a toggle (#157 / FR-018): a parent must never close its own
+          // sub-menu; only a sibling parent, a leaf action, an outside click or Escape closes it.
+          setOpenLabel(item.label ?? null);
           return;
         }
         item.onClick?.();
@@ -265,7 +267,7 @@ function MenuLevel({
               if (hasSub) {
                 e.stopPropagation();
                 cancelHover();
-                setOpenLabel((cur) => (cur === item.label ? null : (item.label ?? null))); // click toggles
+                setOpenLabel(item.label ?? null); // idempotent open, never a toggle (#157 / FR-018)
                 return;
               }
               item.onClick?.();
