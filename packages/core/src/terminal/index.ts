@@ -12,6 +12,7 @@ export {
   type FlavourProblem,
 } from './flavour-record.js';
 export { BUILTIN_FLAVOUR_DEFAULT_PARAMS, resolveDefaultParams } from './defaults.js';
+export { quoteDropPath, formatDroppedPaths } from './drop-paths.js';
 export {
   resolveLaunchSpec,
   tokenizeParams,

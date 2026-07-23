@@ -451,6 +451,8 @@ export {
   type FlavourProblem,
   BUILTIN_FLAVOUR_DEFAULT_PARAMS,
   resolveDefaultParams,
+  quoteDropPath,
+  formatDroppedPaths,
   resolveLaunchSpec,
   tokenizeParams,
   type LaunchSpec,

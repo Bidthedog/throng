@@ -38,6 +38,12 @@ export interface TerminalApi {
    * by Ctrl+V, Shift+Insert and the right-click menu — see the paste handling in the mount effect.
    */
   paste(): void;
+  /**
+   * Write text straight to the shell's input, as if pasted (024 US2, #155 — a dropped path). The
+   * caller composes the exact bytes (e.g. a trailing space + a Left-arrow to sit the cursor before
+   * it, FR-004b); this just routes them to the pty and restores focus.
+   */
+  write(text: string): void;
 }
 
 /**
@@ -246,6 +252,10 @@ export function useTerminal(opts: UseTerminalOptions): void {
         getSelection: () => term.getSelection(),
         focus: () => term.focus(),
         paste: () => void pasteFromClipboard(),
+        write: (text: string) => {
+          void bridge.write(panelId, text);
+          term.focus();
+        },
       };
     }
 

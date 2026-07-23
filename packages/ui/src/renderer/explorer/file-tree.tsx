@@ -22,6 +22,7 @@ import { ExplorerRowContext } from './explorer-context.js';
 import { buildContextMenuItems } from './context-menu-items.js';
 import { useExplorerKeybindings } from './explorer-keybindings.js';
 import { useContextMenu } from '../context-menu-provider.js';
+import { setTreeDrag, clearTreeDrag } from './tree-drag-store.js';
 import { useErrorNotice } from '../common/notification.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
@@ -33,6 +34,13 @@ import { collectPanels, normaliseFolder, resolveDragEffect } from '@throng/core'
 import type { MenuItem } from '../workspace/context-menu.js';
 
 const ROW_HEIGHT = 24;
+
+/** An item's OS-native absolute path from the project root + its `/`-joined relPath (024 US2/US4). */
+function toAbsPath(rootFolder: string, relPath: string): string {
+  const sep = rootFolder.includes('\\') ? '\\' : '/';
+  const root = rootFolder.replace(/[\\/]+$/, '');
+  return relPath ? `${root}${sep}${relPath.split('/').join(sep)}` : root;
+}
 
 /** Leaf folder name of an absolute root path (handles `/` and `\`). */
 function rootName(rootFolder: string): string {
@@ -141,6 +149,11 @@ export function FileTree({
     copy: explorerSettings.dragCopyModifier,
     move: explorerSettings.dragMoveModifier,
   };
+  // 024 US2/US4: the current selection + root, read at drag start to record the dragged items'
+  // absolute paths for a terminal / empty-panel drop (the tree's react-dnd channel is unreadable to
+  // a native drop target). Held in a ref so the window drag listeners need not re-register.
+  const dragPayloadRef = useRef({ selectedRelPaths, primarySelected, rootFolder });
+  dragPayloadRef.current = { selectedRelPaths, primarySelected, rootFolder };
 
   // The drag cursor + copy/move decision (FR-092/095). react-arborist uses react-dnd,
   // whose HTML5 backend sets dataTransfer.dropEffect on a WINDOW-level `dragover`
@@ -153,7 +166,21 @@ export function FileTree({
     if (!ready) return;
     const onDragStart = (e: DragEvent): void => {
       if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copyMove';
+      // 024 US2/US4: record the dragged items' absolute paths so a terminal / empty-panel drop can
+      // read them. Only our OWN tree drags (not an OS 'Files' drag), and only from within the tree.
+      if (Array.from(e.dataTransfer?.types ?? []).includes('Files')) return;
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest?.('[data-testid="file-explorer-tree"]')) return;
+      const { selectedRelPaths: sel, primarySelected: prim, rootFolder: root } = dragPayloadRef.current;
+      const rels = sel.length > 0 ? sel : prim ? [prim.relPath] : [];
+      if (rels.length === 0) return;
+      setTreeDrag({
+        paths: rels.map((r) => toAbsPath(root, r)),
+        singleFile: rels.length === 1 && prim?.kind === 'file',
+      });
     };
+    const onDragEnd = (): void => clearTreeDrag();
+    window.addEventListener('dragend', onDragEnd);
     const onDragOver = (e: DragEvent): void => {
       if (!e.dataTransfer) return;
       // 018 / US9 (FR-063) — this listener is for the tree's OWN drags (moving a file within the
@@ -175,6 +202,7 @@ export function FileTree({
     return () => {
       window.removeEventListener('dragstart', onDragStart);
       window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('dragend', onDragEnd);
     };
   }, [ready]);
 
