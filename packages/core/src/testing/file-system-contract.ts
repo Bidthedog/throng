@@ -150,6 +150,31 @@ export function runFileSystemContract(
       }
     });
 
+    it('restores a trashed node to its original path (024 US3)', async () => {
+      const h = await makeHarness();
+      try {
+        await h.write('restoreme.txt', 'content');
+        const p = h.abs('restoreme.txt');
+        await h.fs.trash(p);
+        expect(await h.fs.exists(p)).toBe(false);
+        await h.fs.restoreFromTrash(p, Date.now());
+        expect(await h.fs.exists(p)).toBe(true);
+        expect(new TextDecoder().decode(await h.fs.readBytes(p))).toBe('content');
+      } finally {
+        await h.cleanup();
+      }
+    });
+
+    it('rejects restoring an item that is no longer recoverable (024 US3)', async () => {
+      const h = await makeHarness();
+      try {
+        // Nothing was trashed at this path → cannot be restored; the caller turns this into a refusal.
+        await expect(h.fs.restoreFromTrash(h.abs('never-trashed.txt'), Date.now())).rejects.toThrow();
+      } finally {
+        await h.cleanup();
+      }
+    });
+
     it('reports a symlink as such (or skips where unsupported)', async () => {
       const h = await makeHarness();
       try {

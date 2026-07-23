@@ -57,6 +57,7 @@ import { registerGhostIpc, setGhostTheme, disposeGhost } from './ghost-window.js
 import { revealWhenPainted } from './reveal-when-painted.js';
 import { WindowManager } from './window-manager.js';
 import { NodeFileSystem } from './node-file-system.js';
+import { restoreFromRecycleBin } from './recycle-bin-restore.js';
 import { resolvePickerDefaultPath } from './pick-folder.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { ElectronShellIntegration } from './electron-shell-integration.js';
@@ -766,7 +767,14 @@ if (isPrimaryInstance)
   // only through these `files.*` channels. Recycle-Bin + reveal use Electron's
   // built-in `shell`; confinement to the active project root is enforced by the
   // service on resolved real paths (research D1/D5).
-  const fileSystem = new NodeFileSystem((p) => shell.trashItem(p));
+  const fileSystem = new NodeFileSystem(
+    (p) => shell.trashItem(p),
+    // 024 US3: recycle-bin restore is Windows-only (PowerShell Shell.Application); elsewhere the
+    // default rejecting impl leaves delete-undo unavailable and it degrades cleanly.
+    process.platform === 'win32'
+      ? (originalPath) => restoreFromRecycleBin(originalPath)
+      : undefined,
+  );
   const shellIntegration = new ElectronShellIntegration(shell);
   // Watch the active project's root and push change signals to every window so
   // the file tree stays live-synced with external + in-app edits (US2).

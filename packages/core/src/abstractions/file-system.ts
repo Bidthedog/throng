@@ -35,6 +35,14 @@ export interface IFileSystem {
   delete(path: string): Promise<void>;
   /** Move to the OS Recycle Bin / Trash (deleteMode = "recycle", default). */
   trash(path: string): Promise<void>;
+  /**
+   * Restore a previously-trashed item back to its original path (024 US3, #85 — undo of a delete).
+   * `deletedAt` (epoch-ms) disambiguates when the recycle bin holds several entries with the same
+   * original path — the closest match at or before that time is restored. Rejects when the item can
+   * no longer be recovered (purged) or the platform seam is unimplemented, so the caller turns it
+   * into the FR-008 refusal and changes nothing.
+   */
+  restoreFromTrash(originalPath: string, deletedAt: number): Promise<void>;
   exists(path: string): Promise<boolean>;
   /** Raw bytes of a file (editor load, 006). Rejects if the path is gone. */
   readBytes(path: string): Promise<Uint8Array>;
