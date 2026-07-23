@@ -1,6 +1,55 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 4.2.0 → 4.3.0
+Bump rationale: MINOR. Principle VI (Simple, Modern, Discoverable UX) gains an additive rule —
+                "Every panel action has a menu item" — making a Panel's menu the canonical index of
+                its actions, with a status bar or chord as an accelerator over it rather than a
+                substitute for it (2026-07-23, raised while clarifying spec 024 / issue #152). No
+                principle is removed or redefined.
+
+                The rule was requested in the broad form "all panel level actions need menu items,
+                even if they are displayed on the status bar also". AN AUDIT OF THE SHIPPED MENUS
+                SHOWED THE BROAD FORM WOULD BE UNSERVICEABLE AS WRITTEN. The editor content menu
+                offers seven items (Cut/Copy/Paste/Select All/Undo/Redo/Set Language…) and the
+                terminal's offers two (Copy/Paste), while roughly two dozen commands are live in a
+                panel scope. Taken literally the rule would demand menu items for
+                `editor.columnSelectUp`, `search.findNext` and `terminal.scrollLineDown` — entries
+                no user would ever choose from a menu — so the rule DISTINGUISHES discrete commands
+                and state toggles (which MUST have items) from continuous or navigational input
+                (exempt, but still rebindable and documented).
+
+                Even so scoped, the shipped app does NOT satisfy it today: per-panel zoom, save,
+                find/replace and the editor's line commands reach no menu. Rather than write a rule
+                the codebase quietly violates, or weaken it to whatever currently ships, it is an
+                END-STATE requirement under the Incremental Delivery rule — binding on new work
+                immediately (a feature adding a panel action adds its menu item in the same
+                increment) with the pre-existing gaps ENUMERATED in the principle and owed to
+                tracked work. This is the same treatment v4.2.0 gave cross-flavour key parity.
+
+                What prompted it: spec 024 makes both panel status bars hideable, at which point a
+                status-bar-only control would become unreachable — the rule generalises the fix
+                (a checkable "Word Wrap" content-menu item) into the standard that produced it.
+Modified principles: VI "Simple, Modern, Discoverable UX" (one rule block added — "Every panel
+                action has a menu item" — plus an extended rationale). Title and every existing
+                rule unchanged.
+Added sections: none. Removed sections: none.
+Templates / artifacts reviewed:
+  ✅ .specify/templates/plan-template.md  — Constitution Check is dynamic; picks the rule up
+       automatically. No edit needed.
+  ✅ .specify/templates/spec-template.md  — principle-agnostic; unchanged.
+  ✅ .specify/templates/tasks-template.md — principle-agnostic; unchanged.
+  ✅ .specify/extensions.yml              — no before/after_constitution hooks registered.
+  ✅ packages/ui/src/renderer/editor/content-menu.ts , terminal/terminal-panel.tsx — audited; the
+       gap list in the principle comes from this audit. No code change is made by this amendment.
+  ✅ specs/024-editor-terminal-enhancements/spec.md — already conforms: FR-003d requires the
+       checkable "Word Wrap" content-menu item in both panel types, and FR-001c requires the
+       command to survive a hidden status bar.
+Deferred TODOs: the enumerated pre-existing gaps (per-panel zoom, save, find/replace, editor line
+                commands) have no issue yet. They are owed to tracked work under the Incremental
+                Delivery rule and MUST be filed before compliance can be claimed.
+
+                ---- superseded amendment (historical) ----
 Version change: 4.1.0 → 4.2.0
 Bump rationale: MINOR. Principle IV (Native Terminal Support & Auto-Detection) gains three additive
                 sub-rules governing the keyboard: reserved terminal keys, one chord per command
@@ -950,12 +999,44 @@ The interface MUST be simple to understand and modern in feel.
   per project and restored when the project is reopened.
 - The interface SHOULD provide modern affordances such as resize handles,
   drag-and-drop panels, and themes, but these MUST NOT obscure core flows.
+
+**Every panel action has a menu item.** A chord is invisible and a status-bar glyph
+is unlabelled; a menu is the one surface a user can browse to learn what a panel can
+do. A panel's menu is therefore the CANONICAL index of its actions, not one route
+among several.
+
+- Every **discrete command** or **state toggle** that acts on a Panel or its content
+  MUST appear in that Panel's menu — its content menu, or its header menu where the
+  action belongs to the Panel rather than to the content — **even when the same
+  action is already reachable** from a status bar, a toolbar, or a chord. A status
+  bar is an accelerator for an action the menu already offers, never the only way to
+  reach it, and hiding a status bar MUST NOT remove the user's last route to a
+  command.
+- A menu item MUST show its command's current chord where one is bound, and a toggle
+  MUST render its state (checked when on).
+- **Exempt**: continuous or navigational input whose home is the keyboard or mouse —
+  scrolling, caret and selection movement, stepping through search matches, and
+  closing a transient bar. These MUST still be rebindable and documented, but a menu
+  item for "move selection up one line" serves no one.
+- This is an **end-state requirement** delivered incrementally under the Incremental
+  Delivery rule (Development Workflow & Quality Gates). It binds new work
+  immediately: a feature that adds a panel action MUST add its menu item in the same
+  increment. Pre-existing gaps — per the v4.3.0 audit, per-panel zoom
+  (`panel.zoomIn`/`Out`/`Reset`), save (`editor.save`/`saveAll`/`saveAs`), find and
+  replace (`search.find`/`replace`/`replaceAll`), and the editor's line commands
+  (`editor.cutLine`/`indentLines`/`outdentLines`) reach no menu — MUST be closed by
+  tracked work, not silently tolerated.
 - The selected project's colour MUST be visually dominant so the active context
   is unambiguous at a glance.
 
 Rationale: The user has rejected tools that are too cumbersome. Configurable
 tabbed, tiled layouts are a primary workflow requirement, and clear context
 signalling via the project colour keeps a busy multi-terminal workspace legible.
+Discoverability is the same requirement applied to commands: an action reachable
+only by a chord the user has not memorised, or only by a glyph on a bar they can
+hide, is an action they do not have. Making the menu the canonical index — and
+letting the status bar and the keyboard be accelerators over it — is what keeps
+"reachable without instruction" true as the number of panel actions grows.
 
 ### VII. Change Review & Approval
 
@@ -1303,4 +1384,4 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 4.2.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-23
+**Version**: 4.3.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-23
