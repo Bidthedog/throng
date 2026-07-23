@@ -1,6 +1,83 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 4.1.0 → 4.2.0
+Bump rationale: MINOR. Principle IV (Native Terminal Support & Auto-Detection) gains three additive
+                sub-rules governing the keyboard: reserved terminal keys, one chord per command
+                across panel types, and key parity across shell flavours (2026-07-23, raised while
+                clarifying spec 024 / issue #152). No principle is removed or redefined.
+
+                Considered MAJOR and rejected on the project's own test: MAJOR is the withdrawal or
+                backward-incompatible redefinition of a stated guarantee. Nothing previously
+                guaranteed is withdrawn — Principle IV's existing rules (support any installed
+                shell, auto-detect, project-root cwd, list and switch running terminals) stand
+                verbatim. What is ADDED is a contract the principle implied but never stated: that
+                "hosting a real terminal" includes hosting its keyboard. Materially expanded
+                guidance within an existing principle → MINOR, in the lineage of v3.13.0 → v3.14.0
+                and v4.0.0 → v4.1.0.
+
+                THE SHIPPED BINDINGS WERE AUDITED, AND THE FIRST DRAFT OF THIS RULE WAS WRONG. A
+                flat "never shadow a line-editor key" would have declared throng non-compliant on
+                five counts the moment it was ratified: `Ctrl+B` (readline `backward-char`) is
+                `view.toggleProjects`, `Ctrl+F` (`forward-char`) is `search.find`, `Ctrl+N`
+                (`next-history`) is `view.toggleExplorer`, `Ctrl+H` (`backward-delete-char`) is
+                `search.replace`, and `Ctrl+S` (XOFF / `forward-search-history`) is `editor.save`
+                — all live in a terminal via the EVERYWHERE or PANELS scope, as
+                `keybindings.ts` already notes ("a terminal's shell never sees them"). Writing the
+                rule flat and calling the code clean would have been false. The rule is therefore
+                TWO-TIERED: a reserved set no command may take, and a shadowable set that MAY be
+                taken only as a recorded exception. The five above are enumerated in the principle
+                as exactly those exceptions — the constitution documents what ships rather than
+                contradicting it, and the reserved tier (`Ctrl+C/D/Z/A/E/W/U/K/R/L/Q`) is clean
+                today and stays clean.
+
+                The rules close a real hole found in practice. Spec 024 proposed `Ctrl+E+W` as the
+                word-wrap chord; because a chord throng consumes never reaches the shell, a `Ctrl+E`
+                prefix would have silently removed `end-of-line` from every Git Bash terminal and
+                scroll-down from `vim`/`less` — a capability loss invisible until a user's reflex
+                stopped working. The constitution had no rule to catch that at the Constitution
+                Check gate, and the near-miss was caught only by manual inspection. The parity
+                clause records the converse gap the same review surfaced: `Ctrl+E` works in Git Bash
+                but not in PowerShell, so today the same throng terminal answers to different keys
+                depending on the flavour behind it.
+
+                The parity clause is an END-STATE requirement delivered incrementally (the pattern
+                Principle I already uses for the project workspace folder structure): it binds new
+                work immediately — no feature may widen the gap — while the normalisation itself is
+                tracked as its own feature. It is deliberately NOT a demand that unshipped
+                behaviour be treated as shipped.
+Modified principles: IV "Native Terminal Support & Auto-Detection" (three sub-rule blocks added —
+                "Terminal keys belong to the terminal" with its reserved / shadowable tiers and the
+                enumerated exceptions, "One command, one chord across panel types", and "Parity
+                across flavours" — plus an extended rationale). Title and every existing rule
+                unchanged.
+Added sections: none. Removed sections: none.
+Templates / artifacts reviewed:
+  ✅ .specify/templates/plan-template.md  — Constitution Check is dynamic ("[Gates determined based
+       on constitution file]"); the new sub-rules are picked up automatically. No edit needed.
+  ✅ .specify/templates/spec-template.md  — principle-agnostic (no principle references); unchanged.
+  ✅ .specify/templates/tasks-template.md — principle-agnostic (no principle references); unchanged.
+  ✅ .specify/extensions.yml              — no before/after_constitution hooks registered.
+  ✅ docs/ , README.md , CLAUDE.md        — no references to Principle IV or its title; unchanged.
+  ✅ packages/core/src/config/keybindings.ts — audited command-by-command against COMMAND_SCOPES.
+       RESERVED tier: clean — no shipped default binds `Ctrl+C/D/Z/A/E/W/U/K/R/L/Q` in a scope live
+       in a terminal (`file.copy`'s `Ctrl+C` and `editor.cutLine`'s `Ctrl+X` are EXPLORER_ONLY /
+       EDITOR_ONLY, so they never apply there). SHADOWABLE tier: five pre-existing bindings, now
+       enumerated in the principle as recorded exceptions. No code change is required by this
+       amendment; the five are flagged for review, not broken.
+  ✅ specs/024-editor-terminal-enhancements/spec.md — already conforms: FR-003c states the
+       don't-shadow rule and the shipped chord was moved from `Ctrl+E+W` to `Ctrl+Alt+W` before this
+       amendment. No spec edit needed.
+Deferred TODOs:
+  - Cross-flavour key parity has no feature or issue yet — it is an end-state obligation under the
+    Incremental Delivery rule and MUST be filed and tracked before it can be claimed. Recorded
+    here, not silently assumed.
+  - The five recorded shadowable exceptions (`Ctrl+B`, `Ctrl+F`, `Ctrl+N`, `Ctrl+H`, `Ctrl+S`) are
+    retained, not endorsed. `Ctrl+S` in particular still means XOFF wherever flow control is on,
+    where a user who hits it sees a frozen terminal with no feedback. Whether to rebind any of the
+    five is a product decision this amendment deliberately does NOT make.
+
+                ---- superseded amendment (historical) ----
 Version change: 4.0.0 → 4.1.0
 Bump rationale: MINOR. Strengthens Principle V (Test-First Quality Discipline) with an additive
                 sub-rule that distinguishes an INFRASTRUCTURE fault (owned by no test) from a test
@@ -713,9 +790,62 @@ single shell.
   project's root folder.
 - Running terminals within a project MUST be clearly listed and switchable.
 
+**Terminal keys belong to the terminal.** A chord the application consumes while a
+terminal is focused never reaches the running program, so binding one is not a
+preference — it is the silent removal of a capability the user already had. Two
+tiers apply, and a chord's tier is decided by **any** hosted flavour's line editor,
+not the flavour a given user happens to run.
+
+- **Reserved — MUST NOT be taken.** No application command may bind, in a scope that
+  is live in a terminal, a chord whose terminal meaning is dominant and has no
+  equivalent by another route: `Ctrl+C` (SIGINT), `Ctrl+D` (EOF), `Ctrl+Z`
+  (suspend), `Ctrl+A` / `Ctrl+E` (line start / end), `Ctrl+W` / `Ctrl+U` / `Ctrl+K`
+  (word and line kill), `Ctrl+R` (reverse search), `Ctrl+L` (clear), `Ctrl+Q`
+  (XON). Taking one of these is a defect, not a trade-off.
+- **Shadowable — MUST be a recorded exception.** A chord whose terminal meaning is a
+  *secondary* binding the user can reach another way — the emacs-style motion and
+  edit aliases `Ctrl+B`, `Ctrl+F`, `Ctrl+N`, `Ctrl+P`, `Ctrl+H`, and flow-control
+  `Ctrl+S` (arrow keys, `Home`/`End`, `Backspace` and history search serve the same
+  ends in every hosted flavour) — MAY be bound, but only deliberately: the feature's
+  spec MUST name the chord, the terminal behaviour it displaces, and why no free
+  chord serves. Silence is not permission.
+- **Recorded exceptions as of v4.2.0** (shipped before this rule existed, each
+  retained on the reasoning above and each open to revisiting): `Ctrl+B`
+  (`view.toggleProjects`), `Ctrl+F` (`search.find`), `Ctrl+N`
+  (`view.toggleExplorer`), `Ctrl+H` (`search.replace`), `Ctrl+S` (`editor.save`).
+  This list is exhaustive; any addition to it MUST come with its own justification,
+  and no chord in the reserved tier may join it.
+
+**One command, one chord across panel types.** A command offered in more than one
+panel type MUST use the SAME chord in each, so it is learned once rather than per
+surface.
+
+- Divergence is permitted ONLY where the terminal's meaning for that chord is
+  well-known and genuinely incompatible with the command's — `Ctrl+C` copies in an
+  editor and interrupts in a terminal — and each exception MUST be recorded in the
+  spec that introduces it.
+- A command that cannot share one chord MUST NOT quietly bind different chords in
+  different scopes; the divergence MUST be visible wherever the command's shortcut
+  is displayed.
+
+**Parity across flavours.** Every terminal throng hosts MUST present the same keys
+for the same line-editing commands, whichever shell is behind it — a user's muscle
+memory MUST NOT depend on which flavour a panel happens to run. Where a flavour's
+own line editor does not bind a key the others do, throng MUST normalise it. This is
+an end-state requirement that MAY be delivered incrementally under the Incremental
+Delivery rule (Development Workflow & Quality Gates), provided each released
+increment is internally consistent and the outstanding work is tracked; until it
+lands, no feature may widen the gap by binding a key in one flavour alone.
+
 Rationale: Working natively in the command line for each agent is the user's
 primary unmet need. Auto-detection and correct working-directory defaults remove
-the friction that drove the user away from other tools.
+the friction that drove the user away from other tools. Hosting a *real* terminal
+means the shell's own keyboard contract is part of what is being hosted: an
+application chord that swallows `Ctrl+E` or `Ctrl+W` makes throng a worse terminal
+than the one it replaced, and the loss is invisible until a user's reflex silently
+stops working. Sharing one chord per command across panel types, and one key per
+line-editing command across flavours, is the same principle seen from the user's
+side — the keyboard should describe the command, not the surface or the shell.
 
 ### V. Test-First Quality Discipline (NON-NEGOTIABLE)
 
@@ -1173,4 +1303,4 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 4.1.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-22
+**Version**: 4.2.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-23
