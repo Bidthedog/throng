@@ -10,6 +10,7 @@ import {
 import {
   effectiveActivePanelId,
   formatDroppedPaths,
+  terminalLinkTarget,
   resolveAction,
   resolveColour,
   zoomFactor,
@@ -28,6 +29,7 @@ import {
   type TreeDropDetail,
 } from '../explorer/tree-drag-store.js';
 import { useContextMenu } from '../context-menu-provider.js';
+import type { MenuItem } from '../workspace/context-menu.js';
 import { Icon } from '../common/icon.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
@@ -166,7 +168,30 @@ export function TerminalPanel({
       // Capture the selection at open time — the menu items act on what was selected
       // when the user right-clicked.
       const selection = apiRef.current?.getSelection() ?? '';
+      // 024 US7 (FR-019d): a link under the pointer, with NO active selection, adds "Open Link" /
+      // "Copy Link Address" above Copy/Paste. An active selection takes priority — then the menu is
+      // the ordinary Copy menu, whatever the pointer is over.
+      const link = terminalLinkTarget(selection, apiRef.current?.getHoveredLink() ?? null);
+      const linkItems: MenuItem[] = link
+        ? [
+            {
+              // No icon: there is no link/open token, and 023's rule is "an icon only where a token
+              // exists". "Copy Link Address" is a copy action, so it carries the shared copy glyph.
+              label: 'Open Link',
+              testId: 'menu-item-Open Link',
+              onClick: () => window.throng?.openExternal?.(link),
+            },
+            {
+              label: 'Copy Link Address',
+              icon: 'copy',
+              testId: 'menu-item-Copy Link Address',
+              onClick: () => void window.throng?.terminal?.writeClipboard?.(link),
+            },
+            { separator: true },
+          ]
+        : [];
       openMenu(e.clientX, e.clientY, [
+        ...linkItems,
         {
           label: 'Copy',
           icon: 'copy',

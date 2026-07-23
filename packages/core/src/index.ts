@@ -454,6 +454,7 @@ export {
   resolveDefaultParams,
   quoteDropPath,
   formatDroppedPaths,
+  terminalLinkTarget,
   resolveLaunchSpec,
   tokenizeParams,
   type LaunchSpec,

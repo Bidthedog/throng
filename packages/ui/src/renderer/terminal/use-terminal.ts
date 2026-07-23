@@ -57,6 +57,11 @@ export interface TerminalApi {
    * it, FR-004b); this just routes them to the pty and restores focus.
    */
   write(text: string): void;
+  /**
+   * The http(s) URL currently under the pointer (an OSC 8 or detected plain-text link), or null
+   * (024 US7, FR-019d). Read at right-click time so the context menu can offer "Open Link".
+   */
+  getHoveredLink(): string | null;
 }
 
 /**
@@ -223,6 +228,12 @@ export function useTerminal(opts: UseTerminalOptions): void {
     let resizedAt = 0;
     /** Tears down the search registration when this view goes (013). */
     let cleanupSearch: (() => void) | undefined;
+    // 024 US7 (FR-019d): the http(s) link currently under the pointer, tracked from the link hover
+    // callbacks so the context menu can offer "Open Link" at right-click time.
+    let hoveredLink: string | null = null;
+    const setHovered = (uri: string | undefined): void => {
+      hoveredLink = uri && /^https?:\/\//i.test(uri) ? uri : null;
+    };
     const term = new Terminal({
       convertEol: false,
       cursorBlink: true,
@@ -235,7 +246,11 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // 024 US7 (#159): route an OSC 8 hyperlink click through the OS open-external seam instead of
       // xterm's default (which calls window.open → an in-app BrowserWindow, the reported bug). Gated
       // on Ctrl/Cmd (FR-019c); the main process re-validates the scheme and denies any window.
-      linkHandler: { activate: (event, uri) => openTerminalLink(event, uri) },
+      linkHandler: {
+        activate: (event, uri) => openTerminalLink(event, uri),
+        hover: (_event, uri) => setHovered(uri),
+        leave: () => setHovered(undefined),
+      },
       // NB: do NOT set `windowsPty` here. Without a matching Windows build number it
       // applies the wrong ConPTY reflow/wrapping heuristics and garbles scrolled
       // PowerShell output. (cls/clear is handled separately via isScreenClear.)
@@ -273,6 +288,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
           void bridge.write(panelId, text);
           term.focus();
         },
+        getHoveredLink: () => hoveredLink,
       };
     }
 
@@ -377,7 +393,12 @@ export function useTerminal(opts: UseTerminalOptions): void {
     // 024 US7 (#159): detect plain-text http(s) URLs printed to the terminal (inert until now) and
     // open them on Ctrl/Cmd+click through the same seam as OSC 8 links. The addon underlines a link
     // on hover, which is the actionable affordance (FR-019a/c).
-    term.loadAddon(new WebLinksAddon((event, uri) => openTerminalLink(event, uri)));
+    term.loadAddon(
+      new WebLinksAddon((event, uri) => openTerminalLink(event, uri), {
+        hover: (_event, uri) => setHovered(uri),
+        leave: () => setHovered(undefined),
+      }),
+    );
 
     // In-panel find over the retained scrollback (013). Read-only: the addon reads the
     // buffer and moves the viewport, never the pty. Registered against the panel id so

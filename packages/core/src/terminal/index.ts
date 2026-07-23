@@ -13,6 +13,7 @@ export {
 } from './flavour-record.js';
 export { BUILTIN_FLAVOUR_DEFAULT_PARAMS, resolveDefaultParams } from './defaults.js';
 export { quoteDropPath, formatDroppedPaths } from './drop-paths.js';
+export { terminalLinkTarget } from './link-menu.js';
 export {
   resolveLaunchSpec,
   tokenizeParams,
