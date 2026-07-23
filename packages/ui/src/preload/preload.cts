@@ -244,6 +244,10 @@ contextBridge.exposeInMainWorld('throng', {
     > => ipcRenderer.invoke('throng:about:getThirdParty'),
     openExternal: (url: string) => ipcRenderer.send('throng:openExternal', url),
   },
+  // 024 US7 (#159): open an http(s) URL in the system browser through the OS open-external seam
+  // (hoisted from the `about` namespace so a terminal link isn't routed through an About-scoped API).
+  // The main process re-validates the scheme; a non-http(s) URL opens nowhere.
+  openExternal: (url: string) => ipcRenderer.send('throng:openExternal', url),
   // A window learns it has been blurred by the app-modal preferences window (US10/FR-035) — the
   // deterministic "a child window took focus" signal the hover-suppression gate needs.
   onWindowBlurred: (cb: (blurred: boolean) => void) => {

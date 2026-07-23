@@ -13,6 +13,7 @@
  */
 import { BrowserWindow } from 'electron';
 import { wireWindowMaximizeEvents } from './window-controls-ipc.js';
+import { denyRendererWindows } from './window-open-guard.js';
 import { appIcon } from './app-icon.js';
 import { revealWhenPainted } from './reveal-when-painted.js';
 
@@ -106,6 +107,7 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
   });
   prefsWindow = win;
   wireWindowMaximizeEvents(win);
+  denyRendererWindows(win.webContents); // 024 US7 (FR-019b)
   revealWhenPainted(win);
   // Flag every other window blurred (US10/FR-035) — they are app-modal-disabled behind this window,
   // so any stranded CSS :hover on them must stop painting.

@@ -34,6 +34,7 @@ import { FileConfigStore } from './config-store.js';
 import { FontCache } from './font-cache.js';
 import { IconPackService } from './icon-pack-service.js';
 import { registerWindowControlsIpc, wireWindowMaximizeEvents } from './window-controls-ipc.js';
+import { denyRendererWindows } from './window-open-guard.js';
 import {
   openPreferences,
   isPreferencesOpen,
@@ -310,6 +311,7 @@ async function createMainWindow(
     },
   });
   wireWindowMaximizeEvents(window);
+  denyRendererWindows(window.webContents); // 024 US7: no in-app browser windows (FR-019b)
   // If preferences is open (app-modal), a window created afterwards must also be
   // non-interactive so the prefs window stays the only interactive surface (FR-013).
   if (isPreferencesOpen()) window.setEnabled(false);
@@ -365,6 +367,7 @@ function createSubWorkspaceWindow(
     },
   });
   wireWindowMaximizeEvents(window);
+  denyRendererWindows(window.webContents); // 024 US7: no in-app browser windows (FR-019b)
   if (isPreferencesOpen()) window.setEnabled(false); // stay app-modal (FR-013)
   revealWhenPainted(window);
   void window.loadFile(resolveFromHere('../renderer/index.html'), { query: { sw: id } });

@@ -61,6 +61,8 @@ declare global {
         >;
         openExternal: (url: string) => void;
       };
+      // 024 US7 (#159): open an http(s) URL in the system browser (hoisted top-level from `about`).
+      openExternal?: (url: string) => void;
       // A window is told when the app-modal preferences window blurs/unblurs it (US10/FR-035).
       onWindowBlurred?: (cb: (blurred: boolean) => void) => () => void;
       // App-close warning when terminals are running (005 / FR-015).

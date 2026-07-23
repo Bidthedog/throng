@@ -1,4 +1,5 @@
 import { BrowserWindow, ipcMain, screen } from 'electron';
+import { denyRendererWindows } from './window-open-guard.js';
 
 /**
  * Cursor-following drag ghost as a real OS window (FR-001). A DOM overlay cannot
@@ -111,6 +112,7 @@ function ensureGhost(): BrowserWindow {
   });
   ghost.setIgnoreMouseEvents(true);
   ghost.setAlwaysOnTop(true, 'screen-saver');
+  denyRendererWindows(ghost.webContents); // 024 US7: no in-app browser windows (FR-019b)
   // Load the shell ONCE; never re-navigate (see file header).
   ghostReady = ghost.webContents.loadURL(shellHtml()).catch(() => {
     /* a destroyed/closing ghost can reject the load; ignore */
