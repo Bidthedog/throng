@@ -78,6 +78,13 @@ describe('SETTINGS_METADATA control types (FR-028/029)', () => {
   it('matches control to value type', () => {
     expect(byKey.get('editor.autoSave')?.control).toBe('toggle');
     expect(byKey.get('editor.warnOnMissingFile')?.control).toBe('toggle');
+    // 024 US1 — three new boolean toggles, grouped by surface.
+    expect(byKey.get('editor.defaultWordWrap')?.control).toBe('toggle');
+    expect(byKey.get('editor.defaultWordWrap')?.group).toBe('Editor');
+    expect(byKey.get('editor.showStatusBar')?.control).toBe('toggle');
+    expect(byKey.get('editor.showStatusBar')?.group).toBe('Editor');
+    expect(byKey.get('terminals.showStatusBar')?.control).toBe('toggle');
+    expect(byKey.get('terminals.showStatusBar')?.group).toBe('Terminal');
     expect(byKey.get('panes.projects.maxWidth')?.control).toBe('slider'); // 018: a bounded numeric is DRAGGABLE now (FR-032)
     expect(byKey.get('behaviour.tabHoverActivateMs')?.control).toBe('slider');
     // A slider now, in 5 MB steps: the objection to it was about the RANGE, and the STEP answers it.

@@ -21,7 +21,18 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       persistUndoHistory: true,
       openTarget: 'lastActive',
       saveDocumentScroll: false,
+      defaultWordWrap: true,
+      showStatusBar: true,
     });
+  });
+
+  it('parses defaultWordWrap and showStatusBar (024 US1; default true, honour false, reject non-boolean)', () => {
+    expect(parseAppSettings({}).editor.defaultWordWrap).toBe(true);
+    expect(parseAppSettings({}).editor.showStatusBar).toBe(true);
+    expect(parseAppSettings({ editor: { defaultWordWrap: false } }).editor.defaultWordWrap).toBe(false);
+    expect(parseAppSettings({ editor: { showStatusBar: false } }).editor.showStatusBar).toBe(false);
+    expect(parseAppSettings({ editor: { defaultWordWrap: 'yes' } }).editor.defaultWordWrap).toBe(true);
+    expect(parseAppSettings({ editor: { showStatusBar: 1 } }).editor.showStatusBar).toBe(true);
   });
 
   it('parses warnOnMissingFile (default true; honours an explicit false)', () => {
@@ -76,6 +87,8 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       persistUndoHistory: true,
       openTarget: 'lastActive',
       saveDocumentScroll: false,
+      defaultWordWrap: true,
+      showStatusBar: true,
     });
   });
 

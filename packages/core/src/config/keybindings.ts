@@ -67,7 +67,10 @@ export type ActionId =
   | 'editor.columnSelectUp'
   | 'editor.columnSelectDown'
   | 'editor.columnSelectLeft'
-  | 'editor.columnSelectRight';
+  | 'editor.columnSelectRight'
+  // 024 US1 (#152): toggle word wrap for the focused editor's document. Ctrl+Alt+W — a single chord
+  // the model already expresses, clear of the reserved terminal-key tier (constitution IV, v4.2.0).
+  | 'editor.toggleWordWrap';
 
 export interface Keybindings {
   version: number;
@@ -147,6 +150,7 @@ export const COMMAND_SCOPES: CommandScopes = {
   'editor.columnSelectDown': EDITOR_ONLY,
   'editor.columnSelectLeft': EDITOR_ONLY,
   'editor.columnSelectRight': EDITOR_ONLY,
+  'editor.toggleWordWrap': EDITOR_ONLY,
 };
 
 /** The modifier held to drag a rectangular selection. Platform-keyed, like the chords (FR-017e). */
@@ -218,6 +222,7 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'editor.columnSelectDown': ['Shift+Alt+ArrowDown'],
     'editor.columnSelectLeft': ['Shift+Alt+ArrowLeft'],
     'editor.columnSelectRight': ['Shift+Alt+ArrowRight'],
+    'editor.toggleWordWrap': ['Ctrl+Alt+W'],
   },
 };
 

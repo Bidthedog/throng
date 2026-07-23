@@ -2,17 +2,25 @@ import { describe, it, expect } from 'vitest';
 import { parseAppSettings, DEFAULT_APP_SETTINGS } from '@throng/core';
 
 describe('parseAppSettings — terminals section (005 Phase B)', () => {
-  it('defaults to empty flavours / disabledBuiltins / defaultParams when absent', () => {
+  it('defaults to empty flavours / disabledBuiltins / defaultParams (+ showStatusBar on) when absent', () => {
     expect(parseAppSettings({}).terminals).toEqual({
       flavours: [],
       disabledBuiltins: [],
       defaultParams: {},
+      showStatusBar: true,
     });
     expect(DEFAULT_APP_SETTINGS.terminals).toEqual({
       flavours: [],
       disabledBuiltins: [],
       defaultParams: {},
+      showStatusBar: true,
     });
+  });
+
+  it('parses terminals.showStatusBar (024 US1; default true, honour false, reject non-boolean)', () => {
+    expect(parseAppSettings({}).terminals.showStatusBar).toBe(true);
+    expect(parseAppSettings({ terminals: { showStatusBar: false } }).terminals.showStatusBar).toBe(false);
+    expect(parseAppSettings({ terminals: { showStatusBar: 'no' } }).terminals.showStatusBar).toBe(true);
   });
 
   it('keeps a well-formed user flavour entry', () => {
@@ -64,6 +72,7 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       flavours: [],
       disabledBuiltins: [],
       defaultParams: {},
+      showStatusBar: true,
     });
   });
 });

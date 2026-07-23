@@ -152,6 +152,12 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Column select right',
     'Extend a rectangular selection one column to the right.',
   ),
+  chord(
+    'editor.toggleWordWrap',
+    'Editor',
+    'Toggle word wrap',
+    "Wrap or unwrap long lines in the focused editor's document (024 US1).",
+  ),
 
   // Search (013) — one shared find bar routed to the active panel. A terminal
   // searches its scrollback (read-only); an editor searches and replaces its file.

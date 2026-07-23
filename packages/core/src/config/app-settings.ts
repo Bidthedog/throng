@@ -44,6 +44,9 @@ export interface TerminalSettings {
   disabledBuiltins: string[];
   /** Per-flavour-id Startup Params override (wins over the catalogue default). */
   defaultParams: Record<string, string>;
+  /** 024 US1 (#152): show the terminal's per-panel status bar (new surface; carries the shell
+   *  flavour label). When off, the bar is hidden and its row reclaimed. */
+  showStatusBar: boolean;
 }
 
 /** File-tree click that opens a file into the last active editor (006, FR-009). */
@@ -103,6 +106,12 @@ export interface EditorSettings {
   languageByExtension: Record<string, string>;
   /** Persist the undo history alongside the crash-recovery snapshot (FR-027a). */
   persistUndoHistory: boolean;
+  /** 024 US1 (#152): starting word-wrap state for a freshly-opened document. The per-document
+   *  status-bar/menu/chord toggle overrides this in memory only (not persisted). */
+  defaultWordWrap: boolean;
+  /** 024 US1 (#152): show the editor's per-panel status strip. When off, the strip is hidden and
+   *  its row reclaimed; the wrap command and language picker stay reachable by chord/menu. */
+  showStatusBar: boolean;
 }
 
 /** Where the new-project folder picker opens (011, FR-041). */
@@ -209,6 +218,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     flavours: [],
     disabledBuiltins: [],
     defaultParams: {},
+    showStatusBar: true,
   },
   editor: {
     openOnClick: 'single',
@@ -231,6 +241,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     // Python and then clears it must end up with no mapping, not with the mapping restored.
     languageByExtension: {},
     persistUndoHistory: true,
+    defaultWordWrap: true,
+    showStatusBar: true,
   },
   newProject: {
     startingFolder: 'lastViewed',
@@ -325,7 +337,9 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
   } else {
     Object.assign(defaultParams, fallback.defaultParams);
   }
-  return { flavours, disabledBuiltins, defaultParams };
+  const showStatusBar =
+    typeof v.showStatusBar === 'boolean' ? v.showStatusBar : fallback.showStatusBar;
+  return { flavours, disabledBuiltins, defaultParams, showStatusBar };
 }
 
 function cloneTerminals(t: TerminalSettings): TerminalSettings {
@@ -333,6 +347,7 @@ function cloneTerminals(t: TerminalSettings): TerminalSettings {
     flavours: t.flavours.map((f) => ({ ...f, args: [...f.args] })),
     disabledBuiltins: [...t.disabledBuiltins],
     defaultParams: { ...t.defaultParams },
+    showStatusBar: t.showStatusBar,
   };
 }
 
@@ -375,6 +390,10 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     typeof v.warnOnMissingFile === 'boolean' ? v.warnOnMissingFile : fallback.warnOnMissingFile;
   const persistUndoHistory =
     typeof v.persistUndoHistory === 'boolean' ? v.persistUndoHistory : fallback.persistUndoHistory;
+  const defaultWordWrap =
+    typeof v.defaultWordWrap === 'boolean' ? v.defaultWordWrap : fallback.defaultWordWrap;
+  const showStatusBar =
+    typeof v.showStatusBar === 'boolean' ? v.showStatusBar : fallback.showStatusBar;
   return {
     openOnClick,
     openTarget,
@@ -391,6 +410,8 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     indentByLanguage: indentMap(v.indentByLanguage, fallback.indentByLanguage),
     languageByExtension: extensionMap(v.languageByExtension, fallback.languageByExtension),
     persistUndoHistory,
+    defaultWordWrap,
+    showStatusBar,
   };
 }
 
