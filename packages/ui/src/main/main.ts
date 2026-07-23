@@ -43,6 +43,11 @@ import {
 import { buildAppMenu } from './app-menu.js';
 import { openAbout, type AboutWindowDeps } from './about-window.js';
 import { acquireSingleInstance } from './single-instance.js';
+import {
+  hasUserDataDirSwitch,
+  instanceDatabasePath,
+  instanceUserDataDir,
+} from './instance-paths.js';
 import { ensureDaemon } from './daemon-lifecycle.js';
 import { DaemonRpcError, type DaemonClient } from './daemon-client.js';
 import { ElectronDisplayInfo } from './electron-display-info.js';
@@ -372,6 +377,20 @@ function createSubWorkspaceWindow(
 app.setName('throng');
 
 /**
+ * Dev-instance isolation: an UNPACKAGED run develops throng while a PACKAGED throng is
+ * installed and in daily use on the same account, so it keeps its own userData, config root,
+ * database and daemon pipe (see `instance-paths.ts` for why the pipe matters most).
+ *
+ * This runs BEFORE the single-instance lock — which Electron keys to the userData directory —
+ * so the two instances neither block nor adopt each other. A launch that supplied its own
+ * `--user-data-dir` (the E2E harness) is left exactly as it asked.
+ */
+const isDevInstance = !app.isPackaged;
+if (isDevInstance && !hasUserDataDirSwitch(process.argv)) {
+  app.setPath('userData', instanceUserDataDir(app.getPath('appData'), true));
+}
+
+/**
  * The windows that can answer the shutdown drain (019 FR-010, issue #86) — by webContents id.
  *
  * A renderer announces itself the instant it registers the drain handler, at its entry point.
@@ -421,6 +440,19 @@ if (isPrimaryInstance)
   const settings = container.get<IUiSettings>(UI_TYPES.UiSettings);
   const daemonClient = container.get<DaemonClient>(UI_TYPES.DaemonClient);
 
+  // Say where a dev instance is keeping its data. Silent isolation is worse than none: the
+  // whole point is being able to SEE that this run is not touching the installed app's store.
+  if (isDevInstance) {
+    console.info(
+      '[throng-ui] dev instance — data:',
+      app.getPath('userData'),
+      '| config:',
+      container.get<IConfigSettings>(UI_TYPES.ConfigSettings).configRoot,
+      '| pipe:',
+      settings.pipeName,
+    );
+  }
+
   // Persistent detached daemon (US3): connect to a running daemon or spawn one and
   // wait until it is ready — BEFORE the window loads, so the first RPC/terminal
   // call finds it up. Detached + unref'd, it outlives this UI (Principle III: open
@@ -431,6 +463,11 @@ if (isPrimaryInstance)
       pipeName: settings.pipeName,
       daemonEntry: resolveFromHere('../../../daemon/dist/main.js'),
       pingTimeoutMs: settings.pingTimeoutMs,
+      // Keep the store beside THIS instance's userData (the production layout,
+      // `%APPDATA%\throng\throng.db`) rather than leaving the daemon to its own default —
+      // that is what stops a dev run from opening the installed app's database.
+      // THRONG_DATABASE_PATH still overrides.
+      databasePath: instanceDatabasePath(app.getPath('userData'), process.env),
       // FR-025b: if we're elevated but an existing daemon isn't, retire + respawn it
       // elevated (an elevated app spawns an elevated daemon) so terminals can run admin.
       appElevated: new WindowsElevation().isElevated(),

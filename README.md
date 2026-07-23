@@ -239,6 +239,26 @@ which writes those same files and applies changes immediately. The installed-fon
 bundled default-theme source live under `%APPDATA%\throng\`. The config directory is overridable
 via `THRONG_CONFIG_ROOT`.
 
+### Running a dev build beside an installed throng
+
+throng is developed on the same machine that runs it, so an **unpackaged** run (`npm start`,
+`npm run start:ui`) is a *dev instance*: it keeps its own data and never touches the installed
+app's. Nothing to configure — the app decides from `app.isPackaged`.
+
+| | Installed (packaged) | Dev (`npm start`) |
+|---|---|---|
+| userData — window state, editor recovery, font cache | `%APPDATA%\throng` | `%APPDATA%\throng-dev` |
+| Config — settings, keybindings, themes, icon packs | `%USERPROFILE%\.throng` | `%USERPROFILE%\.throng-dev` |
+| Database | `%APPDATA%\throng\throng.db` | `%APPDATA%\throng-dev\throng.db` |
+| Daemon pipe | `\\.\pipe\throng.<user>.<hash>.daemon` | …`.daemon.dev` |
+
+The separate pipe is the load-bearing one: an instance that finds a daemon running a *different*
+build **retires it**, killing every terminal that daemon owns — so a shared pipe would mean a
+rebuild destroys the terminals in the throng you are working in. Distinct pipes also give each
+instance its own single-instance lock, so both can run at once. Every override above
+(`THRONG_CONFIG_ROOT`, `THRONG_DATABASE_PATH`, `THRONG_PIPE_NAME`, `--user-data-dir`) still wins
+in both modes, and a dev launch prints the three locations it resolved.
+
 Your **window and panel layout** is written back as you work, on a short (400ms) debounce, and is
 flushed on every ordinary exit — closing a window, quitting the app, a sign-out or a restart. **A
 known and accepted limit:** a termination the application cannot intercept — `SIGKILL`, *End task* in

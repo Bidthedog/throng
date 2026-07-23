@@ -1,8 +1,7 @@
 import 'reflect-metadata';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { Container } from 'inversify';
-import { clipboard as electronClipboard } from 'electron';
+import { app, clipboard as electronClipboard } from 'electron';
 import type {
   IClipboard,
   IConfigSettings,
@@ -23,6 +22,7 @@ import { FileConfigStore } from './config-store.js';
 import { ShippedDefaultsService } from './shipped-defaults-service.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { numberFromEnv, readUiSettings } from './ui-settings.js';
+import { instanceConfigRoot, instancePipeName } from './instance-paths.js';
 
 export { UI_TYPES } from './tokens.js';
 
@@ -38,23 +38,34 @@ const DEFAULT_HOTRELOAD_DEBOUNCE_MS = 150;
 
 /**
  * User-scoped config locations (003 / research D1). The config root defaults to
- * `%USERPROFILE%\.throng` and is overridable via `THRONG_CONFIG_ROOT` (e.g. a
- * temp dir in tests) — environment access stays in the composition root.
+ * `%USERPROFILE%\.throng` — `%USERPROFILE%\.throng-dev` for an unpackaged run, so
+ * developing throng never edits the installed app's settings, themes or icon packs —
+ * and is overridable via `THRONG_CONFIG_ROOT` (e.g. a temp dir in tests). Environment
+ * access stays in the composition root.
  */
-function readConfigSettings(env: NodeJS.ProcessEnv = process.env): IConfigSettings {
+function readConfigSettings(
+  devMode: boolean,
+  env: NodeJS.ProcessEnv = process.env,
+): IConfigSettings {
   return {
-    configRoot: env.THRONG_CONFIG_ROOT ?? join(homedir(), '.throng'),
+    configRoot: instanceConfigRoot(homedir(), devMode, env),
     hotReloadDebounceMs: numberFromEnv(env.THRONG_HOTRELOAD_DEBOUNCE_MS, DEFAULT_HOTRELOAD_DEBOUNCE_MS),
   };
 }
 
 export function createUiContainer(): Container {
   const container = new Container({ defaultScope: 'Singleton' });
+  // An unpackaged run is a DEV instance: its data lives beside — never inside — the installed
+  // app's (see `instance-paths.ts`).
+  const devMode = !app.isPackaged;
   // Per-user default pipe (020 FR-013): the endpoint is scoped to the current user so two
   // OS accounts on one machine never collide. The SID/username call sits behind the platform
   // abstraction (Principle II); `defaultPipeName` (core) is pure. `THRONG_PIPE_NAME` still overrides.
+  //
+  // A dev instance takes a suffixed endpoint so it can neither adopt nor RETIRE the installed
+  // app's daemon — a build-id mismatch on a shared pipe would kill its terminals.
   const uiUserContext = new NodeUserContext();
-  const uiDefaultPipe = defaultPipeName(uiUserContext.currentUser().userId);
+  const uiDefaultPipe = instancePipeName(defaultPipeName(uiUserContext.currentUser().userId), devMode);
   container
     .bind<IUiSettings>(UI_TYPES.UiSettings)
     .toConstantValue(readUiSettings(process.env, uiDefaultPipe));
@@ -75,7 +86,7 @@ export function createUiContainer(): Container {
     .toConstantValue(new ClipboardService(clipboardSeam));
   container.bind<DaemonClient>(UI_TYPES.DaemonClient).to(DaemonClient);
 
-  const configSettings = readConfigSettings();
+  const configSettings = readConfigSettings(devMode);
   container.bind<IConfigSettings>(UI_TYPES.ConfigSettings).toConstantValue(configSettings);
   const configStore = new FileConfigStore(configSettings.configRoot);
   container.bind<IConfigStore>(UI_TYPES.ConfigStore).toConstantValue(configStore);
