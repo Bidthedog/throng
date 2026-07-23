@@ -133,8 +133,9 @@ packages/ui/src/
 ├── main/              main.ts (window-open deny helper, US3 wiring), external-url.ts (widen),
 │                      node-file-system.ts (restoreFromTrash), files-service.ts (undo recording)
 ├── preload/           preload.cts (hoist openExternal; expose terminal write for path-drop)
+├── main/editor-coordinator.ts   (US1 per-document wrap AUTHORITY — CoordDoc.wordWrap)
 ├── renderer/editor/   status-strip.tsx (wrap toggle), content-menu.ts (Word Wrap item),
-│                      use-editor.ts (per-doc wrap), editor-open.tsx
+│                      use-editor.ts (per-doc wrap wiring to CodeMirror), editor-open.tsx
 ├── renderer/terminal/ terminal-panel.tsx (status bar, drop handler, link menu),
 │                      use-terminal.ts (linkHandler, web-links addon), (new) terminal-status-bar.tsx
 ├── renderer/workspace/ panel-placeholder.tsx (US5 effectiveTitle), panel-body.tsx (US4 drop)

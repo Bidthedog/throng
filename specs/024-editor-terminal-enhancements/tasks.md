@@ -153,7 +153,7 @@ per project; refusals warn. **Independent test**: `explorer-undo.e2e.ts` + `migr
 
 ### Tests first
 - [ ] T050 [P] [US7] Update `packages/ui/tests/unit/external-url.test.ts`: `http://` now accepted, `https://` accepted, `javascript:`/`file:`/`data:` still rejected.
-- [ ] T051 [P] [US7] E2E `packages/ui/tests/e2e/terminal-links.e2e.ts`: `Ctrl+click` an OSC 8 link and a plain-text URL → `shell.openExternal` intercepted, no new BrowserWindow (`app.evaluate` on `getAllWindows().length`); plain click opens nothing; link-aware menu offers Open Link/Copy Link Address only over a link with no selection; `javascript:` opens nothing.
+- [ ] T051 [P] [US7] E2E `packages/ui/tests/e2e/terminal-links.e2e.ts` — the **red-first regression for #159** (must FAIL on `origin/master`, where a plain click opens an in-app browser window and plain-text URLs are inert): `Ctrl+click` an OSC 8 link and a plain-text URL → `shell.openExternal` intercepted, no new BrowserWindow (`app.evaluate` on `getAllWindows().length`); plain click opens nothing; link-aware menu offers Open Link/Copy Link Address only over a link with no selection; `javascript:` opens nothing. (FR-020 red-first parity with T042.)
 
 ### Implementation
 - [ ] T052 [US7] Widen `isSafeExternalUrl` to `/^https?:\/\//i` in `packages/ui/src/main/external-url.ts`.
