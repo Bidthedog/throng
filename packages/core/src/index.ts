@@ -387,6 +387,7 @@ export {
   tabUnsaved,
   projectUnsaved,
   projectRootWouldContainOpenEditor,
+  editorAutoTitle,
   editorPathParts,
   toDisplayPath,
   type EditorPathParts,
