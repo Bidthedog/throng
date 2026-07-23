@@ -566,3 +566,20 @@ export { parseHex, isValidHex, toHex, rgbToHsv, hsvToRgb } from './config/colour
 // 018 / US7 — digit grouping. Strictly a VIEW concern: the parser is the exact inverse of the
 // formatter for the active locale, so a grouping character can never reach a settings file.
 export { formatGrouped, parseGrouped } from './config/number-format.js';
+
+// 024 US3 (#85) — file-operation undo/redo engine (pure; the main process applies, persistence v8 stores).
+export {
+  emptyStack,
+  record as recordFileOp,
+  undo as undoFileOp,
+  redo as redoFileOp,
+  validate as validateFileOp,
+  plannedMoves,
+  deletePaths,
+  serialise as serialiseFileOpStack,
+  parse as parseFileOpStack,
+  FILEOP_UNDO_BOUND,
+  type FileOpUndoEntry,
+  type FileOpUndoStack,
+  type PlannedMove,
+} from './fileop-undo/undo-stack.js';
