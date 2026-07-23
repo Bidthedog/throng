@@ -437,6 +437,7 @@ export {
   defaultPanelTypeRegistry,
   setPanelType,
   clearPanelType,
+  convertPanelToProject,
   updatePanelConfig,
 } from './panel-type/index.js';
 export {

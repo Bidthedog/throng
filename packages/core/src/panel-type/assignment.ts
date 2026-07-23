@@ -49,6 +49,25 @@ export function setPanelType(
 }
 
 /**
+ * Convert an untyped Panel to be owned by `projectId` (024 US4, #114 / FR-012).
+ *
+ * A tree file dropped on an untyped SUB-WORKSPACE-owned panel must become a project-owned editor, or
+ * INV-4 (no cross-project panel in the main layout) would reject it. This rewrites `originProjectId`
+ * — the one place a new workspace-model capability is added — and is a no-op once the panel is typed
+ * (ownership is fixed while content is live). The caller chains `setPanelType` to open the file.
+ * Returns a new layout; the input is untouched.
+ */
+export function convertPanelToProject(
+  layout: WorkspaceLayout,
+  panelId: string,
+  projectId: string,
+): WorkspaceLayout {
+  return updatePanel(layout, panelId, (p) =>
+    p.kind === undefined ? { ...p, originProjectId: projectId } : p,
+  );
+}
+
+/**
  * Merge a partial `config` into an already-typed Panel (006). Used to persist an
  * Editor Panel's evolving state (e.g. its `filePath`/encoding/line-ending after a
  * save) into the layout blob so it restores on reopen — without changing the

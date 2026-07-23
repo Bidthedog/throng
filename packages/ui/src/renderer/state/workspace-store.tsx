@@ -31,6 +31,7 @@ import {
   bumpZoom as opBumpZoom,
   resetZoom as opResetZoom,
   setPanelType as opSetPanelType,
+  convertPanelToProject as opConvertPanelToProject,
   clearPanelType as opClearPanelType,
   updatePanelConfig as opUpdatePanelConfig,
   type Edge,
@@ -83,6 +84,8 @@ export interface WorkspaceContextValue {
   resizeSplit(tabId: string, path: number[], sizes: number[]): void;
   /** Assign a confirmed type + config to an untyped Panel (005 / FR-006). */
   setPanelType(panelId: string, kind: PanelKind, config: PanelConfig): void;
+  /** 024 US4: convert an untyped panel to be owned by a project (rewrites originProjectId). */
+  convertPanelToProject(panelId: string, projectId: string): void;
   /** Revert a typed Panel back to the type-selection form (005 / FR-020). */
   clearPanelType(panelId: string): void;
   /** Merge partial config into an already-typed Panel (006 — persist editor path). */
@@ -257,6 +260,8 @@ export function WorkspaceProvider({
       resizeSplit: (tabId, path, sizes) => apply((l) => opResizeSplit(l, tabId, path, sizes)),
       setPanelType: (panelId, kind, config) =>
         apply((l) => opSetPanelType(l, panelId, kind, config)),
+      convertPanelToProject: (panelId, projectId) =>
+        apply((l) => opConvertPanelToProject(l, panelId, projectId)),
       clearPanelType: (panelId) => apply((l) => opClearPanelType(l, panelId)),
       updatePanelConfig: (panelId, config) => apply((l) => opUpdatePanelConfig(l, panelId, config)),
       replaceLayout: (next) => {

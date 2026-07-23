@@ -21,7 +21,12 @@ import {
 import { useWorkspace } from '../state/workspace-store.js';
 import { useActiveTheme, useKeybindings, useAppSettings } from '../config/config-store.js';
 import { TerminalStatusBar } from './terminal-status-bar.js';
-import { getTreeDrag, clearTreeDrag } from '../explorer/tree-drag-store.js';
+import {
+  getTreeDrag,
+  clearTreeDrag,
+  TREE_DROP_EVENT,
+  type TreeDropDetail,
+} from '../explorer/tree-drag-store.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { Icon } from '../common/icon.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
@@ -64,13 +69,6 @@ function terminalFont(theme: Theme): { family: string; size: number } {
  * type-selection form (FR-017/019/020). The session is registered as a running
  * subprocess so Destroy confirmations and `terminal.kill` work (FR-018).
  */
-/** e2e seam for the tree→terminal path drop (024 US2), mirroring `throng:os-drop`. */
-export const TREE_DROP_EVENT = 'throng:tree-drop';
-export interface TreeDropDetail {
-  panelId: string;
-  paths: string[];
-}
-
 export function TerminalPanel({
   panel,
   tabId,

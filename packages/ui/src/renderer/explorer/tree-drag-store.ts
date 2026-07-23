@@ -16,6 +16,18 @@ export interface TreeDragPayload {
   singleFile: boolean;
 }
 
+/**
+ * e2e seam for a tree drop onto a panel (024 US2/US4), mirroring `throng:os-drop`. A real react-dnd
+ * drag cannot be driven from Playwright, so tests dispatch this to exercise the drop targets.
+ */
+export const TREE_DROP_EVENT = 'throng:tree-drop';
+export interface TreeDropDetail {
+  panelId: string;
+  paths: string[];
+  /** US4: whether the drag is a single file (an untyped panel accepts only this). */
+  singleFile?: boolean;
+}
+
 let current: TreeDragPayload | null = null;
 
 export function setTreeDrag(payload: TreeDragPayload): void {
