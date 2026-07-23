@@ -50,7 +50,7 @@ toggling one editor rewraps every panel on that file; hiding a status bar strand
 - [ ] T015 [US1] Wire CodeMirror line-wrapping to the document `wordWrap` in `packages/ui/src/renderer/editor/use-editor.ts` (reconfigure the wrap compartment; rewrap the whole document).
 - [ ] T016 [US1] Add the wrap toggle control to the editor status strip `packages/ui/src/renderer/editor/status-strip.tsx`, and gate the whole strip's visibility on `editor.showStatusBar` (reclaim the row for content when hidden).
 - [ ] T017 [US1] Add the checkable "Word Wrap" item (chord + checked state) to `packages/ui/src/renderer/editor/content-menu.ts` (FR-003d, Principle VI) and dispatch `editor.toggleWordWrap` in the renderer command switch (`app.tsx`).
-- [ ] T018 [US1] Create the terminal status bar `packages/ui/src/renderer/terminal/terminal-status-bar.tsx`, render it in `terminal-panel.tsx` gated on `terminals.showStatusBar`, and ensure adding/removing it re-fits the PTY (row count). No wrap control (FR-003e).
+- [ ] T018 [US1] Create the terminal status bar `packages/ui/src/renderer/terminal/terminal-status-bar.tsx` showing the **shell flavour label** (FR-001; not an empty row), render it in `terminal-panel.tsx` gated on `terminals.showStatusBar`, and ensure adding/removing it re-fits the PTY (row count). No wrap control (FR-003e).
 
 **Checkpoint**: US1 e2e + unit green; `Ctrl+Alt+W` audited not to reach `{terminal}`.
 
@@ -80,17 +80,19 @@ per project; refusals warn. **Independent test**: `explorer-undo.e2e.ts` + `migr
 - [ ] T023 [P] [US3] Add a `restoreFromTrash` case to the shared contract suite `packages/core/src/testing/file-system-contract.ts` (trash → restore → assert back; restore-after-purge → rejects).
 - [ ] T024 [P] [US3] Unit tests for the pure undo engine in `packages/core/tests/unit/fileop-undo.test.ts` (record clears redo; redo does not; bound to 50; validate refuses on stale world; serialise/parse round-trip; parse of garbage → empty).
 - [ ] T025 [P] [US3] Integration test `packages/persistence/tests/integration/migration-v8.integration.test.ts` (v7→v8 upgrade; repo round-trip; CASCADE on project delete) mirroring migration-v7.
-- [ ] T026 [P] [US3] E2E `packages/ui/tests/e2e/explorer-undo.e2e.ts`: cut+paste/rename/delete each undone+redone from the tree; delete restored from recycle bin; editor-focused `Ctrl+Z` is text; a stale-world undo raises a persistent error notice and changes nothing; persistence across an app restart.
+- [ ] T026 [P] [US3] E2E `packages/ui/tests/e2e/explorer-undo.e2e.ts`: cut+paste/rename/delete each undone+redone from the tree; delete restored from recycle bin; editor-focused `Ctrl+Z` is text; a stale-world undo raises a persistent error notice and changes nothing; **an open editor on the affected file follows the undone move/rename without going dirty or warning (FR-009 / SC-003 Acceptance #7)**; persistence across an app restart; undo/redo also invocable from the explorer context menu (FR-006a).
 
 ### Implementation
 - [ ] T027 [US3] Add `restoreFromTrash(originalAbsPath, deletedAt)` to `IFileSystem` (`packages/core/src/abstractions/file-system.ts`) and a Windows impl (PowerShell `Shell.Application` recycle-bin verb) in `packages/ui/src/main/node-file-system.ts` (+ `packages/platform-windows` if that is the seam home); unimplemented platforms reject with a well-known "unsupported" error.
 - [ ] T028 [US3] Create the pure undo engine `packages/core/src/fileop-undo/undo-stack.ts` (record/undo/redo/validate/serialise/parse; bound 50; injected `world` probe) per contracts/seams.md §2.
 - [ ] T029 [US3] Add migration `packages/persistence/src/migrations/v8-fileop-undo.ts` + register in `migration-runner.ts` (`LATEST_VERSION → 8`); add `FileOpUndoRepository` and export from `index.ts`.
-- [ ] T030 [US3] Record ops: in `packages/ui/src/main/files-service.ts` / `main.ts` (~810–815), push move/rename/delete entries (with original paths + timestamp) into the per-project stack alongside the existing `setOnMoved`/`setOnDeleted` editor callbacks; delete must route to `trash` (already default) and record the restore target.
+- [ ] T030 [US3] Record ops: in `packages/ui/src/main/files-service.ts` / `main.ts`, at the existing `setOnMoved`/`setOnDeleted` callback registrations (anchor on those symbols, not a line number), push move/rename/delete entries (with original paths + timestamp) into the per-project stack; delete must route to `trash` (already default) and record the restore target.
 - [ ] T031 [US3] Apply undo/redo: validate (FR-008), then drive `FilesService.move`/`rename` or `IFileSystem.restoreFromTrash`; re-drive `beginMove`/`markMoved` (reversed `MovePair`s) and `EditorCoordinator.load` so open editors follow (reuse the existing re-point machinery). Refuse → persistent `error` notice via `useNotify`/explorer error (FR-008a).
-- [ ] T032 [US3] Bind `file.undo`/`file.redo`-style actions in the `{explorer}` scope (`Ctrl+Z` / `Ctrl+Y` / `Ctrl+Shift+Z`) so they never collide with editor text undo; dispatch from the explorer keybinding handler.
+- [ ] T032 [US3] Register `file.undo`/`file.redo` ActionIds in `packages/core/src/config/keybindings.ts` (scope `{explorer}`; `WINDOWS_BINDINGS` → `file.undo: ['Ctrl+Z']`, `file.redo: ['Ctrl+Y','Ctrl+Shift+Z']`) **and** add their `keybindings-metadata.ts` `chord()` descriptors (the completeness gate requires a descriptor per ActionId), then dispatch from the explorer keybinding handler.
+- [ ] T032a [P] [US3] Keybindings unit tests for `file.undo`/`file.redo` in `packages/core/tests/unit/` (completeness descriptor present; scope `{explorer}`; `Ctrl+Z` resolves to `file.undo` in explorer scope but to editor text-undo in `{editor}` scope; no collision) — mirrors T008/T045.
+- [ ] T032b [US3] Add "Undo"/"Redo" items to the File Explorer context menu (`packages/ui/src/renderer/explorer/context-menu-items.ts`) showing their chords, each disabled when its stack is empty (FR-006a, Principle VI).
 
-**Checkpoint**: US3 e2e + contract + migration green; degrade-cleanly verified where restore is unimplemented.
+**Checkpoint**: US3 e2e + contract + migration green; keybindings completeness gate green; explorer menu items present; degrade-cleanly verified where restore is unimplemented.
 
 ---
 
@@ -167,7 +169,7 @@ per project; refusals warn. **Independent test**: `explorer-undo.e2e.ts` + `migr
 ## Phase 10: Polish & cross-cutting
 
 - [ ] T057 [P] Run the full gates (typecheck, lint, unit/integration/contract, e2e for the touched suites) and confirm no regression against the 1764-test baseline.
-- [ ] T058 [P] Verify every added panel action has a menu item and shows its chord (Principle VI audit): editor Word Wrap present; terminal link items present.
+- [ ] T058 [P] Verify every added panel action has a menu item and shows its chord (Principle VI audit): editor Word Wrap present; terminal link items present; explorer Undo/Redo present.
 - [ ] T059 [P] Audit no reserved terminal key was taken (Principle IV): `Ctrl+Alt+W`, `Shift+F10`, `ContextMenu` all clear.
 - [ ] T060 Update `specs/024-editor-terminal-enhancements/checklists/requirements.md` if any decision shifted during implementation; keep the spec's clarifications authoritative.
 

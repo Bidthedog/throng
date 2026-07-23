@@ -63,7 +63,7 @@ US7 open-external) goes through a platform seam with contract tests (Principle I
 action added gets a menu item (Principle VI / v4.3.0). No application chord may take a reserved
 terminal key (Principle IV / v4.2.0).
 
-**Scale/Scope**: 7 stories, 47 functional requirements, ~15 subsystems touched. Baseline at plan time:
+**Scale/Scope**: 7 stories, 45 functional requirements (this spec's own; FR-048/079/081 are cross-refs to specs 018/006), ~15 subsystems touched. Baseline at plan time:
 1764 unit/integration/contract tests green, typecheck + lint clean.
 
 ## Constitution Check
@@ -103,15 +103,11 @@ specs/024-editor-terminal-enhancements/
 ├── research.md          # codebase survey + decisions (Phase 0)
 ├── data-model.md        # entities: wrap state, undo entry, drag payload, ownership (Phase 1)
 ├── quickstart.md        # manual + automated validation guide (Phase 1)
-├── contracts/           # the seams this feature adds/extends (Phase 1)
-│   ├── settings.md              # 3 new booleans
-│   ├── keybindings.md           # word-wrap.toggle, menu.open commands
-│   ├── filesystem-seam.md       # IFileSystem.restoreFromTrash (US3)
-│   ├── fileop-undo.md           # the undo engine + persistence contract (US3)
-│   ├── tree-drag.md             # tree→panel drag payload (US2/US4)
-│   ├── external-url.md          # widened seam + window-open denial (US7)
-│   └── panel-ownership.md       # originProjectId conversion op (US4)
-└── tasks.md             # Phase 2 (/speckit-tasks — not created here)
+├── contracts/
+│   └── seams.md         # all eight seams (settings, keybindings, filesystem restoreFromTrash,
+│                        # fileop-undo engine, undo persistence v8, tree-drag payload,
+│                        # external-url + window-open denial, panel-ownership op)
+└── tasks.md             # Phase 2 (/speckit-tasks)
 ```
 
 ### Source Code (real directories touched)
