@@ -79,7 +79,7 @@ per project; refusals warn. **Independent test**: `explorer-undo.e2e.ts` + `migr
 ### Tests first
 - [ ] T023 [P] [US3] Add a `restoreFromTrash` case to the shared contract suite `packages/core/src/testing/file-system-contract.ts` (trash → restore → assert back; restore-after-purge → rejects).
 - [ ] T024 [P] [US3] Unit tests for the pure undo engine in `packages/core/tests/unit/fileop-undo.test.ts` (record clears redo; redo does not; bound to 50; validate refuses on stale world; serialise/parse round-trip; parse of garbage → empty).
-- [ ] T025 [P] [US3] Integration test `packages/persistence/tests/integration/migration-v8.integration.test.ts` (v7→v8 upgrade; repo round-trip; CASCADE on project delete) mirroring migration-v7.
+- [ ] T025 [P] [US3] Integration test `packages/persistence/tests/integration/migration-v8.integration.test.ts` (v7→v8 upgrade; repo round-trip; CASCADE on project delete) mirroring migration-v7, **including an idempotent-re-run assertion** — running the migration against an already-v8 store is a safe no-op (constitution v3.5.0, "features adding a migration MUST include a task asserting idempotency").
 - [ ] T026 [P] [US3] E2E `packages/ui/tests/e2e/explorer-undo.e2e.ts`: cut+paste/rename/delete each undone+redone from the tree; delete restored from recycle bin; editor-focused `Ctrl+Z` is text; a stale-world undo raises a persistent error notice and changes nothing; **an open editor on the affected file follows the undone move/rename without going dirty or warning (FR-009 / SC-003 Acceptance #7)**; persistence across an app restart; undo/redo also invocable from the explorer context menu (FR-006a).
 
 ### Implementation
@@ -102,7 +102,7 @@ per project; refusals warn. **Independent test**: `explorer-undo.e2e.ts` + `migr
 **Independent test**: extended `os-drop.e2e.ts` (tree-drop → editor; sub-workspace conversion survives restart).
 
 - [ ] T033 [P] [US4] Unit test `convertPanelToProject` in `packages/core/tests/unit/panel-ownership.test.ts` (rewrites `originProjectId`; result passes `validateMainLayout` / INV-4; no-op when already project-owned).
-- [ ] T034 [P] [US4] E2E extension in `packages/ui/tests/e2e/os-drop.e2e.ts` (or a new `tree-drop-open.e2e.ts`): tree file → untyped project-owned panel becomes editor; sub-workspace-owned panel converts + survives restart; folder/multi rejected; already-open file focuses its panel.
+- [ ] T034 [P] [US4] E2E extension in `packages/ui/tests/e2e/os-drop.e2e.ts` (or a new `tree-drop-open.e2e.ts`): tree file → untyped project-owned panel becomes editor; sub-workspace-owned panel converts + survives restart; folder/multi rejected; already-open file focuses its panel; **a file already open in a Panel of a *different* project is NOT focused across the project boundary (FR-011b edge case)**; **the tree's internal react-arborist move/copy drag and the Ctrl-copy cursor (FR-013/FR-081) are unaffected** (assert the internal drag still moves/copies as before).
 - [ ] T035 [US4] Add the pure op `convertPanelToProject(layout, panelId, projectId)` to `packages/core/src/workspace/operations.ts` (or `assignment.ts`).
 - [ ] T036 [US4] Feed the tree-drag payload into the untyped-panel `onOpen` in `packages/ui/src/renderer/workspace/panel-body.tsx` (reuse the OS-drop `setPanelType(id,'editor',{filePath})` path); on a sub-workspace-owned target call `convertPanelToProject` first; gate through `resolveDrop` confinement.
 - [ ] T037 [US4] Reject folder / multi-item tree payloads on an untyped panel with the "not allowed" drag effect (FR-011a); route an already-open file to reveal+focus its panel (FR-011b).
@@ -117,7 +117,7 @@ per project; refusals warn. **Independent test**: `explorer-undo.e2e.ts` + `migr
 **Goal**: An editor's title auto-derives from its open file's basename unless renamed; unsaved dot reused.
 **Independent test**: `editor-naming.e2e.ts` green.
 
-- [ ] T039 [P] [US5] Unit test basename derivation in `packages/core/tests/unit/` (`foo.test.ts`→`foo.test`, `Makefile`→`Makefile`, `.gitignore`→`.gitignore`, never blank) via `packages/core/src/editor/path-display.ts`.
+- [ ] T039 [P] [US5] Unit test basename derivation in `packages/core/tests/unit/` (`foo.test.ts`→`foo.test`, `Makefile`→`Makefile`, `.gitignore`→`.gitignore`, never blank) via `packages/core/src/editor/path-display.ts`. Also confirm the shipped #89 `titleIsCustom` model stores the override **distinctly from an empty string** (FR-016) — add a small assertion here if the existing #89 unit coverage does not already assert it.
 - [ ] T040 [P] [US5] E2E `packages/ui/tests/e2e/editor-naming.e2e.ts`: `foo.ts`→`foo`; open `bar.md`→`bar`; rename `Scratch`, open `baz.ts`→stays; "Reset Name"→`baz`; unsaved dot shows for auto-named and renamed; persists across restart.
 - [ ] T041 [US5] Extend `effectiveTitle` in `packages/ui/src/renderer/workspace/panel-placeholder.tsx`: when `!titleIsCustom && kind === 'editor'`, use the editor's `displayName` basename (from `useEditorState`); mirror the terminal `terminalTitle` branch. Confirm the shared `throng-unsaved-dot` renders for a dirty editor regardless of naming (FR-017a) — no name mutation.
 
@@ -178,7 +178,8 @@ per project; refusals warn. **Independent test**: `explorer-undo.e2e.ts` + `migr
 ## Dependencies & independent-test criteria
 
 - **Setup (T001–T002)** and **Foundational (T003–T004)** precede the stories that use them (US2, US4 use T003).
-- **Story independence**: US1, US5, US6, US7 are fully independent. US2 and US4 both depend on the T003 tree-drag seam. US3 is self-contained (its own seam + migration). US4's FR-014 (T038) edits a *different* spec file — safe any time.
+- **Story independence**: US1, US5, US6 are fully independent. US2 and US4 both depend on the T003 tree-drag seam. US3 is self-contained (its own seam + migration). US7's right-click link menu is independent, but its **keyboard/`menu.open` route (FR-019d, SC-007's mouse-free path) depends on US6's `menu.open` (FR-018c)** — deliver US6 before US7 (the recommended order already does). US4's FR-014 (T038) edits a *different* spec file — safe any time.
+- **Phase numbers are label-order, not execution-order.** Phases 3–9 follow spec priority (US1…US7); the recommended *delivery* order (US5→US6→US1→US2→US7→US4→US3, top of file) is what to build in. The phases are independent, so this is a labelling convenience only.
 - **Each story is independently testable** via its named e2e (see per-phase Independent test).
 
 ## Implementation strategy (MVP-first, risk-tiered)
