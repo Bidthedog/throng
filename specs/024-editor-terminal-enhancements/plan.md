@@ -70,6 +70,14 @@ terminal key (Principle IV / v4.2.0).
 
 *GATE: re-checked after design below. Result: PASS, with the touchpoints each story must honour.*
 
+> **Constitution version note.** This branch carries the constitution at **v4.3.0** — the v4.2.0
+> (terminal keyboard contract, Principle IV) and v4.3.0 (every-panel-action-has-a-menu-item,
+> Principle VI) amendments were ratified here in commits `1f1c60b` and `0604eed` and merge with this
+> feature. The **main checkout** is still v4.1.0, so a tool that resolves the constitution off the main
+> repo's branch (e.g. `check-prerequisites`) will misreport the version and flag these citations as
+> unratified — that is a path-resolution artifact of the worktree, not a real gate failure. Read
+> `.specify/memory/constitution.md` **in this worktree** (footer: v4.3.0) to confirm.
+
 - **I. Project-First Isolation** — US4's ownership conversion touches `originProjectId`/INV-4; the
   conversion must keep the main layout single-project (INV-4 enforced in `invariants.ts`). US3's undo
   stack is per-project and never acts across projects. ✅ addressed in design.
