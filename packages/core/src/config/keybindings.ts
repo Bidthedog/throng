@@ -70,7 +70,10 @@ export type ActionId =
   | 'editor.columnSelectRight'
   // 024 US1 (#152): toggle word wrap for the focused editor's document. Ctrl+Alt+W — a single chord
   // the model already expresses, clear of the reserved terminal-key tier (constitution IV, v4.2.0).
-  | 'editor.toggleWordWrap';
+  | 'editor.toggleWordWrap'
+  // 024 US6 (#157): open the focused item's context menu from the keyboard (Shift+F10 / the Menu key),
+  // so a menu-driven UI is reachable without a mouse (FR-018c). Neither chord is a reserved terminal key.
+  | 'menu.open';
 
 export interface Keybindings {
   version: number;
@@ -117,6 +120,9 @@ export const COMMAND_SCOPES: CommandScopes = {
   'view.fullscreen': EVERYWHERE,
   'view.toggleProjects': EVERYWHERE,
   'view.toggleExplorer': EVERYWHERE,
+  // 024 US6: the keyboard "open context menu" works wherever a focusable item has one (explorer,
+  // editor, terminal) — EVERYWHERE covers those three scopes.
+  'menu.open': EVERYWHERE,
   // The File Explorer's clipboard chords act on FILES, and only while the tree has focus.
   'file.rename': EXPLORER_ONLY,
   'file.cut': EXPLORER_ONLY,
@@ -186,6 +192,7 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'view.fullscreen': ['F11'],
     'view.toggleProjects': ['Ctrl+B'],
     'view.toggleExplorer': ['Ctrl+N'],
+    'menu.open': ['Shift+F10', 'ContextMenu'],
     'file.rename': ['F2'],
     'file.cut': ['Ctrl+X'],
     'file.copy': ['Ctrl+C'],

@@ -73,8 +73,10 @@
   padding: 1px 8px;
   font-size: 11px;
   line-height: 18px;
-  color: var(--throng-colour-text);
-  background: var(--throng-colour-surface);
+  /* The editor's own status-strip tokens (NOT the pane token — see surface-token-roles) so the two
+     panel types' status bars read alike (024 US1). Literal fallbacks, exactly as the editor strip. */
+  color: var(--throng-colour-editorStatusStripFg, #a7b4c8);
+  background: var(--throng-colour-editorStatusStripBg, #151a23);
   border-top: 1px solid var(--throng-colour-border);
   user-select: none;
 }

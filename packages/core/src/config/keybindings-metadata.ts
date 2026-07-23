@@ -95,6 +95,12 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Toggle File Explorer',
     'Show or hide the Files & Folders pane.',
   ),
+  chord(
+    'menu.open',
+    'View',
+    'Open context menu',
+    'Open the focused item’s context menu from the keyboard (024 US6).',
+  ),
 
   // File Explorer (resolved while the File Explorer pane has focus)
   chord('file.rename', 'File Explorer', 'Rename', 'Rename the selected file or folder.'),
