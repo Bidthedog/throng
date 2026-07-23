@@ -55,6 +55,15 @@ test('edits toggle / select / number / array controls and applies + persists eac
       // Reflects live: the checkbox stays checked after the round-trip.
       await expect(prefs.getByTestId('control-editor.autoSave')).toBeChecked();
 
+      // 024 US1 — the three new booleans (default On) toggle to false and persist, grouped by surface.
+      for (const key of ['editor.defaultWordWrap', 'editor.showStatusBar', 'terminals.showStatusBar']) {
+        await expect(prefs.getByTestId(`control-${key}`)).toBeChecked();
+        await prefs.getByTestId(`control-${key}`).click();
+      }
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.defaultWordWrap).toBe(false);
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.showStatusBar).toBe(false);
+      await expect.poll(() => readSettings(cfgRoot)?.terminals?.showStatusBar).toBe(false);
+
       // Select (enum): confirmations.destroyProject double → none.
       await prefs.getByTestId('control-confirmations.destroyProject').selectOption('none');
       await expect

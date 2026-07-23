@@ -18,7 +18,8 @@ import {
   type Theme,
 } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
-import { useActiveTheme, useKeybindings } from '../config/config-store.js';
+import { useActiveTheme, useKeybindings, useAppSettings } from '../config/config-store.js';
+import { TerminalStatusBar } from './terminal-status-bar.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { Icon } from '../common/icon.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
@@ -98,6 +99,7 @@ export function TerminalPanel({
   const [attached, setAttached] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const config = (panel.config ?? {}) as Partial<TerminalPanelConfig>;
+  const showStatusBar = useAppSettings().terminals.showStatusBar;
   const xtermTheme = useMemo(() => buildXtermTheme(theme), [theme]);
   const font = useMemo(() => terminalFont(theme), [theme]);
   // Match highlights are painted by xterm's own decorations, so the colours have to be
@@ -283,6 +285,11 @@ export function TerminalPanel({
           </button>
         </div>
       ) : null}
+      {/* 024 US1 (FR-001/001b): the new terminal status bar, preference-controlled. Shows the shell
+          flavour label; no wrap control this feature (terminal wrap descoped to #169, FR-003e). */}
+      {showStatusBar && (
+        <TerminalStatusBar panelId={panel.id} flavourLabel={config.flavourLabel ?? 'Terminal'} />
+      )}
     </div>
   );
 }
