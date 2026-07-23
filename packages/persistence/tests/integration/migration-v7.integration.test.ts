@@ -58,7 +58,7 @@ describe('migration v7', () => {
 
       const again = runMigrations(db);
       expect(again.applied).toBe(false);
-      expect(again.to).toBe(7);
+      expect(again.to).toBe(8); // 024 US3 added v8; the chain's latest is now 8
       // The data survived: a migration that dropped and recreated the table would lose it.
       expect(repo.get(OWNER, 'p1', 'src/main.rs')?.languageId).toBe('python');
     } finally {

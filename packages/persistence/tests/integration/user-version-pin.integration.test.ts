@@ -32,8 +32,8 @@ afterEach(() => {
 });
 
 describe('the schema version and the migration chain agree', () => {
-  it('LATEST_VERSION is 7 — 016 adds the document_state migration', () => {
-    expect(LATEST_VERSION).toBe(7);
+  it('LATEST_VERSION is 8 — 024 US3 adds the fileop_undo migration', () => {
+    expect(LATEST_VERSION).toBe(8);
   });
 
   it('a freshly migrated store actually REACHES LATEST_VERSION', () => {
