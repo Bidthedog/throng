@@ -3,6 +3,13 @@ import { languageName } from '@throng/core';
 import { usePanelLanguage } from './editor-language.js';
 import { LanguagePicker } from './language-picker.js';
 import { registerPickerOpener, unregisterPickerOpener } from './picker-request.js';
+import { useEditorState } from './editor-state.js';
+import { useAppSettings } from '../config/config-store.js';
+import {
+  wordWrapDocKey,
+  useDocumentWordWrap,
+  toggleDocumentWordWrap,
+} from './word-wrap-store.js';
 
 /**
  * The editor status strip (016, FR-010) — the band along the bottom of an Editor Panel showing the
@@ -29,6 +36,13 @@ export function StatusStrip({ panelId, projectId, relPath }: StatusStripProps): 
   const resolution = usePanelLanguage(panelId);
   const [pickerOpen, setPickerOpen] = useState(false);
   const name = languageName(resolution?.languageId ?? 'plaintext');
+
+  // 024 US1: the word-wrap toggle. Keyed by the open file's path (per document, Principle XI) so it
+  // and the editor view read the one value; seeded from the editor default preference.
+  const wrapSeed = useAppSettings().editor.defaultWordWrap;
+  const filePath = useEditorState(panelId)?.filePath ?? null;
+  const wrapDocKey = wordWrapDocKey(filePath, panelId);
+  const wrapOn = useDocumentWordWrap(wrapDocKey, wrapSeed);
 
   // The content menu's "Set Language…" opens THIS picker (FR-010/FR-012) — the strip owns it,
   // because the strip is what it is anchored to. A second picker rendered by the menu would be free
@@ -84,6 +98,16 @@ export function StatusStrip({ panelId, projectId, relPath }: StatusStripProps): 
         onClick={() => setPickerOpen((open) => !open)}
       >
         {name}
+      </button>
+      <button
+        type="button"
+        className="editor-status-strip__wrap"
+        data-testid={`editor-word-wrap-${panelId}`}
+        title="Toggle word wrap (Ctrl+Alt+W)"
+        aria-pressed={wrapOn}
+        onClick={() => toggleDocumentWordWrap(wrapDocKey, wrapSeed)}
+      >
+        {wrapOn ? 'Wrap' : 'No Wrap'}
       </button>
       {pickerOpen && (
         <LanguagePicker
