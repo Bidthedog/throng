@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import process from 'node:process';
 import {
   passthroughDeElevator,
+  sanitizeSpawnEnv,
   shouldDeElevate,
   type IDeElevator,
   type IElevationState,
@@ -88,7 +89,11 @@ export class NodePtyHost implements IPtyHost {
       cwd: opts.cwd,
       cols: opts.cols,
       rows: opts.rows,
-      env: { ...process.env, ...(opts.env ?? {}) },
+      // Strip THRONG_* so a spawned shell — and anything it launches (`npm start`) — never
+      // inherits THIS daemon's pipe/db/config identity. Otherwise a dev build launched from a
+      // terminal inside another throng would target that throng's daemon and retire it. Any
+      // explicit per-launch env still layers on top.
+      env: { ...sanitizeSpawnEnv(process.env), ...(opts.env ?? {}) },
       name: 'xterm-256color',
     });
     const session: Session = { proc, seq: this.seqCounter++, conhostPid: null };
