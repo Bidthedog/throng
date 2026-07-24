@@ -460,6 +460,7 @@ export {
   resolveShellFile,
   type ShellProbe,
   type ShellResolver,
+  sanitizeSpawnEnv,
   canRunAsAdmin,
   shouldRespawnDaemonElevated,
   shouldDeElevate,
