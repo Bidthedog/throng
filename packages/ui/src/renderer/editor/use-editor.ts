@@ -16,6 +16,7 @@ import {
   DEFAULT_BINDING_PLATFORM,
   effectiveActivePanelId,
   effectiveIndent,
+  firstBinding,
   inferIndent,
   PLAIN_TEXT_ID,
   shippedBindingsFor,
@@ -73,11 +74,18 @@ import {
   indentCompartment,
   indentExtensions,
   indentLinesCommand,
+  wrapCompartment,
   outdentLinesCommand,
   pasteCommand,
 } from './commands.js';
 import { getPanelLanguage } from './editor-language.js';
 import { editorContentMenu, placeCaretForContextMenu } from './content-menu.js';
+import {
+  wordWrapDocKey,
+  documentWordWrap,
+  useDocumentWordWrap,
+  toggleDocumentWordWrap,
+} from './word-wrap-store.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { useKeybindings } from '../config/config-store.js';
 import { useServices } from '../composition-root.js';
@@ -151,6 +159,7 @@ function mergeClassOf(update: ViewUpdate): MergeClass {
 function commandsFor(deps: {
   lineEnding: () => LineEndingId;
   indent: () => IndentProfile;
+  toggleWrap: () => void;
 }): Partial<Record<ActionId, ReturnType<typeof cutLineCommand>>> {
   return {
     'editor.cutLine': cutLineCommand(deps.lineEnding),
@@ -160,6 +169,12 @@ function commandsFor(deps: {
     'editor.columnSelectDown': columnSelectDown,
     'editor.columnSelectLeft': columnSelectLeft,
     'editor.columnSelectRight': columnSelectRight,
+    // 024 US1: Ctrl+Alt+W toggles the focused editor's document wrap; the compartment reconfigure
+    // effect reflows every view of that document.
+    'editor.toggleWordWrap': () => {
+      deps.toggleWrap();
+      return true;
+    },
   };
 }
 
@@ -181,6 +196,20 @@ export function useEditor(params: UseEditorParams): void {
   // The live bindings. `editor.cutLine` is rebindable (FR-017), and the keymap below is built from
   // them — minus any chord 012's window-level commands own (FR-024b).
   const keybindings = useKeybindings();
+
+  // 024 US1 (#152): word wrap is a per-DOCUMENT flag (Principle XI) — key it by the open file's path
+  // so every panel showing that file wraps together; an untitled buffer keys per panel. A first-seen
+  // document is seeded from the `editor.defaultWordWrap` preference (FR-002).
+  const wrapFilePath = (panel.config as EditorPanelConfig | undefined)?.filePath ?? null;
+  const wrapDocKey = wordWrapDocKey(wrapFilePath, panel.id);
+  const wordWrapOn = useDocumentWordWrap(wrapDocKey, settings.defaultWordWrap);
+  // Read through a ref so the chord/menu toggle always acts on the CURRENTLY open document, even
+  // after a file switch reuses this same view.
+  const wrapDocKeyRef = useRef(wrapDocKey);
+  wrapDocKeyRef.current = wrapDocKey;
+  const toggleWrap = useCallback(() => {
+    toggleDocumentWordWrap(wrapDocKeyRef.current, metaRef.current.settings.defaultWordWrap);
+  }, []);
 
   // Latest values read through refs so the mount effect isn't torn down on every
   // render (mirrors the terminal view's approach). `tabTitle` is resolved from the
@@ -248,6 +277,15 @@ export function useEditor(params: UseEditorParams): void {
       effects: indentCompartment.reconfigure(indentExtensions(currentIndent())),
     });
   };
+
+  // 024 US1: reflow the live view whenever the document's wrap flag changes — from this panel's
+  // toggle, or from another panel showing the same file (the store is the single per-document
+  // authority). Rewraps the whole document, not just the viewport (FR-003a).
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: wrapCompartment.reconfigure(wordWrapOn ? EditorView.lineWrapping : []),
+    });
+  }, [wordWrapOn]);
   // The app-wide context-menu host (FR-036/037): exactly one menu is open anywhere at a time, so
   // the editor asks for one rather than rendering its own.
   const { openMenu } = useContextMenu();
@@ -534,11 +572,11 @@ export function useEditor(params: UseEditorParams): void {
           // until the renderer was first typechecked — left `indent` undefined in the rebuilt
           // keymap, so Tab and Shift+Tab threw the moment the user changed ANY keybinding. Nothing
           // caught it: the renderer is compiled by Vite, which strips types without checking them.
-          commandsFor({ lineEnding: currentLineEnding, indent: currentIndent }),
+          commandsFor({ lineEnding: currentLineEnding, indent: currentIndent, toggleWrap }),
         ),
       ),
     });
-  }, [keybindings, currentLineEnding, currentIndent]);
+  }, [keybindings, currentLineEnding, currentIndent, toggleWrap]);
 
   // Mount the CodeMirror view and initialise content.
   useEffect(() => {
@@ -673,7 +711,7 @@ export function useEditor(params: UseEditorParams): void {
           commandKeymapCompartment.of(
             editorCommandKeymap(
               keybindingsRef.current,
-              commandsFor({ lineEnding: currentLineEnding, indent: currentIndent }),
+              commandsFor({ lineEnding: currentLineEnding, indent: currentIndent, toggleWrap }),
             ),
           ),
           /**
@@ -707,6 +745,14 @@ export function useEditor(params: UseEditorParams): void {
                   viewId,
                   lineEnding: () =>
                     configRef.current.lineEnding ?? metaRef.current.settings.defaultLineEnding,
+                  wordWrap: {
+                    on: documentWordWrap(
+                      wrapDocKeyRef.current,
+                      metaRef.current.settings.defaultWordWrap,
+                    ),
+                    toggle: toggleWrap,
+                    chord: firstBinding(keybindingsRef.current, 'editor.toggleWordWrap'),
+                  },
                 }),
               );
               event.preventDefault();
@@ -714,7 +760,12 @@ export function useEditor(params: UseEditorParams): void {
             },
           }),
           keymap.of(defaultKeymap),
-          EditorView.lineWrapping,
+          // 024 US1: word wrap in a compartment so the toggle/menu/chord flip it live (per document).
+          wrapCompartment.of(
+            documentWordWrap(wrapDocKey, metaRef.current.settings.defaultWordWrap)
+              ? EditorView.lineWrapping
+              : [],
+          ),
           updateListener,
           // Syntax highlighting (016). The grammar sits in a COMPARTMENT so it can be swapped on a
           // live view — remapping an extension, or picking a language by hand, re-highlights the

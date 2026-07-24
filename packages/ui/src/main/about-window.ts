@@ -9,6 +9,7 @@
  */
 import { BrowserWindow } from 'electron';
 import { wireWindowMaximizeEvents } from './window-controls-ipc.js';
+import { denyRendererWindows } from './window-open-guard.js';
 import { appIcon } from './app-icon.js';
 import { revealWhenPainted } from './reveal-when-painted.js';
 
@@ -77,6 +78,7 @@ export function openAbout(deps: AboutWindowDeps): BrowserWindow {
   });
   aboutWindow = win;
   wireWindowMaximizeEvents(win);
+  denyRendererWindows(win.webContents); // 024 US7 (FR-019b)
   revealWhenPainted(win);
 
   win.on('closed', () => {

@@ -165,13 +165,17 @@ function KeybindingsHandler({
       'view.fullscreen',
       'view.toggleProjects',
       'view.toggleExplorer',
+      'menu.open',
     ]);
     const onKeyDown = (e: KeyboardEvent): void => {
       // Shift is deliberately dropped for most keys (the produced character already
-      // encodes it, e.g. "Ctrl++" is Ctrl+Shift+"="). The BACKTICK key is the
-      // exception: it is normalised from its physical key and its Shift state IS the
-      // signal that distinguishes focus.cycle from focus.cycleBack across layouts.
+      // encodes it, e.g. "Ctrl++" is Ctrl+Shift+"="). Two exceptions keep Shift: the
+      // BACKTICK key (normalised from its physical key, so Shift distinguishes
+      // focus.cycle from focus.cycleBack across layouts) and FUNCTION keys, where Shift
+      // is NOT encoded in the produced character (Shift+F10 still reports key "F10") —
+      // without this, a Shift+F10 binding like menu.open (024 US6) would never match.
       const backtick = isBackquote(e);
+      const keepShift = backtick || /^F\d{1,2}$/.test(e.key);
       // Window-level chords are live in every scope (012, FR-024b) — including from inside an
       // editor's find bar, so the user can always move focus out of wherever they are. The
       // HANDLED gate below is what keeps this listener to zoom/focus/view and nothing else.
@@ -181,7 +185,7 @@ function KeybindingsHandler({
           key: chordKey(e),
           ctrl: e.ctrlKey,
           alt: e.altKey,
-          ...(backtick ? { shift: e.shiftKey } : {}),
+          ...(keepShift ? { shift: e.shiftKey } : {}),
         },
         scopeInput(),
       );
@@ -243,6 +247,23 @@ function KeybindingsHandler({
           break;
         case 'view.toggleExplorer':
           cbRef.current.onToggleExplorer();
+          break;
+        case 'menu.open':
+          // 024 US6 (FR-018c): open the FOCUSED item's context menu without a mouse. Rather than
+          // rebuild each surface's menu, re-dispatch a `contextmenu` at the focused element's centre —
+          // the explorer row, editor and terminal all already handle that event, so this is one path
+          // for all three. No focused element with a menu → nothing happens.
+          {
+            const el = document.activeElement as HTMLElement | null;
+            if (el && el !== document.body) {
+              const r = el.getBoundingClientRect();
+              const x = Math.round(r.left + Math.min(r.width / 2, 20));
+              const y = Math.round(r.top + Math.min(r.height / 2, 10));
+              el.dispatchEvent(
+                new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }),
+              );
+            }
+          }
           break;
         default:
           break;

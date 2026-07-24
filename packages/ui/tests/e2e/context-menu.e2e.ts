@@ -115,6 +115,30 @@ test('clicking outside the context menu closes it', async () => {
   });
 });
 
+test('clicking a sub-menu parent keeps it open — a second click never closes it (#157)', async () => {
+  // Regression for #157 / FR-018: a parent click used to TOGGLE its sub-menu, so clicking an
+  // already-open parent closed it, making the children unreachable by click. A parent click must be
+  // an idempotent OPEN. (Fails on origin/master, where the click toggles.)
+  await run(async (_app, win) => {
+    await createProject(win, 'SubOpen', 'C:/c/subopen');
+    const a = await firstPanelId(win);
+    await win.getByTestId(`panel-add-${a}`).click();
+    await commitPanelRename(win);
+    await win.getByTestId('tab-add').click();
+    await commitTabRename(win);
+    await win.locator('.tab-chip').first().click();
+
+    await win.getByTestId(`panel-handle-${a}`).click({ button: 'right' });
+    const parent = win.getByTestId('menu-item-Send to Tab');
+    await parent.click(); // opens the flyout
+    await expect(win.getByTestId('submenu-Send to Tab')).toBeVisible();
+    await parent.click(); // second click MUST NOT close it (the bug)
+    await expect(win.getByTestId('submenu-Send to Tab')).toBeVisible();
+    // The children are still reachable.
+    await expect(win.getByTestId('menu-item-Tab 2')).toBeVisible();
+  });
+});
+
 test('"Send to Tab" submenu moves the panel to the chosen tab', async () => {
   await run(async (_app, win) => {
     await createProject(win, 'Send', 'C:/c/send');

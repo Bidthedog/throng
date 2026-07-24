@@ -4,6 +4,7 @@ import {
   collectPanels,
   countPanels,
   defaultPanelTypeRegistry,
+  editorAutoTitle,
   editorPathParts,
   toDisplayPath,
   effectiveActivePanelId,
@@ -125,14 +126,23 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const terminalCwd = useTerminalCwd(panel.id);
   // US10 (#89): a terminal's live window title replaces the panel name in the header when present.
   const terminalTitle = useTerminalTitle(panel.id);
+  // An editor with no manual name auto-derives its title from the open file's basename (024 US5,
+  // FR-015 — final extension stripped); null when the panel is not an editor, has been renamed, or
+  // has no file open (then the default placeholder stands).
+  const editorAuto =
+    panel.kind === 'editor' && !panel.titleIsCustom && editorUi?.filePath
+      ? editorAutoTitle(editorUi.filePath)
+      : null;
   // The name shown in the header and its hover tooltip. Precedence: a user RENAME wins over
-  // everything (#89 follow-up — a rename must not be overridden by the shell's OSC title); otherwise
-  // a terminal shows its live window title; otherwise the default placeholder. "Reset Name" clears
-  // the custom mark, which drops a terminal back to showing its live title.
-  const effectiveTitle =
-    panel.titleIsCustom || panel.kind !== 'terminal'
-      ? panel.title
-      : (terminalTitle ?? panel.title);
+  // everything (#89 follow-up — a rename must not be overridden by the shell's OSC title, or by an
+  // editor's file name); otherwise a terminal shows its live window title and an editor shows its
+  // open file's basename; otherwise the default placeholder. "Reset Name" clears the custom mark,
+  // which drops each panel type back to its auto source.
+  const effectiveTitle = panel.titleIsCustom
+    ? panel.title
+    : panel.kind === 'terminal'
+      ? (terminalTitle ?? panel.title)
+      : (editorAuto ?? panel.title);
 
   // Removal verb per ownership + location (011, FR-030/031). Inside a sub-workspace a
   // Panel backed by a real project (`originProject` resolved above) is a mirrored VIEW:

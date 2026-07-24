@@ -27,6 +27,8 @@ export interface ContentMenuArgs {
   viewId: string;
   /** The document's effective ending — what the CLIPBOARD is terminated with (SC-009a). */
   lineEnding: () => LineEndingId;
+  /** 024 US1 (#152): the checkable word-wrap toggle — its current state, the action, and its chord. */
+  wordWrap: { on: boolean; toggle: () => void; chord?: string };
 }
 
 /**
@@ -123,6 +125,14 @@ export function editorContentMenu(args: ContentMenuArgs): MenuItem[] {
       label: 'Set Language…',
       icon: 'language',
       onClick: () => requestLanguagePicker(panelId),
+    },
+    {
+      // 024 US1 (#152) / Principle VI: every panel action has a menu item, even one also on the
+      // status bar — so it survives a hidden status bar. The leading ✓ renders the current state.
+      label: args.wordWrap.on ? 'Word Wrap ✓' : 'Word Wrap',
+      testId: 'menu-item-Word Wrap',
+      shortcut: args.wordWrap.chord,
+      onClick: () => args.wordWrap.toggle(),
     },
   ];
 }

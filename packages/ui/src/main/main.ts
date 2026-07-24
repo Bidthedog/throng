@@ -34,6 +34,7 @@ import { FileConfigStore } from './config-store.js';
 import { FontCache } from './font-cache.js';
 import { IconPackService } from './icon-pack-service.js';
 import { registerWindowControlsIpc, wireWindowMaximizeEvents } from './window-controls-ipc.js';
+import { denyRendererWindows } from './window-open-guard.js';
 import {
   openPreferences,
   isPreferencesOpen,
@@ -56,6 +57,7 @@ import { registerGhostIpc, setGhostTheme, disposeGhost } from './ghost-window.js
 import { revealWhenPainted } from './reveal-when-painted.js';
 import { WindowManager } from './window-manager.js';
 import { NodeFileSystem } from './node-file-system.js';
+import { restoreFromRecycleBin } from './recycle-bin-restore.js';
 import { resolvePickerDefaultPath } from './pick-folder.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { ElectronShellIntegration } from './electron-shell-integration.js';
@@ -310,6 +312,7 @@ async function createMainWindow(
     },
   });
   wireWindowMaximizeEvents(window);
+  denyRendererWindows(window.webContents); // 024 US7: no in-app browser windows (FR-019b)
   // If preferences is open (app-modal), a window created afterwards must also be
   // non-interactive so the prefs window stays the only interactive surface (FR-013).
   if (isPreferencesOpen()) window.setEnabled(false);
@@ -365,6 +368,7 @@ function createSubWorkspaceWindow(
     },
   });
   wireWindowMaximizeEvents(window);
+  denyRendererWindows(window.webContents); // 024 US7: no in-app browser windows (FR-019b)
   if (isPreferencesOpen()) window.setEnabled(false); // stay app-modal (FR-013)
   revealWhenPainted(window);
   void window.loadFile(resolveFromHere('../renderer/index.html'), { query: { sw: id } });
@@ -763,7 +767,14 @@ if (isPrimaryInstance)
   // only through these `files.*` channels. Recycle-Bin + reveal use Electron's
   // built-in `shell`; confinement to the active project root is enforced by the
   // service on resolved real paths (research D1/D5).
-  const fileSystem = new NodeFileSystem((p) => shell.trashItem(p));
+  const fileSystem = new NodeFileSystem(
+    (p) => shell.trashItem(p),
+    // 024 US3: recycle-bin restore is Windows-only (PowerShell Shell.Application); elsewhere the
+    // default rejecting impl leaves delete-undo unavailable and it degrades cleanly.
+    process.platform === 'win32'
+      ? (originalPath) => restoreFromRecycleBin(originalPath)
+      : undefined,
+  );
   const shellIntegration = new ElectronShellIntegration(shell);
   // Watch the active project's root and push change signals to every window so
   // the file tree stays live-synced with external + in-app edits (US2).

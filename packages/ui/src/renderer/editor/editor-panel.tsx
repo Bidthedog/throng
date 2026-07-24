@@ -5,6 +5,7 @@ import { FindBar } from '../search/find-bar.js';
 import { StatusStrip } from './status-strip.js';
 import { toRelPath } from './language-override.js';
 import { PanelSkeleton, useDelayedFlag } from '../common/loading.js';
+import { useAppSettings } from '../config/config-store.js';
 import './editor.css';
 
 /**
@@ -43,6 +44,7 @@ export function EditorPanel({
     ['--throng-zoom-editor']: String(zoomFactor(panelZoomLevel(panel))),
   } as CSSProperties;
   const filePath = (panel.config as { filePath?: string } | undefined)?.filePath ?? null;
+  const showStatusBar = useAppSettings().editor.showStatusBar;
   return (
     <div className="editor-panel-wrap">
       <div
@@ -57,11 +59,15 @@ export function EditorPanel({
       {/* The language indicator (016, FR-010) — the ONLY way to see what the editor detected, and
           the way to correct it. It sits BELOW the text area (the wrap is a flex column), never
           over it. */}
-      <StatusStrip
-        panelId={panel.id}
-        projectId={ownerProjectId ?? null}
-        relPath={toRelPath(projectRoot, filePath)}
-      />
+      {/* 024 US1 (FR-001b/c): the status strip is preference-controlled. Hidden → its row is
+          reclaimed for content, and the wrap command + language picker stay reachable by chord/menu. */}
+      {showStatusBar && (
+        <StatusStrip
+          panelId={panel.id}
+          projectId={ownerProjectId ?? null}
+          relPath={toRelPath(projectRoot, filePath)}
+        />
+      )}
     </div>
   );
 }

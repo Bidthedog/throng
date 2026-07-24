@@ -1,0 +1,45 @@
+# Specification Quality Checklist: Editor & Terminal Enhancements
+
+**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Created**: 2026-07-23
+**Feature**: [spec.md](../spec.md)
+
+## Content Quality
+
+- [x] No implementation details (languages, frameworks, APIs)
+- [x] Focused on user value and business needs
+- [x] Written for non-technical stakeholders
+- [x] All mandatory sections completed
+
+## Requirement Completeness
+
+- [x] No [NEEDS CLARIFICATION] markers remain
+- [x] Requirements are testable and unambiguous
+- [x] Success criteria are measurable
+- [x] Success criteria are technology-agnostic (no implementation details)
+- [x] All acceptance scenarios are defined
+- [x] Edge cases are identified
+- [x] Scope is clearly bounded
+- [x] Dependencies and assumptions identified
+
+## Feature Readiness
+
+- [x] All functional requirements have clear acceptance criteria
+- [x] User scenarios cover primary flows
+- [x] Feature meets measurable outcomes defined in Success Criteria
+- [x] No implementation details leak into specification
+
+## Notes
+
+- Scope is the seven `v1.0.0` issues bundled here: five `enhancement`s (#152, #155, #85, #114, #97 — US1–US5) and two `bug`s (#157, #159 — US6–US7). US1–US3 were descoped from spec 023 into this spec; US4–US7 were drafted into spec 023 but never committed or implemented and were carried here when that draft was discarded (2026-07-23).
+- Soft terms retained deliberately, each naming an existing surface or the domain's own vocabulary to bound scope rather than prescribe implementation: US4's `Panel.originProjectId` / INV-4/5/6 / FR-079 / FR-081 (#114); US5's `titleIsCustom` / "Reset Name" / `resetPanelName` (the model already shipped for #89); US7's **OSC 8** (the escape that distinguishes an explicit hyperlink from a plain-text URL) and the main-process denial of renderer-opened browser windows; US1's keybinding-token model (why `Ctrl+Alt+W` is a single chord and a two-key sequence is not expressible today). Named packages appear only as evidence in Assumptions, never in a requirement.
+- Three dependencies/risks flagged for planning, not blockers here: US3 delete-restore (recycle-bin seam), US4 sub-workspace→project ownership conversion (touches INV-4/5/6), and US1's document-owned editor wrap (the wrap state must hang off the document's single authority, Principle XI) each need a focused validation pass and may split into linked issues.
+- Six decisions were clarified on 2026-07-23 (wrap reach, the `Ctrl+Alt+W` chord and its two supporting rules, persisted undo stacks with a mandatory warning, US7's three-layer scope, and `Ctrl+click` link activation). US7 consequently grew beyond the letter of #159 — the main-process guard and plain-text URL detection are additive layers, each independently testable.
+- A second pass the same day closed the five remaining gaps: folder drops on an empty panel are **rejected** with a visible "not allowed"; a **multi-item** drag inserts every path into a terminal but is rejected by an empty panel; a refused undo/redo warns at **`error`** severity through the app's one notification model (persists until dismissed); sub-menus follow the **standard desktop model** (hover opens, a parent click never closes, one sub-menu at a time); and a file **already open** elsewhere focuses that Panel rather than opening a second view.
+- A third pass added five more: both panel status bars are **preference-controlled, default visible** (the editor's existing language strip as well as the new terminal one; the application-level status bar is a different surface and out of scope); word wrap also gets a **checkable content-menu item** in both panel types; a dropped path lands **at the shell's cursor with a trailing space and the cursor left before it**, never submitting the line; sub-menus are **fully keyboard-navigable** (`→`/`←`/`↑`/`↓`/`Enter`/`Escape`); and a **`menu.open`** command on `Shift+F10` + the `ContextMenu` key opens the menu without a mouse. US1 and US6 consequently exceed the letter of #152 and #157, each addition independently testable and separately shippable.
+- A fourth pass reshaped US1 and closed four more gaps: **terminal wrap-off is descoped** to a separate disposable spike (it needs terminal horizontal scrolling that does not exist and may be infeasible), so US1 now delivers the editor wrap toggle + the terminal status bar + status-bar visibility preferences only, and **#152 no longer matches what 024 ships** (narrow it, and file the spike issue outside v1.0.0 — two owed GitHub follow-ups); the three new preferences are **grouped by surface** in the visual Preferences UI (Principle X); US5 **reuses the existing unsaved dot** rather than adding a dirty marker to the name; and US7 gains a **link-aware terminal context menu** ("Open Link"/"Copy Link Address", selection takes priority), the mouse-free path to a link via `menu.open`.
+- Constitution compliance was re-checked against **v4.3.0** — Principle VI now requires every panel-level action to have a menu item even when it is also on a status bar; FR-003d (editor "Word Wrap" content-menu item surviving a hidden status bar) satisfies it for the one panel action this feature adds.
+- Constitution compliance was re-checked against **v4.2.0** (terminal keyboard contract): `Ctrl+Alt+W` is clean on both the reserved and shadowable tiers and identical across the `{editor}` and `{terminal}` scopes; US3's `Ctrl+Z`/`Ctrl+Y` are `{explorer}`-scoped, so the reserved `Ctrl+Z` (suspend) is untouched in terminals; `Shift+F10` and `ContextMenu` are unbound in throng and in readline/PSReadLine; US7's `Ctrl+click` is a mouse gesture and does not collide with the `Alt` column-select modifier.
+- Two follow-ups were raised during that session and deliberately left outside this spec: a **constitution amendment** (do not override well-known terminal keys; share one binding per command across editors and terminals where meanings do not genuinely diverge) and **terminal keybinding parity across shell flavours**, which is a separate feature.
+- The two bugs (US6, US7) each require a regression test that fails before the fix (FR-020).
+- Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`. All items pass.

@@ -290,6 +290,27 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Editor',
     control: 'toggle',
   },
+  {
+    key: 'editor.defaultWordWrap',
+    label: 'Editor default word wrap',
+    description: 'Wrap long lines by default in new editors. Toggle per editor from its status bar, its content menu, or Ctrl+Alt+W.',
+    group: 'Editor',
+    control: 'toggle',
+  },
+  {
+    key: 'editor.showStatusBar',
+    label: 'Show editor status bar',
+    description: 'Show the status strip along the bottom of each editor panel (language, word-wrap toggle).',
+    group: 'Editor',
+    control: 'toggle',
+  },
+  {
+    key: 'terminals.showStatusBar',
+    label: 'Show terminal status bar',
+    description: 'Show the status bar along the bottom of each terminal panel.',
+    group: 'Terminal',
+    control: 'toggle',
+  },
 
   // Indentation (016, FR-018/FR-022). The order of precedence is the requirement: what the FILE
   // already does beats the language, which beats the global default. A setting NEVER reformats an

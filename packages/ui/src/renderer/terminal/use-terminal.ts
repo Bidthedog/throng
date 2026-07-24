@@ -10,6 +10,19 @@ import {
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+
+/**
+ * Open a terminal link in the system browser (024 US7, #159). Activation requires Ctrl (Cmd on
+ * macOS) — matching VS Code's terminal, Windows Terminal and iTerm2 (FR-019c) — so a plain click
+ * keeps its terminal meaning. Only http(s) is routed out (FR-019); the main-process open-external
+ * seam re-validates and denies any in-app window. Shared by OSC 8 links and plain-text detection.
+ */
+function openTerminalLink(event: MouseEvent, uri: string): void {
+  if (!(event.ctrlKey || event.metaKey)) return;
+  if (!/^https?:\/\//i.test(uri)) return;
+  window.throng?.openExternal?.(uri);
+}
 import { registerPanelSearch, unregisterPanelSearch } from '../search/search-controller.js';
 import {
   createTerminalSearchController,
@@ -38,6 +51,17 @@ export interface TerminalApi {
    * by Ctrl+V, Shift+Insert and the right-click menu — see the paste handling in the mount effect.
    */
   paste(): void;
+  /**
+   * Write text straight to the shell's input, as if pasted (024 US2, #155 — a dropped path). The
+   * caller composes the exact bytes (e.g. a trailing space + a Left-arrow to sit the cursor before
+   * it, FR-004b); this just routes them to the pty and restores focus.
+   */
+  write(text: string): void;
+  /**
+   * The http(s) URL currently under the pointer (an OSC 8 or detected plain-text link), or null
+   * (024 US7, FR-019d). Read at right-click time so the context menu can offer "Open Link".
+   */
+  getHoveredLink(): string | null;
 }
 
 /**
@@ -204,6 +228,12 @@ export function useTerminal(opts: UseTerminalOptions): void {
     let resizedAt = 0;
     /** Tears down the search registration when this view goes (013). */
     let cleanupSearch: (() => void) | undefined;
+    // 024 US7 (FR-019d): the http(s) link currently under the pointer, tracked from the link hover
+    // callbacks so the context menu can offer "Open Link" at right-click time.
+    let hoveredLink: string | null = null;
+    const setHovered = (uri: string | undefined): void => {
+      hoveredLink = uri && /^https?:\/\//i.test(uri) ? uri : null;
+    };
     const term = new Terminal({
       convertEol: false,
       cursorBlink: true,
@@ -213,6 +243,14 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // The search addon paints match highlights through xterm's decorations API, which
       // is still flagged "proposed" — without this it throws rather than highlighting (013).
       allowProposedApi: true,
+      // 024 US7 (#159): route an OSC 8 hyperlink click through the OS open-external seam instead of
+      // xterm's default (which calls window.open → an in-app BrowserWindow, the reported bug). Gated
+      // on Ctrl/Cmd (FR-019c); the main process re-validates the scheme and denies any window.
+      linkHandler: {
+        activate: (event, uri) => openTerminalLink(event, uri),
+        hover: (_event, uri) => setHovered(uri),
+        leave: () => setHovered(undefined),
+      },
       // NB: do NOT set `windowsPty` here. Without a matching Windows build number it
       // applies the wrong ConPTY reflow/wrapping heuristics and garbles scrolled
       // PowerShell output. (cls/clear is handled separately via isScreenClear.)
@@ -246,6 +284,11 @@ export function useTerminal(opts: UseTerminalOptions): void {
         getSelection: () => term.getSelection(),
         focus: () => term.focus(),
         paste: () => void pasteFromClipboard(),
+        write: (text: string) => {
+          void bridge.write(panelId, text);
+          term.focus();
+        },
+        getHoveredLink: () => hoveredLink,
       };
     }
 
@@ -347,6 +390,15 @@ export function useTerminal(opts: UseTerminalOptions): void {
 
     const fit = new FitAddon();
     term.loadAddon(fit);
+    // 024 US7 (#159): detect plain-text http(s) URLs printed to the terminal (inert until now) and
+    // open them on Ctrl/Cmd+click through the same seam as OSC 8 links. The addon underlines a link
+    // on hover, which is the actionable affordance (FR-019a/c).
+    term.loadAddon(
+      new WebLinksAddon((event, uri) => openTerminalLink(event, uri), {
+        hover: (_event, uri) => setHovered(uri),
+        leave: () => setHovered(undefined),
+      }),
+    );
 
     // In-panel find over the retained scrollback (013). Read-only: the addon reads the
     // buffer and moves the viewport, never the pty. Registered against the panel id so

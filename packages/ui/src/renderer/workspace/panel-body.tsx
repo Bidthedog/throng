@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useCallback, useEffect, type ReactElement } from 'react';
 import type { Panel } from '@throng/core';
 import { useProjects } from '../state/projects-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
@@ -8,6 +8,15 @@ import { TerminalPanel } from '../terminal/terminal-panel.js';
 import { EditorPanel } from '../editor/editor-panel.js';
 import { PanelDropTarget, type DropContext } from '../editor/drop-target.js';
 import { openFileInPanel } from '../editor/editor-open.js';
+import {
+  getTreeDrag,
+  clearTreeDrag,
+  TREE_DROP_EVENT,
+  type TreeDropDetail,
+} from '../explorer/tree-drag-store.js';
+import { findEditorPanelByPath } from '../editor/editor-state.js';
+import { collectPanels } from '@throng/core';
+import { focusPanel } from './panel-focus.js';
 
 /**
  * Panel body dispatcher (005 / FR-001/003/014). Routes a Panel's body by its
@@ -54,19 +63,20 @@ export function PanelBody({ panel, tabId }: { panel: Panel; tabId: string }): Re
   };
 
   if (panel.kind === undefined) {
-    // FR-056 — a file dropped on an UNTYPED panel makes it an editor showing that file. The type form
-    // has no file input at all, so the route is `setPanelType`, exactly as the explorer's "open in a
-    // dedicated editor" already does it. Without this mount the drop would land on nothing.
     return (
-      <PanelDropTarget
-        ctx={dropCtx}
-        onOpen={(absPath) => {
-          ws.setPanelType(panel.id, 'editor', { filePath: absPath });
-          window.throng?.panel?.notifyTyped?.(panel.id, 'editor', { filePath: absPath });
-        }}
-      >
-        <PanelTypeForm panelId={panel.id} projectRoot={root} rootless={ownedBySub} />
-      </PanelDropTarget>
+      <UntypedPanelBody
+        panel={panel}
+        dropCtx={dropCtx}
+        root={root}
+        ownedBySub={ownedBySub}
+        owningProjectFor={(absPath) =>
+          projects.find(
+            (p) =>
+              p.rootFolder &&
+              absPath.replace(/\\/g, '/').startsWith(p.rootFolder.replace(/\\/g, '/')),
+          )?.id ?? null
+        }
+      />
     );
   }
   if (panel.kind === 'terminal') {
@@ -134,4 +144,100 @@ export function PanelBody({ panel, tabId }: { panel: Panel; tabId: string }): Re
     );
   }
   return <span className="panel-box__placeholder">Empty Panel</span>;
+}
+
+/**
+ * The untyped panel's body — the type-selection form, plus the drop targets that turn it into an
+ * editor (024 US4, #114). An OS-file drop is served by {@link PanelDropTarget} (issue #60); a drag
+ * from throng's OWN tree is served here: a single file opens (converting a sub-workspace-owned panel
+ * to project-owned first, FR-012), while a folder or multi-select is rejected with a "not allowed"
+ * cursor (FR-011a), and a file already open elsewhere leaves this panel untyped (no second view,
+ * FR-011b). Split into its own component so it can host the `throng:tree-drop` seam listener.
+ */
+function UntypedPanelBody({
+  panel,
+  dropCtx,
+  root,
+  ownedBySub,
+  owningProjectFor,
+}: {
+  panel: Panel;
+  dropCtx: DropContext;
+  root: string | null;
+  ownedBySub: boolean;
+  owningProjectFor: (absPath: string) => string | null;
+}): ReactElement {
+  const ws = useWorkspace();
+
+  const openAsEditor = useCallback(
+    (absPath: string): void => {
+      ws.setPanelType(panel.id, 'editor', { filePath: absPath });
+      window.throng?.panel?.notifyTyped?.(panel.id, 'editor', { filePath: absPath });
+    },
+    [ws, panel.id],
+  );
+
+  const acceptTreeDrop = useCallback(
+    (paths: string[], singleFile: boolean): void => {
+      if (!singleFile || paths.length !== 1) return; // folder / multi-select rejected (FR-011a)
+      const absPath = paths[0];
+      // Already open elsewhere → reveal + focus THAT panel, leave this one untyped; never a second
+      // view (FR-011b, one-document-one-state). Only focus across the same window; a panel in another
+      // project's window is not focused across the boundary.
+      const existing = findEditorPanelByPath(absPath);
+      if (existing) {
+        const layout = ws.layout;
+        const tab = layout?.tabs.find((t) => collectPanels(t.root).some((p) => p.id === existing));
+        if (tab) {
+          ws.setActiveTab(tab.id);
+          ws.setActivePanel(tab.id, existing);
+          focusPanel(existing);
+          return;
+        }
+      }
+      if (ownedBySub) {
+        const owning = owningProjectFor(absPath);
+        if (owning) ws.convertPanelToProject(panel.id, owning); // FR-012
+      }
+      openAsEditor(absPath);
+    },
+    [ws, panel.id, ownedBySub, owningProjectFor, openAsEditor],
+  );
+
+  // e2e seam: a real react-dnd → native drop cannot be driven from Playwright (mirrors throng:os-drop).
+  useEffect(() => {
+    const onTreeDrop = (e: Event): void => {
+      const detail = (e as CustomEvent<TreeDropDetail>).detail;
+      if (detail?.panelId === panel.id) acceptTreeDrop(detail.paths, detail.singleFile ?? false);
+    };
+    window.addEventListener(TREE_DROP_EVENT, onTreeDrop);
+    return () => window.removeEventListener(TREE_DROP_EVENT, onTreeDrop);
+  }, [panel.id, acceptTreeDrop]);
+
+  const accepts = (): boolean => {
+    const drag = getTreeDrag();
+    return !!drag && drag.singleFile;
+  };
+
+  return (
+    <div
+      data-testid={`tree-drop-untyped-${panel.id}`}
+      onDragOver={(e) => {
+        if (!getTreeDrag()) return; // not our tree drag — let PanelDropTarget / OS handling run
+        e.preventDefault();
+        e.dataTransfer.dropEffect = accepts() ? 'copy' : 'none'; // 'none' = the "not allowed" cursor
+      }}
+      onDrop={(e) => {
+        const drag = getTreeDrag();
+        if (!drag) return;
+        e.preventDefault();
+        clearTreeDrag();
+        acceptTreeDrop(drag.paths, drag.singleFile);
+      }}
+    >
+      <PanelDropTarget ctx={dropCtx} onOpen={openAsEditor}>
+        <PanelTypeForm panelId={panel.id} projectRoot={root} rootless={ownedBySub} />
+      </PanelDropTarget>
+    </div>
+  );
 }
