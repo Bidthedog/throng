@@ -30,10 +30,27 @@ export function DirtyCloseDialog(): ReactElement | null {
     const list = req.files.filter(Boolean);
     void choose({
       title: 'Unsaved changes',
-      message:
-        `${req.targetLabel} has unsaved changes` +
-        (list.length > 0 ? ` (${list.join(', ')})` : '') +
-        '. Save before closing?',
+      // The FILE NAMES are the part of this sentence a user actually has to read before answering —
+      // they are what is about to be lost — so they are set apart rather than buried mid-paragraph
+      // in the same weight as the surrounding words. The text itself is unchanged.
+      message: (
+        <>
+          {req.targetLabel} has unsaved changes
+          {list.length > 0 ? (
+            <>
+              {' ('}
+              {list.map((file, i) => (
+                <span key={file}>
+                  {i > 0 ? ', ' : null}
+                  <strong className="modal__name">{file}</strong>
+                </span>
+              ))}
+              {')'}
+            </>
+          ) : null}
+          . Save before closing?
+        </>
+      ),
       testIds: { dialog: 'dirty-close-dialog' },
       choices: [
         { label: 'Cancel', value: 'cancel', testId: 'dirty-close-cancel' },

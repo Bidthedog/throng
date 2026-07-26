@@ -7,6 +7,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import { useFocusTrap } from './common/focus-trap.js';
 
 /**
  * THE confirmation model (018 / US6, FR-048/048a).
@@ -50,7 +51,15 @@ export interface ConfirmChoice {
 
 export interface ConfirmOptions {
   title?: string;
-  message: string;
+  /**
+   * The question, as text or as marked-up content.
+   *
+   * A ReactNode rather than a string so a dialog can EMPHASISE the nouns inside its own sentence —
+   * the file names in "Unsaved changes", which are the one part a user actually needs to read before
+   * answering. Every existing caller passes a plain string and is unaffected, and the rendered text
+   * content is unchanged, so the suites that read this message keep reading the same words.
+   */
+  message: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   /** Style the confirm button as destructive. */
@@ -80,7 +89,7 @@ interface ConfirmContextValue {
 
 const ConfirmContext = createContext<ConfirmContextValue | null>(null);
 
-/** The value a dismissal (overlay click / Escape) resolves to. */
+/** The value a dismissal (Escape) resolves to — the safe answer, which loses no work. */
 const DISMISSED = null;
 
 interface PendingConfirm extends ConfirmOptions {
@@ -89,6 +98,9 @@ interface PendingConfirm extends ConfirmOptions {
 
 export function ConfirmProvider({ children }: { children: ReactNode }): ReactElement {
   const [pending, setPending] = useState<PendingConfirm | null>(null);
+  // The keyboard stays in the dialog while one is open (see useFocusTrap): a confirmation is
+  // BLOCKING, and a dialog you can Tab out of into the live application is not.
+  const trap = useFocusTrap<HTMLDivElement>(pending !== null);
 
   const choose = useCallback(
     (options: ConfirmOptions) =>
@@ -141,16 +153,34 @@ export function ConfirmProvider({ children }: { children: ReactNode }): ReactEle
         <div
           className="modal-overlay"
           data-testid={pending.testIds?.overlay ?? 'confirm-overlay'}
-          onClick={() => settle(DISMISSED)}
+          /*
+           * The scrim DISMISSES NOTHING. Clicking beside a dialog is the commonest accidental
+           * gesture there is — a misjudged click at the edge of a button, a click to bring the
+           * window forward — and this dialog is where a user is consenting to a consequence.
+           * Answering a destructive question by missing it is not an answer. The decision buttons
+           * (and Escape, which is deliberate and is what a screen-reader user is told to press)
+           * are the only ways out.
+           *
+           * Pressing on the scrim ITSELF (never on the dialog within it) suppresses its default, so
+           * the click cannot even blur the button the user was on — the dialog keeps the keyboard.
+           */
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) e.preventDefault();
+          }}
         >
           <div
             className="modal"
             role="dialog"
             aria-modal="true"
             data-testid={pending.testIds?.dialog ?? 'confirm-dialog'}
-            onClick={(e) => e.stopPropagation()}
+            ref={trap.ref}
+            tabIndex={-1}
             onKeyDown={(e) => {
-              if (e.key === 'Escape') settle(DISMISSED);
+              if (e.key === 'Escape') {
+                settle(DISMISSED);
+                return;
+              }
+              trap.onKeyDown(e);
             }}
           >
             {pending.title ? <h3 className="modal__title">{pending.title}</h3> : null}

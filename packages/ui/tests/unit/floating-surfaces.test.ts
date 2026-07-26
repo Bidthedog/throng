@@ -48,12 +48,15 @@ const REGISTERED: Readonly<Record<string, string>> = {
   // Not anchored to anything, so there is no edge to flip away from: these are centred or corner-pinned
   // overlays that cover the window by design, and clamping is the browser's job.
   '.modal-overlay': 'a full-viewport scrim — centred, nothing to flip away from',
-  '.notices': 'corner-pinned toast stack — max-width clamped; nothing to flip away from',
+  '.notices':
+    'corner-pinned toast stack — a fixed width and a max-height of the viewport clamp it, and the oldest scrolls out of the top rather than the newest being pushed off; nothing to flip away from',
   '.drag-ghost': 'follows the pointer by design — it is meant to leave the window',
   '.colour-picker':
     'common/colour-picker.tsx — flips + clamps on BOTH axes via clampToViewport (021/FR-036); found BY this guard',
   '.language-picker':
     'editor/language-picker.tsx — CLAMPS its height to the room above its strip; it opens upward from the bottom of its panel, so there is nothing below to flip to (found BY this guard, in 016)',
+  '.terminal-link-tip':
+    'terminal/use-terminal.ts (showLinkTip) — the Ctrl+Click hover tip; positioned up-right of the pointer and CLAMPED to the viewport (flips to the pointer\'s left at the right edge, drops below at the top) (024 US7, #159)',
   '.capture-overlay': 'a full-viewport scrim over the key-capture dialog — nothing to flip away from',
 
   // Everything below is CHROME, not a popup: fixed furniture with a z-index, anchored to nothing, so

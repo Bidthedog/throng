@@ -2,6 +2,7 @@ import { useEffect, type ReactElement } from 'react';
 import { isExcluded } from '@throng/core';
 
 import { IconButton } from '../common/icon-button.js';
+import { useFocusTrap } from '../common/focus-trap.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useProjects } from '../state/projects-store.js';
 import './project-settings.css';
@@ -25,6 +26,9 @@ export function ProjectSettingsDialog({ onClose }: { onClose: () => void }): Rea
   const { activeProject, setProjectHidden } = useProjects();
   const settings = useAppSettings();
   const globs = settings.explorer.excludeGlobs;
+  // Same modality as the confirmation dialog: while this is up, Tab belongs to it (018 US6/US8
+  // follow-up). It is `aria-modal`, and that has to be true of the keyboard as well as the screen.
+  const trap = useFocusTrap<HTMLDivElement>(Boolean(activeProject));
 
   // FR-046 — the project can be deleted, or switched away from, while this is open. A dialog that
   // carried on editing a project that no longer exists would write to a dead id; one that kept
@@ -63,7 +67,10 @@ export function ProjectSettingsDialog({ onClose }: { onClose: () => void }): Rea
         aria-modal="true"
         aria-labelledby="project-settings-title"
         data-testid="project-settings-dialog"
+        ref={trap.ref}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={trap.onKeyDown}
       >
         {/* FR-042 — NAME the project. With several projects open and one dialog, "which project's
             settings am I looking at?" must never be a question the user has to answer by inference. */}
