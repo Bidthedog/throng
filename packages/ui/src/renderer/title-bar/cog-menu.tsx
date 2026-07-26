@@ -51,6 +51,14 @@ export function CogMenu(): ReactElement {
     // About throng (020, FR-003) — the discoverable entry point to the About window. It lives here,
     // not on a native menu bar: throng draws its own title bar (`frame: false`), so the native
     // application menu never appears on screen. Its circled-information glyph reads as "about".
+    // #123 — the way a user reaches their diagnostics. It sits beside About deliberately: both are
+    // things you go looking for when reporting a problem, and neither belongs in preferences.
+    items.push({
+      label: 'Open Logs Folder',
+      testId: 'cog-menu-logs',
+      icon: 'folderOpen',
+      onClick: () => void window.throng?.diagnostics?.openLogs?.(),
+    });
     items.push({
       label: 'About throng',
       testId: 'cog-menu-about',

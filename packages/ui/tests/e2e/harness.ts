@@ -99,7 +99,9 @@ export async function reloadWindow(win: Page): Promise<void> {
  * renderer localStorage; the folder dialog is stubbed to cancel by default.
  */
 export async function runApp(
-  fn: (app: ElectronApplication, win: Page, ctx: { pipeName: string }) => Promise<void>,
+  // `userDataDir` is the run's own Electron data directory — where per-user state, including
+  // the diagnostics logs (#123), is written. Exposed so a spec can assert on what landed there.
+  fn: (app: ElectronApplication, win: Page, ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
   opts: {
     dataDir?: string;
     userDataDir?: string;
@@ -144,7 +146,7 @@ export async function runApp(
     });
     const win = await app.firstWindow();
     await stubFolderDialog(app); // cancel by default
-    await fn(app, win, { pipeName });
+    await fn(app, win, { pipeName, userDataDir: userData });
   } finally {
     // Kill an app-spawned detached daemon BEFORE closing the app: Playwright's
     // app.close() waits for the Electron process's child tree, and the detached
