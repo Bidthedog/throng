@@ -24,8 +24,20 @@ import type { DirEntry, IFileSystem } from '@throng/core';
 /** Move a path to the OS Recycle Bin / Trash (Electron `shell.trashItem`). */
 export type TrashItem = (path: string) => Promise<void>;
 
+/**
+ * Restore a trashed item to its original path (024 US3). Injected because there is no cross-platform
+ * API — Windows uses PowerShell Recycle-Bin automation; other platforms may leave it unimplemented,
+ * in which case it rejects and the undo degrades cleanly. Must reject when the item cannot be
+ * recovered (purged).
+ */
+export type RestoreItem = (originalPath: string, deletedAt: number) => Promise<void>;
+
 export class NodeFileSystem implements IFileSystem {
-  constructor(private readonly trashItem: TrashItem) {}
+  constructor(
+    private readonly trashItem: TrashItem,
+    private readonly restoreItem: RestoreItem = () =>
+      Promise.reject(new Error('restore-from-trash is not supported on this platform')),
+  ) {}
 
   async list(dir: string): Promise<DirEntry[]> {
     const dirents = await readdir(dir, { withFileTypes: true });
@@ -86,6 +98,10 @@ export class NodeFileSystem implements IFileSystem {
 
   async trash(path: string): Promise<void> {
     await this.trashItem(path);
+  }
+
+  async restoreFromTrash(originalPath: string, deletedAt: number): Promise<void> {
+    await this.restoreItem(originalPath, deletedAt);
   }
 
   async exists(path: string): Promise<boolean> {

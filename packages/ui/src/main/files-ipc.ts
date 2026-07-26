@@ -45,4 +45,12 @@ export function registerFilesIpc(service: FilesService, watcher: ExplorerWatcher
   ipcMain.handle('throng:files:reveal', (_event, relPath: unknown) =>
     service.reveal(asStr(relPath)),
   );
+  // 024 US3 (#85): does this path exist inside the project? The undo engine's world-check.
+  ipcMain.handle('throng:files:exists', (_event, relPath: unknown) =>
+    service.existsInProject(asStr(relPath)),
+  );
+  // 024 US3 (#85): undo of a delete — put a trashed item back at its original path.
+  ipcMain.handle('throng:files:restore', (_event, relPath: unknown, deletedAt: unknown) =>
+    service.restoreDeleted(asStr(relPath), typeof deletedAt === 'number' ? deletedAt : Date.now()),
+  );
 }

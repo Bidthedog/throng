@@ -5,6 +5,8 @@ import { WorkspaceClient } from './state/workspace-client.js';
 import { SubWorkspacesClient } from './state/subworkspaces-client.js';
 import { SubWorkspaceWorkspaceClient } from './state/subworkspace-window-client.js';
 import { DocumentClient } from './state/document-client.js';
+import { FileOpUndoClient } from './state/fileop-undo-client.js';
+import { PanelNameClient } from './state/panel-name-client.js';
 import { ProjectsProvider } from './state/projects-store.js';
 import { SubWorkspacesProvider } from './state/subworkspaces-store.js';
 import { ConfirmProvider } from './confirm-dialog.js';
@@ -28,6 +30,10 @@ export interface Services {
   subWorkspaces: SubWorkspacesClient;
   /** Per-document state — the language override (016, FR-028e). */
   documents: DocumentClient;
+  /** 024 US3 (#85): the per-project file-operation undo/redo stack. */
+  fileOpUndo: FileOpUndoClient;
+  /** 024 follow-up: globally unique panel names. */
+  panelNames: PanelNameClient;
 }
 
 const ServicesContext = createContext<Services | null>(null);
@@ -92,6 +98,8 @@ export function CompositionRoot(): ReactElement {
       workspace: new WorkspaceClient(bridge),
       subWorkspaces: new SubWorkspacesClient(bridge),
       documents: new DocumentClient(bridge),
+      fileOpUndo: new FileOpUndoClient(bridge),
+      panelNames: new PanelNameClient(bridge),
     };
   }, []);
   return (
@@ -137,6 +145,8 @@ export function SubWorkspaceCompositionRoot({ id }: { id: string }): ReactElemen
       // Omitting it left `useServices().documents` undefined in this realm — a crash the
       // first time an editor here touched it. The main root has always provided it.
       documents: new DocumentClient(bridge),
+      fileOpUndo: new FileOpUndoClient(bridge),
+      panelNames: new PanelNameClient(bridge),
     };
   }, [id]);
   return (
