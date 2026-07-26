@@ -113,9 +113,12 @@ export {
   DEFAULT_DRAG_MODIFIERS,
   decideClick,
   pathForms,
+  buildTreeDragPayload,
+  toAbsPath,
   nextExpandTargets,
 } from './explorer/index.js';
 export type { DragModifierKey, DragModifierConfig } from './explorer/index.js';
+export type { TreeDragPayload, TreeDragInput } from './explorer/index.js';
 export type {
   AppSettings,
   ConfirmLevel,
@@ -387,6 +390,7 @@ export {
   tabUnsaved,
   projectUnsaved,
   projectRootWouldContainOpenEditor,
+  editorAutoTitle,
   editorPathParts,
   toDisplayPath,
   type EditorPathParts,
@@ -436,6 +440,7 @@ export {
   defaultPanelTypeRegistry,
   setPanelType,
   clearPanelType,
+  convertPanelToProject,
   updatePanelConfig,
 } from './panel-type/index.js';
 export {
@@ -450,6 +455,9 @@ export {
   type FlavourProblem,
   BUILTIN_FLAVOUR_DEFAULT_PARAMS,
   resolveDefaultParams,
+  quoteDropPath,
+  formatDroppedPaths,
+  terminalLinkTarget,
   resolveLaunchSpec,
   tokenizeParams,
   type LaunchSpec,
@@ -499,6 +507,7 @@ export {
   setActiveTab,
   renameTab,
   renamePanel,
+  retitlePanel,
   resetPanelName,
   closeTab,
   closeOtherTabs,
@@ -562,3 +571,30 @@ export { parseHex, isValidHex, toHex, rgbToHsv, hsvToRgb } from './config/colour
 // 018 / US7 — digit grouping. Strictly a VIEW concern: the parser is the exact inverse of the
 // formatter for the active locale, so a grouping character can never reach a settings file.
 export { formatGrouped, parseGrouped } from './config/number-format.js';
+
+// 024 US3 (#85) — file-operation undo/redo engine (pure; the main process applies, persistence v8 stores).
+export {
+  emptyStack,
+  record as recordFileOp,
+  undo as undoFileOp,
+  redo as redoFileOp,
+  validate as validateFileOp,
+  plannedMoves,
+  deletePaths,
+  serialise as serialiseFileOpStack,
+  parse as parseFileOpStack,
+  FILEOP_UNDO_BOUND,
+  type FileOpUndoEntry,
+  type FileOpUndoStack,
+  type PlannedMove,
+} from './fileop-undo/undo-stack.js';
+// Durable diagnostics (#123) — levels, the record + crash-report format, and rotation/retention
+// DECISIONS. The file sink that applies them lives in a platform package (core imports no builtin).
+export * from './diagnostics/index.js';
+// Globally unique panel names (024 follow-up) — the pure rule; the daemon supplies what is taken.
+export {
+  uniquePanelName,
+  reconcilePanelNames,
+  isDefaultPanelName,
+  nextDefaultPanelName,
+} from './workspace/unique-name.js';

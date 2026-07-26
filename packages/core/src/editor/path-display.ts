@@ -32,6 +32,21 @@ export function toDisplayPath(path: string, os: OsName): string {
   return os === 'windows' ? path.replace(/\//g, '\\') : path.replace(/\\/g, '/');
 }
 
+/**
+ * The auto-derived title for an editor panel with no manual name (024 US5, FR-015): the open file's
+ * basename with ONLY its final extension stripped. A file with no extension keeps its whole name
+ * (`Makefile`); a dotfile with no further extension keeps its full name including the leading dot
+ * (`.gitignore`); a dotfile with a further extension is stripped (`.eslintrc.json` → `.eslintrc`).
+ * Never returns a blank string. Pure. No OS/DOM.
+ */
+export function editorAutoTitle(filePath: string): string {
+  const name = leaf(filePath);
+  // Last dot that is NOT the leading character — a leading dot is part of a dotfile's name, not an
+  // extension separator. `slice` keeps the stem; a trailing-dot name (`foo.`) keeps `foo`.
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(0, dot) : name;
+}
+
 export function editorPathParts(
   filePath: string,
   ownerRoot: string | null,
