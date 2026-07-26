@@ -13,5 +13,7 @@ export { resolveDragEffect, DEFAULT_DRAG_MODIFIERS } from './drag.js';
 export type { ClickAction } from './open-intent.js';
 export { decideClick } from './open-intent.js';
 export { pathForms, type PathForms } from './path-forms.js';
+export { buildTreeDragPayload, toAbsPath } from './tree-drag-payload.js';
+export type { TreeDragPayload, TreeDragInput } from './tree-drag-payload.js';
 export type { ExpandNode } from './expand.js';
 export { nextExpandTargets } from './expand.js';
