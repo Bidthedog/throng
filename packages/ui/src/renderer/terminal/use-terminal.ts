@@ -10,6 +10,19 @@ import {
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+
+/**
+ * Open a terminal link in the system browser (024 US7, #159). Activation requires Ctrl (Cmd on
+ * macOS) — matching VS Code's terminal, Windows Terminal and iTerm2 (FR-019c) — so a plain click
+ * keeps its terminal meaning. Only http(s) is routed out (FR-019); the main-process open-external
+ * seam re-validates and denies any in-app window. Shared by OSC 8 links and plain-text detection.
+ */
+function openTerminalLink(event: MouseEvent, uri: string): void {
+  if (!(event.ctrlKey || event.metaKey)) return;
+  if (!/^https?:\/\//i.test(uri)) return;
+  window.throng?.openExternal?.(uri);
+}
 import { registerPanelSearch, unregisterPanelSearch } from '../search/search-controller.js';
 import {
   createTerminalSearchController,
@@ -22,6 +35,13 @@ import { parseOsc52 } from './osc52.js';
 import { setTerminalTitle, clearTerminalTitle } from './title-store.js';
 import { TerminalOutputGate } from './output-gate.js';
 import { consumeExplicitRetype } from './explicit-retype.js';
+
+/**
+ * How long a link `leave` waits before the hover tip is actually hidden (024 US7 follow-up). Long
+ * enough to absorb the leave/hover pair a re-render produces under a motionless pointer, short
+ * enough that a pointer genuinely moving off a link sees the tip go at once.
+ */
+const LINK_TIP_LEAVE_GRACE_MS = 250;
 
 export interface TerminalExit {
   code: number | null;
@@ -38,6 +58,17 @@ export interface TerminalApi {
    * by Ctrl+V, Shift+Insert and the right-click menu — see the paste handling in the mount effect.
    */
   paste(): void;
+  /**
+   * Write text straight to the shell's input, as if pasted (024 US2, #155 — a dropped path). The
+   * caller composes the exact bytes (e.g. a trailing space + a Left-arrow to sit the cursor before
+   * it, FR-004b); this just routes them to the pty and restores focus.
+   */
+  write(text: string): void;
+  /**
+   * The http(s) URL currently under the pointer (an OSC 8 or detected plain-text link), or null
+   * (024 US7, FR-019d). Read at right-click time so the context menu can offer "Open Link".
+   */
+  getHoveredLink(): string | null;
 }
 
 /**
@@ -96,6 +127,9 @@ export interface UseTerminalOptions {
   searchDecorations?: TerminalSearchDecorations;
   /** The live match count, as xterm re-evaluates it against the growing buffer (FR-012). */
   onSearchCount?: (count: SearchCount) => void;
+  /** 024 US7 (#159 follow-up): ms the pointer must rest on a link before the hover tip shows.
+   *  Read live so a preferences change takes effect without remounting the terminal. */
+  linkHoverDelayMs?: number;
   /**
    * True for a key that belongs to throng (find, scrollback navigation) rather than to
    * the shell. xterm would otherwise handle these itself and write them to the pty;
@@ -142,6 +176,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
   const reserveKeyRef = useRef(opts.reserveKey);
   const decorationsRef = useRef(opts.searchDecorations);
   const onSearchCountRef = useRef(opts.onSearchCount);
+  const linkDelayRef = useRef(opts.linkHoverDelayMs);
   onExitRef.current = opts.onExit;
   onErrorRef.current = opts.onError;
   onStillStartingRef.current = opts.onStillStarting;
@@ -151,6 +186,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
   reserveKeyRef.current = opts.reserveKey;
   decorationsRef.current = opts.searchDecorations;
   onSearchCountRef.current = opts.onSearchCount;
+  linkDelayRef.current = opts.linkHoverDelayMs;
   // Read the active-panel predicate through a ref so the (async) attach focus below sees the CURRENT
   // active panel, not the one at mount time (issue 144).
   const isActiveRef = useRef(opts.isActive);
@@ -204,6 +240,99 @@ export function useTerminal(opts: UseTerminalOptions): void {
     let resizedAt = 0;
     /** Tears down the search registration when this view goes (013). */
     let cleanupSearch: (() => void) | undefined;
+    // 024 US7 (FR-019d): the http(s) link currently under the pointer, tracked from the link hover
+    // callbacks so the context menu can offer "Open Link" at right-click time.
+    let hoveredLink: string | null = null;
+    // 024 US7 (#159 follow-up): a hover tooltip naming the activation gesture. xterm's only built-in
+    // link affordance is a hover underline, which does not say the link is Ctrl-clickable — so we add
+    // a floating tip that appears while the pointer is over an http(s) link. It lives on document.body
+    // with `position:fixed` (not inside the panel, whose `overflow:hidden` would clip it) and follows
+    // the pointer in viewport coordinates; removed on dispose.
+    const linkTip = document.createElement('div');
+    linkTip.className = 'terminal-link-tip';
+    linkTip.setAttribute('role', 'tooltip');
+    const linkChord = /Mac/i.test(navigator.platform) ? 'Cmd' : 'Ctrl';
+    linkTip.textContent = `${linkChord}+Click to open in system browser`;
+    linkTip.hidden = true;
+    document.body.appendChild(linkTip);
+    // The tip appears only after the pointer RESTS on a link for the configured delay (default 500ms,
+    // `terminals.linkHoverDelayMs`), so a pointer sweeping across a link doesn't flash it. The timer is
+    // cancelled the moment the pointer leaves the link (or the view is disposed).
+    let linkTipTimer: ReturnType<typeof setTimeout> | undefined;
+    // The link the tip is currently showing (or armed for), and the pending hide. Both exist to keep
+    // the tip STEADY while the pointer rests on one link — see setHovered.
+    let tipUri: string | null = null;
+    let linkTipHideTimer: ReturnType<typeof setTimeout> | undefined;
+    const placeLinkTip = (event: MouseEvent): void => {
+      // Naive position (up-and-right of the pointer) first, then unhide and CLAMP to the viewport so
+      // the tip is never cut off at an edge (018/FR-013 — every floating surface flips/clamps). Near
+      // the right edge it flips to the pointer's left; near the top it drops below.
+      linkTip.style.left = `${event.clientX + 12}px`;
+      linkTip.style.top = `${event.clientY - 28}px`;
+      linkTip.hidden = false;
+      const w = linkTip.offsetWidth;
+      const h = linkTip.offsetHeight;
+      let x = event.clientX + 12;
+      let y = event.clientY - 28;
+      if (x + w > window.innerWidth - 2) x = event.clientX - w - 12;
+      if (y < 2) y = event.clientY + 20;
+      if (y + h > window.innerHeight - 2) y = window.innerHeight - h - 2;
+      linkTip.style.left = `${Math.max(2, x)}px`;
+      linkTip.style.top = `${Math.max(2, y)}px`;
+    };
+    const hideLinkTip = (): void => {
+      if (linkTipTimer !== undefined) {
+        clearTimeout(linkTipTimer);
+        linkTipTimer = undefined;
+      }
+      if (linkTipHideTimer !== undefined) {
+        clearTimeout(linkTipHideTimer);
+        linkTipHideTimer = undefined;
+      }
+      tipUri = null;
+      linkTip.hidden = true;
+    };
+    /**
+     * Track the hovered link and drive the tip (024 US7, #159 follow-ups).
+     *
+     * The tip must stay put while the pointer RESTS on a link — it used to blink every couple of
+     * seconds. xterm re-evaluates its link providers whenever the view re-renders, and the self-heal
+     * repaint below runs on a 2s interval, so a motionless pointer was told `leave` and then `hover`
+     * again on every tick; the old code hid the tip and re-armed the 500ms delay each time, which is
+     * exactly what the user saw. Two guards, either of which suffices:
+     *
+     *  - a `hover` naming the link the tip is ALREADY showing (or armed for) is a no-op, so the delay
+     *    is never restarted under the pointer;
+     *  - a `leave` only SCHEDULES the hide, so a re-hover arriving in the same beat cancels it.
+     *
+     * `hoveredLink` (read by the right-click menu, FR-019d) still updates immediately — the grace
+     * period is the tip's alone.
+     */
+    const setHovered = (uri: string | undefined, event?: MouseEvent): void => {
+      const next = uri && /^https?:\/\//i.test(uri) ? uri : null;
+      hoveredLink = next;
+      if (next === null) {
+        if (linkTipTimer !== undefined) {
+          clearTimeout(linkTipTimer);
+          linkTipTimer = undefined;
+        }
+        if (tipUri !== null && linkTipHideTimer === undefined) {
+          linkTipHideTimer = setTimeout(hideLinkTip, LINK_TIP_LEAVE_GRACE_MS);
+        }
+        return;
+      }
+      if (linkTipHideTimer !== undefined) {
+        clearTimeout(linkTipHideTimer);
+        linkTipHideTimer = undefined;
+      }
+      if (tipUri === next) return; // same link, still hovered — leave the tip exactly as it is
+      if (linkTipTimer !== undefined) clearTimeout(linkTipTimer);
+      linkTip.hidden = true;
+      tipUri = next;
+      if (!event) return;
+      const delay = Math.max(0, linkDelayRef.current ?? 500);
+      linkTipTimer = setTimeout(() => placeLinkTip(event), delay);
+    };
     const term = new Terminal({
       convertEol: false,
       cursorBlink: true,
@@ -213,6 +342,14 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // The search addon paints match highlights through xterm's decorations API, which
       // is still flagged "proposed" — without this it throws rather than highlighting (013).
       allowProposedApi: true,
+      // 024 US7 (#159): route an OSC 8 hyperlink click through the OS open-external seam instead of
+      // xterm's default (which calls window.open → an in-app BrowserWindow, the reported bug). Gated
+      // on Ctrl/Cmd (FR-019c); the main process re-validates the scheme and denies any window.
+      linkHandler: {
+        activate: (event, uri) => openTerminalLink(event, uri),
+        hover: (event, uri) => setHovered(uri, event),
+        leave: () => setHovered(undefined),
+      },
       // NB: do NOT set `windowsPty` here. Without a matching Windows build number it
       // applies the wrong ConPTY reflow/wrapping heuristics and garbles scrolled
       // PowerShell output. (cls/clear is handled separately via isScreenClear.)
@@ -246,6 +383,11 @@ export function useTerminal(opts: UseTerminalOptions): void {
         getSelection: () => term.getSelection(),
         focus: () => term.focus(),
         paste: () => void pasteFromClipboard(),
+        write: (text: string) => {
+          void bridge.write(panelId, text);
+          term.focus();
+        },
+        getHoveredLink: () => hoveredLink,
       };
     }
 
@@ -260,6 +402,20 @@ export function useTerminal(opts: UseTerminalOptions): void {
       ev.preventDefault();
     };
     container.addEventListener('paste', swallowNativePaste, true);
+    // 024 US7 (#159 follow-up): the RIGHT mouse button must not reach the terminal program. With
+    // mouse reporting on (Claude Code, vim, tmux), xterm forwards a right-button press to the pty as
+    // a mouse event, which the program acts on — a stray paste/insert — while throng ALSO opens its
+    // themed context menu, so one click is handled twice. A capture-phase listener on the container
+    // fires before xterm's descendant handlers; stopping button-2 press/release there makes the
+    // context menu the sole owner of a right-click. `stopImmediatePropagation` (not `preventDefault`)
+    // leaves the browser free to still fire `contextmenu` for the themed menu, and the panel's
+    // pointerdown still marks it active. Left/middle buttons (selection, mouse reporting) are untouched.
+    const swallowRightButton = (ev: MouseEvent): void => {
+      if (ev.button === 2) ev.stopImmediatePropagation();
+    };
+    container.addEventListener('mousedown', swallowRightButton, true);
+    container.addEventListener('mouseup', swallowRightButton, true);
+    container.addEventListener('auxclick', swallowRightButton, true);
     // Terminal keyboard negotiation state (#90): the kitty flags AND win32-input-mode the
     // running program has enabled. A modified Enter is reported in CSI-u form while kitty is
     // active, as a win32-input key event while win32-input-mode is (PowerShell/cmd), else as a
@@ -347,6 +503,15 @@ export function useTerminal(opts: UseTerminalOptions): void {
 
     const fit = new FitAddon();
     term.loadAddon(fit);
+    // 024 US7 (#159): detect plain-text http(s) URLs printed to the terminal (inert until now) and
+    // open them on Ctrl/Cmd+click through the same seam as OSC 8 links. The addon underlines a link
+    // on hover, which is the actionable affordance (FR-019a/c).
+    term.loadAddon(
+      new WebLinksAddon((event, uri) => openTerminalLink(event, uri), {
+        hover: (event, uri) => setHovered(uri, event),
+        leave: () => setHovered(undefined),
+      }),
+    );
 
     // In-panel find over the retained scrollback (013). Read-only: the addon reads the
     // buffer and moves the viewport, never the pty. Registered against the panel id so
@@ -413,9 +578,25 @@ export function useTerminal(opts: UseTerminalOptions): void {
         startupClearHandled = true;
         drop = false; // the shell's startup clear — nothing to drop, and dropping truncates a wrapped prompt
       }
+      /*
+       * NEVER on the ALTERNATE screen.
+       *
+       * Dropping scrollback is a normal-buffer idea: the alt screen HAS no scrollback, and
+       * `term.clear()` there does not tidy anything — it throws away the running program's rendered
+       * screen, keeping only the cursor's row, while the program goes on believing its display is
+       * intact and redrawing only what changes. The result is a full-screen application (claude,
+       * vim, tmux) left visibly wrong until something forces it to repaint everything.
+       *
+       * `isScreenClear` already refuses the chunk that SWITCHES to the alt screen, but that guard
+       * only ever sees the switch. Every repaint AFTERWARDS is cursor-home plus one erase per row —
+       * exactly the shape of a `cls` — and a full-screen program repaints constantly. So the buffer
+       * TYPE is checked here, where it is actually known, both before the write and again in the
+       * callback (the chunk itself may have entered the alt screen in between).
+       */
+      if (drop && term.buffer.active.type === 'alternate') drop = false;
       if (drop) {
         term.write(data, () => {
-          if (!disposed) term.clear();
+          if (!disposed && term.buffer.active.type === 'normal') term.clear();
         });
       } else {
         term.write(data);
@@ -435,7 +616,22 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // same shape as a `cls`); arm the window so that repaint is not mistaken for a
       // clear (which would wipe scrollback), whether or not this xterm's size changes.
       resizedAt = Date.now();
-      if (term.cols === cols && term.rows === rows) return;
+      if (term.cols === cols && term.rows === rows) {
+        // The grid already matches, so there is no resize — but this is often the FIRST thing that
+        // happens to a newly opened terminal, whose container may not have been measurable when
+        // `term.open()` ran (the panel was still laying out, and the `fit()` there is wrapped in a
+        // try/catch for exactly that reason). xterm computes its viewport's scroll area during a
+        // render, so a terminal that never resized and never rendered has no scroll area — and a
+        // mouse wheel over it does nothing at all until something else forces the sync. Repainting
+        // here is that something: it costs one render of an already-correct grid, and it means the
+        // wheel works from the first frame rather than from whenever the next repaint happens to be.
+        try {
+          term.refresh(0, term.rows - 1);
+        } catch {
+          /* not measurable yet — the periodic repaint below will catch it */
+        }
+        return;
+      }
       // A shrink in EITHER dimension can leave stale cells beyond the new grid (a right
       // column tail and/or bottom rows); a pure grow cannot.
       const shrank = cols < term.cols || rows < term.rows;
@@ -595,6 +791,14 @@ export function useTerminal(opts: UseTerminalOptions): void {
     // BUFFER: it changes no content, scrollback, cursor, selection, or focus, so it
     // never interrupts typing or work. Skipped while the terminal is hidden (an
     // inactive tab → no offsetParent) so background terminals cost nothing.
+    // It is NOT skipped while the pointer rests on a link, though an earlier revision of the hover
+    // tip did skip it: a repaint makes xterm re-evaluate its link providers and re-report the hover,
+    // and suppressing the repaint was the belt-and-braces half of stopping the tip from flickering.
+    // The braces were harmful. A pointer left over a link — claude prints URLs, and a user reading
+    // output leaves the mouse where it lies — would suspend the self-heal INDEFINITELY, which is
+    // precisely the "the terminal stopped updating until I did something else" the timer exists to
+    // prevent. The belt (setHovered ignoring a re-report of the link it is already showing) is what
+    // actually fixed the flicker, and it needs no help.
     const repaintTimer = setInterval(() => {
       if (disposed || container.offsetParent === null) return;
       try {
@@ -610,6 +814,13 @@ export function useTerminal(opts: UseTerminalOptions): void {
       if (resizeTimer !== undefined) clearTimeout(resizeTimer);
       clearInterval(repaintTimer);
       container.removeEventListener('paste', swallowNativePaste, true); // issue 142 paste seam
+      // 024 US7 (#159 follow-up): drop the right-button guard and the hover tooltip element.
+      container.removeEventListener('mousedown', swallowRightButton, true);
+      container.removeEventListener('mouseup', swallowRightButton, true);
+      container.removeEventListener('auxclick', swallowRightButton, true);
+      if (linkTipTimer !== undefined) clearTimeout(linkTipTimer);
+      if (linkTipHideTimer !== undefined) clearTimeout(linkTipHideTimer);
+      linkTip.remove();
       observer.disconnect();
       offOutput();
       offGrid();

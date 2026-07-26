@@ -21,15 +21,17 @@ import { useExplorerData, ROOT_ID, type TreeNodeData } from './use-explorer-data
 import { ExplorerRowContext } from './explorer-context.js';
 import { buildContextMenuItems } from './context-menu-items.js';
 import { useExplorerKeybindings } from './explorer-keybindings.js';
+import { registerExplorerCommands, unregisterExplorerCommands } from './explorer-commands.js';
 import { useContextMenu } from '../context-menu-provider.js';
+import { setTreeDrag, clearTreeDrag, getTreeDrag, takeTreeDropEffect } from './tree-drag-store.js';
 import { useErrorNotice } from '../common/notification.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { openFileInTab, openFileInNewEditor } from '../editor/editor-open.js';
 import { getLastActiveEditor } from '../editor/last-active-editor.js';
-import { getEditorState } from '../editor/editor-state.js';
+import { getEditorState, useDirtyPathKey } from '../editor/editor-state.js';
 import { PanelSkeleton } from '../common/loading.js';
-import { collectPanels, normaliseFolder, resolveDragEffect } from '@throng/core';
+import { buildTreeDragPayload, collectPanels, normaliseFolder, resolveDragEffect } from '@throng/core';
 import type { MenuItem } from '../workspace/context-menu.js';
 
 const ROW_HEIGHT = 24;
@@ -75,6 +77,7 @@ export function FileTree({
     data,
     ready,
     error,
+    errorAction,
     clearError,
     initialOpenState,
     onToggle,
@@ -96,6 +99,10 @@ export function FileTree({
     reveal,
     revealInTree,
     drop,
+    undoFileOp,
+    redoFileOp,
+    canUndoFileOp,
+    canRedoFileOp,
   } = useExplorerData(rootFolder, projectId, treeRef, name, hiddenPaths);
 
   // US6 (#137) — the editor "Reveal File" action asks the tree to reveal a file by its absolute
@@ -121,7 +128,15 @@ export function FileTree({
   }, [rootFolder, revealInTree]);
 
   // 018 / FR-051 — was an inline strip; now the one notification model.
-  useErrorNotice(error, 'explorer-error', clearError);
+  useErrorNotice(error, 'explorer-error', clearError, errorAction);
+
+  // 024 US3 (#85): make undo/redo reachable whenever this PANE is the active one, not only while a
+  // DOM element inside the tree happens to hold focus — see explorer-commands.ts.
+  useEffect(() => {
+    const commands = { undoFileOp, redoFileOp };
+    registerExplorerCommands(commands);
+    return () => unregisterExplorerCommands(commands);
+  }, [undoFileOp, redoFileOp]);
   const { ref, width, height } = useSize();
   const { openMenu } = useContextMenu();
   const keybindings = useKeybindings(); // US1 (#125): file.* shortcuts shown on the menu items
@@ -141,6 +156,11 @@ export function FileTree({
     copy: explorerSettings.dragCopyModifier,
     move: explorerSettings.dragMoveModifier,
   };
+  // 024 US2/US4: the current selection + root, read at drag start to record the dragged items'
+  // absolute paths for a terminal / empty-panel drop (the tree's react-dnd channel is unreadable to
+  // a native drop target). Held in a ref so the window drag listeners need not re-register.
+  const dragPayloadRef = useRef({ selectedRelPaths, primarySelected, rootFolder });
+  dragPayloadRef.current = { selectedRelPaths, primarySelected, rootFolder };
 
   // The drag cursor + copy/move decision (FR-092/095). react-arborist uses react-dnd,
   // whose HTML5 backend sets dataTransfer.dropEffect on a WINDOW-level `dragover`
@@ -153,7 +173,28 @@ export function FileTree({
     if (!ready) return;
     const onDragStart = (e: DragEvent): void => {
       if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copyMove';
+      // 024 US2/US4: record the dragged items' absolute paths so a terminal / empty-panel drop can
+      // read them. Only our OWN tree drags (not an OS 'Files' drag), and only from within the tree.
+      if (Array.from(e.dataTransfer?.types ?? []).includes('Files')) return;
+      const target = e.target as HTMLElement | null;
+      const rowEl = target?.closest?.('.tree-row') as HTMLElement | null;
+      if (!rowEl || !target?.closest?.('[data-testid="file-explorer-tree"]')) return;
+      // Record the DRAGGED row's own path (read off its DOM), not whatever happens to be selected —
+      // dragging an unselected row must paste that row (#155/#114 follow-up). react-arborist drags the
+      // whole selection only when the grabbed row is part of it, so mirror that: if the dragged row is
+      // in the selection, carry the selection; otherwise carry just the dragged row.
+      const { selectedRelPaths: sel, rootFolder: root } = dragPayloadRef.current;
+      const payload = buildTreeDragPayload({
+        rootFolder: root,
+        draggedRelPath: rowEl.getAttribute('data-rel-path') ?? '',
+        draggedKind: rowEl.getAttribute('data-kind') === 'folder' ? 'folder' : 'file',
+        selectedRelPaths: sel,
+      });
+      if (!payload) return;
+      setTreeDrag(payload);
     };
+    const onDragEnd = (): void => clearTreeDrag();
+    window.addEventListener('dragend', onDragEnd);
     const onDragOver = (e: DragEvent): void => {
       if (!e.dataTransfer) return;
       // 018 / US9 (FR-063) — this listener is for the tree's OWN drags (moving a file within the
@@ -162,6 +203,24 @@ export function FileTree({
       // and not something Throng could do even if it wanted to. Leave OS drags entirely alone; the
       // panel's own drop target says `copy`.
       if (Array.from(e.dataTransfer.types).includes('Files')) return;
+      // 024 US2/US4: a tree drag hovering a throng target OUTSIDE the tree (a terminal, an untyped
+      // panel, an editor, a tab chip) is a valid drop for us — the target's own `onDragOver` set
+      // `dropEffect`, but react-dnd's window handler (which runs before this one, and for which any
+      // non-tree element is "not a drop target") just reset it to 'none'. Re-assert it, so Chromium
+      // delivers the `drop`: with `none` at release the browser fires `dragleave`, not `drop`, and the
+      // target's handler never runs.
+      //
+      // The effect re-asserted is the one the TARGET chose (takeTreeDropEffect), not a blanket
+      // 'copy' — a target that refused the drag must keep showing the "not allowed" cursor rather
+      // than promising a copy it will then decline. Nothing under the pointer → 'copy', because the
+      // panel bodies have uncovered gaps and a drag across one must not flicker.
+      const overTree = (e.target as HTMLElement | null)?.closest?.('[data-testid="file-explorer-tree"]');
+      if (!overTree && getTreeDrag()) {
+        const chosen = takeTreeDropEffect() ?? 'copy';
+        e.preventDefault();
+        e.dataTransfer.dropEffect = chosen;
+        return;
+      }
       const effect = resolveDragEffect(
         { ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey },
         dragConfigRef.current,
@@ -175,6 +234,7 @@ export function FileTree({
     return () => {
       window.removeEventListener('dragstart', onDragStart);
       window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('dragend', onDragEnd);
     };
   }, [ready]);
 
@@ -195,6 +255,8 @@ export function FileTree({
     clearClipboard,
     paste,
     remove,
+    undoFileOp,
+    redoFileOp,
   });
 
   const onContextMenu = useCallback(
@@ -261,14 +323,15 @@ export function FileTree({
         node: node.data,
         selectedRelPaths,
         clipboard,
-        ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile },
+        ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp },
+        undoState: { canUndo: canUndoFileOp, canRedo: canRedoFileOp },
         openIn,
         keybindings,
         projectRoot: rootFolder,
       });
       openMenu(event.clientX, event.clientY, items);
     },
-    [selectedRelPaths, clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, openMenu, ws, rootFolder, createFolder, createFile, keybindings],
+    [selectedRelPaths, clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, openMenu, ws, rootFolder, createFolder, createFile, keybindings, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp],
   );
 
   // Right-clicking empty space (below the rows) opens a menu targeting the ROOT —
@@ -282,13 +345,14 @@ export function FileTree({
         node: { relPath: '', kind: 'folder' },
         selectedRelPaths: [],
         clipboard,
-        ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile },
+        ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp },
+        undoState: { canUndo: canUndoFileOp, canRedo: canRedoFileOp },
         keybindings,
         projectRoot: rootFolder,
       });
       openMenu(event.clientX, event.clientY, items);
     },
-    [clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, createFolder, createFile, openMenu, keybindings, rootFolder],
+    [clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, createFolder, createFile, openMenu, keybindings, rootFolder, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp],
   );
   const cutPaths = useMemo(
     () => new Set(clipboard?.mode === 'cut' ? clipboard.relPaths : []),
@@ -326,9 +390,22 @@ export function FileTree({
     },
     [treeRef, onOpenFile],
   );
+  // Which of THIS project's files have unsaved changes (024 follow-up). The store hands back a
+  // normalised, sorted key of absolute paths; the tree turns it into the root-relative paths its
+  // rows are keyed by, and anything outside this project's root is another project's business.
+  const dirtyKey = useDirtyPathKey();
+  const dirtyPaths = useMemo(() => {
+    const prefix = `${rootFolder.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()}/`;
+    const rels = new Set<string>();
+    for (const abs of dirtyKey.split('\n')) {
+      if (abs.startsWith(prefix)) rels.add(abs.slice(prefix.length));
+    }
+    return rels;
+  }, [dirtyKey, rootFolder]);
+
   const rowCtx = useMemo(
-    () => ({ onContextMenu, cutPaths, openOnClick, onOpenFile }),
-    [onContextMenu, cutPaths, openOnClick, onOpenFile],
+    () => ({ onContextMenu, cutPaths, openOnClick, onOpenFile, dirtyPaths }),
+    [onContextMenu, cutPaths, openOnClick, onOpenFile, dirtyPaths],
   );
 
   return (
@@ -368,6 +445,14 @@ export function FileTree({
             onSelect={onSelect}
             onRename={onRename}
             onMove={onMove}
+            // 024 US3 follow-up: the arrow keys must MOVE THE SELECTION, not merely a cursor.
+            // react-arborist otherwise keeps "focused row" and "selected row" as two independent
+            // things, so arrowing away from a clicked file left the selection behind — and every
+            // file operation reads the SELECTION. Cut/copy then acted on the row the user had left,
+            // and Paste targeted its folder rather than the one the cursor was resting on. A tree
+            // whose highlight and whose operations disagree is a tree that silently does the wrong
+            // thing. Shift+Arrow still extends a multi-selection (it takes a different code path).
+            selectionFollowsFocus
             disableDrop={({ parentNode }) => parentNode.data.kind === 'file'}
           >
             {TreeRow}
