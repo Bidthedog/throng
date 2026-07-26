@@ -20,6 +20,9 @@ export interface ContextMenuOps {
   newFolder: (target: TargetNode) => void;
   /** Create a new file under the target (a folder → itself; a file → its parent). */
   newFile: (target: TargetNode) => void;
+  /** 024 US3 (#85): reverse / re-apply the last file operation. */
+  undoFileOp: () => void;
+  redoFileOp: () => void;
 }
 
 export function buildContextMenuItems(args: {
@@ -35,8 +38,11 @@ export function buildContextMenuItems(args: {
   keybindings?: Keybindings;
   /** The project's absolute root path (US9, #156) — used to render the "Copy Path" forms. */
   projectRoot?: string;
+  /** 024 US3 (#85): whether there is anything to undo / redo, so the items grey themselves
+   *  honestly rather than offering an action that would do nothing. */
+  undoState?: { canUndo: boolean; canRedo: boolean };
 }): MenuItem[] {
-  const { node, selectedRelPaths, clipboard, ops, openIn, keybindings, projectRoot } = args;
+  const { node, selectedRelPaths, clipboard, ops, openIn, keybindings, projectRoot, undoState } = args;
   // US1 (#125): the first bound chord for an explorer command, or undefined (→ no brackets).
   const sc = (action: string): string | undefined =>
     keybindings ? firstBinding(keybindings, action as never) : undefined;
@@ -57,6 +63,23 @@ export function buildContextMenuItems(args: {
     items.push({ label: 'Copy', icon: 'copy', shortcut: sc('file.copy'), onClick: () => ops.copy(targets) });
   }
   items.push({ label: 'Paste', icon: 'paste', disabled: clipboard === null, shortcut: sc('file.paste'), onClick: () => ops.paste(node) });
+  // 024 US3 (#85): undo/redo the last file OPERATION. Disabled — not hidden — when the stack is
+  // empty: an action that exists and is unavailable teaches what the menu can do; one that vanishes
+  // teaches nothing (and leaves the user wondering whether undo exists at all).
+  items.push({
+    label: 'Undo',
+    icon: 'undo',
+    disabled: !(undoState?.canUndo ?? false),
+    shortcut: sc('file.undo'),
+    onClick: () => ops.undoFileOp(),
+  });
+  items.push({
+    label: 'Redo',
+    icon: 'redo',
+    disabled: !(undoState?.canRedo ?? false),
+    shortcut: sc('file.redo'),
+    onClick: () => ops.redoFileOp(),
+  });
 
   // Create section.
   items.push({ separator: true });
@@ -69,11 +92,12 @@ export function buildContextMenuItems(args: {
     items.push({ label: 'Delete', icon: 'destroy', shortcut: sc('file.delete'), onClick: () => ops.remove(targets) });
   }
 
-  // Location section (US5/#158, FR-018a): a single "Open In" submenu, "Open in OS Explorer" FIRST,
-  // with the editor "Open In" targets (for files) beneath. Folders get just the OS reveal.
+  // Location section (US5/#158, FR-018a): a single "Open In" submenu, "OS File Explorer" FIRST,
+  // with the editor "Open In" targets (for files) beneath. Folders get just the OS reveal. The child
+  // reads "OS File Explorer" — the parent already says "Open In", so "Open in OS File Explorer" doubled it.
   items.push({ separator: true });
   const openInItems: MenuItem[] = [
-    { label: 'Open in OS File Explorer', icon: 'folderOpen', onClick: () => ops.reveal(node.relPath) },
+    { label: 'OS File Explorer', icon: 'folderOpen', onClick: () => ops.reveal(node.relPath) },
     ...(openIn ?? []),
   ];
   items.push({ label: 'Open In', icon: 'send', submenu: openInItems });
@@ -91,10 +115,10 @@ export function buildContextMenuItems(args: {
       label: 'Copy Path',
       icon: 'copy',
       submenu: [
-        { label: 'Absolute (Windows \\)', icon: 'copy', onClick: () => copyText(forms.absWin) },
-        { label: 'Absolute (Linux /)', icon: 'copy', onClick: () => copyText(forms.absLinux) },
-        { label: 'Relative (Windows \\)', icon: 'copy', onClick: () => copyText(forms.relWin) },
-        { label: 'Relative (Linux /)', icon: 'copy', onClick: () => copyText(forms.relLinux) },
+        { label: 'Absolute (Windows)', icon: 'copy', onClick: () => copyText(forms.absWin) },
+        { label: 'Absolute (POSIX)', icon: 'copy', onClick: () => copyText(forms.absPosix) },
+        { label: 'Relative (Windows)', icon: 'copy', onClick: () => copyText(forms.relWin) },
+        { label: 'Relative (POSIX)', icon: 'copy', onClick: () => copyText(forms.relPosix) },
       ],
     });
   }

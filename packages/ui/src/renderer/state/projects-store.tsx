@@ -19,6 +19,9 @@ export interface ProjectsContextValue {
   loadedIds: ReadonlySet<string>;
   loading: boolean;
   error: string | null;
+  /** What was being attempted when {@link error} happened, phrased to complete "…you tried to".
+   *  A bare RPC failure names neither the operation nor the project it was for. */
+  errorAction: string | null;
   /** Dismiss the current error immediately (011, US1, FR-002). */
   clearError(): void;
   refresh(): Promise<void>;
@@ -57,6 +60,12 @@ export function ProjectsProvider({
   const [projects, setProjects] = useState<ProjectDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorAction, setErrorAction] = useState<string | null>(null);
+  /** Record a failure with what was being attempted; `null` clears both. */
+  const fail = useCallback((message: string | null, action?: string) => {
+    setError(message);
+    setErrorAction(message === null ? null : (action ?? null));
+  }, []);
   // Lazy project loading (Constitution "Lazy project loading", research D7):
   // startup opens NOTHING — only the project the user explicitly opens (or just
   // created) becomes active. The daemon still persists a "last active" project,
@@ -71,13 +80,13 @@ export function ProjectsProvider({
   const refresh = useCallback(async () => {
     try {
       setProjects(await client.list());
-      setError(null);
+      fail(null);
     } catch (err) {
-      setError(messageOf(err));
+      fail(messageOf(err), 'load your projects');
     } finally {
       setLoading(false);
     }
-  }, [client]);
+  }, [client, fail]);
 
   useEffect(() => {
     void refresh();
@@ -103,20 +112,22 @@ export function ProjectsProvider({
     }
   }, [activeProject]);
 
+  // `label` completes "an error occurred when you tried to …", so a failed reorder no longer reports
+  // a bare RPC string with no hint of which action produced it.
   const run = useCallback(
-    async (action: () => Promise<unknown>): Promise<boolean> => {
+    async (label: string, action: () => Promise<unknown>): Promise<boolean> => {
       try {
         await action();
-        setError(null);
+        fail(null);
         await refresh();
         window.throng?.projects?.notifyChanged?.(); // sync other windows
         return true;
       } catch (err) {
-        setError(messageOf(err));
+        fail(messageOf(err), label);
         return false;
       }
     },
-    [refresh],
+    [refresh, fail],
   );
 
   const value = useMemo<ProjectsContextValue>(
@@ -126,25 +137,26 @@ export function ProjectsProvider({
       loadedIds,
       loading,
       error,
-      clearError: () => setError(null),
+      errorAction,
+      clearError: () => fail(null),
       refresh,
       createProject: async (input) => {
         try {
           const created = await client.create(input);
-          setError(null);
+          fail(null);
           setOpenedId(created.id); // a freshly created project opens immediately
           markLoaded(created.id);
           await refresh();
           window.throng?.projects?.notifyChanged?.(); // sync other windows
           return true;
         } catch (err) {
-          setError(messageOf(err));
+          fail(messageOf(err), 'create a project');
           return false;
         }
       },
-      updateProject: (params) => run(() => client.update(params)),
+      updateProject: (params) => run('update this project', () => client.update(params)),
       deleteProject: async (id) => {
-        await run(() => client.remove(id));
+        await run('delete this project', () => client.remove(id));
         setOpenedId((cur) => (cur === id ? null : cur)); // closing what was open
         setLoadedIds((prev) => {
           if (!prev.has(id)) return prev;
@@ -156,16 +168,16 @@ export function ProjectsProvider({
       switchProject: async (id) => {
         setOpenedId(id); // open on demand (lazy)
         markLoaded(id);
-        await run(() => client.setActive(id));
+        await run('open this project', () => client.setActive(id));
       },
       reorderProjects: async (orderedIds) => {
-        await run(() => client.reorder(orderedIds));
+        await run('reorder your projects', () => client.reorder(orderedIds));
       },
       setProjectHidden: async (id, hiddenPaths) => {
-        await run(() => client.setHidden(id, hiddenPaths));
+        await run('change what this project hides', () => client.setHidden(id, hiddenPaths));
       },
     }),
-    [projects, activeProject, loadedIds, markLoaded, loading, error, refresh, run, client],
+    [projects, activeProject, loadedIds, markLoaded, loading, error, errorAction, fail, refresh, run, client],
   );
 
   return <ProjectsContext.Provider value={value}>{children}</ProjectsContext.Provider>;

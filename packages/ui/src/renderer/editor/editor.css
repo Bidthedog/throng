@@ -204,6 +204,16 @@
   font-weight: 600;
 }
 
+/* The keyboard's position in the list — the option the arrows have reached and Enter would confirm.
+ * The list is one tab stop with a roving tabindex, so this is only ever ONE row, and it is drawn in
+ * the same highlight the pointer uses: which row is "under" the keyboard should not have to be
+ * learned separately from which row is under the mouse. */
+.language-picker__item--active:focus {
+  background: var(--throng-colour-menuItemHoverSurface, var(--accent, #6aa3ff));
+  color: var(--throng-colour-accentText, #06101f);
+  outline: none;
+}
+
 /* Hover STILL wins over the current-marker's accent text — you must be able to read the row you are
    pointing at against the highlight. */
 :where(body:not([data-window-blurred])) .language-picker__item--current:hover {

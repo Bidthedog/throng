@@ -145,7 +145,7 @@ export function DetachProvider({ children }: { children: ReactNode }): ReactElem
         } catch (err) {
           // A swallowed failure here is what made "nothing happens" so baffling —
           // surface it instead (FR: no silent persistence failures).
-          reportError(`Couldn't create the sub-workspace: ${messageOf(err)}`);
+          reportError(messageOf(err), 'create a sub-workspace');
         }
       })();
     },
@@ -185,7 +185,7 @@ export function DetachProvider({ children }: { children: ReactNode }): ReactElem
           await refresh();
           await loadFull();
         } catch (err) {
-          reportError(`Couldn't sync to the sub-workspace: ${messageOf(err)}`);
+          reportError(messageOf(err), 'sync this to a sub-workspace');
         }
       })();
     },
@@ -214,7 +214,7 @@ export function DetachProvider({ children }: { children: ReactNode }): ReactElem
           await refresh();
           await loadFull();
         } catch (err) {
-          reportError(`Couldn't update sub-workspaces after destroying a panel: ${messageOf(err)}`);
+          reportError(messageOf(err), 'update your sub-workspaces after destroying a panel');
         }
       })();
     },

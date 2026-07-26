@@ -32,9 +32,18 @@ import { IconButton } from './icon-button.js';
  *             than the six idioms being replaced.
  *   success — dismisses itself after five seconds.
  *   info    — same.
+ *   warning — same: it reports something that HAPPENED, just not as asked.
  */
 
-export type NoticeSeverity = 'error' | 'success' | 'info';
+/**
+ * `warning` sits with success and info, not with error, and that is the point: it auto-dismisses.
+ *
+ * A warning reports something that WENT AHEAD but not exactly as asked — a panel name adjusted
+ * because it was already taken. There is nothing for the user to decide and nothing at risk, so
+ * making them dismiss it would be nagging. An error, where something did NOT happen, still
+ * persists until acknowledged.
+ */
+export type NoticeSeverity = 'error' | 'success' | 'info' | 'warning';
 
 /** Long enough to read, short enough not to linger — and a STATED number, so a test can assert it. */
 export const AUTO_DISMISS_MS = 5000;
@@ -50,6 +59,17 @@ export interface Notice {
    * the work of inferring the event from the advice.
    */
   title?: string;
+  /**
+   * What the user was TRYING TO DO — "delete these items", "rename this file".
+   *
+   * A raw failure string from a daemon or the filesystem says what went wrong and nothing about
+   * what the user was doing when it did: "EPERM: operation not permitted, unlink" is an accurate
+   * message and a useless one. An error notice made of one composes into "An error occurred when
+   * you tried to delete these items" over the failure itself, so the two halves of the story are
+   * both present. An explicit {@link title} wins — a notice that already names its event does not
+   * need this one derived over the top of it.
+   */
+  action?: string;
   message: string;
   /** A list carried by the notice — e.g. the files an editor notice is about. */
   details?: readonly string[];
@@ -87,6 +107,29 @@ interface NotifyContextValue {
 
 const NotifyContext = createContext<NotifyContextValue | null>(null);
 
+/**
+ * The heading a notice shows above its message: its own title, else the failure phrased around what
+ * the user was doing. Only errors get the derived form — "an error occurred" is a lie over a success.
+ */
+export function noticeHeading(n: Pick<Notice, 'title' | 'action' | 'severity'>): string | undefined {
+  if (n.title) return n.title;
+  if (n.severity === 'error' && n.action) return `An error occurred when you tried to ${n.action}`;
+  return undefined;
+}
+
+/**
+ * A notice as PLAIN TEXT, for the clipboard.
+ *
+ * The whole notice, in the order it is read on screen: the context line ("what you were trying to
+ * do"), the failure itself, then any details. A user pasting this into a bug report should not have
+ * to retype the half of it that was rendered as separate elements — and the raw failure string is
+ * precisely the part they cannot retype accurately.
+ */
+export function noticeToText(n: Pick<Notice, 'title' | 'action' | 'severity' | 'message' | 'details'>): string {
+  const heading = noticeHeading(n);
+  return [heading, n.message, ...(n.details ?? [])].filter(Boolean).join('\n');
+}
+
 let seq = 0;
 
 export function NotificationProvider({ children }: { children: ReactNode }): ReactElement {
@@ -118,10 +161,28 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
     (input: NoticeInput) => {
       const id = `n${++seq}`;
       setNotices((cur) => {
-        // A surface that raises the same notice twice (a watcher firing on every change, say) must
-        // not stack up copies of it. The newest wins.
-        const same = input.testId ? cur.filter((n) => n.testId !== input.testId) : cur;
-        return [...same, { ...input, id }];
+        /*
+         * NOTICES STACK. Two failures are two things the user needs to know.
+         *
+         * This used to drop any live notice sharing the incoming one's test id, so a second delete
+         * that failed replaced the first rather than joining it — the user was told about one of
+         * their two problems, and the surface silently chose which. Test ids identify a SURFACE
+         * ("the explorer reported something"), not an EVENT, so they were never the right thing to
+         * collapse on.
+         *
+         * What must still not stack is the SAME notice raised repeatedly — a file watcher firing on
+         * every change re-reporting one unchanged failure. So the comparison is on what the notice
+         * SAYS. Identical content is one event seen twice; different content is two events.
+         */
+        const duplicate = cur.some(
+          (n) =>
+            n.severity === input.severity &&
+            n.message === input.message &&
+            n.title === input.title &&
+            n.action === input.action &&
+            n.testId === input.testId,
+        );
+        return duplicate ? cur : [...cur, { ...input, id }];
       });
 
       if (input.severity !== 'error') {
@@ -173,7 +234,7 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
             role={n.severity === 'error' ? 'alert' : undefined}
           >
             <div className="notice__body">
-              {n.title ? <h4 className="notice__title">{n.title}</h4> : null}
+              {noticeHeading(n) ? <h4 className="notice__title">{noticeHeading(n)}</h4> : null}
               <p className="notice__message" data-testid={n.testIds?.message}>
                 {n.message}
               </p>
@@ -186,6 +247,21 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
                 </ul>
               ) : null}
             </div>
+            {/* COPY. A failure message is the one thing in the application a user is most likely to
+                need somewhere else — in an issue, in a message to us — and it is also the one thing
+                they cannot accurately retype: a path, an errno, a daemon's own words. Selecting text
+                out of a toast that may auto-dismiss is not a serious answer. */}
+            <IconButton
+              token="copy"
+              className="notice__copy"
+              testId={n.testId ? `${n.testId}-copy` : `notice-${n.severity}-copy`}
+              title="Copy this message"
+              onClick={() => {
+                // `verbatim` — the text goes on the clipboard exactly as it reads, with no editor
+                // line/rectangle semantics attached to it.
+                void window.throng?.clipboard?.write({ text: noticeToText(n), mode: 'verbatim' });
+              }}
+            />
             {/* EVERY notice is dismissable — including the restore notice, which was a stateless
                 component with no dismiss path at all, so the only way to be rid of it was to make
                 the condition it reported stop being true. */}
@@ -227,14 +303,41 @@ export function useErrorNotice(
   error: string | null | undefined,
   testId: string,
   clearError?: () => void,
+  /** What the user was doing when it failed — see {@link Notice.action}. Stores that record the
+   *  attempted operation alongside the error pass it here, so the notice says both halves. */
+  action?: string | null,
 ): void {
   const { notify, clear } = useNotify();
+  /*
+   * Has the USER dismissed one of this surface's notices?
+   *
+   * Dismissing a notice acknowledges the failure, which tells the store to clear its error field —
+   * and clearing it used to run the `clear(testId)` branch below, which removes EVERY notice from
+   * this surface. So dismissing the first of two stacked errors took the second one with it: the
+   * user acknowledged one problem and was silently relieved of being told about the other.
+   *
+   * A programmatic clear (the next operation succeeded) should still tidy the surface's notices
+   * away. A clear that is merely the echo of the user's own dismissal should not — those notices
+   * persist until they are each dismissed, which is what "an error persists until dismissed" means.
+   */
+  const dismissedByUser = useRef(false);
 
   useEffect(() => {
-    if (error) notify({ severity: 'error', message: error, testId, onDismiss: clearError });
-    else clear(testId);
+    if (error) {
+      dismissedByUser.current = false;
+      notify({
+        severity: 'error',
+        message: error,
+        action: action ?? undefined,
+        testId,
+        onDismiss: () => {
+          dismissedByUser.current = true;
+          clearError?.();
+        },
+      });
+    } else if (!dismissedByUser.current) clear(testId);
     // `clearError` is a store callback and is stable; including it would re-notify on every render
     // of a store that rebuilds its handlers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [error, testId, notify, clear]);
+  }, [error, action, testId, notify, clear]);
 }

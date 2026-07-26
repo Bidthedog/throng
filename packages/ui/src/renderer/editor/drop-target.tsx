@@ -58,7 +58,12 @@ export function useDropHandler(
       // notice: a drop of five files that rejects two must explain BOTH, so the id carries the path.
       // (De-duplication is by test id, so a shared id would show only the last refusal.)
       const refuse = (absPath: string, message: string): void => {
-        notify({ severity: 'error', message, testId: `os-drop-error-${absPath}` });
+        notify({
+          severity: 'error',
+          action: 'open a file you dropped here',
+          message,
+          testId: `os-drop-error-${absPath}`,
+        });
       };
 
       for (const absPath of paths) {
@@ -157,6 +162,7 @@ export function PanelDropTarget({
         if (files.length > 0 && paths.length === 0) {
           notify({
             severity: 'error',
+            action: 'open a file you dropped here',
             message: 'That item has no file on disk, so it cannot be opened.',
             testId: 'os-drop-error-no-path',
           });

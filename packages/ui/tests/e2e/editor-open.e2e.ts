@@ -74,6 +74,20 @@ test('opening a file into a dirty editor shows the four-choice prompt; cancel is
       await tree.getByText('beta.txt', { exact: true }).click();
       await expect(win.getByTestId('unsaved-open-dialog')).toBeVisible();
 
+      // The document NAMES in the question are set apart from the sentence around them — they are
+      // what the decision is about, and the one part that must be readable at a glance (024 follow-up).
+      const names = win.getByTestId('unsaved-open-dialog').locator('.modal__name');
+      await expect(names).toHaveCount(2); // the dirty editor, and the file arriving
+      const emphasis = await names.first().evaluate((el) => {
+        const own = getComputedStyle(el as HTMLElement);
+        const around = getComputedStyle((el as HTMLElement).parentElement!);
+        return {
+          bolder: Number(own.fontWeight) > Number(around.fontWeight),
+          larger: parseFloat(own.fontSize) > parseFloat(around.fontSize),
+        };
+      });
+      expect(emphasis).toEqual({ bolder: true, larger: true });
+
       // Cancel → nothing changes: editor still shows the edited alpha, still dirty.
       await win.getByTestId('unsaved-open-cancel').click();
       await expect(win.getByTestId('unsaved-open-dialog')).toHaveCount(0);

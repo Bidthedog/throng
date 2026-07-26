@@ -44,11 +44,12 @@ function SubWorkspaceGrip({ id }: { id: string }): ReactElement {
  * "edited" like a project (no folder), so Open replaces edit.
  */
 export function SubworkspacesPanel(): ReactElement {
-  const { subWorkspaces, loadedIds, open, rename, recolour, remove, reorder, error, clearError } =
-    useSubWorkspaces();
+  const {
+    subWorkspaces, loadedIds, open, rename, recolour, remove, reorder, error, errorAction, clearError,
+  } = useSubWorkspaces();
 
   // 018 / FR-051 — was an inline strip whose CSS was a verbatim copy of the Projects panel's.
-  useErrorNotice(error, 'subworkspace-error', clearError);
+  useErrorNotice(error, 'subworkspace-error', clearError, errorAction);
 
   const confirm = useConfirm();
   const settings = useAppSettings();

@@ -27,14 +27,14 @@ test('rejects a duplicate/nested root folder on create and on edit, keeping the 
     await win.getByTestId('project-name-input').fill('Beta');
     await win.getByTestId('project-save').click();
     await expect(win.getByTestId('project-form')).toBeVisible();
-    await expect(win.getByTestId('project-error')).toBeVisible();
+    await expect(win.getByTestId('project-error').first()).toBeVisible();
     await expect(win.getByTestId('project-root-input')).toHaveClass(/project-form__field--error/);
 
     // Descendant root → still rejected.
     await win.getByTestId('project-root-input').fill('C:/code/alpha/sub');
     await win.getByTestId('project-save').click();
     await expect(win.getByTestId('project-form')).toBeVisible();
-    await expect(win.getByTestId('project-error')).toBeVisible();
+    await expect(win.getByTestId('project-error').first()).toBeVisible();
 
     // A non-overlapping root → accepted; form closes.
     await win.getByTestId('project-root-input').fill('C:/code/beta');
@@ -48,6 +48,6 @@ test('rejects a duplicate/nested root folder on create and on edit, keeping the 
     await win.getByTestId('project-root-input').fill('C:/code/alpha');
     await win.getByTestId('project-save').click();
     await expect(win.getByTestId('project-form')).toBeVisible();
-    await expect(win.getByTestId('project-error')).toBeVisible();
+    await expect(win.getByTestId('project-error').first()).toBeVisible();
   });
 });

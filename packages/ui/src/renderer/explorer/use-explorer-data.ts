@@ -18,13 +18,22 @@ import type { NodeApi, TreeApi } from 'react-arborist';
  */
 type OpenMap = { [id: string]: boolean };
 import {
+  deletePaths,
+  emptyStack,
   isExcluded,
   nextExpandTargets,
   parentRel,
+  plannedMoves,
+  recordFileOp,
+  redoFileOp as popRedo,
   resolveTarget,
   toNodes,
+  undoFileOp as popUndo,
+  validateFileOp,
   type DirEntry,
   type ExpandNode,
+  type FileOpUndoEntry,
+  type FileOpUndoStack,
   type TargetNode,
 } from '@throng/core';
 import { useAppSettings } from '../config/config-store.js';
@@ -50,6 +59,15 @@ export interface ExplorerApi {
   data: TreeNodeData[];
   ready: boolean;
   error: string | null;
+  /**
+   * What the user was trying to do when {@link error} happened, phrased to complete "…you tried to".
+   *
+   * The failures here arrive as raw filesystem strings — "EPERM: operation not permitted, unlink" —
+   * which say what went wrong and nothing whatever about what was being attempted. The operation is
+   * known at the call site and nowhere else, so it is recorded WITH the error rather than guessed at
+   * by whoever displays it.
+   */
+  errorAction: string | null;
   /** Dismiss the current error banner immediately (011, US1, FR-002). */
   clearError: () => void;
   initialOpenState: OpenMap;
@@ -74,6 +92,12 @@ export interface ExplorerApi {
   createFile: (target: TargetNode | null) => void;
   reveal: (relPath: string) => void;
   drop: (dragRelPaths: string[], destRelDir: string, asCopy: boolean) => void;
+  // 024 US3 (#85): reverse (or re-apply) the last file OPERATION — move, rename or delete.
+  undoFileOp: () => void;
+  redoFileOp: () => void;
+  /** Whether there is anything to undo / redo, so a menu can grey its item honestly. */
+  canUndoFileOp: boolean;
+  canRedoFileOp: boolean;
 }
 
 const storageKey = (projectId: string): string => `throng.explorer.tree.${projectId}`;
@@ -127,7 +151,7 @@ export function useExplorerData(
 ): ExplorerApi {
   const settings = useAppSettings();
   const confirm = useConfirm();
-  const { documents } = useServices();
+  const { documents, fileOpUndo } = useServices();
   const globs = settings.explorer.excludeGlobs;
   const globsKey = globs.join(' ');
 
@@ -149,6 +173,69 @@ export function useExplorerData(
     [documents, projectId],
   );
 
+  /*
+   * FILE-OPERATION UNDO (024 US3, #85).
+   *
+   * The stack is per PROJECT and persisted through the daemon, so undo survives a restart: a user
+   * who deletes the wrong folder and closes throng before noticing can still put it back. The pure
+   * engine in core decides WHAT to reverse; this decides how to apply it, because only the renderer
+   * knows the project root that turns an entry's absolute paths back into the confined,
+   * root-relative paths the `files.*` bridge accepts.
+   *
+   * Entries record ABSOLUTE paths deliberately. A relative path is meaningless the moment the
+   * project root changes, and a stack that outlives a session must still name the same files.
+   */
+  const [stack, setStack] = useState<FileOpUndoStack>(emptyStack());
+  const stackRef = useRef(stack);
+  stackRef.current = stack;
+
+  /** Absolute path for a root-relative one, in the root's own separator style. */
+  const toAbs = useCallback(
+    (rel: string): string => {
+      const root = (rootFolder ?? '').replace(/[\\/]+$/, '');
+      const sep = root.includes('\\') ? '\\' : '/';
+      return rel ? `${root}${sep}${rel.split('/').join(sep)}` : root;
+    },
+    [rootFolder],
+  );
+
+  /** Root-relative path for an absolute one, or null when it lies outside this project. */
+  const toRel = useCallback(
+    (abs: string): string | null => {
+      const norm = (v: string): string => v.replace(/\\/g, '/').replace(/\/+$/, '');
+      const root = norm(rootFolder ?? '');
+      const path = norm(abs);
+      if (!root || path.toLowerCase() === root.toLowerCase()) return null;
+      if (!path.toLowerCase().startsWith(`${root.toLowerCase()}/`)) return null;
+      return path.slice(root.length + 1);
+    },
+    [rootFolder],
+  );
+
+  /** Push an entry and persist the new stack. Recording never fails an operation that succeeded. */
+  const pushUndo = useCallback(
+    (entry: FileOpUndoEntry) => {
+      const next = recordFileOp(stackRef.current, entry);
+      stackRef.current = next;
+      setStack(next);
+      void fileOpUndo.save(projectId, next);
+    },
+    [fileOpUndo, projectId],
+  );
+
+  // Load this project's history when it opens. A project with none simply starts empty.
+  useEffect(() => {
+    let cancelled = false;
+    void fileOpUndo.load(projectId).then((loaded) => {
+      if (cancelled) return;
+      stackRef.current = loaded;
+      setStack(loaded);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fileOpUndo, projectId]);
+
   const [childrenMap, setChildrenMap] = useState<Map<string, TreeNodeData[]>>(new Map());
   const [initialOpenState, setInitialOpenState] = useState<OpenMap>({ [ROOT_ID]: true });
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -156,17 +243,36 @@ export function useExplorerData(
   const [clipboard, setClipboard] = useState<ClipboardState>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorAction, setErrorAction] = useState<string | null>(null);
   const deleteMode = settings.explorer.deleteMode;
+
+  /** Record a failure together with what was being attempted; `null` clears both. */
+  const fail = useCallback((message: string | null, action?: string) => {
+    setError(message);
+    setErrorAction(message === null ? null : (action ?? null));
+  }, []);
+  const failRef = useRef(fail);
+  failRef.current = fail;
 
   // Read directory contents, filter excludes, sort folders-first. No state writes.
   const fetchChildren = useCallback(
     async (relDir: string): Promise<TreeNodeData[] | null> => {
       const res = await window.throng?.files?.list?.(relDir);
       if (!res || 'error' in res) {
-        if (res && 'error' in res) setError(res.error);
+        if (res && 'error' in res) failRef.current(res.error, 'list the contents of this folder');
         return null;
       }
-      setError(null);
+      /*
+       * A SUCCESSFUL READ CLEARS NOTHING.
+       *
+       * This used to clear the error, and directory reads happen constantly — the file watcher
+       * reloads every loaded folder on any change, including the change the user's own failed
+       * operation did not make. So a real failure ("that name already exists") was wiped off the
+       * screen a few hundred milliseconds later by an unrelated background listing, and an error
+       * that silently vanishes is exactly what the notification model exists to prevent. Listing a
+       * folder is not the user succeeding at the thing they were refused; only the next OPERATION
+       * (see `report`) is, and only a dismissal is their acknowledgement.
+       */
       return toNodes(res.entries as DirEntry[], relDir)
         .filter((n) => !isExcluded(n.relPath, globs))
         .map((n) => ({
@@ -546,10 +652,13 @@ export function useExplorerData(
   // --- File operations (US3). All mutations go through the sandboxed files.*
   // bridge (confinement + naming enforced in the main process); the live-sync
   // watcher then refreshes the tree. Errors surface in the pane's error banner. ---
-  const report = useCallback((res: { ok: true } | { error: string } | undefined | null): void => {
-    if (res && 'error' in res) setError(res.error);
-    else setError(null);
-  }, []);
+  const report = useCallback(
+    (res: { ok: true } | { error: string } | undefined | null, action: string): void => {
+      if (res && 'error' in res) fail(res.error, action);
+      else fail(null);
+    },
+    [fail],
+  );
 
   const kindOf = useCallback(
     (relPath: string): 'file' | 'folder' | null => {
@@ -591,8 +700,11 @@ export function useExplorerData(
       const parentDir = parentRel(rel); // '' at the root, else the containing dir
       const newRel = parentDir ? `${parentDir}/${next}` : next;
       void window.throng?.files?.rename?.(rel, next).then((res) => {
-        report(res);
+        report(res, 'rename this item');
         if (!(res && 'error' in res)) {
+          // 024 US3: a successful rename is undoable. Recorded with ABSOLUTE paths so the entry
+          // still names the same file after a restart.
+          pushUndo({ kind: 'rename', from: toAbs(rel), to: toAbs(newRel), at: Date.now() });
           // #122 — the rename changed the node's id, so the old selection no longer
           // matches. Keep the renamed file SELECTED at its new path (never opening
           // an editor). Reconcile the parent dir from the awaited result so the new
@@ -617,7 +729,7 @@ export function useExplorerData(
         });
       });
     },
-    [report, documents, projectId, reloadDirs],
+    [report, documents, projectId, reloadDirs, pushUndo, toAbs],
   );
 
   const cut = useCallback((relPaths: string[]) => {
@@ -644,7 +756,17 @@ export function useExplorerData(
         const affected = [...new Set([...clipboard.relPaths.map(parentRel), dest])];
         const moving = clipboard.relPaths;
         void window.throng?.files?.move?.(moving, dest).then((res) => {
-          report(res);
+          report(res, 'move these items');
+          if (!(res && 'error' in res)) {
+            pushUndo({
+              kind: 'move',
+              items: moving.map((from) => {
+                const leaf = from.split('/').pop() ?? from;
+                return { from: toAbs(from), to: toAbs(dest ? `${dest}/${leaf}` : leaf) };
+              }),
+              at: Date.now(),
+            });
+          }
           void reloadDirs(affected);
           // A move changes the file's project-relative path, so the override moves with it (016).
           for (const from of moving) carryOverride(from, dest);
@@ -652,12 +774,12 @@ export function useExplorerData(
         setClipboard(null);
       } else {
         void window.throng?.files?.copy?.(clipboard.relPaths, dest).then((res) => {
-          report(res);
+          report(res, 'paste these items');
           void reloadDirs([dest]);
         });
       }
     },
-    [clipboard, report, reloadDirs, carryOverride],
+    [clipboard, report, reloadDirs, carryOverride, pushUndo, toAbs],
   );
 
   const remove = useCallback(
@@ -676,7 +798,16 @@ export function useExplorerData(
       });
       if (!ok) return;
       void window.throng?.files?.delete?.(items, deleteMode).then((res) => {
-        report(res);
+        report(res, items.length === 1 ? 'delete this item' : 'delete these items');
+        // Only a RECYCLED delete is undoable — a permanent one has nothing to restore from, and
+        // recording it would offer the user an undo that could not possibly work (FR-007).
+        if (!(res && 'error' in res) && deleteMode === 'recycle') {
+          pushUndo({
+            kind: 'delete',
+            items: items.map((rel) => ({ originalPath: toAbs(rel) })),
+            at: Date.now(),
+          });
+        }
         // Remove the override with the file (016, FR-028e). Pruning is only an opportunistic
         // backstop for files deleted OUTSIDE throng — relying on it here would let a file
         // re-created at the same path silently inherit the deleted file's language.
@@ -687,7 +818,7 @@ export function useExplorerData(
         }
       });
     },
-    [confirm, deleteMode, report, documents, projectId],
+    [confirm, deleteMode, report, documents, projectId, pushUndo, toAbs],
   );
 
   // After creating a folder, enter inline rename on it once it appears (FR-033).
@@ -710,10 +841,10 @@ export function useExplorerData(
         treeRef.current?.open(dest);
       }
       const res = await window.throng?.files?.newFolder?.(dest);
-      if (res && 'error' in res) setError(res.error);
+      if (res && 'error' in res) fail(res.error, 'create a new folder');
       else if (res && 'relPath' in res) pendingRename.current = res.relPath;
     },
-    [ensureLoaded, treeRef],
+    [ensureLoaded, treeRef, fail],
   );
 
   // New File (FR-096): create under the selected folder (a file → its parent),
@@ -726,15 +857,15 @@ export function useExplorerData(
         treeRef.current?.open(dest);
       }
       const res = await window.throng?.files?.newFile?.(dest);
-      if (res && 'error' in res) setError(res.error);
+      if (res && 'error' in res) fail(res.error, 'create a new file');
       else if (res && 'relPath' in res) pendingRename.current = res.relPath;
     },
-    [ensureLoaded, treeRef],
+    [ensureLoaded, treeRef, fail],
   );
 
   const reveal = useCallback(
     (relPath: string) => {
-      void window.throng?.files?.reveal?.(relPath).then(report);
+      void window.throng?.files?.reveal?.(relPath).then((res) => report(res, 'open this item in the system file explorer'));
     },
     [report],
   );
@@ -752,7 +883,19 @@ export function useExplorerData(
       const openBefore = asCopy ? [] : snapshotOpen();
       const op = asCopy ? window.throng?.files?.copy : window.throng?.files?.move;
       void op?.(items, destRelDir).then(async (res) => {
-        report(res);
+        report(res, asCopy ? 'copy these items' : 'move these items');
+        // A COPY is not undoable by this stack: nothing was lost, and "undo" would mean deleting a
+        // file the user can simply delete themselves. A MOVE is.
+        if (!asCopy && !(res && 'error' in res)) {
+          pushUndo({
+            kind: 'move',
+            items: items.map((from) => {
+              const leaf = from.split('/').pop() ?? from;
+              return { from: toAbs(from), to: toAbs(destRelDir ? `${destRelDir}/${leaf}` : leaf) };
+            }),
+            at: Date.now(),
+          });
+        }
         if (!asCopy) {
           // Whether we can PROVE a moved node's absence after the reload: only if the
           // destination is loaded (else reloadDirs skips it and can't tell us).
@@ -795,14 +938,125 @@ export function useExplorerData(
         }
       });
     },
-    [report, carryOverride, snapshotOpen, reloadDirs],
+    [report, carryOverride, snapshotOpen, reloadDirs, pushUndo, toAbs],
   );
+
+  /**
+   * Apply one entry in one direction (FR-006/007/008).
+   *
+   * Validated FIRST against the world as it is now: the world moves on between an operation and its
+   * undo — the file was renamed again by hand, something else now occupies the name, the item was
+   * emptied from the Recycle Bin — and replaying blindly would either fail obscurely or overwrite
+   * something the user never agreed to lose. A refusal is REPORTED, never silent (FR-008): a user
+   * who pressed undo and saw nothing at all would reasonably conclude undo is broken.
+   */
+  const applyEntry = useCallback(
+    async (entry: FileOpUndoEntry, direction: 'undo' | 'redo'): Promise<boolean> => {
+      const action = direction === 'undo' ? 'undo that file operation' : 'redo that file operation';
+      /*
+       * Existence is asked of the CONFINED bridge — not of the loaded tree.
+       *
+       * The obvious shortcut is to consult `childrenMap`, since the tree has already listed the
+       * folders it is showing. It is wrong: a folder the user never expanded has no listing, so
+       * every file inside it reads as MISSING, and an undo that moves a file back out of an
+       * unexpanded folder refuses itself with "it is no longer there" — about a file that is
+       * plainly there. What the tree happens to have loaded is a rendering detail; the world is
+       * the world.
+       *
+       * `validate` wants a SYNC predicate, so the paths it will ask about are resolved first —
+       * they are known from the entry — and it is handed the answers.
+       */
+      const candidates = new Set<string>(
+        entry.kind === 'delete'
+          ? deletePaths(entry)
+          : plannedMoves(entry, direction).flatMap((m) => [m.from, m.to]),
+      );
+      const known = new Map<string, boolean>();
+      await Promise.all(
+        [...candidates].map(async (abs) => {
+          const rel = toRel(abs);
+          known.set(abs, rel === null ? false : ((await window.throng?.files?.exists?.(rel)) ?? false));
+        }),
+      );
+      const exists = (abs: string): boolean => known.get(abs) ?? false;
+      const check = validateFileOp(entry, direction, exists);
+      if (!check.ok) {
+        fail(check.reason, action);
+        return false;
+      }
+
+      if (entry.kind === 'delete') {
+        // Undo restores from the Recycle Bin; redo trashes again. A permanent delete cannot be
+        // undone at all, and `validate` has already said so by the time we get here.
+        const rels = deletePaths(entry).map(toRel).filter((r): r is string => r !== null);
+        if (rels.length === 0) return false;
+        const res =
+          direction === 'undo'
+            ? await Promise.all(rels.map((rel) => window.throng?.files?.restore?.(rel, entry.at)))
+            : [await window.throng?.files?.delete?.(rels, deleteMode)];
+        const failed = res.find((r) => r && 'error' in r);
+        if (failed && 'error' in failed) {
+          fail(failed.error, action);
+          return false;
+        }
+        await reloadDirs([...new Set(rels.map(parentRel))]);
+        return true;
+      }
+
+      // A move and a rename are the same shape once planned: take `from` to `to`. Which BRIDGE call
+      // that is depends only on whether the parent changed — renaming in place, or moving across.
+      for (const move of plannedMoves(entry, direction)) {
+        const fromRel = toRel(move.from);
+        const toRelPath = toRel(move.to);
+        if (fromRel === null || toRelPath === null) {
+          fail('That file is no longer inside this project.', action);
+          return false;
+        }
+        const sameParent = parentRel(fromRel) === parentRel(toRelPath);
+        const leaf = toRelPath.split('/').pop() ?? toRelPath;
+        const res = sameParent
+          ? await window.throng?.files?.rename?.(fromRel, leaf)
+          : await window.throng?.files?.move?.([fromRel], parentRel(toRelPath));
+        if (res && 'error' in res) {
+          fail(res.error, action);
+          return false;
+        }
+        carryOverride(fromRel, parentRel(toRelPath));
+        await reloadDirs([...new Set([parentRel(fromRel), parentRel(toRelPath)])]);
+      }
+      return true;
+    },
+    [toRel, fail, deleteMode, reloadDirs, carryOverride],
+  );
+
+  const undoFileOp = useCallback(() => {
+    const popped = popUndo(stackRef.current);
+    if (!popped) return; // nothing to undo is not a failure, and says so by being silent
+    void applyEntry(popped.entry, 'undo').then((ok) => {
+      if (!ok) return; // a refused entry STAYS on the undo stack — the user may fix the world and retry
+      stackRef.current = popped.stack;
+      setStack(popped.stack);
+      void fileOpUndo.save(projectId, popped.stack);
+    });
+  }, [applyEntry, fileOpUndo, projectId]);
+
+  const redoFileOp = useCallback(() => {
+    const popped = popRedo(stackRef.current);
+    if (!popped) return;
+    void applyEntry(popped.entry, 'redo').then((ok) => {
+      if (!ok) return;
+      stackRef.current = popped.stack;
+      setStack(popped.stack);
+      void fileOpUndo.save(projectId, popped.stack);
+    });
+  }, [applyEntry, fileOpUndo, projectId]);
 
   return {
     data,
     ready,
     error,
-    clearError: () => setError(null),
+    errorAction,
+    clearError: () => fail(null),
     initialOpenState,
     onToggle,
     onSelect,
@@ -823,5 +1077,9 @@ export function useExplorerData(
     createFile,
     reveal,
     drop,
+    undoFileOp,
+    redoFileOp,
+    canUndoFileOp: stack.undo.length > 0,
+    canRedoFileOp: stack.redo.length > 0,
   };
 }
