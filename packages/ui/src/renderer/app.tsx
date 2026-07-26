@@ -20,11 +20,15 @@ import { useServices } from './composition-root.js';
 import { TabGroup } from './workspace/tab-group.js';
 import { focusPanel, requestPanelFocus } from './workspace/panel-focus.js';
 import { setActivePane } from './workspace/active-pane.js';
+import { asKeyboardMenu } from './workspace/keyboard-menu.js';
+import { requestPanelRename } from './workspace/panel-rename.js';
+import { getExplorerCommands } from './explorer/explorer-commands.js';
 import { chordKey, isBackquote } from './config/chord-key.js';
 import { DetachProvider } from './workspace/detach-context.js';
 import { PanelRenameSync } from './workspace/panel-rename-sync.js';
 import { PanelDestroySync } from './workspace/panel-destroy-sync.js';
 import { PanelStateSync } from './workspace/panel-state-sync.js';
+import { PanelNameSync } from './workspace/panel-name-sync.js';
 import { useErrorNotice } from './common/notification.js';
 import { windowTitle } from './common/window-title.js';
 import { HoverSuppression } from './common/use-hover-suppression.js';
@@ -77,6 +81,42 @@ function TitleManager(): null {
     window.throng?.setTitle?.(windowTitle(`${label}${elevated ? ' [ADMIN]' : ''}`));
   }, [activeProject, layout, elevated]);
   return null;
+}
+
+/**
+ * The on-screen rectangle of the text CURSOR inside `el`, if there is one.
+ *
+ * Read from the DOM selection rather than from any editor's own API, so this stays one generic
+ * helper: CodeMirror's caret IS the document selection, and a surface with no text selection simply
+ * yields nothing and falls back to its element box.
+ *
+ * It measures the selection's FOCUS end — the end that moves, where the cursor actually is — and not
+ * the selection's bounding box. The box of a long unwrapped line selected with Shift+End starts at
+ * the line's left edge, so anchoring to it put the menu back at the START of the selection, yards
+ * from the cursor the user had just moved. A collapsed range reports width 0 with a correct
+ * position, which is exactly what is wanted; an all-zero rect (a node that cannot be measured) falls
+ * back to the whole selection, and then to the element.
+ */
+function caretRect(el: HTMLElement): DOMRect | null {
+  const selection = document.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  if (!el.contains(range.startContainer)) return null;
+  const { focusNode, focusOffset } = selection;
+  if (focusNode !== null && el.contains(focusNode)) {
+    const atCursor = document.createRange();
+    try {
+      atCursor.setStart(focusNode, focusOffset);
+      atCursor.collapse(true);
+      const cursor = atCursor.getBoundingClientRect();
+      if (cursor.height !== 0 || cursor.width !== 0) return cursor;
+    } catch {
+      /* an offset the node cannot take — fall through to the selection's own box */
+    }
+  }
+  const rect = range.getBoundingClientRect();
+  if (rect.height === 0 && rect.width === 0) return null;
+  return rect;
 }
 
 /**
@@ -165,13 +205,20 @@ function KeybindingsHandler({
       'view.fullscreen',
       'view.toggleProjects',
       'view.toggleExplorer',
+      'menu.open',
+      'panel.rename',
+      'file.undo',
+      'file.redo',
     ]);
     const onKeyDown = (e: KeyboardEvent): void => {
       // Shift is deliberately dropped for most keys (the produced character already
-      // encodes it, e.g. "Ctrl++" is Ctrl+Shift+"="). The BACKTICK key is the
-      // exception: it is normalised from its physical key and its Shift state IS the
-      // signal that distinguishes focus.cycle from focus.cycleBack across layouts.
+      // encodes it, e.g. "Ctrl++" is Ctrl+Shift+"="). Two exceptions keep Shift: the
+      // BACKTICK key (normalised from its physical key, so Shift distinguishes
+      // focus.cycle from focus.cycleBack across layouts) and FUNCTION keys, where Shift
+      // is NOT encoded in the produced character (Shift+F10 still reports key "F10") —
+      // without this, a Shift+F10 binding like menu.open (024 US6) would never match.
       const backtick = isBackquote(e);
+      const keepShift = backtick || /^F\d{1,2}$/.test(e.key);
       // Window-level chords are live in every scope (012, FR-024b) — including from inside an
       // editor's find bar, so the user can always move focus out of wherever they are. The
       // HANDLED gate below is what keeps this listener to zoom/focus/view and nothing else.
@@ -181,7 +228,7 @@ function KeybindingsHandler({
           key: chordKey(e),
           ctrl: e.ctrlKey,
           alt: e.altKey,
-          ...(backtick ? { shift: e.shiftKey } : {}),
+          ...(keepShift ? { shift: e.shiftKey } : {}),
         },
         scopeInput(),
       );
@@ -243,6 +290,60 @@ function KeybindingsHandler({
           break;
         case 'view.toggleExplorer':
           cbRef.current.onToggleExplorer();
+          break;
+        // 024 US3 (#85): undo/redo a FILE operation. Resolved here as well as in the tree's own
+        // handler, because `file.*` only resolves at all while the active pane is Files & Folders —
+        // so this cannot reach an editor, and it works wherever focus sits inside the pane.
+        case 'file.undo':
+          getExplorerCommands()?.undoFileOp();
+          break;
+        case 'file.redo':
+          getExplorerCommands()?.redoFileOp();
+          break;
+        case 'panel.rename': {
+          // Rename the ACTIVE panel. Handled here, beside the other panel-scoped chords, because
+          // this listener is the one place that knows which panel is active; the header itself owns
+          // the rename box and registers how to open it (panel-rename.ts).
+          const target = activePanelId();
+          if (target) requestPanelRename(target);
+          break;
+        }
+        case 'menu.open':
+          // 024 US6 (FR-018c): open the FOCUSED item's context menu without a mouse. Rather than
+          // rebuild each surface's menu, re-dispatch a `contextmenu` at the focused element's centre —
+          // the explorer row, editor and terminal all already handle that event, so this is one path
+          // for all three. No focused element with a menu → nothing happens.
+          {
+            let el = document.activeElement as HTMLElement | null;
+            // Files & Folders: react-arborist keeps DOM focus on the tree CONTAINER (roving focus),
+            // so a synthetic contextmenu on activeElement would open the ROOT menu even when a row is
+            // highlighted (#157 follow-up). Redirect to the highlighted row; when nothing is
+            // highlighted, to the root row — so the menu still comes off the root folder, not mid-pane.
+            const tree = el?.closest?.('[data-testid="file-explorer-tree"]') ?? null;
+            if (tree) {
+              el =
+                (tree.querySelector('[data-tree-focused="true"]') as HTMLElement | null) ??
+                (tree.querySelector('.tree-row--root') as HTMLElement | null) ??
+                el;
+            }
+            if (el && el !== document.body) {
+              const target = el;
+              // Anchor to the CARET where there is one (an editor's selection), else to the focused
+              // element's corner. A menu for a text selection that opens at the top-left of a
+              // full-height editor is pointing at nothing the user was looking at.
+              const r = caretRect(target) ?? target.getBoundingClientRect();
+              const x = Math.round(r.left + Math.min(r.width / 2, 20));
+              const y = Math.round(r.top + Math.min(r.height / 2, 10));
+              // Tell the handler this came from the keyboard: a mouse handler may act on the
+              // POINTER (the editor moves the caret to a click outside the selection), and these
+              // coordinates are a stand-in, not somewhere the user pointed. See keyboard-menu.ts.
+              asKeyboardMenu(() =>
+                target.dispatchEvent(
+                  new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }),
+                ),
+              );
+            }
+          }
           break;
         default:
           break;
@@ -319,8 +420,10 @@ function WorkspacePane(): ReactElement {
   // stateless component with no dismiss path, so the only way to be rid of it was to make the
   // condition it reported stop being true. It is an ordinary notice now, and it can be dismissed.
   useErrorNotice(
-    restoreFailed ? 'The previous layout could not be restored; a fresh workspace was opened.' : null,
+    restoreFailed ? 'A fresh workspace was opened instead.' : null,
     'restore-notice',
+    undefined,
+    'restore your previous layout',
   );
 
   if (!layout) {
@@ -605,6 +708,7 @@ export function App(): ReactElement {
             <PanelRenameSync />
             <PanelDestroySync />
             <PanelStateSync />
+      <PanelNameSync />
             <PanelFocusSync />
             <EditorChrome />
             <SearchKeybindings />

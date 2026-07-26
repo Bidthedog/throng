@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -7,8 +8,15 @@ import {
   type ReactElement,
   type Ref,
 } from 'react';
+import { eventToToken, normalizeToken } from '@throng/core';
 import { Icon } from '../common/icon.js';
 import { clampToViewport } from '../common/clamp-to-viewport.js';
+
+/** Match a keydown against an item's advertised shortcut (e.g. "Ctrl+C"), for in-menu shortcuts. */
+function chordMatchesShortcut(e: React.KeyboardEvent, shortcut: string): boolean {
+  const token = eventToToken({ key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey });
+  return token !== null && normalizeToken(token) === normalizeToken(shortcut);
+}
 
 export interface MenuItem {
   /** The row's text. Required for a real action item; omitted for a `separator`. */
@@ -57,11 +65,20 @@ function MenuLevel({
   isRoot = false,
   rootRef,
   style,
+  onExitToParent,
+  autoFocusFirst = false,
 }: {
   items: MenuItem[];
   onClose: () => void;
   submenuDelayMs: number;
   testId: string;
+  /**
+   * Close THIS sub-menu and return focus to its parent item (024 US6, FR-018b). Provided by the
+   * parent level; undefined at the root, where ArrowLeft/Escape have nowhere to step back to.
+   */
+  onExitToParent?: () => void;
+  /** Focus the first item on open (a sub-menu opened by keyboard), rather than the list (024 US6). */
+  autoFocusFirst?: boolean;
   /**
    * Passed explicitly rather than inferred from `testId === 'context-menu'`, which is how it used to
    * be decided. That inference broke the moment a folded-in menu (the cog) kept its own root id: the
@@ -74,6 +91,9 @@ function MenuLevel({
 }): ReactElement {
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [openLabel, setOpenLabel] = useState<string | null>(null);
+  // Whether the currently-open sub-menu was opened by keyboard (→ / Enter) — if so it takes focus of
+  // its first item; a hover-opened sub-menu does not steal focus (024 US6, FR-018b).
+  const [openViaKeyboard, setOpenViaKeyboard] = useState(false);
 
   /*
    * Keyboard navigation (018 / FR-013a).
@@ -124,6 +144,21 @@ function MenuLevel({
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLUListElement>): void => {
+    // 024 US6 (#157 follow-up): an advertised shortcut executes its item and closes the menu — e.g.
+    // Ctrl+C copies, Ctrl+X cuts, then the user pastes elsewhere. Only chords with a modifier are
+    // considered (a bare letter is never a menu shortcut), so this never eats plain-key navigation.
+    if (e.ctrlKey || e.altKey || e.metaKey) {
+      const hit = items.find(
+        (it) => !it.separator && !it.disabled && it.onClick && it.shortcut && chordMatchesShortcut(e, it.shortcut),
+      );
+      if (hit) {
+        e.preventDefault();
+        e.stopPropagation();
+        hit.onClick?.();
+        onClose();
+        return;
+      }
+    }
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
@@ -148,15 +183,37 @@ function MenuLevel({
         if (item?.submenu?.length) {
           e.preventDefault();
           e.stopPropagation();
+          // Open the sub-menu AND move focus to its first child (FR-018b).
+          setOpenViaKeyboard(true);
           setOpenLabel(item.label ?? null);
         }
         break;
       }
       case 'ArrowLeft':
         if (openLabel !== null) {
+          // Close an open grandchild first (existing behaviour).
           e.preventDefault();
           e.stopPropagation();
           setOpenLabel(null);
+        } else if (onExitToParent) {
+          // This IS a sub-menu with nothing open below it → step back out to the parent (FR-018b).
+          e.preventDefault();
+          e.stopPropagation();
+          onExitToParent();
+        }
+        break;
+      case 'Escape':
+        // In a sub-menu, Escape closes just THIS level and returns to the parent; only at the root does
+        // it close the whole menu (left to the window listener). Stop it reaching that listener here.
+        if (openLabel !== null) {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpenLabel(null);
+        } else if (onExitToParent) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.nativeEvent.stopImmediatePropagation();
+          onExitToParent();
         }
         break;
       case 'Enter':
@@ -166,7 +223,11 @@ function MenuLevel({
         e.preventDefault();
         e.stopPropagation();
         if (item.submenu?.length) {
-          setOpenLabel((cur) => (cur === item.label ? null : (item.label ?? null)));
+          // Idempotent OPEN, never a toggle (#157 / FR-018): a parent must never close its own
+          // sub-menu; only a sibling parent, a leaf action, an outside click or Escape closes it.
+          // Enter also moves focus into the sub-menu's first child (FR-018b).
+          setOpenViaKeyboard(true);
+          setOpenLabel(item.label ?? null);
           return;
         }
         item.onClick?.();
@@ -188,9 +249,12 @@ function MenuLevel({
   useEffect(() => {
     if (focusedOnOpen.current) return;
     focusedOnOpen.current = true;
-    // The LIST, not the first item. Focusing an item would highlight it, and the menu would open with
-    // a choice already made for the user. The list holds the key handler, so the arrows still work.
-    ulRef.current?.focus();
+    // A sub-menu opened by keyboard (→ / Enter) focuses its FIRST item, so the user lands inside it
+    // ready to choose (024 US6, FR-018b). Otherwise focus the LIST, not an item — a menu opened by
+    // right-click or hover should not open with a choice already highlighted.
+    if (autoFocusFirst && enabled[0] !== undefined) focusItem(enabled[0]);
+    else ulRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled]);
 
   // A nested flyout opens to the right (left:100%); if that would push it off the
@@ -254,7 +318,10 @@ function MenuLevel({
             onMouseEnter={() => {
               cancelHover();
               if (hasSub && !item.disabled) {
-                hoverTimer.current = setTimeout(() => setOpenLabel(item.label ?? null), submenuDelayMs);
+                hoverTimer.current = setTimeout(() => {
+                  setOpenViaKeyboard(false); // a hover-opened sub-menu must not steal focus
+                  setOpenLabel(item.label ?? null);
+                }, submenuDelayMs);
               } else {
                 setOpenLabel(null);
               }
@@ -265,7 +332,8 @@ function MenuLevel({
               if (hasSub) {
                 e.stopPropagation();
                 cancelHover();
-                setOpenLabel((cur) => (cur === item.label ? null : (item.label ?? null))); // click toggles
+                setOpenViaKeyboard(false); // a click-opened sub-menu does not grab keyboard focus
+                setOpenLabel(item.label ?? null); // idempotent open, never a toggle (#157 / FR-018)
                 return;
               }
               item.onClick?.();
@@ -297,6 +365,11 @@ function MenuLevel({
                 onClose={onClose}
                 submenuDelayMs={submenuDelayMs}
                 testId={`submenu-${item.label}`}
+                autoFocusFirst={openViaKeyboard}
+                onExitToParent={() => {
+                  setOpenLabel(null);
+                  focusItem(index); // return focus to the parent item (FR-018b)
+                }}
               />
             ) : null}
           </li>
@@ -319,6 +392,7 @@ export function ContextMenu({
   onClose,
   submenuDelayMs = DEFAULT_SUBMENU_DELAY_MS,
   testId = 'context-menu',
+  opener,
 }: {
   x: number;
   y: number;
@@ -327,8 +401,27 @@ export function ContextMenu({
   submenuDelayMs?: number;
   /** Root test id. A menu folded into this one keeps its own (e.g. `cog-menu`) — see FR-053. */
   testId?: string;
+  /**
+   * The element focused when the menu opened (the invoking surface, e.g. the Files & Folders tree).
+   * On a KEYBOARD close (Escape) or after an ACTION, focus returns to it so the pane is usable again
+   * with its highlighted item intact (#157 follow-up). An outside CLICK does NOT restore — focus
+   * belongs wherever the user clicked.
+   */
+  opener?: HTMLElement | null;
 }): ReactElement {
   const ref = useRef<HTMLUListElement>(null);
+
+  // Close AND hand focus back to the opener — but only if, once the menu has gone, focus fell to the
+  // body (nothing else claimed it). An action that opens its own input (Rename, New File) focuses that
+  // input, so `activeElement` is no longer the body and we leave it alone. Deferred a frame so it runs
+  // after React unmounts the menu (which drops focus to the body) and after any autofocus.
+  const closeAndRestore = useCallback(() => {
+    onClose();
+    requestAnimationFrame(() => {
+      const ae = document.activeElement;
+      if ((ae === null || ae === document.body) && opener && opener.isConnected) opener.focus?.();
+    });
+  }, [onClose, opener]);
 
   // Keep the root menu fully on-screen (FR-089): when it would overflow the right
   // edge, open it to the LEFT of the cursor; when it would overflow the bottom,
@@ -355,7 +448,7 @@ export function ContextMenu({
       onClose();
     };
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') closeAndRestore(); // keyboard close → focus back to the opener
     };
     // FR-017a — close when the window loses focus.
     //
@@ -378,12 +471,14 @@ export function ContextMenu({
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('blur', onBlur);
     };
-  }, [onClose]);
+  }, [onClose, closeAndRestore]);
 
   return (
     <MenuLevel
       items={items}
-      onClose={onClose}
+      // Actions (leaf click / Enter, and an in-menu shortcut) close via this, restoring focus to the
+      // opener. Outside-click and blur close via the window listeners above with plain onClose.
+      onClose={closeAndRestore}
       submenuDelayMs={submenuDelayMs}
       testId={testId}
       isRoot
