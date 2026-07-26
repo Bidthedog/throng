@@ -199,6 +199,10 @@ export const THRONG_THEME: Theme = {
     errorSurface: '#3a1d22',
     errorText: '#ffd9dd',
     success: '#3fb950',
+    /* The amber cue for "this went ahead, but not the way you asked" — a warning notice's edge.
+       Distinct from `danger` on purpose: a warning is not a failure, and colouring it red would
+       teach users to read a red card as "something you can ignore". */
+    warning: '#d29922',
     /* Scrollbars (018, FR-009). Before this, the ONLY styled scrollbar in the app was the
        terminal's, which borrowed `border` for its thumb and `textMuted` for the hover, and
        hard-coded `transparent` for the track. Everything else rendered the browser engine's default

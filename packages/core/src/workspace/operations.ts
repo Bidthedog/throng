@@ -285,6 +285,17 @@ function renameInNode(node: LayoutNode, panelId: string, title: string): LayoutN
   return { ...node, children: node.children.map((c) => renameInNode(c, panelId, title)) };
 }
 
+function retitleInNode(node: LayoutNode, panelId: string, title: string): LayoutNode {
+  if (isPanel(node)) {
+    // `titleIsCustom` is deliberately UNTOUCHED: this is throng adjusting a name, not the user
+    // choosing one. Marking it custom would suppress the panel's own auto-title for the rest of its
+    // life — an editor that could name itself after its file would sit on a generated name forever
+    // (the defect behind #176).
+    return node.id === panelId ? { ...node, title } : node;
+  }
+  return { ...node, children: node.children.map((c) => retitleInNode(c, panelId, title)) };
+}
+
 function resetNameInNode(node: LayoutNode, panelId: string): LayoutNode {
   if (isPanel(node)) {
     if (node.id !== panelId || !node.titleIsCustom) return node;
@@ -304,6 +315,26 @@ export function renamePanel(
   return {
     ...layout,
     tabs: layout.tabs.map((tab) => ({ ...tab, root: renameInNode(tab.root, panelId, trimmed) })),
+  };
+}
+
+/**
+ * Change a Panel's DISPLAYED name without claiming it as the user's choice (024, #184).
+ *
+ * Used when throng itself has to move a name — a clash with a panel in another project or
+ * sub-workspace. The user did not pick this name, so "Reset Name" must stay disabled and any
+ * auto-title (an editor's file, a terminal's process) must still be free to replace it.
+ */
+export function retitlePanel(
+  layout: WorkspaceLayout,
+  panelId: string,
+  title: string,
+): WorkspaceLayout {
+  const trimmed = title.trim();
+  if (trimmed.length === 0) return layout;
+  return {
+    ...layout,
+    tabs: layout.tabs.map((tab) => ({ ...tab, root: retitleInNode(tab.root, panelId, trimmed) })),
   };
 }
 

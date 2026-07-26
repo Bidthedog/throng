@@ -254,6 +254,7 @@ interface Palette {
   accent: string;
   danger?: string;
   success?: string;
+  warning?: string;
   border?: string;
   statusBar?: string;
   terminalBg?: string;
@@ -301,6 +302,7 @@ function makeTheme(name: string, p: Palette): Theme {
       errorSurface: mix(p.danger ?? '#e5534b', p.bg, 0.18),
       errorText: readableOn(mix(p.danger ?? '#e5534b', p.bg, 0.18), p.text),
       success: p.success ?? '#3fb950',
+      warning: p.warning ?? '#d29922',
       railBg: p.sidebar ?? p.bg,
       border: p.border ?? p.surface,
       statusBarBg: p.statusBar ?? p.bg,

@@ -198,6 +198,11 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The green cue for a healthy state: the small “loaded this session” dot on a project or sub-workspace row, and the edge of a success notice.',
   },
+  'colours.warning': {
+    label: 'Warning Accent',
+    description:
+      'The amber cue for something that went ahead but not as asked — the edge of a warning notice, such as a panel name that had to be adjusted because it was already taken.',
+  },
   'colours.railBg': {
     label: 'Collapsed Rail Background',
     description: 'The narrow strip shown when a side pane is collapsed, carrying its expand toggle.',
