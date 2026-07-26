@@ -45,7 +45,7 @@ test('explorer menu items render their theme icon; the clipboard rows are no lon
 
       // The relocated OS reveal ('folderOpen') carries its icon inside the "Open In" submenu.
       await win.getByTestId('menu-item-Open In').click();
-      await expect(iconCell(win, 'Open in OS File Explorer')).not.toBeEmpty();
+      await expect(iconCell(win, 'OS File Explorer')).not.toBeEmpty();
     });
   } finally {
     rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

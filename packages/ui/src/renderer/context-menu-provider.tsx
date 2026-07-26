@@ -28,6 +28,8 @@ interface MenuState {
   y: number;
   items: MenuItem[];
   testId?: string;
+  /** The element focused when the menu opened, so keyboard/action close can return focus to it. */
+  opener?: HTMLElement | null;
 }
 
 interface ContextMenuController {
@@ -58,7 +60,10 @@ export function ContextMenuProvider({ children }: { children: ReactNode }): Reac
   const [menu, setMenu] = useState<MenuState | null>(null);
   const openMenu = useCallback(
     (x: number, y: number, items: MenuItem[], options?: OpenMenuOptions) => {
-      setMenu({ x, y, items, testId: options?.testId });
+      // Capture the surface that had focus (e.g. the Files & Folders tree) BEFORE the menu grabs it,
+      // so a keyboard/action close can hand focus back with its highlighted item intact (#157 follow-up).
+      const opener = document.activeElement as HTMLElement | null;
+      setMenu({ x, y, items, testId: options?.testId, opener });
     },
     [],
   );
@@ -77,6 +82,7 @@ export function ContextMenuProvider({ children }: { children: ReactNode }): Reac
           y={menu.y}
           items={menu.items}
           testId={menu.testId}
+          opener={menu.opener}
           onClose={closeMenu}
           submenuDelayMs={settings.behaviour.submenuHoverMs}
         />
