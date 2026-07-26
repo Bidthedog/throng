@@ -6,6 +6,7 @@
  * `version` marker has exactly one descriptor (FR-047). Pure; zero OS/DOM.
  */
 import { DEFAULT_APP_SETTINGS } from './app-settings.js';
+import { LOG_LEVELS } from '../diagnostics/log-level.js';
 import { leavesOfDeclared, type FieldDescriptor, type MetadataRegistry } from './metadata.js';
 
 /** Leaves that are internal bookkeeping, not user-configurable settings. */
@@ -290,6 +291,38 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Editor',
     control: 'toggle',
   },
+  {
+    key: 'editor.defaultWordWrap',
+    label: 'Editor default word wrap',
+    description: 'Wrap long lines by default in new editors. Toggle per editor from its status bar, its content menu, or Ctrl+Alt+W.',
+    group: 'Editor',
+    control: 'toggle',
+  },
+  {
+    key: 'editor.showStatusBar',
+    label: 'Show editor status bar',
+    description: 'Show the status strip along the bottom of each editor panel (language, word-wrap toggle).',
+    group: 'Editor',
+    control: 'toggle',
+  },
+  {
+    key: 'terminals.showStatusBar',
+    label: 'Show terminal status bar',
+    description: 'Show the status bar along the bottom of each terminal panel.',
+    group: 'Terminal',
+    control: 'toggle',
+  },
+  {
+    key: 'terminals.linkHoverDelayMs',
+    label: 'Link hover tooltip delay',
+    description:
+      'How long to rest the pointer on a terminal link before the “Ctrl+Click to open” tooltip appears, in milliseconds. 0 shows it instantly.',
+    group: 'Terminal',
+    control: 'slider',
+    min: 0,
+    max: 2000,
+    step: 50,
+  },
 
   // Indentation (016, FR-018/FR-022). The order of precedence is the requirement: what the FILE
   // already does beats the language, which beats the global default. A setting NEVER reformats an
@@ -397,6 +430,43 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     min: 0,
     max: 1000,
     step: 10,
+  },
+  {
+    // #123 — the one diagnostics knob a user needs, and the reason it is a setting at all: the
+    // build they are running is the one they cannot rebuild, so turning the detail up before
+    // reproducing a fault has to be something they can do from here.
+    key: 'diagnostics.logLevel',
+    label: 'Log detail',
+    description:
+      'How much throng records in its log files. Raise this to debug before reproducing a problem, then send the logs with your report. Logs never leave this machine.',
+    group: 'Logging',
+    control: 'select',
+    allowedValues: [...LOG_LEVELS],
+  },
+  {
+    key: 'diagnostics.maxFileSizeKb',
+    label: 'Log file size (KB)',
+    description:
+      'How large a single log file may grow before throng starts a new one. Older files are kept up to the limit below.',
+    group: 'Logging',
+    control: 'slider',
+    min: 64,
+    // 4 MB a file rather than 8: the step has to stay aimable (the slider guard wants one step to
+    // be at least 1% of the range), and 4 MB × the retention limit is already far more log than any
+    // report needs. A larger cap is still settable by hand — the parser accepts up to 64 MB.
+    max: 4096,
+    step: 64,
+  },
+  {
+    key: 'diagnostics.keepFiles',
+    label: 'Log files kept',
+    description:
+      'How many log files to keep for each part of throng, including the one being written. Older files are deleted, so logs cannot grow without bound.',
+    group: 'Logging',
+    control: 'slider',
+    min: 1,
+    max: 20,
+    step: 1,
   },
 ];
 

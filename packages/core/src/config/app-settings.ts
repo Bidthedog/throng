@@ -6,6 +6,8 @@
 import { DEFAULT_EXCLUDE_GLOBS } from '../explorer/exclude.js';
 import type { DragModifierKey } from '../explorer/drag.js';
 import { SHIPPED_INDENT_BY_LANGUAGE, type IndentProfile } from '../editor/languages.js';
+import { DEFAULT_LOG_LEVEL, parseLogLevel, type LogLevel } from '../diagnostics/log-level.js';
+import { DEFAULT_ROTATION } from '../diagnostics/rotation.js';
 
 /** Confirmation depth for a destroy action: none / single / double (wry second). */
 export type ConfirmLevel = 'none' | 'single' | 'double';
@@ -44,6 +46,12 @@ export interface TerminalSettings {
   disabledBuiltins: string[];
   /** Per-flavour-id Startup Params override (wins over the catalogue default). */
   defaultParams: Record<string, string>;
+  /** 024 US1 (#152): show the terminal's per-panel status bar (new surface; carries the shell
+   *  flavour label). When off, the bar is hidden and its row reclaimed. */
+  showStatusBar: boolean;
+  /** 024 US7 (#159 follow-up): how long the pointer must rest on a terminal link before the
+   *  "Ctrl+Click to open…" hover tip appears, in milliseconds. Default 500. */
+  linkHoverDelayMs: number;
 }
 
 /** File-tree click that opens a file into the last active editor (006, FR-009). */
@@ -103,6 +111,12 @@ export interface EditorSettings {
   languageByExtension: Record<string, string>;
   /** Persist the undo history alongside the crash-recovery snapshot (FR-027a). */
   persistUndoHistory: boolean;
+  /** 024 US1 (#152): starting word-wrap state for a freshly-opened document. The per-document
+   *  status-bar/menu/chord toggle overrides this in memory only (not persisted). */
+  defaultWordWrap: boolean;
+  /** 024 US1 (#152): show the editor's per-panel status strip. When off, the strip is hidden and
+   *  its row reclaimed; the wrap command and language picker stay reachable by chord/menu. */
+  showStatusBar: boolean;
 }
 
 /** Where the new-project folder picker opens (011, FR-041). */
@@ -170,6 +184,25 @@ export interface AppSettings {
   newProject: NewProjectSettings;
   /** In-panel search preferences (013). */
   search: SearchSettings;
+  /** Durable diagnostics (#123). */
+  diagnostics: DiagnosticsSettings;
+}
+
+/**
+ * Diagnostics preferences (#123).
+ *
+ * The log level is a SETTING rather than a constant because the build a user is running is the one
+ * they cannot rebuild: when an installed throng misbehaves, turning the detail up has to be
+ * something they can do from the preferences editor, not something we ship in the next release
+ * (Constitution Principle X).
+ */
+export interface DiagnosticsSettings {
+  /** Threshold for what reaches the log files: error | warn | info | debug. */
+  logLevel: LogLevel;
+  /** Size (KB) a log file may reach before it rotates. */
+  maxFileSizeKb: number;
+  /** How many files to keep per log, INCLUDING the live one — the retention window. */
+  keepFiles: number;
 }
 
 /** In-panel search preferences (013, FR-002a / SC-007). */
@@ -209,6 +242,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     flavours: [],
     disabledBuiltins: [],
     defaultParams: {},
+    showStatusBar: true,
+    linkHoverDelayMs: 500,
   },
   editor: {
     openOnClick: 'single',
@@ -231,6 +266,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     // Python and then clears it must end up with no mapping, not with the mapping restored.
     languageByExtension: {},
     persistUndoHistory: true,
+    defaultWordWrap: true,
+    showStatusBar: true,
   },
   newProject: {
     startingFolder: 'lastViewed',
@@ -240,7 +277,29 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   search: {
     asYouTypeDebounceMs: 120,
   },
+  diagnostics: {
+    logLevel: DEFAULT_LOG_LEVEL,
+    maxFileSizeKb: DEFAULT_ROTATION.maxBytes / 1024,
+    keepFiles: DEFAULT_ROTATION.keep,
+  },
 };
+
+/** Tolerant parse of the diagnostics section; an unknown level falls back rather than throwing —
+ *  a typo in a settings file must never stop the application starting. */
+function diagnosticsSettings(raw: unknown, d: DiagnosticsSettings): DiagnosticsSettings {
+  const v = isRecord(raw) ? raw : {};
+  const positive = (value: unknown, fallback: number, min: number, max: number): number =>
+    typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
+      ? Math.round(value)
+      : fallback;
+  return {
+    logLevel: parseLogLevel(v.logLevel, d.logLevel),
+    // Bounded either side: a 0 KB cap would rotate on every line, and an unbounded one is the very
+    // thing rotation exists to prevent on a daemon that runs for days.
+    maxFileSizeKb: positive(v.maxFileSizeKb, d.maxFileSizeKb, 64, 65_536),
+    keepFiles: positive(v.keepFiles, d.keepFiles, 1, 50),
+  };
+}
 
 /** Tolerant parse of the search section; a bad or negative value falls back. */
 function searchSettings(raw: unknown, d: SearchSettings): SearchSettings {
@@ -325,7 +384,15 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
   } else {
     Object.assign(defaultParams, fallback.defaultParams);
   }
-  return { flavours, disabledBuiltins, defaultParams };
+  const showStatusBar =
+    typeof v.showStatusBar === 'boolean' ? v.showStatusBar : fallback.showStatusBar;
+  // Clamp the hover delay to a sane range: a real number, non-negative, capped so a typo cannot make
+  // the tip effectively never appear.
+  const linkHoverDelayMs =
+    typeof v.linkHoverDelayMs === 'number' && Number.isFinite(v.linkHoverDelayMs)
+      ? Math.min(5000, Math.max(0, Math.round(v.linkHoverDelayMs)))
+      : fallback.linkHoverDelayMs;
+  return { flavours, disabledBuiltins, defaultParams, showStatusBar, linkHoverDelayMs };
 }
 
 function cloneTerminals(t: TerminalSettings): TerminalSettings {
@@ -333,6 +400,8 @@ function cloneTerminals(t: TerminalSettings): TerminalSettings {
     flavours: t.flavours.map((f) => ({ ...f, args: [...f.args] })),
     disabledBuiltins: [...t.disabledBuiltins],
     defaultParams: { ...t.defaultParams },
+    showStatusBar: t.showStatusBar,
+    linkHoverDelayMs: t.linkHoverDelayMs,
   };
 }
 
@@ -375,6 +444,10 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     typeof v.warnOnMissingFile === 'boolean' ? v.warnOnMissingFile : fallback.warnOnMissingFile;
   const persistUndoHistory =
     typeof v.persistUndoHistory === 'boolean' ? v.persistUndoHistory : fallback.persistUndoHistory;
+  const defaultWordWrap =
+    typeof v.defaultWordWrap === 'boolean' ? v.defaultWordWrap : fallback.defaultWordWrap;
+  const showStatusBar =
+    typeof v.showStatusBar === 'boolean' ? v.showStatusBar : fallback.showStatusBar;
   return {
     openOnClick,
     openTarget,
@@ -391,6 +464,8 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     indentByLanguage: indentMap(v.indentByLanguage, fallback.indentByLanguage),
     languageByExtension: extensionMap(v.languageByExtension, fallback.languageByExtension),
     persistUndoHistory,
+    defaultWordWrap,
+    showStatusBar,
   };
 }
 
@@ -508,6 +583,7 @@ export function parseAppSettings(raw: unknown): AppSettings {
     editor: editorSettings(raw.editor, d.editor),
     newProject: newProjectSettings(raw.newProject, d.newProject),
     search: searchSettings(raw.search, d.search),
+    diagnostics: diagnosticsSettings(raw.diagnostics, d.diagnostics),
   };
 }
 
@@ -533,5 +609,6 @@ function structuredCloneSettings(s: AppSettings): AppSettings {
     },
     newProject: { ...s.newProject },
     search: { ...s.search },
+    diagnostics: { ...s.diagnostics },
   };
 }

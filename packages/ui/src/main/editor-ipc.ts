@@ -166,6 +166,18 @@ export function registerEditorIpc(coordinator: EditorCoordinator, deps: EditorIp
     coordinator.redo(raw.panelId, raw.viewId);
   });
 
+  // 024 US1 (FR-001a): wrap belongs to the DOCUMENT, so the renderer asks the coordinator to set it
+  // and the coordinator tells every Panel showing that document, in every window.
+  ipcMain.on('throng:editor:setWordWrap', (_event, req: unknown) => {
+    const r = req as { panelId?: unknown; on?: unknown } | null;
+    if (!r || typeof r.panelId !== 'string' || typeof r.on !== 'boolean') return;
+    coordinator.setWordWrap(r.panelId, r.on);
+  });
+  ipcMain.handle('throng:editor:wordWrap', (_event, req: unknown) => {
+    const r = req as { panelId?: unknown; seedDefault?: unknown } | null;
+    if (!r || typeof r.panelId !== 'string') return true;
+    return coordinator.wordWrapFor(r.panelId, r.seedDefault !== false);
+  });
   ipcMain.handle('throng:editor:revert', (_event, panelId: unknown) =>
     typeof panelId === 'string' ? coordinator.revert(panelId) : false,
   );

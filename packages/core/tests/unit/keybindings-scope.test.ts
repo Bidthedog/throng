@@ -78,16 +78,19 @@ describe('registered commands (FR-017c — the absence is the requirement)', () 
     'editor.columnSelectDown',
     'editor.columnSelectLeft',
     'editor.columnSelectRight',
+    // 024 US1 (#152): a genuine new editor command — NOT one of the banned clipboard/undo commands
+    // FR-017c guards against (those still keep their native OS bindings; see the ABSENCE test below).
+    'editor.toggleWordWrap',
   ];
 
-  it('registers EXACTLY the seven new editor commands, no more', () => {
+  it('registers EXACTLY the expected editor commands (the seven from 016 + word-wrap), no more', () => {
     const editorCommands = ACTION_IDS.filter(
       (a) => a.startsWith('editor.') && !a.startsWith('editor.save'),
     );
     expect(editorCommands.sort()).toEqual([...NEW_COMMANDS].sort());
   });
 
-  it('scopes all seven to the editor alone', () => {
+  it('scopes each editor-only command to the editor alone', () => {
     for (const action of NEW_COMMANDS) {
       expect([...COMMAND_SCOPES[action as ActionId]], action).toEqual(['editor']);
     }

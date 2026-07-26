@@ -1,10 +1,12 @@
-import { useCallback, useState, type CSSProperties, type ReactElement } from 'react';
+import { useCallback, useEffect, useState, type CSSProperties, type ReactElement } from 'react';
 import { zoomFactor, panelZoomLevel, type Panel } from '@throng/core';
 import { useEditor } from './use-editor.js';
 import { FindBar } from '../search/find-bar.js';
 import { StatusStrip } from './status-strip.js';
+import { registerPickerReveal, unregisterPickerReveal } from './picker-request.js';
 import { toRelPath } from './language-override.js';
 import { PanelSkeleton, useDelayedFlag } from '../common/loading.js';
+import { useAppSettings } from '../config/config-store.js';
 import './editor.css';
 
 /**
@@ -43,6 +45,17 @@ export function EditorPanel({
     ['--throng-zoom-editor']: String(zoomFactor(panelZoomLevel(panel))),
   } as CSSProperties;
   const filePath = (panel.config as { filePath?: string } | undefined)?.filePath ?? null;
+  const showStatusBar = useAppSettings().editor.showStatusBar;
+  // 024 US1 follow-up: with the status bar hidden, "Set Language…" had nowhere to open — the strip
+  // owns the picker, and an unmounted strip cannot show one, so the menu item did nothing at all.
+  // Asking for the picker now REVEALS the strip for as long as the picker is up, then puts it away
+  // again. The preference still decides whether the bar is normally on screen; it does not decide
+  // whether the user can reach their own language setting.
+  const [revealedForPicker, setRevealedForPicker] = useState(false);
+  useEffect(() => {
+    registerPickerReveal(panel.id, () => setRevealedForPicker(true));
+    return () => unregisterPickerReveal(panel.id);
+  }, [panel.id]);
   return (
     <div className="editor-panel-wrap">
       <div
@@ -57,11 +70,17 @@ export function EditorPanel({
       {/* The language indicator (016, FR-010) — the ONLY way to see what the editor detected, and
           the way to correct it. It sits BELOW the text area (the wrap is a flex column), never
           over it. */}
-      <StatusStrip
-        panelId={panel.id}
-        projectId={ownerProjectId ?? null}
-        relPath={toRelPath(projectRoot, filePath)}
-      />
+      {/* 024 US1 (FR-001b/c): the status strip is preference-controlled. Hidden → its row is
+          reclaimed for content, and the wrap command + language picker stay reachable by chord/menu. */}
+      {(showStatusBar || revealedForPicker) && (
+        <StatusStrip
+          panelId={panel.id}
+          projectId={ownerProjectId ?? null}
+          relPath={toRelPath(projectRoot, filePath)}
+          autoOpenPicker={revealedForPicker}
+          onPickerClosed={() => setRevealedForPicker(false)}
+        />
+      )}
     </div>
   );
 }
