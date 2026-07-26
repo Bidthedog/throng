@@ -90,6 +90,56 @@ export function LanguagePicker({
     onClose();
   };
 
+  /*
+   * THE LIST IS ONE STOP, NOT TWO HUNDRED.
+   *
+   * Every option was a `<button>`, so Tab stepped through the languages one at a time — a listbox
+   * with a hundred tab stops, where Tab did the job of an arrow key and reaching the filter again
+   * meant tabbing past every remaining language. That is not what Tab is for, and it is not what the
+   * ARIA listbox pattern says: a composite widget is a SINGLE stop, and the arrows move within it.
+   *
+   * So the list carries a roving tabindex — only the active option is tabbable — and Tab therefore
+   * moves between the filter and the list, ArrowUp/ArrowDown move between languages, Home/End jump
+   * to the ends, and Enter confirms. Typing in the filter re-aims the active option at the first
+   * match, so a filter-then-Enter never confirms a language that has been filtered away.
+   */
+  const [activeIndex, setActiveIndex] = useState(0);
+  const listRef = useRef<HTMLUListElement>(null);
+  // Clamp when filtering shrinks the list under the cursor — an index past the end would leave
+  // Enter confirming nothing and the roving tabindex on no one.
+  const active = Math.min(activeIndex, Math.max(0, matches.length - 1));
+
+  /** Move the active option, and take the DOM focus with it if the list already had it. */
+  const moveActive = (next: number): void => {
+    const clamped = Math.max(0, Math.min(next, matches.length - 1));
+    setActiveIndex(clamped);
+    const list = listRef.current;
+    if (!list || !list.contains(document.activeElement)) return;
+    const option = list.querySelectorAll<HTMLElement>('.language-picker__item')[clamped];
+    option?.focus();
+    option?.scrollIntoView({ block: 'nearest' });
+  };
+
+  const onListKeyDown = (e: React.KeyboardEvent): void => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      moveActive(active + 1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      // Off the TOP of the list is back to the filter — the way in was ArrowDown out of it, and a
+      // door that only opens one way is not a door. Without this, ArrowUp on the first option just
+      // re-focused the first option, and the only way back to the filter was Shift+Tab.
+      if (active === 0) inputRef.current?.focus();
+      else moveActive(active - 1);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      moveActive(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      moveActive(matches.length - 1);
+    }
+  };
+
   return (
     <div
       ref={ref}
@@ -112,19 +162,42 @@ export function LanguagePicker({
         type="text"
         placeholder="Filter languages"
         value={filter}
-        onChange={(e) => setFilter(e.target.value)}
+        onChange={(e) => {
+          setFilter(e.target.value);
+          setActiveIndex(0); // a new filter re-aims at its first match
+        }}
+        // ArrowDown enters the list — at the ACTIVE option, the one Enter would confirm, rather
+        // than stepping past it: focus is in the filter, so nothing in the list has been "left" to
+        // move on from. ArrowUp does nothing, because the filter is the top of the picker; the
+        // mirror of this gesture is ArrowUp on the first option, which comes back here.
+        onKeyDown={(e) => {
+          if (e.key !== 'ArrowDown') return;
+          e.preventDefault();
+          if (matches.length === 0) return;
+          const options = listRef.current?.querySelectorAll<HTMLElement>('.language-picker__item');
+          options?.[active]?.focus();
+        }}
       />
-      <ul className="language-picker__list" role="listbox">
-        {matches.map((choice) => (
+      <ul
+        className="language-picker__list"
+        role="listbox"
+        ref={listRef}
+        onKeyDown={onListKeyDown}
+      >
+        {matches.map((choice, i) => (
           <li key={choice.id}>
             <button
               type="button"
               role="option"
               aria-selected={choice.id === current}
+              // Roving tabindex: the list is ONE tab stop. Only the active option is reachable by
+              // Tab; the arrows move which one that is.
+              tabIndex={i === active ? 0 : -1}
               className={`language-picker__item${
                 choice.id === current ? ' language-picker__item--current' : ''
-              }`}
+              }${i === active ? ' language-picker__item--active' : ''}`}
               data-testid={`language-option-${choice.id}`}
+              onFocus={() => setActiveIndex(i)}
               onClick={() => choose(choice.id)}
             >
               {choice.name}

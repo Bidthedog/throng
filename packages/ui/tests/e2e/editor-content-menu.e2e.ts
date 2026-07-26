@@ -178,6 +178,72 @@ test('the CONTENT menu is distinct from the panel-HEADER menu (FR-014)', async (
   }
 });
 
+test('a KEYBOARD-opened menu keeps the selection — Cut takes the selected word, not the line', async () => {
+  skipIfElevated();
+  const root = makeProject();
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'Menu', root);
+      const pid = await openEditorWithFile(win);
+
+      // Select "beta" from the keyboard: to the start of that line, then Shift+End.
+      await line(win, pid, 'beta').click();
+      await win.keyboard.press('Home');
+      await win.keyboard.press('Shift+End');
+
+      // Shift+F10 re-dispatches a synthetic contextmenu carrying the focused element's corner as
+      // its coordinates. Treated as a real click, that landed outside the selection and collapsed
+      // it — so Cut took the whole line, deleting a newline the user never selected.
+      await win.keyboard.press('Shift+F10');
+      await expect(win.getByTestId('menu-item-Cut')).toBeVisible();
+      await win.getByTestId('menu-item-Cut').click();
+
+      // The word goes; its line stays behind, empty.
+      await expect.poll(() => docText(win, pid)).toBe('alpha\n\ngamma\n');
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  }
+});
+
+test('the Set Language item names the current language, and picking one returns focus to the editor', async () => {
+  skipIfElevated();
+  const root = makeProject();
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'Menu', root);
+      const pid = await openEditorWithFile(win);
+
+      // lines.txt is plain text, and the menu says so rather than only offering to change it.
+      await line(win, pid, 'alpha').click({ button: 'right' });
+      const item = win.getByTestId('menu-item-Set Language…');
+      await expect(item).toContainText('Plain Text');
+      await item.click();
+      await expect(win.getByTestId(`language-picker-${pid}`)).toBeVisible({ timeout: 5000 });
+
+      // Choosing puts the caret back in the document — the picker took focus to open, and a user
+      // who chose by keyboard would otherwise be left typing into nothing.
+      await win.getByTestId('language-option-json').click();
+      await expect(win.getByTestId(`language-picker-${pid}`)).toHaveCount(0);
+      await expect
+        .poll(() =>
+          win.evaluate(
+            (id) =>
+              document.activeElement?.closest(`[data-testid="editor-${id}"]`) != null,
+            pid,
+          ),
+        )
+        .toBe(true);
+
+      // …and the menu now names the language that was chosen.
+      await line(win, pid, 'alpha').click({ button: 'right' });
+      await expect(win.getByTestId('menu-item-Set Language…')).toContainText('JSON');
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  }
+});
+
 test('“Set Language…” opens the SAME picker the status strip does (FR-010/FR-012)', async () => {
   skipIfElevated();
   const root = makeProject();
