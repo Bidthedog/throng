@@ -136,3 +136,21 @@ export type {
   DocumentPruneParams,
   DocumentPruneResult,
 } from './document.js';
+// fileopUndo.* (024 US3, #85) — the per-project file-operation undo/redo stack.
+export {
+  FILEOP_UNDO_GET_METHOD,
+  FILEOP_UNDO_SET_METHOD,
+} from './fileop-undo.js';
+export type {
+  FileOpUndoGetParams,
+  FileOpUndoGetResult,
+  FileOpUndoSetParams,
+  FileOpUndoSetResult,
+} from './fileop-undo.js';
+// panelName.* (024 follow-up) — globally unique panel names across projects and sub-workspaces.
+export { PANEL_NAME_CLAIM_METHOD, PANEL_NAME_RECONCILE_METHOD } from './panel-name.js';
+export type {
+  PanelNameClaimParams,
+  PanelNameClaimResult,
+  PanelNameReconcileResult,
+} from './panel-name.js';

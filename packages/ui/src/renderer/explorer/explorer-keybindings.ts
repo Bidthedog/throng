@@ -18,6 +18,9 @@ export interface KeybindingOps {
   clearClipboard: () => void;
   paste: (target: TargetNode | null) => void;
   remove: (relPaths: string[]) => void;
+  /** 024 US3 (#85): reverse / re-apply the last file operation. */
+  undoFileOp: () => void;
+  redoFileOp: () => void;
 }
 
 export function useExplorerKeybindings(ops: KeybindingOps): (e: KeyboardEvent) => void {
@@ -56,6 +59,14 @@ export function useExplorerKeybindings(ops: KeybindingOps): (e: KeyboardEvent) =
           break;
         case 'file.delete':
           ops.remove(ops.selectedRelPaths);
+          break;
+        // Ctrl+Z / Ctrl+Y in the TREE undo a file operation. The same chords undo typing inside an
+        // editor, and the two never contend: their scopes are disjoint (016, FR-017b0).
+        case 'file.undo':
+          ops.undoFileOp();
+          break;
+        case 'file.redo':
+          ops.redoFileOp();
           break;
         default:
           break;

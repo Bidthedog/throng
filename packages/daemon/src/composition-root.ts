@@ -29,6 +29,7 @@ import {
   WorkspaceRepository,
   SubWorkspaceRepository,
   DocumentStateRepository,
+  FileOpUndoRepository,
   type ThrongDatabase,
 } from '@throng/persistence';
 import { DAEMON_TYPES } from './tokens.js';
@@ -39,6 +40,8 @@ import { ProjectIpcService } from './project-service.js';
 import { WorkspaceIpcService } from './workspace-service.js';
 import { SubWorkspaceIpcService } from './subworkspace-service.js';
 import { DocumentIpcService } from './document-service.js';
+import { FileOpUndoIpcService } from './fileop-undo-service.js';
+import { PanelNameIpcService } from './panel-name-service.js';
 import { TerminalEvents } from './terminal-events.js';
 import { TerminalLockManager } from './terminal-lock-manager.js';
 import { TerminalService } from './terminal-service.js';
@@ -229,6 +232,12 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
     userContext,
     (ownerUser, projectId) => projectStore.getById(ownerUser, projectId)?.rootFolder ?? null,
   ).register(router);
+  // fileopUndo.* (024 US3, #85) — the per-project file-operation undo/redo stack, so an undo
+  // survives a restart rather than being one session's private memory.
+  new FileOpUndoIpcService(new FileOpUndoRepository(database), userContext).register(router);
+  // panelName.* (024 follow-up) — the only component that can see every panel in every project and
+  // sub-workspace, and therefore the only one that can keep their names unique.
+  new PanelNameIpcService({ projectStore, workspaceStore, userContext }).register(router);
   terminalService.register(router);
   container.bind<RpcRouter>(DAEMON_TYPES.RpcRouter).toConstantValue(router);
 

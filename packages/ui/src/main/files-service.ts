@@ -53,6 +53,8 @@ export class FilesService {
   private moveQueue: Promise<unknown> = Promise.resolve();
 
   private onDeleted?: (absPaths: string[]) => void;
+  /** 024 US3 (#85): a deleted file came back, so an editor left dirty by the delete can recover. */
+  private onRestored?: (absPaths: string[]) => void;
 
   private onMoveStarted?: (absPaths: readonly string[]) => void;
 
@@ -65,6 +67,10 @@ export class FilesService {
 
   /** Notified with the absolute paths that a delete removed (FR-099) — the editor
    *  coordinator marks any open editor of a deleted file dirty. */
+  setOnRestored(cb: (absPaths: string[]) => void): void {
+    this.onRestored = cb;
+  }
+
   setOnDeleted(cb: (absPaths: string[]) => void): void {
     this.onDeleted = cb;
   }
@@ -254,6 +260,57 @@ export class FilesService {
     return {
       error: `Could not delete ${failures.length} item${failures.length === 1 ? '' : 's'} (${failures.join(', ')}).`,
     };
+  }
+
+  /**
+   * Does this root-relative path exist inside the project? (024 US3, #85.)
+   *
+   * The undo engine has to know whether the world still matches the entry it is about to replay —
+   * whether the file is still where it was, and whether something has since taken the name it wants
+   * to restore. The renderer is sandboxed and cannot look, so it asks here, and the answer is
+   * CONFINED: a path outside the project is "no", not a probe that reveals what lives there.
+   */
+  async existsInProject(relPath: string): Promise<boolean> {
+    if (!this.root) return false;
+    try {
+      const abs = this.absOf(relPath);
+      if (!(await this.fs.exists(abs))) return false;
+      return await this.within(abs);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Put a deleted item back where it came from (024 US3, #85 — undo of a delete).
+   *
+   * Confined exactly as every other operation is: the path is checked against the project root
+   * BEFORE the restore, so an undo entry carrying a path from outside the project — a stale stack, a
+   * project whose root has since changed — cannot write anywhere it likes. `deletedAt` disambiguates
+   * when the Recycle Bin holds several versions of one path; the closest at-or-before wins.
+   *
+   * A refusal is a MESSAGE, never a silent no-op: the item may have been purged from the Recycle
+   * Bin, or restored by hand already, and a user who pressed undo and saw nothing happen would
+   * reasonably conclude undo is broken rather than that the file is gone.
+   */
+  async restoreDeleted(relPath: string, deletedAt: number): Promise<OkOrError> {
+    if (!this.root) return { error: NO_ROOT };
+    if (relPath === '') return { error: OUTSIDE };
+    const abs = this.absOf(relPath);
+    // `within` resolves real paths, and the item does NOT exist yet — so confinement is checked
+    // against the containing directory, which does.
+    if (!(await this.within(dirname(abs)))) return { error: OUTSIDE };
+    try {
+      await this.fs.restoreFromTrash(abs, deletedAt);
+      // Tell the editor layer the file is back, so an editor the DELETE marked dirty can recover
+      // rather than staying dirty over a file that is sitting on disk again.
+      this.onRestored?.([abs]);
+      return { ok: true };
+    } catch (error) {
+      return {
+        error: `Could not restore "${basename(abs)}" — it may no longer be in the Recycle Bin. (${(error as Error).message})`,
+      };
+    }
   }
 
   async newFolder(destRelDir: string): Promise<NewFolderResult> {

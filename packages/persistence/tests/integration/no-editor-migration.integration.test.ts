@@ -32,16 +32,16 @@ function freshDbPath(): string {
 }
 
 describe('016 adds per-document state at v7 (reversing 006’s "no editor migration")', () => {
-  it('the latest schema version is 7', () => {
-    expect(LATEST_VERSION).toBe(7);
+  it('the latest schema version is 8', () => {
+    expect(LATEST_VERSION).toBe(8);
   });
 
-  it('a freshly migrated store reports user_version 7', () => {
+  it('a freshly migrated store reports user_version 8', () => {
     const db = openDatabase({ databasePath: freshDbPath() });
     try {
       const result = runMigrations(db);
-      expect(result.to).toBe(7);
-      expect(Number(db.pragma('user_version', { simple: true }))).toBe(7);
+      expect(result.to).toBe(8);
+      expect(Number(db.pragma("user_version", { simple: true }))).toBe(8);
     } finally {
       db.close();
     }
