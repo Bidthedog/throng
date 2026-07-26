@@ -4,12 +4,14 @@ import {
   collectPanels,
   countPanels,
   defaultPanelTypeRegistry,
+  editorAutoTitle,
   editorPathParts,
   toDisplayPath,
   effectiveActivePanelId,
   panelZoomLevel,
   findPanelLocations,
   planConfirmations,
+  firstBinding,
   type Edge,
   type Panel,
 } from '@throng/core';
@@ -18,8 +20,9 @@ import { useWorkspace } from '../state/workspace-store.js';
 import { useProjects } from '../state/projects-store.js';
 import { useServices } from '../composition-root.js';
 import { useConfirm } from '../confirm-dialog.js';
+import { useNotify } from '../common/notification.js';
 import { useContextMenu } from '../context-menu-provider.js';
-import { useAppSettings } from '../config/config-store.js';
+import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { Icon } from '../common/icon.js';
 import { panelHasLiveTerminal, panelHasRunningSubprocess } from './subprocess.js';
 import { useCapabilities } from '../panel-type/use-capabilities.js';
@@ -28,6 +31,8 @@ import { useSubWorkspaceWindow } from './subworkspace-window-context.js';
 import { destroySubWorkspace } from './destroy-sub-workspace.js';
 import { edgeDropId, panelDragId, useDragState } from './drag-state.js';
 import { setActivePane } from './active-pane.js';
+import { focusPanel } from './panel-focus.js';
+import { registerPanelRename, unregisterPanelRename } from './panel-rename.js';
 import { useWindowFocus } from './use-window-focus.js';
 import { useTerminalCwd } from '../terminal/cwd-store.js';
 import { useTerminalTitle } from '../terminal/title-store.js';
@@ -67,8 +72,11 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const detach = useDetach();
   const subWin = useSubWorkspaceWindow();
   const services = useServices();
+  const { notify } = useNotify();
   const { elevated } = useCapabilities();
   const { draggingPanelId } = useDragState();
+  // The live chords, so a rebind moves what the menu SHOWS as well as what the key does.
+  const keybindings = useKeybindings();
 
   // Inside a sub-workspace window, each Panel shows which project it belongs to:
   // its origin project's name + colour, or — for a Panel created in the
@@ -125,14 +133,35 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const terminalCwd = useTerminalCwd(panel.id);
   // US10 (#89): a terminal's live window title replaces the panel name in the header when present.
   const terminalTitle = useTerminalTitle(panel.id);
+  // An editor with no manual name auto-derives its title from the open file's basename (024 US5,
+  // FR-015 — final extension stripped); null when the panel is not an editor, has been renamed, or
+  // has no file open (then the default placeholder stands).
+  //
+  // The file path is taken from the live editor state when it has registered, but FALLS BACK to the
+  // panel's own `config.filePath` before that happens (#97 follow-up). `setPanelType(editor, …)` writes
+  // the path onto the panel synchronously, while the editor's `editorUi` state registers a beat later
+  // when the CodeMirror view mounts — so a freshly opened editor would otherwise show its placeholder
+  // name ("Panel N") until that registration landed. Trusting `config.filePath` in the gap makes the
+  // auto-name appear immediately, on every open path.
+  const editorFilePath = editorUi
+    ? (editorUi.filePath ?? null)
+    : typeof panel.config?.filePath === 'string'
+      ? panel.config.filePath
+      : null;
+  const editorAuto =
+    panel.kind === 'editor' && !panel.titleIsCustom && editorFilePath
+      ? editorAutoTitle(editorFilePath)
+      : null;
   // The name shown in the header and its hover tooltip. Precedence: a user RENAME wins over
-  // everything (#89 follow-up — a rename must not be overridden by the shell's OSC title); otherwise
-  // a terminal shows its live window title; otherwise the default placeholder. "Reset Name" clears
-  // the custom mark, which drops a terminal back to showing its live title.
-  const effectiveTitle =
-    panel.titleIsCustom || panel.kind !== 'terminal'
-      ? panel.title
-      : (terminalTitle ?? panel.title);
+  // everything (#89 follow-up — a rename must not be overridden by the shell's OSC title, or by an
+  // editor's file name); otherwise a terminal shows its live window title and an editor shows its
+  // open file's basename; otherwise the default placeholder. "Reset Name" clears the custom mark,
+  // which drops each panel type back to its auto source.
+  const effectiveTitle = panel.titleIsCustom
+    ? panel.title
+    : panel.kind === 'terminal'
+      ? (terminalTitle ?? panel.title)
+      : (editorAuto ?? panel.title);
 
   // Removal verb per ownership + location (011, FR-030/031). Inside a sub-workspace a
   // Panel backed by a real project (`originProject` resolved above) is a mirrored VIEW:
@@ -142,6 +171,13 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   // **Destroy** (gone, session terminated). This mirrors the owner-label logic above.
   const panelVerb = subWin !== null && originProject !== null ? 'Close' : 'Destroy';
 
+  // The F2 chord (`panel.rename`) starts the rename. The header owns the box; the window-level
+  // keybinding handler owns the chord and knows only which panel is active — so it asks, here.
+  useEffect(() => {
+    registerPanelRename(panel.id, () => setRenaming(true));
+    return () => unregisterPanelRename(panel.id);
+  }, [panel.id]);
+
   // A freshly added Panel opens directly in rename mode (FR-041 / new-panel UX).
   useEffect(() => {
     if (ws.lastAddedPanelId === panel.id) {
@@ -150,15 +186,69 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
     }
   }, [ws, panel.id]);
 
+  /**
+   * Confirm (or dismiss) the inline rename box.
+   *
+   * Only a CHANGED name is a rename (024 US5/US10 follow-up). This matters far more than it looks: a
+   * newly added Panel opens straight into rename mode, so simply clicking away — to pick a panel
+   * type, to drag a file in — blurred the box and committed its unchanged default. That marked the
+   * Panel `titleIsCustom`, and a custom title outranks every automatic one, so the terminal's live
+   * window title and the editor's file name were suppressed on exactly the panels a user had just
+   * created. Running "Reset Name" cleared the mark and made them work, which is precisely the
+   * symptom that was reported. A user who typed nothing has renamed nothing.
+   */
   const commit = (value: string): void => {
     const trimmed = value.trim();
-    if (trimmed.length > 0) {
-      ws.renamePanel(panel.id, trimmed);
-      // Clone-sync (003): rename the same Panel in every other window it appears in
-      // (its project + any sub-workspaces) in real time.
-      window.throng?.panel?.notifyRenamed?.(panel.id, trimmed);
+    if (trimmed.length > 0 && trimmed !== panel.title) {
+      /*
+       * A panel's name is unique across the WHOLE application (024 follow-up) — every project and
+       * every sub-workspace — because the name is how a user refers to a panel: in the tab strip, in
+       * the window title, in the app-close warning listing what is still running, and out loud.
+       * Two panels called "Build" make every one of those a riddle.
+       *
+       * Only the daemon can see them all, so it grants the name. A taken name is ADJUSTED rather
+       * than refused — the rename always goes through — and the user is told, once, in a warning
+       * that dismisses itself: nothing was lost and there is nothing to decide.
+       */
+      void services.panelNames.claim(panel.id, trimmed).then(({ granted, adjusted }) => {
+        ws.renamePanel(panel.id, granted);
+        // Clone-sync (003): rename the same Panel in every other window it appears in
+        // (its project + any sub-workspaces) in real time.
+        window.throng?.panel?.notifyRenamed?.(panel.id, granted);
+        if (adjusted) {
+          notify({
+            severity: 'warning',
+            message: `Another panel is already called “${trimmed}”, so this one was named “${granted}”.`,
+            testId: 'panel-name-adjusted',
+          });
+        }
+      });
     }
+    endRename();
+  };
+
+  /**
+   * Leave the rename box and hand the keyboard BACK to the panel.
+   *
+   * Renaming is a detour: the user was working in an editor or a terminal, pressed F2 (or picked
+   * Rename), typed a name, and is done. Leaving focus on a header that is no longer an input strands
+   * them — the next keystroke goes nowhere, and they have to click back into the thing they were
+   * already in. The panel's own view restores its caret when it takes focus, so the cursor lands
+   * where they left it rather than at the top of the document.
+   */
+  const endRename = (): void => {
     setRenaming(false);
+    /*
+     * DEFERRED, and that is the whole point.
+     *
+     * Focusing the panel SYNCHRONOUSLY from inside the Enter keydown handler moved the caret into a
+     * terminal or an editor while that very keystroke was still being delivered — so the rest of the
+     * key's dispatch landed in the newly focused surface and typed a newline into it. Confirming a
+     * panel name must not put a blank line in someone's file, or a bare Enter at their shell.
+     *
+     * A frame later the keystroke is finished, and the panel takes focus with nothing following it.
+     */
+    requestAnimationFrame(() => focusPanel(panel.id));
   };
 
   // Shared Destroy Panel flow (FR-020/022/023) used by the header ✕ and the
@@ -324,7 +414,15 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
           e.preventDefault();
           const others = (ws.layout?.tabs ?? []).filter((t) => t.id !== tabId);
           openMenu(e.clientX, e.clientY, [
-            { label: 'Rename', icon: 'rename', onClick: () => setRenaming(true) },
+            {
+              label: 'Rename',
+              icon: 'rename',
+              // The chord is SHOWN, not merely bound. A menu that offers an action without naming
+              // its key teaches nobody the key, and this menu is the panel's canonical index of
+              // what it can do (constitution v4.3.0).
+              shortcut: firstBinding(keybindings, 'panel.rename'),
+              onClick: () => setRenaming(true),
+            },
             // Undo a rename back to the panel's default name (a terminal then shows its live title
             // again). Disabled when there is nothing to reset.
             {
@@ -338,9 +436,24 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
               label: 'Zoom',
               icon: 'zoomIn',
               submenu: [
-                { label: 'Zoom In', icon: 'zoomIn', onClick: () => ws.bumpZoom(panel.id, 1) },
-                { label: 'Zoom Out', icon: 'zoomOut', onClick: () => ws.bumpZoom(panel.id, -1) },
-                { label: 'Reset Zoom', icon: 'zoomReset', onClick: () => ws.resetZoom(panel.id) },
+                {
+                  label: 'Zoom In',
+                  icon: 'zoomIn',
+                  shortcut: firstBinding(keybindings, 'panel.zoomIn'),
+                  onClick: () => ws.bumpZoom(panel.id, 1),
+                },
+                {
+                  label: 'Zoom Out',
+                  icon: 'zoomOut',
+                  shortcut: firstBinding(keybindings, 'panel.zoomOut'),
+                  onClick: () => ws.bumpZoom(panel.id, -1),
+                },
+                {
+                  label: 'Reset Zoom',
+                  icon: 'zoomReset',
+                  shortcut: firstBinding(keybindings, 'panel.zoomReset'),
+                  onClick: () => ws.resetZoom(panel.id),
+                },
               ],
             },
             // Editor Panels: Save (== Ctrl+S, FR-076) and Revert-all-changes with a
@@ -350,6 +463,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                   {
                     label: 'Save',
                     icon: 'send' as const,
+                    shortcut: firstBinding(keybindings, 'editor.save'),
                     onClick: () => {
                       void getEditorActions(panel.id)?.save();
                     },
@@ -357,6 +471,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                   {
                     label: 'Save As…',
                     icon: 'send' as const,
+                    shortcut: firstBinding(keybindings, 'editor.saveAs'),
                     onClick: () => {
                       void getEditorActions(panel.id)?.saveAs();
                     },
@@ -506,8 +621,18 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             onClick={(e) => e.stopPropagation()}
             onBlur={(e) => commit(e.target.value)}
             onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-              if (e.key === 'Enter') commit((e.target as HTMLInputElement).value);
-              if (e.key === 'Escape') setRenaming(false);
+              // Both keys are CONSUMED here: they finish the rename and mean nothing to anything
+              // behind it. Letting them through is what sent Enter on to the panel.
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                commit((e.target as HTMLInputElement).value);
+              }
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                endRename(); // cancelled, but still not stranded
+              }
             }}
           />
         ) : (
@@ -538,7 +663,15 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             <span className="panel-box__file-name">{filePill ? filePill.name : editorUi.displayName}</span>
           </span>
         ) : null}
-        {editorUi?.dirty ? (
+        {/* Gated on the panel being an EDITOR, exactly as the file pill above it is.
+         *
+         * Editor state is keyed by panel id and DELIBERATELY outlives an editor's unmount — a
+         * document moved between tabs or windows must not be destroyed by the move (use-editor.ts).
+         * So a panel that once held a dirty editor and has since been re-typed still HAS that state,
+         * and the dot alone was reading it: a terminal wearing another document's unsaved mark,
+         * reporting work the user cannot reach from it and cannot save there. Whether the state
+         * survives is the document's business; whether THIS panel displays it is the panel's. */}
+        {panel.kind === 'editor' && editorUi?.dirty ? (
           <span
             className="throng-unsaved-dot panel-box__unsaved"
             data-testid={`panel-unsaved-${panel.id}`}
