@@ -39,7 +39,10 @@ export const SCROLLBACK_ACTIONS: readonly ActionId[] = [
   'terminal.scrollToBottom',
 ];
 
-const ALWAYS_OURS = new Set<ActionId>(['search.find', ...SCROLLBACK_ACTIONS]);
+// `panel.rename` joins them: F2 renames the panel, and a terminal must not also hand it to the
+// program. It is safe to take unconditionally for the reason `search.close` is not — F2 has no
+// meaning at a shell prompt that a user could be relying on, whereas Escape plainly does.
+const ALWAYS_OURS = new Set<ActionId>(['search.find', 'panel.rename', ...SCROLLBACK_ACTIONS]);
 
 /** Ours only while a find session is live on the panel — otherwise the program's. */
 const OURS_WHILE_FINDING = new Set<ActionId>([
