@@ -2,6 +2,13 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+/**
+ * The `@lezer/*` packages that are the parser RUNTIME rather than a language: the LR engine, the
+ * syntax-tree model and the highlight tags. Every grammar depends on them, so they stay in one
+ * shared chunk; everything else under `@lezer/` is a language's parse tables and rides with it.
+ */
+const SHARED_LEZER = new Set(['common', 'lr', 'highlight']);
+
 // Renderer build pipeline (research D2). The renderer is a React 18 app bundled
 // by Vite; main and preload stay on `tsc`. Output goes to `dist/renderer` so the
 // Electron main process can `loadFile` it. `base: './'` keeps asset URLs relative
@@ -40,6 +47,27 @@ export default defineConfig({
           const grammar = /\/node_modules\/@codemirror\/(lang-[a-z]+)\//.exec(id);
           if (grammar) return `grammar-${grammar[1]}`;
           if (id.includes('@codemirror/legacy-modes')) return 'grammar-legacy';
+          /*
+           * A LANGUAGE'S PARSER BELONGS WITH ITS LANGUAGE.
+           *
+           * `@codemirror/lang-x` is a thin wrapper; the actual parse tables live in `@lezer/x`, and
+           * they are the bulk of a grammar by an order of magnitude (the `lang-python` wrapper is
+           * 7 kB, `@lezer/python` is 160 kB of source). Sweeping every `@lezer/*` into one chunk
+           * therefore put FOURTEEN parsers — cpp, markdown, php, javascript, rust, java, python,
+           * sass, html, go, yaml, css, xml, json — into a single 624 kB bundle, which the shared
+           * runtime below pulls in EAGERLY. So the split above was cosmetic: the wrappers were
+           * lazy, and every parser behind them loaded at startup anyway, which is precisely what
+           * the comment above says must not happen.
+           *
+           * Routed to the SAME chunk name as its wrapper, so a language is one file. Parsers shared
+           * between languages (html and javascript are used by php and vue too) land in the chunk
+           * of the language they are named for, and the others import it — one copy, fetched by
+           * whichever arrives first.
+           */
+          const lezerLang = /\/node_modules\/@lezer\/([a-z0-9-]+)\//.exec(id);
+          if (lezerLang && !SHARED_LEZER.has(lezerLang[1])) return `grammar-lang-${lezerLang[1]}`;
+          // The shared parser RUNTIME — the LR engine, the tree model, the highlight tags. Small,
+          // and genuinely needed before any document is open, so this one is eager by design.
           if (id.includes('@lezer/')) return 'lezer';
           return 'vendor'; // react-arborist (+ its react-dnd deps), inversify, …
         },
