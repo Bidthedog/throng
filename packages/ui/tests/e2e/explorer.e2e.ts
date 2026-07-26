@@ -263,21 +263,23 @@ test('copy/paste duplicates with a non-clobbering name; open-in-explorer raises 
       await createProject(win, 'Demo', projectRoot);
       const tree = win.getByTestId('file-explorer-tree');
       await expect(tree).toBeVisible();
-      const menuItem = (label: string) => win.locator('.context-menu__item', { hasText: label });
 
-      // Copy README.md, paste at the root → a de-duplicated "README copy.md".
+      // Copy README.md, paste at the root → a de-duplicated "README copy.md". Use the exact
+      // menu-item testIds: a `hasText:'Copy'` locator now also matches "Copy Path" (#156), which is
+      // ambiguous under Playwright strict mode.
       await tree.getByText('README.md', { exact: true }).click({ button: 'right' });
-      await menuItem('Copy').click();
+      await win.getByTestId('menu-item-Copy').click();
       await tree.locator('.tree-row--root').click({ button: 'right' });
-      await menuItem('Paste').click();
+      await win.getByTestId('menu-item-Paste').click();
       await expect(tree.getByText('README copy.md', { exact: true })).toBeVisible();
       await expect(tree.getByText('README.md', { exact: true })).toBeVisible(); // original kept
 
-      // Reveal a file in the OS explorer → no error banner. The reveal is a single
-      // top-level "Open in OS File Explorer" item for files and folders alike (FR-107).
+      // Reveal a file in the OS explorer → no error banner. The reveal lives inside the "Open In"
+      // submenu (#158, FR-018a) for files and folders alike — open it, then the first item.
       await win.keyboard.press('Escape'); // dismiss any lingering menu
       await tree.getByText('a.txt', { exact: true }).click({ button: 'right' });
-      await win.getByTestId('menu-item-Open in OS File Explorer').click();
+      await win.getByTestId('menu-item-Open In').click();
+      await win.getByTestId('submenu-Open In').locator('.context-menu__item').first().click();
       await win.waitForTimeout(300);
       await expect(tree.locator('.explorer__error')).toHaveCount(0);
     });

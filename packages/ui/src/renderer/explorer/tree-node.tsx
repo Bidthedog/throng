@@ -27,6 +27,9 @@ export function TreeRow({
   const isRoot = data.relPath === '';
   const isFolder = data.kind === 'folder';
   const isCut = row?.cutPaths.has(data.relPath) ?? false;
+  // Case-insensitively, because the set is built from paths the platform treats as one file however
+  // they are spelled, and a tree row's own relPath keeps the spelling the filesystem reported.
+  const isDirty = data.kind === 'file' && (row?.dirtyPaths.has(data.relPath.toLowerCase()) ?? false);
   // Escape cancels a rename and suppresses the follow-on blur-commit (FR-090).
   const escapedRef = useRef(false);
   // Highlight the folder that would receive a drop while dragging (FR-091).
@@ -67,6 +70,16 @@ export function TreeRow({
     <div
       ref={dragHandle}
       style={style}
+      // 024 US6 (#157 follow-up): mark the keyboard-focused (highlighted) row so a Shift+F10 /
+      // ContextMenu keypress can open THIS row's menu. react-arborist keeps DOM focus on the tree
+      // container (roving focus), so `document.activeElement` is never the row — the menu.open handler
+      // in app.tsx finds the highlighted row by this attribute instead.
+      data-tree-focused={node.isFocused ? 'true' : undefined}
+      // 024 US2/US4 (#155/#114): identify the row being dragged so a terminal/empty-panel drop records
+      // the DRAGGED item's path, not the current selection. react-arborist's row emits no node id, so
+      // the drag-start listener reads these off the grabbed `.tree-row`.
+      data-rel-path={data.relPath}
+      data-kind={data.kind}
       className={`tree-row${node.isSelected ? ' tree-row--selected' : ''}${
         isRoot ? ' tree-row--root' : ''
       }${isCut ? ' tree-row--cut' : ''}${willDrop ? ' tree-row--drop-target' : ''}`}
@@ -148,6 +161,18 @@ export function TreeRow({
       ) : (
         <span className="tree-label">{data.name}</span>
       )}
+      {/* The SHARED unsaved dot (006, US8) — the same mark the panel header, the tab and the project
+          list carry, now on the file itself. A user who edited a file and looked away should see
+          that from the place they think about files, and not have to find the panel holding it.
+          Suppressed while renaming, where the row is an input and the dot would crowd it. */}
+      {isDirty && !node.isEditing ? (
+        <span
+          className="throng-unsaved-dot tree-row__unsaved"
+          data-testid={`tree-unsaved-${data.relPath}`}
+          title="Unsaved changes"
+          aria-label="Unsaved changes"
+        />
+      ) : null}
       {/*
         FR-006d — an icon may not be the SOLE carrier of meaning.
 

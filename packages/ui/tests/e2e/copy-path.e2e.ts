@@ -37,20 +37,22 @@ test('Copy Path copies the item path in each absolute/relative × slash form (#1
       await tree.getByTestId('tree-twisty-src').click();
       await expect(tree.getByText('b.txt', { exact: true })).toBeVisible();
 
-      // Absolute Linux: forward slashes, ends in the file, no backslashes.
-      const absLinux = await copyForm(win, 'b.txt', 'Absolute (Linux /)');
-      expect(absLinux).toContain('/src/b.txt');
-      expect(absLinux).not.toContain('\\');
+      // Absolute POSIX: MSYS/Git Bash form — a `/<drive>/…` root, forward slashes, no backslashes.
+      const absPosix = await copyForm(win, 'b.txt', 'Absolute (POSIX)');
+      expect(absPosix).toMatch(/^\/[a-z]\//); // starts /<drive-letter>/
+      expect(absPosix).toContain('/src/b.txt');
+      expect(absPosix).not.toContain('\\');
+      expect(absPosix).not.toContain(':'); // no drive colon in the POSIX form
 
-      // Absolute Windows: backslashes.
-      const absWin = await copyForm(win, 'b.txt', 'Absolute (Windows \\)');
+      // Absolute Windows: backslashes, drive letter kept.
+      const absWin = await copyForm(win, 'b.txt', 'Absolute (Windows)');
       expect(absWin).toContain('\\src\\b.txt');
       expect(absWin).not.toContain('/');
 
-      // Relative forms are relative to the project root.
-      const relLinux = await copyForm(win, 'b.txt', 'Relative (Linux /)');
-      expect(relLinux).toBe('src/b.txt');
-      const relWin = await copyForm(win, 'b.txt', 'Relative (Windows \\)');
+      // Relative forms are relative to the project root (no drive).
+      const relPosix = await copyForm(win, 'b.txt', 'Relative (POSIX)');
+      expect(relPosix).toBe('src/b.txt');
+      const relWin = await copyForm(win, 'b.txt', 'Relative (Windows)');
       expect(relWin).toBe('src\\b.txt');
     });
   } finally {

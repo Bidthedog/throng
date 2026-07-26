@@ -107,9 +107,35 @@
   background: var(--throng-colour-hoverSurface);
 }
 
-.tree-row--selected,
-.tree-row--selected:hover {
+/* The selection highlight belongs to the ACTIVE pane, and only to it.
+ *
+ * The tree keeps a selection at all times — it is what every file operation acts on, and it is kept
+ * in step with the open editor — but showing it from an inactive pane made the application look as
+ * though it had two current things at once: a highlighted row over here and a highlighted panel over
+ * there, with no way to tell which the next keystroke would reach. So the row is highlighted while
+ * the pane is the active one (or simply holds the keyboard, which is how a Tab into the tree gets
+ * here without a click), and unhighlighted otherwise. The selection itself is untouched — it comes
+ * back the moment the pane does.
+ *
+ * `[data-active-pane]` rather than `:focus-within` alone, deliberately: a context menu or a delete
+ * confirmation takes DOM focus OUT of the pane, and the row being acted on must stay visibly the
+ * subject of the question being asked about it. */
+.pane-explorer__body[data-active-pane='true'] .tree-row--selected,
+.pane-explorer__body[data-active-pane='true'] .tree-row--selected:hover,
+.pane-explorer__body:focus-within .tree-row--selected,
+.pane-explorer__body:focus-within .tree-row--selected:hover {
   background: var(--throng-colour-surfaceActive);
+}
+
+/* react-arborist gives every row a roving `tabindex` and calls `.focus()` on the highlighted one, so
+   Chromium drew its default focus ring around it. That was a SECOND highlight saying the same thing
+   as the selected row's background — and since the arrow keys now move the selection itself
+   (`selectionFollowsFocus`, file-tree.tsx) the two are always the same row, so the ring only ever
+   double-drew the selection in a heavier style. The background is the indicator; drop the ring.
+   The tree CONTAINER keeps its own focus ring — that one marks which pane has the keyboard. */
+.explorer [role='treeitem']:focus,
+.explorer [role='treeitem']:focus-visible {
+  outline: none;
 }
 
 /* The root row (project folder) reads as a heading and never collapses. */
@@ -191,6 +217,14 @@ button.tree-twisty:focus-visible {
   border: 1px solid var(--throng-colour-accent);
   border-radius: 2px;
   outline: none;
+}
+
+/* The shared unsaved dot on a file row. It sits immediately after the name — attached to the FILE,
+   not pushed to the far edge of the pane where it would read as a column of its own and drift away
+   from the thing it is about on a wide pane. */
+.tree-row__unsaved {
+  flex: 0 0 auto;
+  margin-left: 4px;
 }
 
 .tree-symlink {
