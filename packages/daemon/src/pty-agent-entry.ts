@@ -24,7 +24,12 @@ import { encodeLine, type AgentCommand, type AgentEvent } from './pty-agent-prot
 import { createAgentLogger } from './pty-agent-log.js';
 import { probeErrorMeansDaemonGone } from './pty-agent-liveness.js';
 
-const logger = createAgentLogger(process.pid);
+// #123 — the agent logs BESIDE the rest of throng's diagnostics when the daemon told it where
+// that is (`THRONG_LOG_DIR`, inherited from the UI that started the chain), so "send me your logs"
+// is one folder rather than a hunt through %TEMP%. It falls back to the temp directory, which is
+// where it has always written: an agent launched by a daemon that has no log directory of its own
+// must still leave a record, and %TEMP% is reachable from the de-elevated side of the boundary.
+const logger = createAgentLogger(process.pid, process.env.THRONG_LOG_DIR || undefined);
 const log = (message: string): void => logger.log(message);
 const errText = (e: unknown): string =>
   e instanceof Error ? e.stack ?? e.message : String(e);

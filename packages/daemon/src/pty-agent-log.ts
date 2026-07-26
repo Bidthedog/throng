@@ -1,4 +1,4 @@
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -31,6 +31,13 @@ export interface AgentLogger {
  */
 export function createAgentLogger(pid: number, dir: string = tmpdir()): AgentLogger {
   const path = join(dir, `throng-agent-${pid}.log`);
+  try {
+    // The directory may be throng's own log folder rather than %TEMP% (#123), and on a first run
+    // nothing has created it yet. Failing here would cost us the log we are trying to write.
+    mkdirSync(dir, { recursive: true });
+  } catch {
+    /* see the class note: diagnostics never throw */
+  }
   return {
     path,
     log(message: string): void {

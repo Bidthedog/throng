@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { connect, type Socket } from 'node:net';
 import { dirname, join } from 'node:path';
 import process from 'node:process';
@@ -70,6 +70,16 @@ export interface EnsureDaemonOptions {
    * spawns an elevated daemon — so terminals can run "as administrator". Default false.
    */
   appElevated?: boolean;
+  /**
+   * Where the daemon writes its durable diagnostics (#123).
+   *
+   * The daemon is spawned DETACHED from a shortcut-launched app: it has no console, and its output
+   * went to `stdio: 'ignore'` — so a daemon that failed to start, or died, said nothing to anyone.
+   * Passed on as `THRONG_LOG_DIR` (the daemon logs through it) and used here to give the spawn a
+   * real file for whatever is printed BEFORE the daemon's own logger exists: a module that fails to
+   * load, a native crash, an unhandled throw during startup. Omitted → the old behaviour.
+   */
+  logDir?: string;
 }
 
 export interface EnsureDaemonResult {
@@ -82,6 +92,21 @@ export interface EnsureDaemonResult {
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * A file descriptor for the spawned daemon's stdout/stderr, or null to fall back to `ignore`.
+ *
+ * Never throws: an unwritable log directory must not be the reason the daemon cannot be started.
+ */
+function openDaemonStdio(logDir: string | undefined): number | null {
+  if (!logDir) return null;
+  try {
+    mkdirSync(logDir, { recursive: true });
+    return openSync(join(logDir, 'daemon-startup.log'), 'w');
+  } catch {
+    return null;
+  }
+}
 
 /**
  * One `health.ping` over the pipe. Resolves the pong (pid/buildId) on a well-formed
@@ -192,13 +217,20 @@ export async function ensureDaemon(opts: EnsureDaemonOptions): Promise<EnsureDae
     existsSync,
     inheritedEnv,
   );
+  // Pre-logger output goes to a real file (#123). The descriptor is INHERITED, so it stays valid
+  // after this UI process exits and the detached daemon carries on — which is exactly the window in
+  // which a daemon dies unobserved. Truncated per spawn (`w`), so it holds the current daemon's
+  // startup and nothing else, and cannot grow across restarts; the daemon's own rotating log is
+  // where its running narrative goes.
+  const stdio = openDaemonStdio(opts.logDir);
   const child = spawn(nodeExe, [opts.daemonEntry], {
     detached: true,
-    stdio: 'ignore',
+    stdio: stdio === null ? 'ignore' : ['ignore', stdio, stdio],
     env: {
       ...inheritedEnv,
       THRONG_PIPE_NAME: opts.pipeName,
       ...(opts.databasePath ? { THRONG_DATABASE_PATH: opts.databasePath } : {}),
+      ...(opts.logDir ? { THRONG_LOG_DIR: opts.logDir } : {}),
       ...opts.env,
     },
   });
