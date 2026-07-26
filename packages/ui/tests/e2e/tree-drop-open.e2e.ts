@@ -1,0 +1,195 @@
+/**
+ * US4 (#114, spec 024): dragging a file from Files & Folders onto an untyped panel opens it as an
+ * editor; a folder or multi-select is rejected (the panel stays untyped). Driven through the
+ * throng:tree-drop seam (a real react-dnd → native drop is not scriptable).
+ */
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test, expect, type Page } from '@playwright/test';
+import { runApp, createProject, firstPanelId } from './harness.js';
+import { skipIfElevated } from './admin.js';
+
+function treeDrop(win: Page, panelId: string, paths: string[], singleFile: boolean): Promise<void> {
+  return win.evaluate(
+    ([id, list, single]) => {
+      window.dispatchEvent(
+        new CustomEvent('throng:tree-drop', {
+          detail: { panelId: id, paths: list, singleFile: single },
+        }),
+      );
+    },
+    [panelId, paths, singleFile] as const,
+  );
+}
+
+/** The same seam, aimed at a TAB CHIP rather than a panel (024 US4 follow-up). */
+function treeDropOnTab(win: Page, tabId: string, paths: string[], singleFile: boolean): Promise<void> {
+  return win.evaluate(
+    ([id, list, single]) => {
+      window.dispatchEvent(
+        new CustomEvent('throng:tree-drop', {
+          detail: { tabId: id, paths: list, singleFile: single },
+        }),
+      );
+    },
+    [tabId, paths, singleFile] as const,
+  );
+}
+
+test('a single tree file dropped on an untyped panel opens it as an editor (#114)', async () => {
+  skipIfElevated();
+  const root = mkdtempSync(join(tmpdir(), 'throng-treeopen-'));
+  writeFileSync(join(root, 'hello.txt'), 'HELLO-FROM-TREE\n');
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'TreeOpenProj', root);
+      const pid = await firstPanelId(win);
+      // The first panel is untyped (type-selection form).
+      await expect(win.getByTestId(`panel-type-select-${pid}`)).toBeVisible();
+
+      // A single file → becomes an editor showing the file.
+      await treeDrop(win, pid, [join(root, 'hello.txt')], true);
+      await expect(win.getByTestId(`editor-${pid}`)).toBeVisible({ timeout: 8000 });
+      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
+        'HELLO-FROM-TREE',
+        { timeout: 8000 },
+      );
+      // The panel titles itself from the dropped file — a drop is not a lesser way to open one
+      // (024 US5 follow-up).
+      await expect(win.getByTestId(`panel-title-${pid}`)).toHaveText('hello', { timeout: 8000 });
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  }
+});
+
+test('dropping an already-open file focuses the existing editor, not a second view (#114)', async () => {
+  skipIfElevated();
+  const root = mkdtempSync(join(tmpdir(), 'throng-treeopen2-'));
+  writeFileSync(join(root, 'shared.txt'), 'SHARED-DOC\n');
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'SharedProj', root);
+      const p1 = await firstPanelId(win);
+      // Panel 1 opens the file as an editor.
+      await win.getByTestId(`panel-type-select-${p1}`).selectOption('editor');
+      await win.getByTestId(`panel-type-confirm-${p1}`).click();
+      await win.getByTestId(`editor-${p1}`).click();
+      await win.getByTestId('file-explorer-tree').getByText('shared.txt', { exact: true }).click();
+      await expect(win.getByTestId(`editor-${p1}`).locator('.cm-content')).toContainText('SHARED-DOC', {
+        timeout: 8000,
+      });
+
+      // A second, untyped panel.
+      await win.getByTestId(`panel-add-${p1}`).click();
+      const ids = await win.locator('[data-testid^="panel-type-select-"]').evaluateAll((els) =>
+        els.map((e) => (e.getAttribute('data-testid') ?? '').replace('panel-type-select-', '')),
+      );
+      const p2 = ids[0];
+      expect(p2).toBeTruthy();
+
+      // Dropping the already-open file on the untyped panel → it stays untyped (no second view).
+      await treeDrop(win, p2, [join(root, 'shared.txt')], true);
+      await win.waitForTimeout(400);
+      await expect(win.getByTestId(`panel-type-select-${p2}`)).toBeVisible();
+      await expect(win.getByTestId(`editor-${p2}`)).toHaveCount(0);
+      // Exactly one editor still shows the doc.
+      expect(await win.locator('.cm-content', { hasText: 'SHARED-DOC' }).count()).toBe(1);
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  }
+});
+
+test('a tree file dropped on an EXISTING editor opens it in that editor (#114 follow-up)', async () => {
+  skipIfElevated();
+  const root = mkdtempSync(join(tmpdir(), 'throng-treeeditor-'));
+  writeFileSync(join(root, 'first.txt'), 'FIRST-DOC\n');
+  writeFileSync(join(root, 'second.txt'), 'SECOND-DOC\n');
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'TreeEditorProj', root);
+      const pid = await firstPanelId(win);
+      // An editor already holding a file — the drop must land HERE, not in a new panel.
+      await win.getByTestId(`panel-type-select-${pid}`).selectOption('editor');
+      await win.getByTestId(`panel-type-confirm-${pid}`).click();
+      await win.getByTestId(`editor-${pid}`).click();
+      await win.getByTestId('file-explorer-tree').getByText('first.txt', { exact: true }).click();
+      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
+        'FIRST-DOC',
+        { timeout: 8000 },
+      );
+
+      await treeDrop(win, pid, [join(root, 'second.txt')], true);
+      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
+        'SECOND-DOC',
+        { timeout: 8000 },
+      );
+      // The same rules as any other open: one editor, not a second panel for the same file.
+      expect(await win.locator('.cm-content', { hasText: 'SECOND-DOC' }).count()).toBe(1);
+      // …and it names itself from the dropped file, exactly as a click would (024 US5).
+      await expect(win.getByTestId(`panel-title-${pid}`)).toHaveText('second', { timeout: 8000 });
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  }
+});
+
+test('a tree file dropped on a TAB CHIP opens it in that tab and brings the tab forward (#114 follow-up)', async () => {
+  skipIfElevated();
+  const root = mkdtempSync(join(tmpdir(), 'throng-treetab-'));
+  writeFileSync(join(root, 'other.txt'), 'OTHER-TAB-DOC\n');
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'TreeTabProj', root);
+      const p1 = await firstPanelId(win);
+
+      // A second tab, which then becomes the BACKGROUND tab (adding one activates it, so switch back).
+      await win.getByTestId('tab-add').click();
+      await win.keyboard.press('Escape'); // a new tab opens in rename mode
+      const tabIds = await win
+        .locator('.tab-strip .tab-chip')
+        .evaluateAll((els) => els.map((e) => (e.getAttribute('data-testid') ?? '').slice(4)));
+      expect(tabIds.length).toBe(2);
+      const [firstTab, secondTab] = tabIds;
+      await win.getByTestId(`tab-${firstTab}`).click();
+      await expect(win.getByTestId(`tab-${firstTab}`)).toHaveAttribute('data-active', 'true');
+      // The first tab's panel is still untyped, so nothing here can claim the file.
+      await expect(win.getByTestId(`panel-type-select-${p1}`)).toBeVisible();
+
+      // Dropping the file on the OTHER tab's chip activates that tab and opens the file there.
+      await treeDropOnTab(win, secondTab, [join(root, 'other.txt')], true);
+      await expect(win.getByTestId(`tab-${secondTab}`)).toHaveAttribute('data-active', 'true', {
+        timeout: 8000,
+      });
+      await expect(win.locator('.cm-content', { hasText: 'OTHER-TAB-DOC' })).toHaveCount(1, {
+        timeout: 8000,
+      });
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  }
+});
+
+test('a folder or multi-select dropped on an untyped panel is rejected (#114)', async () => {
+  skipIfElevated();
+  const root = mkdtempSync(join(tmpdir(), 'throng-treereject-'));
+  writeFileSync(join(root, 'a.txt'), 'A\n');
+  writeFileSync(join(root, 'b.txt'), 'B\n');
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'RejectProj', root);
+      const pid = await firstPanelId(win);
+      await expect(win.getByTestId(`panel-type-select-${pid}`)).toBeVisible();
+
+      // Multi-select (singleFile false) → rejected, panel stays untyped.
+      await treeDrop(win, pid, [join(root, 'a.txt'), join(root, 'b.txt')], false);
+      await win.waitForTimeout(400);
+      await expect(win.getByTestId(`panel-type-select-${pid}`)).toBeVisible();
+      await expect(win.getByTestId(`editor-${pid}`)).toHaveCount(0);
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  }
+});

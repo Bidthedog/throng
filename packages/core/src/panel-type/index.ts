@@ -9,4 +9,4 @@ export type {
 } from './descriptor.js';
 export { createPanelTypeRegistry, type PanelTypeRegistry } from './registry.js';
 export { defaultPanelTypeRegistry } from './default-registry.js';
-export { setPanelType, clearPanelType, updatePanelConfig } from './assignment.js';
+export { setPanelType, clearPanelType, convertPanelToProject, updatePanelConfig } from './assignment.js';

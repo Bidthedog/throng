@@ -20,6 +20,7 @@ import {
   setActiveTab as opSetActiveTab,
   renameTab as opRenameTab,
   renamePanel as opRenamePanel,
+  retitlePanel as opRetitlePanel,
   resetPanelName as opResetPanelName,
   closeTab as opCloseTab,
   closeOtherTabs as opCloseOtherTabs,
@@ -31,6 +32,7 @@ import {
   bumpZoom as opBumpZoom,
   resetZoom as opResetZoom,
   setPanelType as opSetPanelType,
+  convertPanelToProject as opConvertPanelToProject,
   clearPanelType as opClearPanelType,
   updatePanelConfig as opUpdatePanelConfig,
   type Edge,
@@ -77,12 +79,16 @@ export interface WorkspaceContextValue {
   resetZoom(panelId: string): void;
   renameTab(tabId: string, title: string): void;
   renamePanel(panelId: string, title: string): void;
+  /** Rename by throng's own decision, leaving the panel's auto-title free (024, #184). */
+  retitlePanel(panelId: string, title: string): void;
   resetPanelName(panelId: string): void;
   closeTab(tabId: string): void;
   closeOtherTabs(tabId: string): void;
   resizeSplit(tabId: string, path: number[], sizes: number[]): void;
   /** Assign a confirmed type + config to an untyped Panel (005 / FR-006). */
   setPanelType(panelId: string, kind: PanelKind, config: PanelConfig): void;
+  /** 024 US4: convert an untyped panel to be owned by a project (rewrites originProjectId). */
+  convertPanelToProject(panelId: string, projectId: string): void;
   /** Revert a typed Panel back to the type-selection form (005 / FR-020). */
   clearPanelType(panelId: string): void;
   /** Merge partial config into an already-typed Panel (006 — persist editor path). */
@@ -143,39 +149,6 @@ export function WorkspaceProvider({
   // so the close settles this layout wherever it is hosted — main window or sub-workspace (C6).
   useEffect(() => registerLayoutFlusher(flushSave), [flushSave]);
 
-  // Load the active project's layout whenever it changes. Flush any pending save
-  // for the OUTGOING project first so switching never drops an in-flight edit.
-  useEffect(() => {
-    let cancelled = false;
-    // Unchanged behaviour: these two fire-and-forget exactly as they did before the drain
-    // gave `flushSave` a return type. `void` states that this caller is not the drain.
-    void flushSave();
-    if (!activeProjectId) {
-      setLayout(null);
-      setRestoreFailed(false);
-      return;
-    }
-    setLoading(true);
-    void client
-      .load(activeProjectId)
-      .then((result) => {
-        if (cancelled) return;
-        setLayout(result.layout);
-        setRestoreFailed(result.restored === false && result.reason === 'corrupt');
-      })
-      .catch(() => {
-        if (!cancelled) setRestoreFailed(false);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-      // On switch/unmount, persist whatever was queued for this project.
-      void flushSave();
-    };
-  }, [activeProjectId, client, flushSave]);
-
   const scheduleSave = useCallback(
     (next: WorkspaceLayout) => {
       pendingSave.current = next;
@@ -196,6 +169,48 @@ export function WorkspaceProvider({
     },
     [client],
   );
+
+  // Load the active project's layout whenever it changes. Flush any pending save
+  // for the OUTGOING project first so switching never drops an in-flight edit.
+  useEffect(() => {
+    let cancelled = false;
+    // Unchanged behaviour: these two fire-and-forget exactly as they did before the drain
+    // gave `flushSave` a return type. `void` states that this caller is not the drain.
+    void flushSave();
+    if (!activeProjectId) {
+      setLayout(null);
+      setRestoreFailed(false);
+      return;
+    }
+    setLoading(true);
+    void client
+      .load(activeProjectId)
+      .then((result) => {
+        if (cancelled) return;
+        setLayout(result.layout);
+        setRestoreFailed(result.restored === false && result.reason === 'corrupt');
+        // A layout that was not restored was SYNTHESISED by the repository just now — a default
+        // whose panel ids were generated on the spot. Persist it immediately, because until it is
+        // saved the panel on screen has no stored identity: the next load invents different ids, and
+        // anything reasoning about panels across projects (panel-name uniqueness, 024/#184) either
+        // cannot see this project's panels at all or sees a phantom set that matches nothing.
+        // Autosave alone never covers this — it only fires when the layout CHANGES, so a project the
+        // user opens and does not edit would stay unsaved forever.
+        if (result.restored === false) scheduleSave(result.layout);
+      })
+      .catch(() => {
+        if (!cancelled) setRestoreFailed(false);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      // On switch/unmount, persist whatever was queued for this project.
+      void flushSave();
+    };
+  }, [activeProjectId, client, flushSave, scheduleSave]);
+
 
   const apply = useCallback(
     (op: (current: WorkspaceLayout) => WorkspaceLayout) => {
@@ -251,12 +266,15 @@ export function WorkspaceProvider({
       resetZoom: (panelId) => apply((l) => opResetZoom(l, panelId)),
       renameTab: (tabId, title) => apply((l) => opRenameTab(l, tabId, title)),
       renamePanel: (panelId, title) => apply((l) => opRenamePanel(l, panelId, title)),
+      retitlePanel: (panelId, title) => apply((l) => opRetitlePanel(l, panelId, title)),
       resetPanelName: (panelId) => apply((l) => opResetPanelName(l, panelId)),
       closeTab: (tabId) => apply((l) => opCloseTab(l, tabId)),
       closeOtherTabs: (tabId) => apply((l) => opCloseOtherTabs(l, tabId)),
       resizeSplit: (tabId, path, sizes) => apply((l) => opResizeSplit(l, tabId, path, sizes)),
       setPanelType: (panelId, kind, config) =>
         apply((l) => opSetPanelType(l, panelId, kind, config)),
+      convertPanelToProject: (panelId, projectId) =>
+        apply((l) => opConvertPanelToProject(l, panelId, projectId)),
       clearPanelType: (panelId) => apply((l) => opClearPanelType(l, panelId)),
       updatePanelConfig: (panelId, config) => apply((l) => opUpdatePanelConfig(l, panelId, config)),
       replaceLayout: (next) => {
