@@ -2,6 +2,7 @@ import { EditorSelection } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import type { LineEndingId } from '@throng/core';
 import type { MenuItem } from '../workspace/context-menu.js';
+import { isKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { applyPaste, clipboardEntry, cutThrough, ENDINGS } from './commands.js';
 import { requestLanguagePicker } from './picker-request.js';
 
@@ -27,6 +28,11 @@ export interface ContentMenuArgs {
   viewId: string;
   /** The document's effective ending — what the CLIPBOARD is terminated with (SC-009a). */
   lineEnding: () => LineEndingId;
+  /** 024 US1 (#152): the checkable word-wrap toggle — its current state, the action, and its chord. */
+  wordWrap: { on: boolean; toggle: () => void; chord?: string };
+  /** The document's effective language NAME, shown on the Set Language item so the menu states the
+   *  current value as well as offering to change it (024 US1 follow-up). */
+  languageName?: string;
 }
 
 /**
@@ -120,9 +126,23 @@ export function editorContentMenu(args: ContentMenuArgs): MenuItem[] {
     {
       // The second of the two entry points FR-010 asks for; the status strip is the other, and both
       // open the SAME picker. No keyboard shortcut — it is reachable only from the two menus.
-      label: 'Set Language…',
+      //
+      // The label NAMES the current language, because with the status bar hidden this menu is the
+      // only place the answer appears — and "what did the editor decide this file is?" is half the
+      // reason the item exists (FR-010). The test id is pinned to the bare label so it survives the
+      // language changing, exactly as the Word Wrap item pins its own.
+      label: args.languageName ? `Set Language… (${args.languageName})` : 'Set Language…',
+      testId: 'menu-item-Set Language…',
       icon: 'language',
       onClick: () => requestLanguagePicker(panelId),
+    },
+    {
+      // 024 US1 (#152) / Principle VI: every panel action has a menu item, even one also on the
+      // status bar — so it survives a hidden status bar. The leading ✓ renders the current state.
+      label: args.wordWrap.on ? 'Word Wrap ✓' : 'Word Wrap',
+      testId: 'menu-item-Word Wrap',
+      shortcut: args.wordWrap.chord,
+      onClick: () => args.wordWrap.toggle(),
     },
   ];
 }
@@ -135,6 +155,11 @@ export function editorContentMenu(args: ContentMenuArgs): MenuItem[] {
  * selection collapses and the caret moves to the click, because that is where the user is pointing.
  */
 export function placeCaretForContextMenu(view: EditorView, event: MouseEvent): void {
+  // A KEYBOARD-opened menu (Shift+F10) has no pointer, and its synthetic event carries the focused
+  // element's corner as its coordinates — nowhere near the caret. Moving the caret there would
+  // destroy the very selection the user opened the menu to act on, so Cut took the whole line
+  // instead of the selected word. The caret is already exactly where the keyboard put it.
+  if (isKeyboardMenu()) return;
   const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
   if (pos === null) return;
 

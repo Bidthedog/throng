@@ -2,17 +2,36 @@ import { describe, it, expect } from 'vitest';
 import { parseAppSettings, DEFAULT_APP_SETTINGS } from '@throng/core';
 
 describe('parseAppSettings — terminals section (005 Phase B)', () => {
-  it('defaults to empty flavours / disabledBuiltins / defaultParams when absent', () => {
+  it('defaults to empty flavours / disabledBuiltins / defaultParams (+ showStatusBar on) when absent', () => {
     expect(parseAppSettings({}).terminals).toEqual({
       flavours: [],
       disabledBuiltins: [],
       defaultParams: {},
+      showStatusBar: true,
+      linkHoverDelayMs: 500,
     });
     expect(DEFAULT_APP_SETTINGS.terminals).toEqual({
       flavours: [],
       disabledBuiltins: [],
       defaultParams: {},
+      showStatusBar: true,
+      linkHoverDelayMs: 500,
     });
+  });
+
+  it('parses terminals.linkHoverDelayMs (024 US7; default 500, clamp to [0,5000], round, reject non-number)', () => {
+    expect(parseAppSettings({}).terminals.linkHoverDelayMs).toBe(500);
+    expect(parseAppSettings({ terminals: { linkHoverDelayMs: 0 } }).terminals.linkHoverDelayMs).toBe(0);
+    expect(parseAppSettings({ terminals: { linkHoverDelayMs: 750.4 } }).terminals.linkHoverDelayMs).toBe(750);
+    expect(parseAppSettings({ terminals: { linkHoverDelayMs: -20 } }).terminals.linkHoverDelayMs).toBe(0);
+    expect(parseAppSettings({ terminals: { linkHoverDelayMs: 99999 } }).terminals.linkHoverDelayMs).toBe(5000);
+    expect(parseAppSettings({ terminals: { linkHoverDelayMs: 'soon' } }).terminals.linkHoverDelayMs).toBe(500);
+  });
+
+  it('parses terminals.showStatusBar (024 US1; default true, honour false, reject non-boolean)', () => {
+    expect(parseAppSettings({}).terminals.showStatusBar).toBe(true);
+    expect(parseAppSettings({ terminals: { showStatusBar: false } }).terminals.showStatusBar).toBe(false);
+    expect(parseAppSettings({ terminals: { showStatusBar: 'no' } }).terminals.showStatusBar).toBe(true);
   });
 
   it('keeps a well-formed user flavour entry', () => {
@@ -64,6 +83,8 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       flavours: [],
       disabledBuiltins: [],
       defaultParams: {},
+      showStatusBar: true,
+      linkHoverDelayMs: 500,
     });
   });
 });

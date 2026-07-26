@@ -121,6 +121,11 @@ export interface EditorSyncMsg {
   /** The document's file MOVED, in-app (019, FR-002). Its new absolute path — and the
    *  ONLY thing about the document that changed. Not a reload, not a dirty edit. */
   movedTo?: string;
+  /**
+   * The document's word wrap changed (024 US1, FR-001a). Sent to every Panel showing this
+   * document, in every window — wrap is document state, so one document has one answer.
+   */
+  wordWrap?: boolean;
 }
 
 export interface CoordinatorDeps {
@@ -297,6 +302,53 @@ export class EditorCoordinator {
       void this.snapshot(doc);
       // -1: broadcast to ALL windows (no editing renderer to exclude).
       this.deps.relaySync(-1, { panelId: doc.panelId, deleted: true, dirty: true });
+    }
+  }
+
+  /**
+   * A set of files came BACK (024 US3, #85) — the inverse of {@link markDeleted}.
+   *
+   * Deleting a file with an editor open on it marks that editor dirty and file-missing, deliberately:
+   * the buffer is now the only copy, and it must not look saved. Undoing the delete puts the file
+   * back, and the editor has to notice — leaving it dirty tells the user their work is still at risk
+   * when it is sitting on disk again, and every later prompt ("save before closing?") is asking about
+   * a document that has nothing to save.
+   *
+   * The reason for the dirtiness decides what happens, and the DISK answers that question without
+   * anyone having to remember: if the restored file matches the buffer, the deletion was the only
+   * thing making it dirty and the editor goes clean. If it does not, the user had genuine unsaved
+   * edits before they deleted it — those are still unsaved, so the file-missing flag clears and the
+   * dirty flag stands. Nothing is silently overwritten in either direction.
+   */
+  async markRestored(restoredAbsPaths: readonly string[]): Promise<void> {
+    if (restoredAbsPaths.length === 0) return;
+    const isUnder = (file: string): boolean =>
+      restoredAbsPaths.some((back) => isUnderPath(file, back));
+    for (const doc of this.docs.values()) {
+      if (!doc.absPath || !doc.fileMissing || !isUnder(doc.absPath)) continue;
+      const res = await this.service.load({
+        absPath: doc.absPath,
+        ownerRoot: doc.ownerRoot,
+        ownerKind: doc.ownerKind,
+        allProjectRoots: doc.allProjectRoots,
+      });
+      if (!res.ok) continue; // it did not actually come back — leave the editor exactly as it was
+      doc.fileMissing = false;
+      doc.encoding = res.encoding;
+      doc.hasBom = res.hasBom;
+      doc.lineEnding = res.lineEnding;
+      if (res.text === doc.authority.text) {
+        // The file is what the buffer holds: the delete was the only thing making this dirty, and
+        // it has been undone. `reset` re-establishes savedText, which is what clears the flag.
+        doc.authority.reset(res.text);
+        this.broadcastReset(doc);
+      }
+      // -1: broadcast to ALL windows — no editing renderer to exclude, exactly as markDeleted does.
+      this.deps.relaySync(-1, {
+        panelId: doc.panelId,
+        deleted: false,
+        dirty: doc.authority.dirty,
+      });
     }
   }
 
@@ -530,6 +582,64 @@ export class EditorCoordinator {
   }
 
   /**
+   * Word wrap for a DOCUMENT (024 US1, FR-001a).
+   *
+   * Wrap is document state, not view state, so it cannot live in a renderer: two windows showing one
+   * file would each hold their own answer and the two Panels would disagree — exactly what
+   * constitution Principle XI forbids. The authority is here, and every view is told.
+   *
+   * Keyed by the file rather than the panel, because "the same document" means the same file open in
+   * however many Panels and windows. An unsaved buffer has no file, so it is its own document.
+   * Windows paths are compared case-insensitively — `App.ts` and `app.ts` are one file, and holding
+   * two wrap values for it would be a bug the user sees as a panel that will not rewrap.
+   */
+  private readonly wordWrap = new Map<string, boolean>();
+
+  private wrapKey(doc: CoordDoc): string {
+    return doc.absPath ? `file:${doc.absPath.replace(/\\/g, '/').toLowerCase()}` : `panel:${doc.panelId}`;
+  }
+
+  /** The document's wrap, seeded from the `editor.defaultWordWrap` preference on first sight. */
+  wordWrapFor(panelId: string, seedDefault: boolean): boolean {
+    const doc = this.docs.get(panelId);
+    if (!doc) return seedDefault;
+    const key = this.wrapKey(doc);
+    const cur = this.wordWrap.get(key);
+    if (cur === undefined) {
+      this.wordWrap.set(key, seedDefault);
+      return seedDefault;
+    }
+    return cur;
+  }
+
+  /**
+   * Set the document's wrap and tell every Panel showing it, in every window.
+   *
+   * The broadcast is per panel because that is how the sync channel routes; the VALUE is per
+   * document, so every panel on this file gets the same one.
+   */
+  setWordWrap(panelId: string, on: boolean): void {
+    const doc = this.docs.get(panelId);
+    if (!doc) return;
+    const key = this.wrapKey(doc);
+    if (this.wordWrap.get(key) === on) return;
+    this.wordWrap.set(key, on);
+    for (const [id, other] of this.docs) {
+      if (this.wrapKey(other) === key) this.deps.relaySync(-1, { panelId: id, wordWrap: on });
+    }
+  }
+
+  /**
+   * Drop a document's wrap once no Panel anywhere still shows it (FR-003): the override is
+   * in-memory, so a document closed everywhere and reopened must start from the preference again,
+   * not from whatever it was last toggled to.
+   */
+  private forgetWordWrapIfClosed(key: string): void {
+    for (const doc of this.docs.values()) if (this.wrapKey(doc) === key) return;
+    this.wordWrap.delete(key);
+  }
+
+  /**
    * Tell every view the document was replaced — they drop whatever they had in flight,
    * because it described the document that has just been discarded.
    *
@@ -637,10 +747,13 @@ export class EditorCoordinator {
   destroy(panelId: string): void {
     const doc = this.docs.get(panelId);
     if (!doc) return;
+    const wrapKey = this.wrapKey(doc);
     if (doc.recoveryTimer) clearTimeout(doc.recoveryTimer);
     this.disposeWatch(doc);
     unregisterPanel(this.registry, panelId);
     this.docs.delete(panelId);
+    // After the delete, so "is anyone still showing this document?" asks about the panels that remain.
+    this.forgetWordWrapIfClosed(wrapKey);
     void this.recovery.remove(panelId);
   }
 

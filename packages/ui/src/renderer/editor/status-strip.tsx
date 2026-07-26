@@ -3,6 +3,15 @@ import { languageName } from '@throng/core';
 import { usePanelLanguage } from './editor-language.js';
 import { LanguagePicker } from './language-picker.js';
 import { registerPickerOpener, unregisterPickerOpener } from './picker-request.js';
+import { useFocusTrap } from '../common/focus-trap.js';
+import { useEditorState } from './editor-state.js';
+import { focusPanel } from '../workspace/panel-focus.js';
+import { useAppSettings } from '../config/config-store.js';
+import {
+  wordWrapDocKey,
+  useDocumentWordWrap,
+  toggleDocumentWordWrap,
+} from './word-wrap-store.js';
 
 /**
  * The editor status strip (016, FR-010) — the band along the bottom of an Editor Panel showing the
@@ -23,12 +32,46 @@ export interface StatusStripProps {
   /** Project id + project-relative path — what the override is persisted against. */
   projectId: string | null;
   relPath: string | null;
+  /** Mount with the language picker already open — the strip was revealed IN ORDER to show it. */
+  autoOpenPicker?: boolean;
+  /** The picker went from open to closed (chosen, dismissed, or Escaped). */
+  onPickerClosed?: () => void;
 }
 
-export function StatusStrip({ panelId, projectId, relPath }: StatusStripProps): ReactElement {
+export function StatusStrip({
+  panelId,
+  projectId,
+  relPath,
+  autoOpenPicker = false,
+  onPickerClosed,
+}: StatusStripProps): ReactElement {
   const resolution = usePanelLanguage(panelId);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(autoOpenPicker);
   const name = languageName(resolution?.languageId ?? 'plaintext');
+
+  // Tell the panel when the picker closes, so a strip that is only on screen FOR the picker can go
+  // away again (024 US1 follow-up). Edge-triggered: the panel must not be told on every render, and
+  // a strip the preference keeps visible simply has nothing listening.
+  //
+  // Closing also hands the keyboard BACK to the editor. The picker takes focus when it opens (its
+  // filter box), so choosing a language by keyboard used to leave the caret nowhere — the document
+  // was re-highlighted in front of a user who then had to click into it to carry on typing. The
+  // editor's own state still holds the cursor and selection, so focusing the view restores them.
+  const wasOpen = useRef(pickerOpen);
+  useEffect(() => {
+    if (wasOpen.current && !pickerOpen) {
+      onPickerClosed?.();
+      focusPanel(panelId);
+    }
+    wasOpen.current = pickerOpen;
+  }, [pickerOpen, onPickerClosed, panelId]);
+
+  // 024 US1: the word-wrap toggle. Keyed by the open file's path (per document, Principle XI) so it
+  // and the editor view read the one value; seeded from the editor default preference.
+  const wrapSeed = useAppSettings().editor.defaultWordWrap;
+  const filePath = useEditorState(panelId)?.filePath ?? null;
+  const wrapDocKey = wordWrapDocKey(filePath, panelId);
+  const wrapOn = useDocumentWordWrap(wrapDocKey, wrapSeed);
 
   // The content menu's "Set Language…" opens THIS picker (FR-010/FR-012) — the strip owns it,
   // because the strip is what it is anchored to. A second picker rendered by the menu would be free
@@ -51,7 +94,16 @@ export function StatusStrip({ panelId, projectId, relPath }: StatusStripProps): 
    * toggle reopen it on `click` — the picker would appear to ignore its own button. Anything inside
    * the strip is the picker's business; everything else dismisses it.
    */
-  const stripRef = useRef<HTMLDivElement>(null);
+  // While the picker is up, Tab belongs to the strip: the language list, the filter box and the
+  // strip's own controls, and nothing else. It used to walk straight out of an open picker and into
+  // the rest of the application — the file tree, the panels — leaving a menu on screen that the
+  // keyboard had abandoned. The strip is the trapped region rather than the picker alone because the
+  // strip is what the picker belongs to, and the user named its controls as part of the cycle.
+  const trap = useFocusTrap<HTMLDivElement>(pickerOpen);
+
+  // One ref serves both jobs: the trap needs the strip, and so does the outside-click dismissal —
+  // they are asking the same question ("is this inside the strip?") about the same element.
+  const stripRef = trap.ref;
   useEffect(() => {
     if (!pickerOpen) return;
     const onPointerDown = (event: MouseEvent): void => {
@@ -60,7 +112,7 @@ export function StatusStrip({ panelId, projectId, relPath }: StatusStripProps): 
     // Capture, so a handler that stops propagation on its way up cannot leave the menu stranded.
     document.addEventListener('mousedown', onPointerDown, true);
     return () => document.removeEventListener('mousedown', onPointerDown, true);
-  }, [pickerOpen]);
+  }, [pickerOpen, stripRef]);
 
   // The dimming is driven from 012's OWN panel classes in CSS (`.panel-box--active`,
   // `.panel-box--active-dimmed`) rather than re-derived here. Re-deriving it would be a second
@@ -71,6 +123,8 @@ export function StatusStrip({ panelId, projectId, relPath }: StatusStripProps): 
       className="editor-status-strip"
       data-testid={`editor-status-strip-${panelId}`}
       ref={stripRef}
+      tabIndex={-1}
+      onKeyDown={trap.onKeyDown}
     >
       <button
         type="button"
@@ -84,6 +138,16 @@ export function StatusStrip({ panelId, projectId, relPath }: StatusStripProps): 
         onClick={() => setPickerOpen((open) => !open)}
       >
         {name}
+      </button>
+      <button
+        type="button"
+        className="editor-status-strip__wrap"
+        data-testid={`editor-word-wrap-${panelId}`}
+        title="Toggle word wrap (Ctrl+Alt+W)"
+        aria-pressed={wrapOn}
+        onClick={() => toggleDocumentWordWrap(wrapDocKey, wrapSeed, panelId)}
+      >
+        {wrapOn ? 'Wrap' : 'No Wrap'}
       </button>
       {pickerOpen && (
         <LanguagePicker

@@ -95,9 +95,33 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Toggle File Explorer',
     'Show or hide the Files & Folders pane.',
   ),
+  chord(
+    'menu.open',
+    'View',
+    'Open context menu',
+    'Open the focused item’s context menu from the keyboard (024 US6).',
+  ),
+  chord(
+    'panel.rename',
+    'Focus & Zoom',
+    'Rename panel',
+    'Rename the active panel — the same key the file tree uses to rename a file.',
+  ),
 
   // File Explorer (resolved while the File Explorer pane has focus)
   chord('file.rename', 'File Explorer', 'Rename', 'Rename the selected file or folder.'),
+  chord(
+    'file.undo',
+    'File Explorer',
+    'Undo file operation',
+    'Reverse the last move, rename or delete made in the file tree.',
+  ),
+  chord(
+    'file.redo',
+    'File Explorer',
+    'Redo file operation',
+    'Re-apply the last file operation that was undone.',
+  ),
   chord('file.cut', 'File Explorer', 'Cut', 'Cut the selected file or folder.'),
   chord('file.copy', 'File Explorer', 'Copy', 'Copy the selected file or folder.'),
   chord('file.paste', 'File Explorer', 'Paste', 'Paste into the selected folder.'),
@@ -151,6 +175,12 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Editor',
     'Column select right',
     'Extend a rectangular selection one column to the right.',
+  ),
+  chord(
+    'editor.toggleWordWrap',
+    'Editor',
+    'Toggle word wrap',
+    "Wrap or unwrap long lines in the focused editor's document (024 US1).",
   ),
 
   // Search (013) — one shared find bar routed to the active panel. A terminal

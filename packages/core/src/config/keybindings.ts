@@ -33,6 +33,11 @@ export type ActionId =
   | 'file.copy'
   | 'file.paste'
   | 'file.delete'
+  // 024 US3 (#85): undo/redo the last file OPERATION — a move, a rename, a delete. Explorer-scoped,
+  // so Ctrl+Z means "put that file back" in the tree and "undo my typing" in an editor, which is
+  // exactly what a user means by it in each place.
+  | 'file.undo'
+  | 'file.redo'
   // Editor panel operations (006, FR-013/014). Resolved only while the active
   // pane is a workspace Panel, not Files & Folders (research D7).
   | 'editor.save'
@@ -67,7 +72,17 @@ export type ActionId =
   | 'editor.columnSelectUp'
   | 'editor.columnSelectDown'
   | 'editor.columnSelectLeft'
-  | 'editor.columnSelectRight';
+  | 'editor.columnSelectRight'
+  // 024 US1 (#152): toggle word wrap for the focused editor's document. Ctrl+Alt+W — a single chord
+  // the model already expresses, clear of the reserved terminal-key tier (constitution IV, v4.2.0).
+  | 'editor.toggleWordWrap'
+  // 024 US6 (#157): open the focused item's context menu from the keyboard (Shift+F10 / the Menu key),
+  // so a menu-driven UI is reachable without a mouse (FR-018c). Neither chord is a reserved terminal key.
+  | 'menu.open'
+  // 024 follow-up: rename the ACTIVE PANEL from the keyboard. F2 is the rename key everywhere else
+  // in throng (the file tree's `file.rename`) and everywhere else in Windows, so a panel header that
+  // could only be renamed by double-click or a menu was the odd one out.
+  | 'panel.rename';
 
 export interface Keybindings {
   version: number;
@@ -105,6 +120,9 @@ export const COMMAND_SCOPES: CommandScopes = {
   'panel.zoomIn': EVERYWHERE,
   'panel.zoomOut': EVERYWHERE,
   'panel.zoomReset': EVERYWHERE,
+  // A panel's NAME belongs to the panel, so this is live in either kind and nowhere else — the file
+  // tree has its own F2 (`file.rename`), and the two never contend because their scopes are disjoint.
+  'panel.rename': PANELS,
   'focus.left': EVERYWHERE,
   'focus.right': EVERYWHERE,
   'focus.up': EVERYWHERE,
@@ -114,12 +132,17 @@ export const COMMAND_SCOPES: CommandScopes = {
   'view.fullscreen': EVERYWHERE,
   'view.toggleProjects': EVERYWHERE,
   'view.toggleExplorer': EVERYWHERE,
+  // 024 US6: the keyboard "open context menu" works wherever a focusable item has one (explorer,
+  // editor, terminal) — EVERYWHERE covers those three scopes.
+  'menu.open': EVERYWHERE,
   // The File Explorer's clipboard chords act on FILES, and only while the tree has focus.
   'file.rename': EXPLORER_ONLY,
   'file.cut': EXPLORER_ONLY,
   'file.copy': EXPLORER_ONLY,
   'file.paste': EXPLORER_ONLY,
   'file.delete': EXPLORER_ONLY,
+  'file.undo': EXPLORER_ONLY,
+  'file.redo': EXPLORER_ONLY,
   // Save acts on the active panel's document; it is inert, not wrong, in a terminal.
   'editor.save': PANELS,
   'editor.saveAll': PANELS,
@@ -147,6 +170,7 @@ export const COMMAND_SCOPES: CommandScopes = {
   'editor.columnSelectDown': EDITOR_ONLY,
   'editor.columnSelectLeft': EDITOR_ONLY,
   'editor.columnSelectRight': EDITOR_ONLY,
+  'editor.toggleWordWrap': EDITOR_ONLY,
 };
 
 /** The modifier held to drag a rectangular selection. Platform-keyed, like the chords (FR-017e). */
@@ -168,6 +192,7 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'panel.zoomIn': ['Ctrl+Alt+=', 'Ctrl+Alt++'],
     'panel.zoomOut': ['Ctrl+Alt+-'],
     'panel.zoomReset': ['Ctrl+Alt+0'],
+    'panel.rename': ['F2'],
     // Keyboard move-focus (012). Arrow tokens use the produced key names (`Arrow*`).
     // The cycle chords use the BACKTICK key, normalised to `` ` `` from its physical
     // key (renderer `chordKey`) so `Ctrl+Shift+`` works on every layout — Shift+
@@ -182,11 +207,14 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'view.fullscreen': ['F11'],
     'view.toggleProjects': ['Ctrl+B'],
     'view.toggleExplorer': ['Ctrl+N'],
+    'menu.open': ['Shift+F10', 'ContextMenu'],
     'file.rename': ['F2'],
     'file.cut': ['Ctrl+X'],
     'file.copy': ['Ctrl+C'],
     'file.paste': ['Ctrl+V'],
     'file.delete': ['Delete'],
+    'file.undo': ['Ctrl+Z'],
+    'file.redo': ['Ctrl+Y'],
     'editor.save': ['Ctrl+S'],
     'editor.saveAll': ['Ctrl+Shift+S'],
     'editor.saveAs': ['Ctrl+Alt+S'],
@@ -218,6 +246,7 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'editor.columnSelectDown': ['Shift+Alt+ArrowDown'],
     'editor.columnSelectLeft': ['Shift+Alt+ArrowLeft'],
     'editor.columnSelectRight': ['Shift+Alt+ArrowRight'],
+    'editor.toggleWordWrap': ['Ctrl+Alt+W'],
   },
 };
 

@@ -292,6 +292,14 @@ export const commandKeymapCompartment = new Compartment();
  */
 export const indentCompartment = new Compartment();
 
+/**
+ * Holds the document's word-wrap state (024 US1, #152) — `EditorView.lineWrapping` when on, empty
+ * when off. In a compartment so the status-bar toggle, the content-menu item, and the `Ctrl+Alt+W`
+ * command can flip it on the live view (rewrapping the whole document) without reopening it. The
+ * value is owned per-document (Principle XI), not per-panel — see `word-wrap-store.ts`.
+ */
+export const wrapCompartment = new Compartment();
+
 /** The CodeMirror facets for one indentation profile. */
 export function indentExtensions(profile: IndentProfile): Extension {
   return [indentUnit.of(indentUnitOf(profile)), EditorState.tabSize.of(profile.tabWidth)];
