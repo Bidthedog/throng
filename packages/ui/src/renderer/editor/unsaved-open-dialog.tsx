@@ -25,7 +25,14 @@ export function UnsavedOpenDialog(): ReactElement | null {
 
     void choose({
       title: 'Unsaved changes',
-      message: `${req.editorName} has unsaved changes. How do you want to open ${req.fileName}?`,
+      // Both names are documents, and both are what the question is ABOUT: which editor holds the
+      // unsaved work, and which file is arriving. Set apart from the sentence around them.
+      message: (
+        <>
+          <strong className="modal__name">{req.editorName}</strong> has unsaved changes. How do you
+          want to open <strong className="modal__name">{req.fileName}</strong>?
+        </>
+      ),
       testIds: { dialog: 'unsaved-open-dialog' },
       choices: [
         { label: 'Cancel', value: 'cancel', testId: 'unsaved-open-cancel' },
