@@ -45,7 +45,13 @@ goal is to pull all of that into a single, simple customisable workspace.
   its text **independently** — from the keyboard or its right-click menu — composing on top of
   the app-wide zoom and persisted with the layout. Each panel shows a small type icon, and a
   terminal shows its **live working directory** in its header (even when a full-screen program
-  hides the prompt).
+  hides the prompt). **F2** renames the active panel, and a panel's name identifies exactly one
+  panel: names are unique across every project and every sub-workspace, because two panels called
+  "Build" would make the window title, the tab strip and the "still running" close prompt into
+  riddles. Panels throng names itself run in **one sequence** — Panel 1, Panel 2, Panel 3 — across
+  the whole application rather than restarting in each project, and a deleted number is reused. A
+  name **you** type keeps the words you chose: if it is already taken it gains a suffix, and a
+  notice tells you where it landed.
 - **In-panel search** — one find bar that adapts to whichever panel is active: an editor gets
   find **and replace** (replace-all is a single undoable step that leaves the file's encoding
   and line endings untouched); a terminal gets a **read-only** find over its retained
@@ -57,11 +63,21 @@ goal is to pull all of that into a single, simple customisable workspace.
   copy, Recycle-Bin delete, per-project hide, editable exclude globs). Hiding is **reversible**:
   a project-settings dialog on the pane header lists everything the project hides and lets you
   un-hide it, marking any path a global exclusion glob *also* excludes — because removing that
-  one will not bring the file back.
+  one will not bring the file back. File operations are **undoable**: Ctrl+Z reverses the last
+  rename, move or delete — a delete comes back out of the Recycle Bin — and Ctrl+Y replays it.
+  The stack is per project and persisted, so it survives a restart, and an undo whose world has
+  changed underneath it (something else now occupies the name) is **refused and explained** rather
+  than replayed over the top. A file with unsaved changes in an editor shows the same dot in the
+  tree that its panel shows.
 - **Terminal panels** — PowerShell, Git Bash, CMD, and custom shell flavours run inline via
   xterm.js on **detached, daemon-owned PTYs**: they survive UI restarts and reattach with
   scrollback, with safe close/exit handling, a project root lock, optional run-as-admin, and
-  no orphaned processes.
+  no orphaned processes. Each carries a **status bar** naming its shell flavour. Dragging files or
+  folders from the tree onto a terminal **pastes their paths** at the shell cursor — quoted if they
+  contain spaces, space-joined when there are several, and never submitted for you. **URLs open in
+  your own browser**: Ctrl+click a link — whether the program emitted a real hyperlink or just
+  printed the address as text — and it opens in the system browser, never in a window throng draws.
+  Right-clicking a link offers Open Link and Copy Link Address.
 - **Editor panels** — open and edit a project's text files inline via a **CodeMirror** editor:
   encoding and line endings are detected and preserved, saves are confined to the project (Ctrl+S /
   scoped Ctrl+Shift+S Save-All), a dirty file is locked against external changes, one buffer is
@@ -70,7 +86,10 @@ goal is to pull all of that into a single, simple customisable workspace.
   last active editor; a synced editor mirrors one document across windows, sharing **one undo
   stack**, so Ctrl+Z in either window reverts an edit made in the other. Files can also be
   **dragged in from the operating system** — onto an editor, or onto an empty panel, which becomes
-  an editor showing the file. **What can be opened is exactly what can be saved**: symlinks are
+  an editor showing the file — and from **throng's own file tree** onto an empty panel, the same way.
+  **Word wrap** is a property of the document, not the panel: toggle it from the status bar, the
+  content menu or `Ctrl+Alt+W`, and every panel showing that file rewraps together. A panel opened on
+  a file **names itself after the file** until you rename it, and "Reset Name" puts it back. **What can be opened is exactly what can be saved**: symlinks are
   resolved first, and a file an editor could not write back is refused up front, visibly, rather
   than opened into a buffer with nowhere to go.
 - **Code editing** — **syntax highlighting** for 31 languages, detected by extension and correctable
@@ -98,7 +117,7 @@ goal is to pull all of that into a single, simple customisable workspace.
   press-to-capture shortcut binder that **adds** multiple chords per action (any single non-reserved
   key allowed), each chord a deletable pill; colour / size / icon pickers and a **multi-select
   font-family pill** editor; a **global UI⇄JSON toggle** (edit the raw file in the built-in code
-  editor) and **immediate-apply** (no Save). Editing a file's raw JSON while it changes on disk
+  editor) and **immediate-apply** (no Save). A **Logging** section controls the diagnostics below. Editing a file's raw JSON while it changes on disk
   surfaces a reload / keep-editing choice rather than silently discarding either version.
   **Terminal flavours** are edited as a **structured table** — one row per flavour, a typed cell per
   field — rather than hand-written JSON, and **hidden built-in shells** are a **multi-select that
@@ -108,7 +127,11 @@ goal is to pull all of that into a single, simple customisable workspace.
 - **One way to be told things** — the application has exactly **two** notice models: a
   *confirmation* (modal, blocking, text-labelled buttons, because the label is the statement of
   what you are consenting to) and a *notification* (transient, non-blocking, dismissable, where
-  severity governs persistence — an error waits for you, a success clears itself). Nothing else.
+  severity governs persistence — an error waits for you, a success or a warning clears itself).
+  Nothing else. Notifications **stack** rather than replacing one another, so two failures are two
+  messages and dismissing one leaves the other alone; each says **what you were doing** when it
+  happened, not merely what went wrong; and each carries a **copy button**, because the useful thing
+  to do with an error is paste it somewhere.
 - **Themed everywhere** — the colour picker is drawn from theme tokens rather than the operating
   system's dialog; inputs, hovers and scrollbars each have their own theme token, menus and dialogs
   share the active- and panel-surface tokens, and text buttons come in three themeable types
@@ -238,6 +261,12 @@ hot-reload. Everything is also editable from the visual **preferences window** (
 which writes those same files and applies changes immediately. The installed-font cache and the
 bundled default-theme source live under `%APPDATA%\throng\`. The config directory is overridable
 via `THRONG_CONFIG_ROOT`.
+
+**Logs and crash reports** are written to a `logs` folder under the user-data directory (`throng`
+when installed, `throng-dev` for a dev run), so a crash that closes the window leaves evidence
+behind instead of vanishing. `diagnostics.logLevel`, `diagnostics.maxFileSizeKb` and
+`diagnostics.keepFiles` control how much is kept and for how long; the **Logging** section of the
+preferences window edits those same values.
 
 ### Running a dev build beside an installed throng
 
