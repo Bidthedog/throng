@@ -64,9 +64,15 @@ test('right-clicking empty space opens a root menu with New File / New Folder / 
       // Menu offers root actions.
       await expect(win.getByTestId('menu-item-New Folder')).toBeVisible();
       await expect(win.getByTestId('menu-item-New File')).toBeVisible();
-      await expect(win.getByTestId('menu-item-Open in OS File Explorer')).toBeVisible();
+      // The OS reveal lives inside the "Open In" submenu (#158, FR-018a) — not top-level — for the
+      // root menu just as for a row's. Open it to confirm the reveal is reachable.
+      await expect(win.getByTestId('menu-item-Open In')).toBeVisible();
+      await win.getByTestId('menu-item-Open In').click();
+      await expect(
+        win.getByTestId('submenu-Open In').locator('.context-menu__item').first(),
+      ).toContainText('OS File Explorer');
 
-      // New File here creates it at the ROOT.
+      // New File here creates it at the ROOT (the top-level item is still open behind the submenu).
       await win.getByTestId('menu-item-New File').click();
       const input = tree.locator('input.tree-rename');
       await expect(input).toBeVisible({ timeout: 6000 });
