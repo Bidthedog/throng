@@ -6,8 +6,10 @@ import { existsSync, statSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell, type WebContents } from 'electron';
 import {
+  DEFAULT_APP_SETTINGS,
   parseAppSettings,
   parseKeybindings,
+  type LogLevel,
   resolveColour,
   themeBootstrap,
   type AppSettings,
@@ -34,6 +36,7 @@ import { FileConfigStore } from './config-store.js';
 import { FontCache } from './font-cache.js';
 import { IconPackService } from './icon-pack-service.js';
 import { registerWindowControlsIpc, wireWindowMaximizeEvents } from './window-controls-ipc.js';
+import { denyRendererWindows } from './window-open-guard.js';
 import {
   openPreferences,
   isPreferencesOpen,
@@ -43,8 +46,10 @@ import {
 import { buildAppMenu } from './app-menu.js';
 import { openAbout, type AboutWindowDeps } from './about-window.js';
 import { acquireSingleInstance } from './single-instance.js';
+import { installCrashHandlers, startUiDiagnostics } from './diagnostics.js';
 import {
   hasUserDataDirSwitch,
+  instanceConfigRoot,
   instanceDatabasePath,
   instanceUserDataDir,
 } from './instance-paths.js';
@@ -56,6 +61,7 @@ import { registerGhostIpc, setGhostTheme, disposeGhost } from './ghost-window.js
 import { revealWhenPainted } from './reveal-when-painted.js';
 import { WindowManager } from './window-manager.js';
 import { NodeFileSystem } from './node-file-system.js';
+import { restoreFromRecycleBin } from './recycle-bin-restore.js';
 import { resolvePickerDefaultPath } from './pick-folder.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { ElectronShellIntegration } from './electron-shell-integration.js';
@@ -310,6 +316,7 @@ async function createMainWindow(
     },
   });
   wireWindowMaximizeEvents(window);
+  denyRendererWindows(window.webContents); // 024 US7: no in-app browser windows (FR-019b)
   // If preferences is open (app-modal), a window created afterwards must also be
   // non-interactive so the prefs window stays the only interactive surface (FR-013).
   if (isPreferencesOpen()) window.setEnabled(false);
@@ -365,6 +372,7 @@ function createSubWorkspaceWindow(
     },
   });
   wireWindowMaximizeEvents(window);
+  denyRendererWindows(window.webContents); // 024 US7: no in-app browser windows (FR-019b)
   if (isPreferencesOpen()) window.setEnabled(false); // stay app-modal (FR-013)
   revealWhenPainted(window);
   void window.loadFile(resolveFromHere('../renderer/index.html'), { query: { sw: id } });
@@ -389,6 +397,62 @@ const isDevInstance = !app.isPackaged;
 if (isDevInstance && !hasUserDataDirSwitch(process.argv)) {
   app.setPath('userData', instanceUserDataDir(app.getPath('appData'), true));
 }
+
+/**
+ * Durable diagnostics (#123), started BEFORE anything else can fail.
+ *
+ * Everything below this line — the container, the daemon, the window — can throw, and until now a
+ * throw at any of those points on an installed build produced silence: no console to print to, no
+ * crash report, nothing in the machine's event log (Electron's own Crashpad suppresses that). This
+ * is deliberately the earliest thing that happens after the data directory is known, so the log
+ * exists before there is anything worth writing to it.
+ *
+ * The level starts at the shipped default and is raised or lowered once settings have been read
+ * (below): configuration cannot be consulted before the store exists, and a startup failure BEFORE
+ * that point is exactly the failure we most need recorded.
+ */
+/**
+ * The configured log level, read straight from the settings document.
+ *
+ * The config STORE is built inside `whenReady`, long after the first thing worth logging; and the
+ * daemon is spawned before it too. Reading the one field synchronously here means the earliest
+ * startup line — and the daemon's very first line — already honour what the user asked for, rather
+ * than logging at the default until the store catches up. Best-effort by construction: a missing or
+ * malformed file simply yields the default, which is what the store would have produced anyway.
+ */
+function configuredDiagnostics(): AppSettings['diagnostics'] {
+  try {
+    const root = instanceConfigRoot(app.getPath('home'), isDevInstance, process.env);
+    const raw = JSON.parse(readFileSync(join(root, 'settings.json'), 'utf8')) as unknown;
+    return parseAppSettings(raw).diagnostics;
+  } catch {
+    return DEFAULT_APP_SETTINGS.diagnostics;
+  }
+}
+const startupDiagnostics = configuredDiagnostics();
+const startupLogLevel: LogLevel = startupDiagnostics.logLevel;
+
+const diagnostics = startUiDiagnostics({
+  level: startupLogLevel,
+  policy: {
+    maxBytes: startupDiagnostics.maxFileSizeKb * 1024,
+    keep: startupDiagnostics.keepFiles,
+  },
+  userDataDir: app.getPath('userData'),
+  version: readProductInfo([
+    resolveFromHere('../../../../package.json'),
+    join(app.getAppPath(), 'package.json'),
+  ]).version,
+  buildId: readBuildId(resolveFromHere('../../../daemon/dist/BUILD_ID')),
+});
+diagnostics.log.attachConsole();
+diagnostics.log.info(
+  `throng starting — pid ${process.pid}, packaged=${app.isPackaged}, data=${app.getPath('userData')}`,
+);
+installCrashHandlers(diagnostics, app);
+// A clean quit is recorded too, and that is the point: without it a log that simply STOPS is
+// ambiguous — the user closed the app, or it vanished. One line tells the two apart.
+app.on('before-quit', () => diagnostics.log.info('throng quitting (requested)'));
 
 /**
  * The windows that can answer the shutdown drain (019 FR-010, issue #86) — by webContents id.
@@ -471,6 +535,16 @@ if (isPrimaryInstance)
       // FR-025b: if we're elevated but an existing daemon isn't, retire + respawn it
       // elevated (an elevated app spawns an elevated daemon) so terminals can run admin.
       appElevated: new WindowsElevation().isElevated(),
+      // #123 — the daemon logs beside the UI, in the same per-user folder, so "send me your logs"
+      // is one folder and not a hunt across two processes that fail for related reasons.
+      logDir: diagnostics.logDir,
+      // The daemon's threshold is injected, never hardcoded (Principle X) — the same value the UI
+      // is using, so one setting governs both halves of one application.
+      env: {
+        THRONG_LOG_LEVEL: startupLogLevel,
+        THRONG_LOG_MAX_KB: String(startupDiagnostics.maxFileSizeKb),
+        THRONG_LOG_KEEP: String(startupDiagnostics.keepFiles),
+      },
     });
   } catch (error) {
     console.error('[throng-ui] daemon did not start:', (error as Error).message);
@@ -565,6 +639,16 @@ if (isPrimaryInstance)
    * editor coordinator needs the daemon first), so they subscribe once they exist.
    */
   const onSettingsChanged: Array<(prev: AppSettings, next: AppSettings) => void> = [];
+  // #123 — the log level is the user's, from here on. It started at the shipped default so that a
+  // failure BEFORE the settings store existed was still recorded; now that they have been read, it
+  // is theirs, and it follows every later change without a restart (Principle X). A user asked to
+  // "turn logging up and try again" must not have to relaunch to do it.
+  diagnostics.setLevel(initialPayload.settings.diagnostics.logLevel);
+  onSettingsChanged.push((previous, next) => {
+    if (previous.diagnostics.logLevel === next.diagnostics.logLevel) return;
+    diagnostics.setLevel(next.diagnostics.logLevel);
+    diagnostics.log.info(`log level changed to ${next.diagnostics.logLevel}`);
+  });
   const broadcast = (payload: ConfigPayload): void => {
     const previous = currentSettings;
     currentSettings = payload.settings;
@@ -689,6 +773,15 @@ if (isPrimaryInstance)
   // throng draws its own title bar (`frame: false`), so the native application menu
   // above never renders on screen — the cog is where users actually reach About.
   ipcMain.on('throng:about:open', () => openAbout(aboutDeps));
+  // #123 — a user must be able to REACH the diagnostics. They will not know the path, and telling
+  // them one over a bug report is how "please send your logs" becomes an unanswered question. The
+  // folder opens in the OS file manager; nothing is read, uploaded or displayed in throng (the
+  // issue rules out an in-app viewer explicitly).
+  ipcMain.handle('throng:diagnostics:openLogs', async () => {
+    diagnostics.log.info('opening the logs folder at the user request');
+    const error = await shell.openPath(diagnostics.logDir);
+    return error === '' ? { ok: true as const, path: diagnostics.logDir } : { ok: false as const, error };
+  });
 
   // Renderer asks for the daemon health.ping outcome through the preload bridge.
   ipcMain.handle('throng:getDaemonStatus', () => daemonClient.getStatus());
@@ -763,7 +856,14 @@ if (isPrimaryInstance)
   // only through these `files.*` channels. Recycle-Bin + reveal use Electron's
   // built-in `shell`; confinement to the active project root is enforced by the
   // service on resolved real paths (research D1/D5).
-  const fileSystem = new NodeFileSystem((p) => shell.trashItem(p));
+  const fileSystem = new NodeFileSystem(
+    (p) => shell.trashItem(p),
+    // 024 US3: recycle-bin restore is Windows-only (PowerShell Shell.Application); elsewhere the
+    // default rejecting impl leaves delete-undo unavailable and it degrades cleanly.
+    process.platform === 'win32'
+      ? (originalPath) => restoreFromRecycleBin(originalPath)
+      : undefined,
+  );
   const shellIntegration = new ElectronShellIntegration(shell);
   // Watch the active project's root and push change signals to every window so
   // the file tree stays live-synced with external + in-app edits (US2).
@@ -845,6 +945,8 @@ if (isPrimaryInstance)
   // Deleting a file that is open in an editor marks that editor dirty (FR-099): the
   // buffer survives so the user can save it back (re-creating the file) or discard.
   filesService.setOnDeleted((absPaths) => editorCoordinator.markDeleted(absPaths));
+  // 024 US3 (#85): the inverse — undoing a delete lets a stranded editor become clean again.
+  filesService.setOnRestored((absPaths) => void editorCoordinator.markRestored(absPaths));
   // Moving one that is open re-points it instead (019, #87): the move is BRACKETED — announced
   // before the first `fs.move` and again after the last — so the folder watch can never read the
   // file's absence as a deletion and dirty a buffer nobody edited.

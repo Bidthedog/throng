@@ -40,6 +40,10 @@ declare global {
       ) => () => void;
       // About throng (020, FR-003): version + build id + full licence for the About
       // surface, plus opening the licence link in the user's default browser.
+      /** #123 — reveal the logs + crash reports folder in the OS file manager. */
+      diagnostics?: {
+        openLogs: () => Promise<{ ok: true; path: string } | { ok: false; error: string }>;
+      };
       about?: {
         open: () => void;
         // US4 (#139) — static identity only; the third-party list is fetched via getThirdParty().
@@ -61,6 +65,8 @@ declare global {
         >;
         openExternal: (url: string) => void;
       };
+      // 024 US7 (#159): open an http(s) URL in the system browser (hoisted top-level from `about`).
+      openExternal?: (url: string) => void;
       // A window is told when the app-modal preferences window blurs/unblurs it (US10/FR-035).
       onWindowBlurred?: (cb: (blurred: boolean) => void) => () => void;
       // App-close warning when terminals are running (005 / FR-015).
@@ -191,6 +197,10 @@ declare global {
         newFolder: (destRelDir: string) => Promise<{ relPath: string } | { error: string }>;
         newFile: (destRelDir: string) => Promise<{ relPath: string } | { error: string }>;
         reveal: (relPath: string) => Promise<FilesOkOrError>;
+        /** 024 US3 (#85): does this path exist inside the project? The undo world-check. */
+        exists?: (relPath: string) => Promise<boolean>;
+        /** 024 US3 (#85): restore a trashed item to its original path. */
+        restore?: (relPath: string, deletedAt: number) => Promise<{ ok: true } | { error: string }>;
         onChange: (cb: (evt: { relDir: string }) => void) => () => void;
       };
       // The OS clipboard (016, FR-013a) — behind the seam, in UI main.
@@ -219,6 +229,8 @@ declare global {
         /** Ask the authority to undo/redo — the stack belongs to the document (FR-026c). */
         undo: (req: { panelId: string; viewId: string }) => void;
         redo: (req: { panelId: string; viewId: string }) => void;
+        setWordWrap: (panelId: string, on: boolean) => void;
+        wordWrap: (panelId: string, seedDefault: boolean) => Promise<boolean>;
         revert: (panelId: string) => Promise<boolean>;
         resync: (panelId: string) => Promise<import('@throng/core').ResetDocumentMsg | null>;
         /** Restore crash-recovered content into the authority, dirty vs the disk file (FR-102). */
@@ -275,6 +287,7 @@ declare global {
             dirty?: boolean;
             deleted?: boolean;
             externalChange?: boolean;
+            wordWrap?: boolean;
             /** throng moved the file: the document's new absolute path (019, FR-002). */
             movedTo?: string;
           }) => void,

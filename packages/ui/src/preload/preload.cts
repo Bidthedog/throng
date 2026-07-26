@@ -219,6 +219,11 @@ contextBridge.exposeInMainWorld('throng', {
   // About throng (020, FR-003/FR-003a): the About surface pulls the product version,
   // build id and full licence text from main (never hardcoded in the renderer), and
   // opens the licence link in the user's default browser.
+  // #123 — open the folder holding throng's logs and crash reports in the OS file manager.
+  diagnostics: {
+    openLogs: (): Promise<{ ok: true; path: string } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('throng:diagnostics:openLogs'),
+  },
   about: {
     // Cog → About throng (020, FR-003): create-or-focus the single shared, app-modal
     // About window. This is the discoverable entry point — throng draws its own title
@@ -244,6 +249,10 @@ contextBridge.exposeInMainWorld('throng', {
     > => ipcRenderer.invoke('throng:about:getThirdParty'),
     openExternal: (url: string) => ipcRenderer.send('throng:openExternal', url),
   },
+  // 024 US7 (#159): open an http(s) URL in the system browser through the OS open-external seam
+  // (hoisted from the `about` namespace so a terminal link isn't routed through an About-scoped API).
+  // The main process re-validates the scheme; a non-http(s) URL opens nowhere.
+  openExternal: (url: string) => ipcRenderer.send('throng:openExternal', url),
   // A window learns it has been blurred by the app-modal preferences window (US10/FR-035) — the
   // deterministic "a child window took focus" signal the hover-suppression gate needs.
   onWindowBlurred: (cb: (blurred: boolean) => void) => {
@@ -365,6 +374,12 @@ contextBridge.exposeInMainWorld('throng', {
     newFolder: (destRelDir: string) => ipcRenderer.invoke('throng:files:newFolder', destRelDir),
     newFile: (destRelDir: string) => ipcRenderer.invoke('throng:files:newFile', destRelDir),
     reveal: (relPath: string) => ipcRenderer.invoke('throng:files:reveal', relPath),
+    // 024 US3 (#85): the undo engine's world-check — is this path still inside the project?
+    exists: (relPath: string): Promise<boolean> =>
+      ipcRenderer.invoke('throng:files:exists', relPath),
+    // 024 US3 (#85): undo of a delete — restore a trashed item to its original path.
+    restore: (relPath: string, deletedAt: number) =>
+      ipcRenderer.invoke('throng:files:restore', relPath, deletedAt),
     onChange: (cb: (evt: { relDir: string }) => void) => {
       const handler = (_event: unknown, evt: { relDir: string }): void => cb(evt);
       ipcRenderer.on('throng:files:changed', handler);
@@ -418,6 +433,10 @@ contextBridge.exposeInMainWorld('throng', {
     undo: (req: unknown) => ipcRenderer.send('throng:editor:undo', req),
     redo: (req: unknown) => ipcRenderer.send('throng:editor:redo', req),
     /** Discard unsaved changes back to the content on disk (FR-075). */
+    setWordWrap: (panelId: string, on: boolean) =>
+      ipcRenderer.send('throng:editor:setWordWrap', { panelId, on }),
+    wordWrap: (panelId: string, seedDefault: boolean) =>
+      ipcRenderer.invoke('throng:editor:wordWrap', { panelId, seedDefault }),
     revert: (panelId: string) => ipcRenderer.invoke('throng:editor:revert', panelId),
     /** The authority's current text + version, for a view that has fallen out of step. */
     resync: (panelId: string) => ipcRenderer.invoke('throng:editor:resync', panelId),
@@ -461,6 +480,7 @@ contextBridge.exposeInMainWorld('throng', {
         dirty?: boolean;
         deleted?: boolean;
         externalChange?: boolean;
+        wordWrap?: boolean;
         /** throng moved the file: the document's new absolute path (019, FR-002). */
         movedTo?: string;
       }) => void,
@@ -474,6 +494,7 @@ contextBridge.exposeInMainWorld('throng', {
           dirty?: boolean;
           deleted?: boolean;
           externalChange?: boolean;
+        wordWrap?: boolean;
           movedTo?: string;
         },
       ): void => cb(msg);
