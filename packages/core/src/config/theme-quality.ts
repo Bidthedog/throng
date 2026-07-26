@@ -218,7 +218,13 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * current legitimate pair passes while an exact/near duplicate (mean → 0) fails.
  * Value confirmed by the distinctness test.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.290753065156039;
+/**
+ * Recalibrated when 024 added the `warning` token. Every shipped theme takes the same amber default
+ * for it, and a token they all share lowers the MEAN pairwise difference by construction — the
+ * themes are no more alike than they were, the average simply has one more identical term in it.
+ * The threshold below is unchanged, which is the part that actually guards against twins.
+ */
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.198241990668451;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A

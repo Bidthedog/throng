@@ -9,9 +9,19 @@ const BUTTON_TOKENS = ['confirm', 'cancel', 'destroy'].flatMap((t) =>
 );
 /** 56 pre-refactor − 6 removed + 18 typed button tokens = 68; follow-up dropped `activePaneHighlight`
  *  (consolidated onto `activePanelBorder`) → 67 (D1). */
-const EXPECTED_COLOUR_TOKEN_COUNT = 67;
+// 68 since 024 added `warning` — the amber cue for a warning notice, distinct from `danger`.
+const EXPECTED_COLOUR_TOKEN_COUNT = 68;
 /** Tokens removed AFTER the fixture was captured — stripped from the fixture before non-drift compare. */
 const REMOVED_SINCE_FIXTURE = ['activePaneHighlight'];
+/**
+ * Tokens ADDED since the fixture was captured.
+ *
+ * The guarantee this test makes is that no SURVIVING token drifted — that a refactor did not quietly
+ * change a colour a user is looking at. A token that did not exist when the fixture was taken cannot
+ * have drifted, and listing it here is what keeps the guard about drift rather than about the size
+ * of the palette.
+ */
+const ADDED_SINCE_FIXTURE = ['warning'];
 
 const EXPECTED = [
   'Light',
@@ -97,7 +107,7 @@ describe('DEFAULT_THEMES (FR-044/046, SC-007)', () => {
       for (const k of REMOVED_SINCE_FIXTURE) delete expected[k];
       const surviving: Record<string, string> = {};
       for (const [k, v] of Object.entries(theme.colours)) {
-        if (!BUTTON_TOKENS.includes(k)) surviving[k] = v;
+        if (!BUTTON_TOKENS.includes(k) && !ADDED_SINCE_FIXTURE.includes(k)) surviving[k] = v;
       }
       expect(surviving, `${name} surviving colours drifted`).toEqual(expected);
     }

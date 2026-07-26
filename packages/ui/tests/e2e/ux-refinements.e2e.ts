@@ -227,7 +227,14 @@ test('window title shows the active project + Tab · Panel, no path or totals (F
       app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle());
 
     // Active project + its Tab · Panel context, nothing else (021 suffix form, FR-033).
-    await expect.poll(getTitle, { timeout: 5000 }).toBe('TitleB · Tab 1 · Panel 1 — throng');
+    //
+    // The panel's name is no longer literally "Panel 1": panel names are unique across the whole
+    // application (024 follow-up), and TitleA's panel claimed that name first, so TitleB's carries a
+    // suffix. What this test is about is the SHAPE of the title — project · tab · panel, no path and
+    // no totals — so it asserts that, and leaves the exact name to the naming tests.
+    await expect
+      .poll(getTitle, { timeout: 5000 })
+      .toMatch(/^TitleB · Tab 1 · Panel \d+( \(\d+\))? — throng$/);
     const title = await getTitle();
     expect(title).not.toContain('C:/c/b'); // no path
     expect(title).not.toMatch(/\d+ (projects|tabs|panels)/); // no totals
