@@ -828,6 +828,15 @@ appears and the item is unchanged. Repeat for a folder.
   and **"Other Tab"** — so a file-to-Panel drag adds no capability that the menu lacks. Recorded in
   **Out of Scope**. (The tree's own internal file move/copy drag, incl. the Ctrl-copy cursor FR-081, is
   unaffected.)
+  - **REVISED — SHIPPED (2026-07-23, spec 024 US4 / #114).** A file-to-panel drag *is* now supported, but
+    for dropping onto an **empty (untyped) panel** only — not the general "new Panel / new sub-workspace"
+    drag the original FR-079 imagined. Dragging a single file from the tree onto an untyped panel types it
+    as an editor on that file (the same end state as an OS-file-manager drop, #60); a sub-workspace-owned
+    panel is converted to project-owned first; a folder or multi-select is rejected; a file already open
+    elsewhere focuses the existing view rather than opening a second. This uses a small shared drag-payload
+    store (the tree records the dragged item's absolute path on dragstart), sidestepping the react-arborist
+    vs `@dnd-kit` incompatibility that withdrew the original. The internal tree move/copy drag (FR-081) is
+    still unaffected. See `specs/024-editor-terminal-enhancements/spec.md` US4.
 - **FR-080 (in-tree drop onto the same folder is a no-op)**: Dropping a file **within** the Files & Folders
   tree onto **its own current parent folder** MUST be a **no-op with no "already exists" error**. A drop
   into a **different** folder MUST still surface the existing name-collision error when the destination
