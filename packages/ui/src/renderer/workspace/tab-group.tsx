@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactElement, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type ReactElement, type KeyboardEvent } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -31,6 +31,15 @@ import { panelHasLiveTerminal, runningSubprocessCount } from './subprocess.js';
 import { type MenuItem } from './context-menu.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { useAppSettings } from '../config/config-store.js';
+import { setActivePane } from './active-pane.js';
+import { openFileInTab } from '../editor/editor-open.js';
+import {
+  getTreeDrag,
+  clearTreeDrag,
+  setTreeDropEffect,
+  TREE_DROP_EVENT,
+  type TreeDropDetail,
+} from '../explorer/tree-drag-store.js';
 import {
   DragStateContext,
   parseEdgeDropId,
@@ -70,6 +79,7 @@ function TabChip({
 }): ReactElement {
   const ws = useWorkspace();
   const { draggingPanelId } = useDragState();
+  const hoverActivateMs = useAppSettings().behaviour.tabHoverActivateMs;
   // Any unsaved editor in this Tab lights the shared dot (006, US8).
   const tabDirty = useEditorDirty(collectPanels(tab.root).map((p) => p.id));
   const drag = useDraggable({ id: tabDragId(tab.id) });
@@ -77,6 +87,54 @@ function TabChip({
   // Highlight only when a Panel (not a Tab) is being dragged over — moving a
   // Panel into this Tab. Tab reordering shows an insertion indicator instead.
   const panelOver = drop.isOver && draggingPanelId !== null;
+
+  /*
+   * 024 US4 follow-up — a file dragged from Files & Folders over a tab chip.
+   *
+   * A tree drag is a NATIVE HTML5 drag, not a dnd-kit one, so none of the panel-drag machinery above
+   * sees it. It gets the same two affordances a panel drag has, for the same reason: dwelling on a
+   * tab activates it (so the user can carry the file through to a panel in ANOTHER tab, which is
+   * otherwise unreachable mid-drag), and dropping on the chip itself opens the file in that tab —
+   * the drag equivalent of the tree menu's "Open In › Other Tab". Both reuse the panel drag's own
+   * dwell preference rather than inventing a second one.
+   */
+  const treeHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [treeOver, setTreeOver] = useState(false);
+  const clearTreeHover = (): void => {
+    if (treeHoverTimer.current) {
+      clearTimeout(treeHoverTimer.current);
+      treeHoverTimer.current = null;
+    }
+    setTreeOver(false);
+  };
+  useEffect(
+    () => () => {
+      if (treeHoverTimer.current) clearTimeout(treeHoverTimer.current);
+    },
+    [],
+  );
+
+  /** Open a dropped tree file in THIS tab. Only ever a single file (a folder is refused). */
+  const acceptTreeDrop = (paths: string[], singleFile: boolean): void => {
+    clearTreeHover();
+    if (!singleFile || paths.length !== 1) return;
+    ws.setActiveTab(tab.id);
+    void openFileInTab(ws, tab.id, paths[0]);
+  };
+  // Read through a ref so the seam listener below registers once per tab rather than on every render.
+  const acceptRef = useRef(acceptTreeDrop);
+  acceptRef.current = acceptTreeDrop;
+
+  // e2e seam (mirrors the panel drop targets): a real native drag cannot be driven from Playwright.
+  useEffect(() => {
+    const onTreeDrop = (e: Event): void => {
+      const detail = (e as CustomEvent<TreeDropDetail>).detail;
+      if (!detail || detail.tabId !== tab.id) return;
+      acceptRef.current(detail.paths, detail.singleFile ?? false);
+    };
+    window.addEventListener(TREE_DROP_EVENT, onTreeDrop);
+    return () => window.removeEventListener(TREE_DROP_EVENT, onTreeDrop);
+  }, [tab.id]);
 
   const commit = (value: string): void => {
     const trimmed = value.trim();
@@ -86,9 +144,34 @@ function TabChip({
   return (
     <div
       ref={mergeRefs(drag.setNodeRef, drop.setNodeRef)}
-      className={`tab-chip${active ? ' tab-chip--active' : ''}${panelOver ? ' tab-chip--over' : ''}`}
+      className={`tab-chip${active ? ' tab-chip--active' : ''}${panelOver || treeOver ? ' tab-chip--over' : ''}`}
       data-testid={`tab-${tab.id}`}
       data-active={active ? 'true' : 'false'}
+      onDragOver={(e) => {
+        const treeDrag = getTreeDrag();
+        if (!treeDrag) return; // a panel/tab drag — dnd-kit owns it
+        e.preventDefault();
+        const effect = treeDrag.singleFile ? 'copy' : 'none';
+        e.dataTransfer.dropEffect = effect;
+        setTreeDropEffect(effect);
+        setTreeOver(treeDrag.singleFile);
+        // Dwell on an inactive tab to bring it forward. Armed once per hover — `dragover` fires
+        // continuously, and re-arming on every event would mean the timer never elapsed.
+        if (!active && treeHoverTimer.current === null) {
+          treeHoverTimer.current = setTimeout(() => {
+            treeHoverTimer.current = null;
+            ws.setActiveTab(tab.id);
+          }, hoverActivateMs);
+        }
+      }}
+      onDragLeave={clearTreeHover}
+      onDrop={(e) => {
+        const treeDrag = getTreeDrag();
+        if (!treeDrag) return;
+        e.preventDefault();
+        clearTreeDrag();
+        acceptTreeDrop(treeDrag.paths, treeDrag.singleFile);
+      }}
       onClick={() => ws.setActiveTab(tab.id)}
       onDoubleClick={() => onStartRename()}
       /*
@@ -617,7 +700,16 @@ export function TabGroup(): ReactElement {
       onDragEnd={onDragEnd}
     >
       <DragStateContext.Provider value={{ draggingPanelId }}>
-        <div className="tab-strip" data-testid="tab-strip" ref={stripRef}>
+        <div
+          className="tab-strip"
+          data-testid="tab-strip"
+          ref={stripRef}
+          // Reaching for a tab is using the WORKSPACE, so it stops being the Files & Folders pane's
+          // turn — otherwise the tree kept its selection highlight lit while the user was plainly
+          // somewhere else, and two surfaces claimed to be current at once. Panels already do this
+          // on pointerdown; the strip above them was the gap.
+          onPointerDown={() => setActivePane('workspace')}
+        >
           {draggingTabId !== null && indicatorX !== null ? (
             <div
               className="tab-insert"

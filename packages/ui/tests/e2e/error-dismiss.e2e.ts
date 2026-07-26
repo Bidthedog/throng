@@ -111,19 +111,24 @@ test('File Explorer error: trailing-edge dismiss removes it immediately and recu
     await createProject(win, 'Files', missingRoot);
     await expect(win.getByTestId('explorer-toolbar')).toBeVisible();
 
+    // Notices STACK (024 follow-up), and a missing root fails at BOTH the initial listing and the
+    // New-folder attempt — two distinct failures, so two notices, each with its own dismiss control.
+    const notices = win.getByTestId('explorer-error');
     const trigger = async (): Promise<void> => {
       await win.getByRole('button', { name: 'New folder' }).click();
-      await expect(win.getByTestId('explorer-error')).toBeVisible({ timeout: 6000 });
+      await expect(notices.first()).toBeVisible({ timeout: 6000 });
     };
 
     await trigger();
-    const dismiss = win.getByTestId('explorer-error-dismiss');
-    await expect(dismiss).toBeVisible();
-    await dismiss.click();
-    await expect(win.getByTestId('explorer-error')).toHaveCount(0);
+    // Dismissing removes ONE notice — the acknowledged one — and leaves the rest standing.
+    for (let n = await notices.count(); n > 0; n = await notices.count()) {
+      await win.getByTestId('explorer-error-dismiss').first().click();
+      await expect(notices).toHaveCount(n - 1);
+    }
+    await expect(notices).toHaveCount(0);
 
-    await trigger(); // recurrence
-    await expect(win.getByTestId('explorer-error-dismiss')).toBeVisible();
+    await trigger(); // recurrence — the same failure, once dismissed, can be raised again
+    await expect(win.getByTestId('explorer-error-dismiss').first()).toBeVisible();
   });
 });
 

@@ -1863,29 +1863,63 @@ textarea,
  * Two were hard-coded outright; the rest leaned on `--danger`, a variable read in thirteen places
  * and defined nowhere — so the preferences notice was always #e5534b whatever the theme, and the
  * themes error strip fell through to `--accent`, rendering a FAILURE in the SUCCESS colour. */
+/* NOTICES OWN THEIR OWN GEOMETRY.
+ *
+ * Every size here used to be a literal buried among the rules that used it, so making the notices
+ * bigger meant hunting eight numbers across eighty lines and hoping none was missed. They are
+ * declared once, on the layer that owns them, and every notice rule below reads them — so the
+ * whole surface can be retuned (or overridden wholesale by a later stylesheet) from one block,
+ * independently of the application's shared typography and spacing.
+ *
+ * COLOURS are deliberately NOT here: those are the theme's, and a notice that stopped answering to
+ * the active theme would be the one surface in the application that ignored it. */
 .notices {
+  --throng-notice-offset: 16px;
+  --throng-notice-gap: 10px;
+  --throng-notice-width: min(520px, 50vw);
+  --throng-notice-padding: 14px 16px;
+  --throng-notice-radius: 8px;
+  /* Deliberately ABOVE the application's base size, not merely equal to it. A notice is read once,
+     at a glance, from the corner of the eye while the user is looking somewhere else entirely —
+     unlike the UI around it, which is read by someone already looking at it. */
+  --throng-notice-font-size: 15px;
+  --throng-notice-line-height: 1.45;
+  --throng-notice-title-font-size: 16px;
+  --throng-notice-details-max-height: 180px;
+
   position: fixed;
-  right: 12px;
-  bottom: 12px;
+  right: var(--throng-notice-offset);
+  bottom: var(--throng-notice-offset);
   z-index: 2500;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-width: min(420px, 45vw);
+  /* Newest at the bottom, nearest the corner the eye is already on. Notices STACK now, and an error
+     persists until dismissed, so a burst can outgrow the window: bound the column to the viewport
+     and let the OLDEST scroll off the top rather than the newest being pushed out of sight.
+     Nothing is lost — dismissing what is visible brings the rest back down. */
+  justify-content: flex-end;
+  max-height: calc(100vh - 2 * var(--throng-notice-offset));
+  overflow: hidden;
+  gap: var(--throng-notice-gap);
+  width: var(--throng-notice-width);
   pointer-events: none;
 }
 
 .notice {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 10px;
+  /* Never squashed by the column's max-height: a notice that shrank to fit would truncate the very
+     message it exists to deliver. The oldest scrolls out of the clipped column instead. */
+  flex: 0 0 auto;
+  padding: var(--throng-notice-padding);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--throng-notice-radius);
   background: var(--throng-colour-surface);
   box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
   color: var(--throng-colour-text);
-  font-size: 12px;
+  font-size: var(--throng-notice-font-size);
+  line-height: var(--throng-notice-line-height);
 
   /* The CARD DOES NOT SWALLOW CLICKS.
    *
@@ -1898,6 +1932,7 @@ textarea,
   pointer-events: none;
 }
 
+.notice__copy,
 .notice__dismiss {
   pointer-events: auto;
 }
@@ -1926,6 +1961,10 @@ textarea,
   border-left: 3px solid var(--throng-colour-success);
 }
 
+.notice--warning {
+  border-left: 3px solid var(--throng-colour-warning);
+}
+
 .notice--info {
   border-left: 3px solid var(--throng-colour-accent);
 }
@@ -1940,13 +1979,18 @@ textarea,
 }
 
 .notice__details {
-  margin: 4px 0 0;
-  padding-left: 16px;
-  max-height: 140px;
+  margin: 6px 0 0;
+  padding-left: 18px;
+  max-height: var(--throng-notice-details-max-height);
   overflow-y: auto;
   color: var(--text-dim);
 }
 
+/* The notice's two controls — copy and dismiss — share one treatment: they sit at the top-right of
+   the card, muted until pointed at, and they are the ONLY parts of a notice that take a click (the
+   card itself is `pointer-events: none` so it never covers the controls a user needs in order to fix
+   what it is reporting). */
+.notice__copy,
 .notice__dismiss {
   flex: 0 0 auto;
   padding: 0;
@@ -1954,16 +1998,29 @@ textarea,
   background: none;
   color: var(--text-dim);
   cursor: pointer;
+  pointer-events: auto;
 }
 
+.notice__copy:hover,
 .notice__dismiss:hover {
   color: var(--throng-colour-text);
 }
 
 .notice__title {
-  margin: 0 0 2px;
-  font-size: 12px;
+  margin: 0 0 4px;
+  font-size: var(--throng-notice-title-font-size);
   font-weight: 600;
+}
+
+/* A file (or document) NAME inside a dialog's sentence.
+ *
+ * The "Unsaved changes" prompts name the documents about to be affected, and those names are the one
+ * part a user must actually read before choosing between Save, Discard and Cancel. Set in bold and a
+ * touch larger than the words around them so they can be read at a glance rather than parsed out of
+ * a paragraph. `em`, so it stays proportional if the dialog's own size ever changes. */
+.modal__name {
+  font-weight: var(--throng-font-weight-bold);
+  font-size: 1.1em;
 }
 
 /* 021 follow-up — modals (confirmations, prompts, the project settings dialog) inherit the BASE

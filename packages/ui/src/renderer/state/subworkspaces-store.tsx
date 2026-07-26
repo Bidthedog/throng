@@ -26,8 +26,10 @@ export interface SubWorkspacesContextValue {
    * the fire-and-forget create path would be silently swallowed.
    */
   error: string | null;
-  /** Record an error to surface to the user. */
-  reportError(message: string): void;
+  /** What was being attempted when {@link error} happened, phrased to complete "…you tried to". */
+  errorAction: string | null;
+  /** Record an error to surface to the user, with what the user was trying to do. */
+  reportError(message: string, action?: string): void;
   /** Dismiss the current error. */
   clearError(): void;
   /** Open (and mark loaded) a sub-workspace window — the lazy reopen path (FR-013). */
@@ -59,8 +61,15 @@ export function SubWorkspacesProvider({
   // closes (lazy-load indicator, mirroring projects).
   const [loadedIds, setLoadedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
-  const reportError = useCallback((message: string) => setError(message), []);
-  const clearError = useCallback(() => setError(null), []);
+  const [errorAction, setErrorAction] = useState<string | null>(null);
+  const reportError = useCallback((message: string, action?: string) => {
+    setError(message);
+    setErrorAction(action ?? null);
+  }, []);
+  const clearError = useCallback(() => {
+    setError(null);
+    setErrorAction(null);
+  }, []);
   const markLoaded = useCallback((id: string) => {
     setLoadedIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   }, []);
@@ -90,6 +99,7 @@ export function SubWorkspacesProvider({
       loadedIds,
       refresh,
       error,
+      errorAction,
       reportError,
       clearError,
       open,
@@ -136,7 +146,7 @@ export function SubWorkspacesProvider({
         await client.reorder(orderedIds);
       },
     }),
-    [subWorkspaces, loadedIds, error, reportError, clearError, open, markLoaded, refresh, client],
+    [subWorkspaces, loadedIds, error, errorAction, reportError, clearError, open, markLoaded, refresh, client],
   );
 
   return <SubWorkspacesContext.Provider value={value}>{children}</SubWorkspacesContext.Provider>;

@@ -67,3 +67,26 @@ describe('shouldDropScrollback (do not treat a resize repaint as a clear)', () =
     expect(shouldDropScrollback('hello world\r\n', 24, 10_000)).toBe(false);
   });
 });
+
+/**
+ * The guard these functions CANNOT provide, documented where the gap is.
+ *
+ * `isScreenClear` refuses the chunk that SWITCHES to the alt screen — but that is the only chunk it
+ * ever sees carrying `?1049`. A full-screen program (claude, vim, tmux) then repaints its whole
+ * screen over and over, and every one of those repaints is cursor-home plus one erase per row: the
+ * exact shape of a `cls`. These functions are pure and see one chunk at a time, so they cannot know
+ * the alt screen is still up; the caller must check the live buffer TYPE before clearing, which is
+ * what use-terminal.ts now does. This test pins the gap so the next person does not "fix" it here.
+ */
+describe('a full-screen program’s repaint is indistinguishable from a clear (by design)', () => {
+  const ALT_REPAINT = '\x1b[H' + '\x1b[K\r\n'.repeat(30); // claude redrawing its whole screen
+
+  it('reads as a clear once the alt screen has already been entered in an earlier chunk', () => {
+    // Entering the alt screen: correctly refused.
+    expect(isScreenClear('\x1b[?1049h' + ALT_REPAINT, 30)).toBe(false);
+    // The SAME repaint arriving later, without the switch, is indistinguishable — hence the
+    // buffer-type check at the call site, which is the only place the answer is knowable.
+    expect(isScreenClear(ALT_REPAINT, 30)).toBe(true);
+    expect(shouldDropScrollback(ALT_REPAINT, 30, 10_000)).toBe(true);
+  });
+});
