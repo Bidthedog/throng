@@ -50,7 +50,7 @@ async function openPrefs(app: ElectronApplication, win: Page): Promise<Page> {
 const HIDDEN_CONTROL_TESTIDS = [
   'control-terminals.flavours',
   'control-terminals.disabledBuiltins',
-  'control-terminals.defaultParams',
+  'control-terminals.defaultShellArguments',
 ] as const;
 
 test('the three terminal-flavour controls do NOT appear in the Settings panel (#67 hidden for v1.0.0)', async () => {
@@ -60,10 +60,10 @@ test('the three terminal-flavour controls do NOT appear in the Settings panel (#
   const cfgRoot = freshCfgRoot({
     terminals: {
       flavours: [
-        { id: 'my-wsl', label: 'WSL: Ubuntu', file: 'wsl.exe', args: ['-d', 'Ubuntu'], defaultParams: '--cd ~' },
+        { id: 'my-wsl', label: 'WSL: Ubuntu', file: 'wsl.exe', args: ['-d', 'Ubuntu'], defaultShellArguments: '--cd ~' },
       ],
       disabledBuiltins: ['cmd'],
-      defaultParams: { pwsh: '-NoLogo' },
+      defaultShellArguments: { pwsh: '-NoLogo' },
     },
   });
   await runApp(
@@ -84,7 +84,7 @@ test('the three terminal-flavour controls do NOT appear in the Settings panel (#
       // these cannot exist; asserting them too catches a control that leaks in under a stray id.
       await expect(prefs.getByTestId('setting-terminals.flavours')).toHaveCount(0);
       await expect(prefs.getByTestId('setting-terminals.disabledBuiltins')).toHaveCount(0);
-      await expect(prefs.getByTestId('setting-terminals.defaultParams')).toHaveCount(0);
+      await expect(prefs.getByTestId('setting-terminals.defaultShellArguments')).toHaveCount(0);
       await expect(prefs.getByTestId('flavour-add')).toHaveCount(0);
       await expect(prefs.getByTestId('flavour-new-id')).toHaveCount(0);
       await expect(prefs.getByTestId('flavour-row-my-wsl')).toHaveCount(0);

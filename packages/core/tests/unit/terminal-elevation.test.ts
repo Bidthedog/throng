@@ -13,7 +13,7 @@ import {
 import { runElevationContract, runDeElevatorContract } from '@throng/core/testing';
 
 const FLAVOURS: FlavourOption[] = [
-  { value: 'pwsh', label: 'PowerShell 7', defaultParams: '-NoLogo' },
+  { value: 'pwsh', label: 'PowerShell 7', defaultShellArguments: '-NoLogo' },
 ];
 const ctx = (o: Partial<PanelTypeContext> = {}): PanelTypeContext => ({
   projectRoot: 'C:/proj',

@@ -16,8 +16,8 @@ import {
 } from '../../src/renderer/panel-type/form-state.js';
 
 const FLAVOURS: FlavourOption[] = [
-  { value: 'pwsh', label: 'PowerShell 7', defaultParams: '-NoLogo' },
-  { value: 'bash', label: 'Git Bash', defaultParams: '-i -l' },
+  { value: 'pwsh', label: 'PowerShell 7', defaultShellArguments: '-NoLogo' },
+  { value: 'bash', label: 'Git Bash', defaultShellArguments: '-i -l' },
 ];
 
 function deps(overrides: Partial<PanelTypeContext> = {}): FormDeps {
@@ -39,7 +39,14 @@ describe('panel-type form reducer', () => {
     const d = deps();
     const s = selectKind(initialFormState(), 'terminal', d);
     expect(s.selectedKind).toBe('terminal');
-    expect(s.values).toEqual({ flavourId: 'pwsh', params: '-NoLogo', runAsAdmin: 'false' });
+    expect(s.values).toEqual({
+      flavourId: 'pwsh',
+      shellArguments: '-NoLogo',
+      startupCommand: '',
+      rememberCommand: 'false',
+      rememberDirectory: 'true',
+      runAsAdmin: 'false',
+    });
     expect(canConfirm(s, d)).toBe(true);
   });
 
@@ -48,7 +55,16 @@ describe('panel-type form reducer', () => {
     const s = selectKind(initialFormState(), 'terminal', d);
     expect(confirmConfig(s, d)).toEqual({
       kind: 'terminal',
-      config: { flavourId: 'pwsh', flavourLabel: 'PowerShell 7', params: '-NoLogo', runAsAdmin: false },
+      config: {
+        flavourId: 'pwsh',
+        flavourLabel: 'PowerShell 7',
+        shellArguments: '-NoLogo',
+        startupCommand: '',
+        rememberCommand: false,
+      rememberDirectory: true,
+        rememberDirectory: true,
+        runAsAdmin: false,
+      },
     });
   });
 
@@ -60,16 +76,20 @@ describe('panel-type form reducer', () => {
     expect(confirmConfig(s, d)).toBeNull();
   });
 
-  it('editing Startup Params is captured in the built config', () => {
+  it('editing Shell Arguments is captured in the built config', () => {
     const d = deps();
     let s = selectKind(initialFormState(), 'terminal', d);
-    s = setValue(s, 'params', '-NoLogo -NoProfile');
+    s = setValue(s, 'shellArguments', '-NoLogo -NoProfile');
     expect(confirmConfig(s, d)).toEqual({
       kind: 'terminal',
       config: {
         flavourId: 'pwsh',
         flavourLabel: 'PowerShell 7',
-        params: '-NoLogo -NoProfile',
+        shellArguments: '-NoLogo -NoProfile',
+        startupCommand: '',
+        rememberCommand: false,
+      rememberDirectory: true,
+        rememberDirectory: true,
         runAsAdmin: false,
       },
     });

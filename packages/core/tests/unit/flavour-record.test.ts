@@ -17,7 +17,7 @@ const valid = {
   label: 'Git Bash',
   file: 'C:/Program Files/Git/bin/bash.exe',
   args: [],
-  defaultParams: '',
+  defaultShellArguments: '',
 };
 
 describe('validateFlavourRecord', () => {
@@ -25,7 +25,7 @@ describe('validateFlavourRecord', () => {
     expect(validateFlavourRecord(valid, ['my-wsl'])).toBeNull();
   });
 
-  it('requires an id — it keys the Flavour dropdown AND terminals.defaultParams', () => {
+  it('requires an id — it keys the Flavour dropdown AND terminals.defaultShellArguments', () => {
     const problem = validateFlavourRecord({ ...valid, id: '' }, []);
     expect(problem).toContain('id');
   });
