@@ -77,15 +77,40 @@ and restored next time you open it.
 
 ## 3. Run a terminal
 
-Choose **Terminal** as a panel's type and you get three fields:
+Choose **Terminal** as a panel's type and you get these fields:
 
 - **Flavour** — the shell. throng detects what you actually have installed: **Windows PowerShell**,
   **PowerShell 7**, **Command Prompt** and **Git Bash** all appear if they resolve to a real
   executable. Your own custom flavours (defined in preferences) are listed first.
-- **Startup Params** — pre-filled with that flavour's defaults; edit them if you like.
+- **Shell Arguments** — arguments passed to the shell itself, pre-filled with that flavour's
+  defaults (`-NoLogo`, `/K`, `-i -l`); edit them if you like.
+- **Startup Command** — a command the shell *runs* when the terminal starts, e.g. `npm run dev`.
+  The shell stays open at a live prompt afterwards, so you can carry on working in it.
+- **Remember the last running command** — when ticked, whatever command is still running as the
+  terminal goes away becomes this panel's Startup Command, so the panel comes back doing what it
+  was doing. If nothing was running, the saved command is left exactly as it was. Off by default.
+- **Reopen in the last directory** — when ticked, the panel reopens in the directory it was last
+  working in rather than the project root. **On by default.** It is disabled for a shell that
+  cannot report its directory — see *Shell integration* below.
 - **Run as administrator** — only available if throng itself is running elevated.
 
-Confirm, and you have a live shell **at the project root**. The panel header shows the terminal's
+Confirm, and you have a live shell **at the project root** — or back in the directory this panel
+was last working in, if it has one.
+
+### Shell integration
+
+Only **Command Prompt** actually moves its process working directory when you `cd`. PowerShell's
+`Set-Location` moves its own *provider* location, and pwsh and Git Bash behave the same way — so
+from the outside those three appear never to leave the directory they started in. throng therefore
+asks them to report where they are, by adding a prompt hook when the terminal starts.
+
+This is the **Shell integration** setting (Settings → Terminal), **on by default**. It preserves any
+prompt you already have — oh-my-posh, starship, a `$PROFILE` function, an existing
+`PROMPT_COMMAND` — and runs it as normal.
+
+Switch it off if it disagrees with your prompt. "Reopen in the last directory" then greys out for
+those shells, because without it they genuinely cannot report where they are; Command Prompt is
+unaffected either way. The panel header shows the terminal's
 **live working directory**, so you can see where a shell is even when a full-screen program hides
 the prompt.
 
