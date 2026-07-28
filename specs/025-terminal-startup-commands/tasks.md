@@ -79,7 +79,9 @@ component-test stack, so renderer behaviour is proven by E2E and logic is pushed
 - [x] **T030** Renderer: promote observations into `terminalMemory` at terminal end, per the rule.
 - [x] **T031** Pre-fill the empty-panel form from `terminalMemory` (FR-007a) — flavour, shell arguments,
       startup command, checkbox.
-- [ ] **T032** E2E: the five memory rows in quickstart Scenario 3, plus the memory-off row.
+- [x] **T032** E2E: the memory rule driven through the real app against the persisted layout —
+      observed while running, cleared when stopped, never promoted after it ended, never recorded
+      at all with memory off, and following a later command.
 - [x] **T033** E2E: closing a terminal returns a **pre-filled** form; editing it changes what next runs.
 
 ## Phase E — Directory memory (US3 · FR-027–FR-032)
