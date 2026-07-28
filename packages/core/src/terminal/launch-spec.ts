@@ -10,13 +10,19 @@ import {
   isValidCommandRecipe,
   prepareStartupCommand,
   NEEDS_VERBATIM_COMMAND_LINE,
-} from './command-recipe.js';
+} from "./command-recipe.js";
 
 /** What the daemon needs to spawn a PTY (cwd = project root). Never persisted. */
 export interface LaunchSpec {
   file: string;
   args: string[];
   cwd: string;
+  /**
+   * Environment applied at launch (025 follow-up) — how a shell that cannot be observed is asked
+   * to report its directory, when the shell supports it. Nothing parses an environment variable on
+   * the way in, so unlike an argv snippet no escape can be eaten in transit.
+   */
+  env?: Record<string, string>;
   /**
    * A VERBATIM command line to use instead of {@link args} (025 follow-up). Set only for shells
    * that do not un-escape a quoted argument — see NEEDS_VERBATIM_COMMAND_LINE. Appended after the
@@ -35,6 +41,9 @@ export interface LaunchSpec {
 export interface LaunchFlavour {
   /** The flavour's id — some shells need their own preparation of a startup command. */
   id?: string;
+  /** Environment asking this shell to report its cwd (025 follow-up). Preferred over a snippet:
+   *  nothing parses an environment variable on the way in, so no escape can be eaten in transit. */
+  shellIntegrationEnv?: Record<string, string>;
   file: string;
   args: string[];
   /** How this flavour is handed a Startup Command (025 FR-010). Absent → fallback. */
@@ -74,19 +83,31 @@ export function resolveLaunchSpec(
   startupCommand?: string,
 ): LaunchSpec {
   if (projectRoot === null) {
-    throw new Error('Cannot resolve a terminal launch spec without a project root');
+    throw new Error(
+      "Cannot resolve a terminal launch spec without a project root",
+    );
   }
   const args = [...flavour.args, ...tokenizeParams(shellArguments)];
-  const userCommand = prepareStartupCommand(flavour.id ?? '', startupCommand?.trim() ?? '');
-  const integration = flavour.shellIntegration?.trim() ?? '';
+  const userCommand = prepareStartupCommand(
+    flavour.id ?? "",
+    startupCommand?.trim() ?? "",
+  );
+  const integration = flavour.shellIntegration?.trim() ?? "";
 
   // Shell integration runs FIRST, so the prompt is reporting before the user's command produces
   // any output — and so a long-running command never delays it. Both travel through the same
   // recipe: to the shell this is simply one script to run.
-  const command = [integration, userCommand].filter((part) => part !== '').join('; ');
+  const command = [integration, userCommand]
+    .filter((part) => part !== "")
+    .join("; ");
 
   // Nothing to run → byte-for-byte today's behaviour (FR-006): no extra args, no PTY write.
-  if (command === '') return { file: flavour.file, args, cwd: projectRoot };
+  const env = flavour.shellIntegrationEnv;
+  if (command === "") {
+    return env
+      ? { file: flavour.file, args, cwd: projectRoot, env }
+      : { file: flavour.file, args, cwd: projectRoot };
+  }
 
   // A recipe puts the command in argv. It goes LAST so the recipe's terminator (`/K`,
   // `-Command`, `-c`) still consumes the command rather than a user-supplied argument.
@@ -101,24 +122,39 @@ export function resolveLaunchSpec(
       recipe.filter((part) => !part.includes(COMMAND_PLACEHOLDER)),
     );
     const withoutDuplicates = args.filter((a) => !suppliedByRecipe.has(a));
-    const expanded = [...withoutDuplicates, ...expandCommandRecipe(recipe, command)];
+    const expanded = [
+      ...withoutDuplicates,
+      ...expandCommandRecipe(recipe, command),
+    ];
     // cmd never un-escapes a quoted argument, so it is handed the line verbatim instead. Joining
     // with spaces is correct here precisely BECAUSE the parts keep their own quoting: the command
     // arrives exactly as the user wrote it rather than re-escaped into something cmd cannot read.
-    if (NEEDS_VERBATIM_COMMAND_LINE.has(flavour.id ?? '')) {
+    if (NEEDS_VERBATIM_COMMAND_LINE.has(flavour.id ?? "")) {
       return {
         file: flavour.file,
         args: expanded,
-        commandLine: expanded.join(' '),
+        commandLine: expanded.join(" "),
         cwd: projectRoot,
+        ...(env ? { env } : {}),
       };
     }
-    return { file: flavour.file, args: expanded, cwd: projectRoot };
+    return {
+      file: flavour.file,
+      args: expanded,
+      cwd: projectRoot,
+      ...(env ? { env } : {}),
+    };
   }
 
   // No recipe → the universal fallback (FR-012). Exactly one of the two paths carries the
   // command, so it can never run twice.
-  return userCommand === ''
-    ? { file: flavour.file, args, cwd: projectRoot }
-    : { file: flavour.file, args, cwd: projectRoot, writeOnReady: userCommand };
+  return userCommand === ""
+    ? { file: flavour.file, args, cwd: projectRoot, ...(env ? { env } : {}) }
+    : {
+        file: flavour.file,
+        args,
+        cwd: projectRoot,
+        writeOnReady: userCommand,
+        ...(env ? { env } : {}),
+      };
 }

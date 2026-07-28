@@ -359,6 +359,7 @@ export class TerminalService {
         file: launch.file,
         args: Array.isArray(launch.args) ? launch.args : [],
         ...(typeof launch.commandLine === 'string' ? { commandLine: launch.commandLine } : {}),
+        ...(launch.env && typeof launch.env === 'object' ? { env: launch.env } : {}),
         cwd: launch.cwd,
         cols: startCols,
         rows: startRows,

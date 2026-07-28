@@ -15,10 +15,13 @@
  * Each was spawned with a real argv array and stdin closed, confirming the command ran and an
  * interactive shell remained to read stdin.
  */
-import type { TerminalFlavourConfig, TerminalSettings } from '../config/app-settings.js';
+import type {
+  TerminalFlavourConfig,
+  TerminalSettings,
+} from "../config/app-settings.js";
 
 /** The placeholder a recipe substitutes the user's command into. */
-export const COMMAND_PLACEHOLDER = '{command}';
+export const COMMAND_PLACEHOLDER = "{command}";
 
 /**
  * Built-in catalogue: flavour id → argv template.
@@ -29,11 +32,14 @@ export const COMMAND_PLACEHOLDER = '{command}';
  *   with a fresh interactive one. Without the re-exec, bash exits the instant the command
  *   finishes (proven in research R1) and the panel would look like it had crashed.
  */
-export const BUILTIN_FLAVOUR_COMMAND_RECIPES: Record<string, readonly string[]> = {
-  'windows-powershell': ['-NoExit', '-Command', COMMAND_PLACEHOLDER],
-  pwsh: ['-NoExit', '-Command', COMMAND_PLACEHOLDER],
-  cmd: ['/K', COMMAND_PLACEHOLDER],
-  'git-bash': ['-c', `${COMMAND_PLACEHOLDER}; exec bash -i`],
+export const BUILTIN_FLAVOUR_COMMAND_RECIPES: Record<
+  string,
+  readonly string[]
+> = {
+  "windows-powershell": ["-NoExit", "-Command", COMMAND_PLACEHOLDER],
+  pwsh: ["-NoExit", "-Command", COMMAND_PLACEHOLDER],
+  cmd: ["/K", COMMAND_PLACEHOLDER],
+  "git-bash": ["-c", `${COMMAND_PLACEHOLDER}; exec bash -i`],
 };
 
 /**
@@ -41,8 +47,13 @@ export const BUILTIN_FLAVOUR_COMMAND_RECIPES: Record<string, readonly string[]> 
  * silently drop the user's command and launch a bare shell, so it is rejected rather than
  * half-applied.
  */
-export function isValidCommandRecipe(recipe: readonly string[] | undefined): boolean {
-  return recipe !== undefined && recipe.some((part) => part.includes(COMMAND_PLACEHOLDER));
+export function isValidCommandRecipe(
+  recipe: readonly string[] | undefined,
+): boolean {
+  return (
+    recipe !== undefined &&
+    recipe.some((part) => part.includes(COMMAND_PLACEHOLDER))
+  );
 }
 
 /**
@@ -51,7 +62,10 @@ export function isValidCommandRecipe(recipe: readonly string[] | undefined): boo
  * element however many spaces or quotes it contains — which is what keeps quoting the shell's
  * own business (FR-047) and sidesteps cmd.exe's non-standard quote handling (research R1a).
  */
-export function expandCommandRecipe(recipe: readonly string[], command: string): string[] {
+export function expandCommandRecipe(
+  recipe: readonly string[],
+  command: string,
+): string[] {
   return recipe.map((part) => part.split(COMMAND_PLACEHOLDER).join(command));
 }
 
@@ -68,15 +82,16 @@ export function expandCommandRecipe(recipe: readonly string[], command: string):
  */
 export function resolveCommandRecipe(
   id: string,
-  source: 'builtin' | 'user',
+  source: "builtin" | "user",
   userEntry: TerminalFlavourConfig | undefined,
   settings: TerminalSettings,
 ): readonly string[] | undefined {
   // Defensive: a settings object assembled before 025 (or by a test double) may lack the map
   // entirely. Launching a terminal must never throw over a missing recipe — the fallback works.
   const override = settings.commandRecipes?.[id];
-  if (override !== undefined) return isValidCommandRecipe(override) ? override : undefined;
-  if (source === 'user') {
+  if (override !== undefined)
+    return isValidCommandRecipe(override) ? override : undefined;
+  if (source === "user") {
     const own = userEntry?.commandRecipe;
     return isValidCommandRecipe(own) ? own : undefined;
   }
@@ -101,14 +116,13 @@ export function resolveCommandRecipe(
  */
 function powershellIntegration(): string {
   return [
-    '$__throngPrior = $function:prompt;',
-    'function global:prompt {',
-    '$__o = if ($__throngPrior) { & $__throngPrior } else { $(Get-Location).Path + [char]62 + [char]32 };',
-    '[char]27 + [char]93 + [char]57 + [char]59 + [char]57 + [char]59 + $(Get-Location).ProviderPath + [char]7 + $__o',
-    '}',
-  ].join(' ');
+    "$__throngPrior = $function:prompt;",
+    "function global:prompt {",
+    "$__o = if ($__throngPrior) { & $__throngPrior } else { $(Get-Location).Path + [char]62 + [char]32 };",
+    "[char]27 + [char]93 + [char]57 + [char]59 + [char]57 + [char]59 + $(Get-Location).ProviderPath + [char]7 + $__o",
+    "}",
+  ].join(" ");
 }
-
 
 /**
  * Git Bash / MSYS. Its `cd` does not move the process working directory that throng can read from
@@ -125,21 +139,55 @@ function powershellIntegration(): string {
  *
  * Any PROMPT_COMMAND already set is preserved and run after ours.
  */
-function bashIntegration(): string {
-  const emit =
-    'printf "\\033]9;9;%s\\007" "$(cygpath -w "$PWD" 2>/dev/null || printf %s "$PWD")"';
-  return `export PROMPT_COMMAND='${emit}'"\${PROMPT_COMMAND:+; $PROMPT_COMMAND}"`;
-}
+/**
+ * Git Bash / MSYS reports its directory through PROMPT_COMMAND — delivered as an ENVIRONMENT
+ * VARIABLE, never spliced into argv.
+ *
+ * That is not a style choice. MSYS bash does its own command-line parsing and strips backslash
+ * escapes, so a snippet passed as an argument arrived with `\033` flattened to `033`: bash then ran
+ * `9` as a command and treated `%s007` as a job spec. Exactly the class of failure cmd has with
+ * quotes, in a different shell and a different escape. An environment variable is not parsed by
+ * anything on the way, so what throng writes is what bash reads.
+ *
+ * bash applies PROMPT_COMMAND from the environment, and it survives the recipe\'s `exec bash -i`
+ * for the same reason -- which is what makes this simpler than the export it replaces, not just
+ * safer. Any PROMPT_COMMAND the user already has is preserved and runs after ours.
+ */
+export const BASH_PROMPT_COMMAND =
+  'printf "\\033]9;9;%s\\007" "$(cygpath -w "$PWD" 2>/dev/null || printf %s "$PWD")"';
 
 /** Per-flavour integration snippets. A flavour absent here needs none. */
 export const BUILTIN_SHELL_INTEGRATION: Record<string, string> = {
-  'windows-powershell': powershellIntegration(),
+  "windows-powershell": powershellIntegration(),
   pwsh: powershellIntegration(),
-  'git-bash': bashIntegration(),
 };
 
+/**
+ * Environment applied at launch so a shell can report its directory, keyed by flavour id.
+ * Preferred over a snippet wherever the shell supports it: nothing parses an environment variable
+ * on the way in, so no escape can be eaten in transit.
+ */
+export const BUILTIN_SHELL_INTEGRATION_ENV: Record<
+  string,
+  Record<string, string>
+> = {
+  "git-bash": { PROMPT_COMMAND: BASH_PROMPT_COMMAND },
+};
+
+/** The integration ENVIRONMENT for a flavour, or undefined when it needs none / it is off. */
+export function resolveShellIntegrationEnv(
+  id: string,
+  enabled: boolean,
+): Record<string, string> | undefined {
+  if (!enabled) return undefined;
+  return BUILTIN_SHELL_INTEGRATION_ENV[id];
+}
+
 /** The integration snippet for a flavour, or undefined when it needs none, or it is switched off. */
-export function resolveShellIntegration(id: string, enabled: boolean): string | undefined {
+export function resolveShellIntegration(
+  id: string,
+  enabled: boolean,
+): string | undefined {
   if (!enabled) return undefined;
   return BUILTIN_SHELL_INTEGRATION[id];
 }
@@ -155,12 +203,18 @@ export function resolveShellIntegration(id: string, enabled: boolean): string | 
  * control that silently does nothing — the same treatment "Run as administrator" gets when throng
  * is not elevated.
  */
-export function flavourReportsDirectory(id: string, shellIntegrationEnabled: boolean): boolean {
-  return BUILTIN_SHELL_INTEGRATION[id] === undefined || shellIntegrationEnabled;
+export function flavourReportsDirectory(
+  id: string,
+  shellIntegrationEnabled: boolean,
+): boolean {
+  const needs =
+    BUILTIN_SHELL_INTEGRATION[id] !== undefined ||
+    BUILTIN_SHELL_INTEGRATION_ENV[id] !== undefined;
+  return !needs || shellIntegrationEnabled;
 }
 
 /** Flavours whose shell parses a leading quoted string as an EXPRESSION, not a command. */
-const NEEDS_CALL_OPERATOR = new Set(['windows-powershell', 'pwsh']);
+const NEEDS_CALL_OPERATOR = new Set(["windows-powershell", "pwsh"]);
 
 /**
  * Prepare a user's Startup Command for a particular shell (025 follow-up).
@@ -178,13 +232,16 @@ const NEEDS_CALL_OPERATOR = new Set(['windows-powershell', 'pwsh']);
  * the operator the shell requires to treat it as the invocation the user plainly meant. Anything
  * not starting with a quote is passed through exactly as typed.
  */
-export function prepareStartupCommand(flavourId: string, command: string): string {
+export function prepareStartupCommand(
+  flavourId: string,
+  command: string,
+): string {
   const trimmed = command.trim();
-  if (trimmed === '' || !NEEDS_CALL_OPERATOR.has(flavourId)) return command;
+  if (trimmed === "" || !NEEDS_CALL_OPERATOR.has(flavourId)) return command;
   const startsQuoted = trimmed.startsWith('"') || trimmed.startsWith("'");
   if (!startsQuoted) return command;
   // Already invoked explicitly — do not double it up.
-  return trimmed.startsWith('& ') ? command : `& ${trimmed}`;
+  return trimmed.startsWith("& ") ? command : `& ${trimmed}`;
 }
 
 /**
@@ -198,4 +255,4 @@ export function prepareStartupCommand(flavourId: string, command: string): strin
  * node-pty accepts a pre-escaped command line and appends it verbatim after the quoted executable,
  * which is the only way to give cmd exactly the text the user typed.
  */
-export const NEEDS_VERBATIM_COMMAND_LINE = new Set(['cmd']);
+export const NEEDS_VERBATIM_COMMAND_LINE = new Set(["cmd"]);
