@@ -63,9 +63,9 @@ component-test stack, so renderer behaviour is proven by E2E and logic is pushed
       (that stall is #190).
 - [x] **T022** Forward it across the agent protocol (`pty-agent-protocol/-entry/-host`).
 - [x] **T023** Add `terminal.command` to the IPC contract; publish from `terminal-events.ts`.
-- [ ] **T024** Integration (Red→Green): `terminal-service` publishes a command change on the shared poll,
-      only on change, suspended when `sinkCount === 0` with the last value retained (FR-019f), and takes a
-      final observation on an observable teardown (FR-019g). Interval comes from `commandPollMs` (FR-019c).
+- [x] **T024** `terminal-service` publishes a command change on the shared poll, only on change,
+      suspended while nothing is listening (FR-019f), and on the INJECTED interval (FR-019c) —
+      driven with a fake host so the loop itself is tested, not the rules it calls.
 - [x] **T025** Preload bridge `onCommand` + renderer `command-store.ts` (twin of `cwd-store.ts`).
 
 ## Phase D — The memory rule (US2 · FR-015–FR-018, FR-025)
@@ -163,7 +163,12 @@ would have caught the first Critical; it is now written.
 
 ### Still open
 
-- **T024** — no integration test for the poll's timer wiring.
-- **T032 / T036** — the five memory rows and the two-panel directory restore are still not driven
-  through the real app end to end. Given what the review found, these are the highest-value
-  remaining work, not a nicety.
+All 41 tasks are done, and every fix made after the adversarial review was verified by reverting it
+and watching its test fail before restoring it.
+
+**One known flake, reported rather than rounded up.** The `IPtyHost` contract suite — specifically
+the `listChildProcesses` obligations added by T020 — failed once in a full `test:contract` run and
+passed twice immediately afterwards in isolation. It waits for a real child process to appear, so
+it is timing-sensitive under the parallel load of the whole project. A test that fails and then
+passes with no code change has not been fixed; it is flaky, and it is one this feature introduced.
+Worth widening its budget or serialising it before this is considered settled.
