@@ -69,6 +69,8 @@ export interface LaunchSpecDto {
   writeOnReady?: string;
   /** 025 follow-up: verbatim command line for a shell that does not un-escape argv (cmd). */
   commandLine?: string;
+  /** 025 follow-up: environment asking a shell to report its working directory. */
+  env?: Record<string, string>;
 }
 
 /** Display metadata for a session, shown in the app-close warning (FR-015). */

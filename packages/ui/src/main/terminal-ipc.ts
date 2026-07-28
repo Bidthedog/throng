@@ -142,6 +142,7 @@ export function registerTerminalIpc(deps: {
           args: flavour.args,
           commandRecipe: flavour.commandRecipe,
           shellIntegration: flavour.shellIntegration,
+          shellIntegrationEnv: flavour.shellIntegrationEnv,
         },
         req.shellArguments,
         cwd,

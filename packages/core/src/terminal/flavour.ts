@@ -10,6 +10,7 @@ import {
   flavourReportsDirectory,
   resolveCommandRecipe,
   resolveShellIntegration,
+  resolveShellIntegrationEnv,
 } from './command-recipe.js';
 
 /** A flavour available to a Terminal Panel — the Flavour dropdown's source. */
@@ -29,6 +30,8 @@ export interface TerminalFlavour {
   commandRecipe?: readonly string[];
   /** Snippet asking this shell to report its cwd (025 follow-up). */
   shellIntegration?: string;
+  /** Environment asking this shell to report its cwd (025 follow-up). */
+  shellIntegrationEnv?: Record<string, string>;
   /** Whether this flavour can report its directory as configured — gates the Reopen control. */
   reportsDirectory: boolean;
 }
@@ -52,6 +55,7 @@ export function mergeFlavours(
     defaultShellArguments: resolveDefaultShellArguments(f.id, 'user', f, settings),
     commandRecipe: resolveCommandRecipe(f.id, 'user', f, settings),
     shellIntegration: resolveShellIntegration(f.id, settings.shellIntegration),
+    shellIntegrationEnv: resolveShellIntegrationEnv(f.id, settings.shellIntegration),
     reportsDirectory: flavourReportsDirectory(f.id, settings.shellIntegration),
   }));
   const builtins: TerminalFlavour[] = detected
@@ -65,6 +69,7 @@ export function mergeFlavours(
       defaultShellArguments: resolveDefaultShellArguments(d.id, 'builtin', undefined, settings),
       commandRecipe: resolveCommandRecipe(d.id, 'builtin', undefined, settings),
       shellIntegration: resolveShellIntegration(d.id, settings.shellIntegration),
+      shellIntegrationEnv: resolveShellIntegrationEnv(d.id, settings.shellIntegration),
       reportsDirectory: flavourReportsDirectory(d.id, settings.shellIntegration),
     }));
   return dedupeById([...users, ...builtins]);
