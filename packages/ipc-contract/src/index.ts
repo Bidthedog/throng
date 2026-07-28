@@ -95,9 +95,11 @@ export {
   TERMINAL_FLAVOUR_MISSING_NOTIFICATION,
   TERMINAL_GRID_NOTIFICATION,
   TERMINAL_CWD_NOTIFICATION,
+  TERMINAL_COMMAND_NOTIFICATION,
 } from './terminal.js';
 export type {
   LaunchSpecDto,
+  TerminalCommandNotification,
   TerminalMeta,
   TerminalAttachParams,
   TerminalAttachResult,

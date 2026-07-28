@@ -1,6 +1,6 @@
 import { connect, type Socket } from 'node:net';
 import process from 'node:process';
-import type { IPtyHost, PtyExit, PtyHandle, PtyStartOptions } from '@throng/core';
+import type { ChildProcess, IPtyHost, PtyExit, PtyHandle, PtyStartOptions } from '@throng/core';
 import { encodeLine, type AgentCommand, type AgentEvent } from './pty-agent-protocol.js';
 
 /**
@@ -40,6 +40,9 @@ export class PtyAgentHost implements IPtyHost {
   private readonly dataCbs = new Map<number, Set<(chunk: string) => void>>();
   private readonly exitCbs = new Map<number, Set<(e: PtyExit) => void>>();
   private readonly childpids = new Map<number, number[]>();
+  /** 025: in-flight `childprocs` requests, resolved when the agent answers. */
+  private readonly childprocWaiters = new Map<number, (procs: ChildProcess[]) => void>();
+  private childprocReqId = 1;
   /** Every key `start`ed and not yet ended — the set a failure must fail (not merely the
    *  keys that happen to have a listener registered yet, which would be a race). */
   private readonly liveKeys = new Set<number>();
@@ -233,6 +236,14 @@ export class PtyAgentHost implements IPtyHost {
       case 'childpids':
         this.childpids.set(ev.key, ev.pids);
         break;
+      case 'childprocs': {
+        const waiter = this.childprocWaiters.get(ev.reqId);
+        if (waiter) {
+          this.childprocWaiters.delete(ev.reqId);
+          waiter(ev.procs);
+        }
+        break;
+      }
       case 'started': {
         // The readiness ack (pty-agent-protocol.ts:26): the agent's ConPTY is spawned.
         // Whatever the shell does next — including printing nothing for a long time —
@@ -314,6 +325,31 @@ export class PtyAgentHost implements IPtyHost {
   listChildPids(handle: PtyHandle): number[] {
     this.sendCmd({ op: 'childpids', key: handle.pid, reqId: 0 });
     return this.childpids.get(handle.pid) ?? [];
+  }
+
+  /**
+   * 025 FR-022. Unlike `listChildPids` this genuinely awaits the agent's answer, because the
+   * caller is an observation loop rather than a close decision — and a stale answer would
+   * capture the wrong command.
+   *
+   * Resolves to `[]` if the agent does not answer within the timeout, so a wedged agent leaves
+   * the last known command in place rather than clearing it (FR-019e) and never stalls the poll.
+   */
+  async listChildProcesses(handle: PtyHandle): Promise<ChildProcess[]> {
+    const reqId = this.childprocReqId++;
+    return new Promise<ChildProcess[]>((resolve) => {
+      const done = (procs: ChildProcess[]): void => {
+        clearTimeout(timer);
+        resolve(procs);
+      };
+      const timer = setTimeout(() => {
+        this.childprocWaiters.delete(reqId);
+        resolve([]);
+      }, 5000);
+      timer.unref?.();
+      this.childprocWaiters.set(reqId, done);
+      this.sendCmd({ op: 'childprocs', key: handle.pid, reqId });
+    });
   }
 
   /** Disconnect from the agent (daemon shutdown); the agent exits on close. */

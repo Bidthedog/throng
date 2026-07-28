@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { ipcMain, type WebContents } from 'electron';
-import { resolveLaunchSpec, type IClipboard } from '@throng/core';
+import { statSync } from 'node:fs';
+import { resolveLaunchSpec, resolveStartDirectory, type IClipboard } from '@throng/core';
 import type { TerminalAttachResult } from '@throng/ipc-contract';
 import { RpcTimeoutError, type DaemonClient } from './daemon-client.js';
 import type { ShellDetectionService } from './shell-detection-service.js';
@@ -27,7 +28,11 @@ interface AttachRequest {
   /** Launch elevated (only honoured in an elevated daemon, FR-025). */
   runAsAdmin?: boolean;
   flavourId: string;
-  params: string;
+  shellArguments: string;
+  /** 025 FR-001: the command the shell should run on cold start. */
+  startupCommand?: string;
+  /** 025 FR-028: the directory this panel last worked in, if any. */
+  rememberedCwd?: string;
   cols: number;
   rows: number;
   /** Display labels for the app-close warning (flavourLabel is filled in here). */
@@ -112,11 +117,36 @@ export function registerTerminalIpc(deps: {
       // A sub-workspace-owned (rootless) Panel has no project root — its terminal
       // launches at the user's home directory (FR-028). Otherwise a null root is an
       // error (no active project to start in).
-      const cwd = req.projectRoot ?? (req.rootless ? homedir() : null);
-      if (cwd === null) {
+      const root = req.projectRoot ?? (req.rootless ? homedir() : null);
+      if (root === null) {
         return { ok: false, error: { code: null, message: 'No active project root to start the terminal in' } };
       }
-      const launch = resolveLaunchSpec({ file: flavour.file, args: flavour.args }, req.params, cwd);
+      // 025 FR-028/FR-030: reopen where this panel was last working. Resolved HERE rather than in
+      // the renderer because it needs the filesystem, and a remembered directory that is gone or
+      // has escaped its project falls back to the root silently — never an error dialog.
+      const cwd = resolveStartDirectory(root, req.rememberedCwd, (p) => {
+        try {
+          return statSync(p).isDirectory();
+        } catch {
+          return false;
+        }
+      });
+      // 025 FR-010: the flavour decides HOW a Startup Command is handed to it — `cmd` keeps its
+      // session with /K, PowerShell with -NoExit, bash by re-execing itself. A flavour with no
+      // recipe falls back to writing the command into the PTY once it is ready (FR-012), which is
+      // what `launch.writeOnReady` carries back to the renderer.
+      const launch = resolveLaunchSpec(
+        {
+          id: flavour.id,
+          file: flavour.file,
+          args: flavour.args,
+          commandRecipe: flavour.commandRecipe,
+          shellIntegration: flavour.shellIntegration,
+        },
+        req.shellArguments,
+        cwd,
+        req.startupCommand,
+      );
       // The attach RPC gets the shell-launch budget, NOT the health-check ping budget
       // (008 FR-004): a shell can take seconds to come up, and reusing the ping budget is
       // exactly what surfaced a spurious connection timeout in a fresh sub-workspace.

@@ -10,6 +10,7 @@
  *
  * No OS/DOM/process imports (Principle II) — verified by the no-os-imports guard.
  */
+import type { TerminalMemory } from '../panel-type/descriptor.js';
 
 /** Current version of the layout JSON document (for forward migration).
  * v2 (003) adds `Tab.activePanelId`; v1 documents are migrated on load
@@ -89,6 +90,16 @@ export interface Panel {
   kind?: PanelKind;
   /** The configuration captured at Confirm for `kind` (005 / FR-007). */
   config?: PanelConfig;
+  /**
+   * What a Terminal Panel remembers ACROSS its own terminal ending (025 FR-007a).
+   *
+   * Deliberately NOT part of `config`: `clearPanelType` deletes `kind` and `config` when a
+   * terminal's content ends, which is precisely the moment this must survive — it is what the
+   * pre-filled empty-panel form reads, and what command memory writes to. Living on the Panel
+   * also means destroying the Panel destroys it (FR-007d), with no cleanup code and no way for
+   * a new Panel in the same position to inherit it.
+   */
+  terminalMemory?: TerminalMemory;
   /**
    * This panel's own text-zoom level (012, revised to per-instance). An integer
    * step in the shared zoom range (see config/zoom.ts); absent / 0 = inherited (no

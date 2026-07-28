@@ -27,7 +27,7 @@ import { IconButton } from '../common/icon-button.js';
  *
  *   • order is PRESERVED, never sorted (C11) — it is the Flavour dropdown's order, and
  *     `mergeFlavours` is first-wins, so which row is first is a fact the user can see
- *   • the id is rendered as text and is NOT editable (C13) — it keys `terminals.defaultParams`, so
+ *   • the id is rendered as text and is NOT editable (C13) — it keys `terminals.defaultShellArguments`, so
  *     renaming in place would silently orphan the parameters keyed to it. Delete and re-add
  *   • rows are keyed by INDEX, not by id (C17): a file-authored duplicate id is reachable (the JSON
  *     tab ships, and `parseTerminals` does not dedupe), and both rows must render
@@ -334,7 +334,7 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
       ?.message ?? null;
 
   const addRow = (): void => {
-    const draft: Draft = { [idKey]: newId.trim(), label: '', file: '', args: [], defaultParams: '' };
+    const draft: Draft = { [idKey]: newId.trim(), label: '', file: '', args: [], defaultShellArguments: '' };
     const problem = checkFlavourRecord(draft, rows.map((r) => String(r[idKey] ?? '')));
     // An ID problem refuses the row outright: an unnamed or duplicate id cannot even be addressed,
     // and a second row claiming one id has no defined winner. Anything else the row can be created
@@ -412,7 +412,7 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
             return (
               <Fragment key={rowKey}>
                 <tr data-testid={`${noun}-row-${rowKey}`}>
-                  {/* The id is TEXT, and not editable (C13): it keys `terminals.defaultParams`, so a
+                  {/* The id is TEXT, and not editable (C13): it keys `terminals.defaultShellArguments`, so a
                       rename in place would silently orphan the parameters keyed to it. */}
                   <td className="map-control-key">{String(row[idKey] ?? '')}</td>
                   {columns.map((column) => (
@@ -487,7 +487,7 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
 }
 
 /**
- * A LIST-valued field, shown the way the Startup Params field already asks a user to type one:
+ * A LIST-valued field, shown the way the Shell Arguments field already asks a user to type one:
  * space-separated (019, T043). A nested array editor is a capability nobody asked for.
  *
  * The round trip is chosen by what the field HOLDS — a list — not by what the control IS: the cell
@@ -605,7 +605,7 @@ function MapCell({ column, value, options, onCommit, testId }: MapCellProps): Re
    *
    * Everything that was not `number` fell through to the `<select>` below — over
    * `allowedValues ?? options ?? []`. So a column declaring `control: 'text'` and no allowed values
-   * rendered a dropdown over NOTHING: `terminals.defaultParams` has shipped as an empty select
+   * rendered a dropdown over NOTHING: `terminals.defaultShellArguments` has shipped as an empty select
    * since 016, a control offering no choice for a value that is free text by nature. It had no test
    * driving it, which is how it stayed that way.
    *

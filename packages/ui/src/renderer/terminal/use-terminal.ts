@@ -32,6 +32,7 @@ import type { SearchCount } from '../search/search-model.js';
 import { shouldDropScrollback } from './clear-detect.js';
 import { saveTerminalViewState, takeTerminalViewState } from './terminal-view-state.js';
 import { parseOsc52 } from './osc52.js';
+import { reportTerminalCwd } from './cwd-store.js';
 import { setTerminalTitle, clearTerminalTitle } from './title-store.js';
 import { TerminalOutputGate } from './output-gate.js';
 import { consumeExplicitRetype } from './explicit-retype.js';
@@ -90,7 +91,11 @@ export interface UseTerminalOptions {
   /** Run the terminal elevated ("as administrator", FR-025). */
   runAsAdmin?: boolean;
   flavourId: string;
-  params: string;
+  shellArguments: string;
+  /** 025 FR-001: a command the shell runs on cold start. */
+  startupCommand: string;
+  /** 025 FR-028: the directory this panel last worked in, if it remembered one. */
+  rememberedCwd?: string;
   /** The DOM node to mount xterm into. */
   container: HTMLElement | null;
   /** xterm theme built from the active throng theme tokens. */
@@ -162,7 +167,7 @@ export interface UseTerminalOptions {
  * identity) does not tear down and recreate the live terminal.
  */
 export function useTerminal(opts: UseTerminalOptions): void {
-  const { panelId, projectId, projectRoot, rootless, runAsAdmin, flavourId, params, container } = opts;
+  const { panelId, projectId, projectRoot, rootless, runAsAdmin, flavourId, shellArguments, startupCommand, container } = opts;
 
   const onExitRef = useRef(opts.onExit);
   const onErrorRef = useRef(opts.onError);
@@ -170,6 +175,16 @@ export function useTerminal(opts: UseTerminalOptions): void {
   const onAttachedRef = useRef(opts.onAttached);
   const themeRef = useRef(opts.theme);
   const metaRef = useRef(opts.meta);
+  /**
+   * 025 FR-028 — the remembered start directory, held in a REF and deliberately NOT a dependency
+   * of the attach effect below.
+   *
+   * It changes every time the user `cd`s, because directory memory records the live cwd. Treating
+   * it as a dependency tore the terminal down and re-attached it on every directory change — a
+   * visible flash, and a needless round-trip. It is only ever read at LAUNCH, so a ref is not a
+   * shortcut here: it is the correct lifetime for the value.
+   */
+  const rememberedCwdRef = useRef(opts.rememberedCwd);
   // Search collaborators are read through refs too (013): the key-reservation predicate
   // changes when the user rebinds a chord or opens/closes find, and the highlight colours
   // change when the theme does — the mount effect must not freeze yesterday's copies.
@@ -183,6 +198,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
   onAttachedRef.current = opts.onAttached;
   themeRef.current = opts.theme;
   metaRef.current = opts.meta;
+  rememberedCwdRef.current = opts.rememberedCwd;
   reserveKeyRef.current = opts.reserveKey;
   decorationsRef.current = opts.searchDecorations;
   onSearchCountRef.current = opts.onSearchCount;
@@ -553,6 +569,17 @@ export function useTerminal(opts: UseTerminalOptions): void {
     // `ESC ] 52 ; c ; <base64> ST`; we decode it and relay the text to the OS
     // clipboard via UI main (the sandboxed renderer can't reach it directly). Reads
     // (`?`) and malformed sequences are ignored (parseOsc52 → null).
+    // 025 follow-up — OSC 9;9 carries a working directory the SHELL reports. PowerShell is the
+    // reason this exists: its `Set-Location` never moves the process working directory, so the
+    // daemon's external read can never see it and only the shell can say where it is. Windows
+    // Terminal uses the same sequence, so a shell already emitting it works with no configuration.
+    term.parser.registerOscHandler(9, (payload) => {
+      const marker = '9;';
+      if (!payload.startsWith(marker)) return false; // some other OSC 9 (a notification) — not ours
+      const reported = payload.slice(marker.length).trim();
+      if (reported) reportTerminalCwd(panelId, reported);
+      return true;
+    });
     term.parser.registerOscHandler(52, (payload) => {
       const text = parseOsc52(payload);
       if (text === null) return true; // handled: swallow reads/garbage (do not echo)
@@ -689,7 +716,9 @@ export function useTerminal(opts: UseTerminalOptions): void {
         rootless: rootless === true,
         runAsAdmin: runAsAdmin === true,
         flavourId,
-        params,
+        shellArguments,
+        startupCommand,
+        rememberedCwd: rememberedCwdRef.current,
         cols: term.cols,
         rows: term.rows,
         meta: metaRef.current,
@@ -847,5 +876,5 @@ export function useTerminal(opts: UseTerminalOptions): void {
     };
     // `opts.attempt` is a dep so a retry (008 FR-005) re-runs the effect and reattaches.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panelId, projectId, projectRoot, rootless, runAsAdmin, flavourId, params, container, opts.attempt]);
+  }, [panelId, projectId, projectRoot, rootless, runAsAdmin, flavourId, shellArguments, startupCommand, container, opts.attempt]);
 }

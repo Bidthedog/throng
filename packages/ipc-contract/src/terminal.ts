@@ -40,11 +40,35 @@ export const TERMINAL_GRID_NOTIFICATION = 'terminal.grid';
 /** A terminal's shell working directory changed (012 revision) — shown in the panel title. */
 export const TERMINAL_CWD_NOTIFICATION = 'terminal.cwd';
 
+/**
+ * 025 FR-019 — which command currently holds a terminal, published per panel as it changes.
+ * The twin of {@link TERMINAL_CWD_NOTIFICATION}: same producer (the daemon's shared observation),
+ * same forwarding path, same per-panel shape.
+ */
+export const TERMINAL_COMMAND_NOTIFICATION = 'terminal.command';
+
+/** Payload of {@link TERMINAL_COMMAND_NOTIFICATION}. `null` means nothing is running. */
+export interface TerminalCommandNotification {
+  panelId: string;
+  command: string | null;
+}
+
 /** Resolved at (re)start; never persisted. cwd = project root. */
 export interface LaunchSpecDto {
   file: string;
   args: string[];
   cwd: string;
+  /**
+   * 025 FR-012 — the universal Startup Command fallback, for a flavour that declares no argv
+   * recipe. The daemon writes it into the PTY once the shell has produced output.
+   *
+   * Only ever present on a COLD START, because a launch spec is only resolved when one happens.
+   * That is what stops a startup command being re-run against a session that is already working
+   * (FR-008): re-attach never carries one.
+   */
+  writeOnReady?: string;
+  /** 025 follow-up: verbatim command line for a shell that does not un-escape argv (cmd). */
+  commandLine?: string;
 }
 
 /** Display metadata for a session, shown in the app-close warning (FR-015). */

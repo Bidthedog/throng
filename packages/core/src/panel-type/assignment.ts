@@ -12,6 +12,7 @@ import {
   type PanelKind,
   type WorkspaceLayout,
 } from '../workspace/model.js';
+import type { TerminalMemory } from './descriptor.js';
 
 /** Map the Panel with `panelId` through `fn`, rebuilding the split tree immutably. */
 function mapPanel(node: LayoutNode, panelId: string, fn: (p: Panel) => Panel): LayoutNode {
@@ -91,7 +92,27 @@ export function updatePanelConfig(
 export function clearPanelType(layout: WorkspaceLayout, panelId: string): WorkspaceLayout {
   return updatePanel(layout, panelId, (p) => {
     if (p.kind === undefined && p.config === undefined) return p;
+    // `terminalMemory` is deliberately NOT destructured away (025 FR-007a): a terminal ending is
+    // exactly when a Panel must remember what it was running, so the memory rides through on
+    // `rest` while kind and config are dropped. Removing it here would silently disable command
+    // memory and leave the pre-filled form with nothing to read.
     const { kind: _kind, config: _config, ...rest } = p;
     return { ...rest, type: 'panel' };
   });
+}
+
+/**
+ * Merge `memory` into a Panel's {@link Panel.terminalMemory} (025). Applies whether or not the
+ * Panel is currently typed — capture happens as the terminal goes away, by which point
+ * {@link clearPanelType} has already run. A no-op for an unknown panel; returns a new layout.
+ */
+export function setTerminalMemory(
+  layout: WorkspaceLayout,
+  panelId: string,
+  memory: Partial<TerminalMemory>,
+): WorkspaceLayout {
+  return updatePanel(layout, panelId, (p) => ({
+    ...p,
+    terminalMemory: { ...(p.terminalMemory ?? {}), ...memory },
+  }));
 }

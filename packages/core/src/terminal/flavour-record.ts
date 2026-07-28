@@ -4,7 +4,7 @@
  * Pure — zero OS, zero DOM. The settings editor is the first place that knows a flavour is broken
  * and the only place that can say so while the user is still looking at it; everything downstream
  * can only fail quietly. Two of the three rules are about the ID, because the id is not a label:
- * it keys the Flavour dropdown AND `terminals.defaultParams`.
+ * it keys the Flavour dropdown AND `terminals.defaultShellArguments`.
  */
 import type { TerminalFlavourConfig } from '../config/app-settings.js';
 

@@ -8,6 +8,8 @@
  * — is used). Each terminal is keyed by a daemon-assigned integer `key` (the synthetic
  * `PtyHandle.pid` the daemon hands to `TerminalService`), not the OS pid.
  */
+import type { ChildProcess } from '@throng/core';
+
 
 /** Daemon → agent commands. */
 export type AgentCommand =
@@ -18,7 +20,9 @@ export type AgentCommand =
   | { op: 'write'; key: number; data: string }
   | { op: 'resize'; key: number; cols: number; rows: number }
   | { op: 'kill'; key: number }
-  | { op: 'childpids'; key: number; reqId: number };
+  | { op: 'childpids'; key: number; reqId: number }
+  // 025: command lines too, for a Panel's command memory. Async by contract (FR-019b).
+  | { op: 'childprocs'; key: number; reqId: number };
 
 /** Agent → daemon events. */
 export type AgentEvent =
@@ -27,7 +31,8 @@ export type AgentEvent =
   | { ev: 'error'; key: number; message: string }
   | { ev: 'data'; key: number; data: string }
   | { ev: 'exit'; key: number; code: number | null; signal?: string }
-  | { ev: 'childpids'; key: number; reqId: number; pids: number[] };
+  | { ev: 'childpids'; key: number; reqId: number; pids: number[] }
+  | { ev: 'childprocs'; key: number; reqId: number; procs: ChildProcess[] };
 
 /** Frame one message as a protocol line. */
 export function encodeLine(msg: AgentCommand | AgentEvent): string {

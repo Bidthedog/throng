@@ -2,6 +2,7 @@
 export {
   TERMINAL_KIND,
   terminalPanelType,
+  readTerminalPanelConfig,
   type TerminalPanelConfig,
   type TerminalValues,
 } from './panel-type.js';
@@ -11,7 +12,18 @@ export {
   checkFlavourRecord,
   type FlavourProblem,
 } from './flavour-record.js';
-export { BUILTIN_FLAVOUR_DEFAULT_PARAMS, resolveDefaultParams } from './defaults.js';
+export { BUILTIN_FLAVOUR_DEFAULT_SHELL_ARGUMENTS, resolveDefaultShellArguments } from './defaults.js';
+export {
+  BUILTIN_FLAVOUR_COMMAND_RECIPES,
+  COMMAND_PLACEHOLDER,
+  expandCommandRecipe,
+  isValidCommandRecipe,
+  resolveCommandRecipe,
+  prepareStartupCommand,
+  resolveShellIntegration,
+  flavourReportsDirectory,
+  BUILTIN_SHELL_INTEGRATION,
+} from './command-recipe.js';
 export { quoteDropPath, formatDroppedPaths } from './drop-paths.js';
 export { terminalLinkTarget } from './link-menu.js';
 export {
@@ -20,7 +32,12 @@ export {
   type LaunchSpec,
   type LaunchFlavour,
 } from './launch-spec.js';
-export { isBusy, shouldCloseOnOwnerClose, attachDecision } from './lifecycle.js';
+export {
+  isBusy,
+  shouldCloseOnOwnerClose,
+  attachDecision,
+  shouldSurfaceExit,
+} from './lifecycle.js';
 export { resolveShellFile, type ShellProbe, type ShellResolver } from './resolve-shell.js';
 export { sanitizeSpawnEnv } from './spawn-env.js';
 export { canRunAsAdmin, shouldRespawnDaemonElevated, shouldDeElevate } from './elevation.js';
@@ -42,3 +59,14 @@ export {
   type KittyCsiResult,
   type KeyChord,
 } from './kitty-keyboard.js';
+export {
+  captureDecision,
+  foregroundCommand,
+  isCapturableCommand,
+  shouldNotifyCaptureOutcome,
+  captureLogLine,
+  MAX_CAPTURABLE_COMMAND_LENGTH,
+  type CaptureOutcome,
+  type CaptureReason,
+} from './command-capture.js';
+export { resolveStartDirectory } from './start-directory.js';

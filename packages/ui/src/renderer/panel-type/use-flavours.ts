@@ -18,7 +18,12 @@ export function useFlavours(): readonly FlavourOption[] {
       void window.throng?.terminal?.listFlavours?.().then((list) => {
         if (!active) return;
         setFlavours(
-          (list ?? []).map((f) => ({ value: f.id, label: f.label, defaultParams: f.defaultParams })),
+          (list ?? []).map((f) => ({
+            value: f.id,
+            label: f.label,
+            defaultShellArguments: f.defaultShellArguments,
+            reportsDirectory: f.reportsDirectory !== false,
+          })),
         );
       });
     };

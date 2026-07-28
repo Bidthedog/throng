@@ -541,6 +541,12 @@ if (isPrimaryInstance)
       // The daemon's threshold is injected, never hardcoded (Principle X) — the same value the UI
       // is using, so one setting governs both halves of one application.
       env: {
+        // 025 FR-019c — the daemon reads `terminals.commandPollMs` from the user's settings, so it
+        // must be told where the config root actually is. It has no notion of dev-vs-prod, and the
+        // config root is NOT beside the database (`%USERPROFILE%\.throng[-dev]` vs `%APPDATA%`),
+        // so guessing it in the daemon silently resolved to a file that never exists — which made
+        // the setting inert, the exact thing Principle X forbids.
+        THRONG_CONFIG_ROOT: container.get<IConfigSettings>(UI_TYPES.ConfigSettings).configRoot,
         THRONG_LOG_LEVEL: startupLogLevel,
         THRONG_LOG_MAX_KB: String(startupDiagnostics.maxFileSizeKb),
         THRONG_LOG_KEEP: String(startupDiagnostics.keepFiles),

@@ -5,7 +5,12 @@
  */
 import type { DetectedShell } from '../abstractions/shell-detection.js';
 import type { TerminalSettings } from '../config/app-settings.js';
-import { resolveDefaultParams } from './defaults.js';
+import { resolveDefaultShellArguments } from './defaults.js';
+import {
+  flavourReportsDirectory,
+  resolveCommandRecipe,
+  resolveShellIntegration,
+} from './command-recipe.js';
 
 /** A flavour available to a Terminal Panel — the Flavour dropdown's source. */
 export interface TerminalFlavour {
@@ -13,12 +18,19 @@ export interface TerminalFlavour {
   label: string;
   /** Executable path or command. */
   file: string;
-  /** Base args inherent to launching it (before user Startup Params). */
+  /** Base args inherent to launching it (before the user's Shell Arguments). */
   args: string[];
   /** Whether it came from the built-in catalogue or the user's settings. */
   source: 'builtin' | 'user';
-  /** Resolved default Startup Params pre-filled when chosen. */
-  defaultParams: string;
+  /** Resolved default Shell Arguments pre-filled when chosen. */
+  defaultShellArguments: string;
+  /** Resolved recipe for handing this flavour a Startup Command (025 FR-010/FR-011).
+   *  Absent → the universal PTY-write fallback (FR-012). */
+  commandRecipe?: readonly string[];
+  /** Snippet asking this shell to report its cwd (025 follow-up). */
+  shellIntegration?: string;
+  /** Whether this flavour can report its directory as configured — gates the Reopen control. */
+  reportsDirectory: boolean;
 }
 
 /**
@@ -37,7 +49,10 @@ export function mergeFlavours(
     file: f.file,
     args: [...f.args],
     source: 'user',
-    defaultParams: resolveDefaultParams(f.id, 'user', f, settings),
+    defaultShellArguments: resolveDefaultShellArguments(f.id, 'user', f, settings),
+    commandRecipe: resolveCommandRecipe(f.id, 'user', f, settings),
+    shellIntegration: resolveShellIntegration(f.id, settings.shellIntegration),
+    reportsDirectory: flavourReportsDirectory(f.id, settings.shellIntegration),
   }));
   const builtins: TerminalFlavour[] = detected
     .filter((d) => !disabled.has(d.id))
@@ -47,7 +62,10 @@ export function mergeFlavours(
       file: d.file,
       args: [...d.defaultArgs],
       source: 'builtin',
-      defaultParams: resolveDefaultParams(d.id, 'builtin', undefined, settings),
+      defaultShellArguments: resolveDefaultShellArguments(d.id, 'builtin', undefined, settings),
+      commandRecipe: resolveCommandRecipe(d.id, 'builtin', undefined, settings),
+      shellIntegration: resolveShellIntegration(d.id, settings.shellIntegration),
+      reportsDirectory: flavourReportsDirectory(d.id, settings.shellIntegration),
     }));
   return dedupeById([...users, ...builtins]);
 }
