@@ -350,6 +350,12 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.on('throng:terminal:cwd', handler);
       return () => ipcRenderer.removeListener('throng:terminal:cwd', handler);
     },
+    // 025 FR-019: which command currently holds a terminal — the twin of onCwd above.
+    onCommand: (cb: (e: { panelId: string; command: string | null }) => void) => {
+      const handler = (_event: unknown, e: { panelId: string; command: string | null }): void => cb(e);
+      ipcRenderer.on('throng:terminal:command', handler);
+      return () => ipcRenderer.removeListener('throng:terminal:command', handler);
+    },
     onExit: (cb: (e: { panelId: string; code: number | null; unexpected: boolean }) => void) => {
       const handler = (_event: unknown, e: { panelId: string; code: number | null; unexpected: boolean }): void =>
         cb(e);

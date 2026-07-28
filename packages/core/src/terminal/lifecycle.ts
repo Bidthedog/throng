@@ -32,3 +32,20 @@ export function shouldCloseOnOwnerClose(childPids: readonly number[]): boolean {
 export function attachDecision(hasLiveSession: boolean): 'reattach' | 'cold-start' {
   return hasLiveSession ? 'reattach' : 'cold-start';
 }
+
+/**
+ * Whether a terminal's end deserves a notice (025 follow-up).
+ *
+ * The discriminator is the EXIT CODE, not the daemon's `unexpected` flag. That flag means "throng
+ * did not kill this" (`unexpected = !userKilled`), so typing `exit` in the shell — the most
+ * deliberate end there is — arrives marked unexpected. Gating on it therefore told the user
+ * "Terminal exited (code 0)" for something they had just asked for, which reports back their own
+ * action and trains them to dismiss notices unread. That is precisely when a real failure is missed.
+ *
+ * A shell that exits 0 ended cleanly, whoever asked. Anything else — a non-zero code, a signal, or
+ * a code we could not read — is a genuine failure and still surfaces with its code, which is what
+ * constitutional Principle III requires.
+ */
+export function shouldSurfaceExit(code: number | null | undefined): boolean {
+  return code !== 0;
+}

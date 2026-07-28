@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useSyncExternalStore, type ReactElement } from 'react';
-import { defaultPanelTypeRegistry, type PanelTypeContext } from '@throng/core';
+import {
+  defaultPanelTypeRegistry,
+  type PanelTypeContext,
+  type TerminalMemory,
+} from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
 import {
   selectKind,
@@ -38,19 +42,27 @@ export function PanelTypeForm({
   panelId,
   projectRoot,
   rootless = false,
+  terminalMemory,
 }: {
   panelId: string;
   projectRoot: string | null;
   /** Sub-workspace-owned Panel: a null root is allowed (launches at home, FR-028). */
   rootless?: boolean;
+  /**
+   * 025 FR-007a — what this Panel remembered from its previous terminal. The empty state a
+   * Panel returns to when its terminal closes IS the edit screen, so the form seeds from this
+   * rather than from bare defaults. Absent on a Panel that has never hosted a terminal, which
+   * is exactly today's behaviour.
+   */
+  terminalMemory?: TerminalMemory;
 }): ReactElement {
   const ws = useWorkspace();
   const flavours = useFlavours();
   const { elevated } = useCapabilities();
   const registry = defaultPanelTypeRegistry;
   const ctx = useMemo<PanelTypeContext>(
-    () => ({ projectRoot, flavours, rootless }),
-    [projectRoot, flavours, rootless],
+    () => ({ projectRoot, flavours, rootless, terminalMemory }),
+    [projectRoot, flavours, rootless, terminalMemory],
   );
   const deps = useMemo<FormDeps>(() => ({ registry, ctx }), [registry, ctx]);
   // The draft lives in a cross-window store keyed by panelId, so a cloned Panel's

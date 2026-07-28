@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
@@ -13,7 +14,13 @@ import type {
   IProjectStore,
   IUserContext,
 } from '@throng/core';
-import { ProjectService, countPanels, defaultPipeName } from '@throng/core';
+import {
+  DEFAULT_APP_SETTINGS,
+  ProjectService,
+  countPanels,
+  defaultPipeName,
+  parseAppSettings,
+} from '@throng/core';
 import {
   WindowsPlatformInfo,
   NodeUserContext,
@@ -94,6 +101,31 @@ function readPersistenceSettings(env: NodeJS.ProcessEnv): IPersistenceSettings {
   return {
     databasePath: env.THRONG_DATABASE_PATH ?? defaultDatabasePath(env),
   };
+}
+
+/**
+ * 025 FR-019c — how often the shared command observation runs.
+ *
+ * Read from the user's `settings.json` at daemon startup and injected, rather than hardcoded:
+ * a setting nothing reads is an inert setting, which the constitution forbids (Principle X).
+ * The daemon has no config-store binding, so this reads the one value it needs directly and
+ * falls back to the shipped default on any problem — a malformed settings file must never stop
+ * terminals from working.
+ */
+function readCommandPollMs(env: NodeJS.ProcessEnv): number {
+  // The config root is `%USERPROFILE%\.throng[-dev]`, NOT `%APPDATA%	hrong` — that is the
+  // userData/database directory and has never held a settings.json. UI-main passes the resolved
+  // root as THRONG_CONFIG_ROOT precisely because the daemon cannot work out dev-vs-prod itself.
+  // The homedir fallback keeps a daemon started without the UI reading the packaged location
+  // rather than nothing at all.
+  const root = env.THRONG_CONFIG_ROOT ?? join(homedir(), '.throng');
+  const settingsPath = join(root, 'settings.json');
+  try {
+    const raw: unknown = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    return parseAppSettings(raw).terminals.commandPollMs;
+  } catch {
+    return DEFAULT_APP_SETTINGS.terminals.commandPollMs;
+  }
 }
 
 export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Container {
@@ -209,6 +241,7 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
     forceAgent,
     attachColdStartDelayMs,
     new WindowsProcessCwd(), // 012: poll each terminal's shell cwd for the panel title
+    readCommandPollMs(env), // 025 FR-019c: the shared command-observation interval
   );
   container.bind<TerminalEvents>(DAEMON_TYPES.TerminalEvents).toConstantValue(terminalEvents);
   container.bind<TerminalLockManager>(DAEMON_TYPES.TerminalLockManager).toConstantValue(lockManager);

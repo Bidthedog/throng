@@ -26,6 +26,28 @@ function subscribe(notify: () => void): () => void {
   };
 }
 
+/**
+ * Record a cwd the SHELL reported (025 follow-up), rather than one the daemon observed.
+ *
+ * PowerShell's `Set-Location` never moves the process working directory, so the daemon's PEB read
+ * can never see it. With shell integration on, the shell emits its location as an OSC 9;9 sequence
+ * and this is where that lands — the same store the daemon feeds, so everything downstream
+ * (the panel header, directory memory) works identically whichever way the value arrived.
+ */
+export function reportTerminalCwd(panelId: string, cwd: string): void {
+  if (!cwd || cwds.get(panelId) === cwd) return;
+  cwds.set(panelId, cwd);
+  for (const l of listeners) l();
+}
+
+/**
+ * Read a panel's last observed cwd without subscribing (025 FR-027). Used at the moment a
+ * terminal ends, to remember the directory it was pointed at — a read, not a render.
+ */
+export function peekTerminalCwd(panelId: string): string | undefined {
+  return cwds.get(panelId);
+}
+
 /** This panel's terminal cwd, or `undefined` until the first update arrives. */
 export function useTerminalCwd(panelId: string): string | undefined {
   return useSyncExternalStore(

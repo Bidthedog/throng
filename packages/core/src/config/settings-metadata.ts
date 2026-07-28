@@ -29,7 +29,11 @@ export const SETTINGS_INTERNAL_KEYS: readonly string[] = [
   // treatment `newProject.lastProjectFolder` above already receives.
   'terminals.flavours',
   'terminals.disabledBuiltins',
-  'terminals.defaultParams',
+  'terminals.defaultShellArguments',
+  // 025: a per-flavour argv template keyed by flavour id. Same shape and same reasoning as
+  // `terminals.flavours` above — it is withheld from the Settings UI until issue 67 settles a
+  // control that can express it, and is hidden here rather than left undescribed.
+  'terminals.commandRecipes',
 ];
 
 /**
@@ -189,7 +193,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   // Terminals
   //
   // The three terminal-flavour controls (`terminals.flavours`, `terminals.disabledBuiltins`,
-  // `terminals.defaultParams`) are WITHHELD from the Settings UI for v1.0.0 pending #67's proper
+  // `terminals.defaultShellArguments`) are WITHHELD from the Settings UI for v1.0.0 pending #67's proper
   // implementation in vNext — see SETTINGS_INTERNAL_KEYS above. Their descriptors are kept intact
   // in HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS below (this is a hide, not a revert); the rendered
   // registry must not carry them, or the completeness rule flags them as descriptors for keys that
@@ -311,6 +315,32 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     description: 'Show the status bar along the bottom of each terminal panel.',
     group: 'Terminal',
     control: 'toggle',
+  },
+  {
+    key: 'terminals.shellIntegration',
+    label: 'Shell integration',
+    description:
+      "Ask shells that cannot be observed from outside to report their working directory, so terminals reopen where you left them. PowerShell needs this: its `cd` never moves the process's real working directory. Installs a prompt function that defers to any prompt you already have — switch it off if it disagrees with a custom prompt.",
+    group: 'Terminal',
+    control: 'toggle',
+  },
+  {
+    // 025 FR-019c. The observation interval is a real, tunable setting rather than a module
+    // constant (Principle X): it is the knob that trades how quickly a newly-started command is
+    // noticed against how often the machine is asked for a process snapshot.
+    key: 'terminals.commandPollMs',
+    label: 'Command tracking interval',
+    description:
+      'How often throng checks which command a terminal is running, in milliseconds. Lower notices a new command sooner; higher does less work. A command running for longer than one interval is always remembered.',
+    group: 'Terminal',
+    // Bounded numerics render a slider in this app (018 FR-034), and the step must be at least 1%
+    // of the range so the control can actually be aimed. 250ms-5s is also the range this knob is
+    // useful over: below that the observation cost stops being negligible, above it a command
+    // started shortly before an unclean kill would routinely be missed (FR-019d).
+    control: 'slider',
+    min: 250,
+    max: 5000,
+    step: 250,
   },
   {
     key: 'terminals.linkHoverDelayMs',
@@ -486,7 +516,7 @@ export const HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS: MetadataRegistry = [
     key: 'terminals.flavours',
     label: 'Custom terminal flavours',
     description:
-      'User-defined shells shown in the Flavour dropdown (id, label, file, args, default params).',
+      'User-defined shells shown in the Flavour dropdown (id, label, file, args, default shell arguments).',
     group: 'Terminals',
     // A structured RECORD table — one row per flavour, one cell per field (019, FR-018/#67).
     //
@@ -501,7 +531,7 @@ export const HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS: MetadataRegistry = [
       { key: 'label', label: 'Label', control: 'text' },
       { key: 'file', label: 'Executable', control: 'text' },
       { key: 'args', label: 'Arguments', control: 'text' }, // string[] ↔ space-separated
-      { key: 'defaultParams', label: 'Default params', control: 'text' },
+      { key: 'defaultShellArguments', label: 'Shell arguments', control: 'text' },
     ],
     clearable: true, // no custom flavours is a perfectly good answer — and it is what it ships as
   },
@@ -524,11 +554,11 @@ export const HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS: MetadataRegistry = [
     // The descriptor this setting has ALWAYS lacked (016, F5). It ships as an empty map, so it
     // yielded zero leaves and slipped past the completeness rule — a JSON-only setting of exactly
     // the kind the constitution forbids. The `map` control closes it rather than stepping around it.
-    key: 'terminals.defaultParams',
-    label: 'Default flavour parameters',
+    key: 'terminals.defaultShellArguments',
+    label: 'Default shell arguments',
     description:
-      'Extra arguments passed to a flavour every time it starts, keyed by flavour id (e.g. pwsh → -NoLogo).',
-    group: 'Terminals',
+      'Shell arguments passed to a flavour every time it starts, keyed by flavour id (e.g. pwsh → -NoLogo).',
+    group: 'Terminal',
     control: 'map',
     columns: [{ label: 'Arguments', control: 'text' }],
     clearable: true, // ships empty; empty means "pass nothing extra", a perfectly good answer

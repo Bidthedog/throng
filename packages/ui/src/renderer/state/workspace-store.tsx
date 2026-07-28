@@ -34,6 +34,7 @@ import {
   setPanelType as opSetPanelType,
   convertPanelToProject as opConvertPanelToProject,
   clearPanelType as opClearPanelType,
+  setTerminalMemory as opSetTerminalMemory,
   updatePanelConfig as opUpdatePanelConfig,
   type Edge,
   type PanelConfig,
@@ -91,6 +92,8 @@ export interface WorkspaceContextValue {
   convertPanelToProject(panelId: string, projectId: string): void;
   /** Revert a typed Panel back to the type-selection form (005 / FR-020). */
   clearPanelType(panelId: string): void;
+  /** 025: merge into what a Terminal Panel remembers across its terminal ending. */
+  setTerminalMemory(panelId: string, memory: Record<string, unknown>): void;
   /** Merge partial config into an already-typed Panel (006 — persist editor path). */
   updatePanelConfig(panelId: string, config: PanelConfig): void;
   /**
@@ -276,6 +279,8 @@ export function WorkspaceProvider({
       convertPanelToProject: (panelId, projectId) =>
         apply((l) => opConvertPanelToProject(l, panelId, projectId)),
       clearPanelType: (panelId) => apply((l) => opClearPanelType(l, panelId)),
+      setTerminalMemory: (panelId, memory) =>
+        apply((l) => opSetTerminalMemory(l, panelId, memory)),
       updatePanelConfig: (panelId, config) => apply((l) => opUpdatePanelConfig(l, panelId, config)),
       replaceLayout: (next) => {
         setLayout(next);

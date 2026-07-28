@@ -153,7 +153,9 @@ declare global {
           rootless?: boolean;
           runAsAdmin?: boolean;
           flavourId: string;
-          params: string;
+          shellArguments: string;
+          startupCommand?: string;
+          rememberedCwd?: string;
           cols: number;
           rows: number;
           /**
@@ -179,6 +181,8 @@ declare global {
         onGrid: (cb: (e: { panelId: string; cols: number; rows: number }) => void) => () => void;
         /** The shell's working directory changed (012): shown in the panel title. */
         onCwd: (cb: (e: { panelId: string; cwd: string }) => void) => () => void;
+        /** 025 FR-019: the terminal's current foreground command, or null when idle. */
+        onCommand?: (cb: (e: { panelId: string; command: string | null }) => void) => () => void;
         onExit: (
           cb: (e: { panelId: string; code: number | null; unexpected: boolean }) => void,
         ) => () => void;
@@ -353,7 +357,7 @@ export interface AppClosePromptInfo {
 
 /**
  * One built-in returned by `window.throng.terminal.listDetectedFlavours` (019) — what the machine
- * HAS. It carries neither `source` nor a resolved `defaultParams`: a picker wants neither, and the
+ * HAS. It carries neither `source` nor a resolved `defaultShellArguments`: a picker wants neither, and the
  * shape says so.
  */
 export interface DetectedFlavourDto {
@@ -369,7 +373,9 @@ export interface TerminalFlavourDto {
   file: string;
   args: string[];
   source: 'builtin' | 'user';
-  defaultParams: string;
+  defaultShellArguments: string;
+  /** 025 follow-up: can this shell report its working directory as configured? */
+  reportsDirectory?: boolean;
 }
 
 /** Result of `window.throng.terminal.attach`. */

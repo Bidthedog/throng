@@ -1,4 +1,4 @@
-import type { IPtyHost, PtyExit } from '../abstractions/pty-host.js';
+import type { ChildProcess, IPtyHost, PtyExit } from '../abstractions/pty-host.js';
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -8,10 +8,14 @@ function assert(condition: unknown, message: string): asserts condition {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-async function waitFor(predicate: () => boolean, timeoutMs: number, label: string): Promise<void> {
+async function waitFor(
+  predicate: () => boolean | Promise<boolean>,
+  timeoutMs: number,
+  label: string,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (predicate()) return;
+    if (await predicate()) return;
     await sleep(25);
   }
   assert(false, `timed out waiting for ${label}`);
@@ -74,12 +78,46 @@ export async function runPtyHostContract(env: PtyHostContractEnv): Promise<void>
       'a new child pid to appear while a command runs',
     );
 
+    // 4b. listChildProcesses (025 FR-022): the same descendants, WITH command lines, and with
+    //     ppids expressed relative to the handle this caller holds.
+    //
+    //     That last part is the whole reason this obligation exists. `PtyAgentHost` identifies a
+    //     terminal by a synthetic key, not an OS pid, so an implementation that forwards raw OS
+    //     ppids leaves every direct child unmatchable and silently disables command memory. It is
+    //     invisible to `listChildPids`, which only ever counts pids and never inspects a ppid.
+    //     Waited for, not asserted once: the pid check above proves a child EXISTS, but this call
+    //     takes its own process snapshot which may be momentarily stale. Asserting immediately made
+    //     the obligation itself flaky, which is worse than not having it.
+    let procs: ChildProcess[] = [];
+    await waitFor(
+      async () => {
+        procs = await host.listChildProcesses(handle);
+        return procs.some((p) => p.ppid === handle.pid);
+      },
+      8000,
+      'a DIRECT child (ppid === handle.pid) to appear in listChildProcesses',
+    );
+    const direct = procs.find((p) => p.ppid === handle.pid);
+    assert(
+      typeof direct?.commandLine === 'string' && direct.commandLine.length > 0,
+      'a direct child must carry a non-empty command line',
+    );
+    assert(
+      Number.isFinite(direct?.startedAt),
+      'a direct child must carry a finite startedAt',
+    );
+
     // 5. unsubscribe stops further callbacks.
     offData();
     const before = output.length;
     host.write(handle, env.echoLine('SHOULD_NOT_APPEAR'));
     await sleep(500);
     assert(output.length === before, 'onData unsubscribe must stop further callbacks');
+
+    // 4c. listChildProcesses never REJECTS (FR-019e): a failed observation must leave the last
+    //     known command in place, so the caller is never handed an exception to swallow.
+    const dead = await host.listChildProcesses({ pid: 999_999_999 }).catch(() => 'REJECTED');
+    assert(dead !== 'REJECTED', 'listChildProcesses must resolve, never reject, for a dead handle');
 
     // 6. kill → onExit fires.
     let exited = false;

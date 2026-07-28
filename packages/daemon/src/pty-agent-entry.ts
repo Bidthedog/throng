@@ -19,7 +19,7 @@ import 'reflect-metadata';
 import { createServer, type Socket } from 'node:net';
 import process from 'node:process';
 import { NodePtyHost } from '@throng/platform-windows';
-import type { PtyHandle } from '@throng/core';
+import type { ChildProcess, PtyHandle } from '@throng/core';
 import { encodeLine, type AgentCommand, type AgentEvent } from './pty-agent-protocol.js';
 import { createAgentLogger } from './pty-agent-log.js';
 import { probeErrorMeansDaemonGone } from './pty-agent-liveness.js';
@@ -218,6 +218,33 @@ function onCommand(msg: AgentCommand): void {
         pids = [];
       }
       send({ ev: 'childpids', key: msg.key, reqId: msg.reqId, pids });
+      break;
+    }
+    // 025 FR-022: the same descendants, with command lines, for command memory. Async so the
+    // agent keeps serving other terminals while the snapshot is taken (FR-019b).
+    case 'childprocs': {
+      const h = handles.get(msg.key);
+      void (async (): Promise<void> => {
+        let procs: ChildProcess[] = [];
+        try {
+          // The daemon knows this terminal only by its synthetic `key`, never by the shell's real
+          // OS pid — `PtyAgentHost.start` returns `{ pid: key }`. The children we report carry
+          // REAL ppids, so a direct child of the shell would never match `key` on the daemon side
+          // and command memory would be silently dead for every de-elevated terminal (the normal
+          // case on an elevated daemon). Re-parent direct children onto the key so the pure
+          // "direct child of the shell" rule (FR-022a) still holds across the seam; grandchildren
+          // keep their real ppids and so remain grandchildren.
+          const raw = h ? await pty.listChildProcesses(h) : [];
+          const shellPid = h?.pid;
+          procs = raw.map((c) =>
+            shellPid !== undefined && c.ppid === shellPid ? { ...c, ppid: msg.key } : c,
+          );
+        } catch (error) {
+          log(`childprocs error key=${msg.key}: ${errText(error)}`);
+          procs = [];
+        }
+        send({ ev: 'childprocs', key: msg.key, reqId: msg.reqId, procs });
+      })();
       break;
     }
   }

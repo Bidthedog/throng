@@ -14,12 +14,25 @@ import {
   resolveAction,
   resolveColour,
   zoomFactor,
+  captureDecision,
+  captureLogLine,
+  shouldSurfaceExit,
+  shouldNotifyCaptureOutcome,
   panelZoomLevel,
+  readTerminalPanelConfig,
   type Panel,
   type TerminalPanelConfig,
   type Theme,
 } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
+import { useNotify } from '../common/notification.js';
+import {
+  ensureTerminalCommandBridge,
+  forgetTerminalCommand,
+  peekTerminalCommand,
+  useTerminalCommand,
+} from './command-store.js';
+import { peekTerminalCwd, useTerminalCwd } from './cwd-store.js';
 import { useActiveTheme, useKeybindings, useAppSettings } from '../config/config-store.js';
 import { TerminalStatusBar } from './terminal-status-bar.js';
 import {
@@ -34,7 +47,7 @@ import type { MenuItem } from '../workspace/context-menu.js';
 import { Icon } from '../common/icon.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
-import { setPanelExit } from './exit-store.js';
+import { clearPanelExit, setPanelExit } from './exit-store.js';
 import { useTerminal, type TerminalApi } from './use-terminal.js';
 import { FindBar } from '../search/find-bar.js';
 import { PanelSkeleton, useDelayedFlag } from '../common/loading.js';
@@ -88,6 +101,7 @@ export function TerminalPanel({
   meta?: { projectName?: string; tabName?: string; panelName?: string };
 }): ReactElement {
   const ws = useWorkspace();
+  const { notify } = useNotify();
   // Whether this terminal is the active panel of the active tab — read through a ref so the terminal's
   // (async) attach focus sees the CURRENT active panel and never steals focus when it isn't (issue 144).
   const activeTab = ws.layout?.tabs.find((t) => t.id === tabId);
@@ -242,13 +256,171 @@ export function TerminalPanel({
     return () => window.removeEventListener(TREE_DROP_EVENT, onTreeDrop);
   }, [panel.id, insertDroppedPaths]);
 
+  // 025 FR-002d: read through the migrating reader so a Panel persisted before this feature
+  // (which spelled it `params`) still launches with its shell arguments intact.
+  const rawConfig = readTerminalPanelConfig(config as Record<string, unknown>);
+
+  // 025 FR-019 — resolve a STRANDED observation during render, before the launch reads it.
+  //
+  // A panel whose terminal died without ending cleanly (app close with "terminate all", a daemon
+  // kill, a crash) still carries its last observation. Resolving that only in an effect would be
+  // too late: `useTerminal` below has already launched with the OLD command, so the recovered one
+  // would not take effect until the restart AFTER this one — which is exactly the case the user
+  // cares about. Doing it here is pure (`captureDecision` takes data and returns data) and makes
+  // the very first reopen correct; the effect below only persists what this decided.
+  const stranded = panel.terminalMemory?.observedCommand;
+  const recovered =
+    stranded === undefined || stranded === null
+      ? null
+      : captureDecision(rawConfig.rememberCommand, rawConfig.startupCommand, stranded);
+  const recoveredValue = recovered?.save === true ? recovered.value : undefined;
+  const {
+    shellArguments,
+    startupCommand: savedStartupCommand,
+    rememberCommand,
+    rememberDirectory,
+  } = rawConfig;
+  // Memoised over its primitive parts: `end()` below depends on this, and a fresh object each
+  // render would re-create that callback (and everything keyed on it) every time.
+  const terminalConfig = useMemo(
+    () => ({
+      shellArguments,
+      startupCommand: recoveredValue ?? savedStartupCommand,
+      rememberCommand,
+      rememberDirectory,
+    }),
+    [shellArguments, savedStartupCommand, rememberCommand, rememberDirectory, recoveredValue],
+  );
+
+  // 025 — arm the command bridge as this terminal mounts, and drop whatever the panel's PREVIOUS
+  // terminal left behind. Both matter: subscribing lazily at capture time meant the first capture
+  // of every session saw nothing, and a retained value from an earlier terminal could be promoted
+  // into a later one that never ran it (FR-017).
+  useEffect(() => {
+    ensureTerminalCommandBridge();
+    forgetTerminalCommand(panel.id);
+
+    // FR-019 / US2 scenario 7 — an abrupt end (app crash, daemon crash, machine restart) never
+    // reaches `end()`, so a value persisted only at teardown would be lost exactly when continuous
+    // tracking was supposed to save it. A stranded `observedCommand` on mount therefore means the
+    // previous terminal died without ending cleanly; resolve it through the ordinary rule now.
+    if (recovered !== null) {
+      console.info(captureLogLine(panel.id, recovered));
+      ws.setTerminalMemory(panel.id, {
+        observedCommand: undefined,
+        ...(recovered.save ? { startupCommand: recovered.value } : {}),
+      });
+    }
+    // Only on mount/relaunch: re-running this on every memory write would loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panel.id, attempt]);
+
+  // Persist the observation as it changes, so it survives a death that never runs `end()`.
+  //
+  // Both of these effects write ONLY on a genuine change, tracked in a ref.
+  //
+  // That is not an optimisation, it is what makes them work at all: writing memory changes the
+  // layout, which changes the workspace context's identity, which re-runs the effect, which writes
+  // again. The write itself is idempotent, so the loop is invisible — but each write reschedules
+  // the debounced layout save, so the save is pushed back forever and NOTHING is ever persisted.
+  // That is precisely why directory memory appeared to do nothing at all.
+  const lastPersistedCommand = useRef<string | null | undefined>(undefined);
+  const observedNow = useTerminalCommand(panel.id);
+  useEffect(() => {
+    if (!terminalConfig.rememberCommand) return;
+    if (observedNow === undefined) return;
+    if (lastPersistedCommand.current === observedNow) return;
+    lastPersistedCommand.current = observedNow;
+    ws.setTerminalMemory(panel.id, { observedCommand: observedNow });
+  }, [panel.id, observedNow, terminalConfig.rememberCommand, ws]);
+
+  // FR-027 — persist the working directory AS IT CHANGES, for the same reason.
+  //
+  // Writing it only in `end()` made directory memory fail on the path that matters most: on app
+  // close with "terminate all", UI-main awaits `terminal.killAll` (which returns when the DAEMON
+  // has killed the PTYs) and then drains the windows — the renderer's exit handler frequently
+  // never runs in between, so nothing was ever recorded. Persisting continuously removes the
+  // ordering dependency entirely, which is also what makes it survive a daemon or machine kill.
+  //
+  // Not gated on the memory checkbox: directory memory is unconditional (FR-027a).
+  const lastPersistedCwd = useRef<string | undefined>(undefined);
+  const cwdNow = useTerminalCwd(panel.id);
+  useEffect(() => {
+    if (!terminalConfig.rememberDirectory) return;
+    if (!cwdNow) return;
+    if (lastPersistedCwd.current === cwdNow) return; // see the note above — this guard is load-bearing
+    lastPersistedCwd.current = cwdNow;
+    ws.setTerminalMemory(panel.id, { lastCwd: cwdNow });
+  }, [panel.id, cwdNow, terminalConfig.rememberDirectory, ws]);
+
   const end = useCallback(
     (message: string, code?: number | null, unexpected?: boolean) => {
-      setPanelExit(panel.id, { message, code, unexpected });
+      // A clean exit the user asked for says nothing worth a notice. Typing `exit` and being told
+      // "Terminal exited (code 0)" reports back what you just did, and trains people to dismiss
+      // notices without reading them — which is exactly when a real failure gets missed.
+      //
+      // Constitutional Principle III requires surfacing an exit that is UNEXPECTED, with its code.
+      // That is untouched: a crash, a non-zero exit, or a launch/attach failure still raises its
+      // notice. Only the deliberate, successful case is silent.
+      // The rule lives in core so it is testable, and so this cannot silently regress again:
+      // the previous attempt gated on `unexpected`, which is set for a typed `exit` too, so it
+      // never fired.
+      if (!shouldSurfaceExit(code)) clearPanelExit(panel.id);
+      else setPanelExit(panel.id, { message, code, unexpected });
       markTerminalStopped(panel.id);
+
+      // 025 — the capture point. This runs for EVERY way a terminal ends (user close/kill,
+      // panel destroy, project close, "terminate all", the shell exiting on its own), which is
+      // exactly the set FR-020 requires, and it happens BEFORE clearPanelType so the config is
+      // still readable. `clearPanelType` then preserves `terminalMemory` on the way past.
+      const observed = peekTerminalCommand(panel.id);
+      const decision = captureDecision(
+        terminalConfig.rememberCommand,
+        terminalConfig.startupCommand,
+        // `undefined` means nothing was ever observed, which is NOT the same as "idle" — treating
+        // it as idle is harmless here (both leave the saved command alone), but conflating them
+        // would be wrong if the rule ever changes.
+        observed ?? null,
+      );
+      const memory: Record<string, unknown> = {
+        flavourId: config.flavourId,
+        shellArguments: terminalConfig.shellArguments,
+        rememberCommand: terminalConfig.rememberCommand,
+        rememberDirectory: terminalConfig.rememberDirectory,
+      };
+      // FR-026a: every outcome is logged, including the no-ops, so "it forgot my command" is
+      // answerable from the log alone. FR-026d: this is fire-and-forget — nothing here may delay
+      // the terminal's teardown.
+      console.info(captureLogLine(panel.id, decision));
+      if (shouldNotifyCaptureOutcome(decision)) {
+        // FR-026b: the only failure the terminal itself never reports — a command WAS running and
+        // could not be stored. Anything the shell already printed on screen is deliberately not
+        // repeated here.
+        notify({
+          severity: 'warning',
+          title: 'Command not remembered',
+          message:
+            'The command running in this terminal could not be saved as its startup command. The previous value is unchanged.',
+          testId: 'notice-capture-failed',
+        });
+      }
+      // FR-017 — "left exactly as it was" means the USER'S configured command survives a teardown
+      // where nothing was running. Writing it only on a capture would silently drop what they
+      // typed the moment they stopped their command, so the configured value is always carried
+      // and a capture overwrites it.
+      memory.startupCommand = decision.save ? decision.value : terminalConfig.startupCommand;
+      // Resolved — clear the raw observation so the next mount does not treat this clean end as a
+      // crash and re-apply it.
+      memory.observedCommand = undefined;
+      // FR-027: the directory is remembered unconditionally — it is independent of the
+      // command-memory checkbox, and cannot execute anything.
+      const lastCwd = peekTerminalCwd(panel.id);
+      if (lastCwd) memory.lastCwd = lastCwd;
+      ws.setTerminalMemory(panel.id, memory);
+
       ws.clearPanelType(panel.id); // revert to the type-selection form (FR-020)
     },
-    [panel.id, ws],
+    [panel.id, ws, config.flavourId, terminalConfig, notify],
   );
 
   const onExit = useCallback(
@@ -284,7 +456,10 @@ export function TerminalPanel({
     rootless,
     runAsAdmin: config.runAsAdmin === true,
     flavourId: config.flavourId ?? '',
-    params: config.params ?? '',
+    shellArguments: terminalConfig.shellArguments,
+    startupCommand: terminalConfig.startupCommand,
+    // 025 FR-028: reopen where this panel was last working, not always at the project root.
+    rememberedCwd: terminalConfig.rememberDirectory ? panel.terminalMemory?.lastCwd : undefined,
     container,
     theme: xtermTheme,
     fontFamily: font.family,

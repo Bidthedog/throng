@@ -32,10 +32,16 @@ export interface TerminalFlavourConfig {
   label: string;
   /** Executable path or command. */
   file: string;
-  /** Base args inherent to launching it (before user Startup Params). */
+  /** Base args inherent to launching it (before the user's Shell Arguments). */
   args: string[];
-  /** Default Startup Params pre-filled when this flavour is chosen. */
-  defaultParams: string;
+  /** Default Shell Arguments pre-filled when this flavour is chosen (025: was `defaultParams`). */
+  defaultShellArguments: string;
+  /**
+   * How this flavour is handed a Startup Command so it runs AND leaves an interactive shell
+   * behind (025 FR-011): an argv template with exactly one `{command}` placeholder, e.g.
+   * `['/K', '{command}']`. Absent → the universal PTY-write fallback (FR-012).
+   */
+  commandRecipe?: string[];
 }
 
 /** Terminal preferences (005 Phase B, contracts/config-additions.md). */
@@ -44,8 +50,25 @@ export interface TerminalSettings {
   flavours: TerminalFlavourConfig[];
   /** Built-in flavour ids to hide from the dropdown. */
   disabledBuiltins: string[];
-  /** Per-flavour-id Startup Params override (wins over the catalogue default). */
-  defaultParams: Record<string, string>;
+  /** Per-flavour-id Shell Arguments override (wins over the catalogue default).
+   *  025: renamed from `defaultParams`; the old key is still read (FR-002d). */
+  defaultShellArguments: Record<string, string>;
+  /** Per-flavour-id Startup Command recipe override (025 FR-011). Wins over a user flavour's
+   *  own `commandRecipe` and over the built-in catalogue. */
+  commandRecipes: Record<string, string[]>;
+  /**
+   * How often the daemon observes each terminal's foreground command, in milliseconds
+   * (025 FR-019c). Externalised rather than a module constant: it is the knob that trades the
+   * staleness window (FR-019d) against observation cost.
+   */
+  commandPollMs: number;
+  /**
+   * Ask shells that cannot be observed from outside to REPORT their working directory
+   * (025 follow-up). PowerShell's `Set-Location` never moves the process working directory, so
+   * without this its terminals always reopen at the project root. On by default; switch it off if
+   * it disagrees with a custom prompt.
+   */
+  shellIntegration: boolean;
   /** 024 US1 (#152): show the terminal's per-panel status bar (new surface; carries the shell
    *  flavour label). When off, the bar is hidden and its row reclaimed. */
   showStatusBar: boolean;
@@ -241,7 +264,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   terminals: {
     flavours: [],
     disabledBuiltins: [],
-    defaultParams: {},
+    defaultShellArguments: {},
+    commandRecipes: {},
+    commandPollMs: 1000,
+    shellIntegration: true,
     showStatusBar: true,
     linkHoverDelayMs: 500,
   },
@@ -364,8 +390,27 @@ function terminalFlavour(v: unknown): TerminalFlavourConfig | null {
   if (typeof v.file !== 'string' || v.file.length === 0) return null;
   const label = typeof v.label === 'string' && v.label.length > 0 ? v.label : v.id;
   const args = Array.isArray(v.args) ? v.args.filter((a): a is string => typeof a === 'string') : [];
-  const defaultParams = typeof v.defaultParams === 'string' ? v.defaultParams : '';
-  return { id: v.id, label, file: v.file, args, defaultParams };
+  // 025 FR-002d: read-side migration. A flavour written before this feature spells it
+  // `defaultParams`; the new key wins when both are present, and re-reading migrated data never
+  // sees the old key, so this is idempotent by construction (FR-002e).
+  const defaultShellArguments =
+    typeof v.defaultShellArguments === 'string'
+      ? v.defaultShellArguments
+      : typeof v.defaultParams === 'string'
+        ? v.defaultParams
+        : '';
+  const commandRecipe = Array.isArray(v.commandRecipe)
+    ? v.commandRecipe.filter((a): a is string => typeof a === 'string')
+    : undefined;
+  const entry: TerminalFlavourConfig = {
+    id: v.id,
+    label,
+    file: v.file,
+    args,
+    defaultShellArguments,
+  };
+  if (commandRecipe !== undefined) entry.commandRecipe = commandRecipe;
+  return entry;
 }
 
 function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSettings {
@@ -376,14 +421,38 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
   const disabledBuiltins = Array.isArray(v.disabledBuiltins)
     ? v.disabledBuiltins.filter((s): s is string => typeof s === 'string')
     : [...fallback.disabledBuiltins];
-  const defaultParams: Record<string, string> = {};
-  if (isRecord(v.defaultParams)) {
-    for (const [key, val] of Object.entries(v.defaultParams)) {
-      if (typeof val === 'string') defaultParams[key] = val;
+  // 025 FR-002d: prefer the new key; fall back to the pre-025 `defaultParams` spelling; only then
+  // to the shipped default. Nothing is rewritten on disk — a read-side migration cannot half-write
+  // a config file, which is why it was chosen over an eager rewrite (research R6, cf. #102).
+  const migratedShellArgs = isRecord(v.defaultShellArguments)
+    ? v.defaultShellArguments
+    : isRecord(v.defaultParams)
+      ? v.defaultParams
+      : null;
+  const defaultShellArguments: Record<string, string> = {};
+  if (migratedShellArgs) {
+    for (const [key, val] of Object.entries(migratedShellArgs)) {
+      if (typeof val === 'string') defaultShellArguments[key] = val;
     }
   } else {
-    Object.assign(defaultParams, fallback.defaultParams);
+    Object.assign(defaultShellArguments, fallback.defaultShellArguments);
   }
+  const commandRecipes: Record<string, string[]> = {};
+  if (isRecord(v.commandRecipes)) {
+    for (const [key, val] of Object.entries(v.commandRecipes)) {
+      if (Array.isArray(val)) {
+        commandRecipes[key] = val.filter((a): a is string => typeof a === 'string');
+      }
+    }
+  } else {
+    for (const [key, val] of Object.entries(fallback.commandRecipes)) commandRecipes[key] = [...val];
+  }
+  const shellIntegration =
+    typeof v.shellIntegration === 'boolean' ? v.shellIntegration : fallback.shellIntegration;
+  const commandPollMs =
+    typeof v.commandPollMs === 'number' && Number.isFinite(v.commandPollMs)
+      ? Math.min(5_000, Math.max(250, Math.round(v.commandPollMs)))
+      : fallback.commandPollMs;
   const showStatusBar =
     typeof v.showStatusBar === 'boolean' ? v.showStatusBar : fallback.showStatusBar;
   // Clamp the hover delay to a sane range: a real number, non-negative, capped so a typo cannot make
@@ -392,14 +461,32 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
     typeof v.linkHoverDelayMs === 'number' && Number.isFinite(v.linkHoverDelayMs)
       ? Math.min(5000, Math.max(0, Math.round(v.linkHoverDelayMs)))
       : fallback.linkHoverDelayMs;
-  return { flavours, disabledBuiltins, defaultParams, showStatusBar, linkHoverDelayMs };
+  return {
+    flavours,
+    disabledBuiltins,
+    defaultShellArguments,
+    commandRecipes,
+    commandPollMs,
+    shellIntegration,
+    showStatusBar,
+    linkHoverDelayMs,
+  };
 }
 
 function cloneTerminals(t: TerminalSettings): TerminalSettings {
   return {
-    flavours: t.flavours.map((f) => ({ ...f, args: [...f.args] })),
+    flavours: t.flavours.map((f) => ({
+      ...f,
+      args: [...f.args],
+      ...(f.commandRecipe ? { commandRecipe: [...f.commandRecipe] } : {}),
+    })),
     disabledBuiltins: [...t.disabledBuiltins],
-    defaultParams: { ...t.defaultParams },
+    defaultShellArguments: { ...t.defaultShellArguments },
+    commandRecipes: Object.fromEntries(
+      Object.entries(t.commandRecipes).map(([k, v]) => [k, [...v]]),
+    ),
+    commandPollMs: t.commandPollMs,
+    shellIntegration: t.shellIntegration,
     showStatusBar: t.showStatusBar,
     linkHoverDelayMs: t.linkHoverDelayMs,
   };

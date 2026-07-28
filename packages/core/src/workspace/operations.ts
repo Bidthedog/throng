@@ -12,7 +12,7 @@ import { clampZoomLevel, stepZoomLevel } from '../config/zoom.js';
 
 // Typed-panel ops (005) live in the panel-type module but are surfaced here so
 // callers reach all layout mutations through one operations surface (FR-006/020).
-export { setPanelType, clearPanelType } from '../panel-type/assignment.js';
+export { setPanelType, clearPanelType, setTerminalMemory } from '../panel-type/assignment.js';
 
 /** Drop edge for splitting a Panel (FR-014). */
 export type Edge = 'top' | 'bottom' | 'left' | 'right';

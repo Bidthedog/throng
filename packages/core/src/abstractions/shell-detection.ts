@@ -14,7 +14,7 @@ export interface DetectedShell {
   label: string;
   /** Executable path or command resolvable on this machine. */
   file: string;
-  /** Base arguments inherent to launching this shell (before user Startup Params). */
+  /** Base arguments inherent to launching this shell (before the user's Shell Arguments). */
   defaultArgs: string[];
 }
 

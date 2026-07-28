@@ -103,7 +103,7 @@ export interface FieldDescriptor {
   /**
    * `records` only — the property that IDENTIFIES a row (019, FR-018).
    *
-   * Immutable once created (C13): a flavour id keys `terminals.defaultParams`, so renaming it in
+   * Immutable once created (C13): a flavour id keys `terminals.defaultShellArguments`, so renaming it in
    * place would silently orphan the parameters keyed to it. To rename, delete and re-add.
    */
   idKey?: string;

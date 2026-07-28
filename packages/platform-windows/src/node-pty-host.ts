@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
+import { promisify } from 'node:util';
 import process from 'node:process';
 import {
   passthroughDeElevator,
@@ -7,10 +8,13 @@ import {
   shouldDeElevate,
   type IDeElevator,
   type IElevationState,
+  type ChildProcess,
   type IPtyHost,
   type PtyHandle,
   type PtyStartOptions,
 } from '@throng/core';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Windows `IPtyHost` (005 Phase C) over node-pty/ConPTY, owned by the **daemon**.
@@ -34,7 +38,7 @@ interface NodePty {
 interface NodePtyModule {
   spawn(
     file: string,
-    args: string[],
+    args: string[] | string,
     options: { cwd: string; cols: number; rows: number; env?: NodeJS.ProcessEnv; name?: string },
   ): NodePty;
 }
@@ -85,7 +89,11 @@ export class NodePtyHost implements IPtyHost {
     if (shouldDeElevate(opts.runAsAdmin === true, hostElevated) && this.deElevator.isAvailable()) {
       ({ file, args } = this.deElevator.wrap({ file, args }));
     }
-    const proc = this.pty.spawn(file, args, {
+    // node-pty appends a STRING args verbatim after the quoted executable, which is the only way
+    // to give cmd the user's own quoting intact (it never un-escapes a quoted argv entry).
+    const spawnArgs: string[] | string =
+      opts.commandLine !== undefined && file === opts.file ? opts.commandLine : args;
+    const proc = this.pty.spawn(file, spawnArgs, {
       cwd: opts.cwd,
       cols: opts.cols,
       rows: opts.rows,
@@ -212,6 +220,19 @@ export class NodePtyHost implements IPtyHost {
   listChildPids(handle: PtyHandle): number[] {
     return descendantPids(handle.pid);
   }
+
+  /**
+   * 025 FR-019/FR-022. Deliberately **async** — this runs on a repeating observation, and the
+   * daemon is single-threaded, so it must never block the event loop (FR-019b). That is the one
+   * thing separating it from `listChildPids` above, whose synchronous whole-table scan on the
+   * close path is a known pre-existing defect tracked as issue 190 and deliberately untouched here.
+   *
+   * Resolves to `[]` on any failure so a bad snapshot leaves the last known command in place
+   * rather than clearing it (FR-019e).
+   */
+  async listChildProcesses(handle: PtyHandle): Promise<ChildProcess[]> {
+    return descendantProcesses(handle.pid);
+  }
 }
 
 /**
@@ -276,4 +297,112 @@ function descendantPids(rootPid: number): number[] {
     if (grandchildren) stack.push(...grandchildren);
   }
   return result;
+}
+
+/**
+ * All live descendant processes of `rootPid`, with their command lines and start times
+ * (025 FR-022). Async and non-blocking by contract — see `listChildProcesses`.
+ *
+ * One snapshot serves the whole tree walk, and the caller batches by terminal, so cost does not
+ * scale with the number of open terminals (FR-019a). `Get-CimInstance` is asked for the four
+ * fields capture needs; `CommandLine` is null for processes this user cannot inspect, which is
+ * reported as an empty string rather than dropping the row.
+ */
+/**
+ * The last process snapshot, shared across terminals within one polling pass (025 FR-019a).
+ *
+ * Without this, the daemon's per-terminal fan-out spawns one `powershell.exe` PER TERMINAL PER
+ * INTERVAL, each enumerating and JSON-serialising the entire system process table — ten terminals
+ * meant ten PowerShell cold starts a second. FR-019a requires that ten terminals cost no more to
+ * track than one, so concurrent and near-simultaneous callers share a single in-flight snapshot.
+ *
+ * The TTL is deliberately short: it exists to collapse ONE polling pass, not to cache across
+ * passes, so the staleness the caller sees is still bounded by its own interval (FR-019d).
+ */
+const SNAPSHOT_TTL_MS = 250;
+let snapshotAt = 0;
+let snapshotInFlight: Promise<Map<number, ChildProcess[]>> | null = null;
+
+/** One process table, indexed by parent pid. Shared; callers must not mutate it. */
+async function processSnapshot(now: number): Promise<Map<number, ChildProcess[]>> {
+  if (snapshotInFlight && now - snapshotAt < SNAPSHOT_TTL_MS) return snapshotInFlight;
+  snapshotAt = now;
+  snapshotInFlight = readProcessTable();
+  return snapshotInFlight;
+}
+
+async function readProcessTable(): Promise<Map<number, ChildProcess[]>> {
+  const byParent = new Map<number, ChildProcess[]>();
+  let json: string;
+  try {
+    const { stdout } = await execFileAsync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine,CreationDate | ConvertTo-Json -Compress",
+      ],
+      { encoding: 'utf8', timeout: 5000, windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
+    );
+    json = stdout;
+  } catch {
+    return byParent; // FR-019e: a failed observation keeps the last known value; it never clears it.
+  }
+  let rows: Array<{
+    ProcessId?: number;
+    ParentProcessId?: number;
+    CommandLine?: string | null;
+    CreationDate?: string | null;
+  }>;
+  try {
+    const parsed: unknown = JSON.parse(json);
+    rows = Array.isArray(parsed) ? parsed : [parsed as never];
+  } catch {
+    return byParent;
+  }
+
+  for (const row of rows) {
+    const pid = Number(row?.ProcessId);
+    const ppid = Number(row?.ParentProcessId);
+    if (!Number.isFinite(pid) || !Number.isFinite(ppid)) continue;
+    const entry: ChildProcess = {
+      pid,
+      ppid,
+      commandLine: typeof row.CommandLine === 'string' ? row.CommandLine : '',
+      startedAt: parseCimDate(row.CreationDate),
+    };
+    const list = byParent.get(ppid);
+    if (list) list.push(entry);
+    else byParent.set(ppid, [entry]);
+  }
+
+  return byParent;
+}
+
+/** All live descendants of `rootPid`, walked from the shared snapshot. */
+async function descendantProcesses(rootPid: number): Promise<ChildProcess[]> {
+  const byParent = await processSnapshot(Date.now());
+  const result: ChildProcess[] = [];
+  const stack = [...(byParent.get(rootPid) ?? [])];
+  while (stack.length > 0) {
+    const proc = stack.pop() as ChildProcess;
+    result.push(proc);
+    const grandchildren = byParent.get(proc.pid);
+    if (grandchildren) stack.push(...grandchildren);
+  }
+  return result;
+}
+
+/**
+ * `ConvertTo-Json` renders a CIM datetime as `/Date(1699999999999)/`. Anything unparseable
+ * yields 0, which simply loses the "most recently started" tiebreak for that row rather than
+ * discarding a real running command.
+ */
+function parseCimDate(value: string | null | undefined): number {
+  if (typeof value !== 'string') return 0;
+  const epoch = /\/Date\((\d+)/.exec(value);
+  if (epoch) return Number(epoch[1]);
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }

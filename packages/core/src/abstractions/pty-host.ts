@@ -21,11 +21,27 @@ export interface PtyStartOptions {
    * elevated daemon the child is de-elevated to medium integrity (mixed mode).
    */
   runAsAdmin?: boolean;
+  /** 025 follow-up: a verbatim command line for shells that do not un-escape argv (cmd). */
+  commandLine?: string;
 }
 
 /** An opaque handle to a running PTY. */
 export interface PtyHandle {
   readonly pid: number;
+}
+
+/**
+ * A live descendant process of a terminal's shell (025). Carries what command memory needs to
+ * decide which command "had control": who its parent is, what it is, and when it started.
+ */
+export interface ChildProcess {
+  pid: number;
+  /** Parent pid — a DIRECT child of the shell is the only capture candidate (FR-022a). */
+  ppid: number;
+  /** Full command line as the OS reports it; empty when it cannot be read. */
+  commandLine: string;
+  /** Epoch milliseconds the process started; picks the most recent (FR-022). */
+  startedAt: number;
 }
 
 /** How a PTY process ended. */
@@ -49,6 +65,18 @@ export interface IPtyHost {
   onExit(handle: PtyHandle, cb: (e: PtyExit) => void): () => void;
   /** Live non-shell descendant pids — drives idle/busy classification (FR-015b). */
   listChildPids(handle: PtyHandle): number[];
+  /**
+   * Live descendant processes **with their command lines** (025 FR-019/FR-022) — what a Panel's
+   * command memory captures.
+   *
+   * Deliberately **async**, unlike {@link listChildPids}: this runs on a repeating observation
+   * and must never block the daemon's single event loop (FR-019b). The existing synchronous
+   * call is left exactly as it is; untangling that is tracked separately (issue 190).
+   *
+   * Never rejects — an unavailable snapshot resolves to `[]`, so a failed observation leaves the
+   * last known value in place rather than clearing it (FR-019e).
+   */
+  listChildProcesses(handle: PtyHandle): Promise<ChildProcess[]>;
   /**
    * Release every live PTY this host owns and any OS resources behind them
    * (on Windows/ConPTY, the per-terminal `conhost.exe` host). Called on daemon

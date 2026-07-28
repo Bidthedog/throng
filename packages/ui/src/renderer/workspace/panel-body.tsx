@@ -217,7 +217,12 @@ function UntypedPanelBody({
       onDrop={(paths) => acceptTreeDrop(paths, true)}
     >
       <PanelDropTarget ctx={dropCtx} onOpen={openAsEditor}>
-        <PanelTypeForm panelId={panel.id} projectRoot={root} rootless={ownedBySub} />
+        <PanelTypeForm
+          panelId={panel.id}
+          projectRoot={root}
+          rootless={ownedBySub}
+          terminalMemory={panel.terminalMemory}
+        />
       </PanelDropTarget>
     </TreeDropTarget>
   );

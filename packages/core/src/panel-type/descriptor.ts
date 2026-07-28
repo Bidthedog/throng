@@ -16,8 +16,40 @@ import type { PanelConfig, PanelKind } from '../workspace/model.js';
 export interface FlavourOption {
   value: string;
   label: string;
-  /** Default startup params pre-filled when this option is chosen (terminal). */
-  defaultParams: string;
+  /** Default Shell Arguments pre-filled when this option is chosen (terminal). */
+  defaultShellArguments: string;
+  /** Whether this shell can report its working directory as configured (025 follow-up).
+   *  False disables "Reopen in the last directory" rather than offering an inert control. */
+  reportsDirectory?: boolean;
+}
+
+/**
+ * What a Terminal Panel remembers across its own terminal ending (025). Lives on the
+ * Panel, NOT in `Panel.config` — `clearPanelType` deletes the config when a terminal's
+ * content ends, which is the exact moment this must survive (FR-007a). Kept here rather
+ * than in `terminal/` so `panel-type/` stays decoupled from the terminal domain.
+ */
+export interface TerminalMemory {
+  flavourId?: string;
+  shellArguments?: string;
+  startupCommand?: string;
+  rememberCommand?: boolean;
+  /** Reopen in the last directory (025 FR-027). Absent means on. */
+  rememberDirectory?: boolean;
+  /** Last working directory this Panel's terminal was pointed at (FR-027). */
+  lastCwd?: string;
+  /**
+   * The command last OBSERVED holding this Panel's terminal, persisted as it changes (025 FR-019).
+   *
+   * Distinct from {@link startupCommand}, which is the decided, user-visible value. This is the
+   * raw observation, and it exists so an abrupt end — an application crash, a daemon crash, a
+   * machine restart — still captures (US2 scenario 7 / SC-004). Tracking live but only persisting
+   * at teardown would defeat the whole reason FR-019 asks for continuous tracking.
+   *
+   * Cleared once it has been resolved into {@link startupCommand}, so its presence on startup is
+   * exactly the signal "the previous terminal never got to end cleanly".
+   */
+  observedCommand?: string | null;
 }
 
 /**
@@ -35,6 +67,9 @@ export interface PanelTypeContext {
    * `projectRoot` no longer blocks confirming a Terminal.
    */
   rootless?: boolean;
+  /** What this Panel remembered from its previous terminal, used to pre-fill the
+   *  form so the empty state doubles as the edit screen (025 FR-007a). */
+  terminalMemory?: TerminalMemory;
 }
 
 /** Outcome of a descriptor's validation: ok, or per-input error messages. */
@@ -44,7 +79,7 @@ export type ValidationResult = { ok: true } | { ok: false; errors: Record<string
 export interface PanelTypeInputSpec {
   key: string;
   label: string;
-  control: 'dropdown' | 'text';
+  control: 'dropdown' | 'text' | 'checkbox';
   required?: boolean;
   /** Dropdown option source (e.g. flavours), resolved from context. */
   options?: (ctx: PanelTypeContext) => Array<{ value: string; label: string }>;

@@ -1,7 +1,9 @@
 import 'reflect-metadata';
 import {
+  foregroundCommand,
   isBusy,
   shouldDeElevate,
+  type ChildProcess,
   type IElevationState,
   type IProcessCwd,
   type IPtyHost,
@@ -140,16 +142,31 @@ export class TerminalService {
      * program hides the prompt). Optional so existing call sites/tests are unchanged.
      */
     private readonly processCwd?: IProcessCwd,
+    /**
+     * 025 FR-019c — how often the shared command observation runs, in milliseconds. Injected
+     * from `settings.terminals.commandPollMs` rather than read here, so it is a real setting
+     * (Principle X) and a test can drive it without waiting a real second.
+     */
+    private readonly commandPollMs: number = 1000,
   ) {
     if (this.processCwd) {
       this.cwdTimer = setInterval(() => void this.pollCwd(), CWD_POLL_MS);
       this.cwdTimer.unref?.(); // never keep the daemon process alive for polling
     }
+    // 025 FR-019a: ONE shared observation covering every terminal, not one per terminal, so
+    // tracking ten terminals costs no more than tracking one. Off the critical path, unref'd,
+    // and — like the cwd poll above — suspended when nothing is listening (FR-019f).
+    this.commandTimer = setInterval(() => void this.pollCommands(), this.commandPollMs);
+    this.commandTimer.unref?.();
   }
 
   /** Last cwd published per panel, so we only emit on an actual change. */
   private readonly lastCwd = new Map<string, string>();
   private readonly cwdTimer?: ReturnType<typeof setInterval>;
+  /** Last foreground command published per panel (025). Retained across a detach so the value
+   *  FREEZES rather than clearing when nothing is observing (FR-019f). */
+  private readonly lastCommand = new Map<string, string | null>();
+  private readonly commandTimer?: ReturnType<typeof setInterval>;
 
   /**
    * Poll every running terminal's shell cwd (012 revision) and publish changes.
@@ -175,6 +192,38 @@ export class TerminalService {
       this.lastCwd.set(panelId, cwd);
       this.events.publishCwd(panelId, cwd);
     }
+  }
+
+  /**
+   * 025 FR-019 — observe which command holds each terminal, on ONE shared pass.
+   *
+   * Suspended when nothing is listening (FR-019f): with no UI attached the user cannot start a
+   * new command, so the last observed value stays accurate and is deliberately frozen rather
+   * than cleared. The accepted cost is that a command which DIES unobserved and is then killed
+   * uncleanly is still remembered as running (FR-019h) — bounded, documented, and never worse
+   * than an unwanted command the user can stop and edit away.
+   *
+   * Never throws, and never clears a value on failure (FR-019e).
+   */
+  private async pollCommands(): Promise<void> {
+    if (this.events.sinkCount === 0) return;
+    const running = [...this.sessions.values()].filter((s) => s.status === 'running');
+    if (running.length === 0) return;
+    await Promise.all(running.map((s) => this.observeCommand(s)));
+  }
+
+  /** Observe one session's foreground command and publish it if it changed. */
+  private async observeCommand(session: Session): Promise<void> {
+    let children: ChildProcess[];
+    try {
+      children = await session.host.listChildProcesses(session.handle);
+    } catch {
+      return; // FR-019e: keep the last known value rather than clearing it.
+    }
+    const command = foregroundCommand(session.handle.pid, children);
+    if (this.lastCommand.get(session.panelId) === command) return;
+    this.lastCommand.set(session.panelId, command);
+    this.events.publishCommand(session.panelId, command);
   }
 
   /** Pick the PTY host for a terminal: the de-elevated agent for an unchecked
@@ -309,6 +358,7 @@ export class TerminalService {
       handle = host.start({
         file: launch.file,
         args: Array.isArray(launch.args) ? launch.args : [],
+        ...(typeof launch.commandLine === 'string' ? { commandLine: launch.commandLine } : {}),
         cwd: launch.cwd,
         cols: startCols,
         rows: startRows,
@@ -338,10 +388,38 @@ export class TerminalService {
       meta: params.meta,
       disposers: [],
     };
+    // 025 FR-012 — the universal Startup Command fallback, for a flavour with no argv recipe.
+    // It lives HERE, on the cold-start path, precisely because a launch spec is only resolved
+    // when a terminal is cold-started: a re-attach never reaches this code, so a startup command
+    // can never be re-run against a session that is already doing its work (FR-008). No condition
+    // to remember, and none to get wrong.
+    //
+    // The command is written after the shell's FIRST output, not immediately after spawn: a shell
+    // that has printed something is a shell that is reading. This is best-effort by nature, which
+    // is exactly why it is the fallback and an argv recipe is preferred wherever one exists.
+    const writeOnReady = typeof launch.writeOnReady === 'string' ? launch.writeOnReady : '';
+    let startupCommandPending = writeOnReady.length > 0;
+
     session.disposers.push(
       host.onData(handle, (chunk) => {
         session.scrollback = (session.scrollback + chunk).slice(-MAX_SCROLLBACK);
         this.events.publishOutput(panelId, chunk);
+        if (startupCommandPending) {
+          startupCommandPending = false;
+          try {
+            host.write(handle, `${writeOnReady}\r`);
+          } catch (error) {
+            // FR-026b: a throwing `write` produces NO terminal output at all, so unlike a command
+            // the shell rejected, the user would otherwise have no way to know their startup
+            // command never ran. Surface it as terminal output rather than swallowing it.
+            this.events.publishOutput(
+              panelId,
+              `
+[throng] Could not run the startup command: ${(error as Error).message}
+`,
+            );
+          }
+        }
       }),
     );
     session.disposers.push(host.onExit(handle, (e) => this.handleExit(session, e)));
@@ -434,6 +512,7 @@ export class TerminalService {
     }
     if (this.sessions.get(session.panelId) === session) this.sessions.delete(session.panelId);
     this.lastCwd.delete(session.panelId); // a reused panelId must re-publish its cwd
+    this.lastCommand.delete(session.panelId); // 025: and its command
     if (!session.rootless) this.locks.release(session.projectId);
     try {
       session.host.kill(session.handle);
