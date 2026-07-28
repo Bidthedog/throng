@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   mergeFlavours,
-  resolveDefaultParams,
-  BUILTIN_FLAVOUR_DEFAULT_PARAMS,
+  resolveDefaultShellArguments,
+  BUILTIN_FLAVOUR_DEFAULT_SHELL_ARGUMENTS,
   type DetectedShell,
   type TerminalSettings,
 } from '@throng/core';
@@ -13,7 +13,14 @@ const DETECTED: DetectedShell[] = [
 ];
 
 function settings(overrides: Partial<TerminalSettings> = {}): TerminalSettings {
-  return { flavours: [], disabledBuiltins: [], defaultParams: {}, ...overrides };
+  return {
+    flavours: [],
+    disabledBuiltins: [],
+    defaultShellArguments: {},
+    commandRecipes: {},
+    commandPollMs: 1000,
+    ...overrides,
+  } as TerminalSettings;
 }
 
 describe('mergeFlavours (builtins ∩ installed − disabled ∪ user, dedupe user-wins)', () => {
@@ -22,7 +29,7 @@ describe('mergeFlavours (builtins ∩ installed − disabled ∪ user, dedupe us
     expect(merged.map((f) => f.id).sort()).toEqual(['cmd', 'windows-powershell']);
     const cmd = merged.find((f) => f.id === 'cmd')!;
     expect(cmd.source).toBe('builtin');
-    expect(cmd.defaultParams).toBe(BUILTIN_FLAVOUR_DEFAULT_PARAMS.cmd);
+    expect(cmd.defaultShellArguments).toBe(BUILTIN_FLAVOUR_DEFAULT_SHELL_ARGUMENTS.cmd);
     expect(cmd.file).toBe('C:/Windows/System32/cmd.exe');
   });
 
@@ -35,7 +42,7 @@ describe('mergeFlavours (builtins ∩ installed − disabled ∪ user, dedupe us
   it('includes user-defined flavours alongside built-ins', () => {
     const merged = mergeFlavours(
       DETECTED,
-      settings({ flavours: [{ id: 'my-wsl', label: 'WSL', file: 'wsl.exe', args: ['-d', 'Ubuntu'], defaultParams: '' }] }),
+      settings({ flavours: [{ id: 'my-wsl', label: 'WSL', file: 'wsl.exe', args: ['-d', 'Ubuntu'], defaultShellArguments: '' }] }),
     );
     const wsl = merged.find((f) => f.id === 'my-wsl')!;
     expect(wsl.source).toBe('user');
@@ -45,7 +52,7 @@ describe('mergeFlavours (builtins ∩ installed − disabled ∪ user, dedupe us
   it('a user flavour with the same id as a built-in wins (dedupe, single entry)', () => {
     const merged = mergeFlavours(
       DETECTED,
-      settings({ flavours: [{ id: 'cmd', label: 'My CMD', file: 'C:/custom/cmd.exe', args: [], defaultParams: '' }] }),
+      settings({ flavours: [{ id: 'cmd', label: 'My CMD', file: 'C:/custom/cmd.exe', args: [], defaultShellArguments: '' }] }),
     );
     const cmds = merged.filter((f) => f.id === 'cmd');
     expect(cmds).toHaveLength(1);
@@ -54,25 +61,25 @@ describe('mergeFlavours (builtins ∩ installed − disabled ∪ user, dedupe us
   });
 });
 
-describe('resolveDefaultParams', () => {
+describe('resolveDefaultShellArguments', () => {
   it('uses the built-in catalogue default for a detected built-in', () => {
-    expect(resolveDefaultParams('cmd', 'builtin', undefined, settings())).toBe(
-      BUILTIN_FLAVOUR_DEFAULT_PARAMS.cmd,
+    expect(resolveDefaultShellArguments('cmd', 'builtin', undefined, settings())).toBe(
+      BUILTIN_FLAVOUR_DEFAULT_SHELL_ARGUMENTS.cmd,
     );
   });
 
-  it('settings.defaultParams[id] overrides the catalogue default', () => {
+  it('settings.defaultShellArguments[id] overrides the catalogue default', () => {
     expect(
-      resolveDefaultParams('cmd', 'builtin', undefined, settings({ defaultParams: { cmd: '/Q' } })),
+      resolveDefaultShellArguments('cmd', 'builtin', undefined, settings({ defaultShellArguments: { cmd: '/Q' } })),
     ).toBe('/Q');
   });
 
-  it("uses a user flavour's own defaultParams when set", () => {
-    const entry = { id: 'my-wsl', label: 'WSL', file: 'wsl.exe', defaultParams: '--cd ~' };
-    expect(resolveDefaultParams('my-wsl', 'user', entry, settings())).toBe('--cd ~');
+  it("uses a user flavour's own defaultShellArguments when set", () => {
+    const entry = { id: 'my-wsl', label: 'WSL', file: 'wsl.exe', defaultShellArguments: '--cd ~' };
+    expect(resolveDefaultShellArguments('my-wsl', 'user', entry, settings())).toBe('--cd ~');
   });
 
   it('falls back to empty string for an unknown flavour with no default', () => {
-    expect(resolveDefaultParams('mystery', 'user', undefined, settings())).toBe('');
+    expect(resolveDefaultShellArguments('mystery', 'user', undefined, settings())).toBe('');
   });
 });

@@ -26,9 +26,29 @@ test('typing exit reverts the Panel to the form with exit info, then it re-types
       const term = win.getByTestId(`terminal-${pid}`);
       await expect(term).toContainText(basename(root), { timeout: 20000 });
 
-      // End the shell → the Panel reverts to the form AND surfaces the exit info.
+      // End the shell → the Panel reverts to the form.
       await term.click();
       await win.keyboard.type('exit');
+      await win.keyboard.press('Enter');
+      await expect(win.getByTestId(`panel-type-form-${pid}`)).toBeVisible({ timeout: 15000 });
+      // ...and says NOTHING about it (025 follow-up). This assertion was inverted deliberately:
+      // it used to require the exit notice here, but telling a user "Terminal exited (code 0)"
+      // after they typed `exit` reports back their own action, and trains them to dismiss notices
+      // unread — which is exactly when a real failure gets missed. A non-zero exit still surfaces;
+      // see the case below.
+      await expect(win.getByTestId(`panel-exit-${pid}`)).toHaveCount(0);
+
+      // A FAILING exit is still surfaced, with its code — constitutional Principle III. This is
+      // the other half of the rule, and without it the change above would just be "hide exits".
+      await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
+      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId(`panel-type-confirm-${pid}`).click();
+      const failing = win.getByTestId(`terminal-${pid}`);
+      await expect(failing).toBeVisible();
+      // Wait for the shell to reach its prompt before typing, or the keystrokes are dropped.
+      await expect(failing).toContainText(basename(root), { timeout: 20000 });
+      await failing.click();
+      await win.keyboard.type('exit 3');
       await win.keyboard.press('Enter');
       await expect(win.getByTestId(`panel-type-form-${pid}`)).toBeVisible({ timeout: 15000 });
       await expect(win.getByTestId(`panel-exit-${pid}`)).toBeVisible();

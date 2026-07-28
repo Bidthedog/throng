@@ -31,7 +31,7 @@ test('replaces Empty Panel with the type form; swaps inputs; Clear resets; Confi
       const select = win.getByTestId(`panel-type-select-${pid}`);
       await select.selectOption('terminal');
       await expect(win.getByTestId('terminal-flavour')).toBeVisible();
-      await expect(win.getByTestId('terminal-params')).toBeVisible();
+      await expect(win.getByTestId('terminal-shell-arguments')).toBeVisible();
       await expect(confirm).toBeEnabled();
 
       // Clear returns to the initial empty state (FR-004).

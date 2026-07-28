@@ -6,7 +6,7 @@ import { runApp, createProject, firstPanelId } from './harness.js';
 
 // US2 (config half) / Plan Phase B (FR-010/010a/011/012): the Flavour dropdown is
 // real — machine-detected built-ins ∪ user-defined flavours from settings.json —
-// and Startup Params pre-fills/updates with the chosen flavour's default. No
+// and Shell Arguments pre-fills/updates with the chosen flavour's default. No
 // terminal launches yet (that is Phase C).
 //
 // FR-024 (batch-2 robust detection: well-known path → PATH → registry, incl.
@@ -17,7 +17,7 @@ import { runApp, createProject, firstPanelId } from './harness.js';
 // the fake-resolver cases in the WindowsShellDetection contract test
 // (packages/platform-windows/tests/contract/windows-shell-detection.contract.test.ts).
 
-test('the Flavour dropdown is populated from the machine and Startup Params follows the flavour', async () => {
+test('the Flavour dropdown is populated from the machine and Shell Arguments follows the flavour', async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'Flavours', 'C:/c/flavours');
     const pid = await firstPanelId(win);
@@ -32,14 +32,14 @@ test('the Flavour dropdown is populated from the machine and Startup Params foll
       .evaluateAll((opts) => opts.map((o) => (o as HTMLOptionElement).value));
     expect(values).toContain('cmd');
 
-    // Selecting a flavour fills Startup Params with that flavour's default (FR-011/012).
+    // Selecting a flavour fills Shell Arguments with that flavour's default (FR-011/012).
     await flavour.selectOption('cmd');
-    await expect(win.getByTestId('terminal-params')).toHaveValue('/K');
+    await expect(win.getByTestId('terminal-shell-arguments')).toHaveValue('/K');
 
-    // Changing the flavour updates Startup Params again (FR-012).
+    // Changing the flavour updates Shell Arguments again (FR-012).
     if (values.includes('windows-powershell')) {
       await flavour.selectOption('windows-powershell');
-      await expect(win.getByTestId('terminal-params')).toHaveValue('-NoLogo');
+      await expect(win.getByTestId('terminal-shell-arguments')).toHaveValue('-NoLogo');
     }
   });
 });
@@ -65,7 +65,7 @@ test('a user-defined flavour added to settings.json appears in the dropdown (hot
             {
               terminals: {
                 flavours: [
-                  { id: 'my-wsl', label: 'WSL: Ubuntu', file: 'wsl.exe', args: ['-d', 'Ubuntu'], defaultParams: '--cd ~' },
+                  { id: 'my-wsl', label: 'WSL: Ubuntu', file: 'wsl.exe', args: ['-d', 'Ubuntu'], defaultShellArguments: '--cd ~' },
                 ],
               },
             },
@@ -76,9 +76,9 @@ test('a user-defined flavour added to settings.json appears in the dropdown (hot
         );
         await expect(flavour.locator('option[value="my-wsl"]')).toHaveCount(1);
 
-        // And it carries its own default Startup Params.
+        // And it carries its own default Shell Arguments.
         await flavour.selectOption('my-wsl');
-        await expect(win.getByTestId('terminal-params')).toHaveValue('--cd ~');
+        await expect(win.getByTestId('terminal-shell-arguments')).toHaveValue('--cd ~');
       },
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );

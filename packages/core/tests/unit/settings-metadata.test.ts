@@ -111,7 +111,7 @@ describe('terminal-flavour controls are HIDDEN for v1.0.0 (#67 → vNext)', () =
   const HIDDEN_KEYS = [
     'terminals.flavours',
     'terminals.disabledBuiltins',
-    'terminals.defaultParams',
+    'terminals.defaultShellArguments',
   ] as const;
 
   it('classifies all three as internal, so they are not in the configurable set', () => {
@@ -133,7 +133,7 @@ describe('terminal-flavour controls are HIDDEN for v1.0.0 (#67 → vNext)', () =
     expect(hidden.get('terminals.flavours')?.control).toBe('records');
     expect(hidden.get('terminals.flavours')?.idKey).toBe('id');
     expect(hidden.get('terminals.disabledBuiltins')?.control).toBe('multiselect');
-    expect(hidden.get('terminals.defaultParams')?.control).toBe('map');
+    expect(hidden.get('terminals.defaultShellArguments')?.control).toBe('map');
   });
 });
 

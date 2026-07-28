@@ -117,7 +117,7 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
     });
 
     it('lets an EXPLICIT empty map mean empty — the whole of FR-022c', () => {
-      // The `terminals.defaultParams` precedent. A map that fell back to its shipped value whenever
+      // The `terminals.defaultShellArguments` precedent. A map that fell back to its shipped value whenever
       // it was empty could never be cleared: the user deletes every row, saves, and watches them all
       // come back. `languageByExtension` MUST be clearable.
       expect(parseAppSettings({ editor: { languageByExtension: {} } }).editor.languageByExtension).toEqual({});

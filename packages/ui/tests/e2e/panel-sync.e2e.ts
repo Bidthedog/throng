@@ -30,12 +30,12 @@ test('the type-selection form syncs live across the project and sub-workspace wi
     await expect(child.getByTestId(`panel-type-select-${a}`)).toHaveValue('terminal');
     await expect(child.getByTestId('terminal-inputs')).toBeVisible();
 
-    // Edit Startup Params in the CHILD → the main window reflects it…
-    await child.getByTestId('terminal-params').fill('--login --sync');
-    await expect(win.getByTestId('terminal-params')).toHaveValue('--login --sync');
+    // Edit Shell Arguments in the CHILD → the main window reflects it…
+    await child.getByTestId('terminal-shell-arguments').fill('--login --sync');
+    await expect(win.getByTestId('terminal-shell-arguments')).toHaveValue('--login --sync');
     // …and back the other way (main → child).
-    await win.getByTestId('terminal-params').fill('--other');
-    await expect(child.getByTestId('terminal-params')).toHaveValue('--other');
+    await win.getByTestId('terminal-shell-arguments').fill('--other');
+    await expect(child.getByTestId('terminal-shell-arguments')).toHaveValue('--other');
   });
 });
 
