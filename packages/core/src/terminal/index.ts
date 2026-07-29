@@ -67,6 +67,7 @@ export {
   captureDecision,
   foregroundCommand,
   normaliseCommand,
+  isResolvedForm,
   isCapturableCommand,
   shouldNotifyCaptureOutcome,
   captureLogLine,

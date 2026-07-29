@@ -112,6 +112,21 @@ function resolveShellPid(
  * genuinely contains several spaces (a Windows path is the obvious case) is left exactly as it is.
  */
 export function normaliseCommand(commandLine: string): string {
+  const collapsed = collapseWhitespace(commandLine);
+  const { exe, rest } = splitCommand(collapsed);
+  // An unquoted path is not safe to replay everywhere: bash strips the backslashes out of a
+  // Windows path, so a captured `C:\\…\\PING.EXE` came back as `C:WINDOWSsystem32ping.exe:
+  // command not found`. Quoted, it runs in bash, cmd and both PowerShells alike (measured).
+  const needsQuoting = exe.includes(String.fromCharCode(92)) || exe.includes(' ');
+  // `splitCommand` has already stripped any quotes, so re-quote on the exe itself rather than on
+  // how the input happened to be spelled — testing the input dropped the quotes off a path that
+  // arrived already quoted.
+  const quoted = needsQuoting ? `"${exe}"` : exe;
+  return rest === '' ? quoted : `${quoted} ${rest}`;
+}
+
+/** Runs of whitespace to one space, outside quotes only. */
+function collapseWhitespace(commandLine: string): string {
   let out = '';
   let quoted = false;
   for (const ch of commandLine.trim()) {
@@ -123,6 +138,52 @@ export function normaliseCommand(commandLine: string): string {
     out += ch;
   }
   return out;
+}
+
+
+/** A command line split into its executable and everything after it, honouring quotes. */
+function splitCommand(line: string): { exe: string; rest: string } {
+  const trimmed = line.trim();
+  if (trimmed.startsWith('"')) {
+    const close = trimmed.indexOf('"', 1);
+    if (close > 0) {
+      return { exe: trimmed.slice(1, close), rest: trimmed.slice(close + 1).trim() };
+    }
+  }
+  const space = trimmed.indexOf(' ');
+  return space < 0
+    ? { exe: trimmed, rest: '' }
+    : { exe: trimmed.slice(0, space), rest: trimmed.slice(space + 1).trim() };
+}
+
+/** An executable's bare name, without directory or extension, lower-cased. */
+function bareName(exe: string): string {
+  const file = exe.split(/[\\/]/).pop() ?? '';
+  const dot = file.lastIndexOf('.');
+  return (dot > 0 ? file.slice(0, dot) : file).toLowerCase();
+}
+
+/**
+ * Whether `observed` is just `saved` with its executable resolved to a full path (025 FR-017).
+ *
+ * The OS reports the command line a launcher built, and shells resolve a command to its image
+ * before spawning it: typing `ping -t bbc.co.uk` is reported as
+ * `C:\\WINDOWS\\system32\\PING.EXE -t bbc.co.uk`. Textually different, the same command.
+ *
+ * Treating that as a change was actively harmful, not merely untidy: memory replaced the user's
+ * own startup command with the resolved form, and in Git Bash the replacement did not even run —
+ * bash strips the backslashes out of an unquoted Windows path, leaving
+ * `bash: C:WINDOWSsystem32ping.exe: command not found`. A terminal broke itself by remembering.
+ *
+ * Same bare executable name and identical arguments means the same command, so the user's
+ * spelling is kept.
+ */
+export function isResolvedForm(observed: string, saved: string): boolean {
+  const a = splitCommand(observed);
+  const b = splitCommand(saved);
+  if (a.rest !== b.rest) return false;
+  const nameA = bareName(a.exe);
+  return nameA !== '' && nameA === bareName(b.exe);
 }
 
 /** Why a capture did or did not happen — recorded in diagnostics so "it forgot my command"
@@ -162,6 +223,8 @@ export function captureDecision(
   if (!isCapturableCommand(observed)) return { save: false, reason: 'not-capturable' };
   const value = observed.trim();
   if ((saved ?? '') === value) return { save: false, reason: 'unchanged' };
+  // …and the same command with its executable resolved to a full path is still the same command.
+  if (saved !== undefined && isResolvedForm(value, saved)) return { save: false, reason: 'unchanged' };
   return { save: true, reason: 'saved', value };
 }
 

@@ -474,6 +474,7 @@ export {
   captureDecision,
   foregroundCommand,
   normaliseCommand,
+  isResolvedForm,
   isCapturableCommand,
   shouldSurfaceExit,
   terminalExitNotice,
