@@ -21,6 +21,11 @@ import { runApp, createProject, firstPanelId } from './harness.js';
 
 const LONG_RUNNING = 'ping -t 127.0.0.1';
 
+/** Ask the main process to close the primary window, firing the real close handshake. */
+async function requestClose(app: import('@playwright/test').ElectronApplication): Promise<void> {
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
+}
+
 function layoutJson(dataDir: string, project: string): string | undefined {
   let db: InstanceType<typeof Database> | undefined;
   try {
@@ -58,6 +63,7 @@ async function withTerminal(
   project: string,
   opts: { startupCommand?: string; remember: boolean },
   body: (ctx: {
+    app: import('@playwright/test').ElectronApplication;
     win: import('@playwright/test').Page;
     pid: string;
     data: string;
@@ -68,7 +74,7 @@ async function withTerminal(
   const data = mkdtempSync(join(tmpdir(), 'throng-cmdmem-data-'));
   try {
     await runApp(
-      async (_app, win) => {
+      async (app, win) => {
         await createProject(win, project, root);
         const pid = await firstPanelId(win);
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
@@ -77,8 +83,11 @@ async function withTerminal(
         if (opts.startupCommand !== undefined) {
           await win.getByTestId('terminal-startup-command').fill(opts.startupCommand);
         }
+        // Command memory now ships ON, so the OFF case must actively UNCHECK it. Asserting the
+        // shipped state here rather than ticking blindly means a silently flipped default fails.
         const remember = win.getByTestId('terminal-remember-command');
-        if (opts.remember) await remember.check();
+        await expect(remember).toBeChecked();
+        if (!opts.remember) await remember.uncheck();
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
 
         const term = win.getByTestId(`terminal-${pid}`);
@@ -86,7 +95,7 @@ async function withTerminal(
         await expect(win.getByTestId(`panel-cwd-${pid}`)).toContainText(basename(root), {
           timeout: 25_000,
         });
-        await body({ win, pid, data, term });
+        await body({ app, win, pid, data, term });
       },
       { dataDir: data },
     );
@@ -182,4 +191,71 @@ test('memory ON: a later command replaces the earlier one (US2 row 5)', async ()
       'the observation did not follow the newer command',
     );
   });
+});
+
+test('a command that takes over REPLACES the startup command the user typed (US2 row 2)', async () => {
+  test.setTimeout(180_000);
+  // Reported from real use: start a terminal on `ping`, stop it, run something else, end the
+  // terminal — and the something else was never saved as the Panel's Startup Command. Each piece
+  // was covered (the rule, the observation, the recovery) but not this shape: a startup command
+  // ALREADY set, replaced, on the end path that stranded it. Two runs, because that is the
+  // user's experience: the terminal is ended in one session and read back in the next.
+  const root = mkdtempSync(join(tmpdir(), 'throng-cmdover-'));
+  const data = mkdtempSync(join(tmpdir(), 'throng-cmdover-data-'));
+  try {
+    await runApp(
+      async (app, win) => {
+        await createProject(win, 'MemOver', root);
+        const pid = await firstPanelId(win);
+        await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
+        await expect(win.getByTestId('terminal-flavour')).toBeVisible();
+        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId('terminal-startup-command').fill(LONG_RUNNING);
+        await expect(win.getByTestId('terminal-remember-command')).toBeChecked();
+        await win.getByTestId(`panel-type-confirm-${pid}`).click();
+
+        const term = win.getByTestId(`terminal-${pid}`);
+        await expect(term).toBeVisible();
+        // The startup command runs on its own — nothing is typed.
+        await expect(term).toContainText('Reply from', { timeout: 25_000 });
+
+        // Interrupt it, as a user would. The shell must survive this (FR-005).
+        await term.click();
+        await win.keyboard.press('Control+c');
+        await expectLayout(data, 'MemOver', (j) => /"observedCommand":null/.test(j), 'the interrupted command still reads as running');
+
+        // A different long-runner takes the foreground.
+        await runInTerminal(win, term, 'findstr /R x', '');
+        await expectLayout(data, 'MemOver', (j) => /"observedCommand":"[^"]*findstr/i.test(j), 'the replacement was never observed');
+
+        // End it the way a user does with something still running.
+        await requestClose(app);
+        await expect(win.getByTestId('app-close-dialog')).toBeVisible({ timeout: 10_000 });
+        await win.getByTestId('app-close-terminate').click();
+      },
+      { dataDir: data },
+    );
+
+    // Reopen. The stranded observation is recovered — and must be PERSISTED, so the Panel's
+    // settings agree with what it relaunched (FR-025). Recovering it for the launch alone left
+    // the saved command showing the old value forever, which is what was reported.
+    await runApp(
+      async (_app, win) => {
+        // The recovery runs as the Panel mounts, so the project has to be open — which is also
+        // exactly when the user would look at the setting.
+        await win.locator('.project-item', { hasText: 'MemOver' }).click();
+        const pid = await firstPanelId(win);
+        await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible({ timeout: 25_000 });
+        await expectLayout(
+          data,
+          'MemOver',
+          (j) => /"startupCommand":"[^"]*findstr/i.test(j),
+          'the command that took over the terminal never replaced the saved startup command',
+        );
+      },
+      { dataDir: data },
+    );
+  } finally {
+    for (const d of [root, data]) rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  }
 });

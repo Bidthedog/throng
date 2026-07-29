@@ -107,7 +107,7 @@ describe('readTerminalPanelConfig migration (025 FR-002d/FR-002f)', () => {
     expect(readTerminalPanelConfig(legacy)).toEqual({
       shellArguments: '-NoLogo',
       startupCommand: '',
-      rememberCommand: false,
+      rememberCommand: true,
       rememberDirectory: true,
     });
   });
@@ -124,7 +124,7 @@ describe('readTerminalPanelConfig migration (025 FR-002d/FR-002f)', () => {
     expect(readTerminalPanelConfig(undefined)).toEqual({
       shellArguments: '',
       startupCommand: '',
-      rememberCommand: false,
+      rememberCommand: true,
       rememberDirectory: true,
     });
   });
@@ -133,21 +133,23 @@ describe('readTerminalPanelConfig migration (025 FR-002d/FR-002f)', () => {
     expect(readTerminalPanelConfig({ params: 42, startupCommand: null })).toEqual({
       shellArguments: '',
       startupCommand: '',
-      rememberCommand: false,
+      rememberCommand: true,
       rememberDirectory: true,
     });
   });
 
-  it('reads the new 025 fields, defaulting memory OFF (FR-015)', () => {
+  it('reads the new 025 fields, defaulting BOTH memories ON', () => {
     expect(readTerminalPanelConfig({ shellArguments: '/K', startupCommand: 'npm run dev' })).toEqual({
       shellArguments: '/K',
       startupCommand: 'npm run dev',
-      rememberCommand: false,
+      rememberCommand: true,
       rememberDirectory: true,
     });
     expect(readTerminalPanelConfig({ rememberCommand: true }).rememberCommand).toBe(true);
-    // Only a real boolean true enables it — a truthy string must not.
-    expect(readTerminalPanelConfig({ rememberCommand: 'yes' }).rememberCommand).toBe(false);
+    // Only an explicit boolean false turns it off — a non-boolean must not switch it off by
+    // accident, the same rule the directory flag beside it follows.
+    expect(readTerminalPanelConfig({ rememberCommand: false }).rememberCommand).toBe(false);
+    expect(readTerminalPanelConfig({ rememberCommand: 'no' }).rememberCommand).toBe(true);
   });
 
   it('directory memory defaults ON, and only an explicit false turns it off (FR-027a)', () => {

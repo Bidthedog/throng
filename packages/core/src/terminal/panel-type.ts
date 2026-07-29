@@ -64,7 +64,11 @@ export function readTerminalPanelConfig(raw: Record<string, unknown> | undefined
   return {
     shellArguments,
     startupCommand: typeof raw?.startupCommand === 'string' ? raw.startupCommand : '',
-    rememberCommand: raw?.rememberCommand === true,
+    // Defaults ON, like the directory beside it. Reported from real use: a command that takes
+    // over a terminal is the one you want back next launch, and an opt-in a user has to discover
+    // first means the feature silently does nothing for everyone who never found the checkbox.
+    // Only an explicit `false` turns it off, so an existing Panel's choice still wins.
+    rememberCommand: raw?.rememberCommand !== false,
     // Defaults ON: absent (a pre-025 panel, or one confirmed before this control existed) means
     // remember. Only an explicit `false` turns it off.
     rememberDirectory: raw?.rememberDirectory !== false,
@@ -118,8 +122,8 @@ export const terminalPanelType: PanelTypeDescriptor<TerminalValues> = {
       flavourId,
       shellArguments: memory?.shellArguments ?? chosen?.defaultShellArguments ?? '',
       startupCommand: memory?.startupCommand ?? '',
-      // FR-015: opt-in, defaults OFF — a Panel never rewrites its own configuration unasked.
-      rememberCommand: memory?.rememberCommand === true ? 'true' : 'false',
+      // Defaults ON (amended — see parseTerminalConfig): only an explicit false turns it off.
+      rememberCommand: memory?.rememberCommand === false ? 'false' : 'true',
       // Defaults ON (FR-027a): only an explicit false turns it off.
       rememberDirectory: memory?.rememberDirectory === false ? 'false' : 'true',
       runAsAdmin: 'false',
@@ -144,7 +148,7 @@ export const terminalPanelType: PanelTypeDescriptor<TerminalValues> = {
     flavourLabel: ctx.flavours.find((f) => f.value === values.flavourId)?.label,
     shellArguments: values.shellArguments,
     startupCommand: values.startupCommand,
-    rememberCommand: values.rememberCommand === 'true',
+    rememberCommand: values.rememberCommand !== 'false',
     rememberDirectory: values.rememberDirectory !== 'false',
     runAsAdmin: values.runAsAdmin === 'true',
   }),
