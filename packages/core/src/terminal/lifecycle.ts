@@ -49,3 +49,38 @@ export function attachDecision(hasLiveSession: boolean): 'reattach' | 'cold-star
 export function shouldSurfaceExit(code: number | null | undefined): boolean {
   return code !== 0;
 }
+
+/** Who a terminal exit notice is about. Every part is optional — a Panel may be unnamed, and a
+ *  rootless Panel has no project — and an absent part is omitted rather than shown blank. */
+export interface TerminalIdentity {
+  projectName?: string;
+  tabName?: string;
+  panelName?: string;
+  flavourLabel?: string;
+}
+
+/**
+ * The message for a terminal-exit notice (025 FR-041b).
+ *
+ * "Terminal exited (code 1)" is unactionable when several terminals are open, which is exactly
+ * when a failure matters: the notice arrives after the Panel has already reverted to its
+ * type-selection form, so there is nothing left on screen to trace it back to. The identity has to
+ * travel with the message.
+ *
+ * Parts are joined with a breadcrumb because they nest — project, then tab, then panel — and the
+ * flavour is parenthesised because it names the shell rather than a place. Anything unknown is
+ * dropped, so a rootless or unnamed Panel degrades to a shorter line instead of showing "undefined".
+ */
+export function terminalExitNotice(
+  code: number | null | undefined,
+  identity: TerminalIdentity = {},
+): string {
+  const where = [identity.projectName, identity.tabName, identity.panelName]
+    .map((part) => part?.trim())
+    .filter((part): part is string => !!part)
+    .join(' › ');
+  const flavour = identity.flavourLabel?.trim();
+  const suffix = [where, flavour ? `(${flavour})` : ''].filter((p) => p !== '').join(' ');
+  const head = `Terminal exited (code ${code ?? '—'})`;
+  return suffix === '' ? head : `${head} — ${suffix}`;
+}

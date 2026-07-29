@@ -24,7 +24,8 @@ export function TerminalInputs({
     onChange({ ...values, flavourId: value, shellArguments: flavour?.defaultShellArguments ?? '' });
   };
   const runAsAdmin = values.runAsAdmin === 'true';
-  const rememberCommand = values.rememberCommand === 'true';
+  // Absent means ON, like the directory beside it — only an explicit 'false' turns it off.
+  const rememberCommand = values.rememberCommand !== 'false';
   // Absent means ON (FR-027a) — only an explicit 'false' turns it off.
   const rememberDirectory = values.rememberDirectory !== 'false';
   // Some shells (PowerShell) cannot be observed from outside and only report their directory while

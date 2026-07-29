@@ -41,7 +41,7 @@ describe('Terminal descriptor — defaults', () => {
       flavourId: 'pwsh',
       shellArguments: '-NoLogo',
       startupCommand: '',
-      rememberCommand: 'false',
+      rememberCommand: 'true',
       rememberDirectory: 'true',
       runAsAdmin: 'false',
     });
@@ -52,7 +52,7 @@ describe('Terminal descriptor — defaults', () => {
       flavourId: '',
       shellArguments: '',
       startupCommand: '',
-      rememberCommand: 'false',
+      rememberCommand: 'true',
       rememberDirectory: 'true',
       runAsAdmin: 'false',
     });

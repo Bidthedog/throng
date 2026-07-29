@@ -5,17 +5,14 @@ export {
   readTerminalPanelConfig,
   type TerminalPanelConfig,
   type TerminalValues,
-} from "./panel-type.js";
-export { mergeFlavours, type TerminalFlavour } from "./flavour.js";
+} from './panel-type.js';
+export { mergeFlavours, type TerminalFlavour } from './flavour.js';
 export {
   validateFlavourRecord,
   checkFlavourRecord,
   type FlavourProblem,
-} from "./flavour-record.js";
-export {
-  BUILTIN_FLAVOUR_DEFAULT_SHELL_ARGUMENTS,
-  resolveDefaultShellArguments,
-} from "./defaults.js";
+} from './flavour-record.js';
+export { BUILTIN_FLAVOUR_DEFAULT_SHELL_ARGUMENTS, resolveDefaultShellArguments } from './defaults.js';
 export {
   BUILTIN_FLAVOUR_COMMAND_RECIPES,
   COMMAND_PLACEHOLDER,
@@ -29,32 +26,25 @@ export {
   BUILTIN_SHELL_INTEGRATION_ENV,
   flavourReportsDirectory,
   BUILTIN_SHELL_INTEGRATION,
-} from "./command-recipe.js";
-export { quoteDropPath, formatDroppedPaths } from "./drop-paths.js";
-export { terminalLinkTarget } from "./link-menu.js";
+} from './command-recipe.js';
+export { quoteDropPath, formatDroppedPaths } from './drop-paths.js';
+export { terminalLinkTarget } from './link-menu.js';
 export {
   resolveLaunchSpec,
   tokenizeParams,
   type LaunchSpec,
   type LaunchFlavour,
-} from "./launch-spec.js";
+} from './launch-spec.js';
 export {
   isBusy,
   shouldCloseOnOwnerClose,
   attachDecision,
   shouldSurfaceExit,
-} from "./lifecycle.js";
-export {
-  resolveShellFile,
-  type ShellProbe,
-  type ShellResolver,
-} from "./resolve-shell.js";
-export { sanitizeSpawnEnv } from "./spawn-env.js";
-export {
-  canRunAsAdmin,
-  shouldRespawnDaemonElevated,
-  shouldDeElevate,
-} from "./elevation.js";
+  terminalExitNotice,
+} from './lifecycle.js';
+export { resolveShellFile, type ShellProbe, type ShellResolver } from './resolve-shell.js';
+export { sanitizeSpawnEnv } from './spawn-env.js';
+export { canRunAsAdmin, shouldRespawnDaemonElevated, shouldDeElevate } from './elevation.js';
 export {
   KITTY_DISAMBIGUATE,
   WIN32_INPUT_MODE,
@@ -72,7 +62,7 @@ export {
   type KittyCsiPrefix,
   type KittyCsiResult,
   type KeyChord,
-} from "./kitty-keyboard.js";
+} from './kitty-keyboard.js';
 export {
   captureDecision,
   foregroundCommand,
@@ -82,5 +72,5 @@ export {
   MAX_CAPTURABLE_COMMAND_LENGTH,
   type CaptureOutcome,
   type CaptureReason,
-} from "./command-capture.js";
-export { resolveStartDirectory } from "./start-directory.js";
+} from './command-capture.js';
+export { resolveStartDirectory } from './start-directory.js';

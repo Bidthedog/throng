@@ -17,6 +17,7 @@ import {
   captureDecision,
   captureLogLine,
   shouldSurfaceExit,
+  terminalExitNotice,
   shouldNotifyCaptureOutcome,
   panelZoomLevel,
   readTerminalPanelConfig,
@@ -268,7 +269,12 @@ export function TerminalPanel({
   // would not take effect until the restart AFTER this one — which is exactly the case the user
   // cares about. Doing it here is pure (`captureDecision` takes data and returns data) and makes
   // the very first reopen correct; the effect below only persists what this decided.
-  const stranded = panel.terminalMemory?.observedCommand;
+  // Read ONCE, at mount. `observedCommand` is rewritten continuously while the terminal runs, so
+  // reading it live would treat every ordinary observation as a stranded one — recovering a
+  // command from a terminal that never ended, and clearing the observation the moment it appeared.
+  // What makes a value "stranded" is that it was already there when this terminal mounted.
+  const strandedAtMount = useRef(panel.terminalMemory?.observedCommand);
+  const stranded = strandedAtMount.current;
   const recovered =
     stranded === undefined || stranded === null
       ? null
@@ -291,6 +297,31 @@ export function TerminalPanel({
     }),
     [shellArguments, savedStartupCommand, rememberCommand, rememberDirectory, recoveredValue],
   );
+
+  // 025 FR-025 — and PERSIST what the recovery decided, so the Panel's settings agree with it.
+  //
+  // Resolving the stranded observation above fixes the LAUNCH, but on its own it leaves the saved
+  // Startup Command showing the old value: the promotion used to happen only in `end()`, and on
+  // the path that strands an observation in the first place — app close with "terminate all", a
+  // daemon kill, a crash — `end()` never runs. So the terminal relaunched with the recovered
+  // command while the settings still showed the previous one, and every subsequent restart had to
+  // recover it again. FR-025 requires the two to agree: what was captured must be what the Panel
+  // shows.
+  //
+  // Clearing `observedCommand` is part of the same write. It marks the recovery resolved, so the
+  // next mount does not treat an already-handled end as a fresh one.
+  //
+  // Scope, stated plainly: the two-run E2E beside this passes on the ORDERLY end path without this
+  // effect, because `end()` promotes there. What this covers is the path `end()` misses entirely —
+  // a daemon kill or a crash, where the observation is stranded and only a later mount can resolve
+  // it. That has no E2E, so this is reasoned rather than proven.
+  const persistedRecovery = useRef(false);
+  useEffect(() => {
+    if (recoveredValue === undefined) return;
+    if (persistedRecovery.current) return; // one write per mount — see the write-loop note above
+    persistedRecovery.current = true;
+    ws.setTerminalMemory(panel.id, { startupCommand: recoveredValue, observedCommand: undefined });
+  }, [panel.id, recoveredValue, ws]);
 
   // 025 — arm the command bridge as this terminal mounts, and drop whatever the panel's PREVIOUS
   // terminal left behind. Both matter: subscribing lazily at capture time meant the first capture
@@ -423,10 +454,22 @@ export function TerminalPanel({
     [panel.id, ws, config.flavourId, terminalConfig, notify],
   );
 
+  // A failure notice arrives AFTER the Panel has reverted to its type-selection form, so there is
+  // nothing left on screen tying it to a terminal. With several open, "Terminal exited (code 1)"
+  // names no terminal at all — the identity has to travel with the message.
   const onExit = useCallback(
     ({ code, unexpected }: { code: number | null; unexpected: boolean }) =>
-      end(`Terminal exited (code ${code ?? '—'})`, code, unexpected),
-    [end],
+      end(
+        terminalExitNotice(code, {
+          projectName: meta?.projectName,
+          tabName: meta?.tabName,
+          panelName: meta?.panelName ?? panel.title,
+          flavourLabel: config.flavourLabel,
+        }),
+        code,
+        unexpected,
+      ),
+    [end, meta, panel.title, config.flavourLabel],
   );
   // A launch/attach failure (e.g. a non-admin terminal refused while elevated) is
   // an unexpected end, so it surfaces as a red error notice, not a neutral one (#143).

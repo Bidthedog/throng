@@ -37,10 +37,12 @@ test('the form offers Shell Arguments, Startup Command and the memory checkbox (
     await expect(win.getByTestId('terminal-shell-arguments')).toBeVisible();
     await expect(win.getByTestId('terminal-startup-command')).toBeVisible();
 
-    // FR-015: memory is opt-in and defaults OFF — a panel never rewrites its own config unasked.
+    // Ships ON, like the directory control beside it — asserted rather than assumed, so a
+    // silently flipped default fails here. An opt-in a user has to discover first means the
+    // feature does nothing for everyone who never found the checkbox.
     const remember = win.getByTestId('terminal-remember-command');
     await expect(remember).toBeVisible();
-    await expect(remember).not.toBeChecked();
+    await expect(remember).toBeChecked();
   });
   } finally {
     rmSync(root, { recursive: true, force: true });
