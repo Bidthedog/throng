@@ -46,14 +46,83 @@ export function isCapturableCommand(commandLine: string): boolean {
 export function foregroundCommand(
   shellPid: number,
   children: readonly ChildProcess[],
+  shellImage?: string,
 ): string | null {
+  const effectiveShell = resolveShellPid(shellPid, children, shellImage);
   let best: ChildProcess | null = null;
   for (const child of children) {
-    if (child.ppid !== shellPid) continue;
+    if (child.ppid !== effectiveShell) continue;
     if (!isCapturableCommand(child.commandLine)) continue;
     if (best === null || child.startedAt >= best.startedAt) best = child;
   }
-  return best === null ? null : best.commandLine.trim();
+  return best === null ? null : normaliseCommand(best.commandLine);
+}
+
+/** The executable's file name from a command line, lower-cased. '' when it cannot be read. */
+function imageName(commandLine: string): string {
+  const trimmed = commandLine.trim();
+  const path =
+    trimmed.startsWith('"') ? trimmed.slice(1, trimmed.indexOf('"', 1)) : trimmed.split(' ')[0];
+  return (path ?? '').split(/[\\/]/).pop()?.toLowerCase() ?? '';
+}
+
+/**
+ * The pid whose direct children are the real candidates (025 FR-022a).
+ *
+ * Normally that is the shell throng launched. Git for Windows breaks the assumption: its
+ * `bin/bash.exe` is a launcher that starts `usr/bin/bash.exe`, and the recipe's own
+ * `exec bash -i` adds another link, so a command a user runs is a great-great-grandchild of the
+ * PTY. Applied literally, "direct children of the shell" found nothing at all and git-bash never
+ * remembered a command.
+ *
+ * So a chain of processes running the SAME EXECUTABLE as the shell is treated as one shell,
+ * transparently. Same-image only, deliberately: it re-follows a shell re-execing itself without
+ * reaching through `npm` into `node`, which FR-022 requires stay a single candidate. A user who
+ * types `bash` inside their bash terminal is followed too, which is the reading they would want —
+ * the command they then run is the one in the foreground.
+ */
+function resolveShellPid(
+  shellPid: number,
+  children: readonly ChildProcess[],
+  shellImage?: string,
+): number {
+  const target = shellImage === undefined ? '' : imageName(shellImage);
+  if (target === '') return shellPid;
+  let current = shellPid;
+  // Bounded by the number of processes: each step moves strictly further down the tree.
+  for (let depth = 0; depth < children.length; depth++) {
+    const next = children
+      .filter((c) => c.ppid === current && imageName(c.commandLine) === target)
+      .sort((a, b) => b.startedAt - a.startedAt)[0];
+    if (next === undefined) return current;
+    current = next.pid;
+  }
+  return current;
+}
+
+/**
+ * A captured command as it should be SAVED (025 FR-023).
+ *
+ * The OS reports a process's command line as the launcher built it, which is not always how the
+ * user typed it: running `claude agents` through cmd came back as `claude  agents`, with the
+ * doubled space the shim inserted. Saving that verbatim puts a command in the Panel's settings
+ * that the user never wrote, and it survives every future launch.
+ *
+ * Runs of whitespace collapse to one space — but only OUTSIDE quotes, so a quoted argument that
+ * genuinely contains several spaces (a Windows path is the obvious case) is left exactly as it is.
+ */
+export function normaliseCommand(commandLine: string): string {
+  let out = '';
+  let quoted = false;
+  for (const ch of commandLine.trim()) {
+    if (ch === '"') quoted = !quoted;
+    if (!quoted && /\s/.test(ch)) {
+      if (!out.endsWith(' ')) out += ' ';
+      continue;
+    }
+    out += ch;
+  }
+  return out;
 }
 
 /** Why a capture did or did not happen — recorded in diagnostics so "it forgot my command"

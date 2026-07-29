@@ -473,6 +473,7 @@ export {
   readTerminalPanelConfig,
   captureDecision,
   foregroundCommand,
+  normaliseCommand,
   isCapturableCommand,
   shouldSurfaceExit,
   terminalExitNotice,

@@ -72,6 +72,12 @@ interface Session {
   readonly host: IPtyHost;
   readonly handle: PtyHandle;
   /**
+   * The executable this session launched (025 FR-022a). Command observation needs it because a
+   * shell may re-exec itself before running anything — Git for Windows' `bash.exe` launcher does
+   * it twice — and only the image name distinguishes those links from a real command.
+   */
+  readonly shellImage: string;
+  /**
    * Every attached view's measured dimensions, keyed by `viewId` (008 FR-009). The
    * daemon — the only component that observes every window — sizes the single PTY to
    * the minimum columns and rows across this set, so two different-sized windows can
@@ -220,7 +226,7 @@ export class TerminalService {
     } catch {
       return; // FR-019e: keep the last known value rather than clearing it.
     }
-    const command = foregroundCommand(session.handle.pid, children);
+    const command = foregroundCommand(session.handle.pid, children, session.shellImage);
     if (this.lastCommand.get(session.panelId) === command) return;
     this.lastCommand.set(session.panelId, command);
     this.events.publishCommand(session.panelId, command);
@@ -381,6 +387,7 @@ export class TerminalService {
       rootless,
       host,
       handle,
+      shellImage: launch.file,
       views: new Map([[viewId, { cols: params.cols, rows: params.rows }]]),
       grid: { cols: startCols, rows: startRows },
       scrollback: '',
