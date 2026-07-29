@@ -14,19 +14,27 @@ import { foregroundCommand, normaliseCommand } from '@throng/core';
 
 const BASH = 'E:\\tools\\Git\\bin\\bash.exe';
 const CMD = 'C:\\Windows\\System32\\cmd.exe';
-const CLAUDE = 'C:\\Users\\Spikeh\\.local\\bin\\claude.exe agents';
+/** As OBSERVED. What is saved quotes the path, so it replays in bash too — see
+ *  command-resolved-form.test.ts. */
+const CLAUDE_OBSERVED = 'C:\\Users\\Spikeh\\.local\\bin\\claude.exe agents';
 
 /** The real git-bash tree, as observed. Shell pid 35944. */
 const GIT_BASH_TREE = [
   { pid: 24588, ppid: 35944, startedAt: 100, commandLine: '"'+'E:\\tools\\Git\\bin\\..\\usr\\bin\\bash.exe'+'" -i -l -c "trap : INT; ping -t 127.0.0.1; exec bash -i"' },
   { pid: 35428, ppid: 24588, startedAt: 101, commandLine: 'E:\\tools\\Git\\usr\\bin\\bash.exe -i' },
   { pid: 33936, ppid: 35428, startedAt: 102, commandLine: 'E:\\tools\\Git\\usr\\bin\\bash.exe -i' },
-  { pid: 32424, ppid: 33936, startedAt: 200, commandLine: CLAUDE },
+  { pid: 32424, ppid: 33936, startedAt: 200, commandLine: CLAUDE_OBSERVED },
 ];
+
+/** The saved form of an observed command line: its executable path quoted. */
+const quoteExe = (line: string): string => {
+  const cut = line.indexOf(' ');
+  return `"${line.slice(0, cut)}"${line.slice(cut)}`;
+};
 
 describe('capturing through a shell that re-execs itself (025 FR-022a)', () => {
   it('finds the command git-bash is actually running, four levels down', () => {
-    expect(foregroundCommand(35944, GIT_BASH_TREE, BASH)).toBe(CLAUDE);
+    expect(foregroundCommand(35944, GIT_BASH_TREE, BASH)).toBe(quoteExe(CLAUDE_OBSERVED));
   });
 
   it('without the shell image, finds the LAUNCHER instead — the defect that was reported', () => {
@@ -35,7 +43,7 @@ describe('capturing through a shell that re-execs itself (025 FR-022a)', () => {
     // 'nothing captured' — it was about to save bash's own launcher command line as the user's
     // startup command, which would then be re-run on every future launch.
     const withoutImage = foregroundCommand(35944, GIT_BASH_TREE);
-    expect(withoutImage).not.toBe(CLAUDE);
+    expect(withoutImage).not.toBe(quoteExe(CLAUDE_OBSERVED));
     expect(withoutImage).toContain('bash.exe');
   });
 
