@@ -24,9 +24,11 @@ describe('Keybindings resolver (FR-033)', () => {
     expect(resolveAction(kb, { ctrl: true, key: '0' }, 'editor')).toBe('zoom.reset');
     expect(resolveAction(kb, { key: 'F11' }, 'editor')).toBe('view.fullscreen');
     // Pane toggles — letters match case-insensitively (DOM keydown reports "b"/"n").
-    expect(resolveAction(kb, { ctrl: true, key: 'b' }, 'editor')).toBe('view.toggleProjects');
-    expect(resolveAction(kb, { ctrl: true, key: 'B' }, 'editor')).toBe('view.toggleProjects');
-    expect(resolveAction(kb, { ctrl: true, key: 'n' }, 'editor')).toBe('view.toggleExplorer');
+    // 026 / #165: these ship on Ctrl+ALT+B / Ctrl+ALT+N. Ctrl+B and Ctrl+N belong to the shell
+    // (tmux's prefix, readline's next-history) and are deliberately left unclaimed.
+    expect(resolveAction(kb, { ctrl: true, alt: true, key: 'b' }, 'editor')).toBe('view.toggleProjects');
+    expect(resolveAction(kb, { ctrl: true, alt: true, key: 'B' }, 'editor')).toBe('view.toggleProjects');
+    expect(resolveAction(kb, { ctrl: true, alt: true, key: 'n' }, 'editor')).toBe('view.toggleExplorer');
   });
 
   it('normalises only a lone-letter key segment', () => {

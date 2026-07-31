@@ -205,8 +205,22 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'focus.cycle': ['Ctrl+`'],
     'focus.cycleBack': ['Ctrl+Shift+`'],
     'view.fullscreen': ['F11'],
-    'view.toggleProjects': ['Ctrl+B'],
-    'view.toggleExplorer': ['Ctrl+N'],
+    // 026 / #165 — the pane toggles live in the Ctrl+Alt family, NOT on Ctrl+B / Ctrl+N.
+    // Those two belong to the shell: Ctrl+B is readline's `backward-char` (and tmux's prefix key)
+    // and Ctrl+N is readline's `next-history`, both pressed constantly by a terminal user.
+    //
+    // They were two of the five RECORDED SHADOWABLE EXCEPTIONS in Principle IV — chords throng was
+    // permitted to take from the terminal, each "open to revisiting". This is that revisit: nothing
+    // about a pane toggle justifies shadowing a line-editing key, and the Ctrl+Alt family (already
+    // throng's own, via `panel.zoom*` and `focus.*`) costs the shell nothing. Retiring the exception
+    // is better than keeping a default almost everyone runs and almost everyone trips over.
+    //
+    // Only the SHIPPED DEFAULT moves. A user who has saved their own bindings keeps exactly what
+    // they saved, including these old values — nothing on disk distinguishes "chose Ctrl+B" from
+    // "Ctrl+B was the default when this file was written", so rewriting it would silently override
+    // some users' decisions in order to help others (026 FR-030).
+    'view.toggleProjects': ['Ctrl+Alt+B'],
+    'view.toggleExplorer': ['Ctrl+Alt+N'],
     'menu.open': ['Shift+F10', 'ContextMenu'],
     'file.rename': ['F2'],
     'file.cut': ['Ctrl+X'],
