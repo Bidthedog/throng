@@ -121,8 +121,9 @@ Deferred TODOs:
   - Cross-flavour key parity has no feature or issue yet — it is an end-state obligation under the
     Incremental Delivery rule and MUST be filed and tracked before it can be claimed. Recorded
     here, not silently assumed.
-  - The five recorded shadowable exceptions (`Ctrl+B`, `Ctrl+F`, `Ctrl+N`, `Ctrl+H`, `Ctrl+S`) are
-    retained, not endorsed. `Ctrl+S` in particular still means XOFF wherever flow control is on,
+  - The recorded shadowable exceptions were five at v4.2.0 and are THREE from v4.3.1 (`Ctrl+F`,
+    `Ctrl+H`, `Ctrl+S`); `Ctrl+B` and `Ctrl+N` were retired by feature 026 (issue #165). Those
+    remaining are retained, not endorsed. `Ctrl+S` in particular still means XOFF wherever flow control is on,
     where a user who hits it sees a frozen terminal with no feedback. Whether to rebind any of the
     five is a product decision this amendment deliberately does NOT make.
 
@@ -858,12 +859,18 @@ not the flavour a given user happens to run.
   ends in every hosted flavour) — MAY be bound, but only deliberately: the feature's
   spec MUST name the chord, the terminal behaviour it displaces, and why no free
   chord serves. Silence is not permission.
-- **Recorded exceptions as of v4.2.0** (shipped before this rule existed, each
-  retained on the reasoning above and each open to revisiting): `Ctrl+B`
-  (`view.toggleProjects`), `Ctrl+F` (`search.find`), `Ctrl+N`
-  (`view.toggleExplorer`), `Ctrl+H` (`search.replace`), `Ctrl+S` (`editor.save`).
+- **Recorded exceptions as of v4.3.1** (shipped before this rule existed, each
+  retained on the reasoning above and each open to revisiting): `Ctrl+F`
+  (`search.find`), `Ctrl+H` (`search.replace`), `Ctrl+S` (`editor.save`).
   This list is exhaustive; any addition to it MUST come with its own justification,
   and no chord in the reserved tier may join it.
+- **Retired at v4.3.1**: `Ctrl+B` (`view.toggleProjects`) and `Ctrl+N`
+  (`view.toggleExplorer`), which moved to `Ctrl+Alt+B` / `Ctrl+Alt+N` in feature 026
+  (issue #165). "Open to revisiting" was not decoration — these two were revisited and
+  given back. Nothing about a pane toggle justified shadowing readline's
+  `backward-char` and `next-history`, and the `Ctrl+Alt` family was already throng's
+  own via `panel.zoom*` and `focus.*`, so the exception bought nothing. Only the
+  shipped defaults moved; a user who had saved these bindings keeps them.
 
 **One command, one chord across panel types.** A command offered in more than one
 panel type MUST use the SAME chord in each, so it is learned once rather than per
@@ -1384,4 +1391,4 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 4.3.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-23
+**Version**: 4.3.1 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-31
