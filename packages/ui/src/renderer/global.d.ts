@@ -238,6 +238,12 @@ declare global {
         setWordWrap: (panelId: string, on: boolean) => void;
         wordWrap: (panelId: string, seedDefault: boolean) => Promise<boolean>;
         revert: (panelId: string) => Promise<boolean>;
+        /** Re-read the document's path from disk (027 / #161). */
+        reload: (
+          panelId: string,
+        ) => Promise<{ ok: true } | { ok: false; reason: string; error: string }>;
+        /** A remount asking whether the document's path still reads (027 / #161). */
+        verifyPath?: (panelId: string) => void;
         resync: (panelId: string) => Promise<import('@throng/core').ResetDocumentMsg | null>;
         /** Restore crash-recovered content into the authority, dirty vs the disk file (FR-102). */
         restoreRecovered: (panelId: string, text: string, history?: unknown) => Promise<void>;
@@ -254,6 +260,8 @@ declare global {
           version: number;
           absPath: string | null;
           fileMissing: boolean;
+          /** The path could not be read when this document was adopted (027 / #161). */
+          unloadable?: boolean;
           /** The FILE's own encoding, learnt from its bytes — never the app defaults (FR-023). */
           encoding: import('@throng/core').EncodingId;
           hasBom: boolean;
@@ -292,6 +300,8 @@ declare global {
             reset?: import('@throng/core').ResetDocumentMsg;
             dirty?: boolean;
             deleted?: boolean;
+            /** The path became unreadable (true) or readable again (false) — 027 / #161. */
+            unloadable?: boolean;
             externalChange?: boolean;
             wordWrap?: boolean;
             /** throng moved the file: the document's new absolute path (019, FR-002). */

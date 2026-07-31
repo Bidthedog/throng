@@ -72,6 +72,29 @@ interface CoordDoc {
   /** The backing file was deleted while open (FR-099): the buffer is kept + marked
    *  dirty so a save re-creates it, and re-selecting the tab surfaces the error. */
   fileMissing?: boolean;
+  /**
+   * The document's path could not be READ when this panel adopted it (027 / #161).
+   *
+   * Deliberately NOT `fileMissing`, which looks like the same fact and is not. `fileMissing` drives
+   * the tab-open "cannot open file" dialog, and FR-105 requires that dialog to stay silent on a
+   * remount — which is the exact moment this state must still be visible. Publishing one through
+   * the other reddened `editor-missing-aggregate` on both its cases when this was first attempted;
+   * they are two facts and they need two fields.
+   *
+   * It exists so the editor can say "this is what your file USED TO SAY" instead of presenting a
+   * blank — or, worse, a remembered — buffer as the file. Cleared by any successful read of the
+   * path: a load, a save that re-creates it, a reload, or the auto-recovery below.
+   */
+  unloadable?: boolean;
+  /**
+   * What was true of the buffer at the moment its file went missing (027 / #161).
+   *
+   * Recorded because `markDeleted` is about to destroy the evidence: it drops `savedText` so the
+   * document cannot look saved while there is no file, and from then on EVERY stranded document
+   * reports dirty. Without this, "did the user have unsaved work?" is unanswerable at the moment
+   * the file comes back — and the recovery would have to either discard real edits or never fire.
+   */
+  missingSince?: { wasDirty: boolean; text: string };
   /** A one-shot flag so the "changed on disk" notice fires once per external edit
    *  of a dirty document (FR-028), not on every filesystem event. */
   diskChanged?: boolean;
@@ -116,6 +139,12 @@ export interface EditorSyncMsg {
   dirty?: boolean;
   /** The backing file was deleted while open (FR-099). */
   deleted?: boolean;
+  /**
+   * The document's path could not be read (true), or has become readable again (false) —
+   * 027 / #161. Drives the editor's unloadable banner, and nothing else; it is NOT the
+   * tab-open missing-file dialog (see `CoordDoc.unloadable`).
+   */
+  unloadable?: boolean;
   /** A dirty document's file changed on disk (FR-028) — a one-shot notice. */
   externalChange?: boolean;
   /** The document's file MOVED, in-app (019, FR-002). Its new absolute path — and the
@@ -246,6 +275,7 @@ export class EditorCoordinator {
       authority: new DocumentAuthority(meta.panelId, result.text),
     };
     doc.fileMissing = false; // a successful load means the file exists (FR-099)
+    doc.unloadable = false; // …and that the path could be read (027 / #161)
     this.docs.set(meta.panelId, doc);
     registerOpen(this.registry, meta.absPath, { panelId: meta.panelId, windowId: meta.windowId });
     this.watchDoc(doc); // soft external-change detection (FR-028)
@@ -289,7 +319,17 @@ export class EditorCoordinator {
       deletedAbsPaths.some((gone) => isUnderPath(file, gone));
     for (const doc of this.docs.values()) {
       if (!doc.absPath || doc.fileMissing || !isUnder(doc.absPath)) continue;
+      // BEFORE `markUnsaved` below drops `savedText` — after it, "did this buffer hold the user's
+      // own work?" can no longer be answered, and that is the question the recovery turns on
+      // (027 / #161, see `missingSince`).
+      doc.missingSince = { wasDirty: doc.authority.dirty, text: doc.authority.text };
       doc.fileMissing = true;
+      // The path cannot be read, so the editor must SAY so and keep saying it (027 / #161). This is
+      // the same condition a failed mount reports, reached from the other direction — the file went
+      // while the document was already open — and the user is owed the same statement either way:
+      // what is on screen is no longer the file. Separate from `fileMissing`, which drives the
+      // one-shot tab-open dialog FR-105 keeps silent on remounts.
+      doc.unloadable = true;
       // No version of this document is on disk any more, so it is dirty whatever it
       // holds — and stays dirty until a save re-creates the file (FR-099).
       doc.authority.markUnsaved();
@@ -301,7 +341,7 @@ export class EditorCoordinator {
       }
       void this.snapshot(doc);
       // -1: broadcast to ALL windows (no editing renderer to exclude).
-      this.deps.relaySync(-1, { panelId: doc.panelId, deleted: true, dirty: true });
+      this.deps.relaySync(-1, { panelId: doc.panelId, deleted: true, dirty: true, unloadable: true });
     }
   }
 
@@ -334,6 +374,8 @@ export class EditorCoordinator {
       });
       if (!res.ok) continue; // it did not actually come back — leave the editor exactly as it was
       doc.fileMissing = false;
+      doc.unloadable = false; // it reads again, so the banner's claim has stopped being true
+      doc.missingSince = undefined;
       doc.encoding = res.encoding;
       doc.hasBom = res.hasBom;
       doc.lineEnding = res.lineEnding;
@@ -347,6 +389,7 @@ export class EditorCoordinator {
       this.deps.relaySync(-1, {
         panelId: doc.panelId,
         deleted: false,
+        unloadable: false,
         dirty: doc.authority.dirty,
       });
     }
@@ -413,8 +456,16 @@ export class EditorCoordinator {
     }
   }
 
-  /** Register a new (possibly empty, unpathed) document without reading a file. */
-  register(meta: DocMeta, text = ''): void {
+  /**
+   * Register a new (possibly empty, unpathed) document without reading a file.
+   *
+   * `unloadable` is how a mount that FAILED to read its path says so (027 / #161). It has to be
+   * recorded here rather than left in the renderer, because the renderer's copy dies with the
+   * mount: a panel that is unmounted and remounted — a tab switch, a project switch, a panel drag —
+   * takes the `getContent` path and never attempts a load at all, so without this the banner
+   * silently disappears and the editor goes back to presenting remembered text as the file.
+   */
+  register(meta: DocMeta, text = '', opts: { unloadable?: boolean } = {}): void {
     const doc: CoordDoc = {
       panelId: meta.panelId,
       windowId: meta.windowId,
@@ -429,6 +480,7 @@ export class EditorCoordinator {
       lineEnding: meta.lineEnding,
       authority: new DocumentAuthority(meta.panelId, text),
     };
+    doc.unloadable = opts.unloadable === true;
     this.docs.set(meta.panelId, doc);
     if (meta.absPath) {
       registerOpen(this.registry, meta.absPath, { panelId: meta.panelId, windowId: meta.windowId });
@@ -512,6 +564,175 @@ export class EditorCoordinator {
     }
     void this.recovery.remove(doc.panelId);
     return true;
+  }
+
+  /**
+   * Re-READ the document's path and adopt what is there now (027 / #161, FR-013).
+   *
+   * A different operation from {@link revert}, on a different source of truth, and the pair must
+   * not be conflated:
+   *
+   * | | Source | When the file is missing |
+   * |---|---|---|
+   * | `revert` (FR-075) | `savedText` — throng's CACHED belief about the disk | refused |
+   * | `reload` (FR-013) | a fresh read of the path | exactly the case it exists for |
+   *
+   * So this is the only operation in the app that can rescue a stranded editor on demand: after a
+   * network blip, after a watcher missed the event, after a move-away-and-back that fell inside one
+   * watch gap — and from the unloadable state itself, where `revert` has nothing to revert TO.
+   *
+   * It reuses `service.load`, deliberately: that is the same read the open path performs, with the
+   * same ownership rule and the same encoding/line-ending detection. A second way to put content
+   * into a document is a second way for it to be wrong.
+   *
+   * It raises NOTHING on failure. `openFile` warns immediately because a deliberate open of a bad
+   * file is news; a reload that finds the path still broken is the state the user is already
+   * looking at, and popping the tab-open dialog for it is how the first attempt at #161 reddened
+   * `editor-missing-aggregate`. The caller gets the reason and decides.
+   */
+  async reload(panelId: string): Promise<LoadResult | { ok: false; reason: 'no-location'; error: string }> {
+    const doc = this.docs.get(panelId);
+    if (!doc) return { ok: false, reason: 'io', error: 'No such open document.' };
+    if (!doc.absPath) {
+      return { ok: false, reason: 'no-location', error: 'This document has no file to reload from.' };
+    }
+    const res = await this.service.load({
+      absPath: doc.absPath,
+      ownerRoot: doc.ownerRoot,
+      ownerKind: doc.ownerKind,
+      allProjectRoots: doc.allProjectRoots,
+    });
+    if (!res.ok) return res; // still unreadable — the buffer, and the banner, stand
+    this.adoptFromDisk(doc, res);
+    return res;
+  }
+
+  /**
+   * The path was read successfully: make what it holds the document (027 / #161).
+   *
+   * Shared by the manual reload and the auto-recovery below so the two cannot drift — recovering
+   * "by itself" and recovering "because you asked" must leave the document in the same state.
+   *
+   * `reset` re-establishes `savedText`, which is what makes the document CLEAN again: what we hold
+   * is now, demonstrably, what the file holds. The recovery temp goes with it — it described a
+   * buffer that no longer exists, and leaving it would restore the pre-recovery text over this
+   * file at the next launch.
+   */
+  private adoptFromDisk(doc: CoordDoc, res: LoadResult & { ok: true }): void {
+    doc.encoding = res.encoding;
+    doc.hasBom = res.hasBom;
+    doc.lineEnding = res.lineEnding;
+    doc.fileMissing = false;
+    doc.unloadable = false;
+    doc.diskChanged = false;
+    doc.authority.reset(res.text);
+    if (doc.recoveryTimer) {
+      clearTimeout(doc.recoveryTimer);
+      doc.recoveryTimer = undefined;
+    }
+    void this.recovery.remove(doc.panelId);
+    this.broadcastReset(doc);
+    // -1: every window showing this document. The banner is per document, not per view.
+    this.deps.relaySync(-1, {
+      panelId: doc.panelId,
+      unloadable: false,
+      deleted: false,
+      dirty: doc.authority.dirty,
+    });
+  }
+
+  /**
+   * AUTO-RECOVERY (027 / #161, FR-012): a path we could not read is readable again.
+   *
+   * This is the issue itself — the user renames the folder back, and until now nothing re-read the
+   * path, so the editor stayed stranded for the rest of the session with no way out but destroying
+   * the panel and reopening the file.
+   *
+   * What decides it is whether the buffer holds work that only exists there. It is NOT
+   * `authority.dirty`, and that distinction is the whole subtlety: a document whose file went
+   * missing is FORCE-dirtied ({@link DocumentAuthority.markUnsaved} drops `savedText`) precisely so
+   * it cannot look saved — so by the time we get here, EVERY stranded document reports dirty,
+   * whether the user typed a word or not. Reading that flag would mean never recovering anything.
+   * {@link markDeleted} therefore records what was true before it intervened.
+   *
+   * • Nothing of the user's in the buffer → adopt the file: its current content, in place, in the
+   *   same panel, tab and panel name.
+   * • Genuine unsaved edits → keep them. They are the only copy, and replacing them with the disk
+   *   would be data loss dressed up as a recovery. The banner still goes (the path reads again, so
+   *   Save and Revert both work now) and the divergence is announced through the ordinary one-shot
+   *   "changed on disk" notice — after which `Reload from disk` is the user's explicit, confirmed
+   *   way to take the file instead.
+   */
+  private pathCameBack(doc: CoordDoc, res: LoadResult & { ok: true }): void {
+    const since = doc.missingSince;
+    const hasOwnWork = since
+      ? since.wasDirty || since.text !== doc.authority.text
+      : doc.authority.dirty && doc.authority.savedText !== null;
+    doc.missingSince = undefined;
+    if (!hasOwnWork) {
+      this.adoptFromDisk(doc, res);
+      return;
+    }
+    doc.fileMissing = false;
+    doc.unloadable = false;
+    doc.encoding = res.encoding;
+    doc.hasBom = res.hasBom;
+    doc.lineEnding = res.lineEnding;
+    this.deps.relaySync(-1, {
+      panelId: doc.panelId,
+      unloadable: false,
+      deleted: false,
+      dirty: doc.authority.dirty,
+    });
+    if (res.text !== doc.authority.text && !doc.diskChanged) {
+      doc.diskChanged = true;
+      this.deps.relaySync(-1, { panelId: doc.panelId, externalChange: true });
+    }
+  }
+
+  /**
+   * A view has mounted onto a document that was ALREADY open — does its path still read?
+   * (027 / #161, FR-011a.)
+   *
+   * The mount path for an existing document adopts the authority's state and never touches the
+   * disk, which is right for the case it was written for (a panel drag, a mirrored view) and blind
+   * in the case this issue is about. Switch to another project and back, or reload the window, over
+   * a path that has since moved, and the panel comes up holding remembered text with nothing to say
+   * that its file is gone — the exact symptom reported, and the one the folder watch cannot cover
+   * because the break happened while nobody was mounted to hear it.
+   *
+   * It sets ONLY `unloadable`, never `fileMissing`. `fileMissing` feeds the tab-open "cannot open
+   * file" dialog, and FR-105 forbids that dialog on a remount — publishing it from here is what
+   * reddened `editor-missing-aggregate` when this issue was first attempted.
+   *
+   * `resolveEntry` rather than `load` for the check: it is the same rule the load path applies, and
+   * it does not read the file. The full read happens only when there is something to recover.
+   */
+  async verifyPath(panelId: string): Promise<void> {
+    const doc = this.docs.get(panelId);
+    const abs = doc?.absPath;
+    if (!doc || !abs) return;
+    const req = {
+      absPath: abs,
+      ownerRoot: doc.ownerRoot,
+      ownerKind: doc.ownerKind,
+      allProjectRoots: doc.allProjectRoots,
+    };
+    const decision = await this.service.resolveEntry(req).catch(() => ({ ok: false }) as const);
+    // The document can be re-pointed or destroyed inside that await (019) — anything decided about
+    // the old path is an answer to a question nobody is asking any more.
+    if (this.docs.get(panelId) !== doc || doc.absPath !== abs) return;
+    if (!decision.ok) {
+      if (!doc.unloadable) {
+        doc.unloadable = true;
+        this.deps.relaySync(-1, { panelId: doc.panelId, unloadable: true });
+      }
+      return;
+    }
+    if (!doc.unloadable && !doc.fileMissing) return; // nothing was wrong; nothing to do
+    const res = await this.service.load(req);
+    if (this.docs.get(panelId) !== doc || doc.absPath !== abs) return;
+    if (res.ok) this.pathCameBack(doc, res);
   }
 
   /** The authority's current state, for a view that is mounting or has fallen out of step. */
@@ -699,6 +920,8 @@ export class EditorCoordinator {
     // this point re-dirties it for free (FR-026d).
     doc.authority.markSaved();
     doc.fileMissing = false; // the save re-created the file (FR-099)
+    doc.unloadable = false; // …and the path is demonstrably writable, so it reads (027 / #161)
+    doc.missingSince = undefined;
     doc.diskChanged = false; // our own write is the current on-disk version (FR-028)
     if (pathChanged || !doc.watch) this.watchDoc(doc); // (re)watch the saved location
     // Cancel any pending debounced recovery write so it can't re-create a temp for a
@@ -773,6 +996,8 @@ export class EditorCoordinator {
     version: number;
     absPath: string | null;
     fileMissing: boolean;
+    /** The path could not be read when this document was adopted (027 / #161). */
+    unloadable: boolean;
     encoding: EncodingId;
     hasBom: boolean;
     lineEnding: LineEndingId;
@@ -785,6 +1010,9 @@ export class EditorCoordinator {
       version: doc.authority.version,
       absPath: doc.absPath,
       fileMissing: !!doc.fileMissing,
+      // A REMOUNT reads its state from here and never attempts a load, so the banner survives a
+      // tab/project/panel switch only because this is published (027 / #161).
+      unloadable: !!doc.unloadable,
       // The FILE's, learnt from its bytes. A mounting view adopts them rather than assuming the app
       // defaults — a mirrored view that assumed LF would show the wrong line ending in its status
       // bar, and offer the wrong one in a Save-As (FR-023).
@@ -900,6 +1128,10 @@ export class EditorCoordinator {
     // branch, i.e. #87 by the back door) or, worse, resets a re-pointed document to the OLD file's
     // content (the clean branch). Both are answers to a question nobody is asking any more.
     if (doc.absPath !== watchedPath) return;
+    if (res.ok && (doc.unloadable || doc.fileMissing)) {
+      this.pathCameBack(doc, res);
+      return;
+    }
     if (!res.ok) {
       // THRONG is moving this file right now (019, FR-004). It is not missing — it is in flight,
       // and `markMoved` is about to say where it went. Dirtying it here is #87: the buffer goes

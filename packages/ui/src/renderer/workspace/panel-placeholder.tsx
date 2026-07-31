@@ -493,6 +493,41 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                       })();
                     },
                   },
+                  /**
+                   * Reload from disk (027 / #161, FR-013) — a NEW action ALONGSIDE Revert, not a
+                   * rename of it. They read different sources of truth: Revert restores throng's
+                   * cached copy of what the file last held and refuses when the file is gone;
+                   * this re-READS the path, which is the only thing that rescues a stranded
+                   * editor. Enabled even with no unsaved changes: "the file changed underneath
+                   * me, show me what it says now" is a legitimate ask.
+                   *
+                   * Menu-only, with no ActionId. Minting one would oblige a default chord, a
+                   * COMMAND_SCOPES entry and a KEYBINDINGS_METADATA descriptor (the completeness
+                   * gate asserts every ActionId is described) for a recovery action always reached
+                   * from a panel already under the pointer.
+                   */
+                  {
+                    label: 'Reload from disk',
+                    icon: 'retry' as const,
+                    disabled: !editorUi?.filePath,
+                    onClick: () => {
+                      void (async () => {
+                        // Unsaved edits are the only copy — a reload discards them, so it asks
+                        // first. A clean document has nothing to lose and is not interrupted.
+                        if (editorUi?.dirty) {
+                          const ok = await confirm({
+                            title: 'Reload from disk',
+                            message: `Discard unsaved changes to “${editorUi?.displayName ?? panel.title}” and load what is on disk now? This cannot be undone.`,
+                            confirmLabel: 'Reload',
+                            cancelLabel: 'Cancel',
+                            danger: true,
+                          });
+                          if (!ok) return;
+                        }
+                        await getEditorActions(panel.id)?.reloadFromDisk();
+                      })();
+                    },
+                  },
                   // US6 (#137) — for a panel backed by an on-disk file: reveal it in throng's own
                   // Files & Folders tree, and open its folder in the OS file manager (via the seam).
                   ...(editorUi?.filePath

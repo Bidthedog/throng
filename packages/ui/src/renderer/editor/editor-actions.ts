@@ -16,6 +16,14 @@ export interface EditorActions {
   openFile: (absPath: string) => Promise<void>;
   /** Discard all unsaved changes, restoring the loaded/last-saved content (FR-075). */
   revert: () => void;
+  /**
+   * Re-READ the file from disk, replacing the document with what is there now (027 / #161, FR-013).
+   *
+   * Not a rename of {@link revert} and not a synonym for it: revert restores throng's cached belief
+   * about the file and refuses when the file is gone, which is precisely the case this one exists
+   * to handle. Resolves false when the path still cannot be read.
+   */
+  reloadFromDisk: () => Promise<boolean>;
 }
 
 const registry = new Map<string, EditorActions>();

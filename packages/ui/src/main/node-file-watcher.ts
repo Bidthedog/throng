@@ -6,8 +6,8 @@
  * first target) so no extra dependency is needed; the OS detail stays behind the
  * IFileWatcher abstraction (Principle II).
  */
-import { watch, type FSWatcher } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, watch, type FSWatcher } from 'node:fs';
+import { dirname, join } from 'node:path';
 import type { Disposable, IFileWatcher, WatchOptions } from '@throng/core';
 
 /** Tuning, all overridable per instance (Principle X). */
@@ -23,6 +23,15 @@ export interface NodeFileWatcherOptions {
   /** Backoff base; the nth attempt waits `retryBaseMs * n`. */
   retryBaseMs?: number;
 }
+
+/**
+ * How many events into a burst before the watch is asked whether its directory still exists
+ * (027 / #201).
+ *
+ * Low enough that a storm — tens of thousands of callbacks — is cut off in its first instants;
+ * high enough that ordinary churn pays one `existsSync` per 64 events rather than one per event.
+ */
+const STORM_CHECK_EVERY = 64;
 
 export class NodeFileWatcher implements IFileWatcher {
   private readonly maxWaitMs: number;
@@ -45,6 +54,8 @@ export class NodeFileWatcher implements IFileWatcher {
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let lastPath = dir;
     let watcher: FSWatcher | null = null;
+    /** The watch on the nearest existing ancestor, held only while `dir` does not exist. */
+    let sentinel: FSWatcher | null = null;
     let disposed = false;
     let attempts = 0;
     /**
@@ -59,10 +70,13 @@ export class NodeFileWatcher implements IFileWatcher {
      * action" (#186).
      */
     let burstStartedAt: number | null = null;
+    /** Events delivered in the current burst — the only cheap signal a storm gives (027 / #201). */
+    let burstEvents = 0;
 
     const fire = (): void => {
       timer = null;
       burstStartedAt = null;
+      burstEvents = 0;
       if (disposed) return;
       onChange(lastPath);
     };
@@ -70,6 +84,34 @@ export class NodeFileWatcher implements IFileWatcher {
     const onEvent = (_event: string, filename: string | Buffer | null): void => {
       if (disposed) return;
       if (filename) lastPath = join(dir, filename.toString());
+      /**
+       * Is this a real change, or has the directory gone? (027 / #201.)
+       *
+       * Removing the root of a recursive `fs.watch` on Windows does not raise an error and does not
+       * end the watch — it turns it into an UNBOUNDED EVENT STORM. Measured at 53,957 callbacks
+       * from one `rmSync`, still climbing, with no `'error'` event at any point; recreating the
+       * directory does not settle it. Every one of those callbacks resets the debounce, so the
+       * tree it is meant to be updating goes permanently silent while the event loop is saturated.
+       *
+       * The watch cannot be trusted to report its own death, so it is asked. Not on every event —
+       * that is a syscall on the hot path of a recursive watch over `node_modules` — but once per
+       * `STORM_CHECK_EVERY` events within a single burst, which ordinary churn crosses harmlessly
+       * (the directory is there, the check costs one `existsSync` per 64 events) and a storm
+       * crosses immediately. The storm is then bounded to its first few dozen callbacks, and the
+       * watch goes to `waitForPath` — so a directory that is deleted and recreated recovers by
+       * exactly the same route as one that is renamed away and back.
+       */
+      burstEvents += 1;
+      if (burstEvents % STORM_CHECK_EVERY === 0 && !existsSync(dir)) {
+        watcher?.close();
+        watcher = null;
+        if (timer) clearTimeout(timer);
+        timer = null;
+        burstStartedAt = null;
+        burstEvents = 0;
+        waitForPath();
+        return;
+      }
       // A delivered event proves this watch works, so the retry budget is spent, not consumed.
       // Resetting on a successful *arm* instead would let a watch that errors immediately after
       // every arm retry forever.
@@ -108,7 +150,82 @@ export class NodeFileWatcher implements IFileWatcher {
       }, this.retryBaseMs * attempts);
     };
 
-    const arm = (): void => {
+    /** The nearest ancestor of `target` that exists right now — `target` itself when it is there. */
+    const nearestExisting = (target: string): string | null => {
+      let cur = target;
+      for (;;) {
+        if (existsSync(cur)) return cur;
+        const parent = dirname(cur);
+        if (parent === cur) return null; // walked off the top: even the drive root is gone
+        cur = parent;
+      }
+    };
+
+    const closeSentinel = (): void => {
+      sentinel?.close();
+      sentinel = null;
+    };
+
+    /**
+     * The directory is not there YET — so WAIT for it rather than spend the retry budget on it
+     * (027 / #161, FR-010b).
+     *
+     * A path that does not exist is not a watch that is failing. The two were treated as one, and
+     * the consequence is the whole of #161: open a project whose folder has been renamed away and
+     * every watch bound underneath it — the tree's, and each open editor's — exhausts five attempts
+     * in under four seconds and is abandoned for the session. Rename the folder back and NOTHING
+     * happens, because there is no longer anybody watching to notice that it did.
+     *
+     * So we watch the nearest ancestor that DOES exist, non-recursively — we only need to learn
+     * that the missing segment appeared — and re-arm the real watch the moment it does. There is no
+     * timer and no attempt limit here, deliberately: the user may repair the path in ten seconds or
+     * ten minutes, and a bounded wait would simply move the give-up further out. The wait ends when
+     * the path returns or when the handle is disposed, and nothing else.
+     */
+    const waitForPath = (): void => {
+      if (disposed) return;
+      closeSentinel();
+      const ancestor = nearestExisting(dir);
+      // Nothing above it exists either (an unplugged drive, a UNC share that is gone). That is a
+      // genuine failure rather than an absence we can wait on, so it goes back to the retry budget
+      // and, in the end, to `onFailed`.
+      if (ancestor === null) {
+        scheduleRetry('ENOENT');
+        return;
+      }
+      if (ancestor === dir) {
+        arm({ reportOnArm: true }); // it came back while we were looking for it
+        return;
+      }
+      try {
+        const created = watch(ancestor, { recursive: false }, () => {
+          if (disposed) return;
+          if (existsSync(dir)) {
+            closeSentinel();
+            arm({ reportOnArm: true });
+            return;
+          }
+          // An INTERMEDIATE folder appeared, so the missing segment has moved down: re-target the
+          // wait onto the new nearest ancestor, or we would sit watching a grandparent that no
+          // longer sees the creation we are waiting for.
+          if (nearestExisting(dir) !== ancestor) waitForPath();
+        });
+        sentinel = created;
+        created.on('error', (error: NodeJS.ErrnoException) => {
+          if (disposed) return;
+          closeSentinel();
+          // The WAIT failed, which is a failure like any other — bounded, and reported if it keeps
+          // happening. Only the absence itself is waited on indefinitely.
+          scheduleRetry(error.code ?? error.message);
+        });
+      } catch (error) {
+        scheduleRetry(
+          (error as NodeJS.ErrnoException)?.code ?? 'the missing path could not be waited on',
+        );
+      }
+    };
+
+    const arm = (opts?: { reportOnArm?: boolean }): void => {
       if (disposed) return;
       try {
         const created = watch(dir, { recursive: true }, onEvent);
@@ -126,11 +243,32 @@ export class NodeFileWatcher implements IFileWatcher {
           if (disposed) return;
           created.close();
           if (watcher === created) watcher = null;
+          // The directory went AWAY under the watch (it was renamed or removed). That is an
+          // absence, not a fault, so it waits for the path instead of counting towards the
+          // give-up — which is what lets a folder renamed away and back recover by itself.
+          if (error.code === 'ENOENT') {
+            waitForPath();
+            return;
+          }
           scheduleRetry(error.code ?? error.message);
         });
+        if (opts?.reportOnArm) {
+          // A directory that has just (RE)APPEARED is entirely news: nobody was watching while it
+          // was away, so no event describes what changed inside it. Report it once, immediately —
+          // without that, the watch is live again and every reader stays stale until something
+          // else happens to touch the folder.
+          attempts = 0;
+          onChange(join(dir, '.'));
+        }
       } catch (error) {
-        // The directory may not exist yet, or may have gone between attempts.
-        scheduleRetry((error as NodeJS.ErrnoException)?.code ?? 'watch could not be established');
+        const code = (error as NodeJS.ErrnoException)?.code;
+        // Not there yet — wait for it (see `waitForPath`), rather than burning the retry budget
+        // on a directory whose only problem is that it does not exist.
+        if (code === 'ENOENT') {
+          waitForPath();
+          return;
+        }
+        scheduleRetry(code ?? 'watch could not be established');
       }
     };
 
@@ -148,6 +286,10 @@ export class NodeFileWatcher implements IFileWatcher {
         retryTimer = null;
         watcher?.close();
         watcher = null;
+        // The wait for a missing path outlives every timer, so it must be closed here too — a
+        // sentinel left open would re-arm a watch on a project the user has already left.
+        sentinel?.close();
+        sentinel = null;
       },
     };
   }

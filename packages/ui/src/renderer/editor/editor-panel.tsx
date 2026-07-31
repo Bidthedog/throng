@@ -3,6 +3,7 @@ import { zoomFactor, panelZoomLevel, type Panel } from '@throng/core';
 import { useEditor } from './use-editor.js';
 import { FindBar } from '../search/find-bar.js';
 import { StatusStrip } from './status-strip.js';
+import { UnloadableBanner } from './unloadable-banner.js';
 import { registerPickerReveal, unregisterPickerReveal } from './picker-request.js';
 import { toRelPath } from './language-override.js';
 import { PanelSkeleton, useDelayedFlag } from '../common/loading.js';
@@ -65,6 +66,8 @@ export function EditorPanel({
         ref={setContainer}
       />
       {!loaded && !giveUp && <PanelSkeleton testId={`editor-skeleton-${panel.id}`} />}
+      {/* 027 / #161: while the path cannot be read, say so — the text below it is not the file. */}
+      <UnloadableBanner panelId={panel.id} />
       {/* The one shared find bar (013); renders only while find is open on this panel. */}
       <FindBar panelId={panel.id} />
       {/* The language indicator (016, FR-010) — the ONLY way to see what the editor detected, and
