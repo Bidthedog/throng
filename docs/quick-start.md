@@ -138,6 +138,12 @@ which becomes an editor showing that file.
   cut or paste across every row at once.
 - **Indentation follows the file's own style** wherever it has one, so throng never quietly
   converts your tab-indented file to spaces.
+- **If the file moves out from under an editor** — you renamed its folder outside throng, or a
+  branch switch took it away — the panel says so and names the path it could not read, so what is
+  on screen is never mistaken for the file. Put the path back and it **reloads by itself**; or use
+  **Reload from disk** on the panel header's menu to re-read it now. That is a different thing from
+  **Revert**, which discards your unsaved edits back to the last saved version and has nothing to
+  restore when the file is gone.
 
 Saves are confined to the project root. Unsaved changes show a pulsing dot; open the same file in
 two windows and they share **one buffer and one undo stack**, so Ctrl+Z in either reverts the

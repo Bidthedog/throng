@@ -91,7 +91,11 @@ goal is to pull all of that into a single, simple customisable workspace.
   content menu or `Ctrl+Alt+W`, and every panel showing that file rewraps together. A panel opened on
   a file **names itself after the file** until you rename it, and "Reset Name" puts it back. **What can be opened is exactly what can be saved**: symlinks are
   resolved first, and a file an editor could not write back is refused up front, visibly, rather
-  than opened into a buffer with nowhere to go.
+  than opened into a buffer with nowhere to go. An editor whose path **stops being readable** —
+  a folder renamed outside throng, a branch switch — says so on the panel and names the path, so
+  remembered text is never presented as the file; it **reloads itself** when the path comes back,
+  and **Reload from disk** re-reads it on demand (distinct from Revert, which restores the last
+  saved version and refuses when there is nothing to restore to).
 - **Code editing** — **syntax highlighting** for 31 languages, detected by extension and correctable
   from a **language picker** in the status strip (the choice is remembered per file). A right-click
   **content menu** puts cut/copy/paste, Select All, Undo/Redo and "Set Language…" under the cursor,
