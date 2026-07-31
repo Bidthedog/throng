@@ -24,9 +24,11 @@ test('window title shows active project · Tab · Panel (no path, no totals); st
     expect(t).not.toMatch(/\d+ (projects|tabs|panels)/); // totals removed
     expect(t).not.toContain('[ADMIN]'); // not elevated here
 
-    // Status bar still shows the project path in brackets (unchanged).
+    // Status bar still shows the project path in brackets — and, since 026 / #166, nothing else.
+    // The project NAME assertion that used to sit here was removed with the duplicated identity
+    // text; the title bar above is now its only home, which the assertions above already prove.
     await expect(win.getByTestId('status-project-path')).toHaveText('(C:/code/titler)');
-    await expect(win.getByTestId('status-project')).toContainText('Titler');
+    await expect(win.getByTestId('status-bar')).not.toContainText('Titler');
   });
 });
 
