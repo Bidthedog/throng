@@ -133,7 +133,25 @@ export class FilesService {
       // nothing, so it announces nothing.
       if (name === basename(abs)) return { ok: true };
       const dest = join(dirname(abs), name);
-      if (await this.fs.exists(dest)) {
+      // 026 / #194 — A CASE-ONLY RENAME IS A RENAME, and it used to be refused as a collision with
+      // ITSELF. The guard above is case-SENSITIVE, so `Job specs` → `Job Specs` correctly is not a
+      // no-op; `exists(dest)` on the very next line then resolves case-INSENSITIVELY on NTFS, finds
+      // this same item, and reports "already exists" about the thing being renamed.
+      //
+      // Source and destination always share a directory here (`dest` is built from `dirname(abs)`),
+      // so they can differ only in the leaf — which makes a case-insensitive leaf match exactly the
+      // question "is the destination this item?". Asking it BEFORE the existence probe is the whole
+      // fix. A genuinely different sibling still fails the probe below (FR-003).
+      //
+      // Compared case-insensitively rather than via `realpath` deliberately: no syscall, so it
+      // cannot race, and it does not conflate a symlink with its target the way realpath would.
+      //
+      // NOTE for anyone reading #194's implementation hint: the two-step rename via a temporary name
+      // it recommends is NOT needed. Measured on this platform, `fs.rename` performs a case-only
+      // rename directly for both files and folders. A temp-name dance would open a window in which
+      // the user's file exists under neither name, which is strictly worse (research R1).
+      const isSelfRename = name.toLowerCase() === basename(abs).toLowerCase();
+      if (!isSelfRename && (await this.fs.exists(dest))) {
         return { error: 'A file or folder with this name already exists.' };
       }
       // Inside the try that owns the `finally`, exactly as `move` does it. It sat outside, so a
