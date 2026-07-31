@@ -65,5 +65,74 @@ export function runFileWatcherContract(
         await h.cleanup();
       }
     });
+
+    /**
+     * 026 / #186 — the obligations that were implicit, and therefore unmet.
+     *
+     * The two cases above say a watcher reports changes and stops on dispose. Both were true of the
+     * implementation that produced #186, because neither asks WHEN a change is reported. A watcher
+     * whose coalescing has no ceiling satisfies "fires onChange" perfectly while reporting nothing
+     * at all for as long as the machine is busy — which is the entire defect.
+     *
+     * These belong in the shared contract rather than in one implementation's tests: any
+     * IFileWatcher can be written with an unbounded debounce, so any implementation must be held to
+     * a ceiling.
+     */
+    describe('liveness under sustained churn (026 / #186)', () => {
+      it('reports a change WHILE the directory is still being written to', async () => {
+        const h = await makeHarness();
+        let stopChurn: ReturnType<typeof setInterval> | undefined;
+        let reported = 0;
+        const sub = h.watcher.watch(h.dir, () => {
+          reported += 1;
+        });
+        try {
+          await new Promise((r) => setTimeout(r, 150)); // let the watch arm
+          let n = 0;
+          // 5ms, deliberately: the contract cannot know the implementation's debounce, and a churn
+          // interval close to it would let an UNBOUNDED debounce fire anyway on a lucky gap — the
+          // test would then pass against the very implementation it exists to reject. At 5ms the
+          // timer is re-armed long before any plausible quiet period elapses, so only a real
+          // ceiling can satisfy this.
+          stopChurn = setInterval(() => {
+            void h.touch(`churn-${n++ % 20}.tmp`).catch(() => {
+              /* teardown race; churn is noise, never an assertion */
+            });
+          }, 5);
+
+          // The churn is STILL RUNNING when this assertion is made. A watcher that only reports
+          // once the machine goes quiet is a watcher whose consumer is stale exactly when it is busy.
+          await new Promise((r) => setTimeout(r, 2000));
+          expect(
+            reported,
+            'nothing was reported while the directory kept changing — the coalescing window has no ceiling',
+          ).toBeGreaterThan(0);
+        } finally {
+          if (stopChurn) clearInterval(stopChurn);
+          sub.dispose();
+          await h.cleanup();
+        }
+      }, 20_000);
+
+      it('still coalesces a burst rather than reporting once per change', async () => {
+        // The fence for the fix above. Bounding the delay must not become "no batching at all" —
+        // that would trade a stale consumer for one re-reading the filesystem on every write.
+        const h = await makeHarness();
+        let reported = 0;
+        const sub = h.watcher.watch(h.dir, () => {
+          reported += 1;
+        });
+        try {
+          await new Promise((r) => setTimeout(r, 150));
+          for (let i = 0; i < 30; i += 1) await h.touch(`burst-${i}.json`);
+          await new Promise((r) => setTimeout(r, 800));
+          expect(reported).toBeGreaterThan(0);
+          expect(reported, 'a 30-write burst must not become 30 reports').toBeLessThan(10);
+        } finally {
+          sub.dispose();
+          await h.cleanup();
+        }
+      }, 20_000);
+    });
   });
 }

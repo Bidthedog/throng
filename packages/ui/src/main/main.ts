@@ -873,9 +873,18 @@ if (isPrimaryInstance)
   const shellIntegration = new ElectronShellIntegration(shell);
   // Watch the active project's root and push change signals to every window so
   // the file tree stays live-synced with external + in-app edits (US2).
-  const explorerWatcher = new ExplorerWatcher(new NodeFileWatcher(150), (evt) => {
-    broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:files:changed', evt);
-  });
+  const explorerWatcher = new ExplorerWatcher(
+    new NodeFileWatcher(150),
+    (evt) => {
+      broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:files:changed', evt);
+    },
+    // 026 / #186 (FR-010a) — the watch is gone for good. Say so: a tree that has silently stopped
+    // updating looks exactly like a project in which nothing is happening, and the user acts on it
+    // either way.
+    (root, reason) => {
+      broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:files:watchFailed', { root, reason });
+    },
+  );
   const filesService = new FilesService(fileSystem, shellIntegration);
   registerFilesIpc(filesService, explorerWatcher);
 

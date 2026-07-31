@@ -391,6 +391,14 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.on('throng:files:changed', handler);
       return () => ipcRenderer.removeListener('throng:files:changed', handler);
     },
+    // 026 / #186 (FR-010a): live sync has stopped and could not be restarted. The peer of
+    // `onChange` — the message that says no more of those are coming. Without it the tree simply
+    // freezes, which is indistinguishable from a project where nothing is happening.
+    onWatchFailed: (cb: (evt: { root: string; reason: string }) => void) => {
+      const handler = (_event: unknown, evt: { root: string; reason: string }): void => cb(evt);
+      ipcRenderer.on('throng:files:watchFailed', handler);
+      return () => ipcRenderer.removeListener('throng:files:watchFailed', handler);
+    },
   },
   // The OS clipboard (016, FR-013a): the sandboxed renderer cannot reach it, so it says WHAT to
   // copy and what SHAPE it is, and UI main writes it and remembers. The shape is app-global — one

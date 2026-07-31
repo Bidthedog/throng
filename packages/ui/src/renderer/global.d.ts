@@ -206,6 +206,8 @@ declare global {
         /** 024 US3 (#85): restore a trashed item to its original path. */
         restore?: (relPath: string, deletedAt: number) => Promise<{ ok: true } | { error: string }>;
         onChange: (cb: (evt: { relDir: string }) => void) => () => void;
+        /** 026 / #186 — live sync stopped and could not be restarted (FR-010a). */
+        onWatchFailed?: (cb: (evt: { root: string; reason: string }) => void) => () => void;
       };
       // The OS clipboard (016, FR-013a) — behind the seam, in UI main.
       clipboard?: {
