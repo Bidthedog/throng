@@ -67,11 +67,11 @@ test('double-click captures a chord and ADDS it (multiple chords per action)', a
       const prefs = await openKeybindings(app, win);
       await prefs.getByTestId('binding-view.toggleProjects').dblclick();
       await expect(prefs.getByTestId('capture-modal')).toBeVisible();
-      await sendChord(prefs, 'k', { ctrlKey: true }); // Ctrl+K added to the default Ctrl+B
+      await sendChord(prefs, 'k', { ctrlKey: true }); // Ctrl+K added to the default Ctrl+Alt+B
       await expect(prefs.getByTestId('capture-modal')).toBeHidden();
       await expect
         .poll(() => readBindings(cfgRoot)?.['view.toggleProjects'])
-        .toEqual(['Ctrl+B', 'Ctrl+K']); // added, not replaced
+        .toEqual(['Ctrl+Alt+B', 'Ctrl+K']); // added, not replaced
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
@@ -90,7 +90,7 @@ test('a single key binds (no modifier required); double-click does not select te
       await expect(prefs.getByTestId('capture-modal')).toBeHidden();
       await expect
         .poll(() => readBindings(cfgRoot)?.['view.toggleExplorer'])
-        .toEqual(['Ctrl+N', 'F7']); // added to the default, not replaced
+        .toEqual(['Ctrl+Alt+N', 'F7']); // added to the default, not replaced
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
@@ -126,7 +126,7 @@ test('an excluded single key (Space) is rejected and not saved', async () => {
       await sendChord(prefs, ' '); // Space — excluded
       await expect(prefs.getByTestId('capture-error')).toBeVisible();
       await expect(prefs.getByTestId('capture-modal')).toBeVisible(); // stays open
-      expect(readBindings(cfgRoot)?.['view.toggleExplorer']).toEqual(['Ctrl+N']); // unchanged
+      expect(readBindings(cfgRoot)?.['view.toggleExplorer']).toEqual(['Ctrl+Alt+N']); // unchanged
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
@@ -142,11 +142,11 @@ test('a chord pill removes just that binding (FR-033b)', async () => {
       await sendChord(prefs, 'k', { ctrlKey: true });
       await expect
         .poll(() => readBindings(cfgRoot)?.['view.toggleProjects'])
-        .toEqual(['Ctrl+B', 'Ctrl+K']);
+        .toEqual(['Ctrl+Alt+B', 'Ctrl+K']);
       // Wait for the renderer to reflect both chords (the live-reload round-trip) so
       // the remove acts on the current two-pill state, not the stale single-pill one.
       await expect(prefs.getByTestId('binding-view.toggleProjects-pill-1')).toBeVisible();
-      await prefs.getByTestId('binding-view.toggleProjects-remove-0').click(); // remove Ctrl+B
+      await prefs.getByTestId('binding-view.toggleProjects-remove-0').click(); // remove Ctrl+Alt+B
       await expect
         .poll(() => readBindings(cfgRoot)?.['view.toggleProjects'])
         .toEqual(['Ctrl+K']);
@@ -164,7 +164,7 @@ test('a reserved OS combo is surfaced as unavailable and not saved', async () =>
       await sendChord(prefs, 'F4', { altKey: true }); // Alt+F4 (reserved)
       await expect(prefs.getByTestId('capture-error')).toContainText('reserved');
       await expect(prefs.getByTestId('capture-modal')).toBeVisible();
-      expect(readBindings(cfgRoot)?.['view.toggleExplorer']).toEqual(['Ctrl+N']);
+      expect(readBindings(cfgRoot)?.['view.toggleExplorer']).toEqual(['Ctrl+Alt+N']);
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
@@ -175,15 +175,17 @@ test('a conflicting chord warns and Reassign moves it from the other action', as
   await runApp(
     async (app, win) => {
       const prefs = await openKeybindings(app, win);
-      // Rebind view.toggleExplorer to Ctrl+B — already bound to view.toggleProjects.
+      // Rebind view.toggleExplorer to Ctrl+Alt+B — already bound to view.toggleProjects.
       await prefs.getByTestId('binding-view.toggleExplorer').dblclick();
-      await sendChord(prefs, 'b', { ctrlKey: true });
+      // 026 / #165 — must be the chord the OTHER action actually holds, or there is no conflict to
+      // detect and this test silently stops testing the conflict path.
+      await sendChord(prefs, 'b', { ctrlKey: true, altKey: true });
       await expect(prefs.getByTestId('capture-conflict')).toBeVisible();
       await prefs.getByTestId('capture-reassign').click();
       await expect(prefs.getByTestId('capture-modal')).toBeHidden();
-      // Reassign is additive here (FR-033/034): Ctrl+B is added to view.toggleExplorer's
+      // Reassign is additive here (FR-033/034): Ctrl+Alt+B is added to view.toggleExplorer's
       // existing chord(s), not a replacement.
-      await expect.poll(() => readBindings(cfgRoot)?.['view.toggleExplorer']).toEqual(['Ctrl+N', 'Ctrl+B']);
+      await expect.poll(() => readBindings(cfgRoot)?.['view.toggleExplorer']).toEqual(['Ctrl+Alt+N', 'Ctrl+Alt+B']);
       // Removed from the previous owner.
       await expect.poll(() => readBindings(cfgRoot)?.['view.toggleProjects']).toEqual([]);
     },
