@@ -32,7 +32,7 @@ throng opens centred on your main display, with an application-drawn title bar r
 | **Right** — Files & Folders | The active project's file tree |
 
 Both side panes collapse to a narrow labelled rail — click the chevron in the pane's top-outer
-corner, or press **Ctrl+B** (projects) and **Ctrl+N** (files). The middle pane never collapses.
+corner, or press **Ctrl+Alt+B** (projects) and **Ctrl+Alt+N** (files). The middle pane never collapses.
 If you make the window too narrow, throng collapses the Explorer for you, then the sidebar, and
 restores them when you widen it again.
 
@@ -208,7 +208,7 @@ also the full list.
 
 | | |
 |---|---|
-| **Ctrl+B** / **Ctrl+N** | Show/hide the Projects pane / the Files & Folders pane |
+| **Ctrl+Alt+B** / **Ctrl+Alt+N** | Show/hide the Projects pane / the Files & Folders pane |
 | **F11** | Full screen |
 | **Ctrl+`** / **Ctrl+Shift+`** | Cycle the active panel forward / back |
 | **Ctrl+Alt+Arrow** | Move focus to the panel left / right / up / down |
