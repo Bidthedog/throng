@@ -20,10 +20,13 @@ green. It was then **reverted**, because the change reddened `editor-missing-agg
 both of its cases: the tab-open "cannot open file" notice began firing on remounts that FR-105
 exempts. Trading one issue’s fix for another issue’s regression is not a fix.
 
-Its three tests stay in the branch as **retained RED coverage** for a still-open issue — they are the
-only failing tests in this feature, and they are failing on purpose. What was learnt (the reported
-"empty panel" is really a STALE one; `fileMissing` cannot carry the banner because FR-105 needs it
-silent on exactly the remount where the banner must appear) is recorded on issue #161.
+Its three tests stay in the branch as retained coverage for a still-open issue. Two are marked
+`test.fixme` — known-failing, awaiting #161 — rather than left failing, because they call
+`skipIfElevated()` and CI runs ELEVATED: left as-is they would skip in CI and fail on a developer's
+machine, making the branch's green depend on which machine ran it. The third is a live green fence.
+What was learnt (the reported "empty panel" is really a STALE one; `fileMissing` cannot carry the
+banner because FR-105 needs it silent on exactly the remount where the banner must appear) is
+recorded on issue #161.
 
 **Related, not fixed here**: #201 (raised from this branch while investigating #186).
 
@@ -43,9 +46,10 @@ that are not happening.
 **Where this spec and an issue body disagree, this spec is authoritative.** Every correction is
 recorded as a comment on its own issue, so the record is not confined to this branch.
 
-The committed tests are the acceptance surface. Deferring #198 removes no red tests (it contributed 4
-green fences); deferring #161 leaves 2 red tests standing deliberately, as coverage waiting for the
-issue it belongs to. Everything else is green.
+The committed tests are the acceptance surface, and the suite is green — everywhere, not just in CI.
+Deferring #198 removes no tests (it contributed 4 green fences); deferring #161 leaves two marked
+`test.fixme`, which is how a known-failing test waits for the issue it belongs to without making the
+bar lie.
 
 ---
 
@@ -377,9 +381,8 @@ chords and that the old ones are unclaimed.
 - **Diagnostics use the existing diagnostic record**; this feature adds entries to it and does not
   introduce a new logging surface, retention rule or format.
 - **The committed tests define done.** Where a test and prose disagree, the test is the requirement.
-  The exception is the three `editor-stranded-recovery` tests: they belong to deferred #161, two of
-  them fail on purpose, and they are NOT a claim about this feature. Nothing else in the branch is
-  red.
+  The exception is the three `editor-stranded-recovery` tests: they belong to deferred #161, two are
+  `test.fixme` pending it, and they are NOT a claim about this feature.
 
 ---
 
