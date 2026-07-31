@@ -62,7 +62,7 @@ export type { VerificationStep, VerificationVerdict } from './config/verificatio
 
 // User-scoped application configuration (003): abstractions + pure schemas.
 export type { IConfigStore, ConfigDocId, ConfigReadOptions, WriteOutcome } from './abstractions/config-store.js';
-export type { IFileWatcher, Disposable } from './abstractions/file-watcher.js';
+export type { IFileWatcher, Disposable, WatchOptions } from './abstractions/file-watcher.js';
 
 // File Explorer tree (004): OS seams + pure domain.
 export type { IFileSystem, DirEntry } from './abstractions/file-system.js';

@@ -256,10 +256,32 @@ export function useExplorerData(
 
   // Read directory contents, filter excludes, sort folders-first. No state writes.
   const fetchChildren = useCallback(
-    async (relDir: string): Promise<TreeNodeData[] | null> => {
+    /**
+     * `silent` marks a SPECULATIVE read — one the user did not ask for (026 / #197, FR-021).
+     *
+     * Restoring a project re-reads every folder localStorage remembers as open. Those paths are a
+     * guess about a filesystem that may have moved on: a folder renamed or deleted outside throng
+     * while the project was closed is *expected* to be gone, and telling the user their remembered
+     * expansion could not be listed reports a problem they neither caused nor have. Worse, it names
+     * the OLD path, so it reads as though throng has lost track of a folder they renamed on purpose.
+     *
+     * A read the user DID ask for — clicking a folder open — still reports, because then the
+     * failure is about something they are trying to do right now (FR-022).
+     */
+    async (relDir: string, silent = false): Promise<TreeNodeData[] | null> => {
       const res = await window.throng?.files?.list?.(relDir);
       if (!res || 'error' in res) {
-        if (res && 'error' in res) failRef.current(res.error, 'list the contents of this folder');
+        if (res && 'error' in res) {
+          if (silent) {
+            // Discarded, not reported — but never invisible. An intermittent restore failure that
+            // leaves no trace is how #186 survived four wrong diagnoses (FR-021, SC-013).
+            console.warn(
+              `[explorer] discarding unresolvable persisted path "${relDir}" for project ${projectId}: ${res.error}`,
+            );
+          } else {
+            failRef.current(res.error, 'list the contents of this folder');
+          }
+        }
         return null;
       }
       /*
@@ -283,7 +305,7 @@ export function useExplorerData(
           isSymlink: n.isSymlink,
         }));
     },
-    [globs],
+    [globs, projectId],
   );
   const fetchRef = useRef(fetchChildren);
   fetchRef.current = fetchChildren;
@@ -330,8 +352,11 @@ export function useExplorerData(
       if (cancelled) return;
       map.set('', rootKids ?? []);
       await Promise.all(
+        // `silent` — these paths are a GUESS about a filesystem that may have moved on while the
+        // project was closed. An unresolvable one is discarded and logged, never raised at the user
+        // (026 / #197, FR-021).
         persisted.expanded.map(async (rel) => {
-          const kids = await fetchRef.current(rel);
+          const kids = await fetchRef.current(rel, true);
           if (kids) map.set(rel, kids);
         }),
       );
@@ -468,6 +493,19 @@ export function useExplorerData(
     return present;
   }, []);
 
+  // 026 / #186 (FR-010a) — live sync has stopped for good. Until now the tree just froze, which is
+  // indistinguishable from a project in which nothing is happening; the user keeps acting on a
+  // listing that has quietly stopped being true. Reported as an ordinary dismissable error notice.
+  useEffect(() => {
+    if (!rootFolder) return;
+    return window.throng?.files?.onWatchFailed?.(() => {
+      failRef.current(
+        'Live updates have stopped for this project. Reopen it to resume watching for changes.',
+        'keep this folder up to date',
+      );
+    });
+  }, [rootFolder]);
+
   // Live sync (US2): re-read every loaded directory when the watcher reports a change.
   useEffect(() => {
     if (!rootFolder) return;
@@ -553,9 +591,22 @@ export function useExplorerData(
     const api = treeRef.current;
     if (api?.get(rel)) {
       pendingSelect.current = null;
-      // `{ focus: false }` — re-highlight the renamed node without stealing keyboard focus into the
-      // tree (issue 144); this is a programmatic re-select, not a user click.
-      api.select(rel, { focus: false });
+      // 026 — TAKE FOCUS HERE, unlike every other programmatic select in this file.
+      //
+      // Issue 144's `{ focus: false }` is right for the editor-sync select (see the selection
+      // restore above): that one runs on every load, project switch and tab switch to keep the
+      // tree's highlight in step with the active editor, and it must never yank the caret out of
+      // the text the user is typing in.
+      //
+      // THIS drain is a different animal. It is reached only from `onRename`, which is only ever
+      // reached from the tree's own inline editor — so the user is, by construction, working in
+      // the tree and has just finished an action there. Suppressing focus left the pane dead to
+      // the keyboard afterwards: arrows stopped moving the selection and F2 would not start
+      // another rename until the tree was clicked again.
+      //
+      // Cancelling a rename never had this problem, which is what pins the cause here rather than
+      // on the input unmounting — Escape takes neither path and keeps focus fine.
+      api.select(rel);
     }
   }, [data, treeRef]);
 
@@ -699,6 +750,23 @@ export function useExplorerData(
       if (next === current) return;
       const parentDir = parentRel(rel); // '' at the root, else the containing dir
       const newRel = parentDir ? `${parentDir}/${next}` : next;
+      // 026 / #197 — MIGRATE THE OPEN STATE, exactly as a move already does.
+      //
+      // `drop` migrates every open descendant by prefix into `pendingOpen` and re-persists the
+      // instant it applies (#120 "Finding 5"). A rename had no equivalent, and it is the same
+      // fact — a folder's path changed — so the same migration is owed. Without it the renamed
+      // folder is simply no longer open, and #122's re-selection below then drains through
+      // `onSelect → persist`, re-snapshotting the open state and writing the stale entry OUT of
+      // localStorage before it can ever be restored. The user loses the expansion and is told
+      // nothing.
+      //
+      // Captured BEFORE the await: the rename re-keys the node, so reading open state afterwards
+      // would read a tree the old ids no longer match.
+      for (const open of snapshotOpen()) {
+        if (open === rel || open.startsWith(`${rel}/`)) {
+          pendingOpen.current.add(newRel + open.slice(rel.length));
+        }
+      }
       void window.throng?.files?.rename?.(rel, next).then((res) => {
         report(res, 'rename this item');
         if (!(res && 'error' in res)) {
@@ -729,7 +797,7 @@ export function useExplorerData(
         });
       });
     },
-    [report, documents, projectId, reloadDirs, pushUndo, toAbs],
+    [report, documents, projectId, reloadDirs, pushUndo, toAbs, snapshotOpen],
   );
 
   const cut = useCallback((relPaths: string[]) => {
@@ -797,8 +865,48 @@ export function useExplorerData(
         danger: true,
       });
       if (!ok) return;
+      // 026 / #186 (FR-009) — DELETE IS THE ONE MUTATION THAT RECONCILED NOTHING. `onRename`,
+      // `drop` and paste all re-read from their awaited result precisely so the tree converges
+      // "even if the debounced fs-watch is missed or coalesced"; delete relied wholly on the
+      // watcher. A working watcher hid that, and any watcher gap turned a delete that DID happen
+      // into one that looked like it had not.
+      //
+      // Removed optimistically so the node goes at once, and — FR-009a — put back if the delete
+      // fails. A failure is not rare on Windows: a file open in another program refuses with EPERM
+      // (#196). Leaving an optimistic removal standing for an item still on disk would be the same
+      // class of untruth this feature exists to remove, just in the other direction.
+      const parents = [...new Set(items.map(parentRel))];
+      const beforeDelete = childrenMapRef.current;
+      setChildrenMap((prev) => {
+        const next = new Map(prev);
+        let changed = false;
+        for (const [dir, kids] of prev) {
+          const kept = kids.filter((k) => !items.some((rel) => k.relPath === rel));
+          if (kept.length !== kids.length) {
+            next.set(dir, kept);
+            changed = true;
+          }
+        }
+        // Drop any loaded directory that lived inside something just deleted.
+        for (const dir of prev.keys()) {
+          if (items.some((rel) => dir === rel || dir.startsWith(`${rel}/`))) {
+            next.delete(dir);
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
       void window.throng?.files?.delete?.(items, deleteMode).then((res) => {
         report(res, items.length === 1 ? 'delete this item' : 'delete these items');
+        if (res && 'error' in res) {
+          // It is still on disk. Restore exactly what was on screen, then reconcile the parents
+          // from the filesystem so a PARTIAL batch failure converges on the truth rather than on
+          // our optimistic guess.
+          setChildrenMap(beforeDelete);
+          void reloadDirs(parents);
+          return;
+        }
+        void reloadDirs(parents);
         // Only a RECYCLED delete is undoable — a permanent one has nothing to restore from, and
         // recording it would offer the user an undo that could not possibly work (FR-007).
         if (!(res && 'error' in res) && deleteMode === 'recycle') {
@@ -818,7 +926,7 @@ export function useExplorerData(
         }
       });
     },
-    [confirm, deleteMode, report, documents, projectId, pushUndo, toAbs],
+    [confirm, deleteMode, report, documents, projectId, pushUndo, toAbs, reloadDirs],
   );
 
   // After creating a folder, enter inline rename on it once it appears (FR-033).
