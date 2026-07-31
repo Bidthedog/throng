@@ -42,27 +42,27 @@ import { skipIfElevated } from './admin.js';
  *
  * 3. **`Reload from disk` does not exist**, exactly as reported.
  *
- * ══ STATUS: two of these are `test.fixme` — deliberately, and not forever ══
+ * ══ STATUS: all three are LIVE (027 / #161 is fixed) ══
  *
- * #161 was BUILT on this branch and then REVERTED: the banner, `Reload from disk` and auto-recovery
- * all worked and these two tests went green, but the change made the tab-open "cannot open file"
- * notice fire on remounts FR-105 exempts (`editor-missing-aggregate.e2e.ts` went red on both its
- * cases). Trading one issue's fix for another's regression is not a fix, so it was backed out and
- * #161 stays open.
+ * Tests 2 and 3 were committed as `test.fixme` — known-failing, awaiting #161 — because #161 had
+ * been BUILT on the 026 branch and then REVERTED: the banner, `Reload from disk` and auto-recovery
+ * all worked, but the change made the tab-open "cannot open file" notice fire on remounts FR-105
+ * exempts (`editor-missing-aggregate.e2e.ts` went red on both its cases).
  *
- * They are `fixme` rather than left failing because a suite that is red on a developer's machine
- * and green in CI is worse than one that is honestly red. These two call `skipIfElevated()`, and CI
- * runs ELEVATED — so they skip there and fail here, which would have made the branch's green
- * depend on which machine ran it. `fixme` says the same thing in both places: known-failing,
- * awaiting #161.
+ * The `.fixme`s are gone and the assertions were NOT rewritten, as that commit required. What the
+ * second attempt added is the root cause the first one never found: the watch on a missing path is
+ * ABANDONED rather than made to wait for it, so nothing was ever going to notice the repair. See
+ * `editor-stranded-restart.e2e.ts` for the reported cycle end to end, and
+ * `packages/ui/tests/unit/file-watcher-missing-path.test.ts` for the watcher contract.
  *
- * **Remove the `.fixme` when picking #161 up — do not rewrite the assertions.** They are correct;
- * the implementation is what is missing. Test 2 asserts an `editor-unloadable-<panelId>` affordance
- * whose real name the spec must settle — what it pins is that some explicit unloadable state exists
- * and names the path.
+ * The aggregate-notice regression is avoided by keeping the two facts apart: `unloadable` (the path
+ * cannot be read — drives the banner, survives a remount) is a different field from `fileMissing`
+ * (drives the one-shot tab-open dialog, which FR-105 keeps silent on a remount). Nothing on the
+ * recovery path calls `openFile`, which warns immediately by design and was the second half of that
+ * regression.
  *
- * Test 1 is a live GREEN fence and stays that way: it is the behaviour a fix for the other two is
- * most likely to break. What was learnt from the attempt is recorded on issue #161.
+ * Test 1 remains the GREEN fence it always was: it is the behaviour a fix for the other two was
+ * most likely to break, and it still passes.
  */
 
 function makeProject(prefix: string): string {
@@ -166,7 +166,7 @@ test('an editor recovers when its folder is renamed away and back WHILE throng i
   }
 });
 
-test.fixme('an editor stranded across a restart recovers when the path is repaired', async () => {
+test('an editor stranded across a restart recovers when the path is repaired', async () => {
   skipIfElevated();
   test.setTimeout(120_000);
   const root = makeProject('throng-strand-restart-');
@@ -225,7 +225,7 @@ test.fixme('an editor stranded across a restart recovers when the path is repair
   }
 });
 
-test.fixme('a "Reload from disk" action exists and re-reads the path on demand', async () => {
+test('a "Reload from disk" action exists and re-reads the path on demand', async () => {
   skipIfElevated();
   const root = makeProject('throng-strand-reload-');
   try {

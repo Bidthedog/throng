@@ -55,6 +55,11 @@ vi.mock('node:fs', () => ({
     watches.push({ dir, watcher, listener });
     return watcher;
   },
+  // The watcher asks whether its directory still exists (027 / #201). Nothing in THIS file is
+  // about a missing directory — every case here is a live watch reporting a fault — so it always
+  // says yes. Absent from the mock it would be `undefined`, and the first call a future change
+  // made would fail as a TypeError rather than as the assertion it belongs to.
+  existsSync: () => true,
 }));
 
 const { NodeFileWatcher } = await import('../../src/main/node-file-watcher.js');
