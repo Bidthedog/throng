@@ -332,6 +332,14 @@ export function useEditor(params: UseEditorParams): void {
   // The backing file could not be loaded (missing/deleted). Published to editor-state
   // so the TAB-open watcher (not this mount) raises the "cannot open" notice (FR-105).
   const fileMissingRef = useRef(false);
+  /**
+   * This editor's path could not be READ, so what it shows is not its file (027 / #161).
+   *
+   * Kept apart from `fileMissingRef` deliberately — see `EditorUiState.unloadable`. Driving the
+   * banner from the missing-file flag was tried and reverted: it made the tab-open dialog fire on
+   * the remounts FR-105 exempts.
+   */
+  const unloadableRef = useRef(false);
 
   // Build the metadata UI main needs for confinement / mirror. It rides with every dispatched
   // change because it is MUTABLE — projects come and go, a Save-As re-points the file — and the
@@ -362,6 +370,7 @@ export function useEditor(params: UseEditorParams): void {
       ownerKind: metaRef.current.rootless ? 'subworkspace' : 'project',
       dirty: dirtyRef.current,
       fileMissing: fileMissingRef.current,
+      unloadable: unloadableRef.current,
       ownerProjectId: metaRef.current.ownerProjectId,
     });
   };
@@ -531,6 +540,7 @@ export function useEditor(params: UseEditorParams): void {
       };
       ws.updatePanelConfig(panelId, configRef.current);
       fileMissingRef.current = false;
+      unloadableRef.current = false; // the path read, so whatever the banner was about is over
       publishState();
       // The document's IDENTITY changed, and its name is what decides its language (FR-002a).
       //
@@ -545,6 +555,29 @@ export function useEditor(params: UseEditorParams): void {
       maybeWarn([{ filePath: absPath, panelName: metaRef.current.title, reason: loaded.reason }]);
       publishState();
     }
+  };
+
+  /**
+   * Re-read this document's file and adopt what is on disk NOW (027 / #161, FR-013).
+   *
+   * Performed by the AUTHORITY — it owns the document, and the replacement reaches every view of it
+   * through the ordinary reset broadcast, so a mirrored editor reloads in both windows at once.
+   *
+   * It deliberately does NOT go through `openFile`. That path warns on failure, immediately, by
+   * design ("a deliberate open of a bad file is news") — and routing a reload through it is what
+   * made the first attempt at this issue pop the tab-open dialog on remounts FR-105 exempts. A
+   * reload that finds the path still broken is the state the user is already looking at.
+   */
+  const reloadFromDisk = async (): Promise<boolean> => {
+    const result = await win()?.editor?.reload?.(panelId);
+    if (!result || result.ok !== true) return false;
+    fileMissingRef.current = false;
+    unloadableRef.current = false;
+    publishState();
+    // The bytes decide the encoding and the name decides the language — both may have changed
+    // while the path was unreadable (FR-002a).
+    refreshLanguage();
+    return true;
   };
 
   // Revert: discard all unsaved changes back to the loaded/last-saved content (FR-075).
@@ -562,6 +595,7 @@ export function useEditor(params: UseEditorParams): void {
       isDirty: () => dirtyRef.current,
       openFile,
       revert,
+      reloadFromDisk,
     });
     return () => unregisterEditorActions(panelId);
     // save/isDirty/openFile read refs, so a stable registration is fine.
@@ -958,6 +992,13 @@ export function useEditor(params: UseEditorParams): void {
         fileMissingRef.current = false;
         publishState();
       }
+      // The path became unreadable, or (027 / #161) became readable again — the authority decided
+      // it, on the document, so every view of it agrees rather than each guessing from its own
+      // last load attempt.
+      if (typeof msg.unloadable === 'boolean') {
+        unloadableRef.current = msg.unloadable;
+        publishState();
+      }
       // throng moved the file, and this document went with it (019, FR-002). Its PATH changed and
       // nothing else did: no dirty flag, no reload, no missing-file notice — it is the same
       // document, holding the same text, and the user asked for the move.
@@ -1064,7 +1105,17 @@ export function useEditor(params: UseEditorParams): void {
         // Publish file-missing so the tab-open watcher (not this mount) raises the
         // notice — a panel drag/move remounts here but must NOT re-warn (FR-105).
         fileMissingRef.current = !!existing.fileMissing;
+        // …and the banner, which must survive exactly that remount: this path never attempts a
+        // load, so without adopting the authority's answer the editor would quietly go back to
+        // presenting remembered text as the file (027 / #161).
+        unloadableRef.current = !!existing.unloadable;
         initialise(existing);
+        // …and CHECK, rather than take the authority's last answer on trust (027 / #161). This
+        // branch never touches the disk, so a path that broke while this panel was unmounted — a
+        // project switch, a window reload — would otherwise show remembered text as the file with
+        // nothing to say it is not. The verdict comes back on the sync channel, whichever way it
+        // goes, so nothing here waits for it.
+        bridge?.verifyPath?.(panelId);
         return;
       }
       // Launch-time crash recovery: in-progress content saved to a recovery temp
@@ -1084,6 +1135,7 @@ export function useEditor(params: UseEditorParams): void {
             lineEnding: loaded.lineEnding,
           };
           fileMissingRef.current = false;
+          unloadableRef.current = false;
           if (recovered && recovered.text !== loaded.text) {
             // Unsaved edits survived a restart — restore them INTO THE AUTHORITY, dirty against the
             // disk file. Restoring them into this view alone would make it disagree with the
@@ -1094,10 +1146,21 @@ export function useEditor(params: UseEditorParams): void {
           // The file could not be loaded. Publish it (the tab-open watcher raises the
           // notice — not this mount, so a panel drag/move never re-warns; FR-105).
           fileMissingRef.current = isMissingReason(loaded.reason);
+          /**
+           * And say so ON SCREEN, for as long as it is true (027 / #161).
+           *
+           * This is the state the issue is actually about. What the editor shows now is either
+           * blank or — if a recovery snapshot survived — the text the file used to hold, over a
+           * path throng could not read; and nothing whatsoever distinguishes that from the file
+           * itself. A Ctrl+S would write remembered text back over a path we could not even open.
+           * The dialog that fires here is a one-shot on tab open; the banner is the standing
+           * statement, and it is what auto-recovery and `Reload from disk` clear.
+           */
+          unloadableRef.current = true;
           // The file is gone, but its last content may survive in the recovery temp
           // (FR-102): show it (dirty) rather than a blank editor, so a save writes it
           // back to the original location. Blank only when nothing was captured.
-          bridge?.register({ ...buildMeta(), text: '' });
+          bridge?.register({ ...buildMeta(), text: '', unloadable: true });
           if (recovered) await bridge?.restoreRecovered(panelId, recovered.text, recovered.history);
         }
       } else if (recovered && recovered.text.length > 0) {

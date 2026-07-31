@@ -129,7 +129,9 @@ export function registerEditorIpc(coordinator: EditorCoordinator, deps: EditorIp
 
   ipcMain.on('throng:editor:register', (event, raw: Record<string, unknown>) => {
     const text = typeof raw.text === 'string' ? raw.text : '';
-    coordinator.register(toMeta(event, raw), text);
+    // `unloadable` says this panel adopted a path it could NOT read (027 / #161). Recorded on the
+    // document so a later remount — which never re-attempts the load — still knows.
+    coordinator.register(toMeta(event, raw), text, { unloadable: raw.unloadable === true });
   });
 
   /**
@@ -181,6 +183,29 @@ export function registerEditorIpc(coordinator: EditorCoordinator, deps: EditorIp
   ipcMain.handle('throng:editor:revert', (_event, panelId: unknown) =>
     typeof panelId === 'string' ? coordinator.revert(panelId) : false,
   );
+
+  /**
+   * Re-read the document's path on demand (027 / #161, FR-013) — `Reload from disk`.
+   *
+   * Distinct from `revert` above, which restores throng's CACHED belief about the file and refuses
+   * when there is nothing cached. This one reads the disk, which is the only thing that can rescue
+   * a stranded editor.
+   */
+  ipcMain.handle('throng:editor:reload', (_event, panelId: unknown) =>
+    typeof panelId === 'string'
+      ? coordinator.reload(panelId)
+      : { ok: false, reason: 'io', error: 'No such open document.' },
+  );
+
+  /**
+   * A view mounted onto an already-open document: check its path still reads (027 / #161).
+   *
+   * Fire-and-forget from the renderer — nothing waits on it, because the answer arrives as the
+   * ordinary sync broadcast every view of that document is already listening to.
+   */
+  ipcMain.on('throng:editor:verifyPath', (_event, panelId: unknown) => {
+    if (typeof panelId === 'string') void coordinator.verifyPath(panelId);
+  });
 
   ipcMain.handle('throng:editor:resync', (_event, panelId: unknown) =>
     typeof panelId === 'string' ? coordinator.resync(panelId) : null,

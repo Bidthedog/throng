@@ -452,6 +452,10 @@ contextBridge.exposeInMainWorld('throng', {
     wordWrap: (panelId: string, seedDefault: boolean) =>
       ipcRenderer.invoke('throng:editor:wordWrap', { panelId, seedDefault }),
     revert: (panelId: string) => ipcRenderer.invoke('throng:editor:revert', panelId),
+    /** Re-READ the path from disk — the operation `revert` deliberately is not (027 / #161). */
+    reload: (panelId: string) => ipcRenderer.invoke('throng:editor:reload', panelId),
+    /** A remount asking whether the document's path still reads (027 / #161). */
+    verifyPath: (panelId: string) => ipcRenderer.send('throng:editor:verifyPath', panelId),
     /** The authority's current text + version, for a view that has fallen out of step. */
     resync: (panelId: string) => ipcRenderer.invoke('throng:editor:resync', panelId),
     /** Restore crash-recovered content into the authority, dirty vs the disk file (FR-102). */
