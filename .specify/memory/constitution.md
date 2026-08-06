@@ -1,6 +1,39 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 4.3.1 → 4.4.0
+Bump rationale: MINOR. Principle IV's enumerated shadowable exceptions gain `Ctrl+F5`
+                (`terminal.redraw`), taken deliberately by feature 028 (issue #163). Additive: no
+                principle is removed or redefined, no previously-compliant design becomes
+                non-compliant, and the reserved tier is untouched.
+
+                This is the first exception taken UNDER the rule rather than inherited by it, which
+                is the point of the rule existing. v4.2.0 recorded five chords the codebase had
+                already taken before anyone wrote the constraint down; this one went the other way
+                round — the spec named the chord, what it displaces, and why no free chord serves,
+                before the binding shipped. The enumerated list is therefore doing its job as a
+                gate rather than as an apology.
+
+                Why the chord is takeable at all: `Ctrl+F5` is not in the reserved tier, no shipped
+                binding held it, and no hosted flavour's LINE EDITOR reads it — the tier test. What
+                it can displace is a full-screen program's function-key handling, which is real but
+                secondary, and terminal file managers bind the UNMODIFIED function keys, which is
+                why bare `F5` was rejected outright rather than merely avoided.
+Modified principles: IV "Native Terminal Support & Auto-Detection" — the recorded-exceptions list
+                gains one entry, plus a paragraph stating its justification in the form the rule
+                demands. Every existing rule, tier and retirement is unchanged.
+Added sections: none. Removed sections: none.
+Templates / artifacts reviewed:
+  ✅ .specify/templates/*                 — Constitution Check is dynamic; no edit needed.
+  ✅ packages/core/src/config/keybindings.ts — `terminal.redraw` is TERMINAL_ONLY with default
+       `Ctrl+F5`; bare `F5` is deliberately not taken.
+  ✅ packages/core/src/config/keybindings-metadata.ts — descriptor added, so the preferences editor
+       exposes it (configuration-editor completeness).
+  ✅ specs/028-terminal-render-input-fidelity/spec.md — FR-008 requires this amendment in the same
+       increment as the binding; FR-049a–d state the chord, its scope and the bare-F5 refusal.
+Deferred TODOs: none.
+
+                ---- superseded amendment (historical) ----
 Version change: 4.2.0 → 4.3.0
 Bump rationale: MINOR. Principle VI (Simple, Modern, Discoverable UX) gains an additive rule —
                 "Every panel action has a menu item" — making a Panel's menu the canonical index of
@@ -859,11 +892,23 @@ not the flavour a given user happens to run.
   ends in every hosted flavour) — MAY be bound, but only deliberately: the feature's
   spec MUST name the chord, the terminal behaviour it displaces, and why no free
   chord serves. Silence is not permission.
-- **Recorded exceptions as of v4.3.1** (shipped before this rule existed, each
-  retained on the reasoning above and each open to revisiting): `Ctrl+F`
-  (`search.find`), `Ctrl+H` (`search.replace`), `Ctrl+S` (`editor.save`).
+- **Recorded exceptions as of v4.4.0** (each retained on the reasoning above and each
+  open to revisiting): `Ctrl+F` (`search.find`), `Ctrl+H` (`search.replace`), `Ctrl+S`
+  (`editor.save`) — all three shipped before this rule existed — and `Ctrl+F5`
+  (`terminal.redraw`), added deliberately by feature 028 (issue #163).
   This list is exhaustive; any addition to it MUST come with its own justification,
   and no chord in the reserved tier may join it.
+- **`Ctrl+F5`, the first exception taken under this rule rather than inherited by it.**
+  What it displaces: a full-screen program can receive `Ctrl+F5` as a function-key
+  sequence, and terminal file managers bind the function keys heavily. What justifies
+  it: the action is the *deliberate* form of the divider-drag users had been performing
+  by accident to fix a mis-rendered terminal, so it needs a chord users can guess, and
+  `Ctrl+F5` reads as "hard refresh" from every browser and from Visual Studio. Why no
+  free chord serves: the unmodified function keys are exactly what a file manager binds,
+  so bare `F5` was rejected outright; every `Ctrl`+letter alternative is either reserved
+  (`Ctrl+R`, `Ctrl+L`) or already an exception. It is scoped `terminal` only, so it is
+  inert in an editor or the file tree, and the two menu items remain the canonical route
+  — the chord is an accelerator over them, never a substitute (Principle VI).
 - **Retired at v4.3.1**: `Ctrl+B` (`view.toggleProjects`) and `Ctrl+N`
   (`view.toggleExplorer`), which moved to `Ctrl+Alt+B` / `Ctrl+Alt+N` in feature 026
   (issue #165). "Open to revisiting" was not decoration — these two were revisited and
@@ -1391,4 +1436,4 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 4.3.1 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-31
+**Version**: 4.4.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-31
