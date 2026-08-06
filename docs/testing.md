@@ -77,6 +77,109 @@ Both are worth reading before re-opening it — but note that neither ever *meas
 case-insensitive `pty` grep also matching "empty"). **#117 re-opens the question empirically**, and is
 where the evidence should land.
 
+## `THRONG_E2E_STEP_MS` — watch a run happen
+
+Pauses between the steps of a spec that opts in, so a run can be followed by eye. Zero by default,
+which makes every pause a no-op: a suite must not get slower because somebody once needed to see it.
+
+```bash
+THRONG_E2E_STEP_MS=2000 npx playwright test <spec> --headed --retries=0
+```
+
+An Electron run already puts a real window on screen, so time between the actions is the only thing
+missing when a defect has to be watched rather than asserted.
+
+## `THRONG_CLAUDE_E2E` — the specs that drive real Claude Code
+
+Terminal key handling has defects that only appear against the actual program: five stand-in
+fixtures failed to reproduce what a user reproduced every time. Those specs therefore drive the real
+`claude` binary, which needs it installed and logged in and spends a little quota — so they are
+opt-in and never run on CI.
+
+```bash
+THRONG_CLAUDE_E2E=1 npx playwright test packages/ui/tests/e2e/terminal-claude-keys.e2e.ts --workers=1
+```
+
+## `THRONG_CLAUDE_E2E_ROOT` — a project with real sessions in it
+
+Points those specs at an existing project instead of a fresh temp directory. Claude's agents view is
+a list of the project's previous sessions, so in an empty project there is nothing to open and the
+test presses keys at a state no user is ever in.
+
+```bash
+THRONG_CLAUDE_E2E=1 THRONG_CLAUDE_E2E_ROOT="D:\path\to\a\real\project"   npx playwright test packages/ui/tests/e2e/terminal-claude-keys.e2e.ts --workers=1
+```
+
+The project is never deleted: cleanup refuses to remove anything outside the temp area.
+
+## `THRONG_INPUT_SOAK` — the keystroke soak
+
+A dropped keystroke is a race, and a race that survives one attempt is not fixed — it is unobserved.
+`terminal-input-idle.e2e.ts` proves the mechanism in one press, which is what a fence run on every
+push should cost; the soak asks the other question, whether it holds fifty times in a row in every
+shell. Fifty click-and-type rounds across four shells takes minutes, so it is opt-in.
+
+```bash
+THRONG_INPUT_SOAK=1 npx playwright test packages/ui/tests/e2e/terminal-input-soak.e2e.ts
+THRONG_INPUT_SOAK=1 THRONG_INPUT_SOAK_REPS=10 …     # a shorter run while iterating
+```
+
+`THRONG_INPUT_SOAK_REPS` defaults to 50. The run prints its repetition count and flavours, so a green
+tick cannot be mistaken for a soak that silently did nothing.
+
+## Two tiers: `THRONG_E2E_TIER`
+
+`npm run test:e2e` runs the suite in **two passes** — the parallel tier at several
+workers, then the serial tier at one. `THRONG_E2E_TIER=parallel|serial` selects a
+tier by itself, and composes with `THRONG_E2E_GROUP`.
+
+Measured on this suite (208 spec files, 651 tests):
+
+| | files | tests | time |
+| --- | --- | --- | --- |
+| parallel tier, 6 workers | 114 | 305 | **3.5 min** |
+| serial tier, 1 worker | 94 | 346 | 17.5 min |
+| whole suite, 1 worker (previous arrangement) | 208 | 651 | ~35 min |
+
+**The serial tier holds more tests than the parallel one**, which is why the total
+lands around 21 minutes rather than something dramatic. Menu and preferences specs
+are test-dense, and they are exactly the ones that cannot share a desktop.
+
+### What puts a spec in the serial tier
+
+Two different mechanisms, both in `parallel-plan.json`:
+
+- **Focus.** It opens the preferences window, or drives a context menu. throng
+  deliberately closes menus and popups when its window loses focus
+  (`context-menu.tsx`), so a second headed Electron app closes them underneath the
+  test using them. The preferences window is a child window and takes focus too.
+- **CPU.** It drives long-running real shells — a `ping`, a `findstr` loop — which
+  starve at high worker counts and time out. `terminal-command-memory` timed out at
+  30.6s in the parallel tier for this reason, not for focus.
+
+Membership is the **mechanism** plus anything measured failing at six workers —
+deliberately not observed failures alone. Contention produces a *different* failure
+set every run (0, 5, 1, 3, 4 and 6 flaky across six runs when this was first
+measured), so three green runs cannot prove a menu-driving spec is safe. Drawing
+the line from failures alone would have said 37 files serial; the mechanism says
+94. The extra 57 are the price of not encoding luck.
+
+`shard-plan.test.ts` guards the boundary, and the guard that matters fails the
+build when a spec in the **parallel** tier grows a context menu or a preferences
+window. Without it the boundary rots silently, and the symptom is some unrelated
+test flaking because its menu closed.
+
+### Why CI is arranged differently
+
+CI keeps **one worker per shard** and does not use tiers. Focus contention is
+per-desktop, so workers are the lever within a machine and shards are the lever
+across machines — and CI already has three machines. Raising workers there was
+measured reintroducing RPC-budget timeouts, launch-SLA misses and EPERM teardown
+races on a 4-vCPU runner (see `ci.yml`), which is the CPU mechanism above, not the
+focus one. Tiers only help if you run more than one worker, so they buy CI nothing
+that would not cost it that. The CI lever is the fixed per-shard `npm ci` + build
+toll instead — issue #103.
+
 ## `THRONG_E2E_WORKERS` — parallel workers
 
 Sets Playwright's worker count for the E2E layer.
@@ -168,13 +271,89 @@ process tree those assertions don't hold for. Such specs call `skipIfElevated()`
 (see `packages/ui/tests/e2e/admin.ts`) and **skip when elevated**, so an elevated
 run stays green.
 
-**This is why a green CI bar is not full coverage.** CI is elevated, so every
-`skipIfElevated()` spec *self-skips there* — it does not run on CI at all. Those
-assumptions are verified **only** by a developer running the suite from a
-non-elevated shell, which is why a non-elevated run belongs in a PR's evidence and
-why CI cannot be the last word on the non-elevated path. A spec with **no**
-elevation guard does execute on CI normally. **Prefer a non-elevated shell for the
-full E2E run.**
+**A green CI bar is still not full coverage — but the gap is now small and deliberate.** CI is
+elevated, so a guarded test does not run there; those assumptions are verified only by a developer
+running the suite from a non-elevated shell, which is why a non-elevated run belongs in a PR's
+evidence. **Prefer a non-elevated shell for the full E2E run.**
+
+**Call it inside the test body, never at module scope.** `skipIfElevated()` at the top of a file
+skips *every test in it*, which is how the gap below got so large: the guard was applied per FILE
+while the assumption it encodes belongs to individual tests. All 25 remaining call sites are inside
+a `test()`, and there are none at module scope — keep it that way.
+
+**How big the gap is: 22 spec files, 25 of 634 tests.** It was `~85 files / 208 tests` — a third of
+the suite, including almost the whole `editor-*` cluster (38 of its 41 files), none of which had any
+reason for the guard.
+
+That was settled by measurement, not by reading. `THRONG_E2E_IGNORE_ELEVATION_GUARD=1` is an audit
+hatch that runs the guarded specs *anyway*; CI is the only elevated environment available, so one CI
+run (`30979816073`) with the hatch open answered which specs genuinely depend on a normal-integrity
+daemon. **71 files had no such dependency and passed elevated** — the guard came off them. What
+remains are the specs whose subject *is* the process tree: conhost reaping, command observation, cwd
+reading, run-as-admin, and reattach.
+
+The hatch only ever makes MORE tests run, never fewer, so it cannot be used to turn a red suite
+green. Every E2E shard prints the remaining count on each run, so the number stays visible instead
+of being rediscovered.
+
+### Why CI cannot simply drop privileges
+
+This was attempted and does not work on GitHub-hosted runners. Both mechanisms were
+measured failing (run `30947653266`):
+
+| mechanism | result |
+| --- | --- |
+| `schtasks /RL LIMITED` | ran with `admin=True` — UAC is **disabled** on the runners, so there is no filtered token for "Limited" to fall back to |
+| `runas /trustlevel:0x20000` | produced no result at all |
+| the product's own `WindowsDeElevatedLauncher` | needs the interactive shell's token via `CreateProcessWithTokenW`; a runner has no interactive shell — the same limit `skipWithoutInteractiveDesktop()` documents |
+
+Note what "de-elevated" has to mean here: `isElevated()` asks whether `net session`
+succeeds, so it is a question about **administrator rights**, not integrity level.
+Lowering integrity alone would leave every guarded spec still skipping.
+
+`scripts/run-deelevated.ps1` is kept for a **self-hosted runner with UAC enabled**,
+where it should work. It probes each strategy before use, so an environment that
+cannot drop rights fails in about 30 seconds with a clear message rather than
+consuming a full E2E run — and it never silently falls back to running elevated,
+because a suite that looks like it ran while verifying nothing is the failure this
+whole area exists to prevent. `THRONG_DEELEVATE_FORCE=1` exercises it from an
+ordinary shell.
+
+## One app per file, not one per test
+
+Every `runApp()` is an Electron launch, a daemon and (for terminal specs) a real shell — about two
+seconds on CI, and the suite once paid it 604 times for 634 tests. Most of that bought nothing.
+
+A launch is only genuinely needed when a test **seeds state before the app starts**: a config root
+with themes in it, a pre-populated database, `skipDaemon`. Those keep their own app. Everything else
+can share one:
+
+```ts
+import { openApp, runApp as runOwnApp, type OpenApp } from './harness.js';
+
+test.describe.configure({ mode: 'serial' });
+let shared: OpenApp;
+test.beforeAll(async () => { shared = await openApp(); });
+test.afterAll(async () => { await shared?.close(); });
+```
+
+Serial mode is not optional: the tests share a window and a database, so they must not interleave,
+and a failure should skip the rest rather than run them against whatever it left behind.
+
+Two rules learned the hard way:
+
+- **Never let a shared-app shim accept launch options.** Dropping a seeded config root does not fail
+  a test, it makes it pass for the wrong reason — measured once, where a swallowed
+  `editor.openOnClick: 'double'` let a single click open the file and the assertion saw 2 opens where
+  it expected 0. A test needing options calls `runOwnApp`.
+- **Give shared projects unique names.** Projects accumulate in a shared app, and fifteen called
+  "Demo" make `.project-item` ambiguous.
+
+Not every file can do this, and that is fine. Of 54 candidates, 34 converted and 20 were reverted
+because their assertions genuinely depend on a pristine app — panels and projects accumulate, and
+"the panel shows its new title" then finds the previous test's panel. **Convert one file at a time
+and run it**; that is the only way to tell which kind you have. `explorer.e2e.ts` went from 46s to
+12.8s this way.
 
 ## A flaky test FAILS the run
 
