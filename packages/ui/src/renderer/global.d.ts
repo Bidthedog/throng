@@ -170,6 +170,13 @@ declare global {
         resize: (panelId: string, cols: number, rows: number, viewId?: string) => Promise<unknown>;
         /** A view is going away (008 FR-007/FR-010) — remove it from the daemon's grid set. */
         detach: (panelId: string, viewId?: string) => Promise<unknown>;
+        /**
+         * 028 (#162/#163) — force the running program to redraw its whole screen. A rebuilt view
+         * (every tab switch unmounts its panels) cannot reconstruct a full-screen program's screen
+         * from the replayed byte tail; only the program can, and it redraws only when the window
+         * changes. The daemon nudges the grid and restores it.
+         */
+        repaint?: (panelId: string) => Promise<unknown>;
         kill: (panelId: string) => Promise<unknown>;
         list: (projectId?: string) => Promise<{ sessions: TerminalSessionDto[] }>;
         // Daemon capabilities (FR-025a): { elevated } gates the "run as admin" control.
@@ -398,6 +405,15 @@ export type TerminalAttachEnvelope =
       scrollback: string;
       /** The session's shared grid — the attaching view conforms its xterm to it (008 FR-009). */
       grid?: { cols: number; rows: number };
+      /**
+       * The daemon already forced the program to redraw as part of this attach (028 follow-up), so
+       * this view must NOT ask for another one — every forced redraw is a full-screen repaint the
+       * user sees as a flash.
+       */
+      redrawn?: boolean;
+      /** The program owns the alternate screen (028 follow-up) — the view must match, or it
+       *  reclaims keys the program owns. */
+      altScreen?: boolean;
       exit?: { code: number | null };
     }
   // `stillStarting` marks a non-fatal attach timeout (008 FR-005): the session may still

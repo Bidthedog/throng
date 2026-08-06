@@ -209,6 +209,12 @@ export function registerTerminalIpc(deps: {
     untrackView(event.sender, panelId, viewId); // a clean unmount handles its own detach
     return daemonClient.call('terminal.detach', { panelId, viewId }).catch(() => ({ ok: false }));
   });
+  // 028 (#162/#163): force the running program to redraw. A tab switch unmounts every panel, so a
+  // returning tab rebuilds its terminal from a replayed byte tail — which cannot represent a
+  // full-screen program's screen. Only the program can, and it redraws only when the window changes.
+  ipcMain.handle('throng:terminal:repaint', (_e, panelId: string) =>
+    daemonClient.call('terminal.repaint', { panelId }).catch(() => ({ ok: false })),
+  );
   ipcMain.handle('throng:terminal:kill', (_e, panelId: string) =>
     daemonClient.call('terminal.kill', { panelId }).catch(() => ({ ok: false })),
   );

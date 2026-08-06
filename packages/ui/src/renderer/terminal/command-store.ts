@@ -80,3 +80,22 @@ export function peekTerminalCommand(panelId: string): string | null | undefined 
 export function forgetTerminalCommand(panelId: string): void {
   commands.delete(panelId);
 }
+
+/**
+ * Test seam: what the DAEMON says is running in a panel, exposed like the terminal diagnostics.
+ *
+ * An E2E asking "did claude exit?" needs an answer claude cannot spoof. Reading the screen fails
+ * (claude leaves its transcript behind); reading the panel header fails too, because that shows the
+ * window title claude sets for itself — one run reported "10 awaiting input - claude agents" and
+ * looked exactly like a live session. This value comes from the daemon polling the session's child
+ * processes, so it reflects the process table and nothing else.
+ */
+declare global {
+  interface Window {
+    __throngTerminalCommand?: (panelId: string) => string | null | undefined;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.__throngTerminalCommand = (panelId: string) => peekTerminalCommand(panelId);
+}

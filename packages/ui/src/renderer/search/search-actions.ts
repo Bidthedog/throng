@@ -42,7 +42,17 @@ export const SCROLLBACK_ACTIONS: readonly ActionId[] = [
 // `panel.rename` joins them: F2 renames the panel, and a terminal must not also hand it to the
 // program. It is safe to take unconditionally for the reason `search.close` is not — F2 has no
 // meaning at a shell prompt that a user could be relying on, whereas Escape plainly does.
-const ALWAYS_OURS = new Set<ActionId>(['search.find', 'panel.rename', ...SCROLLBACK_ACTIONS]);
+// `terminal.redraw` (028, Ctrl+F5) joins them for the same reason as `panel.rename`: throng acts on
+// the chord, so the program must not also receive it. Ctrl+F5 is not in the constitution's reserved
+// tier and no shell reads it as a line-editing key, which is why it is takeable at all — but it IS a
+// key a full-screen program could receive, so the shadow is recorded as an exception, not assumed
+// free (Principle IV).
+const ALWAYS_OURS = new Set<ActionId>([
+  'search.find',
+  'panel.rename',
+  'terminal.redraw',
+  ...SCROLLBACK_ACTIONS,
+]);
 
 /** Ours only while a find session is live on the panel — otherwise the program's. */
 const OURS_WHILE_FINDING = new Set<ActionId>([
@@ -76,8 +86,26 @@ const OURS_WHILE_FINDING = new Set<ActionId>([
  * So the default here is DENY: the shell keeps the key unless there is a specific reason to take it.
  * Scope narrows what may reach this function; it cannot decide what this function decides.
  */
-export function reservedByTerminal(action: ActionId | null, findOpen: boolean): boolean {
+export function reservedByTerminal(
+  action: ActionId | null,
+  findOpen: boolean,
+  /**
+   * The running program owns the keyboard (028 follow-up): it has negotiated enhanced key reporting,
+   * or it is painting the alternate screen.
+   *
+   * Reported from Claude Code running in a throng terminal: `Ctrl+End` "doesn't register at all".
+   * It is bound to `terminal.scrollToBottom` and reserved unconditionally, so the program never sees
+   * it — and inside a full-screen program that binding has nothing to do anyway, because the
+   * alternate screen HAS no scrollback to scroll. Reserving it there costs the user a key and buys
+   * them nothing.
+   */
+  programOwnsKeyboard = false,
+): boolean {
   if (action === null) return false;
+  // Scrollback navigation is throng's only while there is scrollback to navigate and nobody has
+  // asked for the keyboard. The wheel still scrolls, and `search.find` / `panel.rename` stay ours
+  // either way — they are about throng's window, not about the text.
+  if (programOwnsKeyboard && SCROLLBACK_ACTIONS.includes(action)) return false;
   if (ALWAYS_OURS.has(action)) return true;
   return findOpen && OURS_WHILE_FINDING.has(action);
 }

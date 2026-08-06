@@ -14,6 +14,20 @@ export const TERMINAL_RESIZE_METHOD = 'terminal.resize';
  * NOT a kill.
  */
 export const TERMINAL_DETACH_METHOD = 'terminal.detach';
+/**
+ * Force the program running in a terminal to redraw its whole screen (028 #162/#163).
+ *
+ * A tab switch unmounts every panel, so a returning tab rebuilds its terminal from the session's
+ * replayed byte tail — a reconstruction that cannot be right for a full-screen program, which paints
+ * absolutely and is the only authority for what its screen says. Such a program redraws when the
+ * window changes and at no other time, which is why a divider drag cures the corruption and
+ * repainting xterm's buffer never does.
+ *
+ * So a repaint is a grid NUDGE: resize away and back. The session's grid is unchanged on return, no
+ * grid notification is published (no view's size moved), and nothing is written to the pty — a
+ * redraw is never a keystroke.
+ */
+export const TERMINAL_REPAINT_METHOD = 'terminal.repaint';
 export const TERMINAL_KILL_METHOD = 'terminal.kill';
 export const TERMINAL_LIST_METHOD = 'terminal.list';
 /** Report daemon capabilities to the UI — currently just its elevation (FR-025a). */
@@ -134,6 +148,21 @@ export interface TerminalAttachResult {
    * not render a full-screen program offset. Absent only when there is no live session.
    */
   grid?: { cols: number; rows: number };
+  /**
+   * The daemon already forced the program to redraw as part of this attach (028 follow-up), so the
+   * view MUST NOT ask for another one. Every forced redraw is a full-screen repaint the user sees as
+   * a flash, and asking twice doubles them for no benefit.
+   */
+  redrawn?: boolean;
+  /**
+   * The program owns the ALTERNATE screen (028 follow-up).
+   *
+   * A rebuilt view used to learn this from the replayed tail, which carried the switch sequence.
+   * That replay is now suppressed for exactly this case — it was a visible flash of stale content —
+   * so the fact has to travel deliberately instead. Without it the view believes it is on the normal
+   * buffer and reclaims keys the program owns: measured as Ctrl+End dying after a tab switch.
+   */
+  altScreen?: boolean;
   exit?: { code: number | null; signal?: string };
 }
 
@@ -152,6 +181,11 @@ export interface TerminalResizeParams {
 }
 
 export interface TerminalKillParams {
+  panelId: string;
+}
+
+/** Force the running program to redraw (028). No viewId: a repaint is a property of the session. */
+export interface TerminalRepaintParams {
   panelId: string;
 }
 
