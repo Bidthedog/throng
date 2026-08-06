@@ -246,4 +246,10 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Scroll to bottom',
     'Jump to the newest output and resume following it.',
   ),
+  chord(
+    'terminal.redraw',
+    'Terminal',
+    'Refresh / redraw terminal',
+    'Ask the running program to redraw its screen. Changes no content, scrollback, selection or layout.',
+  ),
 ];

@@ -9,6 +9,8 @@ import {
   type IPtyHost,
   type PtyExit,
   type PtyHandle,
+  appendScrollback,
+  trackAltScreen,
 } from '@throng/core';
 import {
   JSON_RPC_INVALID_PARAMS,
@@ -16,6 +18,7 @@ import {
   TERMINAL_WRITE_METHOD,
   TERMINAL_RESIZE_METHOD,
   TERMINAL_DETACH_METHOD,
+  TERMINAL_REPAINT_METHOD,
   TERMINAL_KILL_METHOD,
   TERMINAL_LIST_METHOD,
   TERMINAL_CAPABILITIES_METHOD,
@@ -26,6 +29,7 @@ import {
   type TerminalCapabilitiesResult,
   type TerminalDetachParams,
   type TerminalKillParams,
+  type TerminalRepaintParams,
   type TerminalListParams,
   type TerminalListResult,
   type TerminalMeta,
@@ -49,6 +53,16 @@ const DEFAULT_VIEW_ID = '__default__';
 
 /** The character grid MUST never be driven below one column or one row (008 FR-012). */
 const MIN_GRID = 1;
+
+/**
+ * How long a repaint holds the nudged grid before restoring it (028, #162/#163).
+ *
+ * Not zero, and not a guess: with both resizes in the same tick, ConPTY had not finished repainting
+ * at the intermediate size before the second arrived, and the half-finished repaint left a row of
+ * one repeated character — corrupting the screen the repaint existed to repair. The gap gives the
+ * program time to act on the first window change. One row is imperceptible for this long.
+ */
+const REPAINT_RESTORE_MS = 60;
 
 /** How often to poll each live terminal's shell working directory (012 revision). */
 const CWD_POLL_MS = 1000;
@@ -87,6 +101,22 @@ interface Session {
    * terminal and reap the running program (008 FR-002).
    */
   readonly views: Map<string, ViewDims>;
+  /**
+   * Is the program on the ALTERNATE screen (028 follow-up)? Tracked by watching the output stream
+   * for the switch sequences, because it decides whether the replay tail is worth anything: a
+   * full-screen program's screen is not in the tail, and painting the tail is a flash the user sees
+   * for nothing before the program's own redraw overwrites it.
+   */
+  altScreen: boolean;
+  /**
+   * The grid is stale because every view has gone (028 follow-up). The next attach MUST push a real
+   * resize even when the recomputed grid equals the stored one, because the program needs a window
+   * change to redraw and the stored value no longer reflects anything on screen.
+   *
+   * This is what makes a tab switch cost ONE repaint instead of three: no replayed tail, no
+   * nudge-and-restore, just the single resize the rebuild needed anyway.
+   */
+  gridStale: boolean;
   /** The current PTY grid (last value sent to the host); recomputed on view change. */
   grid: ViewDims;
   scrollback: string;
@@ -121,6 +151,8 @@ function viewIdOf(params: { viewId?: unknown }): string {
  */
 export class TerminalService {
   private readonly sessions = new Map<string, Session>();
+  /** In-flight repaint restores, keyed by panelId — also the coalescing guard (028). */
+  private readonly repaintTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(
     private readonly pty: IPtyHost,
@@ -246,6 +278,7 @@ export class TerminalService {
     router.register(TERMINAL_WRITE_METHOD, (p) => this.write(p));
     router.register(TERMINAL_RESIZE_METHOD, (p) => this.resize(p));
     router.register(TERMINAL_DETACH_METHOD, (p) => this.detach(p));
+    router.register(TERMINAL_REPAINT_METHOD, (p) => this.repaint(p));
     router.register(TERMINAL_KILL_METHOD, (p) => this.kill(p));
     router.register(TERMINAL_LIST_METHOD, (p) => this.list(p));
     router.register(TERMINAL_CAPABILITIES_METHOD, () => this.capabilities());
@@ -345,7 +378,40 @@ export class TerminalService {
         // Hand back the shared grid so this joining view conforms its xterm immediately —
         // even when it did not move the minimum (a larger window mirroring a smaller one),
         // so it never renders a full-screen program offset (008 FR-009).
-        return { status: 'running', scrollback: existing.scrollback, grid: existing.grid };
+        /*
+         * 028 follow-up — a program on the ALTERNATE screen gets NO replay.
+         *
+         * Its screen is not in the tail. The tail holds the bytes that painted it, absolute cursor
+         * moves and all, and replaying them into a fresh view paints something stale at best and
+         * incoherent at worst — which is then immediately overwritten by the redraw the attaching
+         * view asks for. The user counts that wasted paint as one of the flashes on a tab switch.
+         *
+         * The scrollback is not discarded, only withheld from this view: leaving the alt screen
+         * makes it worth replaying again, and any later attach gets it.
+         */
+        const replay = existing.altScreen ? '' : existing.scrollback;
+        /*
+         * The session was left with no views at all, so this view is a REBUILD (every tab switch
+         * unmounts its panels). Force the redraw here rather than letting the view ask for it in a
+         * second round-trip: same single nudge, one less hop, and the view is told not to ask again.
+         *
+         * A same-size resize is NOT used for this. It may never reach the program at all — a window
+         * change that changes nothing is entitled to be ignored — and a redraw that sometimes does
+         * not happen is worse than one that always costs a nudge.
+         */
+        let redrawn = false;
+        if (existing.gridStale) {
+          existing.gridStale = false;
+          this.repaintSession(existing);
+          redrawn = true;
+        }
+        return {
+          status: 'running',
+          scrollback: replay,
+          grid: existing.grid,
+          redrawn,
+          altScreen: existing.altScreen,
+        };
       }
       this.terminate(existing);
     }
@@ -391,6 +457,8 @@ export class TerminalService {
       views: new Map([[viewId, { cols: params.cols, rows: params.rows }]]),
       grid: { cols: startCols, rows: startRows },
       scrollback: '',
+      altScreen: false,
+      gridStale: false,
       status: 'running',
       userKilled: false,
       meta: params.meta,
@@ -410,7 +478,8 @@ export class TerminalService {
 
     session.disposers.push(
       host.onData(handle, (chunk) => {
-        session.scrollback = (session.scrollback + chunk).slice(-MAX_SCROLLBACK);
+        session.scrollback = appendScrollback(session.scrollback, chunk, MAX_SCROLLBACK);
+        session.altScreen = trackAltScreen(session.altScreen, chunk);
         this.events.publishOutput(panelId, chunk);
         if (startupCommandPending) {
           startupCommandPending = false;
@@ -478,6 +547,95 @@ export class TerminalService {
   }
 
   /**
+   * Force the program running in a terminal to redraw its whole screen (028, #162/#163).
+   *
+   * An inactive tab is not hidden — its panels are unmounted — so a returning tab REBUILDS its
+   * terminal and reconstructs the screen from the replayed scrollback tail. For a full-screen
+   * program that reconstruction cannot be right: the program paints absolutely, its own state is the
+   * only authority for what the screen says, and it redraws when the window changes and at no other
+   * time. That is why a divider drag cures the corruption instantly, and why repainting xterm's
+   * buffer — which is what is wrong — never does.
+   *
+   * So a repaint is a grid NUDGE: resize away, resize back. The program receives two window-change
+   * signals and redraws in full at the size it already had.
+   *
+   * ROWS, not columns: a column change makes a shell REFLOW its wrapped lines, which is visible
+   * churn on every tab switch; a row change reflows nothing on the normal buffer, and a full-screen
+   * program repaints wholesale either way.
+   *
+   * `session.grid` is deliberately NOT touched and NO grid notification is published — no view's
+   * size actually moved, and telling the views otherwise would make every xterm resize twice for
+   * nothing. Nothing is written to the pty: a redraw is never `Ctrl+L` or any other keystroke.
+   */
+  private repaint(rawParams: unknown): TerminalOkResult {
+    const params = asObject(rawParams) as unknown as TerminalRepaintParams;
+    const session = this.sessions.get(params.panelId);
+    // A repaint is best-effort by nature — an unknown panel or a session that has exited is simply
+    // nothing to redraw, never an error the user must act on.
+    if (!session || session.status !== 'running') return { ok: true };
+    // A repaint already in flight for this session: do nothing. Coalescing is not an optimisation
+    // here, it is correctness — see the restore delay below. Three rapid Ctrl+F5 presses must not
+    // become six interleaved resizes.
+    this.repaintSession(session);
+    return { ok: true };
+  }
+
+  /**
+   * The nudge itself, shared by `terminal.repaint` and the rebuild path in `attach` so there is one
+   * place for it to be correct.
+   */
+  private repaintSession(session: Session): void {
+    if (session.status !== 'running') return;
+    /*
+     * ONLY on the alternate screen. This was measured the hard way.
+     *
+     * The nudge asks a program to repaint by changing its window size, which is the only way to make
+     * a full-screen program redraw — it owns every cell, and nothing else can ask. On the NORMAL
+     * screen there is no such program: the buffer IS the content, and Windows reflows a console
+     * buffer on resize. Measured at a PowerShell and a cmd prompt with 120 lines of output, one
+     * Ctrl+F5 left a single row, and everything typed afterwards rendered split across the screen
+     * until `clear`. That is a redraw destroying exactly what it was asked to redraw.
+     *
+     * The normal screen needs nothing from the pty anyway: its content is in the view's own buffer,
+     * so a redraw there is a client-side repaint (see the redraw action in the renderer).
+     */
+    if (!session.altScreen) return;
+    if (this.repaintTimers.has(session.panelId)) return;
+    const { cols, rows } = session.grid;
+    const nudged = Math.max(MIN_GRID, rows - 1);
+    if (nudged === rows) return; // already at the floor — a nudge would be a no-op
+    try {
+      session.host.resize(session.handle, cols, nudged);
+    } catch {
+      return; // best-effort — the process may already be gone
+    }
+    /*
+     * Restore on a LATER tick, not this one.
+     *
+     * Both resizes in the same tick is what the first cut of this did, and it corrupted the very
+     * screens it was meant to repair: ConPTY had not finished repainting at the intermediate size
+     * before the second resize arrived, and the half-finished repaint left a row filled with one
+     * repeated character. Caught by the redraw action's own E2E under parallel load, where three
+     * rapid presses became six racing resizes.
+     *
+     * The delay gives the program time to act on the first window change before the second. It is
+     * deliberately short — the intermediate size is one row smaller, which is imperceptible — and
+     * paired with the in-flight guard above so repeats queue behind it rather than pile on.
+     */
+    const timer = setTimeout(() => {
+      this.repaintTimers.delete(session.panelId);
+      if (session.status !== 'running') return;
+      try {
+        session.host.resize(session.handle, session.grid.cols, session.grid.rows);
+      } catch {
+        /* best-effort — the process may already be gone */
+      }
+    }, REPAINT_RESTORE_MS);
+    timer.unref?.(); // never keep the daemon alive for a repaint
+    this.repaintTimers.set(session.panelId, timer);
+  }
+
+  /**
    * A view of a panel is going away (008 FR-007/FR-010). Remove it from the session's
    * grid set and recompute across the survivors. A detach is NOT a kill: the session is
    * terminated ONLY when its LAST view goes AND the panel is sub-workspace-owned
@@ -494,6 +652,10 @@ export class TerminalService {
       this.recomputeGrid(session);
       return { ok: true };
     }
+    // Nothing is presenting this session any more. Whatever the program has on screen is now
+    // unobserved, and the next view to arrive will have been built from scratch — so the grid it
+    // rejoins at must be pushed as a real window change even if the number is unchanged.
+    session.gridStale = true;
     // Last view gone. Terminate only a sub-workspace-owned session (008 FR-007).
     if (session.rootless && session.status === 'running') {
       this.terminate(session);

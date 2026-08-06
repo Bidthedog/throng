@@ -316,6 +316,27 @@ async function createMainWindow(
     },
   });
   wireWindowMaximizeEvents(window);
+  /*
+   * DevTools, in a DEV instance only (028 follow-up).
+   *
+   * throng draws its own title bar, so there is no View menu and no F12 — which left a developer
+   * running from source with no way to inspect the renderer at all. That turned every diagnostic
+   * question into "paste this into DevTools" / "I can't", and a defect that reproduces only on one
+   * machine cannot be diagnosed without reading state on that machine.
+   *
+   * Guarded by `isDevInstance`, so a packaged build is unchanged.
+   */
+  if (isDevInstance) {
+    window.webContents.on('before-input-event', (event, input) => {
+      const toggle =
+        input.key === 'F12' ||
+        (input.control && input.shift && input.key.toLowerCase() === 'i');
+      if (input.type !== 'keyDown' || !toggle) return;
+      event.preventDefault();
+      if (window.webContents.isDevToolsOpened()) window.webContents.closeDevTools();
+      else window.webContents.openDevTools({ mode: 'detach' });
+    });
+  }
   denyRendererWindows(window.webContents); // 024 US7: no in-app browser windows (FR-019b)
   // If preferences is open (app-modal), a window created afterwards must also be
   // non-interactive so the prefs window stays the only interactive surface (FR-013).

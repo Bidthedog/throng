@@ -11,6 +11,7 @@ import {
   effectiveActivePanelId,
   formatDroppedPaths,
   terminalLinkTarget,
+  firstBinding,
   resolveAction,
   resolveColour,
   zoomFactor,
@@ -34,6 +35,7 @@ import {
   useTerminalCommand,
 } from './command-store.js';
 import { peekTerminalCwd, useTerminalCwd } from './cwd-store.js';
+import { requestRedraw } from './redraw.js';
 import { useActiveTheme, useKeybindings, useAppSettings } from '../config/config-store.js';
 import { TerminalStatusBar } from './terminal-status-bar.js';
 import {
@@ -150,7 +152,7 @@ export function TerminalPanel({
   // (FR-017), and so keys like Escape reach the program whenever no find bar is up.
   const keybindings = useKeybindings();
   const reserveKey = useCallback(
-    (e: KeyboardEvent) =>
+    (e: KeyboardEvent, programOwnsKeyboard: boolean) =>
       reservedByTerminal(
         // The TERMINAL scope, by construction: this reservation runs inside a terminal panel's
         // own key handler. Resolving scope-blind here would let an editor-only command claim a
@@ -161,6 +163,7 @@ export function TerminalPanel({
           'terminal',
         ),
         getFindState().panelId === panel.id,
+        programOwnsKeyboard,
       ),
     [keybindings, panel.id],
   );
@@ -230,9 +233,19 @@ export function TerminalPanel({
           // the menu can never drift from the keyboard path.
           onClick: () => apiRef.current?.paste(),
         },
+        { separator: true },
+        {
+          // 028 (issue 163) — the deliberate version of the divider nudge users discovered by
+          // accident. It asks the running program to redraw: no content, scrollback, selection,
+          // cursor, focus or layout changes, and nothing is typed at the shell.
+          label: 'Refresh / redraw terminal',
+          testId: 'menu-item-Refresh / redraw terminal',
+          shortcut: firstBinding(keybindings, 'terminal.redraw'),
+          onClick: () => requestRedraw(panel.id, 'manual'),
+        },
       ]);
     },
-    [openMenu, panel.id],
+    [openMenu, panel.id, keybindings],
   );
 
   useEffect(() => {

@@ -23,6 +23,8 @@ import { useConfirm } from '../confirm-dialog.js';
 import { useNotify } from '../common/notification.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
+import { requestRedraw } from '../terminal/redraw.js';
+import { focusTerminal } from '../terminal/focus-registry.js';
 import { Icon } from '../common/icon.js';
 import { panelHasLiveTerminal, panelHasRunningSubprocess } from './subprocess.js';
 import { useCapabilities } from '../panel-type/use-capabilities.js';
@@ -387,6 +389,20 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         ws.setActivePanel(tabId, panel.id);
         setActivePane('workspace'); // a workspace Panel is now active (gates Ctrl+S)
         if (panel.kind === 'editor') setLastActiveEditor(tabId, panel.id); // FR-010
+        /*
+         * 028 (issue 200) — move focus into the terminal NOW, in the pointer-down handler itself.
+         *
+         * The reported defect is that clicking into an idle terminal and typing immediately loses
+         * the first character: the shell receives `it status` for a typed `git status`. Focus used
+         * to arrive by two later routes — a mount-time call, and one after the async attach resolves
+         * — so a key pressed in the same beat as the click reached document.body instead of xterm's
+         * hidden textarea, and was simply gone. Nothing downstream can recover it, because it never
+         * became terminal input at all.
+         *
+         * Pointer-down is the earliest moment the intent is known, and this call is synchronous, so
+         * the textarea holds focus before the keydown that follows the click can be dispatched.
+         */
+        if (panel.kind === 'terminal') focusTerminal(panel.id);
       }}
       // The dominant project/owner colour marks the active panel only while the
       // window is foreground (Principle VI); when the window is background the
@@ -556,6 +572,26 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                         },
                       ]
                     : []),
+                ]
+              : []),
+            /*
+             * 028 (issue 163) — Terminal Panels: the deliberate version of the divider nudge users
+             * discovered by accident. Present on BOTH the panel header menu (here) and the
+             * terminal's own right-click menu, under the same name, because a user hunting for it
+             * will open whichever menu is nearest.
+             *
+             * It asks the running program to redraw. Nothing about the terminal's content,
+             * scrollback, selection, cursor, focus or the layout changes, and nothing is typed at
+             * the shell.
+             */
+            ...(panel.kind === 'terminal'
+              ? [
+                  {
+                    label: 'Refresh / redraw terminal',
+                    icon: 'retry' as const,
+                    shortcut: firstBinding(keybindings, 'terminal.redraw'),
+                    onClick: () => requestRedraw(panel.id, 'manual'),
+                  },
                 ]
               : []),
             {

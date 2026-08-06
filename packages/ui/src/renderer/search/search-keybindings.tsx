@@ -20,6 +20,7 @@ import {
 } from '@throng/core';
 import { scopeFromKind } from '../keybindings/scope.js';
 import { useKeybindings } from '../config/config-store.js';
+import { requestRedraw } from '../terminal/redraw.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { getActivePane } from '../workspace/active-pane.js';
 import { getPanelSearch } from './search-controller.js';
@@ -51,6 +52,7 @@ const HANDLED = new Set<ActionId>([
   'terminal.scrollPageDown',
   'terminal.scrollToTop',
   'terminal.scrollToBottom',
+  'terminal.redraw',
 ]);
 
 export function SearchKeybindings(): null {
@@ -84,6 +86,20 @@ export function SearchKeybindings(): null {
       if (!action || !HANDLED.has(action)) return;
       // Panel commands only apply while the workspace (not the file tree) is active.
       if (getActivePane() !== 'workspace') return;
+      /*
+       * 028 (issue 163) — Ctrl+F5 redraws the FOCUSED terminal, and only that one (FR-049a).
+       *
+       * Handled here, ahead of the search-controller lookup below, because a redraw has nothing to
+       * do with find: making it wait on a controller would silently disable the chord for any
+       * terminal whose search registration had not landed yet — exactly the kind of "works most of
+       * the time" the rest of this feature exists to remove.
+       */
+      if (action === 'terminal.redraw') {
+        if (activeKind !== 'terminal' || !activePanelId) return;
+        e.preventDefault();
+        requestRedraw(activePanelId, 'manual');
+        return;
+      }
       // PanelKind is an open string (custom panel kinds exist), so a bare `!==` guard cannot
       // narrow it to the two kinds the find/replace bar serves. Capture the membership as a
       // value TypeScript can carry into openFind/openFindOn (search-store's FindPanelKind).

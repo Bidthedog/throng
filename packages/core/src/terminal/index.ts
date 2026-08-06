@@ -48,9 +48,11 @@ export { canRunAsAdmin, shouldRespawnDaemonElevated, shouldDeElevate } from './e
 export {
   KITTY_DISAMBIGUATE,
   WIN32_INPUT_MODE,
+  BRACKETED_PASTE_MODE,
   createKittyKeyboardState,
   kittyKeyboardActive,
   win32InputActive,
+  applicationReadingInput,
   applyDecPrivateMode,
   kittySet,
   kittyPush,
@@ -76,3 +78,14 @@ export {
   type CaptureReason,
 } from './command-capture.js';
 export { resolveStartDirectory } from './start-directory.js';
+export { appendScrollback } from './scrollback-tail.js';
+export {
+  MOUSE_REPORTING_MODES,
+  createMouseReportingState,
+  decideWheel,
+  type MouseReportingState,
+  type WheelContext,
+  type WheelRoute,
+} from './wheel-decision.js';
+export { trackAltScreen } from './alt-screen.js';
+export { encodeModifiedKey, kittyReportsAllKeys, KITTY_REPORT_ALL_KEYS } from './kitty-keyboard.js';

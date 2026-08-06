@@ -4,7 +4,13 @@ import {
   createKittyKeyboardState,
   applyKittyCsi,
   applyDecPrivateMode,
+  applicationReadingInput,
+  createMouseReportingState,
+  kittyKeyboardActive,
+  win32InputActive,
+  decideWheel,
   encodeEnterKey,
+  encodeModifiedKey,
   type KittyCsiPrefix,
 } from '@throng/core';
 import { Terminal } from '@xterm/xterm';
@@ -36,6 +42,19 @@ import { reportTerminalCwd } from './cwd-store.js';
 import { setTerminalTitle, clearTerminalTitle } from './title-store.js';
 import { TerminalOutputGate } from './output-gate.js';
 import { consumeExplicitRetype } from './explicit-retype.js';
+import { clearKeyboardMode, peekKeyboardMode, saveKeyboardMode } from './keyboard-mode-store.js';
+import {
+  countInputAcked,
+  countInputWritten,
+  countReconcile,
+  forgetDiagnostics,
+  recordKeyDecision,
+  recordKeyBytes,
+  recordWrite,
+  recordModeEvent,
+} from './diagnostics.js';
+import { requestRedraw, registerTerminalRefresh } from './redraw.js';
+import { registerTerminalFocus, unregisterTerminalFocus } from './focus-registry.js';
 
 /**
  * How long a link `leave` waits before the hover tip is actually hidden (024 US7 follow-up). Long
@@ -140,7 +159,7 @@ export interface UseTerminalOptions {
    * the shell. xterm would otherwise handle these itself and write them to the pty;
    * reserving them is what keeps them out of the running program (FR-010 / FR-014).
    */
-  reserveKey?: (e: KeyboardEvent) => boolean;
+  reserveKey?: (e: KeyboardEvent, programOwnsKeyboard: boolean) => boolean;
   /**
    * Whether this terminal is the ACTIVE panel of the active tab, read at focus time (issue 144).
    *
@@ -394,6 +413,8 @@ export function useTerminal(opts: UseTerminalOptions): void {
       }
     };
 
+    // The imperative handle, also published to the focus registry so the panel wrapper can move
+    // focus into this terminal synchronously on pointer-down (028, issue 200).
     if (opts.apiRef) {
       opts.apiRef.current = {
         getSelection: () => term.getSelection(),
@@ -405,7 +426,17 @@ export function useTerminal(opts: UseTerminalOptions): void {
         },
         getHoveredLink: () => hoveredLink,
       };
+      registerTerminalFocus(panelId, opts.apiRef.current);
     }
+
+    /*
+     * A redraw's client-side half (028, #163). The daemon's nudge only applies to a program on the
+     * alternate screen; on the normal buffer the content is already here, so repainting the view IS
+     * the redraw — and it is the only safe one, since resizing a console reflows its buffer.
+     */
+    const unregisterRefresh = registerTerminalRefresh(panelId, () => {
+      term.refresh(0, term.rows - 1);
+    });
 
     // xterm 6.0 binds its own `paste` handler to BOTH the hidden textarea and its parent element
     // (`this.element`); the textarea is a descendant, so a single native paste bubbles through both
@@ -437,7 +468,21 @@ export function useTerminal(opts: UseTerminalOptions): void {
     // active, as a win32-input key event while win32-input-mode is (PowerShell/cmd), else as a
     // bare \n. Maintained by the CSI handlers registered below and read by the key handler; both
     // close over this one `let`.
-    let kitty = createKittyKeyboardState();
+    /*
+     * Seeded from what THIS PANEL's program already negotiated, not from zero (028 follow-up).
+     *
+     * An inactive tab is unmounted, so a tab switch rebuilds this view — and the program will not
+     * re-negotiate, because from its side nothing happened. Starting fresh here is what made
+     * Ctrl+Backspace and Ctrl+End work exactly once, in whichever terminal had not been switched
+     * away from yet.
+     */
+    let kitty = peekKeyboardMode(panelId) ?? createKittyKeyboardState();
+    /** Keep the panel's copy in step whenever the program changes what it wants. */
+    const rememberKitty = (): void => saveKeyboardMode(panelId, kitty);
+    // 028 (#187): which DEC mouse-reporting modes the program has enabled. Tracked at the same
+    // private-mode snoop that already drives the win32-input gate, because the wheel decision below
+    // must not steal a gesture from a program that genuinely claimed the mouse.
+    const mouseReporting = createMouseReportingState();
 
     // The key handler does three things, in order:
     //   1. Hand throng's own chords (find, scrollback nav) back to the app — returning false
@@ -455,7 +500,79 @@ export function useTerminal(opts: UseTerminalOptions): void {
     // lives. A captured copy would keep reserving yesterday's chord and leak today's to the shell.
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true; // keyup/keypress: nothing to reserve or re-encode
-      if (reserveKeyRef.current?.(e) === true) return false; // a throng chord — keep it off the pty
+      /*
+       * The running program owns the keyboard when it negotiated enhanced reporting, when it is
+       * READING INPUT ITSELF, or when it is painting the alternate screen (where there is no
+       * scrollback for throng's chords to move).
+       *
+       * The middle case was missing, and it is the common one: Claude Code renders INLINE — it never
+       * takes the alternate screen — so a full-screen-looking program sat on the normal buffer while
+       * throng went on claiming Ctrl+End and Ctrl+Home for scrollback, out of a program that binds
+       * them itself. Bracketed paste is what says an application is reading; see BRACKETED_PASTE_MODE.
+       */
+      const altBuffer = term.buffer.active.type === 'alternate';
+      /*
+       * "Reading input" is NOT the same as "owns the scrollback chords", and conflating them was a
+       * regression: bash enables bracketed paste at its ordinary prompt, so a bare git-bash terminal
+       * started claiming to own the keyboard and Ctrl+Home stopped scrolling — measured, on git-bash
+       * only, because it is the shell whose line editor announces itself.
+       *
+       * The honest carve-out is the ALTERNATE SCREEN: there is no scrollback there, so Ctrl+Home and
+       * Ctrl+End have nothing to move and belong to the program (vim, less, claude's agent view).
+       * Everywhere else — including a program rendering INLINE, as Claude Code does — the buffer is
+       * throng's and so are the chords that move it.
+       */
+      const programOwnsKeyboard = kittyKeyboardActive(kitty) || altBuffer;
+      const reserved = reserveKeyRef.current?.(e, programOwnsKeyboard) === true;
+      // Always on, bounded, and read only by diagnostics: what throng believed when the key was
+      // pressed. Three stand-in programs failed to reproduce a defect a user reproduces every time,
+      // so the decision inputs are recorded where it actually happens.
+      recordKeyDecision(panelId, {
+        chord: `${e.ctrlKey ? 'Ctrl+' : ''}${e.shiftKey ? 'Shift+' : ''}${e.altKey ? 'Alt+' : ''}${e.key}`,
+        reserved,
+        kitty: kittyKeyboardActive(kitty),
+        win32: win32InputActive(kitty),
+        app: applicationReadingInput(kitty),
+        altBuffer,
+        programOwnsKeyboard,
+      });
+      if (reserved) {
+        /*
+         * A throng chord — keep it off the pty, AND cancel the browser's own default for it.
+         *
+         * Returning false stops xterm processing but does NOT preventDefault, which was harmless
+         * while every reserved chord was one Chromium ignores. `Ctrl+F5` is not: it is Chromium's
+         * HARD RELOAD accelerator, so leaving the default in place lets a redraw request tear down
+         * and rebuild the whole renderer — a far more violent thing than the redraw it was asking
+         * for, and one that lands mid-session in a live terminal.
+         */
+        e.preventDefault();
+        return false;
+      }
+      /*
+       * Plain PageUp / PageDown scroll THIS terminal's viewport when nothing is reading input.
+       *
+       * They used to be transmitted as `CSI 5~` / `CSI 6~` to whatever was on the other end, which at
+       * a PowerShell prompt is PSReadLine — and PSReadLine answers PageDown by repainting over the
+       * screen, measured as 120 lines of output collapsing to a bare prompt with the rest of the
+       * session unreachable until `clear`. Windows Terminal does not do this: with no application
+       * reading, the pager keys belong to the TERMINAL's scrollback, which is also what a user
+       * pressing them means.
+       *
+       * When a program IS reading (claude, an editor, anything on the alternate screen) they are its
+       * keys and go straight through, because there the scrollback is not what the user is looking at.
+       */
+      if (
+        (e.key === 'PageUp' || e.key === 'PageDown') &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !e.shiftKey &&
+        !programOwnsKeyboard
+      ) {
+        e.preventDefault();
+        term.scrollPages(e.key === 'PageUp' ? -1 : 1);
+        return false;
+      }
       // Paste (#142): Ctrl+V / Shift+Insert. xterm 6.0 has no key-driven paste (it pastes only from a
       // DOM `paste` event, which Chromium fires from Ctrl+V only with an Edit-menu role throng does
       // not ship), so Ctrl+V did nothing. Do the paste ourselves — exactly once — and keep the chord
@@ -466,11 +583,24 @@ export function useTerminal(opts: UseTerminalOptions): void {
         void pasteFromClipboard();
         return false;
       }
-      const seq = encodeEnterKey(
-        { key: e.key, shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey, meta: e.metaKey },
-        kitty,
-      );
+      const chord = {
+        key: e.key,
+        shift: e.shiftKey,
+        alt: e.altKey,
+        ctrl: e.ctrlKey,
+        meta: e.metaKey,
+      };
+      /*
+       * Enter first (#90), then the other modified keys throng re-encodes (028 follow-up:
+       * Ctrl+Backspace and Ctrl+Arrow did nothing in throng but worked in Windows Terminal).
+       *
+       * Both answer the same question — what does THIS program expect for this chord — and both
+       * return null when the answer is "whatever xterm already sends".
+       */
+      const seq =
+        encodeEnterKey(chord, kitty) ?? encodeModifiedKey(chord, kitty);
       if (seq !== null) {
+        recordKeyBytes(panelId, seq); // throng re-encoded it; onData will never see this one
         // Suppress the browser's OWN default for this key BEFORE handing back. Returning false
         // stops xterm processing but does NOT preventDefault, and Shift+Enter's default action in
         // xterm's hidden input <textarea> is to insert a newline — which xterm would then transmit
@@ -480,6 +610,39 @@ export function useTerminal(opts: UseTerminalOptions): void {
         return false; // …so xterm must not ALSO send its \r
       }
       return true;
+    });
+
+    /*
+     * 028 (#187) — where a wheel notch goes.
+     *
+     * The reported bug is that the wheel does NOTHING over a Claude Code session. It is not a lost
+     * event: xterm scrolls the viewport on the normal buffer, the alternate screen has no scrollback
+     * to scroll, and xterm only forwards notches as arrow keys once the program enables DEC private
+     * mode 1007 — which Claude Code does not. So the gesture arrives and is silently dropped.
+     *
+     * Decide explicitly instead (FR-035/035a). Returning false tells xterm not to handle the event.
+     * The one dangerous route is `arrows`, which must NEVER fire on the normal buffer: a wheel that
+     * synthesised keys at a shell prompt would type into the user's command line (FR-035c). That is
+     * why the decision is a pure function pinned by unit tests rather than an inline condition.
+     */
+    term.attachCustomWheelEventHandler((e) => {
+      const route = decideWheel({
+        altBuffer: term.buffer.active.type === 'alternate',
+        mouseReporting: mouseReporting.isOn(),
+        ctrlKey: e.ctrlKey || e.metaKey,
+      });
+      if (route === 'arrows') {
+        // Three presses per notch — the conventional scroll step, and what xterm's own alternate
+        // scroll sends. The bytes are exactly what a real arrow key produces, so the program cannot
+        // tell this from a keyboard (FR-035c).
+        const key = e.deltaY < 0 ? '[A' : '[B';
+        void bridge.write(panelId, key.repeat(3));
+        e.preventDefault();
+        return false;
+      }
+      // zoom → the window-level zoom binding owns it; program → xterm forwards it as a mouse event;
+      // viewport → xterm scrolls. All three are xterm's or the app's existing behaviour, untouched.
+      return route !== 'zoom';
     });
 
     // Kitty keyboard protocol negotiation (#90). The program turns enhanced key reporting on
@@ -494,7 +657,10 @@ export function useTerminal(opts: UseTerminalOptions): void {
     const onKittyCsi = (prefix: KittyCsiPrefix) => (params: (number | number[])[]): boolean => {
       const { state, reply } = applyKittyCsi(kitty, prefix, flatten(params));
       kitty = state;
-      if (reply !== undefined) void bridge.write(panelId, reply);
+      rememberKitty();
+      if (reply !== undefined) {
+        void bridge.write(panelId, reply);
+      }
       return true;
     };
     for (const prefix of ['?', '=', '>', '<'] as const) {
@@ -511,11 +677,53 @@ export function useTerminal(opts: UseTerminalOptions): void {
     const onDecPrivateMode =
       (enable: boolean) =>
       (params: (number | number[])[]): boolean => {
-        kitty = applyDecPrivateMode(kitty, flatten(params), enable);
+        const modes = flatten(params);
+        recordModeEvent(panelId, modes, enable);
+        /*
+         * A program taking the ALTERNATE SCREEN is a new program, and it has negotiated nothing yet.
+         *
+         * Whatever the shell agreed with throng belongs to the shell. cmd and PSReadLine enable
+         * win32-input-mode to read their prompt, so by the time `claude` starts, throng believes the
+         * terminal wants key RECORDS — and then re-encodes Shift+Enter, and previously
+         * Ctrl+Backspace, into records that a program reading raw VT cannot act on. The keys that
+         * kept working were precisely the ones throng passes through untouched.
+         *
+         * Reset on entry, before the new program's own negotiation is applied: anything it wants, it
+         * will ask for, and what it does not ask for it should not receive.
+         */
+        /*
+         * Reset on a TRANSITION, never on a repetition.
+         *
+         * Programs re-assert their setup constantly — claude re-sends its screen and mouse modes
+         * after every resize, and throng nudges the grid on attach, so a rebuilt view sees the whole
+         * negotiation again within milliseconds. Resetting on each of those threw away the state the
+         * panel store had just restored, and Ctrl+Backspace reverted to its unnegotiated encoding on
+         * a tab switch. Two transitions genuinely mean "a new program":
+         *
+         *   - bracketed paste going OFF→ON: an application has started reading input;
+         *   - the alternate screen being entered from the normal one (for programs that never enable
+         *     bracketed paste), excluding the switch throng writes itself to restore a view.
+         */
+        /*
+         * The console mode is NOT throng's to clear.
+         *
+         * This used to blank win32-input-mode whenever an application started, on the reasoning that
+         * the shell's negotiation should not leak. But 9001 belongs to the CONSOLE, and the console
+         * does not turn it off just because a program started — captured side by side, Windows
+         * Terminal answers `CSI ? 9001 ; 1 $ y` (set) in exactly the state where throng answered `2`.
+         * Clearing it made throng lie about itself to any program that asked.
+         *
+         * Who is READING is a different question, and the encoders answer it themselves from
+         * bracketed paste. Tracking stays faithful; the decisions stay informed.
+         */
+        kitty = applyDecPrivateMode(kitty, modes, enable);
+        rememberKitty();
+        mouseReporting.apply(modes, enable); // 028 (issue 187) — same snoop, second question
         return false; // observe only — never claim the sequence
       };
     term.parser.registerCsiHandler({ prefix: '?', final: 'h' }, onDecPrivateMode(true));
     term.parser.registerCsiHandler({ prefix: '?', final: 'l' }, onDecPrivateMode(false));
+
 
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -696,11 +904,66 @@ export function useTerminal(opts: UseTerminalOptions): void {
       conformGrid(e.cols, e.rows);
     });
     const offExit = bridge.onExit((e) => {
-      if (e.panelId === panelId && !disposed) onExitRef.current({ code: e.code, unexpected: e.unexpected });
+      if (e.panelId !== panelId) return;
+      // The program is gone: forget what IT negotiated, so the next one to run in this panel does
+      // not inherit a protocol it never asked for (the same bug, pointing the other way).
+      clearKeyboardMode(panelId);
+      if (!disposed) onExitRef.current({ code: e.code, unexpected: e.unexpected });
     });
+    /*
+     * Focus reports are only honest when focus actually moved (028 follow-up).
+     *
+     * With focus reporting on (DEC 1004), a terminal tells the program when it gains or loses focus:
+     * `CSI I` / `CSI O`. Claude Code re-asserts the mode on every screen transition, and xterm answers
+     * each time with the CURRENT state — so a report was landing after keystrokes during which focus
+     * never moved. Measured: a DOM focus listener saw nothing while `\x1b[I` went out after every
+     * arrow press and every Escape.
+     *
+     * That is not cosmetic. A lone ESC is ambiguous — it is both the Escape key and the first byte of
+     * every sequence — so a program waits to see what follows before deciding. Handing it
+     * `ESC` then `ESC [ I` turns the user's Escape into something else, which is the reported
+     * "Escape enters the session instead of leaving it", and intermittent because it depends on what
+     * the program was doing.
+     *
+     * So: a report is transmitted only if a real focus change produced it. The listeners sit on the
+     * container in the CAPTURE phase, which runs before xterm's own handlers on the textarea, so the
+     * flag is set by the time xterm asks to send.
+     */
+    let realFocusChange = false;
+    const noteFocusChange = (): void => {
+      realFocusChange = true;
+    };
+    container.addEventListener('focus', noteFocusChange, true);
+    container.addEventListener('blur', noteFocusChange, true);
+
     term.onData((data) => {
-      void bridge.write(panelId, data);
+      // `CSI I` / `CSI O` — a focus report. Send it only when focus really moved.
+      if (data === '[I' || data === '[O') {
+        if (!realFocusChange) return;
+        realFocusChange = false;
+      }
+      // 028 (#200) — count what left the renderer and what the daemon acknowledged. The reported
+      // defect is a character the SHELL never received, which is invisible from the rendered view:
+      // a test can only tell "typed" from "arrived" by counting both ends (FR-009b/FR-023).
+      countInputWritten(panelId);
+      recordKeyBytes(panelId, data);
+      recordWrite(panelId, data); // what the PROGRAM got, next to what throng decided
+      void bridge
+        .write(panelId, data)
+        .then(() => countInputAcked(panelId, true))
+        .catch(() => countInputAcked(panelId, false));
     });
+
+    /*
+     * A deliberate re-type COLD-STARTS a different program (008 FR-002/FR-007), so whatever the
+     * previous one negotiated about the keyboard dies with it. Consumed before the attach so the
+     * decision and the state change happen together.
+     */
+    const explicitRetype = consumeExplicitRetype(panelId);
+    if (explicitRetype) {
+      clearKeyboardMode(panelId);
+      kitty = createKittyKeyboardState();
+    }
 
     void bridge
       .attach({
@@ -712,7 +975,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
         // Confirm button (008 FR-002/FR-007)? Consumed one-shot: an explicit re-type
         // terminates any running session and cold-starts the chosen flavour; a mirror or
         // re-render leaves it false and reuses the running session.
-        explicit: consumeExplicitRetype(panelId),
+        explicit: explicitRetype,
         rootless: rootless === true,
         runAsAdmin: runAsAdmin === true,
         flavourId,
@@ -741,6 +1004,31 @@ export function useTerminal(opts: UseTerminalOptions): void {
         // window mirroring a smaller one) renders the replayed screen at the right size
         // instead of offset (008 FR-009). The grid is absent only if there is no session.
         if (res.grid) conformGrid(res.grid.cols, res.grid.rows);
+        /*
+         * Match the SCREEN the program is on before anything is written (028 follow-up).
+         *
+         * A rebuilt view used to learn this from the replayed tail, which carried the switch
+         * sequence. That replay is suppressed for exactly this case now — it was a visible flash of
+         * stale content — so the view was left believing it was on the normal buffer while the
+         * program painted the alternate one. Everything keyed off the buffer type then drew the
+         * wrong conclusion: the scrollback chords were reclaimed from a program that owns them
+         * (measured as Ctrl+End dying after a tab switch), and the wheel and clear-detection would
+         * have been wrong in the same way.
+         *
+         * Written as the switch sequence rather than set as a flag, so xterm's own state is right
+         * too — the buffer type is what the rest of this file already asks.
+         */
+        if (res.altScreen === true && term.buffer.active.type !== 'alternate') {
+          // Restoring the screen the program is on, for a view throng rebuilt. Nothing about the
+          // negotiation changes here: it belongs to the program, which is still the same one.
+          term.write('[?1049h');
+        }
+        // How many bytes of replayed tail this view painted (028 follow-up instrumentation). A
+        // replay is a visible full-screen paint, so it is one of the "flashes" a user counts on a
+        // tab switch — and for an alternate-screen program it is a paint of something that will be
+        // overwritten anyway. Recorded so a test can assert on it rather than on flicker.
+        (window as unknown as { __throngLastReplayBytes?: number }).__throngLastReplayBytes =
+          res.scrollback?.length ?? 0;
         if (res.scrollback) term.write(res.scrollback);
         // Scrollback is applied — open the gate and flush any live output that
         // arrived during the attach window, in order, after the backlog.
@@ -776,6 +1064,24 @@ export function useTerminal(opts: UseTerminalOptions): void {
           // background terminal in a multi-panel tab stole focus from the active panel on every switch.
           // Focus only when this terminal is still the active panel (issue 144).
           focusIfActive(term);
+          /*
+           * 028 (#162) — ask the program to redraw, now that this view has been rebuilt.
+           *
+           * An inactive tab is not hidden: its panels are UNMOUNTED (tab-group renders only the
+           * active tab's tree). So every tab switch disposes this xterm and builds a new one, and
+           * what we have just written into it is the daemon's replayed byte tail — which cannot
+           * represent a full-screen program's screen. The program paints absolutely and redraws only
+           * when the window changes, so without this it goes on sending deltas against a screen that
+           * was never drawn, and the user sees overlapping glyphs and wrong wrapping until they drag
+           * a divider. That drag is a grid change; this is the same signal, asked for deliberately.
+           *
+           * Only for a session that was ALREADY RUNNING when we attached: a cold start has painted
+           * nothing yet, and there is nothing to redraw.
+           */
+          // The daemon forces the redraw itself when this view is a REBUILD, and says so. Asking
+          // again would double a full-screen repaint the user sees as a flash.
+          if (res.grid && res.redrawn !== true) requestRedraw(panelId, 'attach');
+          else if (res.redrawn === true) countReconcile(panelId, 'attach');
         }
       })
       .catch((err: unknown) => {
@@ -828,20 +1134,20 @@ export function useTerminal(opts: UseTerminalOptions): void {
     // precisely the "the terminal stopped updating until I did something else" the timer exists to
     // prevent. The belt (setHovered ignoring a re-report of the link it is already showing) is what
     // actually fixed the flicker, and it needs no help.
-    const repaintTimer = setInterval(() => {
-      if (disposed || container.offsetParent === null) return;
-      try {
-        term.refresh(0, term.rows - 1);
-      } catch {
-        /* not measurable yet */
-      }
-    }, 2000);
+    /*
+     * The periodic repaint is GONE (028 follow-up, at the maintainer's call).
+     *
+     * It re-rendered the visible rows FROM THE BUFFER every few seconds, so it could never fix the
+     * corruption it was aimed at - when the buffer itself is wrong, painting it again paints the
+     * same wrong thing. The real cure is event-driven: a rebuilt view asks the program to redraw.
+     * What was left was a timer firing forever in every visible terminal, counted in the
+     * diagnostics as `backstop` and doing nothing anyone could point at.
+     */
 
     return () => {
       disposed = true;
       applyResizeRef.current = null;
       if (resizeTimer !== undefined) clearTimeout(resizeTimer);
-      clearInterval(repaintTimer);
       container.removeEventListener('paste', swallowNativePaste, true); // issue 142 paste seam
       // 024 US7 (#159 follow-up): drop the right-button guard and the hover tooltip element.
       container.removeEventListener('mousedown', swallowRightButton, true);
@@ -870,6 +1176,11 @@ export function useTerminal(opts: UseTerminalOptions): void {
         selection: term.getSelectionPosition() ?? undefined,
       });
       clearTerminalTitle(panelId); // US10 (#89): the header falls back to the panel name
+      forgetDiagnostics(panelId); // 028 FR-009 — counters are per live view, not a growing ledger
+      unregisterTerminalFocus(panelId);
+      unregisterRefresh();
+      container.removeEventListener('focus', noteFocusChange, true);
+      container.removeEventListener('blur', noteFocusChange, true);
       term.dispose();
       termRef.current = null;
       if (opts.apiRef) opts.apiRef.current = null;

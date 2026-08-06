@@ -61,6 +61,13 @@ export type ActionId =
   | 'terminal.scrollPageDown'
   | 'terminal.scrollToTop'
   | 'terminal.scrollToBottom'
+  /**
+   * 028 (#163) — redraw the focused terminal deliberately. The user's only cure for a mis-rendered
+   * terminal used to be dragging a panel divider a pixel or two: an accidental discovery, dependent
+   * on landing the drag precisely enough to change the character grid, and destructive to the layout
+   * they arranged. This is that nudge, asked for on purpose.
+   */
+  | 'terminal.redraw'
   // Editor text-editing commands (016, FR-017a/FR-025a). Live ONLY while an editor
   // panel is active — which is what lets `editor.cutLine` share Ctrl+X with the
   // Explorer's `file.cut` (their scopes are disjoint). Cut/Copy/Paste/Select All/
@@ -162,6 +169,9 @@ export const COMMAND_SCOPES: CommandScopes = {
   'terminal.scrollPageDown': TERMINAL_ONLY,
   'terminal.scrollToTop': TERMINAL_ONLY,
   'terminal.scrollToBottom': TERMINAL_ONLY,
+  // TERMINAL_ONLY, not PANELS: a redraw has no meaning in an editor or the file tree, and a chord
+  // throng consumes never reaches the shell — so the shadow is kept to the one surface that earns it.
+  'terminal.redraw': TERMINAL_ONLY,
   // The seven new editor commands (016). Editor-only is what makes Ctrl+X unambiguous.
   'editor.cutLine': EDITOR_ONLY,
   'editor.indentLines': EDITOR_ONLY,
@@ -249,6 +259,15 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'terminal.scrollPageDown': ['Shift+PageDown'],
     'terminal.scrollToTop': ['Ctrl+Home'],
     'terminal.scrollToBottom': ['Ctrl+End'],
+    /*
+     * Ctrl+F5 — "hard refresh" in every browser and Visual Studio, so users guess it.
+     *
+     * Bare F5 is deliberately NOT taken (FR-049d): terminal file managers bind the unmodified
+     * function keys heavily (F5 is copy in Far Manager), and swallowing it would remove a working
+     * key from them. Ctrl+F5 is far less trafficked, is not in the constitution's reserved tier, and
+     * is recorded as a shadowable exception (Principle IV) rather than taken silently.
+     */
+    'terminal.redraw': ['Ctrl+F5'],
     // Editor text editing (016). `Ctrl+X` coexists with `file.cut` — the scopes are disjoint,
     // and the scope-aware collision rule permits exactly this.
     'editor.cutLine': ['Ctrl+X'],

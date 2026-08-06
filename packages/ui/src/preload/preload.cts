@@ -324,6 +324,7 @@ contextBridge.exposeInMainWorld('throng', {
     // Not a kill — the daemon terminates only the last view of a sub-workspace panel.
     detach: (panelId: string, viewId?: string) =>
       ipcRenderer.invoke('throng:terminal:detach', panelId, viewId),
+    repaint: (panelId: string) => ipcRenderer.invoke('throng:terminal:repaint', panelId),
     kill: (panelId: string) => ipcRenderer.invoke('throng:terminal:kill', panelId),
     list: (projectId?: string) => ipcRenderer.invoke('throng:terminal:list', projectId),
     // Daemon capabilities (FR-025a): { elevated } — gates the "run as admin" control.
