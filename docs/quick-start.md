@@ -121,7 +121,14 @@ behind.
 
 Scroll the scrollback from the keyboard without touching the shell: **Shift+PageUp** /
 **Shift+PageDown** by page, **Ctrl+Shift+↑** / **Ctrl+Shift+↓** by line, **Ctrl+Home** /
-**Ctrl+End** to the ends.
+**Ctrl+End** to the ends. The **mouse wheel** scrolls the scrollback too — and over a full-screen
+program (a pager, a file manager, an agent session) it drives that program's own view instead,
+because there is no scrollback to move there.
+
+If a terminal ever looks wrong — smeared characters, lines wrapping in the wrong place — use
+**Refresh / redraw terminal**, on both the terminal's right-click menu and its panel header menu,
+or press **Ctrl+F5**. It asks the running program to redraw its screen: nothing is typed at the
+shell, no scrollback, selection or cursor position is lost, and the layout does not move.
 
 ## 4. Edit files
 
@@ -225,6 +232,7 @@ also the full list.
 | **Ctrl+S** / **Ctrl+Shift+S** / **Ctrl+Alt+S** | Save / Save All / Save As |
 | **F2**, **Delete**, **Ctrl+X/C/V** | Rename, delete, cut/copy/paste — **in the file tree** |
 | **Shift+PageUp/PageDown**, **Ctrl+Home/End** | Scroll a terminal's scrollback |
+| **Ctrl+F5** | Refresh / redraw the focused terminal |
 
 Focus and zoom are **per panel**: each terminal and editor zooms on its own, on top of the app-wide
 zoom, and the setting persists with your layout. Keyboard focus moves *into and out of* terminals
