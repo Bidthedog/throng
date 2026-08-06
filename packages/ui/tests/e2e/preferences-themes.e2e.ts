@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp } from './harness.js';
+import { runApp, cleanupTemp} from './harness.js';
 
 /**
  * The Themes tab — feature 007's base editor (activate, token edits apply + persist,
@@ -30,7 +30,7 @@ function freshCfgRoot(seedThemes: Record<string, unknown> = {}): string {
   return dir;
 }
 test.afterAll(() => {
-  for (const dir of cfgRoots.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
 
 function readTheme(cfgRoot: string, name: string): any {

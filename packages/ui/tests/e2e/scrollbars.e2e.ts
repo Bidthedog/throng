@@ -1,10 +1,10 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { expect, test } from '@playwright/test';
 
-import { createProject, firstPanelId, runApp } from './harness.js';
+import { createProject, firstPanelId, runApp, cleanupTemp} from './harness.js';
 
 /**
  * 018 / US3 — scrollbars are part of the theme (FR-009 … FR-012).
@@ -105,7 +105,7 @@ test('the terminal keeps its classic, non-overlay bar — MEASURED, not read fro
     // race from turning a green measurement red; the temp dir is under the OS temp root and is reaped
     // regardless. (retryDelay matches the other terminal-spawning suites, which clean up in 250ms steps.)
     try {
-      rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+      cleanupTemp(root);
     } catch {
       /* the OS will reap the temp dir; a locked handle here is not a product defect */
     }

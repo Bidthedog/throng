@@ -1,9 +1,9 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { addPanels, createProject, firstPanelId, runApp } from './harness.js';
+import { addPanels, createProject, firstPanelId, runApp, cleanupTemp} from './harness.js';
 
 // FR-026 (batch 2, clarified 2026-07-01): the destroy cascade is ONE-directional.
 // A Panel belongs to its project. Destroying it IN THE PROJECT removes it from the
@@ -138,6 +138,6 @@ test('destroying a mirrored TERMINAL Panel inside a sub-workspace keeps the sess
       await win.waitForTimeout(1200);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });

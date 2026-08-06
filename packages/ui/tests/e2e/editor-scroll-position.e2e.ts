@@ -2,11 +2,11 @@
  * US8 (#154) — "Save Document Scroll Position". With the pref OFF (default), opening a different
  * file in place resets scroll to the top; with it ON, reopening a file in place restores its scroll.
  */
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 import type { Page } from '@playwright/test';
 
 const longText = (marker: string): string =>
@@ -44,6 +44,6 @@ test('with the pref off (default), opening a different file in place scrolls to 
       await expect.poll(() => scrollTop(win)).toBeLessThan(5);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(root);
   }
 });

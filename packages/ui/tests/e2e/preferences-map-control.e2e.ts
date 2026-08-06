@@ -1,9 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp } from './harness.js';
+import { runApp, cleanupTemp} from './harness.js';
 
 /**
  * The keyed-table control (016, F5/FR-022/FR-022c · T076).
@@ -24,7 +24,7 @@ function freshCfgRoot(): string {
 }
 test.afterAll(() => {
   for (const dir of cfgRoots.splice(0)) {
-    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dir);
   }
 });
 
@@ -89,6 +89,14 @@ test('a row can be added, and a duplicate or invalid key is REFUSED with a reaso
         .poll(() => Object.keys(readSettings(cfgRoot)?.editor?.languageByExtension ?? {}))
         .toContain('.foo');
 
+      /*
+       * A successful add CLEARS the new-key input, and that clear is asynchronous. Typing the
+       * duplicate before it arrives means the clear wipes what was just typed, the click then adds
+       * an empty key, and no duplicate is ever attempted — so the error below never appears and the
+       * failure reads as "the product stopped refusing duplicates". Measured: 1 in 12 under eight
+       * CPU hogs. Waiting for the field to be empty is waiting for the add to have fully settled.
+       */
+      await expect(prefs.getByTestId('map-new-key-editor.languageByExtension')).toHaveValue('');
       // A duplicate is refused — two rows claiming one extension have no defined winner.
       await prefs.getByTestId('map-new-key-editor.languageByExtension').fill('.foo');
       await prefs.getByTestId('map-add-editor.languageByExtension').click();
@@ -135,9 +143,21 @@ test('reset CLEARS the extension map and REPOPULATES the indentation map', async
       await prefs.getByTestId('map-new-key-editor.languageByExtension').fill('.zig');
       await prefs.getByTestId('map-add-editor.languageByExtension').click();
       await prefs.getByTestId('map-remove-editor.indentByLanguage-go').click();
+      /*
+       * Wait for BOTH edits to have been written before resetting.
+       *
+       * Polling only for the `go` removal proves one of the two writes landed, not both. The adds
+       * are debounced, so a reset issued in the gap is followed by the still-pending `.zig` write —
+       * which lands AFTER the shipped defaults and puts the mapping back. The assertion below then
+       * reports `{".zig": "csharp"}` where it expected `{}`, blaming reset for a write that
+       * overtook it. Measured once in a full-suite run under six CPU hogs.
+       */
       await expect
-        .poll(() => readSettings(cfgRoot)?.editor?.indentByLanguage?.go)
-        .toBeUndefined();
+        .poll(() => {
+          const e = readSettings(cfgRoot)?.editor;
+          return `${e?.languageByExtension?.['.zig'] !== undefined},${e?.indentByLanguage?.go === undefined}`;
+        })
+        .toBe('true,true');
 
       // Reset the tab.
       await prefs.getByTestId('prefs-reset-current').click();

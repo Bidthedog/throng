@@ -1,9 +1,8 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, reloadWindow } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, reloadWindow, cleanupTemp} from './harness.js';
 
 // US10 (Delivery E): a project editor synced into a sub-workspace mirrors ONE
 // document across both windows — content typed in the main window appears in the
@@ -24,7 +23,6 @@ async function newEditor(win: Page): Promise<string> {
 }
 
 test('a synced project editor mirrors one document across both windows', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-swed-'));
   try {
     await runApp(async (app, win) => {
@@ -69,7 +67,7 @@ test('a synced project editor mirrors one document across both windows', async (
       await expect(childEditor.locator('.cm-content')).toContainText('MORE', { timeout: 10000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
@@ -85,7 +83,6 @@ test('a synced project editor mirrors one document across both windows', async (
  * FR-015c), and the language picker — all driven in the child.
  */
 test('cut-line, a column paste and the language picker all work in a sub-workspace window', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-swpar-'));
   try {
     writeFileSync(join(root, 'grid.txt'), 'aaaa\nbbbb\ncccc\ndddd\n');
@@ -165,6 +162,6 @@ test('cut-line, a column paste and the language picker all work in a sub-workspa
       await expect(child.getByTestId(`editor-language-${pid}`)).toHaveText('Shell');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

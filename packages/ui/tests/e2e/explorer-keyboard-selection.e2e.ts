@@ -7,11 +7,11 @@
  * both from the keyboard alone and proves the file that actually moved is the one that was cut, into
  * the folder the cursor had reached.
  */
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 test('arrowing to a row makes it the cut/paste target (024 US3 follow-up)', async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-kbdsel-'));
@@ -54,6 +54,6 @@ test('arrowing to a row makes it the cut/paste target (024 US3 follow-up)', asyn
       await expect(tree.getByText('a.txt', { exact: true })).toBeVisible({ timeout: 8000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

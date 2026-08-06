@@ -1,9 +1,8 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 // Repro: reusing an editor for a different file (edit A, discard & open B) must not
 // leave A's recovery temp behind — otherwise a later restart restores A's content
@@ -18,7 +17,6 @@ async function newEditor(win: Page): Promise<string> {
 }
 
 test('reusing an editor for another file clears the old file recovery temp (no stale restore)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-stale-'));
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-stale-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-stale-ud-'));
@@ -73,8 +71,8 @@ test('reusing an editor for another file clears the old file recovery temp (no s
       { dataDir, userDataDir },
     );
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
   }
 });

@@ -1,10 +1,9 @@
 import { basename } from 'node:path';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 // FR-021 (dedicated E2E, T128): a Terminal Panel synced into a sub-workspace mirrors
 // ONE session across both views — the daemon fans its output out to every subscribed
@@ -13,7 +12,6 @@ import { skipIfElevated } from './admin.js';
 // session — that keystrokes in one view surface in the other.)
 
 test('a synced Terminal Panel mirrors one session: input in one view appears in both', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-mirror-'));
   try {
     await runApp(async (app, win) => {
@@ -55,6 +53,6 @@ test('a synced Terminal Panel mirrors one session: input in one view appears in 
       await win.waitForTimeout(1200);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });

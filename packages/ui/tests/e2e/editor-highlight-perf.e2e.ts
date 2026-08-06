@@ -1,9 +1,8 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 /**
  * Highlighting is bounded by the VIEWPORT, not by the document (016, FR-008/SC-003 · T097).
@@ -80,7 +79,6 @@ const marks = (win: Page): Promise<{ rendered: number | null; highlighted: numbe
   }));
 
 test('the largest permitted file highlights within budget, and typing never drops a frame', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-perf-'));
   try {
     expect(makeHugeFile(root)).toBe(10 * 1024 * 1024);
@@ -153,6 +151,6 @@ test('the largest permitted file highlights within budget, and typing never drop
       expect((await marks(win)).longTasks).toEqual([]);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

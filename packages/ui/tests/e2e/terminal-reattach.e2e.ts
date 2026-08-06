@@ -1,13 +1,14 @@
 import { basename } from 'node:path';
 import { spawn } from 'node:child_process';
 import { connect } from 'node:net';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
 import { skipIfElevated } from './admin.js';
+import { cleanupTemp } from './harness.js';
 
 // US3 (T067/T069, partial): a terminal opened in one session is kept alive by the
 // detached daemon across an app restart, reattaches on relaunch, and — crucially —
@@ -33,6 +34,16 @@ function daemonSessionCount(pipe: string): Promise<number> {
 
 const requestClose = (app: ElectronApplication): Promise<void> =>
   app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
+
+/*
+ * A terminal VIEW, not everything whose test id happens to start with "terminal-".
+ *
+ * `[data-testid^="terminal-"]` also matches the panel-type form's own controls — `terminal-flavour`,
+ * `terminal-admin`, `terminal-startup-command` — so once a panel reverts to that form the count is
+ * whatever the form contributes, and the assertion is measuring the wrong thing. A terminal view's
+ * id is `terminal-<panel uuid>`, so match that shape.
+ */
+const TERMINAL_VIEW = /^terminal-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 test('a pre-existing terminal reattaches after restart and still warns on close', async () => {
   skipIfElevated();
@@ -90,7 +101,7 @@ test('a pre-existing terminal reattaches after restart and still warns on close'
     await stubDialog(app2);
     const projItem = win2.locator('.project-item', { hasText: 'Persist' });
     await projItem.click();
-    await expect(win2.locator('[data-testid^="terminal-"]')).toHaveCount(1, { timeout: 15000 });
+    await expect(win2.getByTestId(TERMINAL_VIEW)).toHaveCount(1, { timeout: 15000 });
     expect(await daemonSessionCount(pipe)).toBe(1); // reattached, not duplicated
 
     // Closing again MUST warn about the pre-existing terminal — and the reattached
@@ -107,6 +118,6 @@ test('a pre-existing terminal reattaches after restart and still warns on close'
   } finally {
     try { daemon.kill(); } catch { /* already gone */ }
     await new Promise((r) => setTimeout(r, 500));
-    for (const d of [dataDir, cfg, userData, root]) rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    for (const d of [dataDir, cfg, userData, root]) cleanupTemp(d);
   }
 });

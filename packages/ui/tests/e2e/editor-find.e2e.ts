@@ -1,9 +1,54 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { openApp, runApp as runOwnApp, createProject as newProject, firstPanelId, cleanupTemp, type AppOptions, type OpenApp, focusEditor } from './harness.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
+ * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ *
+ * The shims below exist so the test bodies below are unchanged:
+ *   runApp        runs the body against the shared window. It refuses options rather than ignoring
+ *                 them: a dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
 
 // 013 US1 — find in the active editor: seed from selection, incremental as-you-type
 // highlighting, the current/total count, wrap, the match-mode toggles, the no-results
@@ -18,7 +63,7 @@ async function newEditor(win: Page): Promise<string> {
 }
 
 async function typeInto(win: Page, pid: string, text: string): Promise<void> {
-  await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
+  await focusEditor(win, pid);
   await win.keyboard.type(text);
 }
 
@@ -39,7 +84,6 @@ const currentMatch = (win: Page, pid: string) =>
   win.getByTestId(`editor-${pid}`).locator('.throng-search-match--current');
 
 test('finds as you type: highlights every match, marks the current one, counts them', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -61,12 +105,11 @@ test('finds as you type: highlights every match, marks the current one, counts t
       expect(await docText(win, pid)).toContain('alpha beta');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupTemp(root);
   }
 });
 
 test('find next / previous step through matches and wrap at both ends', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -93,12 +136,11 @@ test('find next / previous step through matches and wrap at both ends', async ()
       expect(await docText(win, pid)).toContain('x three');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupTemp(root);
   }
 });
 
 test('match-case and whole-word toggles narrow the matches live (FR-007)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -121,12 +163,11 @@ test('match-case and whole-word toggles narrow the matches live (FR-007)', async
       await expect(matches(win, pid)).toHaveCount(1);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupTemp(root);
   }
 });
 
 test('seeds the term from the selection, and shows a no-results state for a miss', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -148,12 +189,11 @@ test('seeds the term from the selection, and shows a no-results state for a miss
       expect(await docText(win, pid)).toContain('needle in haystack');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupTemp(root);
   }
 });
 
 test('closing find clears the highlights and returns focus to the editor', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -174,12 +214,11 @@ test('closing find clears the highlights and returns focus to the editor', async
       expect(await docText(win, pid)).toContain('!');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupTemp(root);
   }
 });
 
 test('renders results within the 1000 ms budget on a ~10k-line file (SC-007)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     // The SC-007 representative fixture: ~10k lines, 20 of them matching.
@@ -201,7 +240,7 @@ test('renders results within the 1000 ms budget on a ~10k-line file (SC-007)', a
 
       // Clicking the tree made the Files pane active, and find is a PANEL command —
       // so put the workspace back in focus first (the same gate as Ctrl+S).
-      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
+      await focusEditor(win, pid);
       await win.keyboard.press('Control+f');
       const started = Date.now();
       await win.getByTestId('find-input').fill('needle');
@@ -214,12 +253,11 @@ test('renders results within the 1000 ms budget on a ~10k-line file (SC-007)', a
       expect(elapsed, `find took ${elapsed}ms on a 10k-line file`).toBeLessThan(1000);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('every find-bar action control is the same size, and match-case reads "Aa"', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -263,12 +301,11 @@ test('every find-bar action control is the same size, and match-case reads "Aa"'
       }
     });
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupTemp(root);
   }
 });
 
 test('find is a no-op when no panel is active (spec Edge Cases)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -279,7 +316,7 @@ test('find is a no-op when no panel is active (spec Edge Cases)', async () => {
       await expect(win.getByTestId(`find-bar-${pid}`)).toHaveCount(0);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupTemp(root);
   }
 });
 
@@ -290,11 +327,20 @@ test('find is a no-op when no panel is active (spec Edge Cases)', async () => {
  * input with SOMETHING that plainly came from the selection, so it looks like it worked — while
  * actually searching for one arbitrary row of the user's block.
  */
+
+
 test('a ONE-ROW block seeds the find input; a MULTI-ROW block seeds nothing (FR-025i)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
-    await runApp(async (_app, win) => {
+    /*
+     * Its OWN app, not the file's shared one.
+     *
+     * 013 deliberately keeps the find term across a re-open on the same panel, so this test's
+     * subject IS persistent find state — and a shared app carries the previous tests' term and
+     * selection into it. It passes alone and fails in file order, which is the signature of leaked
+     * state rather than a broken feature.
+     */
+    await runOwnApp(async (_app, win) => {
       await createProject(win, 'SeedProj', root);
       const pid = await newEditor(win);
       await typeInto(win, pid, 'alpha\nbeta\ngamma\n');
@@ -304,10 +350,26 @@ test('a ONE-ROW block seeds the find input; a MULTI-ROW block seeds nothing (FR-
       // close — so a close here would destroy the very thing this asserts is preserved.
       await win.keyboard.press('Control+f');
       await win.getByTestId('find-input').fill('gamma');
+      /*
+       * Wait for the term to reach the STORE, not just the input.
+       *
+       * `find-bar.tsx` commits the typed value with a debounce — `setTimeout(() => setTerm(input),
+       * debounceMs)` — and the effect's cleanup CANCELS that timer. The bar also unmounts when it
+       * closes (`if (!open) return null`). So a bar that closes inside the debounce window never
+       * commits the term at all: the input showed "gamma" the whole time, the store still holds "",
+       * and the re-open below reads back "".
+       *
+       * That is what CI failed on (runs 31029008160 and 31030655886, shard 2): `Expected "gamma",
+       * Received ""` at the re-open. Asserting the INPUT's value here proves nothing — it is local
+       * component state, and it is the state that is about to be thrown away. `find-count` is
+       * rendered from `state.term`, so it only reads "1 of 1" once `setTerm` has actually run, which
+       * is the precondition this test's subject depends on.
+       */
+      await expect(win.getByTestId('find-count')).toHaveText('1 of 1');
 
       // A MULTI-ROW block seeds NOTHING — find keeps the term it had, exactly as 013 already does
       // for a multi-line selection. It must never pick one row of the block.
-      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
+      await focusEditor(win, pid);
       await win.keyboard.press('Control+Home');
       await win.keyboard.press('Shift+Alt+ArrowDown');
       await win.keyboard.press('Shift+Alt+ArrowDown');
@@ -317,7 +379,7 @@ test('a ONE-ROW block seeds the find input; a MULTI-ROW block seeds nothing (FR-
       await expect(win.getByTestId('find-input')).toHaveValue('gamma');
 
       // A ONE-ROW block — indistinguishable from an ordinary selection, so it DOES seed.
-      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
+      await focusEditor(win, pid);
       await win.keyboard.press('Control+Home');
       await win.keyboard.press('Shift+Alt+ArrowRight');
       await win.keyboard.press('Shift+Alt+ArrowRight');
@@ -328,6 +390,6 @@ test('a ONE-ROW block seeds the find input; a MULTI-ROW block seeds nothing (FR-
       expect(await docText(win, pid)).toContain('alpha');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupTemp(root);
   }
 });

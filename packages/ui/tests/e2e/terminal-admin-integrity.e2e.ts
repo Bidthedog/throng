@@ -1,9 +1,9 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 import { adminTest, skipWithoutInteractiveDesktop } from './admin.js';
 
 // FR-025c (mixed mode): with an ELEVATED daemon, a Terminal confirmed WITHOUT
@@ -138,7 +138,7 @@ adminTest('cmd & PowerShell honour the run-as-admin flag (integrity matrix, FR-0
       }
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });
 
@@ -163,6 +163,6 @@ adminTest('git bash launches and honours the run-as-admin flag (FR-024/FR-025c)'
       expect(checked, 'git bash with run-as-admin must run as Admin').toBe('admin');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });

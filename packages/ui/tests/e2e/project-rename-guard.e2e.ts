@@ -1,9 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 // Project name is capped at 120 chars: typing is restricted to 120 so the user never
 // hits the error; and if a rename IS rejected, the inline editor stays OPEN (edits
@@ -18,7 +17,6 @@ async function projectId(win: Page): Promise<string> {
 }
 
 test('typing a project rename is capped at 120 characters', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-cap-'));
   try {
     await runApp(async (_app, win) => {
@@ -32,12 +30,11 @@ test('typing a project rename is capped at 120 characters', async () => {
       expect(len).toBe(120);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('a rejected rename keeps the inline editor open (no lost edits)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-keep-'));
   try {
     await runApp(async (_app, win) => {
@@ -65,6 +62,6 @@ test('a rejected rename keeps the inline editor open (no lost edits)', async () 
       expect(len).toBe(130);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

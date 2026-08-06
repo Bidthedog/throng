@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createProject, runApp, seedDatabase } from './harness.js';
+import { createProject, runApp, seedDatabase, cleanupTemp} from './harness.js';
 
 // Regression for the silent-failure half of the "cannot create sub-workspaces"
 // defect: when persisting a detached sub-workspace fails in the daemon, the
@@ -47,6 +47,6 @@ test('surfaces an error when persisting a new sub-workspace fails', async () => 
       { dataDir },
     );
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(dataDir);
   }
 });

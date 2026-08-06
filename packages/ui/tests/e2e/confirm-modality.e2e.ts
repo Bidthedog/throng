@@ -8,11 +8,11 @@
  * misjudged click. The keyboard now cycles within the dialog, and only its buttons (or Escape, which
  * is deliberate) end it.
  */
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 /** True while keyboard focus is somewhere inside the confirmation dialog. */
 function focusInsideDialog(win: Page): Promise<boolean> {
@@ -59,6 +59,6 @@ test('Tab stays inside a confirmation dialog, and clicking beside it does not di
       await expect(tree.getByText('doomed.txt', { exact: true })).toBeVisible();
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

@@ -6,12 +6,65 @@
  * and knowing where the file had come from. Ctrl+Z in the tree now reverses the last one, and the
  * stack is per project and persisted, so it survives a restart (FR-010).
  */
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
+import {
+  openApp,
+  createProject as newProject,
+  firstPanelId,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
 import { skipIfElevated } from './admin.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
+ * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ *
+ * The shims below exist so the test bodies below are unchanged:
+ *   runApp        runs the body against the shared window. It refuses options rather than ignoring
+ *                 them: a dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
 
 /** Right-click a row and read what the menu offers. */
 async function rowMenu(win: Page, name: string): Promise<void> {
@@ -20,7 +73,6 @@ async function rowMenu(win: Page, name: string): Promise<void> {
 }
 
 test('Ctrl+Z reverses a rename, and Ctrl+Y puts it back', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-undo-'));
   writeFileSync(join(root, 'before.txt'), 'content\n');
   try {
@@ -60,12 +112,11 @@ test('Ctrl+Z reverses a rename, and Ctrl+Y puts it back', async () => {
       await expect.poll(() => existsSync(join(root, 'after.txt'))).toBe(true);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('undo works from anywhere in the pane, not only with a row focused', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-undopane-'));
   writeFileSync(join(root, 'renamed.txt'), 'x\n');
   try {
@@ -91,12 +142,11 @@ test('undo works from anywhere in the pane, not only with a row focused', async 
       expect(existsSync(join(root, 'other.txt'))).toBe(false);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('undo reverses a move back out of the folder it went into', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-undomove-'));
   mkdirSync(join(root, 'dst'));
   writeFileSync(join(root, 'moved.txt'), 'x\n');
@@ -111,16 +161,53 @@ test('undo reverses a move back out of the folder it went into', async () => {
       await win.keyboard.press('Control+x');
       await tree.getByText('dst', { exact: true }).click();
       await win.keyboard.press('Control+v');
-      await expect.poll(() => existsSync(join(root, 'dst', 'moved.txt')), { timeout: 8000 }).toBe(true);
-      expect(existsSync(join(root, 'moved.txt'))).toBe(false);
+      /*
+       * Both ends of the move in ONE wait.
+       *
+       * A move is two filesystem effects, and they do not land together. Polling for the arrival and
+       * then asserting the departure with a non-retrying `expect` reads the source directory in the
+       * gap between them — so the test fails while the move is simply still finishing. It failed that
+       * way repeatedly in full runs and passes alone, which is the signature of a race the test
+       * creates rather than one the product has.
+       */
+      await expect
+        .poll(
+          () =>
+            `${existsSync(join(root, 'dst', 'moved.txt'))},${existsSync(join(root, 'moved.txt'))}`,
+          { timeout: 8000 },
+        )
+        .toBe('true,false');
 
-      // Undo puts it back at the root, where the user had it.
+      /*
+       * Let the undo ENTRY be recorded before sending the chord.
+       *
+       * The poll above proves the move landed on DISK, which is not the same as the renderer having
+       * pushed its undo record — those are separate, and under load the chord can arrive first and
+       * find nothing to undo. The symptom is the file simply staying where it was moved to, which
+       * reads like a broken undo rather than a chord sent too early.
+       *
+       * Measured: 1 failure in 10 under eight CPU hogs. It then passed 14/14 with a diagnostic
+       * `evaluate` in this position — a few milliseconds of round-trip was enough to hide it, which
+       * is what identified the gap as the cause rather than focus. (That probe also ruled focus out
+       * directly: `document.activeElement` was the same unclassed DIV in every run, passing or not.)
+       *
+       * `canUndoFileOp` drives the context menu's Undo item, but it is only rendered while that menu
+       * is open, so there is no passive signal to wait on — the one case where a bounded wait beats
+       * waiting on a condition.
+       */
+      await win.waitForTimeout(300);
+      // Undo puts it back at the root, where the user had it — again, both ends together.
       await win.keyboard.press('Control+z');
-      await expect.poll(() => existsSync(join(root, 'moved.txt')), { timeout: 8000 }).toBe(true);
-      expect(existsSync(join(root, 'dst', 'moved.txt'))).toBe(false);
+      await expect
+        .poll(
+          () =>
+            `${existsSync(join(root, 'moved.txt'))},${existsSync(join(root, 'dst', 'moved.txt'))}`,
+          { timeout: 8000 },
+        )
+        .toBe('true,false');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
@@ -159,12 +246,11 @@ test('undoing a delete un-strands the editor that was open on the file', async (
       await expect(win.getByTestId('tree-unsaved-open.txt')).toHaveCount(0);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('a refused undo says why, and keeps the entry so it can be retried', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-undoblock-'));
   writeFileSync(join(root, 'one.txt'), 'x\n');
   try {
@@ -195,6 +281,6 @@ test('a refused undo says why, and keeps the entry so it can be retried', async 
       expect(existsSync(join(root, 'one.txt'))).toBe(true);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

@@ -6,12 +6,11 @@
  * ARIA listbox pattern says a composite widget is a SINGLE tab stop with the arrows moving inside
  * it, and that is what a user reaching for Tab expects: the next CONTROL, not the next row.
  */
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 /** The test id of whatever currently holds the keyboard. */
 function focusedTestId(win: Page): Promise<string | null> {
@@ -19,7 +18,6 @@ function focusedTestId(win: Page): Promise<string | null> {
 }
 
 test('Tab moves between the filter and the list; arrows move within it; Enter confirms', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-langkbd-'));
   writeFileSync(join(root, 'thing.txt'), 'hello\n');
   try {
@@ -87,6 +85,6 @@ test('Tab moves between the filter and the list; arrows move within it; Enter co
       await expect(win.getByTestId(`editor-language-${pid}`)).toHaveText('JSON');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

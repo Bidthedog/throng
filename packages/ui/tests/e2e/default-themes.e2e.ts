@@ -1,9 +1,9 @@
-import { mkdtempSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp } from './harness.js';
+import { runApp, cleanupTemp} from './harness.js';
 
 /**
  * US7 (007 Phase E data, SC-007): a fresh install ships all 14 default themes plus
@@ -22,7 +22,7 @@ function freshCfgRoot(): string {
   return dir;
 }
 test.afterAll(() => {
-  for (const dir of cfgRoots.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
 
 async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {

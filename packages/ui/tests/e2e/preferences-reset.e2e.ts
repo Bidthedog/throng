@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp } from './harness.js';
+import { runApp, cleanupTemp} from './harness.js';
 
 /**
  * US6 (007 Phase G): reset-current restores the tab's defaults (disabled for a
@@ -24,7 +24,7 @@ function freshCfgRoot(seedThemes: Record<string, unknown> = {}): string {
   return dir;
 }
 test.afterAll(() => {
-  for (const dir of cfgRoots.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
 function readSettings(cfgRoot: string): any {
   try {
@@ -33,18 +33,45 @@ function readSettings(cfgRoot: string): any {
     return null;
   }
 }
+/**
+ * Open (or re-open) the Preferences window on a tab.
+ *
+ * Deliberately does NOT wait for a `window` event. throng has ONE shared Preferences window, so if a
+ * previous test left it open the cog re-uses it and no new window is ever created — `waitForEvent`
+ * then waits the full test timeout and the test fails at exactly 30s with no useful message. That is
+ * an ordering dependency, not a defect: measured twice in one run, in a file that passes 5/5 alone.
+ *
+ * Instead: bring the main window forward (a stray window elsewhere on the desktop can otherwise eat
+ * the cog click), then look for the Preferences page among the app's windows however it arrived.
+ */
 async function openPrefs(
   app: ElectronApplication,
   win: Page,
   tab: 'settings' | 'keybindings' | 'themes',
 ): Promise<Page> {
+  await win.bringToFront();
   await win.getByTestId('title-bar-cog').click();
-  const [prefs] = await Promise.all([
-    app.waitForEvent('window'),
-    win.getByTestId(`cog-menu-${tab}`).click(),
-  ]);
-  await prefs.waitForLoadState('domcontentloaded');
-  return prefs;
+  await win.getByTestId(`cog-menu-${tab}`).click();
+
+  let prefs: Page | undefined;
+  await expect
+    .poll(
+      async () => {
+        for (const page of app.windows()) {
+          if (page === win || page.isClosed()) continue;
+          if ((await page.getByTestId('prefs-mode-toggle').count()) > 0) {
+            prefs = page;
+            return true;
+          }
+        }
+        return false;
+      },
+      { timeout: 20_000 },
+    )
+    .toBe(true);
+
+  await prefs!.waitForLoadState('domcontentloaded');
+  return prefs!;
 }
 
 test('the per-tab reset restores the Settings editor from the shipped record (with confirm)', async () => {
@@ -182,8 +209,25 @@ test('US1: a key binding shows a reset icon only once overridden, and resetting 
         .poll(() => readKeybindings(cfgRoot)?.bindings?.['zoom.in']?.length)
         .toBe(shippedZoomIn.length - 1);
 
+      const shippedZoomOut: string[] = readKeybindings(cfgRoot).bindings['zoom.out'];
       await prefs.getByTestId('binding-zoom.out-remove-0').click();
       await expect(prefs.getByTestId('binding-reset-zoom.out')).toBeEnabled();
+      /*
+       * Wait for the zoom.out edit to be WRITTEN before resetting zoom.in.
+       *
+       * The affordance turning enabled is renderer state; the file is written on a debounce. Reading
+       * it straight away — and, worse, resetting zoom.in while that write is still pending — lets the
+       * pending write land AFTER the reset, carrying a bindings map in which zoom.in is still the
+       * edited version. The reset then looks broken: `zoom.in` comes back as
+       * ["Ctrl++", "Ctrl+WheelUp"] with the shipped "Ctrl+=" missing.
+       *
+       * Measured unloaded, so this is not an artefact of a loaded machine: 2 failures in 11 runs, and
+       * still 1 in 14 with the test budget raised to 120s — which is what ruled out slowness and
+       * pointed at the write ordering.
+       */
+      await expect
+        .poll(() => readKeybindings(cfgRoot)?.bindings?.['zoom.out']?.length)
+        .toBe(shippedZoomOut.length - 1);
       const zoomOutAfterEdit: string[] = readKeybindings(cfgRoot).bindings['zoom.out'];
 
       // Reset exactly one — no confirmation, applied immediately.

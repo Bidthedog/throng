@@ -1,9 +1,61 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import {
+  openApp,
+  createProject as newProject,
+  firstPanelId,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
+ * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ *
+ * The shims below exist so the test bodies below are unchanged:
+ *   runApp        runs the body against the shared window. It refuses options rather than ignoring
+ *                 them: a dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
 
 /**
  * US3 — `Ctrl+X` cuts the current line (016, FR-016/FR-016a/FR-015a · T065).
@@ -45,7 +97,6 @@ const docText = (win: Page, pid: string): Promise<string> =>
   );
 
 test('Ctrl+X with no selection cuts the whole line, and it pastes back as a line', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -72,12 +123,11 @@ test('Ctrl+X with no selection cuts the whole line, and it pastes back as a line
       await expect.poll(() => docText(win, pid)).toBe('beta\nalpha\ngamma\n');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('a selection is cut EXACTLY — Ctrl+X never widens it to the whole line', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -100,12 +150,11 @@ test('a selection is cut EXACTLY — Ctrl+X never widens it to the whole line', 
       await expect.poll(() => docText(win, pid)).toBe('alpha\nbeta\ngamma\n');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('one Ctrl+Z restores a cut line — a command is ONE undo entry (FR-026)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -122,12 +171,11 @@ test('one Ctrl+Z restores a cut line — a command is ONE undo entry (FR-026)', 
       await expect.poll(() => docText(win, pid)).toBe('alpha\nbeta\ngamma\n');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('in the File Explorer, Ctrl+X still cuts a FILE — the scopes are disjoint (D6)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -160,6 +208,6 @@ test('in the File Explorer, Ctrl+X still cuts a FILE — the scopes are disjoint
       expect(readFileSync(join(root, 'lines.txt'), 'utf8')).toBe('alpha\nbeta\ngamma\n');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

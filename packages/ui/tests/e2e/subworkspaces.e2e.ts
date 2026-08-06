@@ -199,12 +199,34 @@ test('reorders sub-workspaces by dragging, and the order persists', async () => 
     // Drag B's grip above A.
     const grip = win.locator('.subworkspace-item', { hasText: 'Detached B' }).locator('.subworkspace-item__grip');
     const target = win.locator('.subworkspace-item', { hasText: 'Detached A' });
+    /*
+     * `hover()` rather than a move to a remembered box: it re-resolves the element's position at the
+     * moment of the action, and waits for that box to be STABLE across consecutive frames first.
+     *
+     * The sidebar settles late. The sub-workspace list renders at y≈449 and ends up at y≈671 once
+     * the panels above it finish loading, so a `boundingBox()` read before that is stale by ~222px
+     * — and pressing at those coordinates puts the mouse-down on `.panel__body`, well clear of the
+     * grip. No drag starts, and the only symptom is an order that never changed, which reads like a
+     * product bug three steps from the actual fault.
+     *
+     * Measured, not reasoned about: a probe on `document.elementFromPoint` at the press coordinates
+     * reported `DIV.panel__body` (y=449.5) in every failing run and `SPAN.subworkspace-item__grip`
+     * (y=671.5) in every passing one. It survives 12/12 under load with this, against 2 failures in
+     * 10 without. The bug only appears on a loaded machine because that is what makes the sidebar
+     * slow to settle — it is not a timing subtlety in the drag itself.
+     */
+    await grip.hover();
+    await win.mouse.down();
     const gbox = await grip.boundingBox();
     const tbox = await target.boundingBox();
     if (!gbox || !tbox) throw new Error('boxes missing');
-    await win.mouse.move(gbox.x + gbox.width / 2, gbox.y + gbox.height / 2);
-    await win.mouse.down();
     await win.mouse.move(gbox.x + gbox.width / 2, gbox.y - 8, { steps: 3 });
+    /*
+     * Assert the drag actually STARTED, so a press that misses fails HERE, naming its cause, rather
+     * than surfacing later as "the order did not change" — which sent this investigation down a
+     * dnd-kit rabbit hole the first time round.
+     */
+    await expect(win.locator('.subworkspace-item--dragging')).toHaveCount(1);
     await win.mouse.move(tbox.x + tbox.width / 2, tbox.y + 2, { steps: 8 });
     await win.mouse.up();
 

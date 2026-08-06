@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 // FR-030 (#5/#7/#8/#9): per-section font roles apply to the right elements,
 // baseSizePx rescales unset roles, and theme icons hot-reload in menus.
@@ -37,7 +37,7 @@ test('baseSizePx rescales tab/panel/inner text; pinned roles stay; per-role over
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
+    cleanupTemp(cfg);
   }
 });
 
@@ -56,7 +56,7 @@ test('project name and path use separate font roles (#5)', async () => {
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
+    cleanupTemp(cfg);
   }
 });
 
@@ -94,7 +94,7 @@ test('per-section case / italic / underline + family override apply', async () =
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
+    cleanupTemp(cfg);
   }
 });
 
@@ -127,7 +127,7 @@ test('top-level fonts case/italic/underline apply app-wide and roles inherit', a
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
+    cleanupTemp(cfg);
   }
 });
 
@@ -150,6 +150,6 @@ test('theme icons hot-reload in context menus (#9)', async () => {
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
+    cleanupTemp(cfg);
   }
 });

@@ -1,9 +1,10 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
+import { cleanupTemp } from './harness.js';
 
 // Smoke E2E for the two-Pane docking shell (FR-008). The shell renders without a
 // daemon (the project list simply loads empty), so these checks need no daemon;
@@ -20,7 +21,7 @@ function tmp(prefix: string): string {
 test.afterEach(() => {
   for (const dir of tempDirs) {
     try {
-      rmSync(dir, { recursive: true, force: true, maxRetries: 15, retryDelay: 200 });
+      cleanupTemp(dir);
     } catch {
       // BEST-EFFORT (017 FR-013a/FR-014). Electron releases its userData dir
       // asynchronously, some time after the process exits; under worker contention it

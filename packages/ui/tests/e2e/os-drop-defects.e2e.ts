@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { addPanels, createProject, runApp } from './harness.js';
+import { addPanels, createProject, runApp, cleanupTemp} from './harness.js';
 
 /**
  * 018 follow-up — the drop defects found by actually dragging files at the application.
@@ -75,7 +75,7 @@ test('a dropped file is NEVER pasted into the editor as text (the content-inject
       await expect(win.getByTestId(`editor-${panelId}`)).toContainText('alpha');
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
   }
 });
 
@@ -133,6 +133,6 @@ test('a drop opens the file in the panel UNDER THE CURSOR, not the active one', 
       await expect(win.getByTestId(`editor-${first}`)).not.toContainText('beta');
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
   }
 });

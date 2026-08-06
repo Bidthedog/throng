@@ -16,12 +16,66 @@
  * wherever the caret actually is. With the bug it lands at the start of the document;
  * fixed, it lands at the end of the line the user left it on.
  */
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, reloadWindow } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import {
+  openApp,
+  createProject as newProject,
+  firstPanelId,
+  panelIds,
+  reloadWindow,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
+ * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ *
+ * The shims below exist so the test bodies below are unchanged:
+ *   runApp        runs the body against the shared window. It refuses options rather than ignoring
+ *                 them: a dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
 
 function makeProject(): string {
   const root = mkdtempSync(join(tmpdir(), 'throng-caret-'));
@@ -47,7 +101,6 @@ const docLines = (win: Page, pid: string): Promise<string[]> =>
   );
 
 test('the scroll position is restored and the editor re-focuses on switch back (issue 144)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-scroll-'));
   const rows = Array.from({ length: 200 }, (_, i) => `row-${String(i).padStart(3, '0')}`);
   // No trailing newline, so Ctrl+End lands at the end of "row-199", not an empty line after it.
@@ -93,7 +146,7 @@ test('the scroll position is restored and the editor re-focuses on switch back (
       expect(lines.filter((l) => l.includes('Z')).join()).toContain('row-199Z');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
@@ -104,7 +157,6 @@ async function switchToProject(win: Page, name: string): Promise<void> {
 }
 
 test('the editor takes focus on switching to a project whose editor mounts fresh (issue 144)', async () => {
-  skipIfElevated();
   // The remaining #144 defect: the mount-time focus is gated on saved SESSION view-state so a plain
   // file-open leaves the tree focusable (for F2-rename). But switching to a project whose active
   // editor has NOT been mounted this session — the common "reopen an existing project after a
@@ -148,13 +200,12 @@ test('the editor takes focus on switching to a project whose editor mounts fresh
       expect(lines[0]).toBe('ZAAAA');
     });
   } finally {
-    rmSync(rootA, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(rootB, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(rootA);
+    cleanupTemp(rootB);
   }
 });
 
 test('a terminal in the tab does NOT steal focus from the active editor on switch-back (issue 144)', async () => {
-  skipIfElevated();
   // The user's exact report: if a tab contains a terminal, that terminal grabs keyboard focus on a
   // tab/project switch regardless of which panel is active — because a terminal `focus()`es itself
   // unconditionally on mount AND on its (late, async) attach. Here the ACTIVE panel is the editor, but
@@ -211,12 +262,11 @@ test('a terminal in the tab does NOT steal focus from the active editor on switc
       expect(termFocused).toBe(false);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('the caret survives a tab switch away and back (issue 144)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -252,6 +302,6 @@ test('the caret survives a tab switch away and back (issue 144)', async () => {
       expect(lines[0]).toBe('AAAA');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

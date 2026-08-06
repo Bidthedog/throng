@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ElectronApplication } from '@playwright/test';
-import { runApp } from './harness.js';
+import { runApp, cleanupTemp} from './harness.js';
 
 // FR-033 (#1): keyboard accelerators are driven by keybindings.json — edits apply
 // across sessions AND hot-reload. We rebind zoom.in to a function key and assert
@@ -45,6 +45,6 @@ test('keybindings.json drives accelerators at startup and hot-reloads', async ()
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
+    cleanupTemp(cfg);
   }
 });

@@ -2,11 +2,11 @@
  * US1 (#125) — a context-menu item whose command has a bound keyboard shortcut shows that
  * shortcut in brackets after the label, in smaller text; an unbound item is unchanged.
  */
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 test('a context-menu item shows its command’s first keyboard shortcut in brackets (#125)', async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-sc-'));
@@ -39,6 +39,6 @@ test('a context-menu item shows its command’s first keyboard shortcut in brack
       await expect(win.getByTestId('menu-shortcut-New File')).toHaveCount(0);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(root);
   }
 });

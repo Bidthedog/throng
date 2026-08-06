@@ -6,12 +6,11 @@
  * disabled until the panel has been renamed; the shared unsaved dot shows for a dirty editor whether
  * auto-named or renamed.
  */
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 function makeProject(): string {
   const root = mkdtempSync(join(tmpdir(), 'throng-naming-'));
@@ -22,7 +21,6 @@ function makeProject(): string {
 }
 
 test('dismissing a new panel’s rename box without typing leaves it auto-named (#97/#89 follow-up)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -56,12 +54,11 @@ test('dismissing a new panel’s rename box without typing leaves it auto-named 
       await expect(win.getByTestId(`panel-title-${p2}`)).toHaveText('foo', { timeout: 8000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('an editor titles itself from its open file; rename wins; Reset Name restores it (#97)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -111,6 +108,6 @@ test('an editor titles itself from its open file; rename wins; Reset Name restor
       await expect(title).toHaveText('baz'); // dirtiness never folded into the name
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

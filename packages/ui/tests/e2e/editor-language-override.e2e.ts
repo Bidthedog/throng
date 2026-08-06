@@ -1,9 +1,64 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, addPanels, panelIds } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import {
+  openApp,
+  runApp as runOwnApp,
+  createProject as newProject,
+  firstPanelId,
+  addPanels,
+  panelIds,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
+ * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ *
+ * The shims below exist so the test bodies below are unchanged:
+ *   runApp        runs the body against the shared window. It refuses options rather than ignoring
+ *                 them: a dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
 
 // 016 US5 (FR-010/FR-011/FR-005a/FR-005b) — see the language, and correct it.
 //
@@ -40,7 +95,6 @@ const tokenColours = (win: Page, pid: string): Promise<number> =>
   }, pid);
 
 test('the strip shows the detected language, and an extension-less file reads Plain Text', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -56,12 +110,11 @@ test('the strip shows the detected language, and an extension-less file reads Pl
       });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('the language indicator is a themed control with a hover title (constitution — NON-NEGOTIABLE)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -90,18 +143,17 @@ test('the language indicator is a themed control with a hover title (constitutio
       expect(styling.stripBg).not.toBe('rgba(0, 0, 0, 0)');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('two clicks reach and change the language, it re-highlights at once, and it SURVIVES A RESTART (SC-004a)', async () => {
-  skipIfElevated();
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-lang-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-lang-user-'));
   try {
     // Session 1: correct the language by hand.
-    await runApp(
+    await runOwnApp(
       async (_app, win) => {
         await createProject(win, 'LangProj', root);
         const pid = await openEditorOn(win, 'scriptfile', 'echo');
@@ -132,7 +184,7 @@ test('two clicks reach and change the language, it re-highlights at once, and it
     // Session 2, same store: the override is DOCUMENT state, so the panel that opens the file
     // ADOPTS it rather than re-detecting and overruling the user. This is the assertion the whole
     // SQLite table exists for — a layout blob keyed by panel could not answer it.
-    await runApp(
+    await runOwnApp(
       async (_app, win) => {
         const projectItem = win.locator('.project-item', { hasText: 'LangProj' });
         await expect(projectItem).toBeVisible();
@@ -149,14 +201,13 @@ test('two clicks reach and change the language, it re-highlights at once, and it
       { dataDir, userDataDir },
     );
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
+    cleanupTemp(root);
   }
 });
 
 test('the strip truncates in a narrow panel and never collapses the text area (FR-010c)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -187,12 +238,11 @@ test('the strip truncates in a narrow panel and never collapses the text area (F
       expect(geometry.wrap).toBe('nowrap');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('the strip DIMS with its panel — it does not stay lit while every other indicator dims (FR-010g)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -234,17 +284,16 @@ test('the strip DIMS with its panel — it does not stay lit while every other i
         .toBeLessThan(1);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('a persisted language this build no longer knows opens as plain text, WITHOUT error, and is preserved (FR-005b)', async () => {
-  skipIfElevated();
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-stale-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-stale-user-'));
   try {
-    await runApp(
+    await runOwnApp(
       async (_app, win) => {
         const errors: string[] = [];
         win.on('pageerror', (e) => errors.push(e.message));
@@ -291,14 +340,13 @@ test('a persisted language this build no longer knows opens as plain text, WITHO
       { dataDir, userDataDir },
     );
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
+    cleanupTemp(root);
   }
 });
 
 test('the language picker closes when you click anywhere off it', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -328,6 +376,6 @@ test('the language picker closes when you click anywhere off it', async () => {
       await expect(win.getByTestId(`language-picker-${pid}`)).toBeVisible();
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

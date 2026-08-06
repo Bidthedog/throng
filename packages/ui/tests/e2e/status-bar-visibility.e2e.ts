@@ -3,15 +3,13 @@
  * default. Hiding a bar removes only that surface — the word-wrap command keeps working with the
  * editor bar hidden (FR-001b/c). The new terminal status bar shows the shell flavour label (FR-001).
  */
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 test('the terminal status bar shows the flavour label by default (#152)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-tsb-'));
   try {
     await runApp(async (_app, win) => {
@@ -28,12 +26,11 @@ test('the terminal status bar shows the flavour label by default (#152)', async 
       await expect(bar).not.toBeEmpty();
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('hiding the editor status bar keeps the word-wrap command working (#152)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-esb-'));
   writeFileSync(join(root, 'x.txt'), 'y'.repeat(300) + '\n');
   try {
@@ -86,6 +83,6 @@ test('hiding the editor status bar keeps the word-wrap command working (#152)', 
       await expect(win.getByTestId(`editor-status-strip-${pid}`)).toHaveCount(0);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

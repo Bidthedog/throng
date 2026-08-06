@@ -16,10 +16,32 @@ import { openDatabase, runMigrations, type ThrongDatabase } from '@throng/persis
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
 
+/**
+ * `process.env` with every CLAUDE_* / ANTHROPIC_* variable removed.
+ *
+ * A suite driven FROM a Claude Code session inherits its variables, and they reach all the way down
+ * into a `claude` running inside a terminal panel under test — which then announces "Transcript
+ * saving is off - inherited CLAUDE_CODE_CHILD_SESSION marker" and behaves like a child session:
+ * no agents affordance, and no kitty keyboard negotiation. Measured: a test then presses Left into a
+ * view that never opens and reports on a state no user is ever in.
+ *
+ * A test environment must not depend on who launched it, so they are stripped for every run.
+ */
+function claudeFreeEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    // THRONG_CLAUDE_E2E* are this suite's own switches, not Claude Code's.
+    if (/^(CLAUDE|ANTHROPIC)/i.test(key)) delete env[key];
+  }
+  return env;
+}
+
 function startDaemon(pipeName: string, dataDir: string): Promise<ChildProcess> {
   const child = spawn(process.execPath, [daemonEntry], {
     env: {
-      ...process.env,
+      // The daemon spawns every terminal, so a program in a panel inherits THIS environment - which
+      // is why the Claude Code variables have to be stripped here too, not only at the app.
+      ...claudeFreeEnv(),
       THRONG_PIPE_NAME: pipeName,
       THRONG_DATABASE_PATH: join(dataDir, 'throng.db'),
       THRONG_NO_ORPHAN_REAP: '1', // test daemons are short-lived + parallel; each test cleans its own tree
@@ -86,6 +108,56 @@ export async function stubFolderDialog(app: ElectronApplication, pickedPath?: st
  * sub-workspace window" test flaky. A renderer-initiated reload is a single,
  * clean navigation and keeps the IPC channel live.
  */
+/**
+ * Stop the app opening real OS file-manager windows during a test run.
+ *
+ * `shell.openPath` / `shell.showItemInFolder` launch Explorer. A test that exercises "Open Logs
+ * Folder" therefore leaves a real window on the developer's desktop, every run — and on a suite this
+ * size that is both a nuisance and a hazard, because a window appearing STEALS FOCUS, and throng
+ * closes menus and popups on blur by design. A stray Explorer window can fail an unrelated test that
+ * merely had a menu open at the wrong moment.
+ *
+ * Recorded rather than discarded: `__throngOpenedPaths` in the main process holds what the app asked
+ * to open, so a spec can still assert the request was made and where it pointed. `openExternal` is
+ * deliberately NOT stubbed here — the link specs install their own counters on it.
+ */
+export async function stubShellOpen(app: ElectronApplication): Promise<void> {
+  await app.evaluate(({ shell }) => {
+    const g = globalThis as unknown as { __throngOpenedPaths?: string[] };
+    g.__throngOpenedPaths = [];
+    shell.openPath = async (target: string) => {
+      g.__throngOpenedPaths!.push(target);
+      return ''; // '' is Electron's "opened successfully"
+    };
+    shell.showItemInFolder = (target: string) => {
+      g.__throngOpenedPaths!.push(target);
+    };
+  });
+}
+
+/** What the app asked the OS to open, in order. Empty unless something tried. */
+export async function openedPaths(app: ElectronApplication): Promise<string[]> {
+  return app.evaluate(
+    () => (globalThis as unknown as { __throngOpenedPaths?: string[] }).__throngOpenedPaths ?? [],
+  );
+}
+
+/**
+ * Click into a panel's CodeMirror editor and wait until it ACTUALLY has focus.
+ *
+ * A click resolves as soon as the event is dispatched; CodeMirror adds `.cm-focused` a beat later.
+ * Keys sent in that gap go nowhere, so the assertion blames the feature for a keystroke the editor
+ * never received. Measured repeatedly across full runs: `editor-find` failed 0/5 this way and
+ * `editor-column-select` flaked twice in one run, both passing in isolation.
+ *
+ * Use this instead of clicking `.cm-content` directly whenever keys follow.
+ */
+export async function focusEditor(win: Page, panelId: string): Promise<void> {
+  const editor = win.getByTestId(`editor-${panelId}`);
+  await editor.locator('.cm-content').click();
+  await expect(editor.locator('.cm-editor.cm-focused')).toBeVisible({ timeout: 10_000 });
+}
+
 export async function reloadWindow(win: Page): Promise<void> {
   await win.evaluate(() => location.reload());
   // Bounded (issue #75): a bare waitForLoadState defaults to the whole test timeout, so a reload
@@ -98,22 +170,83 @@ export async function reloadWindow(win: Page): Promise<void> {
  * Run a test body against a fresh app+daemon. A per-launch userData dir isolates
  * renderer localStorage; the folder dialog is stubbed to cancel by default.
  */
+export interface AppOptions {
+  dataDir?: string;
+  userDataDir?: string;
+  env?: Record<string, string>;
+  /**
+   * Skip pre-spawning the daemon so the APP spawns its own via ensureDaemon
+   * (exercises the real production startup + host-Node ABI). The app-spawned
+   * detached daemon is killed on teardown via its health.ping pid.
+   */
+  skipDaemon?: boolean;
+}
+
+/** A running app, plus the teardown that `runApp` would otherwise have done for you. */
+export interface OpenApp {
+  app: ElectronApplication;
+  win: Page;
+  pipeName: string;
+  userDataDir: string;
+  close: () => Promise<void>;
+}
+
+/**
+ * Open an app and hand back the handle, leaving teardown to the caller.
+ *
+ * `runApp` opens one app per call, which for most specs means one Electron launch, one daemon and
+ * one shell start PER TEST — measured at ~2s each on CI, and 604 launches across the suite. Where a
+ * file's tests do not need distinct pre-launch state (a seeded config root, a seeded database), they
+ * can share one app through `beforeAll`, which is what this exists for:
+ *
+ *   let h: OpenApp;
+ *   test.describe.configure({ mode: 'serial' });
+ *   test.beforeAll(async () => { h = await openApp(); });
+ *   test.afterAll(async () => { await h.close(); });
+ *
+ * Serial mode is not optional. Tests sharing an app share its window, its projects and its database,
+ * so they must not interleave — and when one fails, the rest are skipped rather than run against
+ * whatever state the failure left behind, which would turn one fault into a page of noise.
+ *
+ * Prefer `runApp` when a test seeds state before launch or deliberately wants a pristine app; the
+ * isolation is worth 2s. This is for the files where that 2s buys nothing.
+ */
+export async function openApp(opts: AppOptions = {}): Promise<OpenApp> {
+  const started = await launchApp(opts);
+  return {
+    app: started.app,
+    win: started.win,
+    pipeName: started.pipeName,
+    userDataDir: started.userDataDir,
+    close: started.teardown,
+  };
+}
+
 export async function runApp(
   // `userDataDir` is the run's own Electron data directory — where per-user state, including
   // the diagnostics logs (#123), is written. Exposed so a spec can assert on what landed there.
   fn: (app: ElectronApplication, win: Page, ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
-  opts: {
-    dataDir?: string;
-    userDataDir?: string;
-    env?: Record<string, string>;
-    /**
-     * Skip pre-spawning the daemon so the APP spawns its own via ensureDaemon
-     * (exercises the real production startup + host-Node ABI). The app-spawned
-     * detached daemon is killed on teardown via its health.ping pid.
-     */
-    skipDaemon?: boolean;
-  } = {},
+  opts: AppOptions = {},
 ): Promise<void> {
+  const started = await launchApp(opts);
+  try {
+    await fn(started.app, started.win, {
+      pipeName: started.pipeName,
+      userDataDir: started.userDataDir,
+    });
+  } finally {
+    await started.teardown();
+  }
+}
+
+/** The shared launch + teardown both entry points are built from. */
+async function launchApp(opts: AppOptions): Promise<{
+  app: ElectronApplication;
+  win: Page;
+  pipeName: string;
+  userDataDir: string;
+  teardown: () => Promise<void>;
+}> {
   const dataDir = opts.dataDir ?? mkdtempSync(join(tmpdir(), 'throng-e2e-'));
   const pipeName = `\\\\.\\pipe\\throng-e2e-${process.pid}-${Date.now()}`;
   const daemon = opts.skipDaemon ? null : await startDaemon(pipeName, dataDir);
@@ -128,7 +261,7 @@ export async function runApp(
     app = await electron.launch({
       args: [mainEntry, `--user-data-dir=${userData}`],
       env: {
-        ...process.env,
+        ...claudeFreeEnv(),
         THRONG_PIPE_NAME: pipeName,
         THRONG_CONFIG_ROOT: cfgRoot,
         THRONG_NO_ORPHAN_REAP: '1', // an app-spawned test daemon must not sweep sibling test daemons' trees
@@ -146,13 +279,27 @@ export async function runApp(
     });
     const win = await app.firstWindow();
     await stubFolderDialog(app); // cancel by default
-    await fn(app, win, { pipeName, userDataDir: userData });
-  } finally {
+    await stubShellOpen(app); // never leave a real Explorer window behind (and never steal focus)
+    const launched = app;
+    return {
+      app: launched,
+      win,
+      pipeName,
+      userDataDir: userData,
+      teardown: () => teardownApp(launched),
+    };
+  } catch (error) {
+    // The launch itself failed, so nobody holds a handle to tear down — do it here.
+    await teardownApp(app);
+    throw error;
+  }
+
+  async function teardownApp(started: ElectronApplication | undefined): Promise<void> {
     // Kill an app-spawned detached daemon BEFORE closing the app: Playwright's
     // app.close() waits for the Electron process's child tree, and the detached
     // daemon (which by design outlives the UI) would otherwise hang teardown.
     if (!daemon) await killAppSpawnedDaemon(pipeName);
-    if (app) await shutdownApp(app);
+    if (started) await shutdownApp(started);
     if (daemon) await stopDaemon(daemon);
     // Clean up every temp dir this run created (Electron holds the userData dir until
     // the app has fully closed, hence the retries). Skip any the caller supplied.
@@ -315,6 +462,25 @@ async function killAppSpawnedDaemon(pipeName: string): Promise<void> {
   }
 }
 
+/**
+ * How long to pause at each {@link step}, so a run can be WATCHED (`THRONG_E2E_STEP_MS=1500`).
+ *
+ * Zero by default, which makes every call below a no-op: an E2E suite must not get slower because
+ * somebody once needed to see it. An Electron run already puts a real window on screen, so the only
+ * thing missing when a defect has to be observed by eye is time between the actions.
+ */
+export const E2E_STEP_MS = Number(process.env.THRONG_E2E_STEP_MS ?? 0);
+
+/** Pause between steps when observing, and say what is about to happen. */
+export async function step(win: Page, label: string): Promise<void> {
+  if (E2E_STEP_MS <= 0) return;
+  console.log(`[step] ${label}`);
+  await win.waitForTimeout(E2E_STEP_MS);
+}
+
+/** Typing delay: slow enough to read when observing, normal otherwise. */
+export const TYPE_DELAY = E2E_STEP_MS > 0 ? 180 : 40;
+
 /** Create a project via the form (folder filled manually; dialog stays stubbed). */
 export async function createProject(win: Page, name: string, root: string): Promise<void> {
   await win.getByTestId('project-new').click();
@@ -322,17 +488,48 @@ export async function createProject(win: Page, name: string, root: string): Prom
   await win.getByTestId('project-root-input').fill(root);
   await win.getByTestId('project-name-input').fill(name);
   await win.getByTestId('project-save').click();
-  await expect(win.locator('.project-item', { hasText: name })).toBeVisible();
+  await expect(win.locator('.project-item').filter({ hasText: name }).first()).toBeVisible();
+  /*
+   * Wait for the new project to be ACTIVE, not merely listed.
+   *
+   * Creating a project opens it immediately (`projects-store.tsx` — `setOpenedId(created.id)`),
+   * which swaps the entire workspace. Returning as soon as the row appears leaves the PREVIOUS
+   * project's panels on screen, so a caller that reads a panel id straight afterwards can capture
+   * one that is about to be destroyed. Every later `panel-type-select-<dead pid>` then waits out the
+   * full test budget for an element that can never exist.
+   *
+   * That is not a hypothetical: in a full-suite run under six CPU hogs it accounted for four of six
+   * failures, every one a 30s timeout, and it produced two of the CI failures on this branch too.
+   * The symptom looks like a slow app; the cause is a stale id read a few milliseconds too early.
+   *
+   * Keyed on `data-active` rather than on the name: `hasText` is a SUBSTRING match over the row's
+   * whole text, so in a file that accumulates projects it can resolve to more than one row and trip
+   * strict mode. Exactly one project is active, which makes it the unambiguous handle.
+   */
+  const active = win.locator('.project-item[data-active="true"]');
+  await expect(active).toHaveCount(1);
+  await expect(active).toContainText(name);
 }
 
 export async function firstPanelId(win: Page): Promise<string> {
-  return win
+  // `.evaluate()` auto-waits for the element, so this cannot race the panel into existence — but it
+  // CAN return '' if the node lacks the attribute, and an empty id builds testids that match
+  // nothing. Fail here, naming the cause, rather than 30s later at an unrelated locator.
+  const id = await win
     .locator('.panel-box')
     .first()
     .evaluate((el) => (el as HTMLElement).dataset.panelId ?? '');
+  if (id === '') throw new Error('firstPanelId: a .panel-box exists but carries no data-panel-id');
+  return id;
 }
 
 export async function panelIds(win: Page): Promise<string[]> {
+  /*
+   * `evaluateAll` does NOT auto-wait — unlike `evaluate`, it resolves against whatever matches right
+   * now, which is `[]` before the workspace renders. Callers index into it (`(await panelIds(win))[0]`)
+   * and interpolate `undefined` into a testid, then wait out the whole budget for `panel-add-undefined`.
+   */
+  await expect(win.locator('.panel-box').first()).toBeAttached();
   return win.locator('.panel-box').evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.panelId ?? ''));
 }
 
@@ -649,4 +846,40 @@ export { mkdtempSync, tmpdir, join };
 export async function setSlider(slider: import('@playwright/test').Locator, value: string): Promise<void> {
   await slider.fill(value);
   await slider.evaluate((el) => el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })));
+}
+
+/**
+ * Remove a test's temp directory — and never fail the test because Windows would not let go of it.
+ *
+ * This exists because it was the single most expensive thing in the suite. Measured on CI: 51 tests in
+ * the slowest shard failed all four attempts with `EBUSY: resource busy or locked, rmdir`, burning
+ * 23.7 of that shard's 36 minutes — two thirds of it — re-running tests whose BODIES had already
+ * passed. The assertion succeeded; the `finally` threw on the way out.
+ *
+ * The lock is real and not a bug in the test: a terminal spec leaves a shell, a ConPTY host and a
+ * daemon with the directory as their working directory, and they release it when Windows says so, not
+ * when the test ends. Retrying harder does not fix a race with process teardown — the old call sites
+ * already retried up to ten times and still lost.
+ *
+ * So the judgement is: a temp directory that will not unlink is not a product defect and must not be
+ * reported as one. It is noise that costs a real signal, because a suite with known-red tests in it
+ * teaches everyone to ignore red. The directory is under the runner's TEMP and is wiped with the
+ * runner; locally it is a few KB that the next `throng-clear-dev-state` sweeps up.
+ *
+ * What this deliberately does NOT do is swallow deletions that are part of a test's SUBJECT — a spec
+ * that deletes a file to prove the editor notices must still fail loudly when that delete fails. Use
+ * this for teardown only; call `rmSync` directly when the removal is the thing under test.
+ */
+export function cleanupTemp(target: string): void {
+  try {
+    rmSync(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException)?.code;
+    // ENOENT is already the desired end state. The rest are Windows still holding a handle.
+    if (code && !['EBUSY', 'EPERM', 'ENOTEMPTY', 'ENOENT'].includes(code)) {
+      console.warn(`[cleanup] unexpected error removing ${target}: ${String(error)}`);
+      return;
+    }
+    console.warn(`[cleanup] ${code ?? 'error'} removing ${target} — left for the temp sweep`);
+  }
 }

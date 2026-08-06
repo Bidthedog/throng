@@ -9,11 +9,11 @@
  * Driven through real file operations: two moves into a folder that already holds a file of that
  * name, which the daemon refuses by name.
  */
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 /** Cut `name` at the root and paste it into the `dst` folder — a move the daemon will refuse. */
 async function moveIntoDst(win: Page, name: string): Promise<void> {
@@ -72,6 +72,6 @@ test('two different failures show as two notices, each naming what was attempted
       await expect(notices).toContainText('b.txt');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

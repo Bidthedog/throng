@@ -1,9 +1,8 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 // 011 US4 (FR-010): the "file changed on disk" warning NAMES the containing tab, the
 // panel, and the file's full path — not a generic message.
@@ -25,7 +24,6 @@ async function openFileEditor(win: Page, fileName: string, panelName: string): P
 }
 
 test('the file-changed warning names the tab, panel and full path', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-extnamed-'));
   const file = join(root, 'watched.txt');
   writeFileSync(file, 'original\n');
@@ -51,6 +49,6 @@ test('the file-changed warning names the tab, panel and full path', async () => 
       await expect(files).toContainText('Tab:'); // the containing tab
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

@@ -1,8 +1,8 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { runApp } from './harness.js';
+import { runApp, cleanupTemp} from './harness.js';
 
 /**
  * 018 / SC-004 — switching between ALL the bundled themes leaves no surface visually stale.
@@ -94,7 +94,7 @@ test('every bundled theme repaints every surface; nothing is left stale (SC-004)
       { env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
   } finally {
-    rmSync(cfgRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(cfgRoot);
   }
 });
 
@@ -142,6 +142,6 @@ test('an OPTIONAL token set by one theme is GONE after switching to one that doe
       { env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
   } finally {
-    rmSync(cfgRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(cfgRoot);
   }
 });

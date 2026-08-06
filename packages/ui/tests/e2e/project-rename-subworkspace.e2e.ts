@@ -1,9 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, reloadWindow } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, reloadWindow, cleanupTemp} from './harness.js';
 
 // Renaming a project MUST update that project's name shown in OTHER windows —
 // specifically the owner text on sub-workspace panels — without needing a reload.
@@ -17,7 +16,6 @@ async function projectId(win: Page): Promise<string> {
 }
 
 test('renaming a project updates its name on sub-workspace panels live', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-rensub-'));
   try {
     await runApp(async (app, win) => {
@@ -64,6 +62,6 @@ test('renaming a project updates its name on sub-workspace panels live', async (
       await expect(owner).not.toContainText('OldName');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

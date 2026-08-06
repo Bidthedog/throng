@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page, type ElectronApplication } from '@playwright/test';
-import { runApp, createProject, firstPanelId, reloadWindow, daemonRpc } from './harness.js';
+import { runApp, createProject, firstPanelId, reloadWindow, daemonRpc, cleanupTemp} from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /**
@@ -183,6 +183,6 @@ test('@quarantine a full-screen (alt-screen) program renders identically in two 
       await daemonRpc(pipeName, 'terminal.kill', { panelId: pid });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    cleanupTemp(root);
   }
 });

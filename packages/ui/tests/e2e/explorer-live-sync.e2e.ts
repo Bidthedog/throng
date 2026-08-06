@@ -2,8 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 /**
  * 026 / #186 — the Files & Folders tree must stay live-synced with the filesystem.
@@ -86,7 +85,7 @@ test('a file created and then deleted OUTSIDE throng appears and disappears with
       await expect(tree.getByText('external.txt', { exact: true })).toHaveCount(0, { timeout: 10_000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
@@ -107,12 +106,11 @@ test('a file created OUTSIDE throng in an EXPANDED subfolder appears there', asy
       await expect(tree.getByText('nested-external.txt', { exact: true })).toBeVisible({ timeout: 10_000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('a file deleted INSIDE throng leaves the tree immediately', async () => {
-  skipIfElevated();
   const root = makeProject();
   const cfgRoot = permanentDeleteConfig();
   try {
@@ -139,13 +137,12 @@ test('a file deleted INSIDE throng leaves the tree immediately', async () => {
       { env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(cfgRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
+    cleanupTemp(cfgRoot);
   }
 });
 
 test('a FOLDER deleted INSIDE throng leaves the tree immediately', async () => {
-  skipIfElevated();
   const root = makeProject();
   const cfgRoot = permanentDeleteConfig();
   try {
@@ -169,7 +166,7 @@ test('a FOLDER deleted INSIDE throng leaves the tree immediately', async () => {
       { env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(cfgRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
+    cleanupTemp(cfgRoot);
   }
 });

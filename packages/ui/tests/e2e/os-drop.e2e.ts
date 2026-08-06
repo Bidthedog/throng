@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { addPanels, createProject, firstPanelId, runApp } from './harness.js';
+import { addPanels, createProject, firstPanelId, runApp, cleanupTemp} from './harness.js';
 
 /**
  * 018 / US9 — a file dragged in from the operating system (FR-057 … FR-066a, SC-011/SC-012).
@@ -73,7 +73,7 @@ test('a file dropped on an editor panel in its own project opens (US9, FR-057)',
       await expect(win.getByTestId(`editor-${panelId}`)).toContainText('beta');
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
   }
 });
 
@@ -95,7 +95,7 @@ test('a file dropped on an UNTYPED panel makes it an editor showing the file (US
       await expect(win.getByTestId(`panel-type-form-${panelId}`)).toHaveCount(0);
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
   }
 });
 
@@ -121,8 +121,8 @@ test('a file from OUTSIDE the project is visibly rejected, never a silent no-op 
       await expect(win.getByTestId(`editor-${panelId}`)).not.toContainText('outside');
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    rmSync(outside, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
+    cleanupTemp(outside);
   }
 });
 
@@ -157,8 +157,8 @@ test('a SYMLINK escaping the project is refused through the running app (US9, SC
       await expect(win.getByTestId(`editor-${panelId}`)).not.toContainText('outside');
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    rmSync(outside, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
+    cleanupTemp(outside);
   }
 });
 
@@ -182,7 +182,7 @@ test('a FOLDER is rejected; the other files in the same drop still open (US9, FR
       await expect(win.getByTestId(`editor-${panelId}`)).toContainText('beta');
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
   }
 });
 
@@ -220,8 +220,8 @@ test('a file over the openable size limit is visibly refused (US9, FR-061/T110a)
       { env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    rmSync(cfgRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
+    cleanupTemp(cfgRoot);
   }
 });
 
@@ -248,7 +248,7 @@ test('a file already open elsewhere FOCUSES that editor, never a second copy (US
       await expect(win.locator('.editor-panel')).toHaveCount(1);
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
   }
 });
 
@@ -286,7 +286,7 @@ test('a stray drop does NOT navigate the window away (US9, FR-061a — the catas
       expect(win.url()).toBe(before);
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
   }
 });
 
@@ -332,6 +332,6 @@ test('an OS file drag shows a COPY cursor, not a MOVE one (US9, FR-063)', async 
       expect(probe.writes).toEqual(['copy']);
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
   }
 });

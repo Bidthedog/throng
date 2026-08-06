@@ -10,7 +10,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp } from './harness.js';
+import { runApp, openedPaths } from './harness.js';
 
 /** The harness gives every run its own `--user-data-dir`; logs live beside the rest of that state. */
 const logsIn = (userData: string): string => join(userData, 'logs');
@@ -64,16 +64,30 @@ test('the daemon writes its own durable log beside the UI’s', async () => {
 });
 
 test('a user can reach the logs folder without knowing its path', async () => {
-  await runApp(async (_app, win, ctx) => {
+  await runApp(async (app, win, ctx) => {
     await win.getByTestId('title-bar-cog').click();
     // The affordance is discoverable where About is — both are things you go looking for when
     // reporting a problem.
     await expect(win.getByTestId('cog-menu-logs')).toBeVisible();
 
-    // It resolves to the run's own logs directory. (The OS file manager is not opened during the
-    // test: the handler is driven directly, which is what the menu item calls.)
+    /*
+     * It resolves to the run's own logs directory, and it really does ask the OS to open it.
+     *
+     * The comment here used to claim "the OS file manager is not opened during the test". That was
+     * simply untrue: this drives the same handler the menu item does, and the handler calls
+     * `shell.openPath` — so every run left a real Explorer window on the developer's desktop. Worse
+     * than untidy: a window appearing steals focus, and throng closes menus on blur by design, so a
+     * stray Explorer window can fail an unrelated test that had a menu open.
+     *
+     * `runApp` now stubs `shell.openPath` for every app and records what was asked for, so the
+     * request is asserted — which is the actual claim — without launching anything.
+     */
     const result = await win.evaluate(() => window.throng?.diagnostics?.openLogs?.());
     expect(result?.ok).toBe(true);
     expect((result as { path: string }).path).toBe(logsIn(ctx.userDataDir));
+    expect(
+      await openedPaths(app),
+      'the handler should have asked the OS to open the logs directory',
+    ).toEqual([logsIn(ctx.userDataDir)]);
   });
 });

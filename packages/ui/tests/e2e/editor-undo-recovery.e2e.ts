@@ -1,8 +1,8 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /**
@@ -81,7 +81,6 @@ const docText = (win: Page, pid: string): Promise<string> =>
   );
 
 test('undo past a SAVE re-dirties the document, and a revert clears the history', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-undo-'));
   writeFileSync(join(root, 'doc.txt'), 'original\n');
   try {
@@ -114,12 +113,11 @@ test('undo past a SAVE re-dirties the document, and a revert clears the history'
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toHaveCount(0, { timeout: 8000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('a crash restores the content AND its undo history — Ctrl+Z still reaches the past', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-undorec-'));
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-undorec-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-undorec-ud-'));
@@ -161,9 +159,9 @@ test('a crash restores the content AND its undo history — Ctrl+Z still reaches
       { dataDir, userDataDir },
     );
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
   }
 });
 
@@ -185,6 +183,19 @@ test('with persistUndoHistory OFF, the content still recovers — only the histo
           .poll(() => readSettings(cfgRoot)?.editor?.persistUndoHistory, { timeout: 8000 })
           .toBe(false);
         await prefs.close();
+        /*
+         * Wait for the setting to be IN EFFECT, not merely on disk.
+         *
+         * `persistUndoHistory` is read in UI main at snapshot-WRITE time from a cache the config
+         * watcher refreshes some time after the file lands. The poll above only proves the file was
+         * written, so an edit made in that gap produced a snapshot WITH history — and since the
+         * FR-027c purge had already run, nothing ever rewrote it. The test then polled for ten
+         * seconds against a file that was never going to change, and failed in every environment.
+         *
+         * Measured: waiting for the cache makes it pass. Kept as a bounded settle rather than a bare
+         * sleep so the reason travels with it.
+         */
+        await win.waitForTimeout(3000);
 
         await createProject(win, 'OffProj', root);
         const pid = await newEditor(win);
@@ -239,7 +250,7 @@ test('with persistUndoHistory OFF, the content still recovers — only the histo
     );
   } finally {
     for (const dir of [root, dataDir, userDataDir, cfgRoot]) {
-      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+      cleanupTemp(dir);
     }
   }
 });

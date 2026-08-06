@@ -1,8 +1,8 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 // US2 (config half) / Plan Phase B (FR-010/010a/011/012): the Flavour dropdown is
 // real — machine-detected built-ins ∪ user-defined flavours from settings.json —
@@ -83,6 +83,6 @@ test('a user-defined flavour added to settings.json appears in the dropdown (hot
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
+    cleanupTemp(cfg);
   }
 });

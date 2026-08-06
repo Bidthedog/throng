@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { createProject, firstPanelId, runApp } from './harness.js';
+import { createProject, firstPanelId, runApp, cleanupTemp} from './harness.js';
 
 // US1 / SC-001: a translucent ghost follows the cursor during a drag. It is a
 // real frameless/transparent OS window (so it can paint at and beyond the app
@@ -51,7 +51,7 @@ function seedThemeAccent(accentHex: string): string {
   return dir;
 }
 test.afterAll(() => {
-  for (const dir of cfgRoots.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
 
 test('the drag ghost and the New Tab (+) affordance follow the theme accent', async () => {

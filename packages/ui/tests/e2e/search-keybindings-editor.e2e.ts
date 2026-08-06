@@ -1,9 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp } from './harness.js';
+import { runApp, cleanupTemp} from './harness.js';
 
 // 013 SC-006 — every search and scrollback command is DISCOVERABLE and REBINDABLE in the
 // visual Key Bindings editor. The core completeness test already proves each action has a
@@ -18,7 +18,7 @@ function freshCfgRoot(): string {
 }
 test.afterAll(() => {
   for (const dir of cfgRoots.splice(0)) {
-    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dir);
   }
 });
 

@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createProject, runApp, seedDatabase } from './harness.js';
+import { createProject, runApp, seedDatabase, cleanupTemp} from './harness.js';
 
 // End-to-end regression for the reported defect: a developer DB left half-migrated
 // by an intermediate build — stamped to the latest user_version, but its
@@ -60,6 +60,6 @@ test('creating a sub-workspace works after the daemon heals a drifted DB', async
       { dataDir },
     );
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(dataDir);
   }
 });

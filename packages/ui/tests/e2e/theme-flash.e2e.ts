@@ -22,12 +22,12 @@
  * a Chromium compositing artefact of `color-scheme`, so pinning `color-scheme` (and the native backing)
  * to the theme is the exact, deterministic invariant whose violation IS the bug.
  */
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, reloadWindow } from './harness.js';
+import { runApp, reloadWindow, cleanupTemp} from './harness.js';
 
 const LIGHT_APP_BG = '#f5f6f8'; // the bundled "Light" theme's appBg (default-themes/index.ts)
 
@@ -149,7 +149,7 @@ test('every window kind follows the saved LIGHT theme — no dark canvas flash (
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(cfg);
   }
 });
 

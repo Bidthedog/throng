@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 // A project not yet loaded this session shows its name italic + muted; opening it
 // marks it loaded (normal style). Two app sessions share one daemon DB (same
@@ -52,6 +52,6 @@ test('indicates loaded vs not-loaded projects', async () => {
       { dataDir },
     );
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(dataDir);
   }
 });

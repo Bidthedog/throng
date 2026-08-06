@@ -1,9 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, reloadWindow, daemonRpc } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, reloadWindow, daemonRpc, cleanupTemp} from './harness.js';
 
 /**
  * 008 User Story 2 (SC-002/SC-003). One terminal session presented in two windows of
@@ -33,7 +32,6 @@ async function newTerminal(win: Page, root: string): Promise<string> {
 }
 
 test('one terminal in two different-sized windows renders legibly in both, stable across focus', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-dualsize-'));
   try {
     await runApp(async (app, win, { pipeName }) => {
@@ -74,6 +72,6 @@ test('one terminal in two different-sized windows renders legibly in both, stabl
       await expect(child.getByTestId(`terminal-${pid}`)).toContainText('DUALSIZE_MARKER_42');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

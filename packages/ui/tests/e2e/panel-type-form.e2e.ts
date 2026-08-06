@@ -1,9 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 // US1 / Plan Phase A (FR-001..008, SC-001/002/010): a new Panel shows an
 // extensible type-selection form instead of "Empty Panel"; choosing Terminal
@@ -12,7 +11,6 @@ import { skipIfElevated } from './admin.js';
 // (Reload persistence is covered by terminal-persistence.e2e.ts / US3.)
 
 test('replaces Empty Panel with the type form; swaps inputs; Clear resets; Confirm types + launches', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-form-'));
   try {
     await runApp(async (_app, win) => {
@@ -64,12 +62,11 @@ test('replaces Empty Panel with the type form; swaps inputs; Clear resets; Confi
       await expect(win.getByTestId(`panel-type-form-${pid}`)).toBeVisible({ timeout: 15000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });
 
 test('the type form renders and confirms in a sub-workspace window (FR-008)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-form-sub-'));
   try {
     await runApp(async (app, win) => {
@@ -105,6 +102,6 @@ test('the type form renders and confirms in a sub-workspace window (FR-008)', as
       await expect(child.getByTestId(`panel-type-form-${pid}`)).toBeVisible({ timeout: 15000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });

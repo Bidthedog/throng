@@ -1,9 +1,61 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import {
+  openApp,
+  createProject as newProject,
+  firstPanelId,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
+ * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ *
+ * The shims below exist so the test bodies below are unchanged:
+ *   runApp        runs the body against the shared window. It refuses options rather than ignoring
+ *                 them: a dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
 
 /**
  * US4 — per-language indentation (016, FR-018/FR-018a/FR-018d · T075).
@@ -47,7 +99,6 @@ const docText = (win: Page, pid: string): Promise<string> =>
   );
 
 test('a TAB-indented file keeps taking TABS, though the setting says spaces (FR-018a)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -67,12 +118,11 @@ test('a TAB-indented file keeps taking TABS, though the setting says spaces (FR-
       expect(await docText(win, pid)).not.toContain('  x'); // …not spaces
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('a 4-space file takes 4 spaces, though the global default is 2 (FR-018a)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -89,12 +139,11 @@ test('a 4-space file takes 4 spaces, though the global default is 2 (FR-018a)', 
       await expect.poll(() => docText(win, pid)).toContain('    y'); // …four, not two
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('an unindented Go file takes a TAB — its LANGUAGE decides (FR-018)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -112,12 +161,11 @@ test('an unindented Go file takes a TAB — its LANGUAGE decides (FR-018)', asyn
       await expect.poll(() => docText(win, pid)).toContain('\tz');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('Tab and Shift+Tab indent and outdent EVERY line a selection touches — one undo', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -145,12 +193,11 @@ test('Tab and Shift+Tab indent and outdent EVERY line a selection touches — on
       await expect.poll(() => docText(win, pid)).toBe('def a():\nif x:\n    return 1\n');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('opening a file NEVER reindents it, and never marks it dirty (FR-018d)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -165,6 +212,6 @@ test('opening a file NEVER reindents it, and never marks it dirty (FR-018d)', as
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toHaveCount(0);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

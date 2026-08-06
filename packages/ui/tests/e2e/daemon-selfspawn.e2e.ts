@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, reloadWindow } from './harness.js';
+import { runApp, createProject, reloadWindow, cleanupTemp} from './harness.js';
 
 // Regression (T064/T066): with no daemon pre-spawned, the UI must spawn its OWN
 // daemon via ensureDaemon — under Electron. The daemon's native modules
@@ -30,6 +30,6 @@ test('the app spawns its own working daemon (host Node) and projects persist', a
       { skipDaemon: true },
     );
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });

@@ -5,12 +5,11 @@
  * work, and not the work itself. A user who edited a file and looked elsewhere had to find the panel
  * holding it to learn that; Files & Folders, the place they actually think about files, said nothing.
  */
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 /**
  * Close the app the way a user with a live terminal must: answer the close prompt.
@@ -28,7 +27,6 @@ async function terminateAllClose(app: ElectronApplication, win: Page): Promise<v
 }
 
 test('a file with unsaved editor changes is marked in the tree, and unmarked when saved', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-treedot-'));
   writeFileSync(join(root, 'edited.txt'), 'original\n');
   writeFileSync(join(root, 'untouched.txt'), 'other\n');
@@ -88,6 +86,6 @@ test('a file with unsaved editor changes is marked in the tree, and unmarked whe
       await terminateAllClose(app, win);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

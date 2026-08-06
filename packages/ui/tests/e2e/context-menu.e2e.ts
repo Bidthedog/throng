@@ -1,11 +1,11 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { commitPanelRename, commitTabRename } from './harness.js';
+import { commitPanelRename, commitTabRename, cleanupTemp} from './harness.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -66,7 +66,7 @@ async function run(fn: (app: ElectronApplication, win: Page) => Promise<void>): 
   } finally {
     if (app) await app.close();
     await stopDaemon(daemon);
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(dataDir);
   }
 }
 

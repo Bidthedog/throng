@@ -1,9 +1,8 @@
-import { mkdtempSync, writeFileSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 async function dismissNoticeIfPresent(win: Page): Promise<void> {
   const ok = win.getByTestId('editor-notice-ok');
@@ -29,7 +28,6 @@ async function newEditor(win: Page): Promise<string> {
 }
 
 test('the Open-In target is labelled "Last Active Editor (<Panel name>)" (FR-098)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -48,12 +46,11 @@ test('the Open-In target is labelled "Last Active Editor (<Panel name>)" (FR-098
       await expect(win.getByTestId('menu-item-Last Active Editor (Scratch)')).toBeVisible();
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('deleting an open file marks the editor dirty; save re-creates it; re-select shows the error', async () => {
-  skipIfElevated();
   const root = makeProject();
   const file = join(root, 'note.txt');
   try {
@@ -107,12 +104,11 @@ test('deleting an open file marks the editor dirty; save re-creates it; re-selec
         .toContain('HELLO-BODY');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('after a restart, a deleted-file editor restores its content (not blank) from recovery (FR-102)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-del2-'));
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-del2-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-del2-ud-'));
@@ -162,8 +158,8 @@ test('after a restart, a deleted-file editor restores its content (not blank) fr
       { dataDir, userDataDir },
     );
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
   }
 });

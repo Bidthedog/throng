@@ -1,10 +1,10 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { runApp } from './harness.js';
+import { runApp, cleanupTemp} from './harness.js';
 
 /**
  * 018 / US4 — the themed colour picker (FR-020 … FR-026).
@@ -22,7 +22,7 @@ function freshCfgRoot(): string {
 }
 test.afterAll(() => {
   for (const dir of cfgRoots.splice(0))
-    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dir);
 });
 
 async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {

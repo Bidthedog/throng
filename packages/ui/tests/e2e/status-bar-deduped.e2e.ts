@@ -1,9 +1,9 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /**
@@ -63,7 +63,7 @@ test('the status bar keeps only the project root path; the title bar keeps the i
       await expect.poll(() => osTitle(app), { timeout: 5000 }).toBe('DedupeProj · Tab 1 · Panel 1 — throng');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
@@ -81,6 +81,6 @@ test('when elevated, [ADMIN] is on the title bar only — the status bar has no 
       { env: { THRONG_FAKE_ELEVATED: '1' } },
     );
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

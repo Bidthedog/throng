@@ -1,9 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 /**
  * 008 FR-005 / SC-006. A terminal whose shell takes longer to start than the attach
@@ -18,7 +17,6 @@ import { skipIfElevated } from './admin.js';
  * `skipDaemon` makes the APP spawn its own daemon, which inherits these env vars.
  */
 test('a slow-starting terminal shows the "still starting" state and recovers on retry', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-slowstart-'));
   try {
     await runApp(
@@ -71,6 +69,6 @@ test('a slow-starting terminal shows the "still starting" state and recovers on 
       },
     );
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

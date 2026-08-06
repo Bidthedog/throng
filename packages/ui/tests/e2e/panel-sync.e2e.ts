@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { createProject, firstPanelId, runApp, commitPanelRename } from './harness.js';
+import { createProject, firstPanelId, runApp, commitPanelRename, cleanupTemp} from './harness.js';
 
 // FR-027a (batch 2, revised 2026-07-02): a cloned Panel (same id in the project +
 // its sub-workspaces) syncs its CONTENT across windows — the type-selection form
@@ -73,7 +73,7 @@ test('confirming a Panel type in one window types the clone in the other', async
       await win.waitForTimeout(1200);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });
 

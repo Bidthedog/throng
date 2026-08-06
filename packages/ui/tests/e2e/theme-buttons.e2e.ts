@@ -1,9 +1,9 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Locator, Page } from '@playwright/test';
-import { runApp } from './harness.js';
+import { runApp, cleanupTemp} from './harness.js';
 
 /**
  * 021 / US7, FR-027–030 — the three-type button model, proven in the running app.
@@ -50,7 +50,7 @@ function freshCfgRoot(): string {
   return dir;
 }
 test.afterAll(() => {
-  for (const dir of cfgRoots.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
 
 const rootVar = (page: Page, name: string): Promise<string> =>

@@ -1,9 +1,9 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp } from './harness.js';
+import { runApp, cleanupTemp} from './harness.js';
 
 /**
  * The three terminal-flavour settings are HIDDEN from the Settings UI for v1.0.0 (#67 → vNext).
@@ -31,7 +31,7 @@ function freshCfgRoot(seed?: unknown): string {
 }
 test.afterAll(() => {
   for (const dir of cfgRoots.splice(0)) {
-    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dir);
   }
 });
 

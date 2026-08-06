@@ -1,10 +1,9 @@
-import { mkdtempSync, writeFileSync, rmSync, renameSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 /**
  * 027 / #161 — the reported cycle, end to end: close throng, rename the PROJECT FOLDER, reopen,
@@ -89,7 +88,6 @@ async function enterProject(win: Page, name: string): Promise<void> {
 }
 
 test('an editor and the tree recover when the project folder is renamed back after a restart', async () => {
-  skipIfElevated();
   // Two full app launches plus two watcher cycles — past the 30s default.
   test.setTimeout(180_000);
   const root = makeProject();
@@ -168,7 +166,7 @@ test('an editor and the tree recover when the project folder is renamed back aft
     );
   } finally {
     for (const dir of [root, moved, dataDir, userDataDir]) {
-      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+      cleanupTemp(dir);
     }
   }
 });

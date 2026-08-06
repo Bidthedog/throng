@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
-import { createProject, runApp } from './harness.js';
+import { createProject, runApp, cleanupTemp} from './harness.js';
 
 /** The projects list row for `name` — the sidebar has no per-project test id, only a class + text. */
 function projectItem(win: import('@playwright/test').Page, name: string) {
@@ -69,7 +69,7 @@ test('lists every hidden path; removing one brings the file back with no restart
       await expect(tree.getByText('c.txt', { exact: true })).toHaveCount(0);
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
   }
 });
 
@@ -105,8 +105,8 @@ test('the dialog NAMES the project it edits, and follows a project switch (US8, 
       await expect(dialog.locator('.hidden-path').first()).toContainText('a.txt');
     });
   } finally {
-    rmSync(first, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    rmSync(second, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(first);
+    cleanupTemp(second);
   }
 });
 
@@ -162,7 +162,7 @@ test('deleting the edited project closes the dialog rather than editing a ghost 
       await expect(win.getByTestId('project-settings-open')).toBeDisabled();
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
   }
 });
 
@@ -207,8 +207,8 @@ test('a path that is ALSO glob-excluded is marked — removing it would do nothi
       { env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    rmSync(cfgRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
+    cleanupTemp(cfgRoot);
   }
 });
 
@@ -232,7 +232,7 @@ test('a hidden path whose file was DELETED still lists and still removes (US8, e
       await expect(rows).toHaveCount(0);
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
   }
 });
 
@@ -258,6 +258,6 @@ test('every control this story adds is a themed icon with a hover title (US8, FR
       await expect(remove).not.toContainText(/remove/i);
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
   }
 });

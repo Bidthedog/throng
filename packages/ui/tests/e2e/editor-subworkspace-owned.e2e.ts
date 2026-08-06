@@ -1,9 +1,8 @@
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, reloadWindow } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, reloadWindow, cleanupTemp} from './harness.js';
 
 // FR-077 (post-Delivery-E feedback): a sub-workspace-OWNED editor (created inside a
 // sub-workspace, no owning project) can be SAVED (outside every project) and
@@ -20,7 +19,6 @@ const menu = (page: import('@playwright/test').Page, label: string) =>
   page.getByTestId(`menu-item-${label}`);
 
 test('a sub-workspace-owned editor saves outside projects and can be destroyed', async () => {
-  skipIfElevated();
   const projectRoot = mkdtempSync(join(tmpdir(), 'throng-swo-proj-'));
   const outside = mkdtempSync(join(tmpdir(), 'throng-swo-out-'));
   const savePath = join(outside, 'scratch.txt');
@@ -69,7 +67,7 @@ test('a sub-workspace-owned editor saves outside projects and can be destroyed',
       await expect(child.getByTestId('editor-p')).toBeVisible();
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(outside, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(projectRoot);
+    cleanupTemp(outside);
   }
 });

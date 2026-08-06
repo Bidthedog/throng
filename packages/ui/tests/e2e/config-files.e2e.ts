@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, existsSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runApp } from './harness.js';
+import { runApp, cleanupTemp} from './harness.js';
 
 // US8 / FR-031 (config foundation): on first run the app creates the user-scoped
 // config documents under the config root with documented defaults. The root is
@@ -25,6 +25,6 @@ test('creates default settings/keybindings/theme files on first run', async () =
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
+    cleanupTemp(cfg);
   }
 });

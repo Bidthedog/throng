@@ -4,12 +4,11 @@
  * space, and the line is never submitted. Driven through the throng:tree-drop seam (mirroring
  * throng:os-drop), since a real react-dnd → native drop cannot be driven from Playwright.
  */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 function treeDrop(win: Page, panelId: string, paths: string[]): Promise<void> {
   return win.evaluate(
@@ -21,7 +20,6 @@ function treeDrop(win: Page, panelId: string, paths: string[]): Promise<void> {
 }
 
 test('dropping tree paths onto a terminal inserts them at the prompt, quoted and space-joined (#155)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-tdrop-'));
   try {
     await runApp(async (_app, win) => {
@@ -44,6 +42,6 @@ test('dropping tree paths onto a terminal inserts them at the prompt, quoted and
       await expect(term).toContainText('"C:\\my dir\\b.txt" C:\\c.txt', { timeout: 8000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

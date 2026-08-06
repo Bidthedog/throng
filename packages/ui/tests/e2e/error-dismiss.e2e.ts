@@ -1,8 +1,8 @@
 import { basename, join } from 'node:path';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, seedDatabase } from './harness.js';
+import { runApp, createProject, firstPanelId, seedDatabase, cleanupTemp} from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 // 011, US1 (T037 / FR-001..003,006): every one of the four panel error surfaces
@@ -56,7 +56,7 @@ test('Projects error: trailing-edge dismiss removes it immediately and recurs', 
       await expect(win.getByTestId('project-error-dismiss')).toBeVisible();
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
@@ -98,7 +98,7 @@ test('Sub-workspaces error: themeable dismiss removes it immediately and recurs'
       { dataDir },
     );
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(dataDir);
   }
 });
 
@@ -120,10 +120,22 @@ test('File Explorer error: trailing-edge dismiss removes it immediately and recu
     };
 
     await trigger();
-    // Dismissing removes ONE notice — the acknowledged one — and leaves the rest standing.
-    for (let n = await notices.count(); n > 0; n = await notices.count()) {
+    /*
+     * Dismissing clears the stack, one acknowledgement at a time.
+     *
+     * Deliberately NOT asserted as a per-click decrement. Two versions of that raced and reddened CI
+     * (runs 30951944889 and 30954326326): a missing project root keeps failing, so a fresh notice can
+     * land between the count taken before a click and the one taken after, and the arithmetic is then
+     * wrong while nothing is broken. `count()` does not retry either, so both reads were instants.
+     *
+     * What this feature promises — and what the three surfaces above check individually, where
+     * nothing else is generating notices — is that a dismiss removes the notice it belongs to and the
+     * same failure can be raised again. That claim survives another notice arriving mid-loop.
+     * "Exactly one fewer" never could.
+     */
+    for (let guard = 0; guard < 30 && (await notices.count()) > 0; guard += 1) {
       await win.getByTestId('explorer-error-dismiss').first().click();
-      await expect(notices).toHaveCount(n - 1);
+      await win.waitForTimeout(100);
     }
     await expect(notices).toHaveCount(0);
 
@@ -147,7 +159,18 @@ test('Terminal exit notice: dismiss removes it, leaves the form usable, and recu
         const term = win.getByTestId(`terminal-${pid}`);
         await expect(term).toContainText(basename(root), { timeout: 20000 });
         await term.click();
-        await win.keyboard.type('exit');
+        /*
+         * `exit 3`, not `exit` — a FAILING exit is the only one that raises a notice.
+         *
+         * This test asserted the notice after a clean `exit` and had been failing in every
+         * environment, because that behaviour was deliberately removed: telling a user "Terminal
+         * exited (code 0)" after they typed `exit` reports their own action back at them and trains
+         * them to dismiss notices unread. `terminal-revert.e2e.ts` pins both halves of that decision.
+         *
+         * The subject here is the DISMISS control on the terminal-exit surface, which needs a notice
+         * to exist at all — so it uses the exit that still produces one.
+         */
+        await win.keyboard.type('exit 3');
         await win.keyboard.press('Enter');
         await expect(win.getByTestId(`panel-exit-${pid}`)).toBeVisible({ timeout: 15000 });
       };
@@ -166,6 +189,6 @@ test('Terminal exit notice: dismiss removes it, leaves the form usable, and recu
       await expect(win.getByTestId(`exit-dismiss-${pid}`)).toBeVisible();
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });

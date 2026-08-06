@@ -3,12 +3,11 @@
  * editor; a folder or multi-select is rejected (the panel stays untyped). Driven through the
  * throng:tree-drop seam (a real react-dnd → native drop is not scriptable).
  */
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 function treeDrop(win: Page, panelId: string, paths: string[], singleFile: boolean): Promise<void> {
   return win.evaluate(
@@ -38,7 +37,6 @@ function treeDropOnTab(win: Page, tabId: string, paths: string[], singleFile: bo
 }
 
 test('a single tree file dropped on an untyped panel opens it as an editor (#114)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-treeopen-'));
   writeFileSync(join(root, 'hello.txt'), 'HELLO-FROM-TREE\n');
   try {
@@ -60,12 +58,11 @@ test('a single tree file dropped on an untyped panel opens it as an editor (#114
       await expect(win.getByTestId(`panel-title-${pid}`)).toHaveText('hello', { timeout: 8000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('dropping an already-open file focuses the existing editor, not a second view (#114)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-treeopen2-'));
   writeFileSync(join(root, 'shared.txt'), 'SHARED-DOC\n');
   try {
@@ -98,12 +95,11 @@ test('dropping an already-open file focuses the existing editor, not a second vi
       expect(await win.locator('.cm-content', { hasText: 'SHARED-DOC' }).count()).toBe(1);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('a tree file dropped on an EXISTING editor opens it in that editor (#114 follow-up)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-treeeditor-'));
   writeFileSync(join(root, 'first.txt'), 'FIRST-DOC\n');
   writeFileSync(join(root, 'second.txt'), 'SECOND-DOC\n');
@@ -132,12 +128,11 @@ test('a tree file dropped on an EXISTING editor opens it in that editor (#114 fo
       await expect(win.getByTestId(`panel-title-${pid}`)).toHaveText('second', { timeout: 8000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('a tree file dropped on a TAB CHIP opens it in that tab and brings the tab forward (#114 follow-up)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-treetab-'));
   writeFileSync(join(root, 'other.txt'), 'OTHER-TAB-DOC\n');
   try {
@@ -168,12 +163,11 @@ test('a tree file dropped on a TAB CHIP opens it in that tab and brings the tab 
       });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('a folder or multi-select dropped on an untyped panel is rejected (#114)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-treereject-'));
   writeFileSync(join(root, 'a.txt'), 'A\n');
   writeFileSync(join(root, 'b.txt'), 'B\n');
@@ -190,6 +184,6 @@ test('a folder or multi-select dropped on an untyped panel is rejected (#114)', 
       await expect(win.getByTestId(`editor-${pid}`)).toHaveCount(0);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

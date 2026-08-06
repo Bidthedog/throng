@@ -1,9 +1,8 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 // Session 2026-07-06c: New File in the context menu (FR-096) + right-clicking empty
 // space in the Files & Folders pane opens a root-targeted menu (FR-097).
@@ -17,7 +16,6 @@ function makeProject(): string {
 }
 
 test('New File on a folder creates a file inside it, in rename mode (FR-096)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -40,12 +38,11 @@ test('New File on a folder creates a file inside it, in rename mode (FR-096)', a
         .toBe(true);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('right-clicking empty space opens a root menu with New File / New Folder / reveal (FR-097)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -83,6 +80,6 @@ test('right-clicking empty space opens a root menu with New File / New Folder / 
         .toBe(true);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

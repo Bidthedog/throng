@@ -1,9 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 // FR-074: terminals ARE app-stylable — xterm renders from fontFamily/fontSize
 // options, now sourced from the themeable `terminal` typography role (default
@@ -11,7 +10,6 @@ import { skipIfElevated } from './admin.js';
 // silently assuming terminals cannot be styled).
 
 test('a terminal renders in the themeable monospace font (terminals are stylable)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-tf-'));
   try {
     await runApp(async (_app, win) => {
@@ -37,6 +35,6 @@ test('a terminal renders in the themeable monospace font (terminals are stylable
       expect(fonts.some((f) => f.toLowerCase().includes('consolas'))).toBe(true);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

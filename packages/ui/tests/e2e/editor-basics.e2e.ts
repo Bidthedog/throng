@@ -1,9 +1,8 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 // Delivery A (US1/US3/US4/US5/US8-pills): a usable editor — create → type →
 // Ctrl+S (confined) → new-doc LF default → Ctrl+Shift+S scope → Files-pane active
@@ -33,7 +32,6 @@ async function typeInto(win: Page, pid: string, text: string): Promise<void> {
 }
 
 test('creates an editor, types, saves within the tree, and shows type + file pills', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-ed-'));
   const savePath = join(root, 'note.txt');
   try {
@@ -63,12 +61,11 @@ test('creates an editor, types, saves within the tree, and shows type + file pil
       await expect(win.getByTestId(`panel-file-${pid}`)).toContainText('note.txt');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('refuses an out-of-tree save and leaves the buffer unsaved', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-ed-'));
   const outside = mkdtempSync(join(tmpdir(), 'throng-out-'));
   const escapePath = join(outside, 'escape.txt');
@@ -87,13 +84,12 @@ test('refuses an out-of-tree save and leaves the buffer unsaved', async () => {
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible();
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(outside, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
+    cleanupTemp(outside);
   }
 });
 
 test('the Files & Folders pane gates Ctrl+S (no-op) and highlights when active', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-ed-'));
   const savePath = join(root, 'gated.txt');
   try {
@@ -123,12 +119,11 @@ test('the Files & Folders pane gates Ctrl+S (no-op) and highlights when active',
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible();
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('warns (does not lock) when a dirty saved file changes on disk; Save-All writes the scope', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-ed-'));
   const savePath = join(root, 'watched.txt');
   try {
@@ -169,6 +164,6 @@ test('warns (does not lock) when a dirty saved file changes on disk; Save-All wr
         .toContain('more');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

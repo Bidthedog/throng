@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, commitTabRename } from './harness.js';
+import { runApp, createProject, commitTabRename, cleanupTemp} from './harness.js';
 
 /**
  * The main-window status bar — FR-003/004 **as narrowed by 026 / #166**.
@@ -51,6 +51,6 @@ test('shows the active project’s root folder path, and only that', async () =>
       await expect(win.getByTestId('status-project-path')).toHaveText(`(${root})`);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
