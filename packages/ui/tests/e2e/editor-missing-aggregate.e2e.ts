@@ -1,9 +1,8 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 // Session 2026-07-06f: the "cannot open file" popup lists ALL missing files on a tab
 // in ONE dialog (FR-100), fires only on tab open/re-select — never on a panel
@@ -30,7 +29,6 @@ async function reselectFirstTab(win: Page): Promise<void> {
 }
 
 test('lists ALL missing files on a tab in one dialog (FR-100)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -78,12 +76,11 @@ test('lists ALL missing files on a tab in one dialog (FR-100)', async () => {
       expect(weight).toBeGreaterThanOrEqual(600);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('does NOT pop the dialog on delete / remount while the tab stays active (FR-105)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -114,12 +111,11 @@ test('does NOT pop the dialog on delete / remount while the tab stays active (FR
       await expect(win.getByTestId('editor-notice-dialog')).toBeVisible({ timeout: 8000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('editor.warnOnMissingFile=false suppresses the popup entirely', async () => {
-  skipIfElevated();
   const root = makeProject();
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-agg-cfg-'));
   writeFileSync(
@@ -153,7 +149,7 @@ test('editor.warnOnMissingFile=false suppresses the popup entirely', async () =>
       { env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(cfgRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
+    cleanupTemp(cfgRoot);
   }
 });

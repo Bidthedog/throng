@@ -1,9 +1,10 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { skipIfElevated } from './admin.js';
 
 /**
  * 025 US2 — the command-memory rule, driven through the real app (T032).
@@ -101,7 +102,7 @@ async function withTerminal(
     );
   } finally {
     for (const d of [root, data]) {
-      rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+      cleanupTemp(d);
     }
   }
 }
@@ -120,6 +121,10 @@ async function runInTerminal(
 }
 
 test('memory ON: a command started IN the terminal is observed and persisted (US2 row 2)', async () => {
+  // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
+  // daemon routes terminals through the de-elevated agent, a different process tree these
+  // assertions do not describe — the condition this guard exists for.
+  skipIfElevated();
   test.setTimeout(120_000);
   await withTerminal('MemRow2', { remember: true }, async ({ win, data, term }) => {
     await runInTerminal(win, term, LONG_RUNNING, 'Reply from');
@@ -135,6 +140,10 @@ test('memory ON: a command started IN the terminal is observed and persisted (US
 });
 
 test('memory ON: stopping the command leaves nothing to promote (US2 rows 3 and 4)', async () => {
+  // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
+  // daemon routes terminals through the de-elevated agent, a different process tree these
+  // assertions do not describe — the condition this guard exists for.
+  skipIfElevated();
   test.setTimeout(120_000);
   await withTerminal('MemRow34', { startupCommand: '', remember: true }, async ({ win, data, term }) => {
     await runInTerminal(win, term, LONG_RUNNING, 'Reply from');
@@ -159,6 +168,10 @@ test('memory ON: stopping the command leaves nothing to promote (US2 rows 3 and 
 });
 
 test('memory OFF: a running command is never recorded at all (US2 row 6)', async () => {
+  // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
+  // daemon routes terminals through the de-elevated agent, a different process tree these
+  // assertions do not describe — the condition this guard exists for.
+  skipIfElevated();
   test.setTimeout(120_000);
   await withTerminal('MemRow6', { remember: false }, async ({ win, data, term }) => {
     await runInTerminal(win, term, LONG_RUNNING, 'Reply from');
@@ -173,14 +186,40 @@ test('memory OFF: a running command is never recorded at all (US2 row 6)', async
 });
 
 test('memory ON: a later command replaces the earlier one (US2 row 5)', async () => {
+  // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
+  // daemon routes terminals through the de-elevated agent, a different process tree these
+  // assertions do not describe — the condition this guard exists for.
+  skipIfElevated();
   test.setTimeout(120_000);
   await withTerminal('MemRow5', { remember: true }, async ({ win, data, term }) => {
     await runInTerminal(win, term, LONG_RUNNING, 'Reply from');
     await expectLayout(data, 'MemRow5', (j) => /"observedCommand":"[^"]*ping/i.test(j), 'never observed');
 
+    /*
+     * Interrupt until the observation actually clears, rather than pressing once and hoping.
+     *
+     * A single Ctrl+C is occasionally lost: the click focuses a terminal that is streaming ping
+     * output, and the chord lands somewhere that never reaches the shell — so the ping keeps running
+     * and `observedCommand` stays put. The failure then reads "did not clear", which blames the
+     * observation for a keystroke that was never delivered. Measured UNLOADED at 1 in 9, so this is
+     * not an artefact of the CPU-load harness.
+     *
+     * Re-pressing is what a user does with a runaway ping, and it is safe here: Ctrl+C at an idle cmd
+     * prompt is a no-op, so an extra press cannot corrupt the state being asserted.
+     */
     await term.click();
     await win.keyboard.press('Control+c');
-    await expectLayout(data, 'MemRow5', (j) => /"observedCommand":null/.test(j), 'did not clear');
+    await expect
+      .poll(
+        async () => {
+          if (/"observedCommand":null/.test(layoutJson(data, 'MemRow5') ?? '')) return true;
+          await term.click();
+          await win.keyboard.press('Control+c');
+          return false;
+        },
+        { timeout: 30_000, message: 'the interrupt never cleared the observed command' },
+      )
+      .toBe(true);
 
     // A different long-runner takes over; the observation must follow it, not stay on the ping.
     await runInTerminal(win, term, 'findstr /R x', '');
@@ -256,6 +295,6 @@ test('a command that takes over REPLACES the startup command the user typed (US2
       { dataDir: data },
     );
   } finally {
-    for (const d of [root, data]) rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    for (const d of [root, data]) cleanupTemp(d);
   }
 });

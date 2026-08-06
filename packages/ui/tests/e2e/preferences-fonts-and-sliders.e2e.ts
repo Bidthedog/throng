@@ -1,8 +1,8 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { runApp, setSlider } from './harness.js';
+import { runApp, setSlider, cleanupTemp} from './harness.js';
 
 /** Open the preferences window on a tab, through the cog — the same route every prefs suite uses. */
 async function openPrefs(app: ElectronApplication, win: Page, tab: string): Promise<Page> {
@@ -34,7 +34,7 @@ function freshCfg(): string {
 
 test.afterAll(() => {
   for (const dir of cfgRoots.splice(0)) {
-    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dir);
   }
 });
 

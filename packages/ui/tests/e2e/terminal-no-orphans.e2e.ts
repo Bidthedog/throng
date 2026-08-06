@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -10,8 +10,7 @@ import {
   daemonPid,
   daemonRpc,
   conhostChildren,
-  expectNoOrphanConhosts,
-} from './harness.js';
+  expectNoOrphanConhosts, cleanupTemp} from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 // Every test here asserts the terminal's conhost is a child of the DAEMON — true
@@ -100,7 +99,7 @@ test('panel-destroy reaps the conhost for EVERY detected terminal flavour', asyn
       }
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });
 
@@ -120,7 +119,7 @@ test('deleting a project reaps its terminals’ conhosts', async () => {
       await expectNoOrphanConhosts(dpid, baseline);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });
 
@@ -147,6 +146,6 @@ test('app-close “Terminate all” reaps every terminal’s conhost', async () 
       await expectNoOrphanConhosts(dpid, baseline);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });

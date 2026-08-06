@@ -1,9 +1,8 @@
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page, type ElectronApplication } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, reloadWindow } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, panelIds, reloadWindow, cleanupTemp} from './harness.js';
 
 /**
  * Issue #86 — deferred writes and the app's shutdown paths.
@@ -240,7 +239,6 @@ async function zoomInTwice(win: Page, pid: string): Promise<void> {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 test('#86 AC1/AC4: a language override set immediately before TERMINATE ALL survives the next launch', async () => {
-  skipIfElevated();
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-ta-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-ta-user-'));
@@ -303,9 +301,9 @@ test('#86 AC1/AC4: a language override set immediately before TERMINATE ALL surv
       { dataDir, userDataDir },
     );
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
+    cleanupTemp(root);
   }
 });
 
@@ -317,7 +315,6 @@ test('#86 AC1/AC4: a language override set immediately before TERMINATE ALL surv
 // ═══════════════════════════════════════════════════════════════════════════════
 
 test('#86 AC3: a layout change made immediately before an ORDINARY close survives the next launch', async () => {
-  skipIfElevated();
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-oc-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-oc-user-'));
@@ -364,14 +361,13 @@ test('#86 AC3: a layout change made immediately before an ORDINARY close survive
       { dataDir, userDataDir },
     );
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
+    cleanupTemp(root);
   }
 });
 
 test('#86 AC3: a per-panel zoom set immediately before an ORDINARY close survives the next launch', async () => {
-  skipIfElevated();
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-ocz-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-ocz-user-'));
@@ -414,9 +410,9 @@ test('#86 AC3: a per-panel zoom set immediately before an ORDINARY close survive
       { dataDir, userDataDir },
     );
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
+    cleanupTemp(root);
   }
 });
 
@@ -457,7 +453,6 @@ async function storedSubPanels(win: Page): Promise<string[]> {
 }
 
 test('#86 C6: a SUB-WORKSPACE rearrangement survives closing the MAIN window', async () => {
-  skipIfElevated();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-sw-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-sw-user-'));
   // Written by MAIN when the child's renderer dies; read once the app is gone.
@@ -543,8 +538,8 @@ test('#86 C6: a SUB-WORKSPACE rearrangement survives closing the MAIN window', a
       { dataDir, userDataDir },
     );
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
   }
 });
 
@@ -576,7 +571,6 @@ test('#86 C6: a SUB-WORKSPACE rearrangement survives closing the MAIN window', a
 // ═══════════════════════════════════════════════════════════════════════════════
 
 test('#86 C19: a THEME COLOUR edit inside its 150ms debounce survives closing the MAIN window', async () => {
-  skipIfElevated();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-thm-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-thm-user-'));
   // One config root: the theme file the edit under test lands in.
@@ -630,9 +624,9 @@ test('#86 C19: a THEME COLOUR edit inside its 150ms debounce survives closing th
       "the preferences window's debounced theme write must have landed",
     ).toBe('#123456');
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(cfgRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
+    cleanupTemp(cfgRoot);
   }
 });
 
@@ -658,7 +652,6 @@ test('#86 C19: a THEME COLOUR edit inside its 150ms debounce survives closing th
 // ═══════════════════════════════════════════════════════════════════════════════
 
 test('#86 FR-011: a layout change survives an ORDINARY close even at a 1ms drain budget', async () => {
-  skipIfElevated();
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-bud-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-bud-user-'));
@@ -703,9 +696,9 @@ test('#86 FR-011: a layout change survives an ORDINARY close even at a 1ms drain
       { dataDir, userDataDir },
     );
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
+    cleanupTemp(root);
   }
 });
 
@@ -737,7 +730,6 @@ test('#86 FR-011: a layout change survives an ORDINARY close even at a 1ms drain
 // ═══════════════════════════════════════════════════════════════════════════════
 
 test('#86 C19: a JSON-tab edit inside its 300ms debounce survives closing the MAIN window', async () => {
-  skipIfElevated();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-jsn-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-jsn-user-'));
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-jsn-root-'));
@@ -797,9 +789,9 @@ test('#86 C19: a JSON-tab edit inside its 300ms debounce survives closing the MA
       `the DRAIN must have written this, not the 300ms timer running out (landed ${Math.round(landedAfterMs)}ms after the edit)`,
     ).toBeLessThan(200);
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(cfgRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
+    cleanupTemp(cfgRoot);
   }
 });
 
@@ -845,7 +837,6 @@ async function dragPanelOnce(app: ElectronApplication, win: Page, pid: string): 
 }
 
 test('#86 FR-011: an ORDINARY close after a DRAG still closes promptly — the ghost cannot ack', async () => {
-  skipIfElevated();
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-gst-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-gst-user-'));
@@ -896,9 +887,9 @@ test('#86 FR-011: an ORDINARY close after a DRAG still closes promptly — the g
       { dataDir, userDataDir },
     );
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
+    cleanupTemp(root);
   }
 });
 
@@ -911,7 +902,6 @@ test('#86 FR-011: an ORDINARY close after a DRAG still closes promptly — the g
 // ═══════════════════════════════════════════════════════════════════════════════
 
 test('#110: after a DRAG, an ordinary close lets the PROCESS exit — the hidden ghost must not keep it alive', async () => {
-  skipIfElevated();
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-gex-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-gex-user-'));
@@ -954,9 +944,9 @@ test('#110: after a DRAG, an ordinary close lets the PROCESS exit — the hidden
       { dataDir, userDataDir },
     );
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
+    cleanupTemp(root);
   }
 });
 
@@ -967,7 +957,6 @@ test('#110: after a DRAG, an ordinary close lets the PROCESS exit — the hidden
 // ═══════════════════════════════════════════════════════════════════════════════
 
 test('#86 AC4: a language override set immediately before an ORDINARY close survives the next launch', async () => {
-  skipIfElevated();
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-ocl-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-ocl-user-'));
@@ -1019,9 +1008,9 @@ test('#86 AC4: a language override set immediately before an ORDINARY close surv
       { dataDir, userDataDir },
     );
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
+    cleanupTemp(root);
   }
 });
 
@@ -1051,7 +1040,6 @@ test('#86 AC4: a language override set immediately before an ORDINARY close surv
 // ═══════════════════════════════════════════════════════════════════════════════
 
 test('#86 C23: the WORKSPACE window\'s own config write survives an immediate ORDINARY close', async () => {
-  skipIfElevated();
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-cfg-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-cfg-user-'));
@@ -1078,10 +1066,10 @@ test('#86 C23: the WORKSPACE window\'s own config write survives an immediate OR
       `the workspace window's config write must have landed (settings: ${JSON.stringify(settings.newProject)})`,
     ).toBe(root);
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(cfgRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
+    cleanupTemp(cfgRoot);
+    cleanupTemp(root);
   }
 });
 
@@ -1093,7 +1081,6 @@ test('#86 C23: the WORKSPACE window\'s own config write survives an immediate OR
 // ═══════════════════════════════════════════════════════════════════════════════
 
 test('#86 AC3/AC4: layout and per-panel zoom set immediately before TERMINATE ALL survive the next launch', async () => {
-  skipIfElevated();
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-tal-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-tal-user-'));
@@ -1142,8 +1129,8 @@ test('#86 AC3/AC4: layout and per-panel zoom set immediately before TERMINATE AL
       { dataDir, userDataDir },
     );
   } finally {
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
+    cleanupTemp(root);
   }
 });

@@ -5,15 +5,13 @@
  * overrode the rename). "Reset Name" — the header menu item next to "Rename" — clears the custom
  * name, dropping the terminal back to showing its live title.
  */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 test('a rename overrides the live terminal title, and Reset Name restores it (#89)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-reset-'));
   try {
     await runApp(async (_app, win) => {
@@ -42,6 +40,6 @@ test('a rename overrides the live terminal title, and Reset Name restores it (#8
       await expect(header).toContainText('cmd.exe', { timeout: 10_000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(root);
   }
 });

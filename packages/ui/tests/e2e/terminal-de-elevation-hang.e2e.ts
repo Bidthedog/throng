@@ -1,9 +1,9 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 import { adminTest } from './admin.js';
 
 /**
@@ -117,7 +117,7 @@ adminTest(
         await win.evaluate((id) => window.throng?.terminal?.kill?.(id), pid);
       });
     } finally {
-      rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+      cleanupTemp(root);
     }
   },
 );

@@ -1,9 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 // US11 / FR-040/042 (Delivery E): closing the app with an unsaved editor shows NO
 // warning; reopening restores the in-progress content from the recovery temp. The
@@ -18,7 +17,6 @@ async function newEditor(win: Page): Promise<string> {
 }
 
 test('restores unsaved editor content after an app restart (no close warning)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-recroot-'));
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-recdata-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-recud-'));
@@ -54,8 +52,8 @@ test('restores unsaved editor content after an app restart (no close warning)', 
       { dataDir, userDataDir },
     );
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
   }
 });

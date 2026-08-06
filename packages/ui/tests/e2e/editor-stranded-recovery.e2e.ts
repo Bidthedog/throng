@@ -1,10 +1,9 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, renameSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, reloadWindow } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, reloadWindow, cleanupTemp} from './harness.js';
 
 /**
  * 026 / #161 — a stranded editor must recover once its file comes back.
@@ -132,7 +131,6 @@ async function openTheFile(win: Page, pid: string): Promise<void> {
 }
 
 test('an editor recovers when its folder is renamed away and back WHILE throng is running', async () => {
-  skipIfElevated();
   // Two full watcher/restore cycles plus a deliberate negative assertion — past the 30s default.
   test.setTimeout(120_000);
   const root = makeProject('throng-strand-live-');
@@ -162,12 +160,11 @@ test('an editor recovers when its folder is renamed away and back WHILE throng i
       );
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('an editor stranded across a restart recovers when the path is repaired', async () => {
-  skipIfElevated();
   test.setTimeout(120_000);
   const root = makeProject('throng-strand-restart-');
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-strand-data-'));
@@ -220,13 +217,12 @@ test('an editor stranded across a restart recovers when the path is repaired', a
     }, { dataDir });
   } finally {
     for (const dir of [root, dataDir]) {
-      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+      cleanupTemp(dir);
     }
   }
 });
 
 test('a "Reload from disk" action exists and re-reads the path on demand', async () => {
-  skipIfElevated();
   const root = makeProject('throng-strand-reload-');
   try {
     await runApp(async (_app, win) => {
@@ -253,6 +249,6 @@ test('a "Reload from disk" action exists and re-reads the path on demand', async
       );
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

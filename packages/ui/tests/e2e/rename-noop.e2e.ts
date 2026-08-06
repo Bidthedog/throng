@@ -1,8 +1,8 @@
-import { mkdtempSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 // US12 / FR-070: confirming a rename with an UNCHANGED name shows no error and
 // leaves the item unchanged; a changed valid name still renames. Also verifies
@@ -50,6 +50,6 @@ test('confirming an unchanged name is a no-op (no error); a changed name renames
       expect(existsSync(join(root, 'a.txt'))).toBe(false);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

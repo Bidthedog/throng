@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runApp } from './harness.js';
+import { runApp, cleanupTemp} from './harness.js';
 
 // The side-pane maximum width is user-configurable per pane in settings.json
 // (panes.projects.maxWidth). With a custom max of 300, dragging the sidebar handle
@@ -43,6 +43,6 @@ test('the side-pane maximum width is configurable in settings.json', async () =>
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(cfg);
   }
 });

@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,7 @@ import { skipIfElevated } from './admin.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
+import { cleanupTemp } from './harness.js';
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
@@ -89,7 +90,7 @@ async function run(fn: (app: ElectronApplication, win: Page, h: Harness) => Prom
   } finally {
     if (app) await app.close();
     await stopDaemon(h.daemon);
-    rmSync(h.dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(h.dataDir);
   }
 }
 

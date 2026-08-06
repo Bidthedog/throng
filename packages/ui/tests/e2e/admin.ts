@@ -48,13 +48,41 @@ export function isElevated(): boolean {
  * hold for. Rather than fail spuriously on an elevated dev machine, skip; the
  * elevated path has its own `@admin` coverage.
  *
- * Where these actually execute: a **developer's non-elevated run**. NOT in CI — GitHub's
- * Windows runners run as administrator, so every `skipIfElevated()` spec self-skips there
- * (019 FR-013a). This docblock used to claim the opposite ("CI runs non-elevated so these
- * still execute there"), which is why the gap went unnoticed for so long. Treat a green CI
- * as saying nothing about these specs. Call at the top of the test body.
+ * Where these execute: a developer's non-elevated run, and NOT CI. GitHub's Windows runners are
+ * elevated and cannot be made otherwise — dropping admin rights on a hosted runner was attempted and
+ * measured impossible (UAC is disabled there, so `schtasks /RL LIMITED` has no filtered token to
+ * fall back to; run 30947653266). So a guarded test does not run on CI, and never will.
+ *
+ * What changed is the SIZE of that hole, not its existence. The guard used to sit at module scope on
+ * ~85 files, skipping 208 of 634 tests — including almost the whole `editor-*` cluster, none of which
+ * touches the process tree this guard is about. An audit run with
+ * `THRONG_E2E_IGNORE_ELEVATION_GUARD=1` (below) established that 71 of those files pass perfectly
+ * well elevated. It is now 22 files and 25 tests, each one genuinely about conhost reaping, command
+ * observation, cwd reading, run-as-admin or reattach.
+ *
+ * The history is worth keeping, because this docblock has been wrong twice in opposite directions:
+ * it once claimed CI ran non-elevated (it did not), and later claimed the shard job re-entered at
+ * normal integrity through a scheduled task (it never did — that was proposed, measured, and
+ * abandoned, while this comment kept asserting it). Treat a green E2E stage as saying nothing about
+ * the 25 tests below.
+ *
+ * **Call it INSIDE the test body, never at module scope** — at module scope it skips every test in
+ * the file, which is exactly how the hole got to be a third of the suite.
  */
+/**
+ * Audit hatch: run the guarded specs ANYWAY, to find out which ones the guard is actually for.
+ *
+ * The guard was applied far more widely than its reason justifies — 38 of 41 `editor-*` files carry
+ * it, several of which contain no reference to a terminal at all and so cannot depend on the process
+ * tree it describes. The only environment that can settle which specs genuinely need it is an
+ * elevated one, and CI is elevated, so this exists to let CI answer the question once.
+ *
+ * Not a way to make a red suite green: it makes MORE tests run, never fewer.
+ */
+const IGNORE_ELEVATION_GUARD = process.env.THRONG_E2E_IGNORE_ELEVATION_GUARD === '1';
+
 export function skipIfElevated(): void {
+  if (IGNORE_ELEVATION_GUARD) return;
   test.skip(isElevated(), 'assumes a non-elevated (normal-integrity) daemon; the elevated / de-elevation path is covered by @admin tests');
 }
 

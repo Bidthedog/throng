@@ -2,11 +2,11 @@
  * US9 (#156) — the "Copy Path" submenu copies an item's path in each absolute/relative ×
  * Windows/Linux form to the clipboard.
  */
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 import type { Page } from '@playwright/test';
 
 function makeProject(): string {
@@ -56,6 +56,6 @@ test('Copy Path copies the item path in each absolute/relative × slash form (#1
       expect(relWin).toBe('src\\b.txt');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(root);
   }
 });

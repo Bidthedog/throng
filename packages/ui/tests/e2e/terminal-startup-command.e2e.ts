@@ -1,8 +1,62 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
+import {
+  openApp,
+  runApp as runOwnApp,
+  createProject as newProject,
+  firstPanelId,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
+ * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ *
+ * The shims below exist so the test bodies below are unchanged:
+ *   runApp        runs the body against the shared window. It refuses options rather than ignoring
+ *                 them: a dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
 
 /**
  * 025 — Startup Commands, command memory, and the user-defined-flavour launch gap (#113).
@@ -45,7 +99,7 @@ test('the form offers Shell Arguments, Startup Command and the memory checkbox (
     await expect(remember).toBeChecked();
   });
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupTemp(root);
   }
 });
 
@@ -71,7 +125,7 @@ test('a startup command runs and leaves an interactive prompt behind (FR-004/FR-
     await expect(win.getByTestId(`panel-type-select-${pid}`)).toHaveCount(0);
   });
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupTemp(root);
   }
 });
 
@@ -91,7 +145,7 @@ test('an empty startup command behaves exactly as before (FR-006)', async () => 
     await expect(term).not.toContainText('STARTUP_MARKER_OK');
   });
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupTemp(root);
   }
 });
 
@@ -104,7 +158,7 @@ test('a USER-DEFINED flavour actually launches — the gap #113 records (FR-042)
       JSON.stringify({ terminals: { flavours: [USER_FLAVOUR] } }, null, 2),
       'utf8',
     );
-    await runApp(
+    await runOwnApp(
       async (_app, win) => {
         await createProject(win, 'UserLaunch', root);
         const pid = await firstPanelId(win);
@@ -122,8 +176,8 @@ test('a USER-DEFINED flavour actually launches — the gap #113 records (FR-042)
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
-    rmSync(root, { recursive: true, force: true });
+    cleanupTemp(cfg);
+    cleanupTemp(root);
   }
 });
 
@@ -136,7 +190,7 @@ test('a user-defined flavour launches WITH a startup command, via its own recipe
       JSON.stringify({ terminals: { flavours: [USER_FLAVOUR] } }, null, 2),
       'utf8',
     );
-    await runApp(
+    await runOwnApp(
       async (_app, win) => {
         await createProject(win, 'UserLaunchCmd', root);
         const pid = await firstPanelId(win);
@@ -151,8 +205,8 @@ test('a user-defined flavour launches WITH a startup command, via its own recipe
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
-    rmSync(root, { recursive: true, force: true });
+    cleanupTemp(cfg);
+    cleanupTemp(root);
   }
 });
 
@@ -187,6 +241,6 @@ test('the empty-panel form pre-fills from what the panel remembered (FR-007a)', 
     await expect(win.getByTestId('terminal-remember-command')).toBeChecked();
   });
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupTemp(root);
   }
 });

@@ -192,3 +192,30 @@ describe('#90 Enter encoding — win32-input key event when PowerShell/cmd are r
     expect(encodeEnterKey(enter({ shift: true }), both)).toBe('\x1b[13;2u');
   });
 });
+
+describe('win32-input-mode belongs to the console, not to whoever is reading', () => {
+  const enterChord = { key: 'Enter', shift: true, alt: false, ctrl: false, meta: false };
+
+  it('sends the key record while the SHELL is editing its own line', () => {
+    // PSReadLine reads console key events, so the record is what reaches its binding for the chord.
+    const shell = applyDecPrivateMode(createKittyKeyboardState(), [9001], true);
+    expect(encodeEnterKey(enterChord, shell)).toContain('_');
+  });
+
+  it('does NOT send the key record once an application is reading', () => {
+    /*
+     * The mode is the CONSOLE's: a shell turns it on to read its prompt and leaves it on for
+     * whatever runs next, so its being set says nothing about who is reading now. A program reading
+     * raw VT ignores a key record completely, which is how a modified Enter went missing inside one.
+     *
+     * throng used to solve this by CLEARING the mode when an application started — which made it
+     * misreport itself to anything that asked (Windows Terminal answers `CSI ? 9001 ; 1 $ y` in the
+     * same state throng answered `2`). The tracking is now faithful and the decision is made here,
+     * from bracketed paste, exactly as Ctrl+Backspace does it.
+     */
+    const shell = applyDecPrivateMode(createKittyKeyboardState(), [9001], true);
+    const appReading = applyDecPrivateMode(shell, [2004], true);
+    expect(win32InputActive(appReading)).toBe(true); // still true — the console never turned it off
+    expect(encodeEnterKey(enterChord, appReading)).toBe('\n');
+  });
+});

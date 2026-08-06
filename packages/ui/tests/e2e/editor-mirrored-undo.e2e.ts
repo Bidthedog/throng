@@ -1,9 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, reloadWindow } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, reloadWindow, cleanupTemp} from './harness.js';
 
 /**
  * SC-013 — constitution XI, proven to a USER (016, FR-026c/FR-028f · T127).
@@ -33,7 +32,6 @@ async function newEditor(win: Page): Promise<string> {
 }
 
 test('Undo in a mirrored view reverts an edit made in the OTHER view (SC-013)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-mirundo-'));
   try {
     await runApp(async (app, win) => {
@@ -98,12 +96,11 @@ test('Undo in a mirrored view reverts an edit made in the OTHER view (SC-013)', 
       await expect(mainEditor).toHaveText('ALPHA-BETA', { timeout: 10000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('a mirrored view keeps its OWN cursor and scroll — view state is per view (FR-028c)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-mircur-'));
   try {
     await runApp(async (app, win) => {
@@ -154,6 +151,6 @@ test('a mirrored view keeps its OWN cursor and scroll — view state is per view
       await expect(activeLine(child)).toHaveText('one'); // …view B's caret never moved
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

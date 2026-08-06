@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 /**
  * US10 / FR-035 — the STRANDED HOVER never lingers when the window is blurred.
@@ -55,7 +55,7 @@ test('the Files & Folders root drops its hover background while Preferences is o
       expect(await root.evaluate(BG)).toBe(TRANSPARENT);
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(projectRoot);
   }
 });
 

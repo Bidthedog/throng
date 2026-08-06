@@ -2,15 +2,13 @@
  * US10 (#89) — the terminal panel header reflects the live window title the shell/program reports
  * (OSC 0/2 via xterm onTitleChange), replacing the panel name while a title is present.
  */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 test('the terminal header shows the live window title reported by the shell (#89)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-title-'));
   try {
     await runApp(async (_app, win) => {
@@ -31,6 +29,6 @@ test('the terminal header shows the live window title reported by the shell (#89
       await expect(header).toContainText('cmd.exe', { timeout: 10_000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(root);
   }
 });

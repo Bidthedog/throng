@@ -1,10 +1,9 @@
 import { basename } from 'node:path';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 // FR-020 (dedicated E2E, T127): when a Terminal Panel's shell ends — the user typed
 // `exit` (or it crashed) — the Panel reverts to the type-selection form, surfacing the
@@ -12,7 +11,6 @@ import { skipIfElevated } from './admin.js';
 // session. The Panel's type is fixed only while content is live.
 
 test('typing exit reverts the Panel to the form with exit info, then it re-types', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-revert-'));
   try {
     await runApp(async (_app, win) => {
@@ -66,6 +64,6 @@ test('typing exit reverts the Panel to the form with exit info, then it re-types
       await win.waitForTimeout(1200);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });

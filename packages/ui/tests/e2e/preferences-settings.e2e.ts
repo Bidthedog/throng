@@ -1,9 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, stubFolderDialog } from './harness.js';
+import { runApp, stubFolderDialog, cleanupTemp} from './harness.js';
 
 /**
  * US2 (007 Phase B): the Settings tab edits every control type from a visual form
@@ -18,7 +18,7 @@ function freshCfgRoot(): string {
   return dir;
 }
 test.afterAll(() => {
-  for (const dir of cfgRoots.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
 
 function readSettings(cfgRoot: string): Record<string, any> | null {

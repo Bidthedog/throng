@@ -6,14 +6,22 @@
  * Two panels called "Build" in two projects make every one of those a riddle. Uniqueness spans
  * every project and every sub-workspace, which is why only the daemon can enforce it.
  */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
-/** Rename the given panel through its header menu, returning the name it ended up with. */
-async function renamePanel(win: Page, panelId: string, to: string): Promise<string> {
+/**
+ * Rename the given panel through its header menu, and assert the name it ended up with.
+ *
+ * The expected name is asserted HERE, with a retrying expectation, rather than returned for the
+ * caller to compare. Returning `textContent()` was a single instantaneous read taken the moment the
+ * rename input closed: the title had not necessarily re-rendered yet, so under load it captured the
+ * OLD name and the comparison failed. That is what reddened CI (run 30951944889) while the test
+ * passed every time locally — a timing artefact, not a naming bug.
+ */
+async function renamePanel(win: Page, panelId: string, to: string, expected: string): Promise<void> {
   await win.getByTestId(`panel-handle-${panelId}`).click({ button: 'right' });
   await win.getByTestId('menu-item-Rename').click();
   const input = win.getByTestId(`panel-rename-input-${panelId}`);
@@ -21,7 +29,7 @@ async function renamePanel(win: Page, panelId: string, to: string): Promise<stri
   await input.fill(to);
   await input.press('Enter');
   await expect(win.getByTestId(`panel-rename-input-${panelId}`)).toHaveCount(0);
-  return (await win.getByTestId(`panel-title-${panelId}`).textContent()) ?? '';
+  await expect(win.getByTestId(`panel-title-${panelId}`)).toHaveText(expected);
 }
 
 test('a name taken in ANOTHER project is adjusted, and the user is told once', async () => {
@@ -32,7 +40,7 @@ test('a name taken in ANOTHER project is adjusted, and the user is told once', a
       // Project A: name its panel "Build".
       await createProject(win, 'AlphaProj', rootA);
       const a = await firstPanelId(win);
-      expect(await renamePanel(win, a, 'Build')).toBe('Build');
+      await renamePanel(win, a, 'Build', 'Build');
 
       // Project B — a DIFFERENT project, whose layout this window is now showing instead.
       await createProject(win, 'BetaProj', rootB);
@@ -40,8 +48,7 @@ test('a name taken in ANOTHER project is adjusted, and the user is told once', a
       expect(b).not.toBe(a);
 
       // The clash is in a project that is not even open. Only the daemon can see it.
-      const granted = await renamePanel(win, b, 'Build');
-      expect(granted).toBe('Build (2)');
+      await renamePanel(win, b, 'Build', 'Build (2)');
 
       // Told once, in a warning that dismisses itself — nothing was lost and nothing to decide.
       const notice = win.getByTestId('panel-name-adjusted');
@@ -58,11 +65,11 @@ test('a name taken in ANOTHER project is adjusted, and the user is told once', a
           );
         return ids[0];
       });
-      expect(await renamePanel(win, third, 'BUILD')).toBe('BUILD (2)');
+      await renamePanel(win, third, 'BUILD', 'BUILD (2)');
     });
   } finally {
     for (const r of [rootA, rootB]) {
-      rmSync(r, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+      cleanupTemp(r);
     }
   }
 });
@@ -91,7 +98,7 @@ test('the generated names of two projects do not collide', async () => {
     });
   } finally {
     for (const r of [rootA, rootB]) {
-      rmSync(r, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+      cleanupTemp(r);
     }
   }
 });

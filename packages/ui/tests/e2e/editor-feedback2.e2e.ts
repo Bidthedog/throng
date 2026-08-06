@@ -1,9 +1,8 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 // Session 2026-07-06 feedback: "This editor" rename + selected-editor disable
 // (FR-082), New Folder tree menu (FR-086), Save As (FR-084), and the save-dialog
@@ -27,7 +26,6 @@ async function newEditor(win: Page): Promise<string> {
 const item = (win: Page, label: string) => win.getByTestId(`menu-item-${label}`);
 
 test('"This editor" is disabled when the file is already open in the target editor', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -52,12 +50,11 @@ test('"This editor" is disabled when the file is already open in the target edit
       await expect(win.locator('.context-menu__item', { hasText: 'Last Active Editor' }).last()).toHaveClass(/context-menu__item--disabled/);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('the Files & Folders context menu has a New Folder action', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -73,12 +70,11 @@ test('the Files & Folders context menu has a New Folder action', async () => {
         .toBe(true);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('Save As writes the document to a newly chosen location', async () => {
-  skipIfElevated();
   const root = makeProject();
   const first = join(root, 'first.txt');
   const second = join(root, 'second.txt');
@@ -105,12 +101,11 @@ test('Save As writes the document to a newly chosen location', async () => {
       await expect.poll(() => (existsSync(second) ? readFileSync(second, 'utf8') : ''), { timeout: 8000 }).toBe('hello');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('the save dialog defaults the file name to the Panel name (FR-083)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (app, win) => {
@@ -144,6 +139,6 @@ test('the save dialog defaults the file name to the Panel name (FR-083)', async 
         .toContain('MyDocument');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

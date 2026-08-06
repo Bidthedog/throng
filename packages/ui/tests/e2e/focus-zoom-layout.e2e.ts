@@ -1,9 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, reloadWindow, commitPanelRename, commitTabRename } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, panelIds, reloadWindow, commitPanelRename, commitTabRename, cleanupTemp} from './harness.js';
 
 // 012 US4 (FR-005/006/010, SC-003): focus + per-type zoom survive layout changes.
 // A sensible panel stays active across every transition, and each type's
@@ -27,7 +26,6 @@ async function newEditor(win: Page, pid: string): Promise<void> {
 }
 
 test("a panel's zoom and a single active panel survive tab switch, split, and close (FR-005/010)", async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-fzl-'));
   try {
     await runApp(async (_app, win) => {
@@ -70,7 +68,7 @@ test("a panel's zoom and a single active panel survive tab switch, split, and cl
       expect(await panelZoom(win, p1)).toBe(level);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
@@ -116,6 +114,6 @@ test('the main window and a detached sub-workspace hold independent active panel
       await expect(child.locator('.panel-box--active')).toHaveCount(1);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

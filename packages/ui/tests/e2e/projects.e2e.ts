@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,6 +8,7 @@ import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
+import { cleanupTemp } from './harness.js';
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
@@ -106,7 +107,7 @@ test('creates a project, makes it active, and opens its workspace', async () => 
   } finally {
     if (app) await app.close();
     await stopDaemon(harness.daemon);
-    rmSync(harness.dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(harness.dataDir);
   }
 });
 
@@ -137,7 +138,7 @@ test('switches the active project and swaps the workspace + accent', async () =>
   } finally {
     if (app) await app.close();
     await stopDaemon(harness.daemon);
-    rmSync(harness.dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(harness.dataDir);
   }
 });
 
@@ -162,7 +163,7 @@ test('edits and deletes a project, leaving a valid state', async () => {
   } finally {
     if (app) await app.close();
     await stopDaemon(harness.daemon);
-    rmSync(harness.dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(harness.dataDir);
   }
 });
 
@@ -196,6 +197,6 @@ test('restores the project list and active project after a restart', async () =>
   } finally {
     if (app) await app.close();
     await stopDaemon(harness.daemon);
-    rmSync(harness.dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(harness.dataDir);
   }
 });

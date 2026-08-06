@@ -1,11 +1,10 @@
 import { basename } from 'node:path';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, panelIds, cleanupTemp} from './harness.js';
 
 // T068 (US3 / FR-015): closing the app while terminals are running must warn with
 // a three-choice prompt (leave running / terminate all / cancel) instead of
@@ -17,7 +16,6 @@ async function requestClose(app: ElectronApplication): Promise<void> {
 }
 
 test('closing with a running terminal shows the three-choice warning; Cancel keeps it open', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-close-'));
   try {
     await runApp(async (app, win) => {
@@ -52,7 +50,7 @@ test('closing with a running terminal shows the three-choice warning; Cancel kee
       await expect(win.getByTestId(`panel-type-form-${pid}`)).toBeVisible({ timeout: 15000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });
 
@@ -79,12 +77,11 @@ test('“Terminate all” closes the app', async () => {
       await closed;
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });
 
 test('warns with the right count when several terminals run (incl. a busy one)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-close-many-'));
   try {
     await runApp(async (app, win) => {
@@ -130,7 +127,7 @@ test('warns with the right count when several terminals run (incl. a busy one)',
       await closed;
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });
 

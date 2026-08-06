@@ -1,9 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, reloadWindow } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, reloadWindow, cleanupTemp} from './harness.js';
 
 // FR-087: in a sub-workspace window, a Panel's project/sub-workspace owner text is
 // right-aligned in the header, immediately beside the Panel controls (not floating
@@ -17,7 +16,6 @@ const seedSub = `(() => window.throng.invoke('workspace.persistSubWorkspaces', {
 ] }))()`;
 
 test('the sub-workspace/project owner text is right-aligned beside the panel controls', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-owner-'));
   try {
     await runApp(async (app, win) => {
@@ -45,6 +43,6 @@ test('the sub-workspace/project owner text is right-aligned beside the panel con
       }
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

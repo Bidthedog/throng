@@ -20,12 +20,11 @@
  * RED until the tab-close handlers dispose the editor documents they destroy, exactly as
  * the panel-destroy path does.
  */
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 /** A project with a single file at its root. */
 function makeProject(tag: string): string {
@@ -35,7 +34,7 @@ function makeProject(tag: string): string {
 }
 
 const rmRoot = (dir: string): void => {
-  rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  cleanupTemp(dir);
 };
 
 /** Turn the panel `pid` into an editor. */
@@ -78,7 +77,6 @@ async function destroyTab(win: Page, index: number): Promise<void> {
 }
 
 test('AC1 — destroying the tab that hosts an editor releases the one-buffer registry', async () => {
-  skipIfElevated();
   const root = makeProject('ac1');
   const filePath = join(root, 'note.txt');
   try {
@@ -110,7 +108,6 @@ test('AC1 — destroying the tab that hosts an editor releases the one-buffer re
 });
 
 test('AC2 — after the tab is destroyed the file opens again in a new editor', async () => {
-  skipIfElevated();
   const root = makeProject('ac2');
   try {
     await runApp(async (_app, win) => {

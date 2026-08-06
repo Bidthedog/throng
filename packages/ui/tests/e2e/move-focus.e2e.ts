@@ -1,9 +1,64 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, addPanels, commitPanelRename } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import {
+  openApp,
+  createProject as newProject,
+  firstPanelId,
+  panelIds,
+  addPanels,
+  commitPanelRename,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
+ * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ *
+ * The shims below exist so the test bodies below are unchanged:
+ *   runApp        runs the body against the shared window. It refuses options rather than ignoring
+ *                 them: a dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
 
 // 012 US3 (FR-015, SC-008/008a): directional + cyclic keyboard focus movement over
 // the active tab's split tree, in stable layout order, staying put at the edge.
@@ -73,7 +128,6 @@ test('cycle forward/backward visits panels in layout order, wrapping the ring (S
 });
 
 test('move-focus works from a focused terminal and editor, and input routing follows (FR-003)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-mf-io-'));
   try {
     await runApp(async (_app, win) => {
@@ -114,6 +168,6 @@ test('move-focus works from a focused terminal and editor, and input routing fol
       await expect(win.getByTestId(`editor-${p2}`).locator('.cm-content')).not.toContainText('TERM_OK_777');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

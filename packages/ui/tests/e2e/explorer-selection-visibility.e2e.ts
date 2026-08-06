@@ -7,11 +7,11 @@
  * next keystroke would reach. The highlight now goes when the pane does, and comes back with it.
  * The selection underneath is never touched.
  */
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 const TRANSPARENT = 'rgba(0, 0, 0, 0)';
 
@@ -54,6 +54,6 @@ test('the tree highlights its selection only while its pane is active', async ()
       await expect.poll(() => selectedRowBackground(win)).toBe(lit);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

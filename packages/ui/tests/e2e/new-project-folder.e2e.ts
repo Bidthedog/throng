@@ -1,9 +1,9 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
-import { runApp } from './harness.js';
+import { runApp, cleanupTemp} from './harness.js';
 
 // 011 US3 (FR-040/041/043): the new-project folder picker opens at the resolved
 // starting folder, and falls back to the profile/home folder when unresolvable. We
@@ -47,8 +47,8 @@ test('lastViewed opens the picker at the last chosen folder', async () => {
       { env },
     );
   } finally {
-    rmSync(lastFolder, { recursive: true, force: true });
-    rmSync(cfgRoot, { recursive: true, force: true });
+    cleanupTemp(lastFolder);
+    cleanupTemp(cfgRoot);
   }
 });
 
@@ -67,8 +67,8 @@ test('profile opens the picker at the home folder', async () => {
       { env },
     );
   } finally {
-    rmSync(picked, { recursive: true, force: true });
-    rmSync(cfgRoot, { recursive: true, force: true });
+    cleanupTemp(picked);
+    cleanupTemp(cfgRoot);
   }
 });
 
@@ -93,9 +93,9 @@ test('an unresolvable override cascades to the last-viewed folder before home', 
       { env },
     );
   } finally {
-    rmSync(lastFolder, { recursive: true, force: true });
-    rmSync(picked, { recursive: true, force: true });
-    rmSync(cfgRoot, { recursive: true, force: true });
+    cleanupTemp(lastFolder);
+    cleanupTemp(picked);
+    cleanupTemp(cfgRoot);
   }
 });
 
@@ -117,7 +117,7 @@ test('an unresolvable override with no last-viewed folder falls back to home', a
       { env },
     );
   } finally {
-    rmSync(picked, { recursive: true, force: true });
-    rmSync(cfgRoot, { recursive: true, force: true });
+    cleanupTemp(picked);
+    cleanupTemp(cfgRoot);
   }
 });

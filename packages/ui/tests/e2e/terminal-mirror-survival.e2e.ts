@@ -1,9 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, reloadWindow, daemonRpc } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, reloadWindow, daemonRpc, cleanupTemp} from './harness.js';
 
 /**
  * 008 User Story 1 (SC-001/SC-004). A long-running program in a project terminal MUST
@@ -32,7 +31,6 @@ async function newTerminal(win: Page, root: string): Promise<string> {
 }
 
 test('a running terminal survives being mirrored into a new sub-workspace and streams to both windows', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-termsurv-'));
   try {
     await runApp(async (app, win, { pipeName }) => {
@@ -76,6 +74,6 @@ test('a running terminal survives being mirrored into a new sub-workspace and st
       await expect(child.getByTestId(`terminal-${pid}`)).toContainText('SURVIVED_9137', { timeout: 20000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

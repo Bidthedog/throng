@@ -6,16 +6,14 @@
  * title. Here: open a terminal, switch away to a new tab (unmounting it), switch back, and assert the
  * header still shows the shell's reported title rather than falling back to "Panel 1".
  */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId, commitTabRename } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, commitTabRename, cleanupTemp} from './harness.js';
 
 test('a terminal keeps its window title across a tab switch (#7)', async () => {
   test.setTimeout(60000);
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-titlep-'));
   try {
     await runApp(async (_app, win) => {
@@ -47,6 +45,6 @@ test('a terminal keeps its window title across a tab switch (#7)', async () => {
       await expect(header).toContainText('cmd.exe', { timeout: 5_000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(root);
   }
 });

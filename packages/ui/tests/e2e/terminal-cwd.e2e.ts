@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 // 012 revision: the daemon polls each terminal's shell cwd (via the process-cwd OS
@@ -33,6 +33,6 @@ test('the terminal panel title shows its live working directory and updates on c
       await expect(win.getByTestId(`panel-cwd-${pid}`)).toContainText('deepdir', { timeout: 10000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

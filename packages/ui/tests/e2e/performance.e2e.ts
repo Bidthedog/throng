@@ -1,12 +1,12 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { commitPanelRename } from './harness.js';
+import { commitPanelRename, cleanupTemp} from './harness.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -134,7 +134,7 @@ test('restores a project workspace within the launch budget (NFR-002)', async ()
   } finally {
     if (app) await app.close();
     await stopDaemon(h.daemon);
-    rmSync(h.dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(h.dataDir);
   }
 });
 
@@ -171,6 +171,6 @@ test('shows drop-target feedback promptly once a Panel drag starts (NFR-001/SC-0
   } finally {
     if (app) await app.close();
     await stopDaemon(h.daemon);
-    rmSync(h.dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(h.dataDir);
   }
 });

@@ -3,8 +3,7 @@ import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId, daemonRpc } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, daemonRpc, cleanupTemp} from './harness.js';
 
 // FR-022 (dedicated E2E, T129): while a project has an open terminal, the daemon holds
 // the project root (IDirectoryLock), so the root folder can't be deleted/moved and the
@@ -13,7 +12,6 @@ import { skipIfElevated } from './admin.js';
 // shell) and the FR-022 root-path-edit guard (projects.update is rejected).
 
 test('an open terminal locks the project root against deletion and root-path edits', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-rootlock-'));
   const elsewhere = mkdtempSync(join(tmpdir(), 'throng-rootlock-new-'));
   try {
@@ -56,7 +54,7 @@ test('an open terminal locks the project root against deletion and root-path edi
       expect(allowed?.project?.rootFolder).toBe(elsewhere);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
-    rmSync(elsewhere, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
+    cleanupTemp(elsewhere);
   }
 });

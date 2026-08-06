@@ -1,9 +1,9 @@
 import { basename } from 'node:path';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 // US2 (launch) / Plan Phase C·1 (FR-013/014/SC-004): confirming a Terminal Panel
 // starts a live shell hosted by the daemon, attached inline (xterm.js), rooted at
@@ -47,6 +47,6 @@ test('confirms Terminal → a live inline shell echoes input and starts at the p
       await expect(win.getByTestId(`panel-type-form-${pid}`)).toBeVisible({ timeout: 15000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    cleanupTemp(root);
   }
 });

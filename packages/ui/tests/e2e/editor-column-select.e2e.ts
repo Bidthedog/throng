@@ -1,9 +1,63 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, addPanels } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import {
+  openApp,
+  createProject as newProject,
+  firstPanelId,
+  panelIds,
+  addPanels,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
+ * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ *
+ * The shims below exist so the test bodies below are unchanged:
+ *   runApp        runs the body against the shared window. It refuses options rather than ignoring
+ *                 them: a dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
 
 /**
  * US6 — rectangular (column) selection (016, FR-025 · T077-T083).
@@ -93,7 +147,6 @@ const coordsAt = (
   );
 
 test('Shift+Alt+Arrow builds a real block — a typed character lands on EVERY row', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -111,12 +164,11 @@ test('Shift+Alt+Arrow builds a real block — a typed character lands on EVERY r
       await expect.poll(() => docText(win, pid)).toBe('Xaaaa\nXbbbb\nXcccc\ndddd\n');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('Alt+drag makes a block, and cutting it takes ONLY the block’s characters (FR-025e)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -144,12 +196,11 @@ test('Alt+drag makes a block, and cutting it takes ONLY the block’s characters
       expect(entry.text).toBe('aa\nbb\ncc');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('Delete on a block clears it per row and NEVER touches the clipboard (FR-025g)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -172,12 +223,11 @@ test('Delete on a block clears it per row and NEVER touches the clipboard (FR-02
       expect((await clipboard(win)).text).toBe('SENTINEL');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('a block copied in one panel pastes COLUMN-WISE in another — the mode is app-global', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -213,12 +263,11 @@ test('a block copied in one panel pastes COLUMN-WISE in another — the mode is 
       expect(await docText(win, p1)).toBe(GRID);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('N EXTERNAL lines over an N-row block distribute one line per row (FR-025h)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -239,12 +288,11 @@ test('N EXTERNAL lines over an N-row block distribute one line per row (FR-025h)
       await expect.poll(() => docText(win, pid)).toBe('1aaa\n2bbb\n3ccc\ndddd\n');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('a column paste into a TAB-indented file pads with TABS, and lands on the column (FR-025c1)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -279,12 +327,11 @@ test('a column paste into a TAB-indented file pads with TABS, and lands on the c
         .toBe('\tAAaAA\nB\t  b\n\tCCcCC\n');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('ONE Undo reverts a ten-row column paste — a command is one undo entry (FR-026)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -310,6 +357,6 @@ test('ONE Undo reverts a ten-row column paste — a command is one undo entry (F
       await expect.poll(() => docText(win, pid)).toBe(cut);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

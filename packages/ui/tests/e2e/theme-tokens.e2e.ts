@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
-import { runApp } from './harness.js';
+import { runApp, cleanupTemp} from './harness.js';
 
 // FR-030 (#7): EVERY theme colour token + the fonts must actually apply, and
 // hot-reload. #6: a settings-named theme that doesn't exist must fall back to the
@@ -48,7 +48,7 @@ test('every theme colour token applies and hot-reloads', async () => {
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
+    cleanupTemp(cfg);
   }
 });
 
@@ -87,7 +87,7 @@ test('theme colours + fonts map to real rendered styles (whole-app)', async () =
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
+    cleanupTemp(cfg);
   }
 });
 
@@ -110,6 +110,6 @@ test('a non-existent settings theme falls back to defaults and writes no file (#
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
+    cleanupTemp(cfg);
   }
 });

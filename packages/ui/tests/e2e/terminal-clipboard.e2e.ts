@@ -1,12 +1,12 @@
 import { basename } from 'node:path';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
-import { skipIfElevated } from './admin.js';
+import { cleanupTemp } from './harness.js';
 
 // Clipboard support (005): a program running inside the terminal — Claude Code,
 // tmux, vim — copies to the system clipboard by emitting an OSC 52 escape sequence.
@@ -23,7 +23,6 @@ const EXPECTED = 'throngClip42';
 const B64 = 'dGhyb25nQ2xpcDQy';
 
 test('an OSC 52 sequence from inside the terminal writes to the system clipboard', async () => {
-  skipIfElevated();
   const pipe = `\\\\.\\pipe\\throng-clip-${process.pid}-${Date.now()}`;
   const dataDir = mkdtempSync(join(tmpdir(), 'clip-data-'));
   const cfg = mkdtempSync(join(tmpdir(), 'clip-cfg-'));
@@ -116,7 +115,7 @@ test('an OSC 52 sequence from inside the terminal writes to the system clipboard
     }
     await new Promise((r) => setTimeout(r, 500));
     for (const d of [dataDir, cfg, userData, root]) {
-      rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      cleanupTemp(d);
     }
   }
 });
@@ -128,7 +127,6 @@ test('an OSC 52 sequence from inside the terminal writes to the system clipboard
 // menu. We also drive Paste end-to-end (clipboard → terminal.write) to prove the two
 // actions survived the move off the native menu.
 test('right-clicking the terminal opens the themed in-app menu, and Paste works', async () => {
-  skipIfElevated();
   const PASTE = 'throngPasteToken99';
   const pipe = `\\\\.\\pipe\\throng-clipmenu-${process.pid}-${Date.now()}`;
   const dataDir = mkdtempSync(join(tmpdir(), 'clipmenu-data-'));
@@ -198,7 +196,7 @@ test('right-clicking the terminal opens the themed in-app menu, and Paste works'
     }
     await new Promise((r) => setTimeout(r, 500));
     for (const d of [dataDir, cfg, userData, root]) {
-      rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      cleanupTemp(d);
     }
   }
 });
@@ -212,7 +210,6 @@ test('right-clicking the terminal opens the themed in-app menu, and Paste works'
 // the `throng:terminal:write` IPC in the main process and count how many writes carried the token.
 // Nothing pastes → 0 (the old bug); a correct single paste → exactly 1; a double paste → 2.
 test('#142: Ctrl+V pastes the clipboard into the terminal exactly once', async () => {
-  skipIfElevated();
   const PASTE = 'throngCtrlVToken77';
   const pipe = `\\\\.\\pipe\\throng-ctrlv-${process.pid}-${Date.now()}`;
   const dataDir = mkdtempSync(join(tmpdir(), 'ctrlv-data-'));
@@ -292,7 +289,7 @@ test('#142: Ctrl+V pastes the clipboard into the terminal exactly once', async (
     }
     await new Promise((r) => setTimeout(r, 500));
     for (const d of [dataDir, cfg, userData, root]) {
-      rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      cleanupTemp(d);
     }
   }
 });

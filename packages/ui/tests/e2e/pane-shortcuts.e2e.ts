@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 // Ctrl+Alt+B toggles the Projects (left) pane; Ctrl+Alt+N toggles the Files & Folders
 // (right) pane. Both are configurable in keybindings.json.
@@ -80,6 +80,6 @@ test('the pane-toggle shortcuts are configurable in keybindings.json', async () 
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(cfg);
   }
 });

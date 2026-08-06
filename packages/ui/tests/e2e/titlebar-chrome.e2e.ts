@@ -1,9 +1,57 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
-import { runApp } from './harness.js';
+import {
+  openApp,
+  runApp as runOwnApp,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
+ * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ *
+ * The shims below exist so the test bodies below are unchanged:
+ *   runApp        runs the body against the shared window. It refuses options rather than ignoring
+ *                 them: a dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
 
 /**
  * US1 (007 Phase A): the application-drawn title bar replaces the OS chrome — a
@@ -56,12 +104,29 @@ test('title bar spans the top and hosts the cog + window controls', async () => 
   });
 });
 
-test('the cog reveals exactly Settings / Key Bindings / Themes and is dismissible', async () => {
+test('the cog reveals exactly Settings / Key Bindings / Themes / Logs / About and is dismissible', async () => {
   await runApp(async (_app, win) => {
     await win.getByTestId('title-bar-cog').click();
     const menu = win.getByTestId('cog-menu');
     await expect(menu).toBeVisible();
-    await expect(menu.getByRole('menuitem')).toHaveText(['Settings', 'Key Bindings', 'Themes', 'About throng']);
+    /*
+     * Names only — the leading glyph is deliberately not asserted.
+     *
+     * This expectation had gone stale twice over: the menu gained icons and an "Open Logs Folder"
+     * entry, so a whole-text match failed on `⚙Settings` vs `Settings` AND on the missing item. It
+     * was invisible because CI reported the shard green while this failed, so nobody was told.
+     *
+     * Matching the name inside each item keeps the test about WHICH COMMANDS the cog offers, which is
+     * what the title claims, rather than about the icon set — a decorative change should not redden
+     * this, but a command appearing or vanishing must.
+     */
+    await expect(menu.getByRole('menuitem')).toHaveText([
+      /Settings/,
+      /Key Bindings/,
+      /Themes/,
+      /Open Logs Folder/,
+      /About throng/,
+    ]);
     // Dismiss without a selection.
     await win.keyboard.press('Escape');
     await expect(menu).toBeHidden();
@@ -87,7 +152,7 @@ function seedThemeSurfaces(surface: string, surfaceActive: string, accent?: stri
 }
 test.afterAll(() => {
   for (const dir of cfgRoots.splice(0))
-    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(dir);
 });
 
 test('the cog dropdown menu follows the active theme (018/021, FR-008/FR-023)', async () => {
@@ -98,7 +163,7 @@ test('the cog dropdown menu follows the active theme (018/021, FR-008/FR-023)', 
   const cfgRoot = seedThemeSurfaces('#ff00aa', '#00cc55', '#ffcc00');
   const SURFACE_ACTIVE = 'rgb(0, 204, 85)';
   const ACCENT = 'rgb(255, 204, 0)';
-  await runApp(
+  await runOwnApp(
     async (_app, win) => {
       await win.getByTestId('title-bar-cog').click();
       const menu = win.getByTestId('cog-menu');
@@ -153,7 +218,13 @@ test('window controls maximise/restore (button + double-click) and minimise', as
 });
 
 test('cog opens the single shared preferences window on the matching tab; non-modal + movable', async () => {
-  await runApp(async (app, win) => {
+  /*
+   * Its OWN app. The subject here is the cog OPENING that window, and there is only one of them per
+   * app — so if any earlier test in this file has already opened it, the cog re-uses it, no `window`
+   * event is emitted, and the wait below hangs. Sharing an app is right for this file generally and
+   * wrong for the one test whose subject is the window's creation.
+   */
+  await runOwnApp(async (app, win) => {
     // Settings → the prefs window opens on the Settings tab.
     await win.getByTestId('title-bar-cog').click();
     const [prefs] = await Promise.all([

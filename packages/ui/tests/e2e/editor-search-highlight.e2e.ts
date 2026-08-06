@@ -1,9 +1,8 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 // 016 FR-007a / SC-007b — the COMPOSING half of the search/highlight overlap.
 //
@@ -34,7 +33,6 @@ async function openWithFile(win: Page): Promise<string> {
 }
 
 test('a search match keeps the code beneath it syntax-coloured (FR-007a)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -92,6 +90,6 @@ test('a search match keeps the code beneath it syntax-coloured (FR-007a)', async
       expect(stillHighlighted.keyword).toBe(keywordColour);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

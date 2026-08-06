@@ -6,12 +6,11 @@
  * through a context menu was the odd one out. In a TERMINAL it must also be TAKEN: a chord throng
  * advertises must not simultaneously be handed to the running program.
  */
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 /** Close an app that has a live terminal by answering the prompt it earns. */
 async function terminateAllClose(app: ElectronApplication, win: Page): Promise<void> {
@@ -23,7 +22,6 @@ async function terminateAllClose(app: ElectronApplication, win: Page): Promise<v
 }
 
 test('F2 renames an editor panel, and the menu advertises the chord', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-f2-'));
   writeFileSync(join(root, 'a.txt'), 'x\n');
   try {
@@ -68,12 +66,11 @@ test('F2 renames an editor panel, and the menu advertises the chord', async () =
       await expect(content).toContainText('typed');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('F2 renames a terminal panel, and is not delivered to the shell', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-f2t-'));
   try {
     await runApp(async (app, win) => {
@@ -97,6 +94,6 @@ test('F2 renames a terminal panel, and is not delivered to the shell', async () 
       await terminateAllClose(app, win);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

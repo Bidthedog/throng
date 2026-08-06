@@ -1,9 +1,63 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Locator, Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
+import {
+  openApp,
+  createProject as newProject,
+  firstPanelId,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+import { skipIfElevated } from './admin.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
+ * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ *
+ * The shims below exist so the test bodies below are unchanged:
+ *   runApp        runs the body against the shared window. It refuses options rather than ignoring
+ *                 them: a dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
 
 /**
  * 026 / #198 — one Ctrl+click on a terminal link opens the browser exactly once.
@@ -161,7 +215,7 @@ test('Ctrl+clicking an OSC 8 link whose text IS the url opens the browser exactl
       expect(await opens.urls()).toEqual([url]);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
@@ -184,11 +238,15 @@ test('Ctrl+clicking a PLAIN-TEXT url opens exactly once', async () => {
       expect(await opens.urls()).toEqual([url]);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('Ctrl+clicking an OSC 8 link with non-url text opens its TARGET, exactly once', async () => {
+  // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
+  // daemon routes terminals through the de-elevated agent, a different process tree these
+  // assertions do not describe — the condition this guard exists for.
+  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-link3-'));
   const url = 'https://example.com/osc8-hidden-target';
   const label = 'CLICKTHELABEL';
@@ -209,7 +267,7 @@ test('Ctrl+clicking an OSC 8 link with non-url text opens its TARGET, exactly on
       expect(await opens.urls()).toEqual([url]);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
@@ -231,6 +289,69 @@ test('a PLAIN click on a link opens nothing — it keeps its terminal meaning', 
       expect(await opens.urls()).toEqual([]);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
+  }
+});
+
+/**
+ * 028 T004 (FR-050/055a) — the same guarantee on the ALTERNATE screen.
+ *
+ * The four fences above all run on the normal buffer, which is the one condition #198's reporter was
+ * NOT in: the report came from a full-screen program. That difference is not cosmetic here — the
+ * alternate screen is where this feature suppresses the replayed tail, forces redraws and re-encodes
+ * keys, so it is exactly where a second `openExternal` could newly appear.
+ *
+ * The link is emitted by the program itself rather than typed, for the reason in the header: typing
+ * an OSC 8 sequence at a prompt puts the URL in the echoed command line, and the test then clicks
+ * the echo instead of the link.
+ */
+test('Ctrl+clicking a link on the ALTERNATE screen opens exactly once', async () => {
+  // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
+  // daemon routes terminals through the de-elevated agent, a different process tree these
+  // assertions do not describe — the condition this guard exists for.
+  skipIfElevated();
+  const root = mkdtempSync(join(tmpdir(), 'throng-link-alt-'));
+  const uri = 'https://example.com/alt-screen-link';
+  /*
+   * A full-screen program that takes the alternate screen, prints one OSC 8 hyperlink into it, and
+   * then sits still. It must NOT repaint on its own: a program that redraws spontaneously would
+   * rebuild the link cells under the pointer and mask whatever throng did.
+   */
+  const ESC = String.fromCharCode(27);
+  const ST = ESC + String.fromCharCode(92); // the string terminator that closes an OSC sequence
+  writeFileSync(
+    join(root, 'altlink.cjs'),
+    [
+      'const out = process.stdout;',
+      `out.write(${JSON.stringify(ESC + '[?1049h')});`,
+      `out.write(${JSON.stringify(ESC + '[H' + ESC + ']8;;' + uri + ST + 'ALTLINKTEXT' + ESC + ']8;;' + ST)});`,
+      'process.stdin.resume();',
+      'process.stdin.setRawMode && process.stdin.setRawMode(true);',
+      'setInterval(() => {}, 1 << 30);',
+    ].join(String.fromCharCode(10)),
+    'utf8',
+  );
+
+  try {
+    await runApp(async (app, win) => {
+      const opens = await captureOpens(app);
+      await createProject(win, 'LinkAlt', root);
+      const term = await openTerminal(win, root);
+
+      await term.click();
+      await win.keyboard.type('node altlink.cjs');
+      await win.keyboard.press('Enter');
+      await expect(term).toContainText('ALTLINKTEXT', { timeout: 25_000 });
+
+      await opens.reset();
+      await clickLink(win, 'ALTLINKTEXT', { ctrl: true });
+      await win.waitForTimeout(1500);
+
+      // Exactly once, at the seam — the same claim the normal-screen fences make, in the condition
+      // the reporter was actually in.
+      expect(await opens.urls()).toEqual([uri]);
+    });
+  } finally {
+    cleanupTemp(root);
   }
 });

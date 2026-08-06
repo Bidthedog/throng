@@ -2,11 +2,11 @@
  * US6 (#137) — the editor panel title menu's "Reveal File" reveals the open file in throng's own
  * Files & Folders tree (expanding ancestors and selecting it), and offers "Open in OS Explorer".
  */
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 function makeProject(): string {
   const root = mkdtempSync(join(tmpdir(), 'throng-us6-'));
@@ -46,6 +46,6 @@ test('editor "Reveal File" selects the open file in the Files & Folders tree (#1
       await expect(tree.locator('.tree-row--selected')).toContainText('deep.txt');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(root);
   }
 });

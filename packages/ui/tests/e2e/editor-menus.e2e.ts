@@ -1,9 +1,8 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 // US6 / FR-006a (Delivery D; FR-107 refinement): a top-level "Open in OS File
 // Explorer" reveal + an "Open In" submenu of editor targets (disabled for an
@@ -27,7 +26,6 @@ async function newEditor(win: Page): Promise<string> {
 const item = (win: Page, label: string) => win.getByTestId(`menu-item-${label}`);
 
 test('Open In submenu holds editor targets; a top-level OS reveal; disables an open file', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -59,12 +57,11 @@ test('Open In submenu holds editor targets; a top-level OS reveal; disables an o
       await expect(win.locator('.context-menu__item', { hasText: 'Last Active Editor' }).last()).toHaveClass(/context-menu__item--disabled/);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('Send to Tab offers New Tab on the panel menu', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -75,12 +72,11 @@ test('Send to Tab offers New Tab on the panel menu', async () => {
       await expect(item(win, 'New Tab')).toBeVisible();
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('destroying a dirty editor prompts save/discard/cancel; cancel is a no-op', async () => {
-  skipIfElevated();
   const root = makeProject();
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-cfg-menu-'));
   // No destroy-confirmation noise — isolate the dirty-close prompt.
@@ -120,7 +116,7 @@ test('destroying a dirty editor prompts save/discard/cancel; cancel is a no-op',
       { env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(cfgRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
+    cleanupTemp(cfgRoot);
   }
 });

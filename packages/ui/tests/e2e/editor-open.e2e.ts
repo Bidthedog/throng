@@ -1,18 +1,77 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import {
+  openApp,
+  createProject as newProject,
+  firstPanelId,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Every `runApp` is an Electron launch, a daemon and a window — around two seconds each — and none of
+ * the tests here needs a pristine app: each builds its own project, and creating a project swaps the
+ * whole workspace, which is the isolation they actually rely on. Only a test that seeds state BEFORE
+ * launch needs its own app, and there is none in this file.
+ *
+ * The shims keep the test bodies unchanged:
+ *   runApp        runs against the shared window, and REFUSES options rather than ignoring them — a
+ *                 silently dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required (shared window, shared database) and means a failure skips the rest rather
+ * than running them against whatever state it left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
 // US2/US9 (Delivery B): open files from the tree into the last active editor
 // (openOnClick single default); an already-open file focuses the one editor;
-// opening into a dirty editor shows the four-choice prompt.
+// opening into a dirty editor shows the four-choice prompt, and "Open in new
+// editor" must open the file that was CLICKED.
 
 function makeProject(): string {
   const root = mkdtempSync(join(tmpdir(), 'throng-open-'));
   writeFileSync(join(root, 'alpha.txt'), 'ALPHA-CONTENT\n');
   writeFileSync(join(root, 'beta.txt'), 'BETA-CONTENT\n');
+  return root;
+}
+
+/** A project whose open document can be deleted underneath the editor. */
+function makeDirtyProject(): string {
+  const root = mkdtempSync(join(tmpdir(), 'throng-newed-'));
+  writeFileSync(join(root, 'CLAUDE.md'), 'CLAUDE-DOC-CONTENT\n');
+  writeFileSync(join(root, 'gone.txt'), 'GONE-BODY\n');
+  writeFileSync(join(root, 'target.txt'), 'TARGET-BODY-99\n');
   return root;
 }
 
@@ -25,7 +84,6 @@ async function newEditor(win: Page): Promise<string> {
 }
 
 test('clicking a file opens it into the editor; another file replaces a clean doc', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -43,16 +101,21 @@ test('clicking a file opens it into the editor; another file replaces a clean do
       await tree.getByText('beta.txt', { exact: true }).click();
       await expect(content).toContainText('BETA-CONTENT', { timeout: 8000 });
       await expect(content).not.toContainText('ALPHA-CONTENT');
-      // Still exactly one editor panel (no duplicate buffer).
-      expect(await win.locator('.editor-panel').count()).toBe(1);
+      /*
+       * Exactly one editor panel — no duplicate buffer.
+       *
+       * This counts panels in the ACTIVE project's workspace, which is what makes it safe alongside
+       * the "Open in new editor" test below that deliberately ends with two: each test creates its
+       * own project, and creating one swaps the workspace.
+       */
+      await expect(win.locator('.editor-panel')).toHaveCount(1);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('opening a file into a dirty editor shows the four-choice prompt; cancel is a no-op', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -102,6 +165,43 @@ test('opening a file into a dirty editor shows the four-choice prompt; cancel is
       await expect(content).not.toContainText('EDIT');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
+  }
+});
+
+// Repro: a dirty editor whose file was DELETED is active; clicking another file shows
+// the unsaved-changes prompt; "Open in new editor" MUST open the CLICKED file — not
+// some other file (bug: it opened CLAUDE.md / the wrong file).
+test('"Open in new editor" from the unsaved prompt opens the CLICKED file (not CLAUDE.md)', async () => {
+  const root = makeDirtyProject();
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'NewEd', root);
+      const pid = await newEditor(win);
+      await win.getByTestId(`editor-${pid}`).click();
+      const tree = win.getByTestId('file-explorer-tree');
+
+      // Open gone.txt, then delete it EXTERNALLY (as the user did in Explorer) →
+      // the soft-detection watcher marks the editor dirty + file-missing.
+      await tree.getByText('gone.txt', { exact: true }).click();
+      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText('GONE-BODY', {
+        timeout: 8000,
+      });
+      unlinkSync(join(root, 'gone.txt'));
+      await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible({ timeout: 8000 });
+
+      // Click target.txt → the unsaved prompt → "Open in new editor".
+      await tree.getByText('target.txt', { exact: true }).click();
+      await expect(win.getByTestId('unsaved-open-dialog')).toBeVisible({ timeout: 8000 });
+      await win.getByTestId('unsaved-open-new').click();
+
+      // A second editor exists and shows TARGET's content — NOT CLAUDE.md, NOT gone's.
+      await expect(win.locator('.editor-panel')).toHaveCount(2, { timeout: 8000 });
+      const contents = win.locator('.editor-panel .cm-content');
+      await expect(contents.filter({ hasText: 'TARGET-BODY-99' })).toHaveCount(1, { timeout: 8000 });
+      await expect(win.locator('.cm-content', { hasText: 'CLAUDE-DOC-CONTENT' })).toHaveCount(0);
+    });
+  } finally {
+    cleanupTemp(root);
   }
 });

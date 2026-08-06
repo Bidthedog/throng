@@ -1,9 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { skipIfElevated } from './admin.js';
 
 /**
  * 025 US3 / FR-027 — a Terminal Panel remembers the directory it was last working in, for EVERY
@@ -69,6 +70,10 @@ async function expectLayout(
 
 for (const flavour of FLAVOURS) {
   test(`[${flavour}] the working directory is remembered against the panel (FR-027)`, async () => {
+  // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
+  // daemon routes terminals through the de-elevated agent, a different process tree these
+  // assertions do not describe — the condition this guard exists for.
+  skipIfElevated();
     test.fixme(
       CWD_NOT_REPORTED.has(flavour),
       `${flavour}: the daemon does not report this shell's live cwd, so nothing downstream can remember it`,
@@ -149,13 +154,17 @@ for (const flavour of FLAVOURS) {
       test.skip(!present, `${flavour} is not installed on this machine`);
     } finally {
       for (const d of [root, data]) {
-        rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+        cleanupTemp(d);
       }
     }
   });
 }
 
 test('with "Reopen in the last directory" OFF, nothing is remembered (FR-027a)', async () => {
+  // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
+  // daemon routes terminals through the de-elevated agent, a different process tree these
+  // assertions do not describe — the condition this guard exists for.
+  skipIfElevated();
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-dirmem-off-'));
   mkdirSync(join(root, 'deepdir'));
@@ -204,7 +213,7 @@ test('with "Reopen in the last directory" OFF, nothing is remembered (FR-027a)',
     );
   } finally {
     for (const d of [root, data]) {
-      rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+      cleanupTemp(d);
     }
   }
 });
@@ -248,7 +257,7 @@ test('with shell integration OFF, PowerShell cannot offer "Reopen in the last di
     );
   } finally {
     for (const d of [root, cfg]) {
-      rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+      cleanupTemp(d);
     }
   }
 });

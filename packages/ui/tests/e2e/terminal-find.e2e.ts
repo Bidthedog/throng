@@ -1,9 +1,61 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import {
+  openApp,
+  createProject as newProject,
+  firstPanelId,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
+ * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ *
+ * The shims below exist so the test bodies below are unchanged:
+ *   runApp        runs the body against the shared window. It refuses options rather than ignoring
+ *                 them: a dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
 
 // 013 US2 — find in a terminal's retained scrollback. The load-bearing property is that
 // searching is READ-ONLY: not one keystroke reaches the running program, and the
@@ -34,10 +86,32 @@ async function newTerminal(win: Page, root: string): Promise<string> {
  * with that echo and scrambles the line.
  */
 async function run(win: Page, pid: string, cmd: string, marker: string): Promise<void> {
-  await win.getByTestId(`terminal-${pid}`).click();
+  const term = win.getByTestId(`terminal-${pid}`);
+  await term.click();
   await win.keyboard.type(cmd, { delay: 15 });
   await win.keyboard.press('Enter');
-  await expect(win.getByTestId(`terminal-${pid}`)).toContainText(marker, { timeout: 20000 });
+  /*
+   * Wait for one MORE occurrence of the marker than the typed command itself contains.
+   *
+   * ConPTY echoes each keystroke as it is typed, so for `echo NEEDLE_A` the marker is on screen as
+   * part of the command LINE before the shell has run anything. A plain `toContainText(marker)` is
+   * satisfied by that echo, and the next `run` then types into a shell that is still working — the
+   * line interleaves with the echo, which is exactly the scrambling the per-key delay above exists
+   * to prevent. Measured under six CPU hogs: `echo other` rendered as `echo othe` + `othe` + a fresh
+   * prompt + `r`.
+   *
+   * The extra occurrence is the command's OUTPUT, which only exists once it has actually executed.
+   * Counting relative to the command rather than to a fixed 2 keeps this correct for markers that
+   * are never typed — `for /l ... @echo filler %i` waits on `filler 150`, which appears once, in the
+   * output alone.
+   */
+  const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const inCommand = (cmd.match(new RegExp(escaped, 'g')) ?? []).length;
+  await expect
+    .poll(async () => ((await term.innerText()).match(new RegExp(escaped, 'g')) ?? []).length, {
+      timeout: 20000,
+    })
+    .toBeGreaterThanOrEqual(inCommand + 1);
 }
 
 
@@ -50,7 +124,6 @@ async function grid(win: Page, pid: string): Promise<{ width: number; rows: numb
 }
 
 test('finds in the scrollback, counts and steps matches — and types nothing at the shell', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-tfind-'));
   try {
     await runApp(async (_app, win) => {
@@ -84,12 +157,11 @@ test('finds in the scrollback, counts and steps matches — and types nothing at
       await expect(term).not.toContainText('is not recognized');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('parked on a match, incoming output does not yank the viewport away (FR-012a)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-tfind-'));
   try {
     await runApp(async (_app, win) => {
@@ -130,12 +202,11 @@ test('parked on a match, incoming output does not yank the viewport away (FR-012
       await expect(term).toContainText('LATE_OUTPUT', { timeout: 15000 });
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('with no find bar open, Escape still reaches the shell (it is not throng’s key)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-tfind-'));
   try {
     await runApp(async (_app, win) => {
@@ -167,12 +238,11 @@ test('with no find bar open, Escape still reaches the shell (it is not throng’
       await expect(win.getByTestId(`find-bar-${pid}`)).toHaveCount(0);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('the find bar is scoped to one panel — no stray bar on another (spec Edge Cases)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-tfind-'));
   try {
     await runApp(async (_app, win) => {
@@ -187,6 +257,6 @@ test('the find bar is scoped to one panel — no stray bar on another (spec Edge
       expect(await win.locator('[data-testid^="find-bar-"]').count()).toBe(1);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

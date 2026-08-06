@@ -1,8 +1,8 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { createProject, runApp, setSlider } from './harness.js';
+import { createProject, runApp, setSlider, cleanupTemp} from './harness.js';
 
 /**
  * 018 follow-up — the measurements that had no home, and the error that had no presence.
@@ -25,7 +25,7 @@ function freshCfg(): string {
   return d;
 }
 test.afterAll(() => {
-  for (const d of cfgRoots.splice(0)) rmSync(d, { recursive: true, force: true, maxRetries: 10 });
+  for (const d of cfgRoots.splice(0)) cleanupTemp(d);
 });
 
 test('an ICON has its own size, independent of the font it sits beside', async () => {
@@ -168,7 +168,7 @@ test('an ERROR notice has its own background, in every theme', async () => {
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5 });
+    cleanupTemp(projectRoot);
   }
 });
 

@@ -1,9 +1,8 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 // Reported bug: Ctrl-selecting a MIX of files and folders then Delete removes only
 // the folders. Expected: ALL selected items are deleted after confirmation.
@@ -18,7 +17,6 @@ function makeProject(): string {
 }
 
 test('Ctrl-selecting files + folders and deleting removes ALL of them', async () => {
-  skipIfElevated();
   const root = makeProject();
   // permanent delete so we assert directly on disk (no Recycle Bin).
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-cfg-del-'));
@@ -60,13 +58,12 @@ test('Ctrl-selecting files + folders and deleting removes ALL of them', async ()
       { env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(cfgRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
+    cleanupTemp(cfgRoot);
   }
 });
 
 test('recycle mode (default): mixed files + folders all get recycled via the real shell', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -95,12 +92,11 @@ test('recycle mode (default): mixed files + folders all get recycled via the rea
         .toEqual([]);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('file-first selection (opens an editor) then Delete key removes ALL selected', async () => {
-  skipIfElevated();
   const root = makeProject();
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-cfg-del2-'));
   writeFileSync(
@@ -138,7 +134,7 @@ test('file-first selection (opens an editor) then Delete key removes ALL selecte
       { env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(cfgRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
+    cleanupTemp(cfgRoot);
   }
 });

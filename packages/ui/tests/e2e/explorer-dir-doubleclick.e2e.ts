@@ -3,11 +3,11 @@
  * in place (expand if collapsed, collapse if expanded); single-click still selects only (#121);
  * the root never collapses (FR-004).
  */
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 function makeProjectFolder(): string {
   const root = mkdtempSync(join(tmpdir(), 'throng-dbl-'));
@@ -42,6 +42,6 @@ test('double-clicking a directory toggles its expansion; single-click selects on
       await expect(tree.getByText('index.ts', { exact: true })).toHaveCount(0);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(root);
   }
 });

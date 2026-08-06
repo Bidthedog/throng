@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runApp, createProject, panelIds, commitPanelRename } from './harness.js';
+import { runApp, createProject, panelIds, commitPanelRename, cleanupTemp} from './harness.js';
 
 // US8 / FR-030/031/033: user config (settings + theme) is read at startup and
 // hot-reloaded when the JSON files change — so edits apply without a restart, and
@@ -30,7 +30,7 @@ test('hot-reloads the theme when themes/throng.json changes (no restart)', async
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
+    cleanupTemp(cfg);
   }
 });
 
@@ -53,7 +53,7 @@ test('themes the whole app — base text colour hot-reloads from the theme file'
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
+    cleanupTemp(cfg);
   }
 });
 
@@ -85,6 +85,6 @@ test('applies a hand-edited settings.json on startup (confirmations level)', asy
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
+    cleanupTemp(cfg);
   }
 });

@@ -1,9 +1,61 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import {
+  openApp,
+  createProject as newProject,
+  firstPanelId,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
+ * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ *
+ * The shims below exist so the test bodies below are unchanged:
+ *   runApp        runs the body against the shared window. It refuses options rather than ignoring
+ *                 them: a dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
 
 /**
  * Opening a SECOND file into the same panel (016, FR-002a/FR-018a).
@@ -93,7 +145,6 @@ const colourOfWord = (win: Page, pid: string, word: string): Promise<string | nu
   );
 
 test('a .sql opened AFTER another file gets the SQL grammar — not the previous file’s', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -115,12 +166,11 @@ test('a .sql opened AFTER another file gets the SQL grammar — not the previous
       expect(await colourOfWord(win, pid, 'FROM')).toBe(keyword);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('…and it does not matter which file was open before it', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -146,12 +196,11 @@ test('…and it does not matter which file was open before it', async () => {
       await expect.poll(() => colourOfWord(win, pid, 'SELECT'), { timeout: 8000 }).toBe(keyword);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('a PLAIN-TEXT file opened after a highlighted one is left plain', async () => {
-  skipIfElevated();
   const root = makeProject();
   writeFileSync(join(root, 'notes'), 'SELECT this is not code\nfunction neither is this\n');
   try {
@@ -171,12 +220,11 @@ test('a PLAIN-TEXT file opened after a highlighted one is left plain', async () 
         .toBeNull();
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('the FILE’s indentation wins when it is the SECOND file opened into the panel (FR-018a)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -198,12 +246,11 @@ test('the FILE’s indentation wins when it is the SECOND file opened into the p
       expect(text.startsWith('  ')).toBe(false);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('…and the reverse: a SPACE-indented file opened after a tab-indented one indents with spaces', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -223,12 +270,11 @@ test('…and the reverse: a SPACE-indented file opened after a tab-indented one 
       expect(text.startsWith(' ')).toBe(true);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('MARKDOWN is highlighted — headings, emphasis, links and inline code (FR-006)', async () => {
-  skipIfElevated();
   const root = makeProject();
   writeFileSync(
     join(root, 'f-notes.md'),
@@ -268,6 +314,6 @@ test('MARKDOWN is highlighted — headings, emphasis, links and inline code (FR-
       await expect.poll(() => colourOfWord(win, pid, 'A heading'), { timeout: 8000 }).toBe(keyword);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

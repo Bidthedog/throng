@@ -1,17 +1,9 @@
 import { test, expect } from '@playwright/test';
-import {
-  mkdtempSync,
-  mkdirSync,
-  writeFileSync,
-  readFileSync,
-  readdirSync,
-  existsSync,
-  rmSync,
-} from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildShippedDefaults } from '@throng/core';
-import { runApp } from './harness.js';
+import { runApp, cleanupTemp} from './harness.js';
 
 /**
  * Startup regression smoke tests for shipped-defaults (010). These exercise the
@@ -61,7 +53,7 @@ function makeRoot(seed?: (root: string) => void): string {
   return root;
 }
 test.afterEach(() => {
-  for (const r of roots.splice(0)) rmSync(r, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  for (const r of roots.splice(0)) cleanupTemp(r);
 });
 
 /** Boot the real app against `root`; resolve once the shell has rendered (startup

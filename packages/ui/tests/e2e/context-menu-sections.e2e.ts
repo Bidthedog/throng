@@ -2,11 +2,11 @@
  * US5 (#158) + FR-018a — the Files & Folders menu groups items into sections with separators, and
  * "Open in OS Explorer" is the FIRST item of the "Open In" submenu (folders get just that).
  */
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 function makeProjectFolder(): string {
   const root = mkdtempSync(join(tmpdir(), 'throng-us5-'));
@@ -25,7 +25,16 @@ test('"Open in OS Explorer" leads the "Open In" submenu; the menu has section se
 
       // A FILE: the menu is grouped into sections (FR-018a).
       await tree.getByText('a.txt', { exact: true }).click({ button: 'right' });
-      expect(await win.locator('.context-menu__separator').count()).toBeGreaterThan(0);
+      /*
+       * Wait for the menu, then assert with a RETRYING expectation.
+       *
+       * `await locator.count()` is a single instantaneous read — it does not retry — so this asked
+       * how many separators existed the moment after the right-click, before the menu had rendered.
+       * It reddened CI (run 30951944889) while passing every time locally, which is the signature of
+       * a load-sensitive assertion rather than a broken feature.
+       */
+      await expect(win.locator('.context-menu')).toBeVisible();
+      await expect(win.locator('.context-menu__separator').first()).toBeVisible();
 
       // "OS File Explorer" is not a top-level item — it lives in "Open In".
       await expect(win.getByTestId('menu-item-OS File Explorer')).toHaveCount(0);
@@ -41,6 +50,6 @@ test('"Open in OS Explorer" leads the "Open In" submenu; the menu has section se
       await expect(folderSub.locator('.context-menu__item').first()).toContainText('OS File Explorer');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(root);
   }
 });

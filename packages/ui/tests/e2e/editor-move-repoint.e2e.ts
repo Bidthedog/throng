@@ -24,11 +24,11 @@
  * the move signals the coordinator; the final `another program` test is a GUARD and is
  * expected to be GREEN already.
  */
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, renameSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, addPanels } from './harness.js';
+import { runApp, createProject, firstPanelId, addPanels, cleanupTemp} from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /** A project with a file at the root and an empty `dest` folder to move it into. */
@@ -40,7 +40,7 @@ function makeProject(tag: string): string {
 }
 
 const rmRoot = (dir: string): void => {
-  rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  cleanupTemp(dir);
 };
 
 async function newEditor(win: Page, pid: string): Promise<string> {
@@ -137,7 +137,6 @@ async function letWatcherFire(win: Page): Promise<void> {
 }
 
 test('AC1 — a cut+paste move re-points the editor; it does not go dirty and raises no notice', async () => {
-  skipIfElevated();
   const root = makeProject('ac1');
   const oldPath = join(root, 'note.txt');
   const newPath = join(root, 'dest', 'note.txt');
@@ -173,7 +172,6 @@ test('AC1 — a cut+paste move re-points the editor; it does not go dirty and ra
 });
 
 test('AC2 — a drag-move re-points the editor just as a cut+paste does', async () => {
-  skipIfElevated();
   const root = makeProject('ac2');
   const oldPath = join(root, 'note.txt');
   const newPath = join(root, 'dest', 'note.txt');
@@ -197,7 +195,6 @@ test('AC2 — a drag-move re-points the editor just as a cut+paste does', async 
 });
 
 test('AC3 — saving after a move writes to the NEW location and does not re-create the old file', async () => {
-  skipIfElevated();
   const root = makeProject('ac3');
   const oldPath = join(root, 'note.txt');
   const newPath = join(root, 'dest', 'note.txt');
@@ -232,7 +229,6 @@ test('AC3 — saving after a move writes to the NEW location and does not re-cre
 });
 
 test('AC4 — the one-buffer registry follows the move: the new path focuses the existing editor', async () => {
-  skipIfElevated();
   const root = makeProject('ac4');
   const oldPath = join(root, 'note.txt');
   const newPath = join(root, 'dest', 'note.txt');
@@ -260,7 +256,6 @@ test('AC4 — the one-buffer registry follows the move: the new path focuses the
 });
 
 test('AC5 — a clean move leaves no recovery snapshot stranding the document at its old path', async () => {
-  skipIfElevated();
   const root = makeProject('ac5');
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-mv-ac5-ud-'));
   const oldPath = join(root, 'note.txt');
@@ -319,9 +314,15 @@ test('AC6 — moving a FOLDER re-points every open file inside it', async () => 
       await newEditor(win, pidA);
       await newEditor(win, pidB);
 
-      // Expand `pack` so its files are clickable, then open one into each editor.
+      /*
+       * Expand `pack` via its TWISTY, not by clicking its name.
+       *
+       * #121 made the folder name select-only; expansion is the twisty's job alone. This test kept
+       * clicking the name, so the folder never opened and `one.txt` was never in the tree — it has
+       * been failing in every environment since, which the elevation guard hid on CI.
+       */
       const tree = win.getByTestId('file-explorer-tree');
-      await tree.getByText('pack', { exact: true }).click();
+      await tree.getByTestId('tree-twisty-pack').click();
       await expect(tree.getByText('one.txt', { exact: true })).toBeVisible();
       await openInto(win, pidA, 'one.txt', 'ONE-BODY');
       await openInto(win, pidB, 'two.txt', 'TWO-BODY');
@@ -355,7 +356,6 @@ test('AC6 — moving a FOLDER re-points every open file inside it', async () => 
  * remounted" (which was always true, and is worth nothing here) from "the LAYOUT learnt it".
  */
 test('AC8 — a move reaches the persisted layout of a panel in a BACKGROUND tab (FR-008)', async () => {
-  skipIfElevated();
   const root = makeProject('ac8');
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-mv-ac8-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-mv-ac8-ud-'));
@@ -415,7 +415,6 @@ test('AC8 — a move reaches the persisted layout of a panel in a BACKGROUND tab
  * away while making in-app moves quiet.
  */
 test('AC7 (guard) — a file moved by ANOTHER program still keeps its buffer, dirty and recoverable', async () => {
-  skipIfElevated();
   const root = makeProject('ac7');
   const oldPath = join(root, 'note.txt');
   const away = join(root, 'dest', 'note.txt');

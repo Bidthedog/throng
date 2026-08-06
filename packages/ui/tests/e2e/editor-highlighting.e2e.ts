@@ -1,9 +1,62 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import {
+  openApp,
+  runApp as runOwnApp,
+  createProject as newProject,
+  firstPanelId,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
+ * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ *
+ * The shims below exist so the test bodies below are unchanged:
+ *   runApp        runs the body against the shared window. It refuses options rather than ignoring
+ *                 them: a dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
 
 // 016 US1 (FR-001/002/004b/006/007/008a) — language-aware syntax highlighting.
 //
@@ -58,7 +111,6 @@ const tokenColours = (win: Page, pid: string): Promise<string[]> =>
   }, pid);
 
 test('opens a TypeScript file highlighted, and keeps highlighting as you type', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -88,12 +140,11 @@ test('opens a TypeScript file highlighted, and keeps highlighting as you type', 
         .toBeGreaterThanOrEqual(before.length);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('highlights Python and JSON from their extensions alone', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -113,12 +164,11 @@ test('highlights Python and JSON from their extensions alone', async () => {
         .toBeGreaterThan(1);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('an unknown extension is plain text — no highlighting, no error, and a shebang changes nothing', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -141,12 +191,11 @@ test('an unknown extension is plain text — no highlighting, no error, and a sh
       expect(errors, `an unknown extension must not raise an error: ${errors.join('; ')}`).toEqual([]);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('a >10,000-character line renders unhighlighted but editable, while the rest of the file highlights (FR-008a)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -177,16 +226,15 @@ test('a >10,000-character line renders unhighlighted but editable, while the res
       );
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('switching theme repaints code LIVE — no reopen, no view rebuild', async () => {
-  skipIfElevated();
   const root = makeProject();
   const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
   try {
-    await runApp(
+    await runOwnApp(
       async (_app, win) => {
         await createProject(win, 'HL', root);
         const pid = await openEditor(win);
@@ -228,13 +276,12 @@ test('switching theme repaints code LIVE — no reopen, no view rebuild', async 
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(cfg);
+    cleanupTemp(root);
   }
 });
 
 test('embedded regions highlight in a Vue SFC and in HTML — or, at worst, raise no error (SHOULD)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -259,6 +306,6 @@ test('embedded regions highlight in a Vue SFC and in HTML — or, at worst, rais
       expect(errors, `a mixed-language file must never raise an error: ${errors.join('; ')}`).toEqual([]);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

@@ -8,12 +8,64 @@
  * specs assert the icon cell is NON-EMPTY across all four menus.
  */
 import { basename } from 'node:path';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import {
+  openApp,
+  createProject as newProject,
+  firstPanelId,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
+ * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ *
+ * The shims below exist so the test bodies below are unchanged:
+ *   runApp        runs the body against the shared window. It refuses options rather than ignoring
+ *                 them: a dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
 
 /** The icon cell of a menu row, by the row's label. */
 const iconCell = (win: Page, label: string) =>
@@ -48,12 +100,11 @@ test('explorer menu items render their theme icon; the clipboard rows are no lon
       await expect(iconCell(win, 'OS File Explorer')).not.toBeEmpty();
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(root);
   }
 });
 
 test('editor content menu: every row renders an icon, and the editing rows show their shortcut (#127)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-icons-ed-'));
   writeFileSync(join(root, 'lines.txt'), 'alpha\nbeta\ngamma\n');
   try {
@@ -87,7 +138,7 @@ test('editor content menu: every row renders an icon, and the editing rows show 
       await expect(win.getByTestId('menu-shortcut-Undo')).toHaveText('(Ctrl+Z)');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
@@ -107,12 +158,11 @@ test('cog menu: Settings / Key Bindings / Themes / About each render an icon (#1
       }
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(root);
   }
 });
 
 test('terminal menu: Copy and Paste render their icon (#127)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-icons-term-'));
   try {
     await runApp(async (_app, win) => {
@@ -131,6 +181,6 @@ test('terminal menu: Copy and Paste render their icon (#127)', async () => {
       await expect(win.getByTestId('menu-shortcut-Paste')).toHaveText('(Ctrl+V)');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

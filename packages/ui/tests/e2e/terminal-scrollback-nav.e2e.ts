@@ -1,9 +1,61 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import {
+  openApp,
+  createProject as newProject,
+  firstPanelId,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for this file, not one per test.
+ *
+ * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
+ * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ *
+ * The shims below exist so the test bodies below are unchanged:
+ *   runApp        runs the body against the shared window. It refuses options rather than ignoring
+ *                 them: a dropped config root does not fail, it passes for the wrong reason.
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
 
 // 013 US3 — read a long scrollback from the keyboard alone: page, line, top, bottom, and
 // jump between matches. None of these keys may reach the running program (FR-014), and at
@@ -33,7 +85,6 @@ async function run(win: Page, pid: string, cmd: string, marker: string): Promise
 }
 
 test('page / line / top / bottom move the viewport — and never reach the program', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-nav-'));
   try {
     await runApp(async (_app, win) => {
@@ -77,12 +128,11 @@ test('page / line / top / bottom move the viewport — and never reach the progr
       await expect(term).not.toContainText('is not recognized');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('at the live bottom, ordinary typing still reaches the program (FR-016)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-nav-'));
   try {
     await runApp(async (_app, win) => {
@@ -100,12 +150,11 @@ test('at the live bottom, ordinary typing still reaches the program (FR-016)', a
       await run(win, pid, 'echo TYPED_THROUGH', 'TYPED_THROUGH');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('with find open, next/previous jump the viewport between matches (FR-015)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-nav-'));
   try {
     await runApp(async (_app, win) => {
@@ -143,6 +192,6 @@ test('with find open, next/previous jump the viewport between matches (FR-015)',
       await expect(term).not.toContainText('HIT_ONE');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

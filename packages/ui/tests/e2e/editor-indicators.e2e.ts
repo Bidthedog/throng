@@ -1,9 +1,8 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 // US8/US7 (Delivery C): the shared red unsaved dot aggregates on Panel/Tab/project
 // and clears on save; debounced auto-save writes without Ctrl+S.
@@ -23,7 +22,6 @@ async function newEditor(win: Page): Promise<string> {
 }
 
 test('the unsaved dot lights on panel + tab + project and clears on save', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-ind-'));
   const savePath = join(root, 'doc.txt');
   try {
@@ -51,12 +49,11 @@ test('the unsaved dot lights on panel + tab + project and clears on save', async
       await expect(win.locator('.project-item .throng-unsaved-dot')).toHaveCount(0);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('auto-save writes edits within the debounce without Ctrl+S', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-auto-'));
   const file = join(root, 'auto.txt');
   writeFileSync(file, 'seed\n');
@@ -88,7 +85,7 @@ test('auto-save writes edits within the debounce without Ctrl+S', async () => {
       { env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
-    rmSync(cfgRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
+    cleanupTemp(cfgRoot);
   }
 });

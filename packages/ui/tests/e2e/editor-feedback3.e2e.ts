@@ -1,8 +1,8 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 // Session 2026-07-06b: editor pill always shows the containing folder (FR-088),
@@ -36,7 +36,7 @@ test('the editor pill shows the containing folder in brackets (subfolder + root)
 
       // Open a file in a subfolder → pill shows the project-relative path with the
       // host OS's native separator (Windows '\\', FR-101).
-      await tree.getByText('sub', { exact: true }).click();
+      await tree.getByTestId('tree-twisty-sub').click(); // #121: the NAME only selects; the twisty expands
       await tree.getByText('deep.txt', { exact: true }).click();
       const pill = win.getByTestId(`panel-file-${pid}`);
       await expect(pill).toContainText('deep.txt', { timeout: 8000 });
@@ -52,12 +52,11 @@ test('the editor pill shows the containing folder in brackets (subfolder + root)
       await expect(pill).toContainText('\\top.txt');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('a context menu opened near the bottom-right edge stays fully on-screen (FR-089)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -81,12 +80,11 @@ test('a context menu opened near the bottom-right edge stays fully on-screen (FR
       }
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('entering rename selects only the name, not the extension', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -107,12 +105,11 @@ test('entering rename selects only the name, not the extension', async () => {
       expect(sel.end).toBe(3);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });
 
 test('clicking away from an inline rename commits it immediately (FR-090)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -125,7 +122,7 @@ test('clicking away from an inline rename commits it immediately (FR-090)', asyn
       await input.fill('renamed.txt');
 
       // Click AWAY (onto another row) instead of pressing Enter → commit (FR-090).
-      await tree.getByText('sub', { exact: true }).click();
+      await tree.getByTestId('tree-twisty-sub').click(); // #121: the NAME only selects; the twisty expands
 
       await expect(tree.getByText('renamed.txt', { exact: true })).toBeVisible({ timeout: 6000 });
       await expect(tree.getByText('top.txt', { exact: true })).toHaveCount(0);
@@ -133,6 +130,6 @@ test('clicking away from an inline rename commits it immediately (FR-090)', asyn
       expect(existsSync(join(root, 'top.txt'))).toBe(false);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

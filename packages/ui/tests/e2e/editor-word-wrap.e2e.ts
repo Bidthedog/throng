@@ -3,12 +3,11 @@
  * content menu, and the Ctrl+Alt+W chord. Default On (editor.defaultWordWrap). The toggle reflows the
  * live view (the CodeMirror content's white-space flips between wrapping and not).
  */
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 function makeProject(): string {
   const root = mkdtempSync(join(tmpdir(), 'throng-wrap-'));
@@ -27,7 +26,6 @@ async function contentWraps(win: import('@playwright/test').Page, pid: string): 
 }
 
 test('word wrap toggles from the status bar, the chord, and the content menu (#152)', async () => {
-  skipIfElevated();
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -68,6 +66,6 @@ test('word wrap toggles from the status bar, the chord, and the content menu (#1
       await expect.poll(() => contentWraps(win, pid)).toBe(false);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

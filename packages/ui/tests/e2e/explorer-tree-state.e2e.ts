@@ -10,10 +10,10 @@
  * the current build. They exist to establish the true mechanism, not to fix it.
  */
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runApp, createProject, reloadWindow } from './harness.js';
+import { runApp, createProject, reloadWindow, cleanupTemp} from './harness.js';
 
 /** react-dnd's empty drag-preview image trips the app's CSP harmlessly; ignore it. */
 const realErrors = (errors: string[]): string[] =>
@@ -99,7 +99,7 @@ test('(1) dragging an EXPANDED folder into another folder keeps it expanded, ico
       expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
   }
 });
 
@@ -151,7 +151,7 @@ test('(1b) dragging a folder BACK to a previously-expanded path: icon open, no c
       expect(observed).toEqual({ twistyOpen: true, icon: '📂', childVisible: true });
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
   }
 });
 
@@ -182,7 +182,7 @@ test('(2) clicking a folder NAME only selects; clicking the icon toggles', async
       ).toHaveCount(0);
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
   }
 });
 
@@ -261,8 +261,8 @@ test('(3) a renamed file stays selected, and renaming never fires open-editor', 
       { env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    rmSync(cfgRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
+    cleanupTemp(cfgRoot);
   }
 });
 
@@ -315,6 +315,6 @@ test('(5) a MOVE-migrated expansion is persisted immediately (survives an instan
       await expect(treeAfter.getByText('child.txt', { exact: true })).toBeVisible();
     });
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(projectRoot);
   }
 });

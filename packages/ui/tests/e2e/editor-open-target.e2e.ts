@@ -2,11 +2,11 @@
  * US7 (#141) — the "default file-open target" preference. With "New Editor", each opened file lands
  * in a new editor panel; with "Last Active Editor" (default), opens reuse the last active editor.
  */
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
+import { runApp, createProject, cleanupTemp} from './harness.js';
 
 function makeProject(): string {
   const root = mkdtempSync(join(tmpdir(), 'throng-us7-'));
@@ -36,8 +36,8 @@ test('with "New Editor", each opened file lands in a new editor panel (#141)', a
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    rmSync(cfg, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(root);
+    cleanupTemp(cfg);
   }
 });
 
@@ -54,6 +54,6 @@ test('with "Last Active Editor" (default), opens reuse one editor (#141)', async
       await expect(editors(win).first()).toContainText('BBB');
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    cleanupTemp(root);
   }
 });

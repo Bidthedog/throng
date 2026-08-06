@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, existsSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, settle, createProject } from './harness.js';
+import { runApp, settle, createProject, cleanupTemp} from './harness.js';
 
 /**
  * US4 (007 Phase F): icon packs — a pack dropped under icon-packs\ is selectable
@@ -32,7 +32,7 @@ function bareCfgRoot(): string {
   return dir;
 }
 test.afterAll(() => {
-  for (const dir of cfgRoots.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
 
 async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {

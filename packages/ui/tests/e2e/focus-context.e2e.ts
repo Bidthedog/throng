@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -8,9 +8,7 @@ import {
   firstPanelId,
   panelIds,
   addPanels,
-  installResizeProbe,
-} from './harness.js';
-import { skipIfElevated } from './admin.js';
+  installResizeProbe, cleanupTemp} from './harness.js';
 
 // 012 US1 (FR-001/002/005, SC-001a/006): the active panel is a single, visible,
 // theme-driven focus context per window — the foreground treatment when the
@@ -64,7 +62,6 @@ test('exactly one active panel; it dims on window blur and restores on focus, wi
 });
 
 test('changing which panel holds focus sends zero terminal resize messages (SC-004)', async () => {
-  skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-focus-'));
   try {
     await runApp(async (app, win) => {
@@ -101,6 +98,6 @@ test('changing which panel holds focus sends zero terminal resize messages (SC-0
       expect(await probe.count()).toBe(0);
     });
   } finally {
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(root);
   }
 });

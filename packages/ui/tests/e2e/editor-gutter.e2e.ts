@@ -1,9 +1,8 @@
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
 // 009 US3 / FR-011 / FR-014: the editor gutter has its own themeable background
 // and foreground tokens; changing them repaints ONLY the gutter, not the editor
@@ -35,7 +34,6 @@ const fg = (win: Page, sel: string): Promise<string> =>
   win.evaluate((s) => getComputedStyle(document.querySelector(s)!).color, sel);
 
 test('gutter tokens paint only the gutter, not the editor body', async () => {
-  skipIfElevated();
   const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
   const root = makeProject();
   try {
@@ -71,13 +69,12 @@ test('gutter tokens paint only the gutter, not the editor body', async () => {
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(cfg);
+    cleanupTemp(root);
   }
 });
 
 test('a theme without gutter tokens inherits the default gutter colours (no migration)', async () => {
-  skipIfElevated();
   const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
   const root = makeProject();
   try {
@@ -109,7 +106,7 @@ test('a theme without gutter tokens inherits the default gutter colours (no migr
       { env: { THRONG_CONFIG_ROOT: cfg } },
     );
   } finally {
-    rmSync(cfg, { recursive: true, force: true });
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+    cleanupTemp(cfg);
+    cleanupTemp(root);
   }
 });
