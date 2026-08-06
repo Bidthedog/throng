@@ -19,7 +19,7 @@
  * hang skips the owner's cleanup, leaving the parent (and whatever the crashed
  * test never cleaned) behind for inspection — which is the whole point.
  */
-import { mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -56,9 +56,53 @@ export function ensureRunDir() {
 }
 
 /**
- * Remove the run folder if the run cleaned up after itself (empty). If anything
- * remains — a test crashed or hung before its own cleanup ran — keep the folder
- * and report where it is, so the leftovers can be inspected.
+ * Delete run folders left behind by EARLIER runs.
+ *
+ * A run folder is kept when it is not empty, which is the right call for the run that just
+ * finished — its leftovers are evidence. It is the wrong call forever: a directory Windows would
+ * not release leaves one item behind, every run leaves one folder, and nothing ever removes them.
+ * Measured on this machine after a few days of iterating: 378 folders, 4.4 GB.
+ *
+ * So each run sweeps what previous runs abandoned, never its own. `ageMs` is generous on purpose —
+ * a concurrent run's folder must never be touched, and a stale folder costs nothing but disk until
+ * the next sweep.
+ */
+export function sweepStaleRunDirs({ ageMs = 6 * 60 * 60 * 1000, keep = '' } = {}) {
+  const parent = tmpdir();
+  const cutoff = Date.now() - ageMs;
+  let removed = 0;
+  let entries = [];
+  try {
+    entries = readdirSync(parent).filter((n) => n.startsWith('throng_e2e_'));
+  } catch {
+    return { removed, scanned: 0 };
+  }
+  for (const name of entries) {
+    const dir = join(parent, name);
+    if (dir === keep) continue;
+    try {
+      if (statSync(dir).mtimeMs > cutoff) continue;
+      rmSync(dir, { recursive: true, force: true, maxRetries: 2, retryDelay: 100 });
+      removed += 1;
+    } catch {
+      // Still locked, or someone else is using it. It will be swept next time.
+    }
+  }
+  if (removed > 0) {
+    console.log(`[throng test] swept ${removed} stale run folder(s) from previous runs`);
+  }
+  return { removed, scanned: entries.length };
+}
+
+/**
+ * Remove the run folder if the run cleaned up after itself (empty), otherwise keep it and say where
+ * it is, so the leftovers can be inspected.
+ *
+ * A leftover is NOT evidence that something went wrong. Windows routinely keeps a handle on a
+ * directory after the process that owned it has gone, so `cleanupTemp` (tests/e2e/harness.ts)
+ * deliberately gives up rather than failing a test whose assertions already passed — that lock used
+ * to cost two thirds of CI's slowest shard in retries. The wording here matters because the previous
+ * "a test likely crashed" reading sent people looking for a crash that had not happened.
  */
 export function cleanupRunDir(dir) {
   let leftovers = [];
@@ -73,6 +117,6 @@ export function cleanupRunDir(dir) {
   }
   console.log(
     `\n[throng test] kept run dir with ${leftovers.length} leftover item(s) ` +
-      `(a test likely crashed or hung before cleanup):\n  ${dir}\n`,
+      `(a directory Windows would not release, or a test that crashed before its cleanup):\n  ${dir}\n`,
   );
 }
