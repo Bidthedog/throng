@@ -10,11 +10,17 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ensureRunDir } from './test-run-dir.mjs';
+import { ensureRunDir, sweepStaleRunDirs } from './test-run-dir.mjs';
 
 export default async function () {
   const { dir, owned } = ensureRunDir();
   if (owned) process.env.THRONG_TEST_RUN_OWNED_DIR = dir;
+
+  // Clear out what earlier runs abandoned. A run keeps its own folder when it is not empty, which is
+  // right for inspecting that run and wrong forever: measured at 378 folders and 4.4 GB after a few
+  // days of iterating. Never touches this run's folder, nor anything recent enough to belong to a
+  // concurrent one.
+  sweepStaleRunDirs({ keep: dir });
 
   // Size the app's daemon-RPC budget for the TEST environment (017 FR-013a).
   //

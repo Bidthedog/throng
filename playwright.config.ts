@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { defineConfig } from '@playwright/test';
 
@@ -67,9 +68,81 @@ if (!process.env.THRONG_E2E_INCLUDE_QUARANTINE) excludedTags.push(/@quarantine/)
  */
 const sharded = Number(process.env.THRONG_E2E_SHARDS) > 0;
 
+/*
+ * BALANCED SHARDS. `--shard=i/N` splits by test COUNT in file order, which on this suite means the
+ * alphabet decides the split — and every `terminal-*` spec sorts into the same third. Measured, that
+ * gave shards of 3.7, 8.3 and 36 minutes, the last of which exceeded a 30-minute job cap and was
+ * killed mid-run.
+ *
+ * `THRONG_E2E_GROUP` selects a group from `shard-plan.json` instead, whose lists are built from
+ * MEASURED per-file durations. Nothing else changes: each group still emits a blob report and merges
+ * exactly as a shard did.
+ *
+ * A spec file missing from the plan would silently never run, which is the one failure mode worth
+ * more than the balance — so `shard-plan.test.ts` fails if any spec is absent or listed twice.
+ */
+const shardGroup = process.env.THRONG_E2E_GROUP;
+const plannedIgnores = ((): RegExp[] => {
+  if (!shardGroup) return [];
+  const plan = JSON.parse(
+    readFileSync(new URL('./packages/ui/tests/e2e/shard-plan.json', import.meta.url), 'utf8'),
+  ) as { groups: Record<string, string[]> };
+  const mine = new Set(plan.groups[shardGroup] ?? []);
+  if (mine.size === 0) throw new Error(`THRONG_E2E_GROUP=${shardGroup} is not in shard-plan.json`);
+  const others = Object.entries(plan.groups)
+    .filter(([g]) => g !== shardGroup)
+    .flatMap(([, files]) => files)
+    .filter((f) => !mine.has(f));
+  /*
+   * Anchored to a path separator, which is not fussiness: `terminal.e2e.ts$` alone also matches
+   * `subworkspace-owned-terminal.e2e.ts`, so listing one file quietly excluded the other from EVERY
+   * group and 18 tests stopped running. Caught by counting `--list` per group and finding the totals
+   * did not add up to the whole suite.
+   */
+  return others.map((f) => new RegExp(`[\\/]${f.replace(/\./g, '[.]')}$`));
+})();
+
+/*
+ * `THRONG_E2E_TIER` splits the suite by whether a spec can tolerate ANOTHER headed window.
+ *
+ * Focus contention is per-DESKTOP, not per-machine: throng deliberately closes menus and popups when
+ * its window loses focus (context-menu.tsx), and the preferences window is a child window that takes
+ * focus. So workers are the lever WITHIN a machine and shards are the lever ACROSS machines, and the
+ * two compose — this filter is applied on top of `plannedIgnores`, not instead of it.
+ *
+ * The membership in `parallel-plan.json` is MEASURED, not guessed: the whole suite was run at six
+ * workers three times with retries off, and the serial tier is every spec that opens the preferences
+ * window (the contention mechanism) plus every spec observed failing. A boundary drawn only from
+ * observed failures would encode luck, since contention produces a different failure set each run.
+ *
+ * Measured: 208 specs, 37 serial, 171 parallel. The full suite at six workers ran in ~8-11 minutes
+ * against ~35 minutes at one worker.
+ */
+const tier = process.env.THRONG_E2E_TIER;
+const tierIgnores = ((): RegExp[] => {
+  if (!tier) return [];
+  if (tier !== 'parallel' && tier !== 'serial') {
+    throw new Error(`THRONG_E2E_TIER must be 'parallel' or 'serial', got '${tier}'`);
+  }
+  const plan = JSON.parse(
+    readFileSync(new URL('./packages/ui/tests/e2e/parallel-plan.json', import.meta.url), 'utf8'),
+  ) as { serial: string[] };
+  const serial = new Set(plan.serial);
+  const shardPlan = JSON.parse(
+    readFileSync(new URL('./packages/ui/tests/e2e/shard-plan.json', import.meta.url), 'utf8'),
+  ) as { groups: Record<string, string[]> };
+  const every = Object.values(shardPlan.groups).flat();
+  // Ignore the OTHER tier's files. Same path-separator anchoring as above, and for the same reason:
+  // an unanchored `terminal.e2e.ts$` also matches `subworkspace-owned-terminal.e2e.ts`.
+  const exclude = every.filter((f) => (tier === 'serial' ? !serial.has(f) : serial.has(f)));
+  return exclude.map((f) => new RegExp(`[\\/]${f.replace(/\./g, '[.]')}$`));
+})();
+
 export default defineConfig({
   testDir: 'packages/ui/tests/e2e',
   testMatch: '**/*.e2e.ts',
+  // Empty unless THRONG_E2E_GROUP / THRONG_E2E_TIER are set, so an ordinary run is untouched.
+  testIgnore: [...plannedIgnores, ...tierIgnores],
   // Consolidate all E2E scratch under one %TEMP%/throng_e2e_<runhash>/ folder
   // (created here when run directly, or inherited from the top-level wrapper).
   globalSetup: './scripts/playwright-global-setup.mjs',

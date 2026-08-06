@@ -32,6 +32,52 @@ env:
   npm_config_loglevel: error
 
 jobs:
+  # Which E2E does this push need?
+  #
+  # The full suite is three 12-minute shards. Most iterations do not need it: work on the elevated /
+  # de-elevation path only changes what `E2E (@admin, elevated)` covers, and running the other three
+  # to find that out spends ~36 runner-minutes proving nothing. Put `[ci-admin-only]` anywhere in the
+  # HEAD commit message and they are skipped.
+  #
+  # Deliberately opt-IN to skipping rather than opt-in to running: forgetting the marker costs runner
+  # minutes, whereas forgetting to ask for the full suite would let a branch merge unverified. Run the
+  # full suite before merging — see CLAUDE.md, "E2E on CI".
+  plan:
+    name: Plan E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      full: ${{ steps.decide.outputs.full }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The PR's own head commit, NOT the merge commit actions/checkout defaults to on a
+          # pull_request event. That default's message is "Merge <sha> into <sha>", so the marker was
+          # never visible and the shards ran anyway — measured on run 30985458985.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - id: decide
+        shell: bash
+        env:
+          # The PR title carries the marker too, so a run can be re-triggered without a new commit.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # The commit SUBJECT (%s) rather than the whole message: it is a single line, so this
+          # needs no newline handling at all, and an embedded newline broke the YAML block scalar
+          # twice. The PR title is appended so a run can be re-triggered without a new commit.
+          msg="$(git log -1 --pretty=format:%s) ${PR_TITLE}"
+          echo "considering: ${msg:0:160}"
+          # Pure bash: `grep -qiF` aborts under Git Bash, and the marker contains brackets that a
+          # non-fixed grep would read as a character class. Lower-cased so the marker is not
+          # case-sensitive.
+          lower="${msg,,}"
+          if [[ "$lower" == *'[ci-admin-only]'* ]]; then
+            echo "full=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::[ci-admin-only] found in the commit message - running the elevated @admin job only. Run the full suite before merging."
+          else
+            echo "full=true" >> "$GITHUB_OUTPUT"
+          fi
+
   lint:
     name: Lint & type-check
     runs-on: windows-2022
@@ -90,10 +136,21 @@ jobs:
 
   e2e:
     name: E2E (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+    needs: plan
+    if: ${{ needs.plan.outputs.full == 'true' }}
     runs-on: windows-2022
-    # Per shard: one build + ~1/3 of the suite at single worker. 30 min is generous headroom
-    # over the ~4-5 min a shard actually takes (the old single-job budget was 45 for the whole).
-    timeout-minutes: 30
+    # Per shard: one build + ~1/3 of the suite at single worker.
+    #
+    # The "~4-5 min a shard actually takes" this comment used to claim has not been true for some
+    # time: measured on 028, shard 1 takes ~7 min, shard 2 ~20, and shard 3 exceeded the old 30-minute
+    # cap and was killed mid-run. Playwright shards by FILE in declaration order, so shard 3 inherits
+    # the alphabetical tail — which is where every terminal spec lives, and terminal specs each launch
+    # a daemon, an Electron app and a real shell.
+    #
+    # 45 buys headroom for the imbalance rather than pretending it is not there. The durable fix is to
+    # rebalance (more shards, or an explicit split that does not track the alphabet); that changes the
+    # set of required checks, so it is a deliberate decision and not a timeout bump.
+    timeout-minutes: 45
     strategy:
       # Do NOT cancel sibling shards when one fails: we want the full red/green picture, and the
       # merged report needs every shard's blob present. Each shard is its own required check.
@@ -172,22 +229,39 @@ jobs:
           '@
           $rc = [Disp]::Set(1920, 1080)
           Write-Host "ChangeDisplaySettings -> $rc (0 = success)"
-      # `pretest:e2e` builds the app first. The runner is elevated (GitHub Windows
-      # runners run as administrator), so: @admin specs remain excluded by default
-      # (playwright.config.ts grepInvert), and non-elevated-baseline specs self-skip via
-      # skipIfElevated().
+      # `pretest:e2e` builds the app first. The runner is elevated (GitHub Windows runners run as
+      # administrator), so @admin specs remain excluded by default (playwright.config.ts grepInvert)
+      # and get their own job below.
       #
-      # `--shard=i/N` runs this shard's slice only; Playwright splits by FILE (fullyParallel is
-      # false), so a describe.serial file stays whole on one shard. The blob reporter writes
+      # This job runs ELEVATED and there is no way around it: dropping admin rights on a hosted
+      # runner was attempted and measured impossible (UAC is disabled, so `schtasks /RL LIMITED` has
+      # no filtered token to fall back to — run 30947653266). What made the guarded specs run here
+      # was narrowing the guard itself, from 85 spec files to 22, leaving 25 genuinely
+      # integrity-dependent tests that still self-skip. See docs/testing.md.
+      #
+      # NOT `--shard=i/N` — that splits by test COUNT in file order, which let the alphabet put every
+      # terminal-* spec in one third (measured 3.7 / 8.3 / 36 min, the last killed by the timeout).
+      # THRONG_E2E_GROUP selects this job's files from packages/ui/tests/e2e/shard-plan.json, which
+      # is balanced by measured duration. Playwright still splits by FILE (fullyParallel is false),
+      # so a describe.serial file stays whole. The blob reporter writes
       # blob-report/report-<shard>.zip, uploaded below for `merge-e2e` to stitch together.
       # Run this shard under the issue-#75 flake policy: a genuine test flake/failure (report shows
       # flaky>0 or unexpected>0) stays RED — the strict gate (failOnFlakyTests, Principle V) is
       # untouched. Only a PURE INFRA fault (non-zero exit with 0 flaky AND 0 unexpected — a worker/
       # global-teardown crash no test owns, which no retry absorbs) is retried once. The classifier
       # cannot turn a real test flake green; see scripts/ci-e2e-shard.ps1 and the constitution.
+      # Run the shard at NORMAL INTEGRITY. GitHub's Windows runners are elevated, and 84 spec files
+      # call skipIfElevated() because they assume a normal-integrity daemon — so before this, 208
+      # tests self-skipped here and a green E2E stage said nothing whatever about them. Thirteen more
+      # lacked the guard and simply failed, which the shard script's broken exit-code handling then
+      # reported as a pass. `run-deelevated.ps1` re-enters through a Limited scheduled task, which
+      # needs no interactive shell token (the reason the product's own de-elevation cannot be reused
+      # here) and fails loudly rather than quietly running elevated.
+      #
+      # The @admin job below is deliberately NOT de-elevated: it is the elevated path's own coverage.
       - name: Run E2E shard (flake-policy aware)
         shell: pwsh
-        run: ./scripts/ci-e2e-shard.ps1 -Shard "${{ matrix.shard }}/${{ strategy.job-total }}"
+        run: ./scripts/ci-e2e-shard.ps1 -Shard "${{ matrix.shard }}/${{ strategy.job-total }}" -Group "${{ matrix.shard }}"
       - name: Upload blob report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -215,9 +289,10 @@ jobs:
   # With this job off the path, green arrives with the slowest shard, ~9m.
   merge-e2e:
     name: E2E report (merged)
-    # Run even when a shard failed (so the report is always produced), but not when cancelled.
-    if: ${{ !cancelled() }}
-    needs: e2e
+    # Run even when a shard failed (so the report is always produced), but not when cancelled, and
+    # not when the shards were skipped for an admin-only run (there would be no blobs to merge).
+    if: ${{ !cancelled() && needs.plan.outputs.full == 'true' }}
+    needs: [plan, e2e]
     runs-on: windows-2022
     timeout-minutes: 15
     steps:
