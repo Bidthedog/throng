@@ -161,6 +161,20 @@ describe('WindowsDeElevatedLauncher — a failed de-elevated launch must be able
     // No `report` at all: the parameter is optional and the old 2-arg call still works.
     const returned = new WindowsDeElevatedLauncher().launch('C:\\Windows\\System32\\cmd.exe', ['/c', 'exit']);
     expect(returned, 'launch must still return void').toBeUndefined();
-    expect(Date.now() - started, 'launch must not wait on the shim').toBeLessThan(2_000);
+    /*
+     * The ceiling discriminates against WAITING ON THE SHIM, and nothing finer.
+     *
+     * A shim run is seconds — the tests above allow 10s and 30s, because PowerShell compiles the
+     * C# member definition via Add-Type before it can even fail. So any budget comfortably under
+     * that proves the claim.
+     *
+     * It was 2s, and it failed 2 runs in 5 at 2056ms / 2307ms / 2541ms. The time is not the
+     * launcher blocking: `fakeSystemRoot` has just COPIED a ~100MB binary, and the `spawn` inside
+     * this window is the OS reading that file back cold, behind its own write-back. That is disk,
+     * measured under whatever else the machine is doing, and no amount of it means `launch` awaited
+     * anything. Sized so the gap it tests — sub-second work versus a multi-second shim — is what
+     * decides the result, rather than how busy the disk was.
+     */
+    expect(Date.now() - started, 'launch must not wait on the shim').toBeLessThan(5_000);
   });
 });
