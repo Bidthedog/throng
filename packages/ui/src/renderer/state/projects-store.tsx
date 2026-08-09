@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactElement,
   type ReactNode,
@@ -76,6 +77,34 @@ export function ProjectsProvider({
   const markLoaded = useCallback((id: string) => {
     setLoadedIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   }, []);
+  /**
+   * A project that was optimistically opened and then FAILED to open is not loaded (#212).
+   *
+   * `loadedIds` means "opened at least once this session", and a switch marks it before the RPC has
+   * agreed. Leaving the mark behind after a failure says a project is in memory when nothing ever
+   * put it there.
+   */
+  const unmarkLoaded = useCallback((id: string) => {
+    setLoadedIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  /*
+   * The CURRENT values, readable from a callback that does not list them as dependencies (#212).
+   *
+   * `switchProject` lives in a `useMemo` whose dependency array deliberately omits `openedId` — so
+   * reading it directly there would capture whatever it was when the memo last built, and "restore
+   * the previous project" would restore a stale one. Refs are how the rest of this codebase solves
+   * exactly that (`terminal-panel.tsx`), and they are always current.
+   */
+  const openedIdRef = useRef(openedId);
+  openedIdRef.current = openedId;
+  const loadedIdsRef = useRef(loadedIds);
+  loadedIdsRef.current = loadedIds;
 
   const refresh = useCallback(async () => {
     try {
@@ -166,9 +195,27 @@ export function ProjectsProvider({
         });
       },
       switchProject: async (id) => {
+        /*
+         * Optimistic, and REVERTED when the open fails (#212).
+         *
+         * Opening on demand before the RPC answers is what keeps the switch feeling instant, and that
+         * is worth keeping. What was missing is the other half: when the RPC fails, the store went on
+         * believing it was in a project it had never entered.
+         *
+         * The visible cost was not the wrong highlight — it was the NEXT switch. Asking to open the
+         * project the store already (wrongly) thinks is open can be refused as a no-op, so the click
+         * does nothing whatever: no work attempted, no error, no notice. Measured as a test that
+         * raised a notice on three runs and, unchanged, raised none on the fourth.
+         */
+        const previousId = openedIdRef.current;
+        const wasLoaded = loadedIdsRef.current.has(id);
         setOpenedId(id); // open on demand (lazy)
         markLoaded(id);
-        await run('open this project', () => client.setActive(id));
+        const opened = await run('open this project', () => client.setActive(id));
+        if (!opened) {
+          setOpenedId(previousId);
+          if (!wasLoaded) unmarkLoaded(id);
+        }
       },
       reorderProjects: async (orderedIds) => {
         await run('reorder your projects', () => client.reorder(orderedIds));
@@ -177,7 +224,7 @@ export function ProjectsProvider({
         await run('change what this project hides', () => client.setHidden(id, hiddenPaths));
       },
     }),
-    [projects, activeProject, loadedIds, markLoaded, loading, error, errorAction, fail, refresh, run, client],
+    [projects, activeProject, loadedIds, markLoaded, unmarkLoaded, loading, error, errorAction, fail, refresh, run, client],
   );
 
   return <ProjectsContext.Provider value={value}>{children}</ProjectsContext.Provider>;
