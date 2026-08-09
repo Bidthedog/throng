@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { commitPanelRename, commitTabRename, cleanupTemp} from './harness.js';
+import { cleanupTemp, commitPanelRename, commitTabRename, shutdownApp } from './harness.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -64,7 +64,7 @@ async function run(fn: (app: ElectronApplication, win: Page) => Promise<void>): 
     });
     await fn(app, win);
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(daemon);
     cleanupTemp(dataDir);
   }

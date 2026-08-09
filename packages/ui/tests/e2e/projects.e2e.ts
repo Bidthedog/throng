@@ -8,7 +8,7 @@ import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
-import { cleanupTemp } from './harness.js';
+import { cleanupTemp, shutdownApp } from './harness.js';
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
@@ -105,7 +105,7 @@ test('creates a project, makes it active, and opens its workspace', async () => 
     await expect(win.getByTestId('tab-strip')).toBeVisible();
     await expect(win.locator('.panel-box')).toHaveCount(1);
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(harness.daemon);
     cleanupTemp(harness.dataDir);
   }
@@ -136,7 +136,7 @@ test('switches the active project and swaps the workspace + accent', async () =>
     );
     expect(accent.toLowerCase()).toBe('#ff0000');
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(harness.daemon);
     cleanupTemp(harness.dataDir);
   }
@@ -161,7 +161,7 @@ test('edits and deletes a project, leaving a valid state', async () => {
     await expect(win.getByTestId('projects-empty')).toBeVisible();
     await expect(win.getByTestId('workspace-no-project')).toBeVisible();
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(harness.daemon);
     cleanupTemp(harness.dataDir);
   }
@@ -195,7 +195,7 @@ test('restores the project list and active project after a restart', async () =>
     await projectItem(win, 'Beta').locator('[data-testid^="project-switch-"]').click();
     await expect(projectItem(win, 'Beta')).toHaveAttribute('data-active', 'true');
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(harness.daemon);
     cleanupTemp(harness.dataDir);
   }

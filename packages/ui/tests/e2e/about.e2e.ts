@@ -8,7 +8,7 @@ import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
-import { cleanupTemp } from './harness.js';
+import { cleanupTemp, shutdownApp } from './harness.js';
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
@@ -70,7 +70,7 @@ async function run(fn: (app: ElectronApplication, win: Page) => Promise<void>): 
     const win = await app.firstWindow();
     await fn(app, win);
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(daemon);
     cleanupTemp(dataDir);
   }

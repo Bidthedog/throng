@@ -8,7 +8,7 @@ import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
-import { cleanupTemp } from './harness.js';
+import { cleanupTemp, shutdownApp } from './harness.js';
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
@@ -81,7 +81,7 @@ async function run(fn: (win: Page, app: ElectronApplication, h: Harness) => Prom
     const win = await app.firstWindow();
     await fn(win, app, h);
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(h.daemon);
     cleanupTemp(h.dataDir);
   }
@@ -209,7 +209,7 @@ test('restores window size and position across restarts (FR-047)', async () => {
     expect(bounds.x).toBe(120);
     expect(bounds.y).toBe(90);
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(h.daemon);
     cleanupTemp(h.dataDir);
   }

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { commitPanelRename, commitTabRename, cleanupTemp} from './harness.js';
+import { cleanupTemp, commitPanelRename, commitTabRename, shutdownApp } from './harness.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -118,7 +118,7 @@ test('adds Tabs and Panels, never showing a typed Panel', async () => {
     await expect(win.locator('.panel-box__body').first()).toContainText(/panel type/i);
     await expect(win.locator('[data-testid^="panel-terminal-"]')).toHaveCount(0);
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(h.daemon);
     cleanupTemp(h.dataDir);
   }
@@ -145,7 +145,7 @@ test('splits a Panel by dragging another onto its edge (no Panel lost)', async (
     await expect(win.locator('.split--column')).toHaveCount(1);
     await expect(win.locator('.panel-box')).toHaveCount(2);
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(h.daemon);
     cleanupTemp(h.dataDir);
   }
@@ -176,7 +176,7 @@ test('collapses a split when a Panel is closed and never empties the workspace',
     await win.getByTestId(`panel-close-${lastId}`).click();
     await expect(win.locator('.panel-box')).toHaveCount(1);
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(h.daemon);
     cleanupTemp(h.dataDir);
   }
@@ -215,7 +215,7 @@ test('reorders Tabs by dragging', async () => {
     expect(after).not.toEqual(before);
     expect(after[0]).toBe(before[before.length - 1]);
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(h.daemon);
     cleanupTemp(h.dataDir);
   }
