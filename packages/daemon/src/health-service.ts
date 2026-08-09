@@ -23,6 +23,8 @@ function readBuildId(): string {
 export class HealthService {
   private readonly startedAt = new Date().toISOString();
   private readonly buildId = readBuildId();
+  /** Which entry script this daemon is running, so a stranger's daemon is recognisable (#192). */
+  private readonly daemonEntry = process.argv[1] ?? '';
 
   /** @param elevation reports the daemon's own integrity (FR-025b); omitted → unknown. */
   constructor(private readonly elevation?: IElevationState) {}
@@ -42,6 +44,7 @@ export class HealthService {
       pid: process.pid,
       buildId: this.buildId,
       elevated: this.elevation?.isElevated() ?? false,
+      daemonEntry: this.daemonEntry,
     };
   }
 }

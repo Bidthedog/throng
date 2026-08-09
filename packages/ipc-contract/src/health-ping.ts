@@ -50,6 +50,16 @@ export interface HealthPongResult {
   /** Whether the daemon process runs elevated (FR-025b). An elevated app retires a
    *  non-elevated daemon and respawns it elevated so terminals can run "as admin". */
   elevated?: boolean;
+  /**
+   * The daemon entry script this daemon is running (#192).
+   *
+   * Identity, not diagnostics. Two throng instances on one machine — a packaged install and a dev
+   * build, or a dev build and an E2E run — are the NORMAL way throng is developed, and `ensureDaemon`
+   * retires any daemon on its pipe whose build id does not match its own. Without knowing whose
+   * daemon it is, "outdated" and "somebody else's" are indistinguishable, and the second one gets
+   * killed along with every terminal it owns.
+   */
+  daemonEntry?: string;
 }
 
 /** Client-side outcome: the daemon answered the ping. */

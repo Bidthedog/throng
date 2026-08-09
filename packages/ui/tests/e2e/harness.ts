@@ -494,7 +494,7 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
 }
 
 /** Kill a detached daemon the APP spawned: ask it for its pid via health.ping. */
-async function killAppSpawnedDaemon(pipeName: string): Promise<void> {
+export async function killAppSpawnedDaemon(pipeName: string): Promise<void> {
   const pong = await new Promise<{ pid?: number } | null>((resolve) => {
     const socket = connect(pipeName);
     let buffer = '';

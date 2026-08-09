@@ -87,6 +87,15 @@ export interface EnsureDaemonResult {
   spawned: boolean;
   /** True if an outdated daemon was stopped and replaced (build id mismatch). */
   restarted?: boolean;
+  /**
+   * True when the pipe is held by ANOTHER instance's daemon, which was left alone (#192).
+   *
+   * Distinct from `spawned: false` meaning "ours was already running and is current" — here nothing
+   * of ours is running and nothing was started, because starting one would have meant killing a
+   * stranger's. The caller carries on without a daemon rather than taking someone else's terminals
+   * down with it.
+   */
+  foreign?: boolean;
   /** The spawned child (only when `spawned`), so a caller/test can manage it. */
   child?: ChildProcess;
 }
@@ -170,6 +179,20 @@ function currentBuildId(daemonEntry: string): string | null {
  * code across an app update or rebuild. Throws only if a freshly-spawned daemon does
  * not become ready within `readyTimeoutMs`.
  */
+/**
+ * Are these two paths the same daemon entry? (#192)
+ *
+ * Compared case-insensitively with separators normalised, because the two sides arrive from
+ * different worlds: one is `process.argv[1]` as the OS spelled it when the daemon was spawned, the
+ * other is resolved from the app's own install root. Windows will happily give you `C:/x` and
+ * `C:\\X` for one file, and a mismatch here does not fail loudly — it silently decides a daemon is
+ * a stranger, or worse, that a stranger is ours.
+ */
+function sameEntry(a: string, b: string): boolean {
+  const key = (p: string): string => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  return key(a) === key(b);
+}
+
 export async function ensureDaemon(opts: EnsureDaemonOptions): Promise<EnsureDaemonResult> {
   const pingTimeout = opts.pingTimeoutMs ?? 800;
   const readyTimeout = opts.readyTimeoutMs ?? 15_000;
@@ -191,6 +214,28 @@ export async function ensureDaemon(opts: EnsureDaemonOptions): Promise<EnsureDae
     // only way; it ends the old daemon's terminals, which the mixed-mode design accepts.
     const elevate = shouldRespawnDaemonElevated(opts.appElevated === true, info.elevated === true);
     if (!stale && !elevate) return { spawned: false }; // up to date — reuse it (Principle III)
+
+    /*
+     * NEVER retire a daemon that is not ours (#192).
+     *
+     * Everything below kills the daemon on this pipe because its build id does not match. That is
+     * right when it is OUR daemon running older code, and catastrophic when it belongs to another
+     * instance: two throngs on one machine — a packaged install beside a dev build, or a dev build
+     * beside an E2E run — is not an edge case, it is how throng is developed, and killing the other
+     * one ends every terminal it owns with no warning and a raw ENOENT for everything after.
+     *
+     * Instance separation is supposed to prevent the pipes ever meeting (`instancePipeName`), and
+     * that is the first line of defence, not a guarantee: a stray `THRONG_PIPE_NAME`, a spec that
+     * forgets to set one, a future packaging change. This is the second line, and it is the one that
+     * makes the promise unconditional — "must not touch the installed instance's daemon, at all, by
+     * any route".
+     *
+     * An old daemon that predates this field reports nothing, and is retired as before: it is
+     * necessarily running code older than this handshake, so it can only be ours to replace.
+     */
+    if (info.daemonEntry && !sameEntry(info.daemonEntry, opts.daemonEntry)) {
+      return { spawned: false, foreign: true };
+    }
 
     // The running daemon is outdated (or must be replaced to gain elevation): stop it,
     // then wait for the pipe to free so the replacement can bind. Killing it ends its
