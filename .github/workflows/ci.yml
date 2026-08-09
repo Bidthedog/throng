@@ -243,8 +243,13 @@ jobs:
       # terminal-* spec in one third (measured 3.7 / 8.3 / 36 min, the last killed by the timeout).
       # THRONG_E2E_GROUP selects this job's files from packages/ui/tests/e2e/shard-plan.json, which
       # is balanced by measured duration. Playwright still splits by FILE (fullyParallel is false),
-      # so a describe.serial file stays whole. The blob reporter writes
-      # blob-report/report-<shard>.zip, uploaded below for `merge-e2e` to stitch together.
+      # so a describe.serial file stays whole.
+      #
+      # Because there is no `--shard`, Playwright does NOT add a shard suffix to the blob's name — it
+      # writes plain `blob-report/report.zip` in every job. All three are downloaded into one
+      # directory with `merge-multiple: true`, so identical names collided and the merge read a
+      # half-written zip (issue #216). THRONG_E2E_BLOB_OUT names each one, exactly as
+      # THRONG_E2E_JSON_OUT already names the json report.
       # Run this shard under the issue-#75 flake policy: a genuine test flake/failure (report shows
       # flaky>0 or unexpected>0) stays RED — the strict gate (failOnFlakyTests, Principle V) is
       # untouched. Only a PURE INFRA fault (non-zero exit with 0 flaky AND 0 unexpected — a worker/
@@ -261,6 +266,8 @@ jobs:
       # The @admin job below is deliberately NOT de-elevated: it is the elevated path's own coverage.
       - name: Run E2E shard (flake-policy aware)
         shell: pwsh
+        env:
+          THRONG_E2E_BLOB_OUT: report-${{ matrix.shard }}.zip
         run: ./scripts/ci-e2e-shard.ps1 -Shard "${{ matrix.shard }}/${{ strategy.job-total }}" -Group "${{ matrix.shard }}"
       - name: Upload blob report
         if: ${{ !cancelled() }}
