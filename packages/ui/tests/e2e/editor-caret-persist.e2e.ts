@@ -120,8 +120,22 @@ test('the scroll position is restored and the editor re-focuses on switch back (
       await content.click();
       await win.keyboard.press('Control+End');
       const scroller = win.getByTestId(`editor-${pid}`).locator('.cm-scroller');
+      /*
+       * Ctrl+End moves the caret synchronously but scrolls on CodeMirror's NEXT MEASURE CYCLE, and
+       * `locator.evaluate` does not retry — so a single read can land in the gap and see 0. It did:
+       * CI run 31315872760, shard 3, `expected > 0, received 0`. The poll on line 134 below already
+       * exists for exactly this reason; this read was simply never given the same treatment.
+       *
+       * The text assertion is the real synchronisation. CodeMirror virtualises its rows, so `row-199`
+       * being IN THE DOM means the viewport has actually moved to the bottom — a stronger condition
+       * than any offset threshold. The offset poll then pins the baseline the restore is measured
+       * against, rather than trusting whatever value the first read happened to catch.
+       */
+      await expect(content).toContainText('row-199', { timeout: 8000 });
+      await expect
+        .poll(() => scroller.evaluate((el) => el.scrollTop), { timeout: 8000 })
+        .toBeGreaterThan(0);
       const scrollBefore = await scroller.evaluate((el) => el.scrollTop);
-      expect(scrollBefore).toBeGreaterThan(0);
 
       // Switch away (second tab) and back to the editor's tab (remount).
       await win.getByTestId('tab-add').click();
