@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
-import { cleanupTemp, shutdownApp } from './harness.js';
+import { cleanupTemp, killAppSpawnedDaemon, shutdownApp } from './harness.js';
 
 /*
  * WHY THIS SPEC DOES NOT CALL `app.close()` DIRECTLY — #211.
@@ -57,12 +57,67 @@ test.afterEach(() => {
   tempDirs.length = 0;
 });
 
-function launchApp(): Promise<ElectronApplication> {
+let pipeSeq = 0;
+
+/**
+ * The pipe each launched app was given, so its daemon can be reaped before the app is closed.
+ *
+ * ══ THIS IS #211's TRUE MECHANISM ══
+ *
+ * The app spawns its daemon DETACHED, to outlive the UI on purpose. Playwright's `app.close()` waits
+ * for the Electron process's child tree, so an app-spawned daemon still running makes close hang —
+ * `runApp` has always known this and kills the daemon FIRST for exactly that reason.
+ *
+ * This spec never did, and the reason it failed only sometimes is that it also had no pipe of its
+ * own: on the shared dev pipe it usually found an existing daemon and spawned nothing, so close was
+ * fast. When nothing happened to be there it spawned one, close hung, and the test ran out its own
+ * 30-second budget — reported against a test whose assertions had passed seconds earlier. "Roughly
+ * once per full run" was that coin landing the other way.
+ *
+ * Giving it a private pipe made it spawn a daemon EVERY time, which turned the intermittent failure
+ * into a deterministic one and is how the cause was finally identified.
+ */
+const launchedPipes = new Map<ElectronApplication, string>();
+
+async function launchApp(): Promise<ElectronApplication> {
   const userData = tmp('throng-ud-');
-  return electron.launch({
+  const pipeName = `\\\\.\\pipe\\throng.e2e.app-shell.${process.pid}.${pipeSeq++}`;
+  const app = await electron.launch({
     args: [mainEntry, `--user-data-dir=${userData}`],
-    env: { ...process.env, THRONG_CONFIG_ROOT: tmp('throng-cfg-') },
+    env: {
+      ...process.env,
+      THRONG_CONFIG_ROOT: tmp('throng-cfg-'),
+      /*
+       * ITS OWN PIPE — #192.
+       *
+       * This spec was alone among the twelve that launch Electron directly in setting no pipe name,
+       * so it fell back to the shared per-user DEV pipe. `ensureDaemon` retires any daemon on its
+       * pipe whose build id does not match, so this app would find, and kill, a developer's own
+       * `npm start` daemon — ending their terminals mid-session — simply because the suite was run.
+       *
+       * The product now refuses to retire a daemon belonging to another entry, which makes that
+       * unconditional. This is the other half: not sharing the endpoint in the first place, exactly
+       * as every sibling spec already does.
+       */
+      THRONG_PIPE_NAME: pipeName,
+    },
   });
+  launchedPipes.set(app, pipeName);
+  return app;
+}
+
+/**
+ * Close an app the way `runApp` does: reap its detached daemon FIRST, then shut down under a bound.
+ *
+ * Either half alone is not enough. Without the reap, close waits on a child the app is designed
+ * never to reap and burns the full 15s shutdown grace before being force-killed — measured at 17s
+ * per test here. Without the bound, a genuine hang runs out the test's own budget instead.
+ */
+async function closeApp(app: ElectronApplication): Promise<void> {
+  const pipeName = launchedPipes.get(app);
+  launchedPipes.delete(app);
+  if (pipeName) await killAppSpawnedDaemon(pipeName);
+  await shutdownApp(app);
 }
 
 test('opens the two-Pane shell within 5 seconds (NFR-002)', async () => {
@@ -90,7 +145,7 @@ test('opens the two-Pane shell within 5 seconds (NFR-002)', async () => {
     const uncontended = test.info().config.workers === 1 && !process.env.CI;
     expect(Date.now() - start).toBeLessThan(uncontended ? 5000 : 20_000);
   } finally {
-    await shutdownApp(app);
+    await closeApp(app);
   }
 });
 
@@ -104,7 +159,7 @@ test('opens a resizable main window', async () => {
     });
     expect(isResizable).toBe(true);
   } finally {
-    await shutdownApp(app);
+    await closeApp(app);
   }
 });
 
@@ -117,29 +172,32 @@ test('exposes only placeholder workspace content (no real product features)', as
     await expect(window.getByTestId('projects-panel')).toBeVisible();
     await expect(window.locator('.sidebar-panel--terminals')).toHaveCount(0);
   } finally {
-    await shutdownApp(app);
+    await closeApp(app);
   }
 });
 
 test('closes cleanly', async () => {
   const app = await launchApp();
   await app.firstWindow();
+
   /*
-   * This one asserts on the GRACEFUL close, because that is the behaviour under test — so it must
-   * NOT go through `shutdownApp`, which force-kills a hang and resolves anyway. Routing it there
-   * would have made the assertion vacuous: the test could never fail again.
+   * "Cleanly" means the GRACEFUL path finished — not that the process is gone, which force-killing
+   * also achieves and which would make this test unable to fail.
    *
-   * Instead the close is bounded explicitly, so a hang fails as a hang and says so, rather than
-   * running out the test's own 30-second budget and being reported as an unexplained timeout
-   * (#211). `shutdownApp` still runs afterwards to guarantee the process is gone either way.
+   * So it is timed. `closeApp` reaps the detached daemon, then `shutdownApp` destroys the windows and
+   * closes, racing a 15s grace before it resorts to `taskkill`. Finishing well inside that grace is
+   * exactly the claim: the app shut itself down when asked.
+   *
+   * A bare `app.close()` is NOT the thing to assert here, which took a while to establish. It hangs
+   * even on a healthy app, because throng runs its own close handling and Playwright is waiting on a
+   * window that is waiting on the app; destroying the windows first is what lets it exit. Asserting
+   * the bare call would have been asserting a behaviour throng does not have.
    */
-  const outcome = await Promise.race([
-    app.close().then(() => 'closed' as const),
-    new Promise<'timed out'>((r) => setTimeout(() => r('timed out'), 20_000)),
-  ]);
-  try {
-    expect(outcome, 'the app did not close when asked').toBe('closed');
-  } finally {
-    await shutdownApp(app);
-  }
+  const began = Date.now();
+  await closeApp(app);
+  const took = Date.now() - began;
+
+  // Comfortably inside SHUTDOWN_GRACE_MS (15s). A shutdown that needed the force-kill fallback
+  // cannot come in under this, so the bound is what distinguishes "closed" from "was killed".
+  expect(took, `shutdown took ${took}ms — it needed the force-kill fallback`).toBeLessThan(10_000);
 });
