@@ -63,10 +63,37 @@ async function openEditorOn(win: Page, pid: string, file: string, contains: stri
   });
 }
 
+/**
+ * Close the inline rename box IF the new panel opened one, by pressing Enter ON THE INPUT.
+ *
+ * A freshly added panel can open straight into rename mode, and the Enter this file used to send was
+ * there to commit it. But a BARE `keyboard.press('Enter')` goes wherever focus happens to be, and
+ * immediately after the click that is still the add button — a clicked button keeps focus until React
+ * moves it. Enter then activates the button a second time and adds a panel nobody asked for. That is
+ * the flake, measured on CI run 31305390679, shard 1: four `.panel-box` where the test asserted three.
+ *
+ * Pressing on the located input cannot reach the button, so the race has nowhere left to happen.
+ *
+ * Traced in this file's own path: the rename box does NOT open here (2s sample, focus on a plain div,
+ * zero rename inputs), so the old Enter was a no-op locally and a coin flip on a loaded runner. The
+ * conditional keeps it correct either way rather than depending on which of those is true.
+ */
+async function commitAnyRename(win: Page): Promise<void> {
+  const rename = win.locator('[data-testid^="panel-rename-input-"]');
+  if ((await rename.count()) > 0) await rename.press('Enter');
+}
+
+/** Add a sibling panel, and settle whatever the add left open. */
+async function addPanel(win: Page, hostPid: string): Promise<void> {
+  const before = await win.locator('.panel-box').count();
+  await win.getByTestId(`panel-add-${hostPid}`).click();
+  await expect(win.locator('.panel-box')).toHaveCount(before + 1);
+  await commitAnyRename(win);
+}
+
 /** Add a sibling panel and turn it into a running cmd terminal — the close warning's precondition. */
 async function addTerminalPanel(win: Page, hostPid: string, root: string): Promise<string> {
-  await win.getByTestId(`panel-add-${hostPid}`).click();
-  await win.keyboard.press('Enter');
+  await addPanel(win, hostPid);
   const pid = (await panelIds(win)).find((id) => id !== hostPid)!;
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
   await win.getByTestId('terminal-flavour').selectOption('cmd');
@@ -333,9 +360,7 @@ test('#86 AC3: a layout change made immediately before an ORDINARY close survive
         expect(await storedPanels(win, projectId), 'baseline must be stored first').toHaveLength(1);
 
         // THE DECISION: add a panel — an ordinary, visible structural edit the user watches happen.
-        await win.getByTestId(`panel-add-${editorPid}`).click();
-        await win.keyboard.press('Enter');
-        await expect(win.locator('.panel-box')).toHaveCount(2);
+        await addPanel(win, editorPid);
 
         // …and close. NO terminals running, so this is the "ordinary way" the issue calls safe:
         // no prompt, and a 250ms fuse against a 400ms debounce.
@@ -499,11 +524,14 @@ test('#86 C6: a SUB-WORKSPACE rearrangement survives closing the MAIN window', a
           }
         }, childDiedStamp);
 
-        // THE DECISION, made in the SUB-WORKSPACE window. The debounce is armed by the Enter,
+        // THE DECISION, made in the SUB-WORKSPACE window. The debounce is armed by the CLICK,
         // so the race starts HERE — before the assertion that confirms it, which is the user's
         // read of the screen and not part of the window they get.
+        //
+        // Inlined rather than using `addPanel`, because `armedAt` must be stamped before the
+        // assertion that confirms the panel — the ordering this test measures.
         await child.getByTestId('panel-add-p').click();
-        await child.keyboard.press('Enter');
+        await commitAnyRename(child);
         armedAt = Date.now();
         await expect(child.locator('.panel-box')).toHaveCount(2);
 
@@ -671,9 +699,7 @@ test('#86 FR-011: a layout change survives an ORDINARY close even at a 1ms drain
         await win.waitForTimeout(1500);
         expect(await storedPanels(win, projectId), 'baseline must be stored first').toHaveLength(1);
 
-        await win.getByTestId(`panel-add-${editorPid}`).click();
-        await win.keyboard.press('Enter');
-        await expect(win.locator('.panel-box')).toHaveCount(2);
+        await addPanel(win, editorPid);
 
         await ordinaryClose(app);
       },
@@ -1099,9 +1125,7 @@ test('#86 AC3/AC4: layout and per-panel zoom set immediately before TERMINATE AL
         await win.waitForTimeout(1500); // baseline (2 panels, no zoom) safely stored
 
         // THE DECISIONS: a structural edit AND a zoom, both riding the same deferred write.
-        await win.getByTestId(`panel-add-${editorPid}`).click();
-        await win.keyboard.press('Enter');
-        await expect(win.locator('.panel-box')).toHaveCount(3);
+        await addPanel(win, editorPid);
         await zoomInTwice(win, editorPid);
 
         await terminateAllClose(app, win);
