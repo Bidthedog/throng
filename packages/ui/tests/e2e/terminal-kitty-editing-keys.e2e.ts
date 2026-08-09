@@ -96,6 +96,42 @@ async function runKittyFixture(
   await term.click();
 }
 
+/**
+ * Switch to a new tab and back — the reported trigger, which unmounts and REBUILDS the terminal view.
+ *
+ * Every wait here is a condition, never a duration. A rebuilt view that has not finished re-attaching
+ * silently DROPS keystrokes, and the markers this file types are one-shot: a lost marker never
+ * reappears, so `captured` waits out its whole budget having proved nothing. That is exactly what a
+ * fixed `waitForTimeout(1500)` was gambling on, and on CI it lost — run 31305390679, shard 3,
+ * captured "ab" where the test had typed "c", the chord, and "d".
+ *
+ * So the view is made to PROVE it is taking input, with a throwaway character, before any marker is
+ * risked on it. The probes land before the left marker, so every captured slice excludes them.
+ */
+async function switchAwayAndBack(win: Page, root: string): Promise<void> {
+  const chips = win.getByTestId('tab-strip').locator('.tab-chip');
+  const before = await chips.count();
+  await win.getByTestId('tab-add').click();
+  await expect(chips).toHaveCount(before + 1);
+  await chips.first().click();
+
+  const term = win.locator('[data-testid^="terminal-"]').first();
+  await expect(term).toBeVisible();
+  await term.click();
+
+  // The fixture truncates cap.bin at startup, so by here it exists and reading it cannot throw.
+  const capFile = join(root, 'cap.bin');
+  await expect
+    .poll(
+      async () => {
+        await win.keyboard.type('z', { delay: 40 });
+        return readFileSync(capFile).toString('latin1').includes('z');
+      },
+      { timeout: 30000 },
+    )
+    .toBe(true);
+}
+
 /** Bytes captured between two marker characters the test typed either side of the chord. */
 async function captured(root: string, left: string, right: string): Promise<string> {
   const capFile = join(root, 'cap.bin');
@@ -187,14 +223,8 @@ test('a rebuilt view still knows the program negotiated the keyboard', async () 
       await runKittyFixture(win, root, 'KITTY_ALT_READY');
 
       // Switch away and back: the panel is unmounted and rebuilt, exactly as in normal use.
-      await win.getByTestId('tab-add').click();
-      const tab1 = win.getByTestId('tab-strip').locator('.tab-chip').first();
-      await tab1.click();
-      await expect(win.getByTestId('tab-strip')).toBeVisible();
-      await win.waitForTimeout(1500);
+      await switchAwayAndBack(win, root);
 
-      const term = win.locator('[data-testid^="terminal-"]').first();
-      await term.click();
       await win.keyboard.type('a', { delay: 40 });
       await win.keyboard.press('Control+Backspace');
       await win.keyboard.type('b', { delay: 40 });
@@ -232,14 +262,9 @@ test('Ctrl+End still reaches the program after switching tabs and back', async (
       expect((await captured(root, 'a', 'b')).length).toBeGreaterThan(0);
 
       // Switch to another tab and back — the reported trigger.
-      await win.getByTestId('tab-add').click();
-      await win.waitForTimeout(500);
-      await win.getByTestId('tab-strip').locator('.tab-chip').first().click();
-      await win.waitForTimeout(1500);
+      await switchAwayAndBack(win, root);
 
       // After: it must still work.
-      const term = win.locator('[data-testid^="terminal-"]').first();
-      await term.click();
       await win.keyboard.type('c', { delay: 40 });
       await win.keyboard.press('Control+End');
       await win.keyboard.type('d', { delay: 40 });
@@ -275,13 +300,8 @@ test('Ctrl+End survives a tab switch even when the program negotiated nothing', 
       await win.keyboard.type('b', { delay: 40 });
       expect((await captured(root, 'a', 'b')).length).toBeGreaterThan(0);
 
-      await win.getByTestId('tab-add').click();
-      await win.waitForTimeout(500);
-      await win.getByTestId('tab-strip').locator('.tab-chip').first().click();
-      await win.waitForTimeout(1500);
+      await switchAwayAndBack(win, root);
 
-      const term = win.locator('[data-testid^="terminal-"]').first();
-      await term.click();
       await win.keyboard.type('c', { delay: 40 });
       await win.keyboard.press('Control+End');
       await win.keyboard.type('d', { delay: 40 });
