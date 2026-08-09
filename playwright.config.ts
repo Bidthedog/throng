@@ -219,8 +219,27 @@ export default defineConfig({
    * that case ONLY (see .github/workflows/ci.yml → "Run E2E shard"). The json report is the
    * evidence for that narrow, safe distinction; it can never turn a real test flake green.
    */
+  /*
+   * The blob's FILENAME must be unique per shard, and Playwright will not do it for us here.
+   *
+   * `_defaultReportName()` appends a shard suffix ONLY when `config.shard` is set — which happens
+   * only under Playwright's own `--shard`, and this repo deliberately does not use it (see the
+   * THRONG_E2E_GROUP note above). So every shard job wrote `blob-report/report.zip`, all three
+   * artifacts were downloaded into ONE directory with `merge-multiple: true`, and they overwrote
+   * each other; the merge then read a half-written file and the merged report job failed:
+   *
+   *     Error: not enough bytes in the stream. expected 4019954. got only 3740141
+   *
+   * Two attempts over the same artifacts gave DIFFERENT byte counts (3531821, then 3740141), which
+   * is how a write race is told apart from one corrupt upload — a bad upload gives the same number
+   * twice. Issue #216.
+   */
   reporter: sharded
-    ? [['blob'], ['list'], ['json', { outputFile: process.env.THRONG_E2E_JSON_OUT ?? 'shard-report.json' }]]
+    ? [
+        ['blob', { fileName: process.env.THRONG_E2E_BLOB_OUT ?? 'report.zip' }],
+        ['list'],
+        ['json', { outputFile: process.env.THRONG_E2E_JSON_OUT ?? 'shard-report.json' }],
+      ]
     : [['list'], ['./packages/ui/tests/e2e/admin-reminder.reporter.ts']],
   // 30s per test (issue #75). 60s was too generous: when a test genuinely wedges (a window that
   // never opens, a renderer that never settles), the old budget let it sit for a full minute
