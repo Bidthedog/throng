@@ -58,14 +58,24 @@ describe('sanitizeSpawnEnv', () => {
  * reopens the throng-kills-throng footgun with no other test to catch it.
  */
 describe('NodePtyHost wires the sanitiser at its spawn site', () => {
-  it('builds the shell env from sanitizeSpawnEnv(process.env), not raw process.env', async () => {
+  it('builds the shell env through the sanitiser, never from a raw environment', async () => {
     const { readFileSync } = await import('node:fs');
     const { fileURLToPath } = await import('node:url');
     const source = readFileSync(
       fileURLToPath(new URL('../../../platform-windows/src/node-pty-host.ts', import.meta.url)),
       'utf8',
     );
-    expect(source).toMatch(/sanitizeSpawnEnv\(process\.env\)/);
+    /*
+     * The BASE environment may now be the LAUNCHER's rather than this process's (#209) — the daemon
+     * outlives the UI and is reused, so its own `process.env` can be days stale. What this guards is
+     * unchanged by that: whichever environment is used, it goes through the sanitiser.
+     *
+     * #172 leaked `THRONG_*` into every user shell by spreading a raw environment at this exact
+     * spawn site, and the sanitiser is the only thing standing between that bug and its return.
+     */
+    expect(source).toMatch(/sanitizeSpawnEnv\(\s*opts\.baseEnv\s*\?\?\s*process\.env\s*\)/);
+    // Neither environment may be spread in raw — which is the whole reason the sanitiser exists.
     expect(source).not.toMatch(/env:\s*\{\s*\.\.\.process\.env\b/);
+    expect(source).not.toMatch(/\.\.\.opts\.baseEnv\b/);
   });
 });

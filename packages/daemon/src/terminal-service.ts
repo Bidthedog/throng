@@ -467,6 +467,9 @@ export class TerminalService {
         args: Array.isArray(launch.args) ? launch.args : [],
         ...(typeof launch.commandLine === 'string' ? { commandLine: launch.commandLine } : {}),
         ...(launch.env && typeof launch.env === 'object' ? { env: launch.env } : {}),
+        // #209 — build the shell from the LAUNCHER's environment, not this daemon's, which is a
+        // snapshot of whichever session first started it and may be days stale.
+        ...(launch.baseEnv && typeof launch.baseEnv === 'object' ? { baseEnv: launch.baseEnv } : {}),
         cwd: launch.cwd,
         cols: startCols,
         rows: startRows,

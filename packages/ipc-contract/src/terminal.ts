@@ -83,6 +83,19 @@ export interface LaunchSpecDto {
   writeOnReady?: string;
   /** 025 follow-up: verbatim command line for a shell that does not un-escape argv (cmd). */
   commandLine?: string;
+  /**
+   * The environment the shell is BUILT FROM, sent by UI main (#209).
+   *
+   * It crosses the RPC because the daemon cannot obtain it any other way: it is spawned detached
+   * to outlive the UI and REUSED whenever its build id still matches, so its own `process.env` is
+   * a snapshot of whichever session first started it — measured at 22 hours old, its launching
+   * console long gone, passing `CLAUDE_CODE_CHILD_SESSION=1` into every terminal it spawned. A
+   * process cannot re-read its parent's environment after the fact, so the current one has to be
+   * carried to it.
+   *
+   * Absent (an older UI) leaves the daemon's own environment in use, exactly as before.
+   */
+  baseEnv?: Record<string, string>;
   /** 025 follow-up: environment asking a shell to report its working directory. */
   env?: Record<string, string>;
 }

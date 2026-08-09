@@ -205,7 +205,19 @@ export function registerTerminalIpc(deps: {
         {
           panelId: req.panelId,
           projectId: req.projectId,
-          launch,
+          launch: {
+            ...launch,
+            /*
+             * #209 — the environment the shell is built from comes from HERE.
+             *
+             * This process was launched by the user's current session; the daemon may have been
+             * launched by one that ended days ago and is reused whenever its build id still
+             * matches. Sending ours at attach time is the only way the daemon can spawn a shell
+             * with an environment that is actually current — a process cannot re-read its
+             * parent's after the fact.
+             */
+            baseEnv: { ...process.env } as Record<string, string>,
+          },
           viewId: req.viewId,
           // Carry the caller's stated intent (008 FR-002/FR-007). An explicit re-type
           // terminates a running session and cold-starts the new flavour; an implicit
