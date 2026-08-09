@@ -1,7 +1,14 @@
 import { homedir } from 'node:os';
 import { ipcMain, type WebContents } from 'electron';
 import { statSync } from 'node:fs';
-import { resolveLaunchSpec, resolveStartDirectory, type IClipboard } from '@throng/core';
+import {
+  resolveLaunchSpec,
+  resolveStartDirectory,
+  fallbackToReport,
+  isTransportFailure,
+  type IClipboard,
+  type FailureCause,
+} from '@throng/core';
 import type { TerminalAttachResult } from '@throng/ipc-contract';
 import { RpcTimeoutError, type DaemonClient } from './daemon-client.js';
 import type { ShellDetectionService } from './shell-detection-service.js';
@@ -40,8 +47,34 @@ interface AttachRequest {
 }
 
 type AttachEnvelope =
-  | ({ ok: true } & TerminalAttachResult)
-  | { ok: false; stillStarting?: boolean; error: { code: number | null; message: string } };
+  | ({
+      ok: true;
+      /**
+       * The remembered directory that no longer exists, when the terminal fell back to the project
+       * root because of it (029 FR-005b). Absent on every ordinary start.
+       */
+      cwdFallback?: string;
+    } & TerminalAttachResult)
+  | {
+      ok: false;
+      stillStarting?: boolean;
+      error: { code: number | null; message: string };
+      /** The classified reason, where the daemon could derive one (029, FR-003/FR-011). */
+      cause?: FailureCause;
+    };
+
+/**
+ * Narrow the RPC error's opaque `data` slot to a cause.
+ *
+ * It crosses a process boundary as JSON, so it arrives as `unknown` and is checked rather than cast:
+ * a malformed payload must degrade to "no cause" — which means today's behaviour — and never crash
+ * the attach path it is trying to describe.
+ */
+function isFailureCause(value: unknown): value is FailureCause {
+  if (typeof value !== 'object' || value === null) return false;
+  const c = value as Partial<FailureCause>;
+  return typeof c.kind === 'string' && typeof c.subject === 'string' && typeof c.raw === 'string';
+}
 
 /**
  * Terminal command bridge (005 Phase C). The sandboxed renderer reaches terminals
@@ -123,14 +156,30 @@ export function registerTerminalIpc(deps: {
       }
       // 025 FR-028/FR-030: reopen where this panel was last working. Resolved HERE rather than in
       // the renderer because it needs the filesystem, and a remembered directory that is gone or
-      // has escaped its project falls back to the root silently — never an error dialog.
-      const cwd = resolveStartDirectory(root, req.rememberedCwd, (p) => {
+      // has escaped its project falls back to the root — never an error dialog.
+      const dirExists = (p: string): boolean => {
         try {
           return statSync(p).isDirectory();
         } catch {
           return false;
         }
-      });
+      };
+      const cwd = resolveStartDirectory(root, req.rememberedCwd, dirExists);
+      /*
+       * 029 FR-005b — the fallback is no longer SILENT.
+       *
+       * 025 chose silence deliberately, and was right that this must never be an error dialog: the
+       * terminal starts, nothing is lost, and interrupting the user would be nagging. But silence has
+       * its own cost, which #204's cycle exposes — restore a project root while a subfolder stays
+       * deleted and the user finds a shell at the root with no explanation, which reads as
+       * "remember-my-directory is broken". A quiet line in the panel is the middle the requirement
+       * asks for: informative, not modal, and not a failure.
+       *
+       * Only reported when a directory was actually REMEMBERED and is actually GONE. A cwd that
+       * escaped its project also falls back, but that is a boundary throng enforces on purpose and
+       * announcing it would be noise.
+       */
+      const cwdFallback = fallbackToReport(req.rememberedCwd, cwd, dirExists);
       // 025 FR-010: the flavour decides HOW a Startup Command is handed to it — `cmd` keeps its
       // session with /K, PowerShell with -NoExit, bash by re-execing itself. A flavour with no
       // recipe falls back to writing the command into the PTY once it is ready (FR-012), which is
@@ -170,7 +219,7 @@ export function registerTerminalIpc(deps: {
         },
         attachTimeoutMs,
       );
-      return { ok: true, ...result };
+      return { ok: true, ...result, ...(cwdFallback ? { cwdFallback } : {}) };
     } catch (error) {
       // A timeout is NOT a failure (008 FR-005): the daemon may still be launching the
       // shell, and any existing session keeps running. Surface it as a non-fatal
@@ -179,8 +228,41 @@ export function registerTerminalIpc(deps: {
       if (error instanceof RpcTimeoutError) {
         return { ok: false, stillStarting: true, error: { code: null, message: 'still starting' } };
       }
-      const err = error as { code?: number; message?: string };
-      return { ok: false, error: { code: err.code ?? null, message: err.message ?? 'terminal attach failed' } };
+      /*
+       * 029 — carry the CAUSE the daemon classified (contract §4).
+       *
+       * It cannot be re-derived here: `code` on the wire is a numeric JSON-RPC code, not an errno,
+       * and the errno only ever existed where the throw happened. Absent (an unclassifiable launch
+       * failure — a missing flavour, a broken shell path) is meaningful, not a gap: the panel then
+       * reverts exactly as it does today, which is FR-003's second arm.
+       */
+      const err = error as { code?: number; message?: string; data?: unknown };
+      const message = err.message ?? 'terminal attach failed';
+      /*
+       * A TRANSPORT failure is the daemon being gone, and it must be said so — FR-001.
+       *
+       * `DaemonClient` rejects a lost connection with the errno as the entire message (`ENOENT`,
+       * `daemon-unreachable`, `invalid-response`) and no `data`, because the throw never reached the
+       * daemon's router. Left unclassified, that arrived at the panel as "no cause", which
+       * `startFailurePreservesPanelType` correctly reads as "revert" — and the panel's type and
+       * config were stripped and persisted. Open throng while its daemon is down and every
+       * configured terminal is gone for good.
+       *
+       * So the classification happens where the knowledge is. The daemon cannot classify a failure
+       * it never received; this is the one place that can distinguish a daemon which REFUSED from a
+       * daemon which was never reached. `isTransportFailure` is the same rule the renderer uses to
+       * decide what to SAY, so the two cannot drift apart.
+       */
+      const cause = isFailureCause(err.data)
+        ? err.data
+        : isTransportFailure(message)
+          ? ({ kind: 'daemon-stopped', subject: 'throng', raw: message } satisfies FailureCause)
+          : undefined;
+      return {
+        ok: false,
+        error: { code: err.code ?? null, message },
+        ...(cause ? { cause } : {}),
+      };
     }
   };
 

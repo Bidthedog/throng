@@ -290,6 +290,24 @@ export function WorkspaceProvider({
     [layout, loading, restoreFailed, lastAddedPanelId, apply, scheduleSave],
   );
 
+  /*
+   * 029 FR-013 — publish panel id -> displayed title, so main can NAME a throng lock holder.
+   *
+   * The three facts needed to say "Inner is open in throng, in the terminal Build" live in three
+   * places: the daemon knows which terminal sits in the folder, this store knows what that panel is
+   * called, and main is where the failure is classified. Main holds the layout only as an opaque
+   * blob, so without this it can learn THAT throng holds the folder but never WHICH panel.
+   *
+   * Keyed on the layout, which already changes whenever a panel is renamed or moved.
+   */
+  useEffect(() => {
+    if (!layout) return;
+    const identities = layout.tabs.flatMap((tab) =>
+      collectPanels(tab.root).map((p) => ({ panelId: p.id, panelTitle: p.title })),
+    );
+    window.throng?.panels?.publishIdentities?.(identities);
+  }, [layout]);
+
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 

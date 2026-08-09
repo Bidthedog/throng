@@ -63,6 +63,26 @@ contextBridge.exposeInMainWorld('throng', {
   // (FR-101) — Windows uses '\\', everything else '/'.
   osName: process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'macos' : 'linux',
   getDaemonStatus: () => ipcRenderer.invoke('throng:getDaemonStatus'),
+  /*
+   * 029 / #182 — daemon liveness, PUSHED.
+   *
+   * `getDaemonStatus` above is a one-shot pull, and it had no consumer at all: nothing ever asked,
+   * so nothing ever noticed. Detection has to arrive without the user doing anything (FR-006), which
+   * a pull cannot provide.
+   */
+  /** 029 FR-013 — panel id -> what a user calls it, so main can NAME a throng lock holder. */
+  panels: {
+    publishIdentities: (list: unknown) => ipcRenderer.send('throng:panels:identities', list),
+  },
+  daemon: {
+    state: () => ipcRenderer.invoke('throng:daemon:state'),
+    restart: () => ipcRenderer.invoke('throng:daemon:restart'),
+    onState: (cb: (s: unknown) => void) => {
+      const h = (_e: unknown, s: unknown): void => cb(s);
+      ipcRenderer.on('throng:daemon:state', h);
+      return () => ipcRenderer.removeListener('throng:daemon:state', h);
+    },
+  },
   // Generic JSON-RPC bridge to the daemon (projects.* / workspace.*). Returns a
   // tagged { ok, result } | { ok, error } envelope; the renderer's typed clients
   // unwrap it (002 / research D10).

@@ -14,6 +14,16 @@ export class RpcError extends Error {
   constructor(
     message: string,
     readonly rpcCode: number,
+    /**
+     * Structured payload travelling with the failure (029). JSON-RPC's own `error.data` slot,
+     * unused here until now.
+     *
+     * It exists because a CAUSE cannot be re-derived at the far end: `error.code` on the wire is a
+     * numeric JSON-RPC code, not an errno, and the errno only exists where the throw happened. The
+     * alternative — pattern-matching our own internal message strings in the renderer — is exactly
+     * the fragility 029 removes.
+     */
+    readonly data?: unknown,
   ) {
     super(message);
     this.name = 'RpcError';
@@ -58,12 +68,13 @@ export class RpcRouter {
       return this.error(id, JSON_RPC_NOT_FOUND, error.message);
     }
     if (error instanceof RpcError) {
-      return this.error(id, error.rpcCode, error.message);
+      return this.error(id, error.rpcCode, error.message, error.data);
     }
     return this.error(id, -32603, `Internal error: ${(error as Error).message}`);
   }
 
-  private error(id: number, code: number, message: string): JsonRpcResponse {
-    return { jsonrpc: '2.0', id, error: { code, message } };
+  private error(id: number, code: number, message: string, data?: unknown): JsonRpcResponse {
+    // `data` is omitted entirely when absent, so every existing response is byte-identical to before.
+    return { jsonrpc: '2.0', id, error: { code, message, ...(data === undefined ? {} : { data }) } };
   }
 }

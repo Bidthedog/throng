@@ -11,7 +11,10 @@ import {
   type PtyHandle,
   appendScrollback,
   trackAltScreen,
+  classifyFailure,
+  type FailureCause,
 } from '@throng/core';
+import { basename } from 'node:path';
 import {
   JSON_RPC_INVALID_PARAMS,
   TERMINAL_ATTACH_METHOD,
@@ -212,7 +215,19 @@ export class TerminalService {
    * the seam omits any process it cannot read (e.g. one that just exited).
    */
   private async pollCwd(): Promise<void> {
-    if (!this.processCwd || this.events.sinkCount === 0) return;
+    if (this.events.sinkCount === 0) return;
+    await this.refreshCwds();
+  }
+
+  /**
+   * Read every running shell's cwd and publish what changed. Never throws.
+   *
+   * Split out from the poller so a caller that NEEDS the answer to be current can ask for it
+   * (`terminal.list { refreshCwd }`), including when nothing is subscribed. The poller keeps its own
+   * guards; this is the work itself.
+   */
+  private async refreshCwds(): Promise<void> {
+    if (!this.processCwd) return;
     const byPid = new Map<number, string>(); // shell pid → panelId
     for (const s of this.sessions.values()) {
       if (s.status === 'running') byPid.set(s.handle.pid, s.panelId);
@@ -419,7 +434,27 @@ export class TerminalService {
     // Cold start. Acquire the project-root lock for the first terminal (FR-022) —
     // never for a rootless (sub-workspace-owned) terminal, whose cwd is the user's
     // home directory (FR-028).
-    if (!rootless) this.locks.acquire(projectId, launch.cwd);
+    /*
+     * 029 / #204 / #181 — a lock failure is a START failure, and it must arrive at the panel as a
+     * CAUSE rather than as prose.
+     *
+     * This used to throw straight out of `create`, so the router wrapped it as
+     * `Internal error: Cannot lock "…": the path does not exist` and the panel, holding only a
+     * string, could not tell a briefly-absent folder from a configuration that can never be
+     * satisfied. It reverted the panel either way, which destroyed the user's terminal
+     * configuration for a folder that was coming back.
+     */
+    if (!rootless) {
+      try {
+        this.locks.acquire(projectId, launch.cwd);
+      } catch (error) {
+        throw new RpcError(
+          `Failed to launch terminal: ${(error as Error).message}`,
+          JSON_RPC_INVALID_PARAMS,
+          this.classifyAndLog(error, launch.cwd),
+        );
+      }
+    }
     // Route to the de-elevated agent for an unchecked terminal on an elevated daemon
     // (FR-025c); otherwise the local host. Fixed per-session for its lifetime.
     const host = this.hostFor(params.runAsAdmin === true);
@@ -440,9 +475,14 @@ export class TerminalService {
     } catch (error) {
       // Launch failure (FR-019): release the lock we just took and surface it.
       if (!rootless) this.locks.release(projectId);
+      // 029: carry a cause where the shell's own failure has one — a cwd that vanished between the
+      // lock and the spawn, a permission refusal. An unclassifiable launch failure (a missing
+      // flavour, a broken shell path) yields `undefined`, and the panel then reverts exactly as it
+      // does today (FR-003's second arm, asserted by `terminal-persistence.e2e.ts:81`).
       throw new RpcError(
         `Failed to launch terminal: ${(error as Error).message}`,
         JSON_RPC_INVALID_PARAMS,
+        this.classifyAndLog(error, launch.cwd),
       );
     }
 
@@ -742,8 +782,29 @@ export class TerminalService {
     return { ok: true };
   }
 
-  private list(rawParams: unknown): TerminalListResult {
+  /**
+   * Classify a launch failure, and RECORD the raw text before the cause replaces it (029, FR-018).
+   *
+   * The raw errno exists only here — by the time this crosses the RPC it is a numeric JSON-RPC code
+   * and a spoken sentence. FR-018 requires it in the diagnostics log as well as the notice's Copy
+   * payload, precisely so it survives the notice being dismissed, which is the state a support
+   * conversation actually begins in.
+   *
+   * `console.warn` rather than an injected sink because the daemon calls `attachConsole()` at
+   * startup (`main.ts`), which routes it into the same rotating log file everything else here uses.
+   * The service has no log of its own and giving it one would be a constructor change for one line.
+   */
+  private classifyAndLog(error: unknown, cwd: string): FailureCause | undefined {
+    const cause = classifyFailure(error, { subject: basename(cwd), operation: 'lock' }) ?? undefined;
+    if (cause) console.warn(`[terminal] launch failed: ${cause.raw}`);
+    return cause;
+  }
+
+  private async list(rawParams: unknown): Promise<TerminalListResult> {
     const params = (rawParams && typeof rawParams === 'object' ? rawParams : {}) as TerminalListParams;
+    // FR-013 — a caller naming a lock holder cannot use a cwd that is up to a second old; see
+    // `refreshCwd`. Everyone else is served from the poll, unchanged and free.
+    if (params.refreshCwd) await this.refreshCwds();
     const sessions = [];
     for (const session of this.sessions.values()) {
       if (params.projectId && session.projectId !== params.projectId) continue;
@@ -755,6 +816,15 @@ export class TerminalService {
         // explicitly requested, so a plain count (e.g. the app-close prompt) is fast.
         busy: params.includeBusy ? this.isBusy(session) : false,
         meta: session.meta,
+        /*
+         * 029 FR-013 — where this terminal is actually working.
+         *
+         * The daemon is the only process that knows, and it already tracks it for FR-027. Publishing
+         * it is what lets throng name ITSELF as a lock holder: asking "does a known terminal sit at
+         * or under this path?" is a prefix match over state throng already has, with no OS call and
+         * no native addon — which is why the throng case ships while the third-party one does not.
+         */
+        cwd: this.lastCwd.get(session.panelId) ?? session.cwd,
       });
     }
     return { sessions };

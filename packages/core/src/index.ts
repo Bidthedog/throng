@@ -481,6 +481,7 @@ export {
   shouldNotifyCaptureOutcome,
   captureLogLine,
   resolveStartDirectory,
+  fallbackToReport,
   MAX_CAPTURABLE_COMMAND_LENGTH,
   quoteDropPath,
   formatDroppedPaths,
@@ -638,3 +639,6 @@ export {
   isDefaultPanelName,
   nextDefaultPanelName,
 } from './workspace/unique-name.js';
+// 029 — the shared failure-cause concept and daemon liveness. One idea for four bugs: a reason
+// derived from a raw error, which also owns the wording and the "already reported" key.
+export * from './failure/index.js';

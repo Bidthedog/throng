@@ -77,7 +77,7 @@ export {
   type CaptureOutcome,
   type CaptureReason,
 } from './command-capture.js';
-export { resolveStartDirectory } from './start-directory.js';
+export { resolveStartDirectory, fallbackToReport } from './start-directory.js';
 export { appendScrollback } from './scrollback-tail.js';
 export {
   MOUSE_REPORTING_MODES,

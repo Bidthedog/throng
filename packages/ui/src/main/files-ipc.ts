@@ -24,8 +24,11 @@ export function registerFilesIpc(service: FilesService, watcher: ExplorerWatcher
   });
 
   ipcMain.handle('throng:files:list', (_event, relDir: unknown) => service.list(asStr(relDir)));
-  ipcMain.handle('throng:files:rename', (_event, relPath: unknown, newName: unknown) =>
-    service.rename(asStr(relPath), asStr(newName)),
+  // The SENDING window is passed on so a named holder can say whether the panel is in a different
+  // window from the one showing the notice (029, FR-013a). Rename is the only operation that names a
+  // holder today, so it is the only one that needs it.
+  ipcMain.handle('throng:files:rename', (event, relPath: unknown, newName: unknown) =>
+    service.rename(asStr(relPath), asStr(newName), event.sender.id),
   );
   ipcMain.handle('throng:files:move', (_event, src: unknown, destDir: unknown) =>
     service.move(asStrArr(src), asStr(destDir)),

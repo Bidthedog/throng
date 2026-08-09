@@ -1,5 +1,6 @@
 import { type ReactElement } from 'react';
 import { useProjects } from '../state/projects-store.js';
+import { DaemonIndicator } from './daemon-indicator.js';
 import './status-bar.css';
 
 /**
@@ -32,7 +33,10 @@ export function StatusBar(): ReactElement {
           </span>
         ) : null}
       </span>
-      <span className="throng-status-bar__right" />
+      {/* 029 / #182 — daemon liveness, and the only route to a restart. Renders nothing while healthy. */}
+      <span className="throng-status-bar__right">
+        <DaemonIndicator />
+      </span>
     </footer>
   );
 }
