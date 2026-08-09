@@ -37,7 +37,11 @@ function claudeFreeEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-function startDaemon(pipeName: string, dataDir: string): Promise<ChildProcess> {
+function startDaemon(
+  pipeName: string,
+  dataDir: string,
+  extraEnv: Record<string, string> = {},
+): Promise<ChildProcess> {
   const child = spawn(process.execPath, [daemonEntry], {
     env: {
       // The daemon spawns every terminal, so a program in a panel inherits THIS environment - which
@@ -46,6 +50,9 @@ function startDaemon(pipeName: string, dataDir: string): Promise<ChildProcess> {
       THRONG_PIPE_NAME: pipeName,
       THRONG_DATABASE_PATH: join(dataDir, 'throng.db'),
       THRONG_NO_ORPHAN_REAP: '1', // test daemons are short-lived + parallel; each test cleans its own tree
+      // #209 — lets a spec give the DAEMON an environment the app will not have, which is an aged
+      // daemon in miniature: the two differ, which is the whole of what that bug needs.
+      ...extraEnv,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -181,6 +188,14 @@ export interface AppOptions {
    * detached daemon is killed on teardown via its health.ping pid.
    */
   skipDaemon?: boolean;
+  /**
+   * Extra environment for the DAEMON only, never the app (#209).
+   *
+   * The daemon outlives the UI and is reused, so in real life its environment is a snapshot of a
+   * session that may be days old. Setting a variable here and not on the app reproduces exactly
+   * that relationship, in seconds.
+   */
+  daemonEnv?: Record<string, string>;
 }
 
 /** A running app, plus the teardown that `runApp` would otherwise have done for you. */
@@ -250,7 +265,7 @@ async function launchApp(opts: AppOptions): Promise<{
 }> {
   const dataDir = opts.dataDir ?? mkdtempSync(join(tmpdir(), 'throng-e2e-'));
   const pipeName = `\\\\.\\pipe\\throng-e2e-${process.pid}-${Date.now()}`;
-  const daemon = opts.skipDaemon ? null : await startDaemon(pipeName, dataDir);
+  const daemon = opts.skipDaemon ? null : await startDaemon(pipeName, dataDir, opts.daemonEnv ?? {});
   const userData = opts.userDataDir ?? mkdtempSync(join(tmpdir(), 'throng-ud-'));
   // Isolate the user config root to a temp dir by default so the app's first-run
   // file creation never touches the real %USERPROFILE%\.throng (a test may still

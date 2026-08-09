@@ -87,6 +87,7 @@
     "terminal-command-memory.e2e.ts",
     "terminal-dual-size.e2e.ts",
     "terminal-editing-matrix.e2e.ts",
+    "terminal-env-freshness.e2e.ts",
     "terminal-mirror-survival.e2e.ts",
     "terminal-mirror.e2e.ts",
     "terminal-no-orphans.e2e.ts",

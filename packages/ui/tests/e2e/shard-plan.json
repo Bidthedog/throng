@@ -209,6 +209,7 @@
       "terminal-cwd.e2e.ts",
       "terminal-directory-memory.e2e.ts",
       "terminal-dual-size.e2e.ts",
+      "terminal-env-freshness.e2e.ts",
       "terminal-flavours.e2e.ts",
       "terminal-kitty-editing-keys.e2e.ts",
       "terminal-link-once.e2e.ts",

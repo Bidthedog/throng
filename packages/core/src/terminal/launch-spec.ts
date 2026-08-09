@@ -24,6 +24,23 @@ export interface LaunchSpec {
    */
   env?: Record<string, string>;
   /**
+   * The environment the shell should be BUILT FROM, replacing the daemon's own (#209).
+   *
+   * The daemon is spawned detached to outlive the UI, and is REUSED whenever its build id still
+   * matches — so it keeps the environment of whichever session first started it, potentially days
+   * ago, and a process cannot re-read its parent's environment afterwards. Every terminal it spawns
+   * inherited that snapshot.
+   *
+   * Measured: a 22-hour-old daemon, its launching console long gone, passing
+   * `CLAUDE_CODE_CHILD_SESSION=1` into every new terminal — which silently turned off Claude Code's
+   * transcript saving, and suppresses kitty keyboard negotiation by the same route. Silent in both
+   * directions, which is what makes it worth carrying an environment across the RPC to fix.
+   *
+   * Supplied by UI main, which was launched by the user's CURRENT session. Absent (an older UI, or a
+   * caller that does not set it) leaves the daemon's own environment in use, exactly as before.
+   */
+  baseEnv?: Record<string, string>;
+  /**
    * A VERBATIM command line to use instead of {@link args} (025 follow-up). Set only for shells
    * that do not un-escape a quoted argument — see NEEDS_VERBATIM_COMMAND_LINE. Appended after the
    * quoted executable exactly as written, so the user's own quoting reaches the shell intact.

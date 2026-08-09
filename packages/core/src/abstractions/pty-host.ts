@@ -13,8 +13,15 @@ export interface PtyStartOptions {
   cwd: string;
   cols: number;
   rows: number;
-  /** Extra environment overrides merged over the daemon's environment. */
+  /** Extra environment overrides merged over the base environment. */
   env?: Record<string, string>;
+  /**
+   * The environment to build the shell FROM, replacing the daemon's own (#209).
+   *
+   * The daemon outlives the UI and is reused across launches, so its `process.env` is a snapshot of
+   * whichever session first started it. Supplied by UI main, which the user launched just now.
+   */
+  baseEnv?: Record<string, string>;
   /**
    * Run the PTY elevated ("as administrator", FR-025). Only meaningful in an
    * elevated daemon: when true the child runs at high integrity; when false in an

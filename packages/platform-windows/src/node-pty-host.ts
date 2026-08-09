@@ -101,7 +101,20 @@ export class NodePtyHost implements IPtyHost {
       // inherits THIS daemon's pipe/db/config identity. Otherwise a dev build launched from a
       // terminal inside another throng would target that throng's daemon and retire it. Any
       // explicit per-launch env still layers on top.
-      env: { ...sanitizeSpawnEnv(process.env), ...(opts.env ?? {}) },
+      /*
+       * The BASE is the launcher's environment when one was sent, not this process's (#209).
+       *
+       * `process.env` here is the DAEMON's, frozen when it was spawned and outliving every UI that
+       * has since adopted it. Preferring the environment UI main captured at attach time is what
+       * stops a variable from a session that ended days ago reaching a shell started today.
+       *
+       * Still sanitised either way: `THRONG_*` must not reach a user's shell whichever process the
+       * environment came from (#172).
+       */
+      env: {
+        ...sanitizeSpawnEnv(opts.baseEnv ?? process.env),
+        ...(opts.env ?? {}),
+      },
       name: 'xterm-256color',
     });
     const session: Session = { proc, seq: this.seqCounter++, conhostPid: null };
