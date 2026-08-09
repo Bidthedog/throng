@@ -53,7 +53,7 @@ import {
   instanceDatabasePath,
   instanceUserDataDir,
 } from './instance-paths.js';
-import { ensureDaemon } from './daemon-lifecycle.js';
+import { ensureDaemon, pingDaemon } from './daemon-lifecycle.js';
 import { DaemonRpcError, type DaemonClient } from './daemon-client.js';
 import { ElectronDisplayInfo } from './electron-display-info.js';
 import { loadWindowState, saveWindowState } from './window-state.js';
@@ -66,6 +66,8 @@ import { resolvePickerDefaultPath } from './pick-folder.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { ElectronShellIntegration } from './electron-shell-integration.js';
 import { FilesService } from './files-service.js';
+import { resolveThrongHolder } from './throng-holder.js';
+import { PanelIdentityRegistry } from './panel-identity.js';
 import { ExplorerWatcher } from './explorer-watcher.js';
 import { registerFilesIpc } from './files-ipc.js';
 import { EditorService } from './editor-service.js';
@@ -74,9 +76,10 @@ import { EditorCoordinator } from './editor-coordinator.js';
 import { registerEditorIpc } from './editor-ipc.js';
 import { registerClipboardIpc } from './clipboard-ipc.js';
 import type { ClipboardService } from './clipboard-service.js';
-import { WindowsShellDetection, WindowsElevation } from '@throng/platform-windows';
+import { WindowsShellDetection, WindowsElevation, lookupHolder } from '@throng/platform-windows';
 import { createShellDetectionService } from './shell-detection-service.js';
 import { DaemonEvents } from './daemon-events.js';
+import { DaemonSupervisor } from './daemon-supervisor.js';
 import { registerTerminalIpc } from './terminal-ipc.js';
 
 /** Result envelope for the generic renderer RPC bridge — preserves JSON-RPC
@@ -543,36 +546,47 @@ if (isPrimaryInstance)
   // call finds it up. Detached + unref'd, it outlives this UI (Principle III: open
   // terminals keep running). A failure here is non-fatal: the app still runs and
   // getDaemonStatus will report unavailable.
+  /*
+   * HOW THIS APP SPAWNS ITS DAEMON — stated ONCE (029 / Principle X).
+   *
+   * There are two callers: startup, and the status-bar restart 029 added. The restart began life as
+   * a copy of this literal that had quietly lost `logDir` and the whole `env` block, so a daemon the
+   * user restarted from the new control came back with `terminals.commandPollMs` silently inert,
+   * default log level and rotation, and its diagnostics landing somewhere other than beside the UI's.
+   * Nothing reported any of it. One function, so the two can never differ again.
+   */
+  const daemonOptions = (): Parameters<typeof ensureDaemon>[0] => ({
+    pipeName: settings.pipeName,
+    daemonEntry: resolveFromHere('../../../daemon/dist/main.js'),
+    pingTimeoutMs: settings.pingTimeoutMs,
+    // Keep the store beside THIS instance's userData (the production layout,
+    // `%APPDATA%\throng\throng.db`) rather than leaving the daemon to its own default —
+    // that is what stops a dev run from opening the installed app's database.
+    // THRONG_DATABASE_PATH still overrides.
+    databasePath: instanceDatabasePath(app.getPath('userData'), process.env),
+    // FR-025b: if we're elevated but an existing daemon isn't, retire + respawn it
+    // elevated (an elevated app spawns an elevated daemon) so terminals can run admin.
+    appElevated: new WindowsElevation().isElevated(),
+    // #123 — the daemon logs beside the UI, in the same per-user folder, so "send me your logs"
+    // is one folder and not a hunt across two processes that fail for related reasons.
+    logDir: diagnostics.logDir,
+    // The daemon's threshold is injected, never hardcoded (Principle X) — the same value the UI
+    // is using, so one setting governs both halves of one application.
+    env: {
+      // 025 FR-019c — the daemon reads `terminals.commandPollMs` from the user's settings, so it
+      // must be told where the config root actually is. It has no notion of dev-vs-prod, and the
+      // config root is NOT beside the database (`%USERPROFILE%\.throng[-dev]` vs `%APPDATA%`),
+      // so guessing it in the daemon silently resolved to a file that never exists — which made
+      // the setting inert, the exact thing Principle X forbids.
+      THRONG_CONFIG_ROOT: container.get<IConfigSettings>(UI_TYPES.ConfigSettings).configRoot,
+      THRONG_LOG_LEVEL: startupLogLevel,
+      THRONG_LOG_MAX_KB: String(startupDiagnostics.maxFileSizeKb),
+      THRONG_LOG_KEEP: String(startupDiagnostics.keepFiles),
+    },
+  });
+
   try {
-    await ensureDaemon({
-      pipeName: settings.pipeName,
-      daemonEntry: resolveFromHere('../../../daemon/dist/main.js'),
-      pingTimeoutMs: settings.pingTimeoutMs,
-      // Keep the store beside THIS instance's userData (the production layout,
-      // `%APPDATA%\throng\throng.db`) rather than leaving the daemon to its own default —
-      // that is what stops a dev run from opening the installed app's database.
-      // THRONG_DATABASE_PATH still overrides.
-      databasePath: instanceDatabasePath(app.getPath('userData'), process.env),
-      // FR-025b: if we're elevated but an existing daemon isn't, retire + respawn it
-      // elevated (an elevated app spawns an elevated daemon) so terminals can run admin.
-      appElevated: new WindowsElevation().isElevated(),
-      // #123 — the daemon logs beside the UI, in the same per-user folder, so "send me your logs"
-      // is one folder and not a hunt across two processes that fail for related reasons.
-      logDir: diagnostics.logDir,
-      // The daemon's threshold is injected, never hardcoded (Principle X) — the same value the UI
-      // is using, so one setting governs both halves of one application.
-      env: {
-        // 025 FR-019c — the daemon reads `terminals.commandPollMs` from the user's settings, so it
-        // must be told where the config root actually is. It has no notion of dev-vs-prod, and the
-        // config root is NOT beside the database (`%USERPROFILE%\.throng[-dev]` vs `%APPDATA%`),
-        // so guessing it in the daemon silently resolved to a file that never exists — which made
-        // the setting inert, the exact thing Principle X forbids.
-        THRONG_CONFIG_ROOT: container.get<IConfigSettings>(UI_TYPES.ConfigSettings).configRoot,
-        THRONG_LOG_LEVEL: startupLogLevel,
-        THRONG_LOG_MAX_KB: String(startupDiagnostics.maxFileSizeKb),
-        THRONG_LOG_KEEP: String(startupDiagnostics.keepFiles),
-      },
-    });
+    await ensureDaemon(daemonOptions());
   } catch (error) {
     console.error('[throng-ui] daemon did not start:', (error as Error).message);
   }
@@ -907,7 +921,82 @@ if (isPrimaryInstance)
     },
   );
   const filesService = new FilesService(fileSystem, shellIntegration);
+  // FR-018 — a raw error that a classified message replaces still reaches the log, so it outlives
+  // the notice being dismissed. `diagnostics.log` is the same rotating file the daemon writes to.
+  filesService.setDiagnosticLog((message) => diagnostics.log.warn(message));
   registerFilesIpc(filesService, explorerWatcher);
+  /*
+   * 029 FR-013 — who is holding a folder a file operation could not touch.
+   *
+   * The renderer publishes panel id -> title (and the sub-workspace window, when it is not the one
+   * reporting); the daemon supplies each live terminal and where its shell is working. Main is the
+   * only place both are visible, which is why the join lives here — the daemon knows nothing about
+   * panel titles and the renderer knows nothing about working directories.
+   */
+  const panelIdentities = new PanelIdentityRegistry();
+  ipcMain.on(
+    'throng:panels:identities',
+    (event, list: Array<{ panelId: string; panelTitle: string }>) => {
+      const window = BrowserWindow.fromWebContents(event.sender);
+      if (!window) return;
+      /*
+       * Keyed on the WEBCONTENTS id, not the BrowserWindow id.
+       *
+       * They are separate id spaces that both read as small integers, and the failure mode if they
+       * are mixed is silent: `identities(reportingWindowId)` would compare a webContents id against a
+       * window id, they would collide or fail to match by luck, and FR-013a would name the user's own
+       * window at them (or stay silent about a different one). The files bridge only ever has
+       * `event.sender`, so the webContents id is the one both ends can agree on.
+       *
+       * The TITLE still comes from the window — a renderer knows its panels and nothing about the
+       * others, which is why a flat map filled by whoever published last erased the other window's.
+       */
+      const senderId = event.sender.id;
+      /*
+       * `Array.isArray`, not `?? []`. The payload crosses IPC from a sandboxed renderer, so it is
+       * INPUT: a number or an object reaches `for (const p of panels)` and throws
+       * "panels is not iterable" inside an `ipcMain.on` listener — an uncaught exception in the main
+       * process. The per-entry `typeof` checks guard the elements; nothing guarded the container.
+       */
+      const first = panelIdentities.publish(senderId, window.getTitle(), Array.isArray(list) ? list : []);
+      /*
+       * The teardown listener is registered ONCE per window, on its first publication.
+       *
+       * The renderer republishes on every layout change — a panel renamed, moved, added — so
+       * registering here unconditionally attaches a new `closed` handler each time. They would all
+       * do the same harmless thing, but they accumulate for the lifetime of the window and trip
+       * Node's max-listeners warning, which is the sort of leak that gets diagnosed as something
+       * else entirely. `publish` reports whether this window was new, so the subscription follows
+       * the window rather than the message.
+       */
+      if (first) window.once('closed', () => panelIdentities.forget(senderId));
+    },
+  );
+  filesService.setHolderResolver(async (absPath, reportingWindowId) => {
+    const res = (await daemonClient
+      // `refreshCwd` — the poll is a second stale at worst, which is invisible in a panel title and
+      // wrong here: it answers "another program" about the user's own terminal. Paid on a failure
+      // path only.
+      .call('terminal.list', { refreshCwd: true })
+      .catch(() => null)) as { sessions?: Array<{ panelId: string; cwd?: string }> } | null;
+    // The reporting window decides whether the holder's window gets NAMED (FR-013a).
+    const mine = resolveThrongHolder(
+      absPath,
+      res?.sessions ?? [],
+      panelIdentities.identities(reportingWindowId),
+    );
+    /*
+     * FR-012 / FR-014 — and if it is NOT one of ours, ask the platform.
+     *
+     * `lookupHolder` answers "not identified" today and is tracked as #210. Calling it anyway is the
+     * point: without this line the third-party branch would be unattributed by OMISSION, the seam
+     * would have no caller, and whoever implements the Restart Manager lookup would have to find
+     * this join and wire it themselves — which is exactly the sort of thing that gets implemented
+     * and then quietly never invoked. The answer is identical either way, so nothing changes today
+     * except that the code now says what it means.
+     */
+    return mine ?? (await lookupHolder(absPath));
+  });
 
   // Editor panels (006): UI-main-owned, NOT daemon-backed. File I/O via the same
   // IFileSystem; the app-wide open-document registry, dirty-file lock, recovery
@@ -1013,9 +1102,28 @@ if (isPrimaryInstance)
     // Through the seam (016, FR-013a) — never Electron's clipboard module directly.
     clipboard: container.get<IClipboard>(UI_TYPES.Clipboard),
   });
-  const daemonEvents = new DaemonEvents(settings.pipeName);
+  /*
+   * 029 / #182 — the daemon supervisor.
+   *
+   * Fed by the events socket that was already there, whose silent forever-reconnect is exactly why
+   * a dead daemon left the application looking alive. Restart is injected rather than imported so
+   * the supervisor stays ignorant of daemon lifecycle details.
+   */
+  const daemonSupervisor = new DaemonSupervisor();
+  daemonSupervisor.setRestartHandler(async () => {
+    // The SAME options the app started with — see `daemonOptions`. A restart that reconfigured the
+    // daemon behind the user's back would be a stranger bug than the one the control fixes.
+    const res = await ensureDaemon(daemonOptions());
+    return res.spawned || (await pingDaemon(settings.pipeName, settings.pingTimeoutMs));
+  });
+  ipcMain.handle('throng:daemon:restart', () => daemonSupervisor.requestRestart());
+  ipcMain.handle('throng:daemon:state', () => daemonSupervisor.current());
+  const daemonEvents = new DaemonEvents(settings.pipeName, daemonSupervisor);
   daemonEvents.start();
-  app.on('will-quit', () => daemonEvents.stop());
+  app.on('will-quit', () => {
+    daemonEvents.stop();
+    daemonSupervisor.dispose();
+  });
 
   // Window geometry persistence (FR-047) restored onto a visible display (FR-028).
   const displayInfo = new ElectronDisplayInfo(() => screen.getAllDisplays());

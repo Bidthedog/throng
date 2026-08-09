@@ -23,7 +23,16 @@ export class DaemonEvents {
   private socket: Socket | null = null;
   private stopped = false;
 
-  constructor(private readonly pipeName: string) {}
+  /**
+   * 029 / #182 — the supervisor watching this socket.
+   *
+   * Optional so every existing construction site keeps working untouched: without one, this class
+   * behaves exactly as it did, silently reconnecting forever.
+   */
+  constructor(
+    private readonly pipeName: string,
+    private readonly supervisor?: { onConnected(): void; onDisconnected(): void },
+  ) {}
 
   start(): void {
     this.stopped = false;
@@ -41,9 +50,13 @@ export class DaemonEvents {
     this.socket = socket;
     let buffer = '';
     socket.setEncoding('utf8');
-    socket.on('connect', () =>
-      socket.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: TERMINAL_SUBSCRIBE_METHOD, params: {} })}\n`),
-    );
+    socket.on('connect', () => {
+      socket.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: TERMINAL_SUBSCRIBE_METHOD, params: {} })}\n`);
+      // 029 — a connected, subscribed events socket is the definition of "the daemon is usable".
+      // It is also what cancels a grace still running from a previous close, so a blip the user
+      // never noticed never becomes a notice.
+      this.supervisor?.onConnected();
+    });
     socket.on('data', (chunk: string) => {
       buffer += chunk;
       let nl = buffer.indexOf('\n');
@@ -56,7 +69,15 @@ export class DaemonEvents {
     });
     socket.on('close', () => {
       this.socket = null;
-      if (!this.stopped) setTimeout(() => this.open(), 500);
+      /*
+       * 029 — this used to be the WHOLE story: retry in 500ms, forever, in silence. That silence is
+       * exactly why a dead daemon left the app looking alive. The `stopped` guard keeps a
+       * deliberate shutdown quiet, because closing throng is not a failure to report.
+       */
+      if (!this.stopped) {
+        this.supervisor?.onDisconnected();
+        setTimeout(() => this.open(), 500);
+      }
     });
     socket.on('error', () => socket.destroy());
   }

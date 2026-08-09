@@ -28,6 +28,12 @@ const HELPER_SCRIPT =
   'setInterval(()=>{try{process.kill(p,0)}catch{process.exit(0)}},1000);' +
   'setInterval(()=>{},1e9);';
 
+/** Tag an internal Error with an errno so it classifies like an OS failure (029, FR-011). */
+function withCode(error: Error, code: string): Error {
+  (error as NodeJS.ErrnoException).code = code;
+  return error;
+}
+
 export class WindowsDirectoryLock implements IDirectoryLock {
   private readonly held = new Map<LockHandle, ChildProcess>();
 
@@ -36,9 +42,16 @@ export class WindowsDirectoryLock implements IDirectoryLock {
     try {
       isDir = statSync(absPath).isDirectory();
     } catch {
-      throw new Error(`Cannot lock "${absPath}": the path does not exist`);
+      /*
+       * Carries an errno (029). This threw a plain Error, which classified as NOTHING — so the user
+       * was shown `Internal error: Cannot lock "…": the path does not exist` verbatim, which is half
+       * of what #181 reports. The path really IS missing, and saying so in the OS's own vocabulary is
+       * what lets ONE classifier serve both this and `fs`, instead of pattern-matching our own
+       * internal message strings somewhere far from here.
+       */
+      throw withCode(new Error(`Cannot lock "${absPath}": the path does not exist`), 'ENOENT');
     }
-    if (!isDir) throw new Error(`Cannot lock "${absPath}": not a directory`);
+    if (!isDir) throw withCode(new Error(`Cannot lock "${absPath}": not a directory`), 'ENOTDIR');
 
     const child = spawn(process.execPath, ['-e', HELPER_SCRIPT], {
       cwd: absPath,

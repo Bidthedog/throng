@@ -30,6 +30,37 @@ export function resolveStartDirectory(
   return rememberedCwd;
 }
 
+/**
+ * The remembered directory to TELL THE USER about, or nothing when there is nothing to say
+ * (029 FR-005a / FR-005b).
+ *
+ * ══ WHY THE FALLBACK STOPPED BEING SILENT, AND ONLY PARTLY ══
+ *
+ * 025 made the fallback silent on purpose and was right that it must never be an error: the terminal
+ * starts, nothing is lost, and interrupting the user would be nagging. But silence has its own cost,
+ * which #204's cycle exposed — restore a project root while a subfolder stays deleted, and the user
+ * finds a shell at the root with no explanation, which reads as "remember-my-directory is broken".
+ *
+ * So exactly ONE of the two fallback reasons is reported. A directory that is GONE is news: the user
+ * did not ask to be moved and can see the difference. A directory that ESCAPED ITS PROJECT is a
+ * boundary throng enforces deliberately, and announcing it would be explaining our own rule at
+ * someone who never crossed it on purpose.
+ *
+ * Pure and separate from `resolveStartDirectory` so the distinction is testable without a
+ * filesystem, an Electron process or a shell — it used to live inline in an IPC handler, where the
+ * only way to exercise it was to launch the app.
+ */
+export function fallbackToReport(
+  rememberedCwd: string | undefined,
+  resolvedCwd: string,
+  directoryExists: (path: string) => boolean,
+): string | undefined {
+  if (!rememberedCwd) return undefined; // nothing was remembered, so nothing was lost
+  if (samePath(rememberedCwd, resolvedCwd)) return undefined; // it was honoured; no fallback happened
+  if (directoryExists(rememberedCwd)) return undefined; // still there ⇒ it escaped the project
+  return rememberedCwd;
+}
+
 /** Whether `candidate` is the root itself or sits underneath it. */
 function isWithinOrEqual(candidate: string, root: string): boolean {
   return samePath(candidate, root) || isUnderPath(candidate, root);

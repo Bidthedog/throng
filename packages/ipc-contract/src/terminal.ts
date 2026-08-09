@@ -205,6 +205,18 @@ export interface TerminalListParams {
    * requested.
    */
   includeBusy?: boolean;
+  /**
+   * Read every running shell's cwd NOW, instead of serving the last poll (029, FR-013).
+   *
+   * `cwd` is normally sampled on a 1-second timer, which is right for the panel title it was built
+   * for — a title a second stale is invisible. It is wrong for naming a lock holder: measured, a
+   * rename attempted within a second of `cd Inner` was told "another program" while the folder was
+   * being held by the user's OWN terminal, because the daemon had not yet looked.
+   *
+   * Off by default and paid for only on a failure path, where the cost is one PEB read per running
+   * terminal and the alternative is an answer that is confidently wrong.
+   */
+  refreshCwd?: boolean;
 }
 
 export interface TerminalSessionInfo {
@@ -215,6 +227,15 @@ export interface TerminalSessionInfo {
   busy: boolean;
   /** Display metadata captured at (re)attach, for the app-close warning. */
   meta?: TerminalMeta;
+  /**
+   * Where this terminal's shell is actually working (029 FR-013).
+   *
+   * The daemon is the only process that knows, and it already tracks it for FR-027. It is published
+   * so throng can name ITSELF as a lock holder: "does a known terminal sit at or under the path that
+   * failed to rename?" is a prefix match over state throng already has — no OS call and no native
+   * addon, which is why the throng case ships while the third-party one is deferred.
+   */
+  cwd?: string;
 }
 
 export interface TerminalListResult {

@@ -13,19 +13,43 @@ import {
   isDropAllowed,
   isWithinRoot,
   joinRel,
+  classifyFailure,
+  causeMessage,
   type DirEntry,
+  type FailureCause,
+  type FailureOperation,
+  type Holder,
   type IFileSystem,
   type IShellIntegration,
 } from '@throng/core';
 
-export type OkOrError = { ok: true } | { error: string };
+/**
+ * A failure, as it crosses the bridge (029, FR-018).
+ *
+ * ══ WHY THE CAUSE TRAVELS AND IS NOT RE-DERIVED ══
+ *
+ * `error` is the sentence the user reads, already spoken — classification happens HERE because this
+ * is where the errno exists and where the holder can be looked up. But a spoken sentence is a
+ * one-way door: `EBUSY` is gone from it, and with it the causeKey that decides whether a cascade of
+ * failures is one notice or five, and the raw text a bug report needs.
+ *
+ * Sending the cause alongside is what keeps all three facts — the sentence, the key and the raw —
+ * without asking the renderer to reverse-engineer any of them out of prose. Absent when the failure
+ * matched none of the five kinds (FR-011b), in which case `error` is the untouched original.
+ */
+export interface FailureEnvelope {
+  readonly error: string;
+  readonly cause?: FailureCause;
+}
+
+export type OkOrError = { ok: true } | FailureEnvelope;
 /** One completed move — both paths ABSOLUTE, as the OS spelled them (019, FR-001). */
 export interface MovePair {
   readonly from: string;
   readonly to: string;
 }
-export type ListResult = { entries: DirEntry[] } | { error: string };
-export type NewFolderResult = { relPath: string } | { error: string };
+export type ListResult = { entries: DirEntry[] } | FailureEnvelope;
+export type NewFolderResult = { relPath: string } | FailureEnvelope;
 export type DeleteMode = 'recycle' | 'permanent';
 
 const NO_ROOT = 'No active project.';
@@ -64,6 +88,75 @@ export class FilesService {
     private readonly fs: IFileSystem,
     private readonly shell: IShellIntegration,
   ) {}
+
+  /**
+   * Resolve who is holding an absolute path (029, FR-013).
+   *
+   * Injected rather than imported so this service stays ignorant of terminals and windows, and so
+   * the not-yet-implemented third-party lookup and the non-Windows build take the SAME branch —
+   * returning nothing — which is what stops either rotting unnoticed (FR-012, FR-014).
+   */
+  private resolveHolder:
+    | ((absPath: string, reportingWindowId?: number) => Promise<Holder | undefined>)
+    | null = null;
+
+  setHolderResolver(
+    resolve: (absPath: string, reportingWindowId?: number) => Promise<Holder | undefined>,
+  ): void {
+    this.resolveHolder = resolve;
+  }
+
+  /**
+   * Where the RAW error text goes when a classified message replaces it (029, FR-018).
+   *
+   * FR-018 asks for the raw text in BOTH places, and the two are not redundant: Copy serves the user
+   * writing a bug report right now, the log serves everyone after the notice has been dismissed —
+   * which is the state a support conversation actually starts in.
+   *
+   * Injected rather than importing the log, for the same reason the holder resolver is: this service
+   * knows about a filesystem and nothing else. It is also what makes the behaviour testable without
+   * an Electron process.
+   *
+   * NOT relied upon implicitly. Both the UI main process and the daemon call `attachConsole()`, so a
+   * bare `console.warn` here would in fact reach the log file today — and would silently stop the day
+   * someone removed that call, taking a stated MUST with it and telling nobody.
+   */
+  private logRaw: ((message: string) => void) | null = null;
+
+  setDiagnosticLog(log: (message: string) => void): void {
+    this.logRaw = log;
+  }
+
+  /**
+   * Classify a failure, and record the raw text it replaced.
+   *
+   * Only when a cause was found. An UNCLASSIFIED failure is reported verbatim (FR-011b), so its raw
+   * text is already in front of the user and logging it would add a line saying what the notice says.
+   */
+  private failed(e: unknown, operation: FailureOperation = 'access', holder?: Holder): FailureEnvelope {
+    const envelope = failure(e, operation, holder);
+    if (envelope.cause) this.logRaw?.(`[files] ${envelope.cause.raw}`);
+    return envelope;
+  }
+
+  /**
+   * Who is holding the item at `relPath`, best effort. Never throws — this is a failure path.
+   *
+   * `reportingWindowId` is the window that will SHOW the answer, which decides whether a holder in
+   * another window gets that window named (FR-013a). Absent when the caller has no window — every
+   * panel then reads as "here", which is the same answer a single-window session gives.
+   */
+  private async holderFor(relPath: string, reportingWindowId?: number): Promise<Holder | undefined> {
+    if (!this.resolveHolder || !this.root) return undefined;
+    try {
+      return await this.resolveHolder(this.absOf(relPath), reportingWindowId);
+    } catch {
+      // Identifying a holder is inherently racy — the process can go between the failure and the
+      // lookup. A lookup that fails degrades to "not identified", which is a stated outcome
+      // (FR-012), never a second error on top of the first.
+      return undefined;
+    }
+  }
 
   /** Notified with the absolute paths that a delete removed (FR-099) — the editor
    *  coordinator marks any open editor of a deleted file dirty. */
@@ -107,15 +200,19 @@ export class FilesService {
       if (!(await this.within(abs))) return { error: OUTSIDE };
       return { entries: await this.fs.list(abs) };
     } catch (e) {
-      return { error: message(e) };
+      return this.failed(e);
     }
   }
 
-  async rename(relPath: string, newName: string): Promise<OkOrError> {
-    return this.bracketed(() => this.renameInBracket(relPath, newName));
+  async rename(relPath: string, newName: string, reportingWindowId?: number): Promise<OkOrError> {
+    return this.bracketed(() => this.renameInBracket(relPath, newName, reportingWindowId));
   }
 
-  private async renameInBracket(relPath: string, newName: string): Promise<OkOrError> {
+  private async renameInBracket(
+    relPath: string,
+    newName: string,
+    reportingWindowId?: number,
+  ): Promise<OkOrError> {
     if (!this.root) return { error: NO_ROOT };
     if (relPath === '') return { error: 'The project root cannot be renamed.' };
     const name = newName.trim();
@@ -163,7 +260,18 @@ export class FilesService {
       moved.push({ from: abs, to: await this.fs.rename(abs, name) });
       return { ok: true };
     } catch (e) {
-      return { error: message(e) };
+      /*
+       * The holder is looked up ONLY when the failure can actually name one.
+       *
+       * `held` is the one kind whose sentence mentions a holder. Asking unconditionally cost a
+       * `terminal.list { refreshCwd }` round trip plus a PEB read per running terminal on EVERY
+       * rename failure — including `ENOENT` and unrecognised ones, where the answer is discarded.
+       * Worse, the `await` sits inside the `catch`, so it also delayed the `finally` that closes the
+       * move bracket by that round trip: every open document stayed `movePending` for longer than
+       * the operation took, for an answer nobody would read.
+       */
+      const holder = holdsTheAnswer(e) ? await this.holderFor(relPath, reportingWindowId) : undefined;
+      return this.failed(e, 'lock', holder);
     } finally {
       if (bracketOpen) this.onMoved?.(moved);
     }
@@ -212,7 +320,7 @@ export class FilesService {
       }
       return { ok: true };
     } catch (e) {
-      return { error: message(e) };
+      return this.failed(e, 'lock');
     } finally {
       // ALWAYS close a bracket that opened — on success, on the early error return above, and on
       // a throw. One that never closes leaves a document `movePending` for the rest of the
@@ -238,7 +346,7 @@ export class FilesService {
       }
       return { ok: true };
     } catch (e) {
-      return { error: message(e) };
+      return this.failed(e, 'lock');
     }
   }
 
@@ -341,7 +449,7 @@ export class FilesService {
       await this.fs.mkdir(join(destAbs, name));
       return { relPath: joinRel(destRelDir, name) };
     } catch (e) {
-      return { error: message(e) };
+      return this.failed(e);
     }
   }
 
@@ -357,7 +465,7 @@ export class FilesService {
       await this.fs.writeBytes(join(destAbs, name), new Uint8Array());
       return { relPath: joinRel(destRelDir, name) };
     } catch (e) {
-      return { error: message(e) };
+      return this.failed(e);
     }
   }
 
@@ -372,7 +480,7 @@ export class FilesService {
       else await this.shell.openFolder(abs);
       return { ok: true };
     } catch (e) {
-      return { error: message(e) };
+      return this.failed(e);
     }
   }
 
@@ -400,6 +508,56 @@ export class FilesService {
   }
 }
 
-function message(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+/**
+ * What the user is told when a file operation fails (029, FR-011).
+ *
+ * ══ WHY THE OPERATION IS A PARAMETER ══
+ *
+ * This returned `e.message` verbatim, which is #196: `EBUSY: resource busy or locked, rename 'C:\…'`
+ * names no cause, and `EPERM: operation not permitted` names the WRONG one — it reads as a
+ * permissions problem when the folder is simply open somewhere else.
+ *
+ * `EPERM` means both on Windows and the errno cannot separate them, so the caller says which kind of
+ * operation it attempted. That judgement has to live at the call site because only the call site
+ * knows; guessing centrally is how #196's exact harm gets reproduced in a new place.
+ *
+ * A failure matching none of the five kinds is returned UNCHANGED (FR-011b) — which is what makes
+ * this incapable of making anything worse than it already is.
+ */
+function failure(
+  e: unknown,
+  operation: FailureOperation = 'access',
+  holder?: Holder,
+): FailureEnvelope {
+  const raw = e instanceof Error ? e.message : String(e);
+  const cause = classifyFailure(e, { subject: subjectOf(raw), operation, holder });
+  return cause ? { error: causeMessage(cause), cause } : { error: raw };
+}
+
+/**
+ * Would knowing the holder change what this failure SAYS? (029, FR-013.)
+ *
+ * Only `held` renders a holder — `causeMessage` puts it after "is open in…", and every other kind's
+ * sentence has nowhere to put one. On a lock-class operation that is exactly `EBUSY` and `EPERM`,
+ * which is why the two are named here rather than the kind being re-derived: this runs BEFORE
+ * classification, on the failure path, to decide whether classification needs an expensive answer.
+ */
+function holdsTheAnswer(error: unknown): boolean {
+  const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+  return code === 'EBUSY' || code === 'EPERM';
+}
+
+/**
+ * The subject a raw errno message is about — the last segment of the first path it quotes.
+ *
+ * FR-017 asks for prose that NAMES the folder, and in a raw errno the only place that name survives
+ * is inside the path. Extracting it is the difference between "a path appears in the string" and
+ * "the sentence names the thing".
+ */
+function subjectOf(raw: string): string {
+  const quoted = /'([^']+)'|"([^"]+)"/.exec(raw);
+  const path = quoted?.[1] ?? quoted?.[2];
+  if (!path) return 'this item';
+  const parts = path.split(/[/\\]/).filter(Boolean);
+  return parts[parts.length - 1] ?? path;
 }

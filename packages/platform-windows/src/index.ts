@@ -7,6 +7,8 @@ export { WindowsElevation } from './windows-elevation.js';
 export { WindowsProcessCwd } from './windows-process-cwd.js';
 export { WindowsDeElevatedLauncher } from './windows-de-elevated-launcher.js';
 export { WindowsFontEnumeration } from './windows-font-enumeration.js';
+// 029 FR-012/FR-014: who else is holding a path. Deferred, and deliberately present — see the file.
+export { lookupHolder } from './holder-lookup.js';
 // Durable diagnostics (#123): the file sink both boundaries log through, and crash reports.
 export { CRASH_DIR_NAME, createFileLog, writeCrashReport } from './node-file-log.js';
 export type { DiagnosticLog, FileLogOptions } from './node-file-log.js';

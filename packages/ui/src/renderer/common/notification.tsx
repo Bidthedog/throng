@@ -10,7 +10,9 @@ import {
   type ReactNode,
 } from 'react';
 
+import { causeMessage, causeKey, isTransportFailure, type FailureCause } from '@throng/core';
 import { IconButton } from './icon-button.js';
+import { shouldSuppressForCause } from './notice-suppression.js';
 
 /**
  * THE notification model (018 / US6, FR-048/048b/050).
@@ -73,8 +75,25 @@ export interface Notice {
   message: string;
   /** A list carried by the notice — e.g. the files an editor notice is about. */
   details?: readonly string[];
+  /**
+   * The raw error, for COPY and the log only — never rendered (029 FR-018/FR-018a).
+   *
+   * FR-018 demotes the raw text; FR-016 forbids it from the visible notice. `details` cannot serve
+   * both, because `details` IS rendered — putting the errno there satisfied "still reachable" by
+   * breaking "not the headline". This is the demotion with nowhere to leak.
+   */
+  copyDetail?: string;
   /** Preserved verbatim from the surface being folded in (e.g. `project-error`). */
   testId?: string;
+  /**
+   * The cause this notice reports, as a stable key (029 FR-019).
+   *
+   * Present only when the failure was CLASSIFIED. While a notice carrying this key is live, further
+   * failures sharing it raise nothing — one absent folder is one problem, however many parts of the
+   * workspace it breaks. Absent (an unclassified failure, or anything that is not a failure at all)
+   * means the ordinary stacking rules apply and nothing is suppressed.
+   */
+  causeKey?: string;
   /**
    * The message's and dismiss control's identifiers, where a folded-in surface used its own.
    *
@@ -125,9 +144,12 @@ export function noticeHeading(n: Pick<Notice, 'title' | 'action' | 'severity'>):
  * to retype the half of it that was rendered as separate elements — and the raw failure string is
  * precisely the part they cannot retype accurately.
  */
-export function noticeToText(n: Pick<Notice, 'title' | 'action' | 'severity' | 'message' | 'details'>): string {
+export function noticeToText(
+  n: Pick<Notice, 'title' | 'action' | 'severity' | 'message' | 'details' | 'copyDetail'>,
+): string {
   const heading = noticeHeading(n);
-  return [heading, n.message, ...(n.details ?? [])].filter(Boolean).join('\n');
+  // `copyDetail` last: a bug report wants the human sentence first and the machine text under it.
+  return [heading, n.message, ...(n.details ?? []), n.copyDetail].filter(Boolean).join('\n');
 }
 
 let seq = 0;
@@ -182,7 +204,22 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
             n.action === input.action &&
             n.testId === input.testId,
         );
-        return duplicate ? cur : [...cur, { ...input, id }];
+        if (duplicate) return cur;
+        /*
+         * ONE CAUSE, ONE NOTICE (029 FR-019).
+         *
+         * The rule above collapses IDENTICAL notices — one event seen twice. This one collapses
+         * DIFFERENT notices that share an underlying cause: a missing project root breaks the file
+         * tree AND every terminal, and measured on master that was two notices, in two vocabularies,
+         * for one absent folder.
+         *
+         * Bounded by the live list, which is what makes dismissal re-arm the cause (FR-019c) with no
+         * timer to tune. Deliberately NOT keyed on the surface or the message text — the two measured
+         * messages differ, and `notice-stacking.e2e.ts` proves two genuinely different failures must
+         * still stack.
+         */
+        if (shouldSuppressForCause(cur.map((n) => n.causeKey ?? ''), input.causeKey)) return cur;
+        return [...cur, { ...input, id }];
       });
 
       if (input.severity !== 'error') {
@@ -289,6 +326,80 @@ export function useNotify(): NotifyContextValue {
 }
 
 /**
+ * Turn a raw failure string into what the user should actually read (029).
+ *
+ * Exported for unit testing: every vitest project here runs `environment: 'node'`, so a rule buried
+ * inside a hook cannot be exercised without a DOM.
+ *
+ * `raw` is a message, not an Error — by the time a store has recorded it, the errno is long gone.
+ * So classification works on the text, which is exactly why the CLOSED set matters: a pattern that
+ * matches nothing leaves the string untouched, and nothing that works today can break.
+ */
+export function speakFailure(raw: string): { message: string; causeKey?: string; copyDetail?: string } {
+  /*
+   * The daemon is decided by the MESSAGE ALONE, never by its state.
+   *
+   * Consulting the state looks strictly better and is strictly worse. `daemonStopped ||` short-
+   * circuits before any classification, for ANY string a surface reports — so while the daemon
+   * happened to be down, a user renaming a file onto an existing name was told "throng's daemon has
+   * stopped" instead of "a file with this name already exists". `FilesService` runs in main and
+   * needs no daemon at all; relabelling its refusals is the wrong-words-for-the-actual-failure
+   * defect this whole feature exists to remove, re-created inside the fix. FR-011b requires anything
+   * matching none of the five kinds to keep today's behaviour EXACTLY.
+   *
+   * It also made the daemon's state a dependency of this effect, so a daemon dying while a stale
+   * error sat in a store re-ran it — undoing the user's dismissal and raising a SECOND notice under
+   * a different causeKey, which is precisely what FR-019 forbids.
+   *
+   * `isTransportFailure` is shared with UI main (`terminal-ipc.ts`), so what the renderer SAYS about
+   * a dead daemon and what main DECIDES about a failed attach can never disagree.
+   */
+  if (isTransportFailure(raw)) {
+    const cause: FailureCause = { kind: 'daemon-stopped', subject: 'throng', raw };
+    return { message: causeMessage(cause), causeKey: causeKey(cause), copyDetail: raw };
+  }
+  const kind = kindFromMessage(raw);
+  if (!kind) return { message: raw }; // FR-011b — unmatched failures are untouched
+  const cause: FailureCause = { kind, subject: subjectFromMessage(raw), raw };
+  /*
+   * FR-018 — the raw text is DEMOTED, not discarded.
+   *
+   * `noticeToText` composes heading + message + details + `copyDetail`, and that is what Copy
+   * yields, so the raw error stays in a bug report without appearing in the notice. Dropping it
+   * entirely was the first version of this, and it traded one failure of communication for another:
+   * the user could read the notice but no longer report it. `details` was the second, and it put
+   * the errno straight back on screen — which is why `copyDetail` exists as its own field.
+   */
+  return { message: causeMessage(cause), causeKey: causeKey(cause), copyDetail: raw };
+}
+
+function kindFromMessage(raw: string): FailureCause['kind'] | null {
+  if (/^EBUSY\b/.test(raw)) return 'held';
+  if (/^EPERM\b/.test(raw)) return 'held'; // reached only from lock-class ops; see classifyFailure
+  if (/^ENOENT\b/.test(raw)) return 'path-missing';
+  if (/^EACCES\b/.test(raw)) return 'permission-denied';
+  if (/^ENOTEMPTY\b/.test(raw)) return 'not-empty';
+  // The directory lock's own throw, which carries an errno at the source but arrives here as text.
+  if (/^Cannot lock ".*": the path does not exist/.test(raw)) return 'path-missing';
+  return null;
+}
+
+/**
+ * The subject a raw message is about — the last path segment inside its quotes or after its comma.
+ *
+ * FR-017 wants prose naming the folder, and the only place that name survives in a raw errno is the
+ * path. Pulling it out here is what turns "a path is in the string somewhere" into "the sentence
+ * names the folder".
+ */
+function subjectFromMessage(raw: string): string {
+  const quoted = /'([^']+)'|"([^"]+)"/.exec(raw);
+  const path = quoted?.[1] ?? quoted?.[2];
+  if (!path) return 'this item';
+  const parts = path.split(/[/\\]/).filter(Boolean);
+  return parts[parts.length - 1] ?? path;
+}
+
+/**
  * Report a STORE's error field through the notification model.
  *
  * This is the whole of what the four copy-pasted error strips did — projects, explorer,
@@ -306,6 +417,16 @@ export function useErrorNotice(
   /** What the user was doing when it failed — see {@link Notice.action}. Stores that record the
    *  attempted operation alongside the error pass it here, so the notice says both halves. */
   action?: string | null,
+  /**
+   * The classification the PRODUCER already made, where one was made (029, FR-018).
+   *
+   * `speakFailure` below classifies from the message text, which is all a surface has when the
+   * message is all it was given. But a producer that caught the actual error knows more than the
+   * sentence preserves — the errno, and who is holding the file — and a sentence it has already
+   * spoken can no longer be classified from its own words. So a supplied cause WINS: it is the
+   * upstream fact, not a guess reconstructed from prose.
+   */
+  cause?: FailureCause | null,
 ): void {
   const { notify, clear } = useNotify();
   /*
@@ -325,11 +446,31 @@ export function useErrorNotice(
   useEffect(() => {
     if (error) {
       dismissedByUser.current = false;
+      /*
+       * 029 FR-010 / FR-011 — say what actually went wrong.
+       *
+       * Two substitutions, in priority order, both applied HERE because this is the one raiser the
+       * explorer, the projects panel and sub-workspaces all share. Doing it in each store would be
+       * three places to keep in step, and the third would be forgotten.
+       *
+       *   1. The daemon has stopped. EVERY dependent action fails, each with its own unrelated-
+       *      looking message — on Windows a bare `ENOENT`, because a named pipe that no longer
+       *      exists is a missing path. That code sends the user hunting for a file that was never
+       *      involved, so the stopped daemon is named as the cause instead (FR-010).
+       *   2. Otherwise, classify the raw error. Anything matching none of the five kinds keeps
+       *      today's text exactly (FR-011b), which is what makes this incapable of regressing.
+       */
+      const spoken = cause
+        ? { message: error, causeKey: causeKey(cause), copyDetail: cause.raw }
+        : speakFailure(error);
       notify({
         severity: 'error',
-        message: error,
+        message: spoken.message,
         action: action ?? undefined,
         testId,
+        causeKey: spoken.causeKey,
+        // FR-018: the raw error rides along where Copy can reach it, below the human sentence.
+        copyDetail: spoken.copyDetail,
         onDismiss: () => {
           dismissedByUser.current = true;
           clearError?.();
@@ -339,5 +480,5 @@ export function useErrorNotice(
     // `clearError` is a store callback and is stable; including it would re-notify on every render
     // of a store that rebuilds its handlers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [error, action, testId, notify, clear]);
+  }, [error, action, testId, notify, clear, cause]);
 }

@@ -19,6 +19,18 @@ declare global {
         onChanged: (cb: () => void) => () => void;
       };
       getDaemonStatus?: () => Promise<unknown>;
+      /** 029 FR-013 — panel id to displayed title, published so main can name a throng holder. */
+      panels?: {
+        publishIdentities: (
+          list: Array<{ panelId: string; panelTitle: string; windowTitle?: string }>,
+        ) => void;
+      };
+      /** 029 / #182 — daemon liveness, pushed rather than pulled. */
+      daemon?: {
+        state: () => Promise<import('@throng/core').DaemonState>;
+        restart: () => Promise<{ ok: boolean; error?: string }>;
+        onState: (cb: (s: import('@throng/core').DaemonState) => void) => () => void;
+      };
       invoke?: (method: string, params: unknown) => Promise<ThrongRpcEnvelope>;
       pickFolder?: (opts?: { defaultPath?: string | string[] }) => Promise<string | null>;
       setTitle?: (title: string) => void;
@@ -200,18 +212,18 @@ declare global {
         setRoot: (root: string | null) => void;
         list: (
           relDir: string,
-        ) => Promise<{ entries: FileTreeEntry[] } | { error: string }>;
+        ) => Promise<{ entries: FileTreeEntry[] } | FilesFailure>;
         rename: (relPath: string, newName: string) => Promise<FilesOkOrError>;
         move: (srcRelPaths: string[], destRelDir: string) => Promise<FilesOkOrError>;
         copy: (srcRelPaths: string[], destRelDir: string) => Promise<FilesOkOrError>;
         delete: (relPaths: string[], mode: 'recycle' | 'permanent') => Promise<FilesOkOrError>;
-        newFolder: (destRelDir: string) => Promise<{ relPath: string } | { error: string }>;
-        newFile: (destRelDir: string) => Promise<{ relPath: string } | { error: string }>;
+        newFolder: (destRelDir: string) => Promise<{ relPath: string } | FilesFailure>;
+        newFile: (destRelDir: string) => Promise<{ relPath: string } | FilesFailure>;
         reveal: (relPath: string) => Promise<FilesOkOrError>;
         /** 024 US3 (#85): does this path exist inside the project? The undo world-check. */
         exists?: (relPath: string) => Promise<boolean>;
         /** 024 US3 (#85): restore a trashed item to its original path. */
-        restore?: (relPath: string, deletedAt: number) => Promise<{ ok: true } | { error: string }>;
+        restore?: (relPath: string, deletedAt: number) => Promise<FilesOkOrError>;
         onChange: (cb: (evt: { relDir: string }) => void) => () => void;
         /** 026 / #186 — live sync stopped and could not be restarted (FR-010a). */
         onWatchFailed?: (cb: (evt: { root: string; reason: string }) => void) => () => void;
@@ -415,10 +427,24 @@ export type TerminalAttachEnvelope =
        *  reclaims keys the program owns. */
       altScreen?: boolean;
       exit?: { code: number | null };
+      /** A remembered directory that no longer exists; the terminal started at the root (FR-005b). */
+      cwdFallback?: string;
     }
   // `stillStarting` marks a non-fatal attach timeout (008 FR-005): the session may still
   // be launching; the view shows a "still starting" state with a retry, not a hard error.
-  | { ok: false; stillStarting?: boolean; error: { code: number | null; message: string } };
+  | {
+      ok: false;
+      stillStarting?: boolean;
+      error: { code: number | null; message: string };
+      /**
+       * The classified reason, where the daemon could derive one (029, FR-003).
+       *
+       * Its ABSENCE is meaningful: an unclassifiable start failure — a flavour that no longer
+       * resolves, a broken shell path — is a configuration the user must re-choose, and the panel
+       * reverts to the type-selection form exactly as it does today.
+       */
+      cause?: import('@throng/core').FailureCause;
+    };
 
 /** One session row from `window.throng.terminal.list`. */
 export interface TerminalSessionDto {
@@ -436,7 +462,20 @@ export interface FileTreeEntry {
   hasChildren?: boolean;
 }
 
-export type FilesOkOrError = { ok: true } | { error: string };
+/**
+ * A file operation that failed (029, FR-018).
+ *
+ * `error` is the sentence to show. `cause` is the classification main already made — present only
+ * when the failure was one of the five kinds. It carries the raw errno, so a spoken sentence does not
+ * cost the bug report its evidence, and it carries the kind and subject, from which the notice layer
+ * derives the suppression key that collapses a cascade into one notice.
+ */
+export interface FilesFailure {
+  error: string;
+  cause?: import('@throng/core').FailureCause;
+}
+
+export type FilesOkOrError = { ok: true } | FilesFailure;
 
 /** Config document identity for the preferences write path (mirrors core ConfigDocId). */
 export type ThrongConfigDocId =

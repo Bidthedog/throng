@@ -34,6 +34,7 @@ import {
   createTerminalSearchController,
   type TerminalSearchDecorations,
 } from '../search/terminal-search.js';
+import type { FailureCause } from '@throng/core';
 import type { SearchCount } from '../search/search-model.js';
 import { shouldDropScrollback } from './clear-detect.js';
 import { saveTerminalViewState, takeTerminalViewState } from './terminal-view-state.js';
@@ -127,15 +128,28 @@ export interface UseTerminalOptions {
   /** Called when the terminal process ends (revert to the form, FR-020). */
   onExit: (exit: TerminalExit) => void;
   /** Called when (re)attach fails — bad params, missing flavour, etc. (FR-019). */
-  onError: (message: string) => void;
+  /**
+   * Carries the daemon-classified CAUSE where there is one (029, FR-003).
+   *
+   * The panel needs it to decide whether to keep its type: a folder briefly away is transient and
+   * the configuration must survive, while a flavour that no longer resolves is a choice the user
+   * must remake. A bare string could not tell those apart, which is #204.
+   */
+  onError: (message: string, cause?: FailureCause) => void;
   /**
    * Called when the attach exceeds its budget (008 FR-005). NON-fatal: the session may
    * still be launching, so the view shows a "still starting" state with a retry — it does
    * NOT revert to the form (that is {@link onError}) and does NOT kill the session.
    */
   onStillStarting?: () => void;
-  /** Called when an attach resolves as running — clears any "still starting" state. */
-  onAttached?: () => void;
+  /**
+   * Called when an attach resolves as running — clears any "still starting" state.
+   *
+   * `cwdFallback` names a remembered directory that no longer exists, when the terminal started at
+   * the project root because of it (029 FR-005b). The terminal WORKS; this is information, not a
+   * failure, and must never be presented as one.
+   */
+  onAttached?: (cwdFallback?: string) => void;
   /**
    * Retry counter (008 FR-005). Bumping it re-runs the attach effect, reattaching to the
    * (already-running) session — idempotent by session reuse — so a still-starting view can
@@ -995,10 +1009,10 @@ export function useTerminal(opts: UseTerminalOptions): void {
             onStillStartingRef.current?.();
             return;
           }
-          onErrorRef.current(res.error.message);
+          onErrorRef.current(res.error.message, res.cause);
           return;
         }
-        onAttachedRef.current?.(); // a successful attach clears any "still starting" state
+        onAttachedRef.current?.(res.cwdFallback); // a successful attach clears any "still starting" state
         // Conform to the session's shared grid BEFORE replaying scrollback, so a view
         // joining an existing session (whose minimum it may not move — e.g. a larger
         // window mirroring a smaller one) renders the replayed screen at the right size
@@ -1085,6 +1099,8 @@ export function useTerminal(opts: UseTerminalOptions): void {
         }
       })
       .catch((err: unknown) => {
+        // No cause here by construction: this is a THROWN transport failure (the IPC bridge itself
+        // rejected), not a daemon-classified one, so the panel reverts as it does today.
         if (!disposed) onErrorRef.current(err instanceof Error ? err.message : 'terminal attach failed');
       });
 

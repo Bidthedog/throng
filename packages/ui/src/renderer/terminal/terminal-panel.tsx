@@ -22,6 +22,9 @@ import {
   shouldNotifyCaptureOutcome,
   panelZoomLevel,
   readTerminalPanelConfig,
+  startFailurePreservesPanelType,
+  causeMessage,
+  type FailureCause,
   type Panel,
   type TerminalPanelConfig,
   type Theme,
@@ -58,6 +61,18 @@ import { reservedByTerminal } from '../search/search-actions.js';
 import { getFindState, updateCount } from '../search/search-store.js';
 import type { SearchCount } from '../search/search-model.js';
 import './terminal.css';
+
+/**
+ * The last path segment — the folder's own name (029 FR-017).
+ *
+ * Notices and panel messages name their subject in PROSE, never by leaning on a path the reader has
+ * to parse. `node:path` is not available in the renderer, and this only ever runs on a path throng
+ * itself recorded, so a split on both separators is enough.
+ */
+function lastSegment(absPath: string): string {
+  const parts = absPath.split(/[/\\]/).filter(Boolean);
+  return parts[parts.length - 1] ?? absPath;
+}
 
 /** Build the xterm theme from the active throng terminal colour tokens (FR-030). */
 function buildXtermTheme(theme: Theme): Record<string, string> {
@@ -120,6 +135,21 @@ export function TerminalPanel({
   // cleared when an attach resolves running. `attempt` is bumped by the retry control to
   // re-run the attach (a reattach, idempotent by session reuse) — never a revert or kill.
   const [stillStarting, setStillStarting] = useState(false);
+  /**
+   * The terminal could not START, for a reason that is the ENVIRONMENT's and not the panel's
+   * (029 FR-004). Non-null keeps the panel a terminal and shows the failure in place; the panel type
+   * and every remembered setting survive untouched.
+   */
+  const [startFailure, setStartFailure] = useState<{ message: string; cause: FailureCause } | null>(null);
+  // Read by the context-menu callback, which is memoised and would otherwise close over a stale
+  // value — the menu must offer Retry/Clear based on the state at the moment it OPENS (FR-004d).
+  const startFailureRef = useRef(startFailure);
+  startFailureRef.current = startFailure;
+  // Same reason, and additionally because `clearWithMemory` is declared BELOW the menu callback:
+  // a ref is read when the menu opens, not when the callback was built.
+  const clearWithMemoryRef = useRef<() => void>(() => {});
+  /** A remembered directory that had gone; the terminal started at the project root (FR-005b). */
+  const [cwdFallback, setCwdFallback] = useState<string | null>(null);
   // Show a themed skeleton over the blank xterm until the session attaches and its
   // scrollback is streamed in, so a switch shows a loading placeholder rather than a
   // blank panel that fills in (issue 132 follow-up).
@@ -243,6 +273,42 @@ export function TerminalPanel({
           shortcut: firstBinding(keybindings, 'terminal.redraw'),
           onClick: () => requestRedraw(panel.id, 'manual'),
         },
+        /*
+         * 029 FR-004d — Retry and Clear as MENU ITEMS, not only as icons on the failure badge.
+         *
+         * The Constitution binds a feature that adds a panel action to add its menu item in the same
+         * increment, and FR-004a makes clearing a panel user-invoked for the first time: until now
+         * `clearPanelType` only ever ran automatically, as a side effect of a terminal ending. An
+         * action reachable solely by an icon on a transient badge is exactly the invisibility that
+         * rule exists to prevent.
+         *
+         * Shown only while a start failure is live, because that is the only state in which either
+         * is meaningful — offering "Try again" to a healthy terminal would be noise. The menu itself
+         * IS reachable in that state: its `onContextMenu` sits on a div rendered unconditionally, and
+         * the failure badge is a sibling of that div rather than a cover.
+         */
+        ...(startFailureRef.current
+          ? ([
+              { separator: true },
+              {
+                label: 'Try again',
+                testId: 'menu-item-Try again',
+                // Inlined rather than reusing `onRetry`, which is declared below this callback —
+                // and read through a ref rather than a dependency, so opening the menu always sees
+                // the CURRENT failure state instead of whatever it was when the callback was made.
+                onClick: () => {
+                  setStillStarting(false);
+                  setStartFailure(null);
+                  setAttempt((n) => n + 1);
+                },
+              },
+              {
+                label: 'Clear panel type',
+                testId: 'menu-item-Clear panel type',
+                onClick: clearWithMemoryRef.current,
+              },
+            ] as MenuItem[])
+          : []),
       ]);
     },
     [openMenu, panel.id, keybindings],
@@ -484,16 +550,88 @@ export function TerminalPanel({
       ),
     [end, meta, panel.title, config.flavourLabel],
   );
-  // A launch/attach failure (e.g. a non-admin terminal refused while elevated) is
-  // an unexpected end, so it surfaces as a red error notice, not a neutral one (#143).
-  const onError = useCallback((message: string) => end(message, null, true), [end]);
+  /**
+   * A start failure (029 / #204, FR-001 → FR-003).
+   *
+   * ══ THE SPLIT ══
+   *
+   * This used to be `end(message, null, true)` unconditionally — one line, and the whole of #204.
+   * `end()` finishes with `clearPanelType`, which strips the panel's `kind` and writes that stripped
+   * layout to the store. So a project folder that was briefly renamed away deleted the user's
+   * terminal configuration PERMANENTLY: put the folder back, reopen, and the panel is an
+   * unconfigured form that never becomes a terminal again.
+   *
+   * Now the CAUSE decides:
+   *
+   *   • transient (a folder missing, held, or refused) → keep the panel type, show the failure in
+   *     place with Retry and Clear. The configuration survives because nothing was ever wrong with
+   *     it — the environment was;
+   *   • unsatisfiable or unclassified (a flavour that no longer resolves) → `end()` as before, so
+   *     the user can choose again. That arm is deliberately asserted by
+   *     `terminal-persistence.e2e.ts:81` and must not change.
+   *
+   * A failure that ends a RUNNING shell is untouched by this — it arrives via `onExit` (FR-002).
+   */
+  /**
+   * Clear a panel the user no longer wants a terminal in (029 FR-004a) — remembering its settings
+   * on the way out.
+   *
+   * The remembering is not incidental. Before 029, a failed start ran `end()`, which wrote
+   * `terminalMemory` and only then cleared the type, so the type-selection form came back
+   * PRE-FILLED with the flavour and arguments the user had chosen. Keeping the panel type (FR-001)
+   * means `end()` no longer runs on that path — so clearing without this would hand the user an
+   * empty form and quietly lose the settings that #204 is about preserving. Measured:
+   * `terminalMemory:false` in the layout after the fix, where it had been `true`.
+   */
+  const clearWithMemory = useCallback(() => {
+    ws.setTerminalMemory(panel.id, {
+      flavourId: config.flavourId,
+      shellArguments: terminalConfig.shellArguments,
+      rememberCommand: terminalConfig.rememberCommand,
+      rememberDirectory: terminalConfig.rememberDirectory,
+      startupCommand: terminalConfig.startupCommand,
+    });
+    ws.clearPanelType(panel.id);
+  }, [ws, panel.id, config.flavourId, terminalConfig]);
+  clearWithMemoryRef.current = clearWithMemory;
+
+  const onError = useCallback(
+    (message: string, cause?: FailureCause) => {
+      if (startFailurePreservesPanelType(cause ?? null)) {
+        setStartFailure({ message: causeMessage(cause as FailureCause), cause: cause as FailureCause });
+        setStillStarting(false);
+        // Drop the loading skeleton NOW. It renders while `!attached && !giveUpSkeleton`, and
+        // `giveUpSkeleton` is a 4000ms delayed flag — a panel that failed to start never attaches,
+        // so without this the failure sits under an opaque "loading" cover for four seconds. That is
+        // not "presenting the failure in place" (FR-004).
+        setAttached(true);
+        markTerminalStopped(panel.id);
+        return;
+      }
+      end(message, null, true);
+    },
+    [end, panel.id],
+  );
   const onStillStarting = useCallback(() => setStillStarting(true), []);
-  const onAttached = useCallback(() => {
+  const onAttached = useCallback((cwdFallback?: string) => {
     setStillStarting(false);
+    setStartFailure(null); // a working attach clears any start failure this panel was showing
+    /*
+     * 029 FR-005b — the terminal started, but NOT where it was asked to.
+     *
+     * Information, not a failure: the shell is live and nothing was lost, so this never becomes an
+     * error notice. But it must not be silent either — a user who left a shell deep in a subtree and
+     * finds one at the root, with no explanation, reasonably concludes that remember-my-directory is
+     * broken. Naming the folder is the difference between a fallback and a bug.
+     */
+    setCwdFallback(cwdFallback ?? null);
     setAttached(true); // session live + scrollback replayed — drop the loading skeleton
   }, []);
   const onRetry = useCallback(() => {
     setStillStarting(false);
+    // 029 FR-004c: this retries THIS panel and nothing else. No retry-all, and a success here does
+    // not cascade into other failed panels — reopening the project is already the bulk path.
+    setStartFailure(null);
     setAttempt((n) => n + 1); // re-run the attach effect → reattach (idempotent by reuse)
   }, []);
 
@@ -564,6 +702,69 @@ export function TerminalPanel({
       {!attached && !giveUpSkeleton && <PanelSkeleton testId={`terminal-skeleton-${panel.id}`} />}
       {/* The one shared find bar (013); renders only while find is open on this panel. */}
       <FindBar panelId={panel.id} />
+      {/*
+        029 FR-004 — the terminal could not START, and the panel says so IN PLACE rather than
+        dissolving into an unconfigured form. Same shape as the "still starting" badge because it is
+        the same kind of news: non-fatal, actionable, and belonging to this panel.
+      */}
+      {startFailure ? (
+        <div
+          className="terminal-panel__starting"
+          data-testid={`terminal-start-failed-${panel.id}`}
+          role="status"
+        >
+          <span className="terminal-panel__starting-msg">{startFailure.message}</span>
+          {/* Action controls (Principle VI): themeable icons with hover titles, never text buttons. */}
+          <button
+            type="button"
+            className="terminal-panel__retry"
+            title="Try again"
+            aria-label="Try again"
+            data-testid={`terminal-retry-${panel.id}`}
+            onClick={onRetry}
+          >
+            <Icon token="retry" />
+          </button>
+          {/*
+            FR-004a — the escape hatch that preserving the panel type takes away.
+            Before 029 a failed start reverted the panel for you; now it does not, so a user who no
+            longer wants a terminal here must be able to SAY so, without destroying the panel and
+            losing its position and title. Clearing becomes their decision instead of a side effect
+            of a folder being briefly unavailable — which is the whole distinction this feature draws.
+          */}
+          <button
+            type="button"
+            className="terminal-panel__retry"
+            title="Clear panel type"
+            aria-label="Clear panel type"
+            data-testid={`terminal-clear-${panel.id}`}
+            onClick={clearWithMemory}
+          >
+            <Icon token="dismiss" />
+          </button>
+        </div>
+      ) : null}
+      {cwdFallback ? (
+        <div
+          className="terminal-panel__starting"
+          data-testid={`terminal-cwd-fallback-${panel.id}`}
+          role="status"
+        >
+          <span className="terminal-panel__starting-msg">
+            Started in the project root — "{lastSegment(cwdFallback)}" no longer exists.
+          </span>
+          <button
+            type="button"
+            className="terminal-panel__retry"
+            title="Dismiss"
+            aria-label="Dismiss"
+            data-testid={`terminal-cwd-fallback-dismiss-${panel.id}`}
+            onClick={() => setCwdFallback(null)}
+          >
+            <Icon token="dismiss" />
+          </button>
+        </div>
+      ) : null}
       {stillStarting ? (
         <div
           className="terminal-panel__starting"

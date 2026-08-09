@@ -32,10 +32,12 @@ import {
   validateFileOp,
   type DirEntry,
   type ExpandNode,
+  type FailureCause,
   type FileOpUndoEntry,
   type FileOpUndoStack,
   type TargetNode,
 } from '@throng/core';
+import type { FilesOkOrError } from '../global.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useServices } from '../composition-root.js';
@@ -68,6 +70,14 @@ export interface ExplorerApi {
    * by whoever displays it.
    */
   errorAction: string | null;
+  /**
+   * 029 FR-018 — the classification main already made for {@link error}, when it made one.
+   *
+   * The message is spoken by the time it gets here, so the errno is no longer recoverable from it.
+   * Carrying the cause is what lets the notice keep the raw text reachable for a bug report and key
+   * its suppression on the cause rather than on the wording.
+   */
+  errorCause: FailureCause | null;
   /** Dismiss the current error banner immediately (011, US1, FR-002). */
   clearError: () => void;
   initialOpenState: OpenMap;
@@ -244,12 +254,14 @@ export function useExplorerData(
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorAction, setErrorAction] = useState<string | null>(null);
+  const [errorCause, setErrorCause] = useState<FailureCause | null>(null);
   const deleteMode = settings.explorer.deleteMode;
 
-  /** Record a failure together with what was being attempted; `null` clears both. */
-  const fail = useCallback((message: string | null, action?: string) => {
+  /** Record a failure with what was being attempted and how main classified it; `null` clears all. */
+  const fail = useCallback((message: string | null, action?: string, cause?: FailureCause) => {
     setError(message);
     setErrorAction(message === null ? null : (action ?? null));
+    setErrorCause(message === null ? null : (cause ?? null));
   }, []);
   const failRef = useRef(fail);
   failRef.current = fail;
@@ -279,7 +291,7 @@ export function useExplorerData(
               `[explorer] discarding unresolvable persisted path "${relDir}" for project ${projectId}: ${res.error}`,
             );
           } else {
-            failRef.current(res.error, 'list the contents of this folder');
+            failRef.current(res.error, 'list the contents of this folder', res.cause);
           }
         }
         return null;
@@ -704,8 +716,8 @@ export function useExplorerData(
   // bridge (confinement + naming enforced in the main process); the live-sync
   // watcher then refreshes the tree. Errors surface in the pane's error banner. ---
   const report = useCallback(
-    (res: { ok: true } | { error: string } | undefined | null, action: string): void => {
-      if (res && 'error' in res) fail(res.error, action);
+    (res: FilesOkOrError | undefined | null, action: string): void => {
+      if (res && 'error' in res) fail(res.error, action, res.cause);
       else fail(null);
     },
     [fail],
@@ -949,7 +961,7 @@ export function useExplorerData(
         treeRef.current?.open(dest);
       }
       const res = await window.throng?.files?.newFolder?.(dest);
-      if (res && 'error' in res) fail(res.error, 'create a new folder');
+      if (res && 'error' in res) fail(res.error, 'create a new folder', res.cause);
       else if (res && 'relPath' in res) pendingRename.current = res.relPath;
     },
     [ensureLoaded, treeRef, fail],
@@ -965,7 +977,7 @@ export function useExplorerData(
         treeRef.current?.open(dest);
       }
       const res = await window.throng?.files?.newFile?.(dest);
-      if (res && 'error' in res) fail(res.error, 'create a new file');
+      if (res && 'error' in res) fail(res.error, 'create a new file', res.cause);
       else if (res && 'relPath' in res) pendingRename.current = res.relPath;
     },
     [ensureLoaded, treeRef, fail],
@@ -1104,7 +1116,7 @@ export function useExplorerData(
             : [await window.throng?.files?.delete?.(rels, deleteMode)];
         const failed = res.find((r) => r && 'error' in r);
         if (failed && 'error' in failed) {
-          fail(failed.error, action);
+          fail(failed.error, action, failed.cause);
           return false;
         }
         await reloadDirs([...new Set(rels.map(parentRel))]);
@@ -1126,7 +1138,7 @@ export function useExplorerData(
           ? await window.throng?.files?.rename?.(fromRel, leaf)
           : await window.throng?.files?.move?.([fromRel], parentRel(toRelPath));
         if (res && 'error' in res) {
-          fail(res.error, action);
+          fail(res.error, action, res.cause);
           return false;
         }
         carryOverride(fromRel, parentRel(toRelPath));
@@ -1164,6 +1176,7 @@ export function useExplorerData(
     ready,
     error,
     errorAction,
+    errorCause,
     clearError: () => fail(null),
     initialOpenState,
     onToggle,
