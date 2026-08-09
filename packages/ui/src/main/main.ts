@@ -740,22 +740,41 @@ if (isPrimaryInstance)
   // window) + the cog → preferences entry point. The cog opens the single shared,
   // always-on-top, movable preferences window on the requested tab (FR-002/009/010).
   registerWindowControlsIpc();
+
+  /*
+   * Nullable ref to the main window, for the Preferences and About windows' parent.
+   *
+   * Neither may read `const mainWindow` directly. It is declared several hundred lines below in
+   * this same startup scope, so until that line runs it sits in its TEMPORAL DEAD ZONE — and
+   * touching a `const` in its TDZ throws `ReferenceError` rather than yielding `undefined`. The
+   * handlers below are registered and reachable long before then, and an uncaught throw inside an
+   * `ipcMain` listener takes the whole main process down: the app dies rather than the menu
+   * misbehaving.
+   *
+   * Measured, not theorised — `theme-flash.e2e.ts` opened preferences from the cog during startup
+   * and killed the app with:
+   *
+   *     ReferenceError: Cannot access 'mainWindow' before initialization
+   *         at getMainWindow (main.js:633)
+   *         at openPreferences (preferences-window.js:53)
+   *
+   * A `let … = null` has no dead zone, so reading it early yields `null`, which both windows
+   * already handle: they simply open unparented. That is the whole reason this ref exists.
+   */
+  let mainWindowRef: BrowserWindow | null = null;
+  const currentMainWindow = (): BrowserWindow | null =>
+    mainWindowRef && !mainWindowRef.isDestroyed() ? mainWindowRef : null;
+
   const preferencesDeps: PreferencesWindowDeps = {
     indexHtml: resolveFromHere('../renderer/index.html'),
     preloadPath: resolveFromHere('../preload/preload.cjs'),
     backgroundColor: themeBackground,
-    // Resolved lazily at open time: `mainWindow` is created further below in this
-    // same startup scope, so this closure captures the current main window (FR-013/013a).
-    getMainWindow: () => (mainWindow.isDestroyed() ? null : mainWindow),
+    // Resolved lazily at open time, so this yields the current main window (FR-013/013a).
+    getMainWindow: currentMainWindow,
   };
   ipcMain.on('throng:preferences:open', (_event, tab: unknown) => {
     openPreferences(isPreferencesTab(tab) ? tab : 'settings', preferencesDeps);
   });
-
-  // Nullable ref to the main window, for the About menu's parent (see below). The
-  // `const mainWindow` further down is in its temporal dead zone while the menu is
-  // being wired, so the About window cannot read it directly.
-  let mainWindowRef: BrowserWindow | null = null;
 
   // About throng (020, FR-003/FR-003a): the cog menu's "About throng" item opens the
   // shared app-modal About window. The product version + author are read from the ROOT
@@ -796,18 +815,15 @@ if (isPrimaryInstance)
   ipcMain.on('throng:openExternal', (_event, url: unknown) => {
     if (isSafeExternalUrl(url)) void shell.openExternal(url);
   });
-  // The application menu is set NOW (early), but the main window is created further
-  // below, so the About window's parent is resolved through a nullable ref rather
-  // than the later `const mainWindow` — the menu is clickable before that const is
-  // initialised, and reading it then is a temporal-dead-zone crash. The ref is
-  // assigned the moment the main window exists (see below); until then About opens
-  // unparented, which is harmless.
+  // The application menu is set NOW (early), but the main window is created further below — so
+  // About resolves its parent through the same nullable ref as Preferences, for the same
+  // temporal-dead-zone reason documented where that ref is declared. Until the ref is assigned
+  // (the moment the main window exists) About opens unparented, which is harmless.
   const aboutDeps: AboutWindowDeps = {
     indexHtml: resolveFromHere('../renderer/index.html'),
     preloadPath: resolveFromHere('../preload/preload.cjs'),
     backgroundColor: themeBackground,
-    getMainWindow: () =>
-      mainWindowRef && !mainWindowRef.isDestroyed() ? mainWindowRef : null,
+    getMainWindow: currentMainWindow,
   };
   Menu.setApplicationMenu(buildAppMenu(() => openAbout(aboutDeps)));
   // The DISCOVERABLE entry point (020, FR-003): the cog menu's "About throng" item.
