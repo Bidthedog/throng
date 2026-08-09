@@ -130,6 +130,34 @@ If a terminal ever looks wrong — smeared characters, lines wrapping in the wro
 or press **Ctrl+F5**. It asks the running program to redraw its screen: nothing is typed at the
 shell, no scrollback, selection or cursor position is lost, and the layout does not move.
 
+### When a terminal cannot start
+
+If the shell cannot be launched — most often because the project's folder has been renamed, moved
+or deleted while throng was closed — the panel **stays a terminal** and says what happened in
+place, naming the folder rather than showing an error code. It offers two icons:
+
+- **Try again**, once you have put the folder back. It retries *that* panel only.
+- **Clear panel type**, if you would rather set the panel up as something else. The panel returns
+  to the Panel Type form with your terminal's settings still filled in, so choosing Terminal again
+  costs you nothing.
+
+Both are also on the panel's right-click menu. **Your configuration is never discarded for you** —
+flavour, shell arguments and startup command all survive a failed start, and clearing is something
+you choose.
+
+If the terminal's *remembered* directory is the part that has gone, it starts in the project root
+instead and says so quietly in the panel. That is a note, not a failure.
+
+### If the background service stops
+
+throng's terminals are owned by a background daemon. If it stops — it crashed, or you killed it,
+or another build retired it — you are told once, plainly, and a **↻ icon appears in the status
+bar**. Click it to restart the daemon.
+
+The icon is deliberately in the status bar rather than on the message: the message can be
+dismissed, and the way back should not vanish with it. Nothing else is disabled meanwhile, and
+anything that does not need the daemon — browsing and editing files — keeps working.
+
 ## 4. Edit files
 
 Click any file in the **Files & Folders** tree to open it in the last active editor panel — or
