@@ -5,6 +5,7 @@
     "about.e2e.ts",
     "app-icon.e2e.ts",
     "colour-picker.e2e.ts",
+    "config-write-failure.e2e.ts",
     "confirm-modality.e2e.ts",
     "context-menu-icons.e2e.ts",
     "context-menu-sections.e2e.ts",

@@ -23,8 +23,23 @@ function docKey(id: ConfigDocId): string {
  */
 const writeChains = new Map<string, Promise<unknown>>();
 
+/** Tell every subscriber a write did not land. Never throws — a reporter must not break a writer. */
+function publishFailure(id: ConfigDocId, error: string): void {
+  for (const listener of failureListeners) {
+    try {
+      listener(id, error);
+    } catch {
+      // A listener that throws is its own problem; the write path is already on a failure branch and
+      // must not acquire a second one.
+    }
+  }
+}
+
 type WriteListener = (id: ConfigDocId, json: string) => void;
 const writeListeners = new Set<WriteListener>();
+
+type FailureListener = (id: ConfigDocId, error: string) => void;
+const failureListeners = new Set<FailureListener>();
 
 /**
  * Observe documents as they are successfully written (issue #50).
@@ -42,6 +57,25 @@ export function onConfigWritten(listener: WriteListener): () => void {
 }
 
 /**
+ * Observe writes that FAILED (#102).
+ *
+ * The symmetric half of {@link onConfigWritten}, and it exists here rather than at the call sites
+ * for a reason the call sites cannot solve. #99 made `writeConfig` return a truthful outcome and
+ * every caller then dropped it — but the DEBOUNCED path could not have done otherwise: it fires from
+ * {@link scheduleWrite}'s timer as `void writeConfig(id, json)`, with no caller holding the promise
+ * and no component guaranteed to still be mounted (the module keeps that registry precisely so an
+ * orphaned write still settles). Every text and number edit in preferences takes that path.
+ *
+ * So the report is published from the chokepoint this module already is: "THE CHOKEPOINT IS THE
+ * DESIGN. Every config write goes through `writeConfig`." One subscriber per window turns these into
+ * notices, and a writer added tomorrow is covered without knowing this exists.
+ */
+export function onConfigWriteFailed(listener: FailureListener): () => void {
+  failureListeners.add(listener);
+  return () => failureListeners.delete(listener);
+}
+
+/**
  * Persist a config document as raw JSON via the preload bridge. Returns the
  * main-process {@link ConfigWriteResult}; if the bridge is unavailable (e.g. a
  * test render without preload) it resolves to a failure rather than throwing so
@@ -52,7 +86,11 @@ export function onConfigWritten(listener: WriteListener): () => void {
  */
 export async function writeConfig(id: ConfigDocId, json: string): Promise<ConfigWriteResult> {
   const write = window.throng?.config?.write;
-  if (!write) return { ok: false, error: 'bridge-unavailable' };
+  if (!write) {
+    const unavailable = { ok: false, error: 'bridge-unavailable' } as const;
+    publishFailure(id, unavailable.error);
+    return unavailable;
+  }
 
   const key = docKey(id);
   const previous = writeChains.get(key) ?? Promise.resolve();
@@ -62,6 +100,8 @@ export async function writeConfig(id: ConfigDocId, json: string): Promise<Config
     .then((res) => {
       if (res.ok) {
         for (const listener of writeListeners) listener(id, json);
+      } else {
+        publishFailure(id, res.error);
       }
       return res;
     });

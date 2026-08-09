@@ -12,6 +12,7 @@ import { ContextMenuProvider } from '../context-menu-provider.js';
 import { useNoDropNavigation } from '../composition-root.js';
 import { ConfirmProvider, useConfirm } from '../confirm-dialog.js';
 import { NotificationProvider } from '../common/notification.js';
+import { useConfigWriteFailureNotices } from '../config/config-write-notices.js';
 import { ThemeProvider } from '../theme/theme-provider.js';
 import { IconButton } from '../common/icon-button.js';
 import { windowTitle } from '../common/window-title.js';
@@ -51,6 +52,9 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
   // A reset that could not be written must never fail silently (FR-006a) — including one
   // fired from a row inside a tab, which is why the reporter is shared through context.
   const { report } = useResetNotice();
+  // #102 — a write that could not land is reported wherever it came from, including the debounced
+  // paths no call site can hold a promise for. Subscribed once, here, inside the provider.
+  useConfigWriteFailureNotices();
   const confirm = useConfirm();
 
   // Per-tab scroll position. The three editors share ONE scrolling element (the tab panel is a
