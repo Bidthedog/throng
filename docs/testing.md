@@ -133,13 +133,13 @@ tick cannot be mistaken for a soak that silently did nothing.
 workers, then the serial tier at one. `THRONG_E2E_TIER=parallel|serial` selects a
 tier by itself, and composes with `THRONG_E2E_GROUP`.
 
-Measured on this suite (208 spec files, 651 tests):
+Measured on this suite (214 spec files, 658 tests):
 
 | | files | tests | time |
 | --- | --- | --- | --- |
-| parallel tier, 6 workers | 114 | 305 | **3.5 min** |
-| serial tier, 1 worker | 94 | 346 | 17.5 min |
-| whole suite, 1 worker (previous arrangement) | 208 | 651 | ~35 min |
+| parallel tier, 6 workers | 115 | 296 | **4.7 min** |
+| serial tier, 1 worker | 99 | 362 | 20.0 min |
+| whole suite, 1 worker (previous arrangement) | 214 | 658 | ~35 min |
 
 **The serial tier holds more tests than the parallel one**, which is why the total
 lands around 21 minutes rather than something dramatic. Menu and preferences specs
@@ -147,7 +147,7 @@ are test-dense, and they are exactly the ones that cannot share a desktop.
 
 ### What puts a spec in the serial tier
 
-Two different mechanisms, both in `parallel-plan.json`:
+Three different mechanisms, all in `parallel-plan.json`:
 
 - **Focus.** It opens the preferences window, or drives a context menu. throng
   deliberately closes menus and popups when its window loses focus
@@ -156,6 +156,13 @@ Two different mechanisms, both in `parallel-plan.json`:
 - **CPU.** It drives long-running real shells — a `ping`, a `findstr` loop — which
   starve at high worker counts and time out. `terminal-command-memory` timed out at
   30.6s in the parallel tier for this reason, not for focus.
+- **Timing.** It asserts a wall-clock ceiling that is *about the product*, so
+  contention breaks it without anything having regressed. `daemon-status-bar`
+  asserts SC-002's two seconds from killing the daemon to the notice appearing, and
+  1200ms of that budget is the reconnect grace by design — leaving 800ms for the
+  socket, the broadcast and a paint. Measured at 2039ms with six workers. A
+  wall-clock assertion cannot tell contention from a regression, so it must not be
+  asked the question under load.
 
 Membership is the **mechanism** plus anything measured failing at six workers —
 deliberately not observed failures alone. Contention produces a *different* failure

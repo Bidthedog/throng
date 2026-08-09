@@ -77,7 +77,17 @@ goal is to pull all of that into a single, simple customisable workspace.
   contain spaces, space-joined when there are several, and never submitted for you. **URLs open in
   your own browser**: Ctrl+click a link — whether the program emitted a real hyperlink or just
   printed the address as text — and it opens in the system browser, never in a window throng draws.
-  Right-clicking a link offers Open Link and Copy Link Address.
+  Right-clicking a link offers Open Link and Copy Link Address. A terminal that **cannot start** —
+  its project folder renamed away while throng was closed, say — keeps its panel and its
+  configuration, names the missing folder in plain words, and offers Try again and Clear panel type;
+  nothing is discarded on your behalf.
+- **Failures that name their cause** — a file operation blocked by something holding the folder says
+  *what* is holding it, and identifies **throng's own terminal** by name when the answer is one of
+  yours, rather than reporting `EBUSY: resource busy or locked`. One underlying problem raises one
+  message, not one per thing it broke, and the raw error rides along in the message's Copy so a bug
+  report loses nothing. If the background daemon stops, throng says so once and puts a **restart
+  control in the status bar** — where it survives the message being dismissed — while everything that
+  does not need the daemon carries on working.
 - **Editor panels** — open and edit a project's text files inline via a **CodeMirror** editor:
   encoding and line endings are detected and preserved, saves are confined to the project (Ctrl+S /
   scoped Ctrl+Shift+S Save-All), a dirty file is locked against external changes, one buffer is
