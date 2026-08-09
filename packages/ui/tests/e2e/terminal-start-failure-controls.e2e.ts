@@ -1,0 +1,443 @@
+import { mkdirSync, mkdtempSync, renameSync, rmSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
+import Database from 'better-sqlite3';
+import { test, expect, type Page } from '@playwright/test';
+import {
+  runApp,
+  createProject,
+  firstPanelId,
+  daemonPid,
+  forceKillProcessTree,
+  cleanupTemp,
+} from './harness.js';
+import { skipIfElevated } from './admin.js';
+
+/**
+ * 029 US1 — the CONTROLS on a terminal that could not start.
+ *
+ * ══ WHY A SEPARATE FILE FROM `terminal-launch-failure-config.e2e.ts` ══
+ *
+ * That spec is #204's replication: a terminal that fails to launch must not lose its configuration.
+ * It should keep reading as the reproduction of that bug. This one covers what 029 ADDS — a failure
+ * shown in place, with two controls, reachable from the panel's menu as well as the badge.
+ *
+ * ══ THE POINT OF THE `Clear` CONTROL ══
+ *
+ * #204's fix is that a failed start no longer clears the panel type. That leaves the user with a
+ * panel stuck as a terminal it cannot start, so the clearing has to remain AVAILABLE — the change is
+ * that it becomes something the user does, not something that happens to them (FR-004a). Asserting
+ * the control exists and works is what stops the fix from being a trap.
+ *
+ * ══ AND WHY THE MENU ITEMS ARE ASSERTED HERE ══
+ *
+ * The Constitution binds a feature that adds a panel action to add its menu item in the same
+ * increment: an icon-only control with no menu equivalent is unreachable by keyboard and
+ * undiscoverable by anyone who does not recognise the glyph.
+ */
+
+/** The persisted layout blob for `projectName`, or '' if there isn't one yet. */
+function layoutJson(dataDir: string, projectName: string): string {
+  let db: InstanceType<typeof Database> | undefined;
+  try {
+    db = new Database(join(dataDir, 'throng.db'), { readonly: true });
+    const row = db
+      .prepare(
+        `SELECT w.layout_json AS json
+           FROM workspace_layout w
+           JOIN projects p ON p.id = w.project_id
+          WHERE p.name = ?`,
+      )
+      .get(projectName) as { json?: string } | undefined;
+    return row?.json ?? '';
+  } catch {
+    return ''; // the daemon may hold the file mid-write; the poll will come back
+  } finally {
+    db?.close();
+  }
+}
+
+/**
+ * Rename `from` to `to`, waiting out the directory lock rather than assuming it has dropped.
+ *
+ * The daemon holds a project root for as long as a terminal is open, via a helper whose cwd IS the
+ * folder, and that helper exits a beat AFTER `runApp`'s teardown returns. Renaming immediately
+ * therefore races the OS releasing the handle, and loses often enough to matter.
+ */
+async function renameWhenReleased(from: string, to: string): Promise<void> {
+  await expect
+    .poll(
+      () => {
+        try {
+          renameSync(from, to);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 30_000, message: `could not rename ${from} → ${to} (directory lock never released?)` },
+    )
+    .toBe(true);
+  expect(existsSync(to)).toBe(true);
+}
+
+/** Reopen a project from the sidebar. */
+async function enterProject(win: Page, name: string): Promise<void> {
+  const item = win.locator('.project-item', { hasText: name });
+  await expect(item).toBeVisible({ timeout: 20_000 });
+  const sw = item.locator('[data-testid^="project-switch-"]');
+  if (await sw.isVisible().catch(() => false)) await sw.click();
+  await expect(win.locator('.panel-box').first()).toBeVisible({ timeout: 20_000 });
+}
+
+test('a terminal that could not start offers Try again and Clear, on the badge and in its menu', async () => {
+  // An elevated daemon routes terminals through the de-elevated agent — a different process tree
+  // from the one these assertions describe.
+  skipIfElevated();
+  test.setTimeout(300_000);
+
+  const root = mkdtempSync(join(tmpdir(), 'throng-029c-root-'));
+  const moved = `${root}-renamed`;
+  const dataDir = mkdtempSync(join(tmpdir(), 'throng-029c-data-'));
+  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-029c-ud-'));
+
+  try {
+    // ── Launch 1: a real terminal, persisted. ────────────────────────────────────────────────
+    await runApp(
+      async (_app, win) => {
+        await createProject(win, 'Controls', root);
+        const pid = await firstPanelId(win);
+        await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
+        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId(`panel-type-confirm-${pid}`).click();
+        await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), {
+          timeout: 20_000,
+        });
+        await expect
+          .poll(() => layoutJson(dataDir, 'Controls').includes('"kind":"terminal"'), {
+            timeout: 20_000,
+            message: 'the terminal panel was never persisted',
+          })
+          .toBe(true);
+      },
+      { dataDir, userDataDir },
+    );
+
+    // Break the root, so the next launch cannot start the shell.
+    await renameWhenReleased(root, moved);
+
+    // ── Launch 2: the failure state, and everything on it. ───────────────────────────────────
+    await runApp(
+      async (_app, win) => {
+        await enterProject(win, 'Controls');
+        const pid = await firstPanelId(win);
+
+        // SETUP: the panel really is in the start-failure state — everything below describes it.
+        const badge = win.getByTestId(`terminal-start-failed-${pid}`);
+        await expect(badge).toBeVisible({ timeout: 60_000 });
+
+        /**
+         * FR-004 — the failure is stated in the panel, in prose, naming the folder.
+         *
+         * Paths are stripped first: the folder's name appears inside the raw error's path, so an
+         * unstripped match passes while the message is still an errno.
+         */
+        const prose = (await badge.innerText()).replace(/[A-Za-z]:\\[^\s'"|]+/g, '<path>');
+        // The ORIGINAL folder name: that is the path the project still points at, and the one that
+        // is missing. `moved` is where it went, which the user has no way to know and no reason to
+        // be told.
+        expect(prose).toContain(basename(root));
+        expect(prose).not.toMatch(/ENOENT|Cannot lock|Internal error/i);
+
+        /**
+         * FR-004b — both controls are ICONS with hover titles (Constitution VI).
+         *
+         * The empty-text assertion is the one that matters: an icon token the shipped theme does not
+         * define renders NOTHING, silently, and the control becomes an invisible button. That has
+         * already happened once in this feature.
+         */
+        for (const testId of [`terminal-retry-${pid}`, `terminal-clear-${pid}`]) {
+          const control = win.getByTestId(testId);
+          await expect(control).toBeVisible();
+          await expect(control).toHaveAttribute('title', /.+/);
+          const glyph = (await control.innerText()).trim();
+          expect(glyph, `${testId} rendered nothing — an invisible control`).not.toBe('');
+          expect(glyph.length, `${testId} should be an icon, not a word`).toBeLessThanOrEqual(2);
+          expect(glyph, `${testId} should be an icon, not a word`).not.toMatch(/[A-Za-z]/);
+        }
+
+        /**
+         * FR-004d — and both are in the panel's CONTEXT MENU.
+         *
+         * Right-clicking the panel BODY, not the badge: the badge is a sibling with no handler of
+         * its own, so a right-click on it bubbles past and opens nothing. The menu handler sits on a
+         * div rendered in every state, which is what makes it reachable while the panel is failed.
+         */
+        await win.locator('.panel-box').first().click({ button: 'right', position: { x: 20, y: 120 } });
+        await expect(win.getByTestId('context-menu')).toBeVisible();
+        await expect(win.getByTestId('menu-item-Try again')).toBeVisible();
+        await expect(win.getByTestId('menu-item-Clear panel type')).toBeVisible();
+        /*
+         * Dismissed by CLICKING AWAY, not by Escape — the pattern `context-menu.e2e.ts:113` uses.
+         *
+         * Escape has to reach the menu, and a terminal panel is exactly the surface that might eat
+         * it first. Measured: it held the menu open for the full 10s budget across 23 polls, in a
+         * run where the same code had passed three times before. A click on the tab body has one
+         * destination and no such argument with anything.
+         */
+        await win.getByTestId('tab-body').click({ position: { x: 5, y: 5 } });
+        await expect(win.getByTestId('context-menu')).toHaveCount(0);
+
+        /**
+         * FR-004c — retry acts on THIS panel only.
+         *
+         * Asserted as "the panel is still the one that failed, and is still a terminal": a retry that
+         * cascaded would take the panel type with it, which is #204 by another route.
+         */
+        await win.getByTestId(`terminal-retry-${pid}`).click();
+        await expect(badge).toBeVisible({ timeout: 60_000 });
+        await expect(win.getByTestId(`panel-type-form-${pid}`)).toHaveCount(0);
+
+        /**
+         * FR-004a — Clear is the user's decision, and it works.
+         *
+         * The panel returns to the type-selection form, in place — same position, same panel.
+         */
+        const titleBefore = await win.locator('.panel-box').first().getAttribute('data-panel-id');
+        await win.getByTestId(`terminal-clear-${pid}`).click();
+        await expect(win.getByTestId(`panel-type-form-${pid}`)).toBeVisible({ timeout: 20_000 });
+        await expect(badge).toHaveCount(0);
+        // Still the SAME panel in the SAME place — cleared, not destroyed and recreated.
+        expect(await win.locator('.panel-box').first().getAttribute('data-panel-id')).toBe(titleBefore);
+      },
+      { dataDir, userDataDir },
+    );
+  } finally {
+    cleanupTemp(root);
+    cleanupTemp(moved);
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
+  }
+});
+
+/**
+ * 029 FR-005a / FR-005b — the remembered directory is gone, and the terminal SAYS so.
+ *
+ * ══ WHY THIS IS NOT A FAILURE, AND WHY IT IS NOT SILENT EITHER ══
+ *
+ * 025 made this fallback silent on purpose and was right that it must never be an error: the shell
+ * starts, nothing is lost, and interrupting the user would be nagging. But #204's cycle exposed the
+ * cost of silence — restore a project root while a subfolder inside it stays deleted, and the user
+ * finds a shell at the root with no explanation, which reads as "remember-my-directory is broken".
+ *
+ * So the notice has to thread a needle: informative, dismissable, and NOT an error. All three are
+ * asserted here, because getting any one of them wrong turns a helpful line into either noise or a
+ * false alarm. `fallbackToReport` unit-tests WHEN to report; this is the half that reaches a user.
+ */
+test('a remembered directory that has gone is reported in the panel, and is not an error', async () => {
+  skipIfElevated();
+  test.setTimeout(300_000);
+
+  const root = mkdtempSync(join(tmpdir(), 'throng-029f-root-'));
+  const deep = join(root, 'Deep');
+  mkdirSync(deep);
+  const dataDir = mkdtempSync(join(tmpdir(), 'throng-029f-data-'));
+  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-029f-ud-'));
+
+  try {
+    // ── Launch 1: leave the shell inside `Deep`, and let that be remembered. ─────────────────
+    await runApp(
+      async (_app, win) => {
+        await createProject(win, 'Fallback', root);
+        const pid = await firstPanelId(win);
+        await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
+        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId(`panel-type-confirm-${pid}`).click();
+        const term = win.getByTestId(`terminal-${pid}`);
+        await expect(term).toContainText(basename(root), { timeout: 20_000 });
+
+        await term.click();
+        await win.keyboard.type('cd Deep');
+        await win.keyboard.press('Enter');
+        await expect(term).toContainText(`${basename(root)}\\Deep>`, { timeout: 20_000 });
+
+        // SETUP: the directory reached the PERSISTED layout. Without this the second launch would
+        // remember nothing, no fallback would occur, and the assertions below would pass vacuously
+        // against a terminal that simply started at the root for the ordinary reason.
+        /*
+         * Polled on the VALUE, not on the key.
+         *
+         * `lastCwd` is written as soon as the terminal starts — holding the project ROOT — so
+         * waiting for the key to exist succeeds long before the `cd` has been observed, and the
+         * second launch then remembers the root, falls back to nothing, and every assertion below
+         * passes vacuously against an ordinary start. Measured exactly that way once.
+         *
+         * The daemon samples shell cwds on a 1-second timer and the layout save is debounced on top,
+         * so the wait is real and the condition is the only honest thing to wait on.
+         */
+        await expect
+          .poll(() => /"lastCwd":"[^"]*Deep/.test(layoutJson(dataDir, 'Fallback')), {
+            timeout: 30_000,
+            message: 'the terminal never recorded the subfolder as its working directory',
+          })
+          .toBe(true);
+      },
+      { dataDir, userDataDir },
+    );
+
+    // Delete the remembered subfolder — polled, because the shell held it until a moment ago.
+    await expect
+      .poll(
+        () => {
+          try {
+            rmSync(deep, { recursive: true, force: true });
+            return !existsSync(deep);
+          } catch {
+            return false;
+          }
+        },
+        { timeout: 30_000, message: 'could not delete the remembered subfolder' },
+      )
+      .toBe(true);
+
+    // ── Launch 2: it starts at the root, and says why. ───────────────────────────────────────
+    await runApp(
+      async (_app, win) => {
+        await enterProject(win, 'Fallback');
+        const pid = await firstPanelId(win);
+
+        const notice = win.getByTestId(`terminal-cwd-fallback-${pid}`);
+        await expect(notice).toBeVisible({ timeout: 60_000 });
+
+        // It NAMES the folder that vanished — "your directory is gone" without saying which one
+        // leaves the user no better off than the silence this replaced.
+        await expect(notice).toContainText('Deep');
+
+        /**
+         * NOT an error, in three independent ways.
+         *
+         * The terminal really started, at the root; the start-failure surface is absent; and no
+         * error notice was raised anywhere. A fallback that shipped as an error would be a
+         * regression against 025's deliberate choice, and each of these three could be true while
+         * another was false.
+         */
+        await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), {
+          timeout: 30_000,
+        });
+        await expect(win.getByTestId(`terminal-start-failed-${pid}`)).toHaveCount(0);
+        await expect(win.locator('[data-testid$="-error"]')).toHaveCount(0);
+
+        // Dismissable — it is information, and information the user has read should go away.
+        await win.getByTestId(`terminal-cwd-fallback-dismiss-${pid}`).click();
+        await expect(notice).toHaveCount(0);
+      },
+      { dataDir, userDataDir },
+    );
+  } finally {
+    cleanupTemp(root);
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
+  }
+});
+
+/**
+ * 029 FR-001 / SC-001 — a STOPPED DAEMON must not cost a panel its configuration.
+ *
+ * ══ WHY THIS EXISTS, AND WHY IT IS THE MOST IMPORTANT TEST IN THE FILE ══
+ *
+ * Found by independent review AFTER the feature was called finished, and it is #204 verbatim with a
+ * different trigger. The cause that decides "keep the panel type" was produced only by the daemon —
+ * so when the daemon was not there to produce one, the attach failure arrived unclassified,
+ * `startFailurePreservesPanelType(null)` correctly read that as "revert", and `end()` stripped the
+ * panel's kind and config and PERSISTED it.
+ *
+ * The user-visible shape: open throng while its daemon is down and every configured terminal becomes
+ * an empty Panel Type form, permanently, whether or not the daemon ever comes back. The Retry
+ * control this feature ADDED made it worse — clicking it while the daemon was down destroyed the
+ * configuration the control exists to protect.
+ *
+ * ══ WHY A TAB SWITCH IS THE TRIGGER ══
+ *
+ * The panel has to RE-ATTACH while the daemon is dead. Switching projects would be the obvious way
+ * and cannot be: that is itself an RPC, so it fails before any panel re-attaches. A tab switch is
+ * renderer-local — it unmounts and remounts the panel — so it reaches the attach path with no daemon
+ * needed to get there.
+ */
+test('a terminal keeps its configuration when the daemon is gone, not just when a folder is', async () => {
+  skipIfElevated();
+  test.setTimeout(240_000);
+
+  const root = mkdtempSync(join(tmpdir(), 'throng-029d-root-'));
+  const dataDir = mkdtempSync(join(tmpdir(), 'throng-029d-data-'));
+  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-029d-ud-'));
+
+  try {
+    await runApp(
+      async (_app, win, { pipeName }) => {
+        await createProject(win, 'DaemonGone', root);
+        const pid = await firstPanelId(win);
+        await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
+        await win.getByTestId('terminal-flavour').selectOption('cmd');
+        await win.getByTestId(`panel-type-confirm-${pid}`).click();
+        await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), {
+          timeout: 20_000,
+        });
+        // SETUP: the layout on disk really describes a configured terminal, so "still a terminal"
+        // below is a statement about something that was true to begin with.
+        await expect
+          .poll(() => layoutJson(dataDir, 'DaemonGone').includes('"flavourId":"cmd"'), {
+            timeout: 30_000,
+            message: 'the terminal was never persisted',
+          })
+          .toBe(true);
+
+        // ── Kill the daemon, and confirm the app noticed. ──────────────────────────────────────
+        const daemon = await daemonPid(pipeName);
+        expect(daemon).toBeGreaterThan(0);
+        forceKillProcessTree(daemon);
+        await expect(win.getByTestId('daemon-error')).toHaveCount(1, { timeout: 30_000 });
+
+        // ── Force a re-attach with the daemon dead. ────────────────────────────────────────────
+        await win.getByTestId('tab-add').click();
+        const chips = win.getByTestId('tab-strip').locator('.tab-chip');
+        await expect(chips).toHaveCount(2, { timeout: 20_000 });
+        await chips.first().click();
+        await expect(win.getByTestId(`panel-type-form-${pid}`)).toHaveCount(0, { timeout: 20_000 });
+
+        /**
+         * The panel is still a terminal — on screen AND in the saved workspace.
+         *
+         * The persisted half is the one that matters: a reverted layout is written back, so the loss
+         * outlives the session that caused it. That is what "for good" means in #204's title.
+         */
+        await win.waitForTimeout(3000); // let any erroneous revert be written before reading
+        const layout = layoutJson(dataDir, 'DaemonGone');
+        expect(layout, 'the persisted layout stopped describing a terminal').toContain('"kind":"terminal"');
+        expect(layout, 'the flavour the user chose was discarded').toContain('"flavourId":"cmd"');
+
+        /**
+         * And RETRY is safe to press, which is the half that turns the bug into a trap.
+         *
+         * The control exists to protect the configuration; before this fix, using it while the daemon
+         * was down was the fastest way to lose it.
+         */
+        const retry = win.getByTestId(`terminal-retry-${pid}`);
+        if (await retry.isVisible().catch(() => false)) {
+          await retry.click();
+          await win.waitForTimeout(3000);
+          expect(
+            layoutJson(dataDir, 'DaemonGone'),
+            'pressing Retry with the daemon down destroyed the panel configuration',
+          ).toContain('"kind":"terminal"');
+        }
+        await expect(win.getByTestId(`panel-type-form-${pid}`)).toHaveCount(0);
+      },
+      // The app spawns its own daemon, so `daemonPid` resolves it and teardown tolerates its absence.
+      { dataDir, userDataDir, skipDaemon: true },
+    );
+  } finally {
+    cleanupTemp(root);
+    cleanupTemp(dataDir);
+    cleanupTemp(userDataDir);
+  }
+});
