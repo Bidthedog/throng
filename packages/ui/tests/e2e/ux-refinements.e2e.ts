@@ -9,7 +9,7 @@ import { skipIfElevated } from './admin.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
-import { cleanupTemp } from './harness.js';
+import { cleanupTemp, shutdownApp } from './harness.js';
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
@@ -88,7 +88,7 @@ async function run(fn: (app: ElectronApplication, win: Page, h: Harness) => Prom
     const win = await app.firstWindow();
     await fn(app, win, h);
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(h.daemon);
     cleanupTemp(h.dataDir);
   }

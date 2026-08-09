@@ -6,6 +6,7 @@
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { connect } from 'node:net';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -298,9 +299,33 @@ async function launchApp(opts: AppOptions): Promise<{
     // Kill an app-spawned detached daemon BEFORE closing the app: Playwright's
     // app.close() waits for the Electron process's child tree, and the detached
     // daemon (which by design outlives the UI) would otherwise hang teardown.
-    if (!daemon) await killAppSpawnedDaemon(pipeName);
-    if (started) await shutdownApp(started);
-    if (daemon) await stopDaemon(daemon);
+    /*
+     * TIMED, because a slow teardown does not fail the test that caused it (#211).
+     *
+     * Playwright gives a worker 30s to tear down, and everything below happens inside that budget:
+     * `shutdownApp` alone allows a 15s graceful grace, and the `taskkill` behind it another 10s. When
+     * the budget is blown, the worker dies and Playwright charges it to whichever test was current —
+     * which is why #211 reads as "app-shell times out" when app-shell passes 6/6 in isolation at
+     * ~1.5s. Nothing in the log said which phase spent the time, so it had to be inferred; now it is
+     * reported.
+     *
+     * Only slow teardowns are printed. A line per teardown across ~640 tests would be noise, and
+     * noise is what stops anyone reading the log the one time it matters.
+     */
+    const phase = async (name: string, run: () => Promise<void>): Promise<void> => {
+      const began = Date.now();
+      try {
+        await run();
+      } finally {
+        const ms = Date.now() - began;
+        if (ms >= SLOW_TEARDOWN_PHASE_MS) console.warn(`[teardown] ${name} took ${ms}ms`);
+      }
+    };
+
+    const teardownBegan = Date.now();
+    if (!daemon) await phase('killAppSpawnedDaemon', () => killAppSpawnedDaemon(pipeName));
+    if (started) await phase('shutdownApp', () => shutdownApp(started));
+    if (daemon) await phase('stopDaemon', () => stopDaemon(daemon));
     // Clean up every temp dir this run created (Electron holds the userData dir until
     // the app has fully closed, hence the retries). Skip any the caller supplied.
     //
@@ -314,22 +339,66 @@ async function launchApp(opts: AppOptions): Promise<{
     // is a flake source for the whole cohort. (The same class was fixed for non-runApp specs
     // in temp-file-helpers.ts; this is the seam it missed.) Nothing leaks: globalTeardown
     // removes the whole per-run throng_e2e_<runhash> folder these dirs live under.
-    const cleanup = { recursive: true, force: true, maxRetries: 15, retryDelay: 200 } as const;
-    const rmBestEffort = (dir: string): void => {
+    /*
+     * ASYNCHRONOUS, and briefly — #211.
+     *
+     * This was `rmSync` with 15 retries at 200ms, over three directories: up to NINE SECONDS of
+     * synchronous work in a teardown, and worse than it sounds, because `rm`'s retry budget applies
+     * PER FAILING ENTRY in a recursive tree and an Electron userData directory holds hundreds of
+     * cache files. A blocked event loop stops Playwright's timers with it, so the cost did not land
+     * on the test that caused it — it landed on whichever test ran next, as a timeout that had
+     * nothing to do with its own work.
+     *
+     * That is #211's measured signature exactly: `[cleanup] EPERM removing …` immediately before
+     * `app-shell.e2e.ts` fails with `Test timeout of 30000ms exceeded`, in a full run, in BOTH tiers,
+     * while passing 6/6 in isolation at ~1.5s.
+     *
+     * `await rm(...)` keeps the loop turning, and the retry budget drops to ~300ms because it was
+     * never load-bearing: `globalTeardown` removes the whole per-run `throng_e2e_<runhash>` folder
+     * these live under. The retries are a courtesy to keep the temp directory tidy DURING a run; the
+     * sweep is what actually guarantees it, and paying seconds of blocked time for a courtesy is how
+     * a housekeeping race became a red test.
+     */
+    const cleanup = { recursive: true, force: true, maxRetries: 3, retryDelay: 100 } as const;
+    const rmBestEffort = async (dir: string): Promise<void> => {
       try {
-        rmSync(dir, cleanup);
+        await rm(dir, cleanup);
       } catch {
         // lost the race with Electron's userData lock; globalTeardown sweeps it.
       }
     };
-    if (!opts.dataDir) rmBestEffort(dataDir);
-    if (ownCfgRoot) rmBestEffort(cfgRoot);
-    if (!opts.userDataDir) rmBestEffort(userData);
+    await phase('removeTempDirs', async () => {
+      if (!opts.dataDir) await rmBestEffort(dataDir);
+      if (ownCfgRoot) await rmBestEffort(cfgRoot);
+      if (!opts.userDataDir) await rmBestEffort(userData);
+    });
+
+    // The phases can each sit under the threshold while their SUM does not — which is the shape that
+    // actually blows a 30s worker budget.
+    const total = Date.now() - teardownBegan;
+    if (total >= SLOW_TEARDOWN_TOTAL_MS) console.warn(`[teardown] TOTAL ${total}ms`);
   }
 }
 
 /** How long the graceful shutdown gets before we force-kill the Electron process tree. */
 const SHUTDOWN_GRACE_MS = 15_000;
+
+/**
+ * When a teardown phase is worth reporting (#211).
+ *
+ * 2s is comfortably above a healthy teardown (an app that closes when asked is a few hundred ms) and
+ * far below the 15s grace, so anything printed is genuinely slow rather than merely unlucky.
+ */
+const SLOW_TEARDOWN_PHASE_MS = 2_000;
+
+/**
+ * When the WHOLE teardown is worth reporting.
+ *
+ * Playwright's worker-teardown budget is 30s. Reporting at 10s gives a clear margin: a run that is
+ * heading for the cliff says so before it goes over, rather than only when the worker is already
+ * dead and the evidence has gone with it.
+ */
+const SLOW_TEARDOWN_TOTAL_MS = 10_000;
 
 /**
  * Force-kill an OS process and its entire child tree, best-effort and BOUNDED.
@@ -377,7 +446,7 @@ export function forceKillProcessTree(pid: number): void {
  *    RACED against a deadline; if it does not complete, we force-kill the whole Electron process
  *    tree. Teardown is thereby bounded by construction and can never blow the worker budget.
  */
-async function shutdownApp(app: ElectronApplication): Promise<void> {
+export async function shutdownApp(app: ElectronApplication): Promise<void> {
   // The app may ALREADY have exited on its own — many specs trigger the app's own quit (TERMINATE
   // ALL / an ordinary close that drains and quits) in the test body. Once the Electron process is
   // gone, Playwright's `app.process()` throws ("Cannot read properties of undefined"), so read the
@@ -872,7 +941,17 @@ export async function setSlider(slider: import('@playwright/test').Locator, valu
  */
 export function cleanupTemp(target: string): void {
   try {
-    rmSync(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    /*
+     * A SMALL retry budget, for #211's reason.
+     *
+     * This was 10 retries at 250ms — 2.5s of blocked event loop per call, per failing entry, and
+     * `cleanupTemp` is called from 180-odd `finally` blocks. Whatever it fails to remove is swept by
+     * `globalTeardown` anyway, so the retries buy tidiness during the run and never correctness.
+     *
+     * Still synchronous, deliberately: the callers are `finally` blocks in specs that do not await
+     * it, and changing that signature would be a 180-file edit to fix a budget.
+     */
+    rmSync(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   } catch (error) {
     const code = (error as NodeJS.ErrnoException)?.code;
     // ENOENT is already the desired end state. The rest are Windows still holding a handle.

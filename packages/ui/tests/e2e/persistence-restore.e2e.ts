@@ -9,7 +9,7 @@ import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
-import { cleanupTemp } from './harness.js';
+import { cleanupTemp, shutdownApp } from './harness.js';
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
@@ -179,7 +179,7 @@ test('restores each project’s own layout after a restart (SC-006)', async () =
     await expect(win.locator('.tab-chip')).toHaveCount(2);
     await expect(win.locator('.panel-box')).toHaveCount(1);
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(h.daemon);
     cleanupTemp(h.dataDir);
   }
@@ -221,7 +221,7 @@ test('falls back to the default workspace and notifies on a corrupt layout (SC-0
     await expect(win.locator('.tab-chip')).toHaveCount(1);
     await expect(win.locator('.panel-box')).toHaveCount(1);
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(h.daemon);
     cleanupTemp(h.dataDir);
   }

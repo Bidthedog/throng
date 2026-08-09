@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { commitPanelRename, cleanupTemp} from './harness.js';
+import { cleanupTemp, commitPanelRename, shutdownApp } from './harness.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -127,7 +127,7 @@ test('drag a Panel onto "+" → new active Tab containing only that Panel', asyn
     await expect(win.locator('.panel-box')).toHaveCount(1);
     await expect.poll(async () => (await panelIds(win))[0]).toBe(a);
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(h.daemon);
     cleanupTemp(h.dataDir);
   }

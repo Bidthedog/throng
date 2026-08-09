@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { commitPanelRename, cleanupTemp} from './harness.js';
+import { cleanupTemp, commitPanelRename, shutdownApp } from './harness.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -132,7 +132,7 @@ test('restores a project workspace within the launch budget (NFR-002)', async ()
     await win.locator('.panel-box').first().waitFor({ state: 'visible' });
     expect(Date.now() - start).toBeLessThan(5000);
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(h.daemon);
     cleanupTemp(h.dataDir);
   }
@@ -169,7 +169,7 @@ test('shows drop-target feedback promptly once a Panel drag starts (NFR-001/SC-0
     await expect(win.getByTestId(`edge-right-${a}`)).toBeVisible({ timeout: 200 });
     await win.mouse.up();
   } finally {
-    if (app) await app.close();
+    if (app) await shutdownApp(app);
     await stopDaemon(h.daemon);
     cleanupTemp(h.dataDir);
   }
