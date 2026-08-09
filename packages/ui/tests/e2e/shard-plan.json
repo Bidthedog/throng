@@ -80,6 +80,7 @@
       "about.e2e.ts",
       "app-shell.e2e.ts",
       "config-hotreload.e2e.ts",
+      "config-write-failure.e2e.ts",
       "context-menu-sections.e2e.ts",
       "daemon-status-bar.e2e.ts",
       "delete-mixed.e2e.ts",
