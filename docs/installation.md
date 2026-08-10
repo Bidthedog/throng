@@ -3,9 +3,9 @@
 Downloading, verifying, installing, upgrading, and removing throng on Windows.
 
 > **Status.** The installer described here comes from **feature 020 — Application Packaging**
-> ([#21](https://github.com/Bidthedog/throng/issues/21)) and is live as of **v0.0.1**, the first published
-> release. Earlier revisions had no installer; if you are ahead of a release, run throng from a developer
-> checkout with `npm install && npm run build && npm start` (see the [quick start](quick-start.md)).
+> ([#21](https://github.com/Bidthedog/throng/issues/21)). To run a revision that has no release yet, use a
+> developer checkout instead — `npm install && npm run build && npm start` (see the
+> [quick start](quick-start.md)).
 
 ## Before you start
 
