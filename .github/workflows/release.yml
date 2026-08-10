@@ -148,6 +148,10 @@ jobs:
           installer=$(ls dist/installer/*.exe | head -n1)
           version="${{ needs.build-installer.outputs.version }}"
           sum=$(node scripts/checksum.mjs "$installer")
+          # A SemVer prerelease suffix (1.0.0-alpha1, 1.0.0-rc.2) publishes as a GitHub PRERELEASE, so an
+          # alpha never becomes the repository's "latest release" that the install docs point people at.
+          prerelease=''
+          case "$version" in *-*) prerelease='--prerelease';; esac
           notes="Automated release of throng v$version.
 
           **This installer is not code-signed.** Windows will show an \"unrecognised app\" warning
@@ -159,4 +163,4 @@ jobs:
           | $(basename "$installer") | \`$(echo "$sum" | cut -d' ' -f1)\` |
 
           Built from ${{ github.sha }}."
-          gh release create "v$version" "$installer" --title "throng v$version" --notes "$notes"
+          gh release create "v$version" "$installer" --title "throng v$version" --notes "$notes" $prerelease

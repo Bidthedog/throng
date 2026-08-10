@@ -5,10 +5,10 @@ maintainers and contributors.
 
 > **Status.** This is the process introduced by **feature 020 — Application Packaging**
 > ([#21](https://github.com/Bidthedog/throng/issues/21)); see
-> [`specs/020-application-packaging/`](../specs/020-application-packaging/) for the design. It is live as of
-> **v0.0.1**: [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the installer,
-> verifies it on a clean runner, and publishes the GitHub Release behind the `release` Environment's
-> required reviewers. A release is cut by pushing a `v*` tag on `master`.
+> [`specs/020-application-packaging/`](../specs/020-application-packaging/) for the design. It is live:
+> [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the installer, verifies it
+> on a clean runner, and publishes the GitHub Release behind the `release` Environment's required reviewers.
+> A release is cut by pushing a `v*` tag on `master`.
 
 ## The shape of it
 
@@ -39,8 +39,14 @@ Everything else derives from it.
   is a *content hash* used to detect and retire a stale daemon; the product version identifies a *release*.
   Two builds of one version differ in `BUILD_ID` but share the version. Do not conflate them.
 
-`0.0.0` is a placeholder that the publish gate refuses. The first published release is `0.0.1`; the
-root and every workspace package carry it together, which the version guard test enforces.
+`0.0.0` is a placeholder that the publish gate refuses. The root and every workspace package carry the same
+version together, which the version guard test enforces.
+
+**Prereleases** use a SemVer prerelease suffix — `1.0.0-alpha1`, `1.0.0-rc.2` — and are published as
+**GitHub prereleases**, so they never appear as the repository's latest release. The suffix is part of the
+version's identity: the four-way match (installer filename, package, reported, tag) compares it exactly, so
+a stable build cannot be published under a prerelease tag or the reverse. It does **not** affect
+upgrade/downgrade ordering, which compares the `MAJOR.MINOR.PATCH` core only.
 
 ## 2. Packaging
 
