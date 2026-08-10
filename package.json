@@ -1,8 +1,8 @@
 {
   "name": "throng",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
-  "description": "throng \u2014 project-first terminal & agent workspace",
+  "description": "throng — project-first terminal & agent workspace",
   "author": "Christopher Sebok",
   "license": "AGPL-3.0-only",
   "repository": {
