@@ -4,12 +4,11 @@ How a throng build becomes a versioned, packaged, verified, published release �
 maintainers and contributors.
 
 > **Status.** This is the process introduced by **feature 020 — Application Packaging**
-> ([#21](https://github.com/Bidthedog/throng/issues/21)) for **v1.0.0**, being implemented on the
-> `worktree-21-app-packaging` branch. The design is complete (see
-> [`specs/020-application-packaging/`](../specs/020-application-packaging/)); the parts that build a real
-> installer, verify it on a clean machine, and publish a real release run in CI and are still landing.
-> Until it ships, throng runs from a developer checkout — see the [quick start](quick-start.md). This guide
-> describes the target end-to-end process so it is understood before it is switched on.
+> ([#21](https://github.com/Bidthedog/throng/issues/21)); see
+> [`specs/020-application-packaging/`](../specs/020-application-packaging/) for the design. It is live as of
+> **v0.0.1**: [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the installer,
+> verifies it on a clean runner, and publishes the GitHub Release behind the `release` Environment's
+> required reviewers. A release is cut by pushing a `v*` tag on `master`.
 
 ## The shape of it
 
@@ -40,8 +39,8 @@ Everything else derives from it.
   is a *content hash* used to detect and retire a stale daemon; the product version identifies a *release*.
   Two builds of one version differ in `BUILD_ID` but share the version. Do not conflate them.
 
-Today every package is `0.0.0` — a placeholder that the publish gate refuses. The first real release is
-`1.0.0`.
+`0.0.0` is a placeholder that the publish gate refuses. The first published release is `0.0.1`; the
+root and every workspace package carry it together, which the version guard test enforces.
 
 ## 2. Packaging
 
