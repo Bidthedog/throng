@@ -307,6 +307,48 @@ export function TabGroup(): ReactElement {
   const [indicatorX, setIndicatorX] = useState<number | null>(null);
   const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  /*
+   * 031 US1 (#225) — the strip's scroll lives on a TRACK inside it, and this is that track.
+   *
+   * Deliberately a ref plus component state rather than anything in `layout`: scroll position is
+   * VIEW state (FR-006), and persisting it would restore a project to wherever the last session
+   * happened to have dragged the strip.
+   */
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [fades, setFades] = useState({ left: false, right: false });
+
+  /*
+   * Recompute which fades show, from what is actually on screen. Runs on scroll, on resize, and
+   * whenever the tab set changes — the three things FR-022 names. A tab is "hidden" only when it is
+   * FULLY out of view; a partly-visible tab is the one the fade marks, not one it counts.
+   */
+  const syncFades = (): void => {
+    const track = trackRef.current;
+    if (!track) return;
+    const left = track.scrollLeft > 1;
+    const right = track.scrollLeft + track.clientWidth < track.scrollWidth - 1;
+    setFades((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
+  };
+
+  /*
+   * The observer is attached ONCE. `layout.tabs` is a fresh array identity on every render, so
+   * depending on it would tear the ResizeObserver down and rebuild it each time — churn that buys
+   * nothing, because the observer already fires when the track's box changes.
+   *
+   * A tab added, destroyed or renamed changes the CONTENT width rather than the track's own box, so
+   * that case is covered by re-measuring on each render below instead.
+   */
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const observer = new ResizeObserver(syncFades);
+    observer.observe(track);
+    return () => observer.disconnect();
+  }, []);
+
+  // Re-measure after every render: cheap (two numbers off the DOM), and `syncFades` bails out
+  // without setting state when nothing changed, so this cannot loop.
+  useEffect(syncFades);
 
   if (!layout) return <></>;
   const activeTab = layout.tabs.find((t) => t.id === layout.activeTabId) ?? layout.tabs[0];
@@ -318,7 +360,15 @@ export function TabGroup(): ReactElement {
   // on dnd-kit's cached collision rects while the dragged tab is still in flow.
   const trackTabDrag = (draggingId: string) => (e: PointerEvent): void => {
     pointerXRef.current = e.clientX;
-    const strip = stripRef.current;
+    /*
+     * 031 US1 — measure against the TRACK, not the strip.
+     *
+     * The chips and the insertion indicator both live inside the scrolling track now, so the track
+     * is the indicator's positioning context AND the thing that carries `scrollLeft`. Reading either
+     * from the outer strip would put the indicator at the wrong x the moment the strip is scrolled —
+     * the strip's own `scrollLeft` is permanently 0 by design (FR-001).
+     */
+    const strip = trackRef.current;
     if (!strip) return;
     const others = (Array.from(strip.querySelectorAll('.tab-chip')) as HTMLElement[]).filter(
       (c) => c.getAttribute('data-testid') !== `tab-${draggingId}`,
@@ -721,6 +771,8 @@ export function TabGroup(): ReactElement {
         <div
           className="tab-strip"
           data-testid="tab-strip"
+          data-fade-left={fades.left ? 'true' : 'false'}
+          data-fade-right={fades.right ? 'true' : 'false'}
           ref={stripRef}
           // Reaching for a tab is using the WORKSPACE, so it stops being the Files & Folders pane's
           // turn — otherwise the tree kept its selection highlight lit while the user was plainly
@@ -728,28 +780,35 @@ export function TabGroup(): ReactElement {
           // on pointerdown; the strip above them was the gap.
           onPointerDown={() => setActivePane('workspace')}
         >
-          {draggingTabId !== null && indicatorX !== null ? (
-            <div
-              className="tab-insert"
-              data-testid="tab-insert-indicator"
-              style={{ left: indicatorX }}
-              aria-hidden
-            />
-          ) : null}
-          {layout.tabs.map((tab) => (
-            <TabChip
-              key={tab.id}
-              tab={tab}
-              active={tab.id === activeTab?.id}
-              renaming={renamingTabId === tab.id}
-              onRenameCommit={(title) => {
-                if (title !== null) ws.renameTab(tab.id, title);
-                setRenamingTabId(null);
-              }}
-              onStartRename={() => setRenamingTabId(tab.id)}
-              onMenu={(s) => openMenu(s.x, s.y, menuItems(s.tabId))}
-            />
-          ))}
+          <div
+            className="tab-strip__track"
+            data-testid="tabstrip-track"
+            ref={trackRef}
+            onScroll={syncFades}
+          >
+            {draggingTabId !== null && indicatorX !== null ? (
+              <div
+                className="tab-insert"
+                data-testid="tab-insert-indicator"
+                style={{ left: indicatorX }}
+                aria-hidden
+              />
+            ) : null}
+            {layout.tabs.map((tab) => (
+              <TabChip
+                key={tab.id}
+                tab={tab}
+                active={tab.id === activeTab?.id}
+                renaming={renamingTabId === tab.id}
+                onRenameCommit={(title) => {
+                  if (title !== null) ws.renameTab(tab.id, title);
+                  setRenamingTabId(null);
+                }}
+                onStartRename={() => setRenamingTabId(tab.id)}
+                onMenu={(s) => openMenu(s.x, s.y, menuItems(s.tabId))}
+              />
+            ))}
+          </div>
           <NewTabButton onNewTab={() => setRenamingTabId(ws.addTab())} />
         </div>
         <div className="tab-body" data-testid="tab-body">

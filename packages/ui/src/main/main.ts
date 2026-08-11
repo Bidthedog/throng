@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell, type WebContents } from 'electron';
 import {
   DEFAULT_APP_SETTINGS,
+  guardedSettingsValidator,
   parseAppSettings,
   parseKeybindings,
   type LogLevel,
@@ -609,7 +610,7 @@ if (isPrimaryInstance)
   } else {
     // Defensive: recreate the singleton documents if a user deleted one (sourced
     // from the record), then apply the additive upgrade when the version advanced.
-    await configStore.read({ kind: 'settings' }, shipped.settings, parseAppSettings);
+    await configStore.read({ kind: 'settings' }, shipped.settings, guardedSettingsValidator);
     await configStore.read({ kind: 'keybindings' }, shipped.keybindings, parseKeybindings);
     if ((await shippedService.readAppliedVersion()) !== shipped.version) {
       const upgraded = await shippedService.upgrade();

@@ -1,5 +1,5 @@
 {
-  "note": "Which E2E specs each CI shard runs. Built from MEASURED per-file durations, because Playwright --shard splits by test count in file order and the alphabet then decides \u2014 every terminal-* spec landed in one third, giving 3.7 / 8.3 / 36 minute shards. Regenerate when the balance drifts; packages/ui/tests/unit/shard-plan.test.ts fails if a spec is missing, duplicated or stale.",
+  "note": "Which E2E specs each CI shard runs. Built from MEASURED per-file durations, because Playwright --shard splits by test count in file order and the alphabet then decides — every terminal-* spec landed in one third, giving 3.7 / 8.3 / 36 minute shards. Regenerate when the balance drifts; packages/ui/tests/unit/shard-plan.test.ts fails if a spec is missing, duplicated or stale.",
   "measuredFrom": "https://github.com/Bidthedog/throng/actions/runs/30982670450",
   "groups": {
     "1": [
@@ -53,6 +53,7 @@
       "subworkspace-sync.e2e.ts",
       "subworkspace-titlebar.e2e.ts",
       "subworkspaces.e2e.ts",
+      "tab-strip-overflow.e2e.ts",
       "terminal-altscreen-fidelity.e2e.ts",
       "terminal-altscreen-parity.e2e.ts",
       "terminal-command-memory.e2e.ts",

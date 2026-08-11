@@ -635,6 +635,11 @@ function newProjectSettings(v: unknown, fallback: NewProjectSettings): NewProjec
 /**
  * Parse raw JSON into a complete, valid AppSettings by merging over the defaults.
  * Unknown/invalid fields fall back to their default. Never throws.
+ *
+ * 031 (#227): this does NOT apply the declared-bounds guard. It cannot — `settings-metadata.ts`
+ * imports `DEFAULT_APP_SETTINGS` from here, so importing the registry back would close a cycle whose
+ * only symptom is an undefined registry at module-init time. The guarded entry point lives in
+ * `settings-read.ts`, which imports both and is what every reader should call.
  */
 export function parseAppSettings(raw: unknown): AppSettings {
   const d = DEFAULT_APP_SETTINGS;

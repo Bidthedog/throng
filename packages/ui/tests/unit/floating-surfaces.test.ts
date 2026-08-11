@@ -71,6 +71,8 @@ const REGISTERED: Readonly<Record<string, string>> = {
   '.resize-handle--leading': 'chrome — the same drag edge, leading side',
   '.pane-explorer__body--active': 'chrome — an active-pane highlight, not a surface',
   '.terminal-panel__starting': 'chrome — a status overlay filling its own panel',
+  '.tab-strip':
+    'chrome — the tab strip itself. Its z-index belongs to the ::before/::after OVERFLOW FADES (031/#225), which are decoration painted over the scrolling track and are `pointer-events: none`. Nothing opens out of it, so there is no edge to flip away from; the fades are clamped to the strip by construction',
   '.project-insert': 'a drag INSERTION MARKER inside its list — a line, not a surface',
   '.subworkspace-insert': 'a drag insertion marker inside its list',
   '.tab-insert': 'a drag insertion marker inside the tab strip',

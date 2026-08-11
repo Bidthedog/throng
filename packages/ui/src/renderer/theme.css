@@ -596,17 +596,88 @@ textarea,
 
 
 /* --- Tab group -------------------------------------------------------- */
+/*
+ * 031 US1 (#225) — the strip does NOT scroll; its TRACK does.
+ *
+ * The defect this replaces was three lines: a fixed-height flex row with `overflow-x: auto`. A
+ * horizontal scrollbar in such a row has nowhere to take its ~15px from except the content box, so
+ * the moment the tabs overflowed they lost height and shifted up — clipped, exactly as reported.
+ *
+ * So the outer element no longer scrolls at all. It is a plain row holding the scrolling track, the
+ * tab-action controls and the New Tab button, which is also what pins the last two in place instead
+ * of letting them drift off with the tabs.
+ */
 .tab-strip {
   position: relative;
   display: flex;
-  align-items: flex-end;
-  gap: 2px;
+  align-items: stretch;
   height: var(--pane-header-height);
   box-sizing: border-box;
   padding: 4px 4px 0;
   border-bottom: 1px solid var(--border);
-  overflow-x: auto;
+  overflow: hidden;
   flex: 0 0 auto;
+}
+
+/*
+ * The scrolling region. `hidden` rather than `clip` deliberately: `scrollLeft` still works on it,
+ * and every scroll in this feature — the step controls, reveal-the-active-tab, the picker — drives
+ * exactly that. `clip` would take the property away and leave nothing to drive.
+ */
+.tab-strip__track {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.tab-strip__track::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * Overflow fades. These are OVERLAYS: absolutely positioned, `pointer-events: none`, and outside the
+ * flow. Anything inserted into the track instead would push every tab to its right the moment tabs
+ * were hidden — which is the one thing FR-005 forbids, and the reason this is not just a
+ * `border-image` on the first chip.
+ */
+.tab-strip::before,
+.tab-strip::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 0;
+  width: 24px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  z-index: 2;
+}
+
+.tab-strip::before {
+  left: 4px;
+  background: linear-gradient(to right, var(--bg) 0%, transparent 100%);
+}
+
+.tab-strip::after {
+  /*
+   * Sits at the track's trailing edge. Today that is just inside the New Tab button; when US3 adds
+   * the tab-action controls this becomes their combined width. Deliberately a literal rather than a
+   * `var(--tab-actions-width, …)` fallback: a custom property nothing defines is invisible to a
+   * reader and to the theme editor, and `css-variables-defined.test.ts` rightly refuses one.
+   */
+  right: 32px;
+  background: linear-gradient(to left, var(--bg) 0%, transparent 100%);
+}
+
+.tab-strip[data-fade-left='true']::before,
+.tab-strip[data-fade-right='true']::after {
+  opacity: 1;
 }
 
 .tab-chip {
@@ -635,13 +706,28 @@ textarea,
   outline-offset: -2px;
 }
 
+/*
+ * 031 FR-003 — pinned, square, vertically centred, and OUTSIDE the track so it never scrolls away.
+ *
+ * `flex: 0 0 auto` plus `align-self: center` is what holds it still; the fixed width/height is what
+ * makes it square. It used to sit inside the scrolling row, which is why it drifted off with the
+ * tabs.
+ */
 .tab-strip__add {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-dim);
   border-radius: 6px;
-  margin: 2px 0 2px 4px;
-  padding: 0 10px;
+  flex: 0 0 auto;
+  align-self: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 4px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
   cursor: pointer;
 }
 
