@@ -41,6 +41,23 @@ async function project(): Promise<void> {
 /** Long enough that a handful of tabs overruns the strip — the reproduction #225 gives. */
 const LONG = (n: number): string => `feature-S031-a-deliberately-long-tab-name-number-${n}`;
 
+/**
+ * Make the strip overflow, whatever state the shared app is in.
+ *
+ * Idempotent on purpose: a test that ASSUMES a previous test left the strip overflowing is fine
+ * until the previous test retries, at which point the assumption is silently false. Seeding until
+ * the condition holds costs a second and removes the ordering dependency entirely.
+ */
+async function ensureOverflowing(): Promise<void> {
+  if (isOverflowing(await stripGeometry(shared.win))) return;
+  await project();
+  let n = 0;
+  while (!isOverflowing(await stripGeometry(shared.win)) && n < 12) {
+    await seedTabs(shared.win, [LONG((n += 1))]);
+  }
+  expect(isOverflowing(await stripGeometry(shared.win)), 'seeded enough tabs to overflow').toBe(true);
+}
+
 test('T004 — a tab keeps its height and vertical position when the strip overflows', async () => {
   await project();
   const before = await stripGeometry(shared.win);
@@ -80,6 +97,10 @@ test('T004 — a tab keeps its height and vertical position when the strip overf
 });
 
 test('T003 — an overflowing strip renders no native horizontal scrollbar', async () => {
+  // Seeds its own overflow rather than inheriting T004's. Depending on what an earlier test left
+  // behind makes the file order-dependent, and a single retry then shifts the ground under
+  // everything after it — which is exactly how this spec first went flaky.
+  await ensureOverflowing();
   const g = await stripGeometry(shared.win);
   expect(isOverflowing(g), 'precondition: the strip is overflowing').toBe(true);
   expect(
@@ -89,6 +110,7 @@ test('T003 — an overflowing strip renders no native horizontal scrollbar', asy
 });
 
 test('T005 — the New Tab button stays pinned, square and centred at every tab count', async () => {
+  await ensureOverflowing();
   const add = shared.win.getByTestId('tab-add');
   await expect(add, 'New Tab is visible while the strip overflows').toBeVisible();
 
@@ -111,14 +133,28 @@ test('T005 — the New Tab button stays pinned, square and centred at every tab 
 });
 
 test('T007 — a fade never displaces a tab', async () => {
+  await ensureOverflowing();
   // Scroll so tabs are hidden to the left, which is when the leading fade shows.
   await shared.win.evaluate(() => {
     const strip = document.querySelector('[data-testid="tab-strip"]');
     const track = strip?.querySelector('[data-testid="tabstrip-track"]') ?? strip;
     (track as HTMLElement).scrollLeft = 200;
   });
+
+  /*
+   * WAIT for the fade rather than reading it on the next line.
+   *
+   * Setting `scrollLeft` from `evaluate` fires a scroll event, but the renderer still has to run its
+   * handler and re-render before the attribute exists — and a plain read raced that, passing on a
+   * fast machine and failing under a loaded suite. Polling waits on the CONDITION instead of on the
+   * clock, which is what makes it deterministic rather than merely slower.
+   */
+  await expect
+    .poll(async () => (await stripGeometry(shared.win)).fades.left, {
+      message: 'tabs hidden to the left show the leading fade',
+    })
+    .toBe(true);
   const faded = await stripGeometry(shared.win);
-  expect(faded.fades.left, 'tabs hidden to the left show the leading fade').toBe(true);
 
   const offsets = faded.tabs.map((t) => Math.round(t.left));
 
