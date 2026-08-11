@@ -4,6 +4,15 @@ shell commands, and other important information, read the current plan
 at specs/029-failure-path-integrity/plan.md
 <!-- SPECKIT END -->
 
+## Specialist agents
+
+`.claude/agents/` holds eleven repo-local subagents, one per area of this codebase — core/DI, daemon
+and persistence, terminals and PTY, renderer, editor, config and preferences, explorer and file ops,
+failure presentation, E2E harness, spec governance, build and release. Each carries that area's file
+map, the constitutional rules that bind it, and the traps it has already produced. Delegate to the
+owning agent rather than re-deriving an area from scratch; see `.claude/agents/README.md` for the
+routing table and how they defer to skills.
+
 ## E2E on CI
 
 **Run it locally before you push it.** The full E2E suite takes about 10 minutes locally
