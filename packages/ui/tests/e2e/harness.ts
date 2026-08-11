@@ -273,6 +273,7 @@ async function launchApp(opts: AppOptions): Promise<{
   const ownCfgRoot = opts.env?.THRONG_CONFIG_ROOT === undefined;
   const cfgRoot = opts.env?.THRONG_CONFIG_ROOT ?? mkdtempSync(join(tmpdir(), 'throng-cfg-'));
   let app: ElectronApplication | undefined;
+  let endSuddenDeathWatch: () => void = () => {};
   try {
     app = await electron.launch({
       args: [mainEntry, `--user-data-dir=${userData}`],
@@ -294,6 +295,7 @@ async function launchApp(opts: AppOptions): Promise<{
       },
     });
     const win = await app.firstWindow();
+    endSuddenDeathWatch = watchForSuddenDeath(app); // #240: say WHY, if this app goes away mid-test
     await stubFolderDialog(app); // cancel by default
     await stubShellOpen(app); // never leave a real Explorer window behind (and never steal focus)
     const launched = app;
@@ -311,6 +313,7 @@ async function launchApp(opts: AppOptions): Promise<{
   }
 
   async function teardownApp(started: ElectronApplication | undefined): Promise<void> {
+    endSuddenDeathWatch(); // from here on, the app going away is the intent, not a fault (#240)
     // Kill an app-spawned detached daemon BEFORE closing the app: Playwright's
     // app.close() waits for the Electron process's child tree, and the detached
     // daemon (which by design outlives the UI) would otherwise hang teardown.
@@ -393,6 +396,54 @@ async function launchApp(opts: AppOptions): Promise<{
     const total = Date.now() - teardownBegan;
     if (total >= SLOW_TEARDOWN_TOTAL_MS) console.warn(`[teardown] TOTAL ${total}ms`);
   }
+}
+
+/**
+ * Report an Electron app that dies while a test is still using it — issue #240.
+ *
+ * "Target page, context or browser has been closed" is the least informative failure this suite can
+ * produce: it names no component, so there is nothing to grep for and nothing to bisect without
+ * catching it again. What is missing is the app's own account of its death, which Playwright
+ * discards. Keep the tail of the main process's stderr and print it with the exit code.
+ *
+ * Two gates keep it silent on a healthy run, and both are load-bearing — measured on a full local
+ * suite, where the ungated version cried wolf four times in a row on perfectly ordinary teardowns:
+ *
+ *   - **Only before teardown.** `shutdownApp` destroys windows and, if that stalls, force-kills the
+ *     process tree; Electron reports those as `0xC0000409` or `7`, which look exactly like a crash
+ *     and are not one. Once teardown has begun, the app dying IS the point.
+ *   - **Only non-zero.** Plenty of specs quit the app from inside the test body (TERMINATE ALL, an
+ *     ordinary close that drains and quits), and those exit 0.
+ *
+ * @returns the callback that closes the first gate; teardown must call it before it starts.
+ */
+function watchForSuddenDeath(app: ElectronApplication): () => void {
+  let tearingDown = false;
+  const markTeardown = (): void => {
+    tearingDown = true;
+  };
+  let proc: ReturnType<ElectronApplication['process']>;
+  try {
+    proc = app.process();
+  } catch {
+    return markTeardown; // already gone; nothing to observe
+  }
+  const tail: string[] = [];
+  proc.stderr?.on('data', (chunk: Buffer) => {
+    tail.push(chunk.toString());
+    if (tail.length > 20) tail.shift();
+  });
+  proc.once('exit', (code, signal) => {
+    if (tearingDown || code === 0 || code === null) return;
+    const why = tail.join('').trim();
+    console.warn(
+      `[app] electron main (pid ${proc.pid}) died mid-test: code=${code} signal=${signal ?? 'none'}` +
+        (why === ''
+          ? ' — and wrote nothing to stderr, so look for something killing it from outside'
+          : `\n${why}`),
+    );
+  });
+  return markTeardown;
 }
 
 /** How long the graceful shutdown gets before we force-kill the Electron process tree. */
