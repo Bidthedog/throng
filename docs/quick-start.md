@@ -164,6 +164,11 @@ Click any file in the **Files & Folders** tree to open it in the last active edi
 **drag a file in from Windows Explorer** and drop it onto an editor, or onto an empty panel,
 which becomes an editor showing that file.
 
+- **The tree follows the editor.** Whichever file you move to — another panel, another tab, a file
+  you just opened — is expanded to, selected and marked in **Files & Folders**, so a rename or a
+  right-click always lands on the file you are actually in. It never takes the keyboard: your caret
+  stays where it was. Turn it off under **Settings → File Explorer → Follow the active editor**; the
+  file you are editing stays marked either way.
 - **Save** with **Ctrl+S**; **Ctrl+Shift+S** saves all (scoped to the project); **Ctrl+Alt+S** is Save As.
 - **Syntax highlighting** covers 31 languages, detected by extension. Wrong guess? Correct it from
   the **language picker** in the status strip — throng remembers your choice for that file.
