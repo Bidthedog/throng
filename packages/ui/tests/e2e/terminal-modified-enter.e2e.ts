@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { copyFileSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { basename, join } from 'node:path';
@@ -52,11 +53,13 @@ registerTempCleanup();
 async function negotiatesWin32Input(): Promise<boolean> {
   const pty = createRequire(import.meta.url)('node-pty') as {
     spawn(file: string, args: string[], opts: Record<string, unknown>): {
+      readonly pid: number;
       onData(cb: (d: string) => void): void;
       kill(): void;
     };
   };
   return await new Promise<boolean>((resolve) => {
+    const before = new Set(conhostChildren(process.pid));
     const p = pty.spawn('powershell.exe', ['-NoLogo', '-NoProfile'], {
       name: 'xterm-256color',
       cols: 80,
@@ -65,11 +68,7 @@ async function negotiatesWin32Input(): Promise<boolean> {
     });
     const done = (v: boolean): void => {
       clearTimeout(timer);
-      try {
-        p.kill();
-      } catch {
-        // already gone — nothing to clean up
-      }
+      reapProbe(p.pid, before);
       resolve(v);
     };
     const timer = setTimeout(() => done(false), 20000); // no request within a prompt's lifetime → absent
@@ -77,6 +76,66 @@ async function negotiatesWin32Input(): Promise<boolean> {
       if (d.includes('?9001h')) done(true);
     });
   });
+}
+
+/**
+ * Dispose of the probe's shell and pseudoconsole WITHOUT node-pty's own `kill()` — issue #240.
+ *
+ * node-pty 1.1.0's Windows `kill()` forks `conpty_console_list_agent`, which calls
+ * `AttachConsole(shellPid)` and hands back every pid attached to that console so node-pty can
+ * `process.kill()` each one. When the agent fails — it prints `Error: AttachConsole failed` and dies
+ * — node-pty's 5-second fallback resolves the list as `[shellPid]` and kills THAT, by bare pid,
+ * **five seconds after the shell it named has gone**. Windows reuses pids freely, and an E2E shard
+ * starts an Electron app, a daemon and a shell every couple of seconds, so the pid is very likely to
+ * belong to somebody else by then. Measured on CI: the agent failed at 11:51:26.836, and 5.4s later
+ * the NEXT spec's Electron app died 1.3s into its body with "Target page, context or browser has been
+ * closed" — a test killed by the teardown of a test that had already been skipped.
+ *
+ * This is exactly why `NodePtyHost` avoids node-pty's `kill()` too (see its comment); this call site
+ * was the one left using it, and it is the more dangerous of the two because it runs in the Playwright
+ * WORKER, whose `process.kill` reaches every other app the worker is driving.
+ *
+ * So: taskkill the shell tree by pid, then reap the pseudoconsole host node-pty leaves behind for a
+ * shell it did not kill itself. `before` is the worker's conhost children from before the spawn, so
+ * only the probe's own host is reaped.
+ */
+function reapProbe(shellPid: number, before: ReadonlySet<number>): void {
+  taskkill(shellPid);
+  for (const pid of conhostChildren(process.pid)) if (!before.has(pid)) taskkill(pid);
+}
+
+function taskkill(pid: number): void {
+  try {
+    execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], {
+      stdio: 'ignore',
+      timeout: 5000,
+      windowsHide: true,
+    });
+  } catch {
+    /* already gone — best effort, never an assertion */
+  }
+}
+
+/** The pids of headless `conhost.exe` hosts owned by `parentPid` (one per live ConPTY). */
+function conhostChildren(parentPid: number): number[] {
+  try {
+    const out = execFileSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        `Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'conhost.exe' -and $_.ParentProcessId -eq ${parentPid} } | ForEach-Object { $_.ProcessId }`,
+      ],
+      { encoding: 'utf8', timeout: 5000, windowsHide: true },
+    );
+    return out
+      .split(/\r?\n/)
+      .map((l) => Number(l.trim()))
+      .filter((n) => Number.isFinite(n) && n > 0);
+  } catch {
+    return [];
+  }
 }
 
 /** Open a terminal on `cmd`, run `node <fixture>`, and return the terminal locator + a byte reader. */
