@@ -141,14 +141,13 @@ its own. Set it to Never display and confirm nothing appears while the event sti
    no toast appears — no space taken, no effect on other notices — the event is recorded in the
    diagnostic log, and any panel affected still shows its own failure banner.
 5. **Given** a severity whose mode is not **Display for**, **When** the user looks at that row's
-   timeout control, **Then** the timeout control is inert — it cannot be edited, or its value has no
-   effect, and the interface makes clear which.
+   timeout control, **Then** it is disabled — it cannot be edited, and it looks that way.
 6. **Given** the user sets `error` to **Display for** 3000 ms, **When** an error notice is raised,
    **Then** it auto-dismisses after 3000 ms like any other severity — errors have no built-in
    exemption.
-7. **Given** the user enters a timeout below 1500 ms or above 60000 ms, **When** the value is applied,
-   **Then** the interface prevents or corrects it, and no notice ends up with a timeout outside that
-   range.
+7. **Given** the user enters a timeout below 1500 ms or above 60000 ms, **When** they try to commit it,
+   **Then** the interface prevents it — the value is not accepted, and no notice ends up with a
+   timeout outside that range.
 8. **Given** the user chooses **Never display** for `error` or `warning`, **When** the choice is made,
    **Then** they are asked to confirm and told those events will reach only the log; confirming
    applies the mode and declining leaves it unchanged.
@@ -230,17 +229,19 @@ and terminals among the panels, and count the notices: exactly one, listing ever
 
      Tab 2
        • Panel 3
-
-     > System Message:
-     > ENOENT: no such file or directory, realpath 'D:\git\throng_tests\test 1'
    ```
+
+   The raw system error is **not** rendered here — 029 FR-016 forbids a notice carrying a raw error
+   string and 029 FR-018a demotes it to Copy and the log. It reaches the user through the Copy
+   control (FR-048) and the diagnostic log (FR-006), both of which this feature makes complete.
 3. **Given** a project with many affected panels, **When** the notice appears, **Then** the list is
    vertically scrollable within a bounded height and the notice is no taller than that cap.
 4. **Given** editors and terminals defeated by the same cause, **When** the notice appears, **Then**
    they appear in the same list under their own tabs, in tab order and then panel position, with no
    grouping by panel type.
-5. **Given** the underlying system error, **When** the notice appears, **Then** it appears exactly
-   once, visually subordinate to the message rather than as the headline.
+5. **Given** the underlying system error, **When** the notice appears, **Then** it is not rendered in
+   the notice at all; **When** the user copies the notice or reads the log, **Then** it is there
+   exactly once.
 6. **Given** any multi-panel failure at all, **When** notices are raised, **Then** the former per-tab
    "Cannot open N files" / "Cannot open file" notices do not appear — for this cause or any other.
 7. **Given** two genuinely different causes, **When** both occur, **Then** two notices are raised.
@@ -284,20 +285,26 @@ returns to panel-type selection.
    tokens, spacing and control order.
 2. **Given** either banner, **When** it is read, **Then** its message names what could not be done in
    that panel type's own words, followed by a consistent pointer to where the detail is.
-3. **Given** either banner, **When** its controls are inspected, **Then** it offers ↻ Retry and
-   ✕ Cancel, in that order, with the same icons, titles and accessible names in both panel types.
-4. **Given** an editor showing the banner, **When** the user presses ✕ Cancel, **Then** the panel
+3. **Given** either banner, **When** its controls are inspected, **Then** it offers Retry and Cancel,
+   in that order, with the same icons, titles and accessible names in both panel types, each drawn
+   from the theme's icon tokens rather than a literal glyph.
+4. **Given** a panel showing the banner, **When** the user opens that panel's own menu, **Then**
+   Retry and Cancel are there as commands, for every panel type.
+5. **Given** an editor showing the banner, **When** the user presses Cancel, **Then** the panel
    returns to the panel-type selection screen, keeping the panel, its position in the layout and its
    title — it is not deleted.
-5. **Given** a terminal showing the banner, **When** the user presses ✕ Cancel, **Then** it behaves as
+6. **Given** a terminal showing the banner, **When** the user presses Cancel, **Then** it behaves as
    Clear panel type does today, with no regression to the behaviour specified by 029 FR-004a.
-6. **Given** either banner, **When** the user presses ↻ Retry and the retry succeeds, **Then** the
+7. **Given** either banner, **When** the user presses Retry and the retry succeeds, **Then** the
    banner disappears along with the condition; **When** the retry fails, **Then** the banner remains
    and says the retry failed.
-7. **Given** a banner, **When** the user looks for a way to close it, **Then** there is none — it is
+8. **Given** a banner, **When** the user looks for a way to close it, **Then** there is none — it is
    not dismissible while its condition holds.
-8. **Given** any shipped theme, **When** a banner is rendered, **Then** it renders correctly using
-   theme tokens only.
+9. **Given** an editor that cannot read its file, **When** its banner is read, **Then** it still names
+   the path it could not read — 027 (#161) FR-011's protection against saving a recovered buffer over
+   a moved path is unchanged.
+10. **Given** each shipped theme in turn, **When** a banner is rendered, **Then** it renders legibly,
+    taking every colour from that theme.
 
 ---
 
@@ -420,18 +427,21 @@ reject it. Separately, read the inventory and find every notice accounted for.
   one panel; no separate singular phrasing to maintain.
 - **One cause defeating panels in several projects** — one notice per project, each naming its own
   project and listing only that project's panels. A cause that is not project-scoped at all (a stopped
-  daemon, say) raises one notice whose list groups by project first, then by tab.
-- **An affected panel that belongs to no tab or no project** — it is listed under a group that names
-  what it does belong to; the list never prints an empty heading or a placeholder name.
+  daemon, say) raises one notice with **no** affected-panel list: it is not about particular panels,
+  and inventing a cross-project list for it is out of scope (see Out of Scope).
+- **An affected panel that belongs to no project** — the notice names no project and the list is
+  grouped by tab alone. A panel always sits in a tab, so a tab-less panel is not a state this model
+  admits; if one ever arises it is a defect in the workspace model, not a case for the list to paper
+  over.
+- **Two panels defeated by two different unclassified failures in one operation** — they share the
+  operation, so they share a notice. Each panel carries its own raw error, which reaches the user
+  through Copy (FR-048a) and the log, never rendered (FR-034).
 - **A multi-panel failure the project-load path never sees** — for example a file deleted while the
   project root is fine. It groups by cause like any other; there is no surviving per-tab route for it
   to take.
 - **A multi-panel failure 029 declined to classify** — no cause, so it groups by the operation that
   produced it and still raises one notice. Its wording is unchanged from today; only the grouping is
   new.
-- **Two panels defeated by two different unclassified failures in one operation** — they share the
-  operation, so they share a notice; the notice names the operation rather than a cause, and the raw
-  errors are carried per panel.
 
 **Banners**
 
@@ -479,14 +489,41 @@ earlier one.
   dismisses it, regardless of its configured timeout.
 - **FR-004**: A notice of a severity set to **Display for** *N* ms MUST leave on its own once *N* has
   elapsed.
-- **FR-005**: An event of a severity set to **Never display** MUST NOT raise a notice — no toast is
-  shown, no space is occupied, and no other notice's position or dwell is affected.
+- **FR-005**: An event of a severity set to **Never display** MUST NOT be *displayed* — no toast is
+  shown, no space is occupied, and no other notice's position or dwell is affected. It is still an
+  **accepted** notice: it passes the duplicate and cause checks, and everything that follows from
+  acceptance — the log record above all — happens exactly as it would if it were on screen. "Accepted"
+  is the word FR-006 means by "every notice"; a notice rejected as a duplicate is not one.
+- **FR-005b**: A silenced notice MUST be de-duplicated exactly as a displayed one is. The duplicate
+  and cause checks compare against notices that are *live*, so a notice that never enters the list
+  would be compared against nothing — and a file watcher re-firing one unchanged failure would write a
+  record every time, where the same event displayed writes one. The application MUST therefore
+  remember a silenced notice for as long as the displayed one would have lasted: **its severity's
+  configured `timeoutMs`**, which every severity carries whatever its mode. After that window the
+  event is genuinely new again, exactly as it would be for a notice the user had watched expire.
+- **FR-005c**: That memory MUST be keyed by the notice's group key where it has one, and MUST suppress
+  only a notice reporting **nothing new**. A notice whose affected panels include one not yet reported
+  for that key is new information and MUST write a record naming **the panels that are new**, matching
+  the displayed path's growth record (FR-006a) in content as well as in count. Without this the silenced
+  path writes one record where the displayed path writes one plus a growth per newly discovered
+  panel — and a cause that keeps claiming panels while silenced would go unrecorded after the first,
+  which is the opposite of what silencing is allowed to cost.
 - **FR-005a**: The notification preferences MUST govern notices and nothing else. A panel's failure
   banner MUST be shown whenever its condition holds, whatever the display mode of any severity, and
   whatever a shell prints into its own terminal is untouched by these preferences.
 - **FR-006**: Every notice MUST be recorded in the diagnostic log, whatever its severity's display
   mode, at a log level derived from its severity: `error` → error, `warning` → warn, `info` and
   `success` → info.
+- **FR-006b**: A notice record MUST be written regardless of the log's configured level threshold.
+  This is a deliberate exemption from `diagnostics.logLevel`: FR-008 asks the user to consent to
+  "these events will thereafter reach only the log", and with `logLevel: 'error'` — a shipped,
+  selectable value — a silenced `warning` would reach *nowhere*, making that consent false and
+  SC-003 unachievable. A notice is a user-facing event the user chose not to see, not diagnostic
+  chatter to be filtered.
+- **FR-006a**: A notice that **grows** (FR-037) MUST also write a record, naming the panels that
+  joined. The log is the record of what happened, and panels discovered after the first record are new
+  facts; without this, silencing a severity would lose every panel found after the first. A notice
+  suppressed as a duplicate, or suppressed by cause, writes nothing — nothing happened.
 - **FR-007**: The log record MUST carry enough to identify the event without the screen — at minimum
   the severity, the notice's message and its subject where FR-018 gives it one.
 - **FR-008**: Choosing **Never display** for `error` or `warning` MUST ask the user to confirm,
@@ -496,8 +533,9 @@ earlier one.
   Preferences row is the record.
 - **FR-010**: The accepted timeout range MUST be 1500 ms to 60000 ms inclusive. Preferences MUST NOT
   allow a value outside that range to be committed.
-- **FR-011**: The timeout control MUST be inert, and visibly so, while the severity's mode is anything
-  other than **Display for**.
+- **FR-011**: The timeout control MUST be `disabled` while the severity's mode is anything other than
+  **Display for** — inert and visibly so, by the same affordance the settings editor already uses for
+  a control that does not apply.
 - **FR-012**: No severity may have hard-coded display behaviour. Every severity, `error` included, MUST
   be settable to any of the three modes and MUST behave accordingly.
 - **FR-013**: The shipped defaults on a fresh configuration MUST be: `error` **Dismiss only**,
@@ -550,6 +588,9 @@ earlier one.
 
 #### Group 3 — One notice per cause (#235, US3)
 
+> **FR-030a was withdrawn.** It restated FR-037 and was folded into it during analysis. The number is
+> not reused, so a reader who finds a stale reference knows where it went.
+
 - **FR-029**: A single cause that defeats several panels MUST raise exactly one notice **per project
   affected**, naming the cause and the project once, and listing every panel of that project the cause
   affected.
@@ -562,9 +603,6 @@ earlier one.
 - **FR-030**: The affected-panel list MUST span the whole project rather than a single tab, holding
   every affected panel known so far. It MUST NOT require panels on tabs that have not been rendered to
   be discovered in advance.
-- **FR-030a**: As further affected panels become known — typically when the user visits a tab that had
-  not been rendered — they MUST be added to the notice already on screen, under their own tab group,
-  without raising a second notice for the same cause and project.
 - **FR-030b**: The list MUST be a report, not a control. Rows and tab headings MUST NOT be clickable or
   otherwise navigate; the actions for an affected panel live on that panel's own banner.
 - **FR-031**: The list MUST be grouped by tab: each affected tab appears as a heading, with the
@@ -573,11 +611,14 @@ earlier one.
 - **FR-031a**: Tabs MUST appear in the workspace's own tab order, and panels within a tab in their
   position order — the list reads as a map of what is on screen, not as arrival order or an
   alphabetical index.
-- **FR-031b**: Panel and tab names in the list MUST be the names the interface displays, formatted by
-  the one place FR-021 establishes. The list MUST NOT define a naming format of its own.
+- **FR-031b**: Panel and tab names in the list MUST be rendered through the one formatter FR-021
+  establishes, given the notice's project and the row's tab as context so those parts are elided
+  (FR-022a). The list MUST NOT define a naming format of its own, and MUST NOT render raw names
+  directly — which would bypass the per-part truncation and let one long panel name break the height
+  bound FR-032 sets.
 - **FR-032**: The list MUST be vertically scrollable within a bounded height, so that a project with
   many affected panels does not produce a notice taller than that bound.
-- **FR-032a**: When a notice grows (FR-030a), what is announced to assistive technology MUST be only
+- **FR-032a**: When a notice grows (FR-037), what is announced to assistive technology MUST be only
   what was added — the tab and how many panels joined — not a re-reading of the whole notice. A notice
   that gains a group MUST NOT cause its entire list to be announced again.
 - **FR-032b**: The affected-panel list MUST be reachable and scrollable by keyboard, and any control
@@ -585,8 +626,9 @@ earlier one.
   into it can tab out again.
 - **FR-033**: Panel type MUST NOT affect grouping — editors and terminals defeated by the same cause
   appear in the same list.
-- **FR-034**: The raw system error MUST appear exactly once in the notice and MUST be visually
-  subordinate to the message.
+- **FR-034**: The raw system error MUST NOT be rendered in the notice — 029 FR-016 forbids it and 029
+  FR-018a demotes it to Copy and the log, both of which this feature preserves. It MUST be carried on
+  the notice for copying (FR-048) and written to the log (FR-006), exactly once each.
 - **FR-035**: Batching by tab MUST be removed outright. The per-tab notices this replaces ("Cannot open
   N files", "Cannot open file") MUST NOT be raised at all, and no multi-panel failure — whatever
   produced it — may group by anything other than its cause. One grouping rule, not two coexisting
@@ -604,21 +646,46 @@ earlier one.
 
 #### Group 4 — One shared failure banner (#236, US4)
 
-- **FR-039**: Every panel type's failure banner MUST be rendered by one shared component — same
+- **FR-039**: Every panel type's **failure** banner MUST be rendered by one shared component — same
   layout, same tokens, same spacing, same controls in the same order — with per-type wording confined
   to the sentence that names what could not be done.
+- **FR-039a**: The terminal's non-failure strips — "starting…" and the remembered-cwd fallback — are
+  **not** failure banners and stay as they are. They report progress and a substitution, neither of
+  which offers Retry, Cancel or a cause; folding them into a failure component would make them look
+  like failures. They are out of scope, and SC-009 counts failure banners only.
 - **FR-040**: The banner MUST state what could not be done in that panel type's terms, followed by a
-  consistent pointer to where the detail is, and MUST NOT repeat the detail the consolidated notice
-  carries.
-- **FR-041**: The banner MUST appear whenever its condition holds, independently of the notification
-  preferences (FR-005a) — a user who silences a severity still sees which panels failed. Its pointer
-  MUST NOT promise a notice that may not exist: where the relevant severity is set to Never display, or
-  the notice has already gone, the banner MUST still lead the user to the detail through its own copy
-  control (FR-051) and the diagnostic log.
-- **FR-042**: Every banner MUST offer ↻ Retry and ✕ Cancel, in that order, with the same icons, titles
-  and accessible names in every panel type.
+  consistent pointer to where the detail is, and MUST NOT repeat the cause and affected-panel list the
+  consolidated notice carries.
+- **FR-040a**: The banner MUST keep naming the path it could not read, where it has one. This is not
+  duplicated detail: 027 (#161) FR-011 makes the visible path load-bearing, because an editor holding
+  a recovered buffer over a path throng could not open looks entirely ordinary, and a Ctrl+S would
+  write the remembered text back over that path. Removing it to "delegate detail to the notice" would
+  regress that feature.
+- **FR-041**: FR-005a is the rule that the banner is never hidden by the notification preferences;
+  what this requirement adds is the consequence for its wording. The pointer MUST NOT promise a notice
+  that may not exist: where the relevant severity is set to Never display, or the notice has already
+  gone, the banner MUST still lead the user to the detail through its own copy control (FR-051) and
+  the diagnostic log.
+- **FR-042**: Every banner MUST offer Retry and Cancel, in that order, with the same icons, titles and
+  accessible names in every panel type.
 - **FR-042a**: Every banner control — Retry, Cancel and the copy control of FR-051 — MUST be reachable
   and operable by keyboard, in the order they are displayed.
+- **FR-042b**: Every banner control MUST be a themeable icon with a hover title, resolved through the
+  theme's icon tokens rather than a literal glyph — the constitution's non-negotiable rule for action
+  controls, restated by 029 FR-004b. The tokens are the ones the theme already ships: `retry`, `copy`
+  and `dismiss`.
+- **FR-042c**: Every command the banner offers — Retry, Copy **and** Cancel — MUST also appear in the
+  panel's own menu, for every panel type that shows the banner. A discrete command acting on a Panel
+  that exists only as a banner button is unreachable from the place users look for panel commands; 029
+  FR-004d set this precedent for the terminal's Clear panel type, and each of the three is new work in
+  at least one panel type, which binds it immediately.
+- **FR-042d**: The labels MUST be the ones 029 already ships — **Try again** and **Clear panel type**
+  — in every panel type, plus **Copy details**. This is what makes FR-042's "same titles and
+  accessible names everywhere" true without regressing 029 FR-004a/FR-004d or churning the five test
+  ids that depend on them. "Clear panel type" is accurate for the editor too: returning a panel to its
+  panel-type selection screen *is* clearing its type, which is why
+  `packages/core/src/editor/panel-type.ts` records that `clearPanelType` is simply not wired for
+  editors yet. Where this spec says "Cancel" it names the concept; the label is *Clear panel type*.
 - **FR-043**: ✕ Cancel on an editor MUST return the panel to the panel-type selection screen, keeping
   the panel, its position in the layout and its title. It MUST NOT delete the panel.
 - **FR-044**: ✕ Cancel on a terminal MUST behave as Clear panel type does today, with no regression to
@@ -634,6 +701,9 @@ earlier one.
 
 - **FR-048**: Copying a notice MUST place every rendered part of it on the clipboard — heading,
   message, affected-panel list, and raw system detail — in reading order.
+- **FR-048a**: Where affected panels carry their own raw errors — two different unclassified failures
+  in one operation — each panel's error MUST reach the clipboard with its row. It is never rendered
+  (FR-034); copy is where it becomes reachable.
 - **FR-049**: A notice's copy text MUST be derived from what the notice renders, so that a rendered
   part added later is included without anyone remembering to mirror it. A check MUST compare copied
   text against rendered content so that omission fails rather than passes silently.
@@ -641,8 +711,9 @@ earlier one.
   tab groups, in displayed order — regardless of how far the list is scrolled. "Every panel it holds"
   is what is known at the moment of copying (FR-030); a copy taken before the user visits Tab 3 does
   not contain Tab 3.
-- **FR-051**: The shared failure banner MUST carry a copy control alongside ↻ and ✕, added once to the
-  shared component rather than per panel type.
+- **FR-051**: The shared failure banner MUST carry a copy control alongside Retry and Cancel, added
+  once to the shared component rather than per panel type, and resolved through the theme's `copy`
+  icon token per FR-042b.
 - **FR-052**: Copying from a banner MUST yield the banner's message, its subject in the form of FR-022,
   the path involved, and the underlying system error.
 - **FR-053**: Banner copy MUST work with no notice on screen — dismissed, timed out, or never
@@ -680,7 +751,8 @@ earlier one.
   files.
 - **Notice subject**: The concrete thing a notice is about — a file, folder, pane, tab, panel, panel
   type, project, sub-workspace or terminal flavour — identified by the name the interface displays for
-  it. A stated part of every notice, or an explicit "none available". A panel subject is written
+  it. The set is closed: every one of those kinds is expressible, Pane included, and there is no
+  free-text kind. A stated part of every notice, or an explicit "none available". A panel subject is written
   `Project — Tab — Panel`.
 - **Cause**: What went wrong once, however many panels it defeated. The unit a notice reports where
   the failure was classified.
@@ -705,9 +777,10 @@ earlier one.
   editing a file by hand and without restarting.
 - **SC-002**: 100% of notices raised by the application are governed by the notification preferences —
   none has display behaviour the user cannot change.
-- **SC-003**: Every notice appears in the diagnostic log exactly once, whatever its display mode — an
-  event set to Never display appears zero times on screen and exactly as often in the log as the same
-  event does when displayed.
+- **SC-003**: Every notice **raised** appears in the diagnostic log exactly once, whatever its display
+  mode — an event set to Never display appears zero times on screen and exactly as often in the log as
+  the same event does when displayed, repeats included (FR-005b). A notice that grows adds one further
+  record per growth (FR-006a); those are additional to the raise, not duplicates of it.
 - **SC-004**: No user silences errors or warnings without being told, at that moment, that those
   events will thereafter reach only the log.
 - **SC-004a**: With every severity set to Never display, a user can still see that a panel failed and
@@ -721,8 +794,9 @@ earlier one.
 - **SC-008**: Opening a project whose root folder is missing produces exactly one notice, down from
   three plus one per affected panel — and that notice names every affected panel, grouped under the
   tab it sits in, in the order the workspace shows them.
-- **SC-009**: The number of distinct failure-banner designs in the application is one, down from two,
-  and adding a new panel type adds none.
+- **SC-009**: The number of distinct **failure**-banner designs in the application is one, down from
+  two, and adding a new panel type adds none. The terminal's progress and cwd-fallback strips are not
+  failure banners and are not counted (FR-039a).
 - **SC-009a**: Everything a mouse user can do with a failure — read the list, scroll it, retry, cancel,
   copy — a keyboard user can do too, and a screen-reader user learns that a failure has spread without
   having the whole list read to them again.
@@ -750,11 +824,16 @@ earlier one.
   other duration settings are already presented — a bounded number field, not a slider or a list of
   presets.
 - The diagnostic log the application already writes is the destination for FR-006; this feature does
-  not introduce a second log or a new log location, and the log's existing level threshold applies.
+  not introduce a second log or a new log location. Its level threshold is the one thing this feature
+  overrides (FR-006b), because a threshold that silently dropped notice records would falsify the
+  guarantee FR-008 asks the user to accept.
 - Notification preferences are application-wide, shared by the main window and any sub-workspace
   windows, rather than per project or per window.
 - Preferences already renders settings categories generically, so the **Notifications** category needs
-  no bespoke preferences surface.
+  no bespoke *surface* — but it does need two new capabilities in that generic renderer: a control
+  disabled by a sibling's value (FR-011) and a confirmation before a value is committed (FR-008).
+  Verified: the settings metadata has no `enabledWhen`/`dependsOn` today, and `settings-tab.tsx`
+  carries only a single bespoke case (`terminals.disabledBuiltins`).
 - The subject sweep adjusts wording, carries an already-known subject through to the place the notice
   is raised, and changes the shape of a notice so the subject is stated rather than implied. Every
   place that raises a notice today is therefore touched.
@@ -790,6 +869,8 @@ earlier one.
 - Per-notice or per-call-site persistence overrides.
 - A notice history, notification centre, or replay of dismissed notices.
 - A clickable or navigable affected-panel list — it reports, and the panel's banner acts.
+- An affected-panel list on a notice that is not about particular panels — a stopped daemon reports
+  itself, not an inventory of everything it broke. No cross-project list exists.
 - Eagerly rendering or scanning unvisited tabs so a notice can list panels before they are known.
 - A "copy all notices" or notification-history export.
 - Rich or HTML clipboard formats.
