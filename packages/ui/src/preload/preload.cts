@@ -184,6 +184,16 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.on('throng:panel:renamed', handler);
       return () => ipcRenderer.removeListener('throng:panel:renamed', handler);
     },
+    // The same Panel, a DIFFERENT act (#184/#218): throng moved the name because it clashed with a
+    // panel elsewhere in the application. Every window must show the new name, and NO window may
+    // record it as the user's choice — hence its own channel rather than a flag on the rename.
+    notifyRetitled: (id: string, title: string) =>
+      ipcRenderer.send('throng:panel:retitle', { id, title }),
+    onRetitled: (cb: (id: string, title: string) => void) => {
+      const handler = (_event: unknown, p: { id: string; title: string }): void => cb(p.id, p.title);
+      ipcRenderer.on('throng:panel:retitled', handler);
+      return () => ipcRenderer.removeListener('throng:panel:retitled', handler);
+    },
     // A Panel was destroyed in one window; tell every window so the same Panel
     // (by id) is removed everywhere it appears — project + sub-workspaces (FR-026).
     notifyDestroyed: (id: string) => ipcRenderer.send('throng:panel:destroy', { id }),

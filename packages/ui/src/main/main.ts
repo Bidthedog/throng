@@ -1415,11 +1415,42 @@ if (isPrimaryInstance)
   });
 
   // Cross-window Panel identity sync (003): a Panel was renamed in one window;
-  // tell every window so the same Panel (by id) is renamed everywhere it appears.
-  ipcMain.on('throng:panel:rename', (_event, payload: unknown) => {
+  // tell every OTHER window so the same Panel (by id) is renamed everywhere it appears.
+  //
+  // The sender is EXCLUDED (#218). Every notifier applies the change to its own layout first and
+  // notifies afterwards, so relaying it back was always redundant — and it was not harmless: the
+  // echo re-entered the sender as a `renamePanel`, which marks a panel manually renamed. A panel
+  // whose GENERATED name the daemon had merely adjusted came back through this channel and was
+  // branded as the user's choice, which permanently suppressed its automatic title.
+  ipcMain.on('throng:panel:rename', (event, payload: unknown) => {
     const p = payload as { id?: unknown; title?: unknown } | null;
     if (!p || typeof p.id !== 'string' || typeof p.title !== 'string') return;
-    broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:panel:renamed', { id: p.id, title: p.title });
+    broadcastToWindows(
+      BrowserWindow.getAllWindows(),
+      'throng:panel:renamed',
+      { id: p.id, title: p.title },
+      senderWebContentsId(event.sender) ?? undefined,
+    );
+  });
+
+  /*
+   * A Panel was RETITLED — throng moved its name, the user did not choose it (#184/#218).
+   *
+   * A separate channel from the rename above, because the distinction has to survive the trip. Both
+   * change what a panel is called; only one of them is the user's choice, and only the user's choice
+   * may set `titleIsCustom` — which outranks every automatic title for the rest of the panel's life.
+   * Sending an adjustment down the rename channel branded it as a rename in every window that
+   * received it, which is exactly the defect this pair exists to prevent.
+   */
+  ipcMain.on('throng:panel:retitle', (event, payload: unknown) => {
+    const p = payload as { id?: unknown; title?: unknown } | null;
+    if (!p || typeof p.id !== 'string' || typeof p.title !== 'string') return;
+    broadcastToWindows(
+      BrowserWindow.getAllWindows(),
+      'throng:panel:retitled',
+      { id: p.id, title: p.title },
+      senderWebContentsId(event.sender) ?? undefined,
+    );
   });
 
   // Cross-window Panel destroy cascade (005 FR-026): a Panel was destroyed in one

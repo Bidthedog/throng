@@ -72,6 +72,15 @@ A new panel starts **untyped** — its body shows a **Panel Type** dropdown. Pic
 **Editor Panel** and press **Confirm** (or **Clear** to start over). A freshly added panel opens
 in rename mode, so you can name it immediately.
 
+**What a panel is called.** A panel names itself after whatever is inside it: a terminal shows its
+shell's window title (and, until the shell announces one, the flavour you chose), an editor shows
+its file's name without the extension. "Panel 3" is what an **untyped** panel is called, and only an
+untyped one. Type a name yourself — **F2**, double-click the header, or **Rename** in its right-click
+menu — and your name wins from then on, through a change of file or shell and across a restart;
+**Reset Name** in the same menu hands the panel back to naming itself, and is offered only on a panel
+you actually renamed. Names are unique across the whole application, so if one is already taken by a
+panel in another project or sub-workspace, throng adjusts it and tells you once.
+
 Your whole layout — tabs, splits, sizes, panel names and per-panel zoom — is saved per project
 and restored next time you open it.
 

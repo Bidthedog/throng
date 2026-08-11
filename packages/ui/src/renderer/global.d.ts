@@ -109,6 +109,9 @@ declare global {
       panel?: {
         notifyRenamed: (id: string, title: string) => void;
         onRenamed: (cb: (id: string, title: string) => void) => () => void;
+        // A name throng moved, not one the user chose (#184/#218) — never marks a panel custom.
+        notifyRetitled: (id: string, title: string) => void;
+        onRetitled: (cb: (id: string, title: string) => void) => () => void;
         notifyDestroyed: (id: string) => void;
         onDestroyed: (cb: (id: string) => void) => () => void;
         notifyDraft: (id: string, draft: unknown) => void;
