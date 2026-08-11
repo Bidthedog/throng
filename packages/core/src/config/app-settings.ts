@@ -24,6 +24,13 @@ export interface ExplorerSettings {
   dragCopyModifier: DragModifierKey;
   /** Drag modifier that forces move (default Shift) (006, FR-095). */
   dragMoveModifier: DragModifierKey;
+  /**
+   * Follow the active editor: expand and select its file in the tree whenever it changes (#188).
+   * Default ON — the tree is the thing you act on the current file WITH, so it keeping a stale
+   * selection made every rename/reveal/delete start with a hunt. Off restores the old behaviour,
+   * where only the manual "Reveal File" action moves it (#137).
+   */
+  autoRevealActiveFile: boolean;
 }
 
 /** A user-defined terminal flavour (005 Phase B, settings.terminals.flavours). */
@@ -260,6 +267,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     excludeGlobs: [...DEFAULT_EXCLUDE_GLOBS],
     dragCopyModifier: 'ctrl',
     dragMoveModifier: 'shift',
+    autoRevealActiveFile: true,
   },
   terminals: {
     flavours: [],
@@ -369,7 +377,9 @@ function explorerSettings(v: unknown, fallback: ExplorerSettings): ExplorerSetti
   const dragMoveModifier = DRAG_MODIFIER_KEYS.includes(v.dragMoveModifier as DragModifierKey)
     ? (v.dragMoveModifier as DragModifierKey)
     : fallback.dragMoveModifier;
-  return { deleteMode, excludeGlobs, dragCopyModifier, dragMoveModifier };
+  const autoRevealActiveFile =
+    typeof v.autoRevealActiveFile === 'boolean' ? v.autoRevealActiveFile : fallback.autoRevealActiveFile;
+  return { deleteMode, excludeGlobs, dragCopyModifier, dragMoveModifier, autoRevealActiveFile };
 }
 
 const DRAG_MODIFIER_KEYS: readonly DragModifierKey[] = ['ctrl', 'shift', 'alt'];
@@ -380,6 +390,7 @@ function cloneExplorer(e: ExplorerSettings): ExplorerSettings {
     excludeGlobs: [...e.excludeGlobs],
     dragCopyModifier: e.dragCopyModifier,
     dragMoveModifier: e.dragMoveModifier,
+    autoRevealActiveFile: e.autoRevealActiveFile,
   };
 }
 

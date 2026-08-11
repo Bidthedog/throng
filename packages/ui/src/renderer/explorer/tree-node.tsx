@@ -30,6 +30,10 @@ export function TreeRow({
   // Case-insensitively, because the set is built from paths the platform treats as one file however
   // they are spelled, and a tree row's own relPath keeps the spelling the filesystem reported.
   const isDirty = data.kind === 'file' && (row?.dirtyPaths.has(data.relPath.toLowerCase()) ?? false);
+  // #188 — the file the active editor is showing. Marked separately from the selection, which is
+  // hidden whenever another pane holds the keyboard; see explorer-context.ts.
+  const isActiveFile =
+    data.kind === 'file' && row?.activeFilePath != null && row.activeFilePath === data.relPath.toLowerCase();
   // Escape cancels a rename and suppresses the follow-on blur-commit (FR-090).
   const escapedRef = useRef(false);
   // Highlight the folder that would receive a drop while dragging (FR-091).
@@ -82,7 +86,9 @@ export function TreeRow({
       data-kind={data.kind}
       className={`tree-row${node.isSelected ? ' tree-row--selected' : ''}${
         isRoot ? ' tree-row--root' : ''
-      }${isCut ? ' tree-row--cut' : ''}${willDrop ? ' tree-row--drop-target' : ''}`}
+      }${isCut ? ' tree-row--cut' : ''}${willDrop ? ' tree-row--drop-target' : ''}${
+        isActiveFile ? ' tree-row--active-file' : ''
+      }`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={(e) => {

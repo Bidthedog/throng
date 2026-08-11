@@ -21,6 +21,18 @@ export interface ExplorerRowCtx {
    * about files, not only from the panel that happens to be holding it.
    */
   dirtyPaths: ReadonlySet<string>;
+  /**
+   * Root-relative path (lower-cased) of the file the ACTIVE EDITOR is showing, or null (#188).
+   *
+   * Deliberately not the same thing as the selection. The selection highlight belongs to the active
+   * pane and vanishes when the keyboard is elsewhere (explorer.css) — which is exactly when the user
+   * most wants to know which file they are in, since being in the editor is what put it there. So
+   * the active file carries its own quieter mark, shown wherever the focus happens to be.
+   *
+   * Independent of `explorer.autoRevealActiveFile` as well: turning the follow-the-editor behaviour
+   * off asks the tree not to MOVE on its own, not to stop saying what is open.
+   */
+  activeFilePath: string | null;
 }
 
 export const ExplorerRowContext = createContext<ExplorerRowCtx | null>(null);

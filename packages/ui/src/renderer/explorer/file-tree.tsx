@@ -30,8 +30,15 @@ import { useWorkspace } from '../state/workspace-store.js';
 import { openFileInTab, openFileInNewEditor } from '../editor/editor-open.js';
 import { getLastActiveEditor } from '../editor/last-active-editor.js';
 import { getEditorState, useDirtyPathKey } from '../editor/editor-state.js';
+import { useActiveEditorFilePath } from '../editor/active-editor-file.js';
 import { PanelSkeleton } from '../common/loading.js';
-import { buildTreeDragPayload, collectPanels, normaliseFolder, resolveDragEffect } from '@throng/core';
+import {
+  buildTreeDragPayload,
+  collectPanels,
+  normaliseFolder,
+  relPathUnderRoot,
+  resolveDragEffect,
+} from '@throng/core';
 import type { MenuItem } from '../workspace/context-menu.js';
 
 const ROW_HEIGHT = 24;
@@ -107,21 +114,14 @@ export function FileTree({
   } = useExplorerData(rootFolder, projectId, treeRef, name, hiddenPaths);
 
   // US6 (#137) — the editor "Reveal File" action asks the tree to reveal a file by its absolute
-  // path; do so only when the file belongs to THIS project's root (paths compared case-insensitively
-  // and slash-agnostically, since Windows is case-insensitive).
+  // path; do so only when the file belongs to THIS project's root (`relPathUnderRoot` compares
+  // case-insensitively and slash-agnostically, since Windows does).
   useEffect(() => {
     const handler = (e: Event): void => {
       const abs = (e as CustomEvent).detail?.absPath as string | undefined;
       if (!abs) return;
-      const norm = (p: string): string => p.replace(/\\/g, '/').replace(/\/+$/, '');
-      const rootN = norm(rootFolder);
-      const absN = norm(abs);
-      const rel =
-        absN.toLowerCase() === rootN.toLowerCase()
-          ? ''
-          : absN.toLowerCase().startsWith(`${rootN.toLowerCase()}/`)
-            ? absN.slice(rootN.length + 1)
-            : null;
+      const rel = relPathUnderRoot(rootFolder, abs);
+      // Focus travels with this one: the user asked to be taken to the file.
       if (rel) void revealInTree(rel);
     };
     window.addEventListener('throng:reveal-in-tree', handler);
@@ -143,6 +143,40 @@ export function FileTree({
   const keybindings = useKeybindings(); // US1 (#125): file.* shortcuts shown on the menu items
   const ws = useWorkspace();
   const explorerSettings = useAppSettings().explorer;
+
+  /*
+   * #188 — follow the active editor: whichever file the user is working in is the one selected here,
+   * so acting on it (rename, copy path, reveal, delete) never starts with a hunt.
+   *
+   * Three things make this safe rather than intrusive:
+   *
+   *   - `{ focus: false }`. The reveal fires on every panel and tab switch, and react-arborist's
+   *     `select()` otherwise focuses the row — which would pull the caret out of the editor the user
+   *     just switched INTO. That is precisely the #144 class of bug, and the reason the setting
+   *     cannot simply reuse the manual action's call.
+   *   - It keys on the PATH, not on the reveal callback's identity (which changes as folders load).
+   *     So a selection the user makes by hand stands until the active editor genuinely changes,
+   *     instead of being snapped back on the next unrelated re-render.
+   *   - A null path — a terminal, a placeholder, an unsaved document — and a file outside this
+   *     project's root both mean "nothing to do", never "clear the selection".
+   *
+   * `ready` participates because the reveal cannot find a node before the root's children exist;
+   * re-running once the tree loads is what makes a restored editor's file selected on arrival.
+   */
+  const activeEditorPath = useActiveEditorFilePath();
+  /** That file as a path of THIS tree, or null when it belongs somewhere else (or there is none). */
+  const activeFileRel = useMemo(
+    () => (activeEditorPath ? relPathUnderRoot(rootFolder, activeEditorPath) : null),
+    [activeEditorPath, rootFolder],
+  );
+  const revealRef = useRef(revealInTree);
+  useEffect(() => {
+    revealRef.current = revealInTree;
+  }, [revealInTree]);
+  useEffect(() => {
+    if (!ready || !explorerSettings.autoRevealActiveFile || !activeFileRel) return;
+    void revealRef.current(activeFileRel, { focus: false });
+  }, [ready, explorerSettings.autoRevealActiveFile, activeFileRel]);
 
   // Whether the in-progress drag will copy (vs move). Driven live from the drag
   // event's modifier keys below, and read by react-arborist's onMove at drop time.
@@ -404,9 +438,13 @@ export function FileTree({
     return rels;
   }, [dirtyKey, rootFolder]);
 
+  // Lower-cased for the same reason `dirtyPaths` is: a row's relPath keeps whatever spelling the
+  // filesystem reported, and Windows calls those the same file.
+  const activeFilePath = useMemo(() => activeFileRel?.toLowerCase() ?? null, [activeFileRel]);
+
   const rowCtx = useMemo(
-    () => ({ onContextMenu, cutPaths, openOnClick, onOpenFile, dirtyPaths }),
-    [onContextMenu, cutPaths, openOnClick, onOpenFile, dirtyPaths],
+    () => ({ onContextMenu, cutPaths, openOnClick, onOpenFile, dirtyPaths, activeFilePath }),
+    [onContextMenu, cutPaths, openOnClick, onOpenFile, dirtyPaths, activeFilePath],
   );
 
   return (

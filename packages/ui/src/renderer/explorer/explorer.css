@@ -127,6 +127,23 @@
   background: var(--throng-colour-surfaceActive);
 }
 
+/* #188 — the file the ACTIVE EDITOR is showing, marked wherever the keyboard happens to be.
+ *
+ * The selection highlight above is scoped to the active pane on purpose, and that is right for what
+ * it means: which row the next keystroke acts on. But it leaves the tree looking blank in precisely
+ * the situation this feature exists for — the user is typing in the editor, the tree has quietly
+ * followed along, and nothing on screen says so.
+ *
+ * So this is a SECOND, deliberately quieter mark with a different job: not "what the keyboard will
+ * act on" but "what you are editing". A left accent bar and a wash of the accent colour, both well
+ * under the weight of `surfaceActive`, so when the pane IS active the two read as a strong
+ * selection sitting on a marked row rather than as two rival highlights (the ambiguity the
+ * active-pane rule was introduced to remove). */
+.tree-row--active-file {
+  background: color-mix(in srgb, var(--throng-colour-accent) 10%, transparent);
+  box-shadow: inset 2px 0 0 var(--throng-colour-accent);
+}
+
 /* react-arborist gives every row a roving `tabindex` and calls `.focus()` on the highlighted one, so
    Chromium drew its default focus ring around it. That was a SECOND highlight saying the same thing
    as the selected row's background — and since the arrow keys now move the selection itself

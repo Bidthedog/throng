@@ -15,6 +15,25 @@ export function isWithinRoot(rootReal: string, candidateReal: string): boolean {
 }
 
 /**
+ * `abs` expressed relative to `root`, or null when it is not INSIDE the root (#137/#188).
+ *
+ * The comparison is case-insensitive and separator-agnostic, matching how Windows treats paths, but
+ * the returned value is sliced from the ORIGINAL string — the tree keys its nodes on the real
+ * spelling, so a lower-cased relative path would match no node at all.
+ *
+ * The root itself yields null rather than `''`: callers are revealing a FILE, and the root row is
+ * not a thing they can mean.
+ */
+export function relPathUnderRoot(root: string, abs: string): string | null {
+  // The same tidy-up normaliseFolder does, minus the lower-casing — so the slice below is taken
+  // from a string whose LENGTH matches the value being compared, whatever the caller passed in.
+  const absTidy = abs.trim().replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '');
+  const r = normaliseFolder(root);
+  if (!r || !absTidy || !absTidy.toLowerCase().startsWith(`${r}/`)) return null;
+  return absTidy.slice(r.length + 1);
+}
+
+/**
  * True when moving/copying `srcReal` INTO `destDirReal` is allowed: both inside
  * the root, and the destination is not the source itself nor a descendant of it
  * (which would be moving a folder into its own subtree).
