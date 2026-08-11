@@ -259,6 +259,25 @@ export function useEditor(params: UseEditorParams): void {
   isActivePanelRef.current =
     ws.layout?.activeTabId === tabId && !!activeTab && effectiveActivePanelId(activeTab) === panel.id;
   const configRef = useRef<EditorPanelConfig>((panel.config ?? {}) as EditorPanelConfig);
+  /**
+   * Whose config `configRef` currently holds — and a re-seed if this hook is ever handed a
+   * DIFFERENT panel (#228).
+   *
+   * `configRef` is seeded once, at mount, and everything downstream trusts it: it is the path the
+   * mount loads, the path a Ctrl+S writes to, and the path the header shows. So a component instance
+   * reused for another panel would open one panel's file into another panel's document — which is
+   * exactly what an unkeyed panel leaf allowed, across a project switch, until `split-tree.tsx`
+   * started keying by panel id.
+   *
+   * That key is the fix; this is the guard behind it. The cost is one comparison per render, and the
+   * failure it refuses is silent, cross-project, and one keystroke from writing a buffer over the
+   * wrong file — the kind of thing that should be impossible from two directions rather than one.
+   */
+  const seededFor = useRef(panel.id);
+  if (seededFor.current !== panel.id) {
+    seededFor.current = panel.id;
+    configRef.current = (panel.config ?? {}) as EditorPanelConfig;
+  }
   const keybindingsRef = useRef(keybindings);
   keybindingsRef.current = keybindings;
   /**
