@@ -86,8 +86,15 @@ export interface ExplorerApi {
   onRename: (args: { id: string; name: string }) => void;
   expandStep: () => void;
   collapseAll: () => void;
-  /** US6 (#137): reveal a file in this tree by its root-relative path (expand ancestors + select). */
-  revealInTree: (relPath: string) => Promise<void>;
+  /**
+   * US6 (#137): reveal a file in this tree by its root-relative path (expand ancestors + select).
+   *
+   * `focus` decides whether the tree also takes the keyboard. It defaults to true because the only
+   * original caller is the manual "Reveal File" action — an explicit "take me there" — but the
+   * automatic follow-the-editor reveal (#188) passes false, so it cannot pull the caret out of the
+   * text the user is typing in (the #144 class of bug).
+   */
+  revealInTree: (relPath: string, opts?: { focus?: boolean }) => Promise<void>;
   // Selection + operations (US3).
   selectedRelPaths: string[];
   primarySelected: TargetNode | null;
@@ -693,7 +700,7 @@ export function useExplorerData(
   // US6 (#137) — reveal a file IN THIS TREE: lazily load and open each ancestor (shallow → deep so
   // each level's children exist before the next opens), then select and scroll to the file.
   const revealInTree = useCallback(
-    async (relPath: string): Promise<void> => {
+    async (relPath: string, opts?: { focus?: boolean }): Promise<void> => {
       if (!treeRef.current || !relPath) return;
       const ancestors: string[] = [];
       for (let p = parentRel(relPath); p !== ''; p = parentRel(p)) ancestors.unshift(p);
@@ -705,7 +712,7 @@ export function useExplorerData(
       if (parent) await ensureLoaded(parent);
       const a = treeRef.current;
       if (!a || !a.get(relPath)) return;
-      a.select(relPath, { focus: true });
+      a.select(relPath, { focus: opts?.focus ?? true });
       a.scrollTo(relPath);
       persist(relPath);
     },

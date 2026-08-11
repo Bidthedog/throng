@@ -174,6 +174,16 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     clearable: true, // empty = exclude nothing; the parser honours an explicit empty list
   },
   {
+    // #188 — the tree follows the active editor. Grouped with the other explorer settings because
+    // it is the TREE's behaviour that changes, even though the editor is what triggers it.
+    key: 'explorer.autoRevealActiveFile',
+    label: 'Follow the active editor',
+    description:
+      "Automatically select the currently active editor's file in Files & Folders, expanding its folders.",
+    group: 'File Explorer',
+    control: 'toggle',
+  },
+  {
     key: 'explorer.dragCopyModifier',
     label: 'Copy-drag modifier',
     description: 'The modifier key that makes a file-tree drag copy instead of move.',

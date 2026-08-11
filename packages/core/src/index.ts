@@ -107,6 +107,7 @@ export {
   isWithinRoot,
   isDropAllowed,
   isRoot,
+  relPathUnderRoot,
   resolveTarget,
   validateRename,
   dedupeName,

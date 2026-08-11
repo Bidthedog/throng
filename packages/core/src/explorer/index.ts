@@ -3,7 +3,7 @@
 export type { FileNode, NodeKind } from './node.js';
 export { toNodes, sortNodes, joinRel, parentRel } from './node.js';
 export { isExcluded, DEFAULT_EXCLUDE_GLOBS } from './exclude.js';
-export { isWithinRoot, isDropAllowed, isRoot } from './path-rules.js';
+export { isWithinRoot, isDropAllowed, isRoot, relPathUnderRoot } from './path-rules.js';
 export type { TargetNode } from './target.js';
 export { resolveTarget } from './target.js';
 export type { RenameResult, DedupeStyle } from './naming.js';
