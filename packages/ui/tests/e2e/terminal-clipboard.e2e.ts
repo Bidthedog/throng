@@ -144,7 +144,18 @@ test('right-clicking the terminal opens the themed in-app menu, and Paste works'
   try {
     app = await electron.launch({
       args: [mainEntry, `--user-data-dir=${userData}`],
-      env: { ...process.env, THRONG_PIPE_NAME: pipe, THRONG_CONFIG_ROOT: cfg },
+      // The in-process clipboard seam, as `harness.ts` uses for every app it launches. Without it
+      // this test PASTES THE DEVELOPER'S REAL CLIPBOARD: Electron's clipboard does not work under
+      // this harness, so the token written below never lands, and Paste delivers whatever the
+      // machine happened to be holding. Measured on a dev box carrying multi-line text — the shell
+      // showed a wall of PowerShell `>>` continuation prompts and the assertion failed 3/3, on a
+      // clean master too. CI passes only because a fresh runner's clipboard is empty.
+      env: {
+        ...process.env,
+        THRONG_PIPE_NAME: pipe,
+        THRONG_CONFIG_ROOT: cfg,
+        THRONG_E2E_CLIPBOARD: 'memory',
+      },
     });
     const win = await app.firstWindow();
     await app.evaluate(({ dialog }) => {
@@ -227,7 +238,14 @@ test('#142: Ctrl+V pastes the clipboard into the terminal exactly once', async (
   try {
     app = await electron.launch({
       args: [mainEntry, `--user-data-dir=${userData}`],
-      env: { ...process.env, THRONG_PIPE_NAME: pipe, THRONG_CONFIG_ROOT: cfg },
+      // The in-process clipboard seam — same reason as the Paste-menu test above: without it this
+      // pastes whatever the developer's machine is holding, not the token it seeded.
+      env: {
+        ...process.env,
+        THRONG_PIPE_NAME: pipe,
+        THRONG_CONFIG_ROOT: cfg,
+        THRONG_E2E_CLIPBOARD: 'memory',
+      },
     });
     const win = await app.firstWindow();
     await app.evaluate(({ dialog }) => {
