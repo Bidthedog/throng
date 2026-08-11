@@ -83,10 +83,22 @@ async function enterProject(win: Page, name: string): Promise<void> {
 /** Right-click a panel header and report whether "Reset Name" is offered. */
 async function resetNameEnabled(win: Page, panelId: string): Promise<boolean> {
   await win.getByTestId(`panel-handle-${panelId}`).click({ button: 'right' });
+  const menu = win.getByTestId('context-menu');
   const item = win.getByTestId('menu-item-Reset Name');
   await expect(item).toBeVisible();
   const disabled = await item.isDisabled();
+  /*
+   * A plain Escape, and it closes the menu wherever focus happens to be — the root menu closes from
+   * a WINDOW listener, not from the list's own handler.
+   *
+   * This is the assertion that found #228's neighbour: that listener used to be attached inside a
+   * `setTimeout(…, 0)` alongside the outside-pointer one, so for a macrotask the menu was visible,
+   * focused and deaf to Escape. On a busy event loop that window is wide enough to hit — 1 run in 5
+   * here, and 5 in 10 while the app was still starting. Keeping the assertion (rather than merely
+   * pressing and moving on) is what makes this spec able to notice it again.
+   */
   await win.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
   await expect(item).toHaveCount(0);
   return !disabled;
 }
