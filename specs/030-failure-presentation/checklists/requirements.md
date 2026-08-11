@@ -75,6 +75,37 @@ appended because no plan or tasks exist yet, so no downstream artefact reference
   of sameness.
 - The affected-panel list's height bound is left to planning; the requirement is that a bound exists.
 
+### Scope as it now stands
+
+**80 functional requirements, 16 success criteria, 112 tasks** after six analysis passes — counted
+from the files (`grep -c '^- \[ \] T'`, `grep -o '\*\*FR-[0-9]\{3\}[a-z]\?\*\*' | sort -u | wc -l`),
+never by arithmetic, because every count stated by hand in this feature so far has been wrong. The
+earlier line recording "72 requirements" was stale from before the adoption of #235/#236/#238.
+
+### What the analysis passes actually found
+
+Worth recording, because the cost was real and so was the return. Each pass found defects the
+previous one created:
+
+| Pass | Criticals | The substance |
+|---|---|---|
+| 1 | 3 | Rendering the raw error contradicted 029 FR-016; the editor's new Cancel had no menu item; controls were specified as literal glyphs instead of theme tokens |
+| 2 | 1 | The menu-item fix bound Retry and Cancel but not Copy — the same principle, one layer down |
+| 3 | 2 | FR-048a added with no task; the banner's pointer sentence given implementation and no test |
+| 4 | 3 | FR-006b **unimplementable** — the log filters at write time and exposes no bypass; a silenced notice's dedup was vacuous; Phase 7 ordered implementation-before-test |
+| 5 | 2 | The log record had no field for the raw error it was required to carry; the silenced-dedup shadow would have swallowed every record after the first |
+| 6 | **0** | No criticals, no constitution violations. One HIGH (two US1 assertions unreachable until US3's model exists), three MEDIUM, eight LOW — mostly line numbers and a log line shape that could not distinguish `info` from `success` |
+| 7 | **0** | "Nothing here blocks implementation." Two HIGHs worth fixing before their phases: the 12 `notify()` calls are only 12 *literal* calls — one is the shared `useErrorNotice` hook with four unnamed callers covering every explorer, project and sub-workspace failure, the exact path #195 is about; and deleting the editor banner orphans a test id asserted by three specs, two of them `toHaveCount(0)` that would pass vacuously |
+
+**Stopping here.** The exit condition was "no criticals and nothing blocking", not "an analyzer runs
+out of opinions" — a document this size will always yield editorial findings, and `/speckit-converge`
+catches those against the built code, where they can be judged against something real.
+
+### Deliberately unmapped requirements
+
+- **FR-009** — a non-obligation ("no other part of the interface is *required* to indicate that a
+  severity is silenced"). It correctly has no task and should not be re-flagged as a coverage gap.
+
 ### Open items for planning, not blockers
 
 - Where the FR-056 inventory lives and whether it is maintained after this feature. Structural

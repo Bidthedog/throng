@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/031-tab-strip-and-config-bounds/plan.md
+at specs/030-failure-presentation/plan.md
 <!-- SPECKIT END -->
 
 ## Specialist agents
