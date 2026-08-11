@@ -32,11 +32,29 @@ export const PREFERENCES_TAB_CHANNEL = 'throng:preferences:tab';
  */
 export const WINDOW_BLURRED_CHANNEL = 'throng:window:blurred';
 
-/** Tell every window except `except` whether it is now blurred by the app-modal preferences window. */
+/**
+ * Tell every window except `except` whether it is now blurred by the app-modal preferences window.
+ *
+ * Every send is guarded, because this runs from the prefs window's `closed` handler and therefore
+ * runs DURING SHUTDOWN, when the other windows are being torn down around it. `isDestroyed()` alone
+ * was not enough: a window reports itself alive for a moment after its `webContents` has gone, and
+ * either can be destroyed between the check and the send. Sending to a dead one throws
+ * `TypeError: Object has been destroyed` out of an event handler with nothing to catch it, which
+ * kills the MAIN PROCESS mid-quit (exit code 7) — so the rest of the shutdown, including the
+ * settings/layout drain that `terminate-all-drain` exists to protect, never runs.
+ *
+ * Observed twice per full local E2E run, silently, until the harness started reporting an app that
+ * dies while a test is still using it (#240).
+ */
 function broadcastBlurred(blurred: boolean, except?: BrowserWindow): void {
   for (const w of BrowserWindow.getAllWindows()) {
-    if (w === except || w.isDestroyed()) continue;
-    w.webContents.send(WINDOW_BLURRED_CHANNEL, blurred);
+    if (w === except) continue;
+    try {
+      if (w.isDestroyed() || w.webContents.isDestroyed()) continue;
+      w.webContents.send(WINDOW_BLURRED_CHANNEL, blurred);
+    } catch {
+      /* destroyed between the check and the send — it needs no blur notice either way */
+    }
   }
 }
 
