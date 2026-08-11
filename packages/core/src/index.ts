@@ -563,6 +563,8 @@ export {
   resetZoom,
 } from './workspace/operations.js';
 export type { Edge, NewTabIds } from './workspace/operations.js';
+export { panelDisplayTitle } from './workspace/panel-title.js';
+export type { PanelTitleSources } from './workspace/panel-title.js';
 export {
   detachPanel,
   detachTab,

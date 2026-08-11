@@ -60,9 +60,18 @@ export function PanelNameSync(): null {
           // retitle, NOT rename: throng chose this name, the user did not. A rename would mark the
           // panel manually titled and permanently suppress its auto-title (#176).
           wsRef.current.retitlePanel(panel.id, granted);
-          // Other windows hold this panel too when it is mirrored into a sub-workspace; the rename
-          // has to reach them or the two views would disagree about what it is called.
-          window.throng?.panel?.notifyRenamed?.(panel.id, granted);
+          /*
+           * …and it has to stay a RETITLE on the way out, too (#218).
+           *
+           * Other windows hold this panel when it is mirrored into a sub-workspace, so the new name
+           * must reach them or the two views disagree about what it is called. It used to travel on
+           * the RENAME channel, which undid the care taken two lines above: the main process relayed
+           * it to every window INCLUDING this one, and `PanelRenameSync` applied it with
+           * `renamePanel`. So the panel this component had deliberately retitled was, a beat later,
+           * marked manually renamed by its own broadcast — offering "Reset Name" on a panel nobody
+           * had renamed and suppressing the auto-title that #176 restored.
+           */
+          window.throng?.panel?.notifyRetitled?.(panel.id, granted);
         });
       }
     }

@@ -1,11 +1,11 @@
-import { useEffect, useState, type KeyboardEvent, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactElement } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import {
   collectPanels,
   countPanels,
   defaultPanelTypeRegistry,
-  editorAutoTitle,
   editorPathParts,
+  panelDisplayTitle,
   toDisplayPath,
   effectiveActivePanelId,
   panelZoomLevel,
@@ -135,35 +135,19 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const terminalCwd = useTerminalCwd(panel.id);
   // US10 (#89): a terminal's live window title replaces the panel name in the header when present.
   const terminalTitle = useTerminalTitle(panel.id);
-  // An editor with no manual name auto-derives its title from the open file's basename (024 US5,
-  // FR-015 — final extension stripped); null when the panel is not an editor, has been renamed, or
-  // has no file open (then the default placeholder stands).
-  //
-  // The file path is taken from the live editor state when it has registered, but FALLS BACK to the
-  // panel's own `config.filePath` before that happens (#97 follow-up). `setPanelType(editor, …)` writes
-  // the path onto the panel synchronously, while the editor's `editorUi` state registers a beat later
-  // when the CodeMirror view mounts — so a freshly opened editor would otherwise show its placeholder
-  // name ("Panel N") until that registration landed. Trusting `config.filePath` in the gap makes the
-  // auto-name appear immediately, on every open path.
-  const editorFilePath = editorUi
-    ? (editorUi.filePath ?? null)
-    : typeof panel.config?.filePath === 'string'
-      ? panel.config.filePath
-      : null;
-  const editorAuto =
-    panel.kind === 'editor' && !panel.titleIsCustom && editorFilePath
-      ? editorAutoTitle(editorFilePath)
-      : null;
-  // The name shown in the header and its hover tooltip. Precedence: a user RENAME wins over
-  // everything (#89 follow-up — a rename must not be overridden by the shell's OSC title, or by an
-  // editor's file name); otherwise a terminal shows its live window title and an editor shows its
-  // open file's basename; otherwise the default placeholder. "Reset Name" clears the custom mark,
-  // which drops each panel type back to its auto source.
-  const effectiveTitle = panel.titleIsCustom
-    ? panel.title
-    : panel.kind === 'terminal'
-      ? (terminalTitle ?? panel.title)
-      : (editorAuto ?? panel.title);
+  // The file path an editor names itself after: the live editor state when it has registered, and
+  // the panel's own `config.filePath` otherwise (#97 follow-up). `setPanelType(editor, …)` writes
+  // the path onto the panel synchronously, while `editorUi` registers a beat later when the
+  // CodeMirror view mounts — so a freshly opened editor would show its placeholder until that
+  // landed. The config also backstops a restored editor whose live state has no path yet (#218).
+  const editorFilePath =
+    editorUi?.filePath ?? (typeof panel.config?.filePath === 'string' ? panel.config.filePath : null);
+  // The name shown in the header and its hover tooltip. The rule lives in core (`panelDisplayTitle`)
+  // so it can be asserted without launching the application, and so the header, the tooltip and any
+  // future surface that has to name a panel cannot drift apart: a user rename outranks everything,
+  // then the live/secondary automatic source for the panel's kind, then the placeholder — which is
+  // correct only while the panel is untyped.
+  const effectiveTitle = panelDisplayTitle(panel, { terminalTitle, editorFilePath });
 
   // Removal verb per ownership + location (011, FR-030/031). Inside a sub-workspace a
   // Panel backed by a real project (`originProject` resolved above) is a mirrored VIEW:
@@ -189,6 +173,27 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   }, [ws, panel.id]);
 
   /**
+   * What the open rename box was SEEDED with — the yardstick a commit is measured against.
+   *
+   * The input is uncontrolled (`defaultValue`), so it holds whatever it was given at mount for as
+   * long as it is open. `panel.title`, meanwhile, can change underneath it: `PanelNameSync` claims
+   * every panel's name as it appears and RETITLES the panel when the daemon moves it, which for a
+   * brand-new panel happens moments after the box opens — panels are numbered within their own
+   * layout, so a clash with another project is the norm rather than the exception (#184).
+   *
+   * Comparing the submitted value against a title that can move is what let an UNTOUCHED box commit:
+   * the box still held "Panel 9", the panel had become "Panel 9 (2)", the two differed, and clicking
+   * a panel-type button therefore renamed the panel the user had typed nothing into (#218 A2).
+   * Against the seed, an untouched box is always equal to itself, whatever else has happened.
+   *
+   * Recorded from the INPUT, in its focus handler, rather than from `panel.title` when the box is
+   * asked to open: the two can already differ by then, because the box opens from an effect and
+   * mounts on a later render. The element's own value is what the user is looking at, so it is the
+   * only honest yardstick for "did they change it?".
+   */
+  const renameSeed = useRef('');
+
+  /**
    * Confirm (or dismiss) the inline rename box.
    *
    * Only a CHANGED name is a rename (024 US5/US10 follow-up). This matters far more than it looks: a
@@ -201,7 +206,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
    */
   const commit = (value: string): void => {
     const trimmed = value.trim();
-    if (trimmed.length > 0 && trimmed !== panel.title) {
+    if (trimmed.length > 0 && trimmed !== renameSeed.current.trim()) {
       /*
        * A panel's name is unique across the WHOLE application (024 follow-up) — every project and
        * every sub-workspace — because the name is how a user refers to a panel: in the tab strip, in
@@ -688,7 +693,10 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             data-testid={`panel-rename-input-${panel.id}`}
             defaultValue={panel.title}
             autoFocus
-            onFocus={(e) => e.target.select()}
+            onFocus={(e) => {
+              renameSeed.current = e.target.value; // the yardstick — see `commit`
+              e.target.select();
+            }}
             onClick={(e) => e.stopPropagation()}
             onBlur={(e) => commit(e.target.value)}
             onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {

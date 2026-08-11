@@ -73,7 +73,8 @@ function TabChip({
   tab: Tab;
   active: boolean;
   renaming: boolean;
-  onRenameCommit: (title: string) => void;
+  /** The new title, or `null` when the box is leaving without a change (see `commit`). */
+  onRenameCommit: (title: string | null) => void;
   onStartRename: () => void;
   onMenu: (state: TabMenuState) => void;
 }): ReactElement {
@@ -136,9 +137,23 @@ function TabChip({
     return () => window.removeEventListener(TREE_DROP_EVENT, onTreeDrop);
   }, [tab.id]);
 
+  /**
+   * What the open box was seeded with, so an untouched box can be told from an edit (#218).
+   *
+   * The panel header's rename had this guard and the tab strip's did not — the asymmetry the issue
+   * asks about. A tab carries no `titleIsCustom`, so committing an unchanged title never branded
+   * anything; it did write an identical layout and pay for an autosave, and it left the one rule
+   * ("only a changed name is a rename") stated in only one of the two places that need it.
+   */
+  const renameSeed = useRef('');
+
   const commit = (value: string): void => {
     const trimmed = value.trim();
-    onRenameCommit(trimmed.length > 0 ? trimmed : tab.title);
+    if (trimmed.length === 0 || trimmed === renameSeed.current.trim()) {
+      onRenameCommit(null); // nothing typed, or typed back to what it already said
+      return;
+    }
+    onRenameCommit(trimmed);
   };
 
   return (
@@ -194,12 +209,15 @@ function TabChip({
           data-testid={`tab-rename-input-${tab.id}`}
           defaultValue={tab.title}
           autoFocus
-          onFocus={(e) => e.target.select()}
+          onFocus={(e) => {
+            renameSeed.current = e.target.value; // the yardstick — see `commit`
+            e.target.select();
+          }}
           onClick={(e) => e.stopPropagation()}
           onBlur={(e) => commit(e.target.value)}
           onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
             if (e.key === 'Enter') commit((e.target as HTMLInputElement).value);
-            if (e.key === 'Escape') onRenameCommit(tab.title);
+            if (e.key === 'Escape') onRenameCommit(null); // cancelled — nothing to write
           }}
         />
       ) : (
@@ -725,7 +743,7 @@ export function TabGroup(): ReactElement {
               active={tab.id === activeTab?.id}
               renaming={renamingTabId === tab.id}
               onRenameCommit={(title) => {
-                ws.renameTab(tab.id, title);
+                if (title !== null) ws.renameTab(tab.id, title);
                 setRenamingTabId(null);
               }}
               onStartRename={() => setRenamingTabId(tab.id)}
