@@ -112,7 +112,26 @@ export function SplitTree({
   path: number[];
 }): ReactElement {
   if (isPanel(node)) {
-    return <PanelPlaceholder panel={node} tabId={tabId} />;
+    /*
+     * KEYED BY PANEL ID, and this is load-bearing (#228).
+     *
+     * React reconciles by position and type, so an unkeyed leaf lets a DIFFERENT panel reuse the
+     * component instance standing in the same slot — and a panel's component is full of state that
+     * is seeded once at mount: the editor's `configRef` (its file path), its CodeMirror view, its
+     * document replica, the terminal's attachment. Switching to another project whose layout has the
+     * same shape therefore mounted project B's panel id on top of project A's editor, which then
+     * loaded A's file into B's panel: the file flashed correctly and was overridden a beat later,
+     * and a dirty buffer ended up wearing a path from a project it had never been in.
+     *
+     * Within one project the same reuse happened on every tab switch and went unnoticed, because
+     * both documents were already registered in UI main and the mount adopted the authority's path
+     * for its own panel id. The cross-project case had no such backstop — the incoming panel's
+     * document did not exist yet, so the stale path was the only one on offer.
+     *
+     * The id is the panel's identity everywhere else in the application (documents, recovery temps,
+     * terminal sessions are all keyed by it), so it is the identity React must use as well.
+     */
+    return <PanelPlaceholder key={node.id} panel={node} tabId={tabId} />;
   }
   return <SplitContainer node={node} tabId={tabId} path={path} />;
 }
