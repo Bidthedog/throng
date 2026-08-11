@@ -139,6 +139,13 @@ export type {
   StartingFolderMode,
 } from './config/app-settings.js';
 export { DEFAULT_APP_SETTINGS, parseAppSettings } from './config/app-settings.js';
+// 031 (#227) — the declared-bounds guard, and the guarded read every settings reader should use.
+export {
+  applyDeclaredBounds,
+  type Correction,
+  type CorrectionOutcome,
+} from './config/bounds-guard.js';
+export { parseSettingsGuarded, guardedSettingsValidator } from './config/settings-read.js';
 export type { StartingFolderConfig, StartingFolderContext } from './config/starting-folder.js';
 export { resolveStartingFolder, isOverrideResolvable } from './config/starting-folder.js';
 // Shared zoom range & mapping (012) — global + per-type zoom use one source.

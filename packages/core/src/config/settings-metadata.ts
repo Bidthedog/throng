@@ -281,6 +281,20 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     min: 5242880,
     max: 262144000,
     step: 5242880,
+    /*
+     * 031 (#227) — the SECOND setting whose slider floor is not its real floor.
+     *
+     * The 5 MiB minimum exists so the 5 MiB step is a sane place for the control to start, not
+     * because a smaller cap is invalid: "refuse anything over 1 MB" is a perfectly reasonable thing
+     * to ask for, and hand-editing was always how you asked. Enforcing the slider's minimum would
+     * have silently RAISED every such user's cap to 5 MiB — the same trap `diagnostics.maxFileSizeKb`
+     * set from the other direction, and found the same way, by the guard changing a behaviour a test
+     * depended on (os-drop.e2e.ts lowers this to make its fixture cheap).
+     *
+     * 1 KiB is the floor because below it nothing opens at all, which is a broken app rather than a
+     * strict one.
+     */
+    hardMin: 1024,
   },
   {
     key: 'editor.projectPathDisplay',
@@ -493,9 +507,19 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     min: 64,
     // 4 MB a file rather than 8: the step has to stay aimable (the slider guard wants one step to
     // be at least 1% of the range), and 4 MB × the retention limit is already far more log than any
-    // report needs. A larger cap is still settable by hand — the parser accepts up to 64 MB.
+    // report needs.
     max: 4096,
     step: 64,
+    /*
+     * 031 (#227) — a larger cap really is settable by hand, and now SAYS so.
+     *
+     * This was previously stated only in the comment above ("the parser accepts up to 64 MB"), which
+     * the read-side guard cannot read. When #227 made declared ranges binding, that would have
+     * silently rewritten a user's deliberate 64 MB log cap down to 4 MB on the next start — a
+     * capability revoked by a change meant to be a safety net. The slider's ceiling constrains the
+     * CONTROL; this constrains the FILE.
+     */
+    hardMax: 65_536,
   },
   {
     key: 'diagnostics.keepFiles',

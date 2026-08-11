@@ -65,6 +65,9 @@ export interface MapColumn {
   allowedValues?: readonly (string | number)[];
   min?: number;
   max?: number;
+  /** As on {@link FieldDescriptor}: the enforced bound where it differs from the control's range. */
+  hardMin?: number;
+  hardMax?: number;
 }
 
 /** One editor field: a configurable key plus how to render and constrain it. */
@@ -81,10 +84,24 @@ export interface FieldDescriptor {
   control: ControlKind;
   /** allowed set for select/multiselect/enum (FR-029). */
   allowedValues?: readonly (string | number)[];
-  /** numeric/font-size constraints. */
+  /** numeric/font-size constraints — the CONTROL's range. */
   min?: number;
   max?: number;
   step?: number;
+  /*
+   * 031 (#227) — the bound the read-side guard ENFORCES, where it differs from the control's range.
+   *
+   * Defaults to `min`/`max`, so every descriptor that declares neither is unaffected and the guard's
+   * contract stays universal. It exists because one shipped setting genuinely needs the two to
+   * differ: `diagnostics.maxFileSizeKb` caps its slider at 4096 so the control stays aimable (one
+   * step must be ≥1% of the range) while a hand-set 64 MB remains legitimate.
+   *
+   * That intent used to live in a COMMENT, which the guard cannot read — so enforcing the declared
+   * maximum would have silently rewritten a user's 64 MB log cap to 4 MB. A wider hard bound must
+   * therefore be declared, never implied.
+   */
+  hardMin?: number;
+  hardMax?: number;
   /** element control for an 'array' field. */
   itemControl?: ControlKind;
   /** value columns for a 'map' field — the keyed table's shape (016, F5). */

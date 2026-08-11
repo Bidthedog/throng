@@ -8,7 +8,7 @@ import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
   isValidThemeName,
-  parseAppSettings,
+  guardedSettingsValidator,
   parseKeybindings,
   THRONG_THEME,
   type AppSettings,
@@ -41,7 +41,7 @@ export async function readConfigPayload(
   store: IConfigStore,
   loadIconPacks: () => Promise<LoadedIconPack[]> = async () => [],
 ): Promise<ConfigPayload> {
-  const settings = await store.read({ kind: 'settings' }, DEFAULT_APP_SETTINGS, parseAppSettings);
+  const settings = await store.read({ kind: 'settings' }, DEFAULT_APP_SETTINGS, guardedSettingsValidator);
   // Confine the active-theme name to a safe single segment before it becomes a file
   // path — a hand-edited `appearance.theme` like "../../x" must not read off-tree.
   const activeThemeName = isValidThemeName(settings.appearance.theme)

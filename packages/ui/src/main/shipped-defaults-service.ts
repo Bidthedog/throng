@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
-  parseAppSettings,
+  guardedSettingsValidator,
   parseKeybindings,
   planThemeUpgrade,
   reservedThemeNames,
@@ -131,7 +131,7 @@ export class ShippedDefaultsService {
 
   /** FR-010/011/016: reset one setting leaf (dotted path) to its shipped value. */
   async resetSetting(path: string): Promise<ResetOne> {
-    const current = await this.store.read({ kind: 'settings' }, DEFAULT_APP_SETTINGS, parseAppSettings);
+    const current = await this.store.read({ kind: 'settings' }, DEFAULT_APP_SETTINGS, guardedSettingsValidator);
     const next = resetSettingValue(current, path, this.shipped);
     if (next === null) return { ok: false, reason: 'no-default' };
     const res = await this.store.writeFilesAtomic([

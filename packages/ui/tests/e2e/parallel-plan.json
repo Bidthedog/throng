@@ -85,6 +85,7 @@
     "subworkspace-rename-title.e2e.ts",
     "subworkspace-sync.e2e.ts",
     "subworkspace-titlebar.e2e.ts",
+    "tab-strip-overflow.e2e.ts",
     "terminal-altscreen-parity.e2e.ts",
     "terminal-clipboard.e2e.ts",
     "terminal-command-memory.e2e.ts",
