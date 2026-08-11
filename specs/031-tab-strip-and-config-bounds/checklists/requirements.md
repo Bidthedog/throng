@@ -115,6 +115,35 @@ trace of the reversed wording remains in the spec.
     also settles what a rename field does when opened on a name already longer than the limit —
     committing applies the limit, so a rename cannot reintroduce an over-long name.
 
+- **Iteration 6 (2026-08-11, `/speckit-analyze` remediation, two passes)**: **112 FRs, 18 SCs,
+  15 clarifications, 137 tasks.** FR coverage 112/112. Checklist 16/16.
+  - **Pass 1** returned 0 Critical / 3 High. The two that mattered were both verified against source
+    before acting:
+    - **C1** — the spec claimed `linkHoverDelayMs` was the only setting whose parsed range disagreed
+      with its declared one. There are **four**. Three are drift and now resolve to their declaration
+      (FR-015). The fourth, `diagnostics.maxFileSizeKb`, is *deliberate* — its descriptor says the
+      4096 ceiling exists so the slider stays aimable while "the parser accepts up to 64 MB". FR-008
+      as written would have silently rewritten a user's hand-set 64 MB log cap to 4 MB. Resolved by
+      FR-015a–c: `min`/`max` stays the hard bound, and a genuinely wider bound must be **declared**
+      via `hardMin`/`hardMax`, never left in a comment the guard cannot read.
+    - **A1** — the three new sliders had no `step`, and `slider-descriptors.test.ts` enforces
+      "step ≥ 1% of range". `tabs.maxNameLength` at 10–128 with step 1 is 0.85% and would have
+      **reddened a shipped test**. Steps are now 50 / 50 / 2, each checked for its default staying
+      reachable.
+  - **Pass 2** confirmed every fix landed and found **two Highs the remediation itself introduced** —
+    which is the loop earning its keep:
+    - **I5** — consolidating the settings-exposure assertions put all three under US3, including two
+      settings US4 and US5 add. It could not have gone green in its own phase. Split across T057 /
+      T085a / T105a, with the shared spec file completed incrementally.
+    - **I6** — four test tasks had landed *after* the code they test, contradicting the file's own
+      test-first rule. Three moved up; **T015b deliberately did not** — it sweeps existing specs for
+      selectors the restructure moves, so written first it would fail for a reason unrelated to its
+      assertion. The reasoning is recorded beside the task.
+    - **U5** was the best catch of either pass: `MapColumn.key` is optional and
+      `editor.languageByExtension`'s only column declares neither a key nor `allowedValues`. A naive
+      guard would have found every language mapping "outside the declared set" and replaced it with
+      the default — wiping the one table FR-008f exists to protect. Now G7a–c, with T021a–c.
+
 ### Settled as assumptions rather than questions (low impact, obvious defaults)
 
 - The picker lists **its own window's** tabs — each window has its own strip.

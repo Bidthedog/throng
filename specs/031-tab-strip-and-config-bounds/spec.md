@@ -45,6 +45,8 @@ project's files is not in this feature's scope.
 - Q: Does anything acknowledge a keystroke the rename field refuses at the limit? → A: **A character counter appears in the rename field as the name nears the limit** (the last 10 characters), showing used against total and reading as at-limit when full. Nothing is shown otherwise, and a refused keystroke is not an error state.
 - Q: Does the animated scroll honour the operating system's "reduce motion" preference? → A: **Yes — it forces instant scrolling**, exactly as a duration of 0 does, whatever the configured duration says. The setting is unchanged; it simply has no effect while the preference is on. This matches the three places throng already honours the preference.
 - Q: What happens when a scroll begins while another is still running? → A: **The new one supersedes the old.** It starts from wherever the strip currently is and eases to the new target over the full duration. Scrolls never queue, and the strip settles once at the most recent target.
+- Q: `/speckit-analyze` found that **three more** settings parse a wider range than they declare — and one documents the gap as deliberate (`diagnostics.maxFileSizeKb` declares 64–4096 "so the slider stays aimable" while stating "a larger cap is still settable by hand — the parser accepts up to 64 MB"). Does the declaration simply win everywhere? → A: **No, not blindly.** A declared `min`/`max` remains the **hard bound** and the guard's universal contract, so `terminals.linkHoverDelayMs`, `diagnostics.keepFiles` and `search.asYouTypeDebounceMs` — none of which justify their wider parse — resolve to their declaration. Where a wider hard bound is genuinely intended, the descriptor MUST say so **explicitly** with `hardMin`/`hardMax`, rather than leaving it in a comment the guard cannot read. `diagnostics.maxFileSizeKb` takes `hardMax: 65536`, preserving a shipped capability that FR-008 would otherwise have silently revoked — a user's deliberate 64 MB log cap would have been rewritten to 4 MB on next start.
+- Q: A hard cut can leave a trailing space, which is invisible and makes two names look identical. What happens? → A: **Trim trailing whitespace after the cut.** The limit governs the name's length, not its final character, and a name ending in an invisible space is a name the user cannot distinguish or retype.
 - Q: What counts as one "character" for the limit? → A: **Grapheme clusters** — what the user perceives as one character. Truncation MUST cut only on a cluster boundary, so a name never ends in a broken encoding: no split surrogate pair, no emoji cut in half, no combining accent separated from the letter it belongs to. Whatever the cut produces must render as whole characters. (This does **not** change FR-040 — the stored value is still replaced at the next ordinary layout save.)
 
 ---
@@ -283,6 +285,12 @@ cap.
    **Then** it opens successfully with the name brought within the current limit.
 4a. **Given** a limit of 64 and a 300-character name, **When** it is read, **Then** the value is
     the first 64 characters, with no ellipsis in it.
+4b. **Given** that truncated name, **When** it is read again at the same limit, **Then** it is
+    unchanged — truncating twice is the same as truncating once.
+4c. **Given** a name that was cut, **When** the user looks at the tab, **Then** an ellipsis shows
+    that it was cut; **and** the stored value still contains no ellipsis.
+4d. **Given** a name exactly at the limit that was never cut, **When** the user looks at the tab,
+    **Then** no ellipsis is shown.
 4e. **Given** a name whose 64th and 65th characters are halves of one emoji, **When** it is
     truncated, **Then** the cut falls before that emoji rather than through it — the result renders
     as whole characters and contains no broken encoding.
@@ -291,12 +299,9 @@ cap.
     together, never separated.
 4g. **Given** a limit of 10 and a name of ten emoji, **When** the user types into the rename field,
     **Then** all ten are accepted — the cap counts what the user sees, not what it costs to encode.
-4b. **Given** that truncated name, **When** it is read again at the same limit, **Then** it is
-    unchanged — truncating twice is the same as truncating once.
-4c. **Given** a name that was cut, **When** the user looks at the tab, **Then** an ellipsis shows
-    that it was cut; **and** the stored value still contains no ellipsis.
-4d. **Given** a name exactly at the limit that was never cut, **When** the user looks at the tab,
-    **Then** no ellipsis is shown.
+4h. **Given** a name whose cut lands immediately after a space, **When** it is truncated, **Then**
+    the trailing space is trimmed, so two names that differ only past the cut cannot render
+    identically.
 5. **Given** a panel whose name is derived automatically from a file or a running command, **When**
    that derived name exceeds the limit, **Then** the displayed name is brought within it.
 6. **Given** names longer than a newly lowered limit, **When** those names are next read, **Then**
@@ -398,7 +403,8 @@ context menu's Destroy Tab.
   that appeared only in the cut-off tail no longer finds the tab. That is the cost of the limit, not
   a defect in the picker.
 - **A truncated name that ends in whitespace.** A hard cut can leave a trailing space, which is
-  invisible and would make two names look identical.
+  invisible and would make two names look identical. **Resolved by FR-037e**: trailing whitespace is
+  trimmed after the cut.
 - **A cut that lands inside an encoded character.** A multi-code-point emoji, a flag, a
   skin-tone-modified emoji, a letter plus combining accent, or a surrogate pair straddling the limit
   (FR-033b). The cut moves back to the cluster boundary, so the result may be one character shorter
@@ -508,10 +514,28 @@ context menu's Destroy Tab.
   written. The sequence must converge after one write, never oscillate.
 - **FR-014**: A configuration whose every value is already valid MUST NOT be rewritten — not at
   startup and not on any reload.
-- **FR-015**: The terminal link-hover delay MUST be clamped to its declared 0–2000 ms range,
-  resolving the current disagreement between the declared range and the larger hand-written one.
+- **FR-015**: **Four** settings currently parse a wider range than they declare. Three of them have
+  no stated reason and MUST resolve to their declaration:
+
+  | Setting | Declared | Parsed today | Resolves to |
+  |---|---|---|---|
+  | `terminals.linkHoverDelayMs` | 0–2000 | 0–5000 | **0–2000** |
+  | `diagnostics.keepFiles` | 1–20 | 1–50 | **1–20** |
+  | `search.asYouTypeDebounceMs` | 0–1000 | 0–unbounded | **0–1000** |
+
+- **FR-015a**: The fourth, `diagnostics.maxFileSizeKb`, is **deliberate** — it declares 64–4096 so
+  its slider stays aimable while the parser accepts up to 64 MB, and says so in the descriptor. That
+  intent MUST be preserved: a user's hand-set 64 MB log cap MUST NOT be silently rewritten to 4 MB.
+- **FR-015b**: A descriptor MAY therefore declare **`hardMin` / `hardMax`** — the bound the guard
+  enforces — separately from `min`/`max`, which remain the control's range. When absent, the hard
+  bound **is** `min`/`max`, so every existing descriptor is unaffected and the guard's contract stays
+  universal. `diagnostics.maxFileSizeKb` MUST declare `hardMax: 65536`.
+- **FR-015c**: A wider hard bound MUST be **declared, never implied**. A comment explaining that a
+  parser accepts more than the control offers is not a declaration — the guard cannot read it, which
+  is exactly how this divergence went unnoticed.
 - **FR-016**: The existing hand-written per-setting clamps MUST be removed in favour of the generic
-  guard.
+  guard — `terminals.commandPollMs`, `terminals.linkHoverDelayMs`, and the range checks inside the
+  diagnostics and search parsers.
 - **FR-017**: Clamping and write-back MUST NOT interfere with resetting a setting to its shipped
   default, and MUST NOT churn the file when nothing needed correcting.
 - **FR-018**: If the corrected configuration cannot be written back, the application MUST still
@@ -680,6 +704,10 @@ context menu's Destroy Tab.
   marker is presentation only and MUST NOT enter the stored value, MUST NOT count toward the limit,
   and MUST NOT appear in any value the application persists or compares.
 - **FR-037d**: A name that happens to be exactly the limit and was not cut MUST NOT be marked.
+- **FR-037e**: **Trailing whitespace left by a cut MUST be trimmed.** A hard cut can land after a
+  space, and a name ending in an invisible character is one the user can neither distinguish from its
+  neighbour nor retype. The limit governs the name's length, not its final character, so trimming
+  never makes a name exceed it. Leading whitespace is left alone — the user typed that.
 - **FR-038**: A persisted layout containing an over-long name MUST load successfully, with the name
   brought within the limit; it MUST NOT be rejected and MUST NOT error.
 - **FR-039**: Lowering the limit MUST bring longer names within it the next time they are read,
@@ -720,8 +748,10 @@ context menu's Destroy Tab.
   **ignored, not queued**: nothing may fire when the delay elapses.
 - **FR-044e**: A click during the arming window MUST also not activate the tab or start a rename —
   it is inert in every respect, exactly as FR-045 requires of a click that lands on the affordance.
-- **FR-044f**: The affordance MAY be shown in a subdued state while inert, so the user can see it is
-  not yet live rather than being puzzled by a dead click.
+- **FR-044f**: The affordance **MUST** be shown in a subdued state while inert, so the user can see
+  it is not yet live rather than being puzzled by a dead click. (Raised from MAY to MUST during the
+  analyze pass: a deliberately dead control with no visible difference is the confusion the arming
+  delay was added to avoid, and the styling costs nothing.)
 - **FR-044g**: The **active** tab's close affordance, which is always present, MUST NOT be subject
   to the arming delay — there is no moment at which it appears, so there is no accidental click to
   guard against.
