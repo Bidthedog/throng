@@ -38,6 +38,7 @@
     "editor-undo-recovery.e2e.ts",
     "editor-word-wrap.e2e.ts",
     "error-dismiss.e2e.ts",
+    "explorer-follow-active-editor.e2e.ts",
     "explorer-live-sync.e2e.ts",
     "explorer-new-items.e2e.ts",
     "explorer.e2e.ts",

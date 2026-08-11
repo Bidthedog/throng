@@ -101,6 +101,7 @@
       "editor-subworkspace.e2e.ts",
       "error-dismiss.e2e.ts",
       "explorer-dir-doubleclick.e2e.ts",
+      "explorer-follow-active-editor.e2e.ts",
       "explorer-live-sync.e2e.ts",
       "explorer-selection-visibility.e2e.ts",
       "explorer.e2e.ts",
