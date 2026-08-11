@@ -387,8 +387,8 @@ Set `THRONG_E2E_RETRIES=0` to see raw first-run results with no diagnostic retry
 
 ### Writing a test that does not flake
 
-Two helpers in `packages/ui/tests/e2e/harness.ts` exist to close the race class that produced most of
-the flakes we found. Use them:
+Several helpers in `packages/ui/tests/e2e/harness.ts` exist to close the race classes that produced
+most of the flakes we found. Use them:
 
 - **`settle(win, root?)`** — a POSITIVE assertion that the window has rendered. Make it the first
   statement of any test that later reads raw state. A *negative* opening assertion
@@ -399,10 +399,36 @@ the flakes we found. Use them:
   for the element to exist *or* to stop animating, and both failures look like flakiness rather than
   like the broken read they are.
 - **`viewport(win)`** — window dimensions, for measuring a control against the window edge.
+- **`commitPanelRename(win)` / `commitTabRename(win)`** — commit the inline rename that `panel-add`
+  and `tab-add` open the new panel/tab in. They wait for the input, assert it holds focus, press
+  Enter and return only once it is gone.
+- **`focusEditor(win, panelId)`** — click into a panel's editor and wait until it *actually* has
+  focus. A click resolves when the event is dispatched; CodeMirror adds `.cm-focused` a beat later,
+  and keys sent in that gap go nowhere.
 
 Prefer an assertion on a real condition (`toBeVisible`, `toHaveCount`, `expect.poll`) over
 `waitForTimeout(n)`. A sleep asserts that *n* milliseconds is always enough; a condition asserts that
 the thing you are about to measure has actually happened.
+
+**Never send a key at a control you have not asserted is there.** This is the same rule, but it fails
+differently and much more expensively: an unsynchronised *read* returns the wrong value, while an
+unsynchronised *keystroke* goes to whatever holds focus instead — and that surface may well act on
+it. A bare `await win.keyboard.press('Enter')` to commit a new panel's rename does nothing visibly
+wrong when the input has not mounted yet; the Enter reaches the editor that had focus, which inserts
+a **newline into the document**.
+
+Nothing fails there. The test carries on against a fixture that is now one line longer than the file
+on disk, and dies later on an assertion that names the feature under test:
+
+```
+Expected: "CCCCZ"
+Received: "BBBB"
+```
+
+That failure is a lie — the caret never moved, the *text* did — and it sends you into the product
+code for as long as you believe it. Hence the helpers above: they are not shorthand for the raw
+call, they are the difference between a key that lands where you meant it and one that quietly edits
+your fixture.
 
 ## Quarantine
 
