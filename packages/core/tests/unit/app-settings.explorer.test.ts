@@ -52,4 +52,19 @@ describe('AppSettings explorer section (004 T004/T005)', () => {
     expect(bad.explorer.dragCopyModifier).toBe('ctrl');
     expect(bad.explorer.dragMoveModifier).toBe('shift');
   });
+
+  it('follows the active editor by default, and honours an explicit false (#188)', () => {
+    expect(DEFAULT_APP_SETTINGS.explorer.autoRevealActiveFile).toBe(true);
+    expect(parseAppSettings({ explorer: { autoRevealActiveFile: false } }).explorer.autoRevealActiveFile).toBe(
+      false,
+    );
+  });
+
+  it('coerces a non-boolean follow setting back to the default (#188)', () => {
+    // 'false' the STRING is the classic hand-edit; it must not read as "off" by being truthy, nor
+    // silently disable the feature by being falsy.
+    expect(parseAppSettings({ explorer: { autoRevealActiveFile: 'false' } }).explorer.autoRevealActiveFile).toBe(
+      true,
+    );
+  });
 });
