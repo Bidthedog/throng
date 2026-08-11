@@ -87,6 +87,7 @@
       "destroy-cascade.e2e.ts",
       "diagnostics-logging.e2e.ts",
       "editor-content-menu.e2e.ts",
+      "editor-cross-project-restore.e2e.ts",
       "editor-cut-line.e2e.ts",
       "editor-external-change-named.e2e.ts",
       "editor-find.e2e.ts",

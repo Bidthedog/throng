@@ -19,6 +19,7 @@
     "destroy.e2e.ts",
     "diagnostics-logging.e2e.ts",
     "editor-content-menu.e2e.ts",
+    "editor-cross-project-restore.e2e.ts",
     "editor-feedback.e2e.ts",
     "editor-feedback2.e2e.ts",
     "editor-feedback3.e2e.ts",
