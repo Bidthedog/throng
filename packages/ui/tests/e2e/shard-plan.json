@@ -185,6 +185,7 @@
       "new-project-folder.e2e.ts",
       "os-drop-defects.e2e.ts",
       "pane-shortcuts.e2e.ts",
+      "panel-auto-naming.e2e.ts",
       "panel-name-unique.e2e.ts",
       "panel-owner-align.e2e.ts",
       "panel-reset-name.e2e.ts",
