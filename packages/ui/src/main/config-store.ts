@@ -12,7 +12,7 @@
  */
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { ALL_DEFAULT_THEMES, checkRename, type ConfigDocId, type ConfigReadOptions, type IConfigStore, type ThemeRenameResult, type WriteOutcome } from '@throng/core';
+import { ALL_DEFAULT_THEMES, checkRename, type ConfigDocId, type ConfigReadOptions, type ConfigValidator, type IConfigStore, type ThemeRenameResult, type ValidatedConfig, type WriteOutcome } from '@throng/core';
 
 /** Result of a transactional multi-file write (010, FR-012/012a). */
 export type WriteAllResult = { ok: true } | { ok: false; failedPath: string; error: string };
@@ -58,6 +58,27 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Normalise either validator shape to the reporting one (031, FR-013).
+ *
+ * A validator may hand back just the document (every validator before #227) or the document plus
+ * whether validation had to CORRECT it. They are told apart structurally: no config document is
+ * a `{ value, corrected: boolean }` pair — settings, keybindings and themes are each keyed by
+ * their own domain — so a plain document is unambiguous, and "not reported" reads as "clean",
+ * which is what keeps the write-back off every pre-existing read path.
+ */
+function asValidatedConfig<T>(result: T | ValidatedConfig<T>): ValidatedConfig<T> {
+  if (
+    result !== null &&
+    typeof result === 'object' &&
+    'value' in result &&
+    typeof (result as ValidatedConfig<T>).corrected === 'boolean'
+  ) {
+    return result as ValidatedConfig<T>;
+  }
+  return { value: result as T, corrected: false };
+}
+
 interface FileSnapshot {
   path: string;
   content: string;
@@ -71,7 +92,33 @@ export class FileConfigStore implements IConfigStore {
    *  to the same document never race on a shared `.tmp` (rapid theme edits). */
   private writeSeq = 0;
 
+  /**
+   * One in-flight chain per document path (031, FR-013c).
+   *
+   * Atomic renames already made a single write all-or-nothing, but nothing ordered TWO writers of
+   * the same file against each other. #227 adds a second one — the guard's write-back — running
+   * concurrently with a Settings-editor save, and every config write serialises the WHOLE
+   * document, so two of them are not commutative: whichever renames last wins outright. Chaining
+   * them per path is what makes "cannot interleave" structural instead of improbable.
+   */
+  private readonly writeChains = new Map<string, Promise<unknown>>();
+
   constructor(private readonly configRoot: string) {}
+
+  /** Run `op` after every write already queued for `path`, and queue it for the next one. */
+  private chain<R>(path: string, op: () => Promise<R>): Promise<R> {
+    const prior = this.writeChains.get(path) ?? Promise.resolve();
+    // `then(op, op)` rather than `then(op)`: a prior write that rejected must not strand the queue.
+    const run = prior.then(op, op);
+    this.writeChains.set(
+      path,
+      run.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    return run;
+  }
 
   pathOf(doc: ConfigDocId): string {
     switch (doc.kind) {
@@ -87,7 +134,7 @@ export class FileConfigStore implements IConfigStore {
   async read<T>(
     doc: ConfigDocId,
     defaults: T,
-    validate: (raw: unknown) => T,
+    validate: ConfigValidator<T>,
     options?: ConfigReadOptions,
   ): Promise<T> {
     const path = this.pathOf(doc);
@@ -103,16 +150,53 @@ export class FileConfigStore implements IConfigStore {
       }
       return defaults;
     }
+    let validated;
     try {
-      return validate(JSON.parse(raw) as unknown);
+      validated = asValidatedConfig(validate(JSON.parse(raw) as unknown));
     } catch {
       // Malformed JSON → defaults; leave the user's file intact (D1).
       return defaults;
     }
+    // 031 / FR-013: validation had to change something, so the file no longer says what is in
+    // use. Write the corrected form back — ONCE, and only if the bytes we read are still there.
+    if (validated.corrected) await this.writeBack(path, raw, validated.value);
+    return validated.value;
   }
 
   async write<T>(doc: ConfigDocId, value: T): Promise<WriteOutcome> {
     const path = this.pathOf(doc);
+    return this.chain(path, () => this.commit(path, value));
+  }
+
+  /**
+   * Write a corrected document back over the bytes it was read from (031, FR-013/013c/018).
+   *
+   * Two properties this deliberately has, and one it deliberately lacks:
+   *
+   *  - It is COMPARE-AND-SWAP. If the file changed between the read and now — a Settings-editor
+   *    save landing in the same breath — the correction is abandoned rather than applied on top,
+   *    because it was computed from a document that no longer exists. The newer document gets
+   *    corrected on its own read; overwriting it here would silently lose the user's edit.
+   *  - It runs on the same per-path chain as every other write, so the two cannot interleave.
+   *  - It does NOT retry (FR-018). A failure is reported by `commit` and that is the end of it:
+   *    the app is already running on the corrected values, and a write-back that retried would
+   *    turn an unwritable config file into a permanent background loop.
+   */
+  private async writeBack<T>(path: string, seen: string, value: T): Promise<void> {
+    await this.chain(path, async () => {
+      let current: string;
+      try {
+        current = await readFile(path, 'utf8');
+      } catch {
+        return; // it went away; nothing to correct
+      }
+      if (current !== seen) return; // superseded — see above
+      await this.commit(path, value);
+    });
+  }
+
+  /** The actual atomic replace. Callers reach it through the per-path chain, never directly. */
+  private async commit<T>(path: string, value: T): Promise<WriteOutcome> {
     let tmp: string | undefined;
     try {
       await mkdir(dirname(path), { recursive: true });

@@ -61,7 +61,16 @@ export {
 export type { VerificationStep, VerificationVerdict } from './config/verification-verdict.js';
 
 // User-scoped application configuration (003): abstractions + pure schemas.
-export type { IConfigStore, ConfigDocId, ConfigReadOptions, WriteOutcome } from './abstractions/config-store.js';
+export type {
+  IConfigStore,
+  ConfigDocId,
+  ConfigReadOptions,
+  WriteOutcome,
+  // 031 (#227) — a validator may now report that it CORRECTED the document, which is what lets the
+  // store write the correction back without rewriting a file that was already valid.
+  ValidatedConfig,
+  ConfigValidator,
+} from './abstractions/config-store.js';
 export type { IFileWatcher, Disposable, WatchOptions } from './abstractions/file-watcher.js';
 
 // File Explorer tree (004): OS seams + pure domain.
@@ -146,6 +155,14 @@ export {
   type CorrectionOutcome,
 } from './config/bounds-guard.js';
 export { parseSettingsGuarded, guardedSettingsValidator } from './config/settings-read.js';
+// 031 US3 — pure tab-strip geometry and the picker's match predicate. Both are DOM-free so the
+// renderer holds only the measuring and the drawing.
+export { stripCounts, stepTarget, revealTarget, ease } from './workspace/tab-strip.js';
+export type { StripMetrics, StripCounts } from './workspace/tab-strip.js';
+export { matches, matchSpans } from './picker/match.js';
+export type { MatchSpan } from './picker/match.js';
+// 031 US4 — grapheme-cluster counting and truncation (FR-033a-c, FR-037a-e).
+export { countGraphemes, truncateGraphemes, wasTruncated } from './text/grapheme.js';
 export type { StartingFolderConfig, StartingFolderContext } from './config/starting-folder.js';
 export { resolveStartingFolder, isOverrideResolvable } from './config/starting-folder.js';
 // Shared zoom range & mapping (012) — global + per-type zoom use one source.

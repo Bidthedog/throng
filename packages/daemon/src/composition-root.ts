@@ -19,7 +19,7 @@ import {
   ProjectService,
   countPanels,
   defaultPipeName,
-  parseAppSettings,
+  parseSettingsGuarded,
 } from '@throng/core';
 import {
   WindowsPlatformInfo,
@@ -111,8 +111,15 @@ function readPersistenceSettings(env: NodeJS.ProcessEnv): IPersistenceSettings {
  * The daemon has no config-store binding, so this reads the one value it needs directly and
  * falls back to the shipped default on any problem — a malformed settings file must never stop
  * terminals from working.
+ *
+ * 031 T035 (#227, FR-013b) — it CORRECTS but never WRITES, and that asymmetry is deliberate.
+ * Correction has to happen in every process, or the daemon would poll at whatever a hand-edited
+ * file said while the UI used the corrected value. Write-back happens in UI-main ALONE: two
+ * processes writing one config file is how a config file gets truncated, and the daemon has no
+ * business editing a document the user owns. Exported so that is a testable claim rather than
+ * a comment.
  */
-function readCommandPollMs(env: NodeJS.ProcessEnv): number {
+export function readCommandPollMs(env: NodeJS.ProcessEnv): number {
   // The config root is `%USERPROFILE%\.throng[-dev]`, NOT `%APPDATA%	hrong` — that is the
   // userData/database directory and has never held a settings.json. UI-main passes the resolved
   // root as THRONG_CONFIG_ROOT precisely because the daemon cannot work out dev-vs-prod itself.
@@ -122,7 +129,7 @@ function readCommandPollMs(env: NodeJS.ProcessEnv): number {
   const settingsPath = join(root, 'settings.json');
   try {
     const raw: unknown = JSON.parse(readFileSync(settingsPath, 'utf8'));
-    return parseAppSettings(raw).terminals.commandPollMs;
+    return parseSettingsGuarded(raw).value.terminals.commandPollMs;
   } catch {
     return DEFAULT_APP_SETTINGS.terminals.commandPollMs;
   }

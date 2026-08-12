@@ -8,8 +8,8 @@ import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
   isValidThemeName,
-  guardedSettingsValidator,
   parseKeybindings,
+  parseSettingsGuarded,
   THRONG_THEME,
   type AppSettings,
   type Disposable,
@@ -41,7 +41,16 @@ export async function readConfigPayload(
   store: IConfigStore,
   loadIconPacks: () => Promise<LoadedIconPack[]> = async () => [],
 ): Promise<ConfigPayload> {
-  const settings = await store.read({ kind: 'settings' }, DEFAULT_APP_SETTINGS, guardedSettingsValidator);
+  /*
+   * `parseSettingsGuarded`, not `guardedSettingsValidator` — the REPORTING validator (031, FR-013a).
+   *
+   * Both correct the document; only this one tells the store that it had to, which is what lets
+   * UI-main write the corrected form back. And it matters HERE rather than only at startup: this
+   * function is what the config watcher calls on every file change, so a value hand-edited out of
+   * range while the app runs is corrected and written back on the reload, not left to disagree
+   * with the running app until the next launch.
+   */
+  const settings = await store.read({ kind: 'settings' }, DEFAULT_APP_SETTINGS, parseSettingsGuarded);
   // Confine the active-theme name to a safe single segment before it becomes a file
   // path — a hand-edited `appearance.theme` like "../../x" must not read off-tree.
   const activeThemeName = isValidThemeName(settings.appearance.theme)

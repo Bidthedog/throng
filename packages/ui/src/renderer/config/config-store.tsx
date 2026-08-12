@@ -9,8 +9,8 @@ import {
 import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
+  guardedSettingsValidator,
   migrateTheme,
-  parseAppSettings,
   parseKeybindings,
   THRONG_THEME,
   type AppSettings,
@@ -84,7 +84,7 @@ function toState(
 ): ConfigState {
   if (!payload) return DEFAULT_STATE;
   return {
-    settings: payload.settings ? parseAppSettings(payload.settings) : DEFAULT_APP_SETTINGS,
+    settings: payload.settings ? guardedSettingsValidator(payload.settings) : DEFAULT_APP_SETTINGS,
     theme: toTheme(payload.theme),
     keybindings: payload.keybindings ? parseKeybindings(payload.keybindings) : DEFAULT_KEYBINDINGS,
     iconPacks: toPackMap(payload.iconPacks),
@@ -124,7 +124,14 @@ export function ConfigProvider({ children }: { children: ReactNode }): ReactElem
         return; // main refuses invalid JSON anyway; nothing to adopt
       }
       setState((prev) => {
-        if (id.kind === 'settings') return { ...prev, settings: parseAppSettings(parsed) };
+        /*
+         * Guarded (031, #227). This document has NOT been through main's read path — it is being
+         * adopted the instant it is written, precisely so the next edit builds on it. The JSON tab
+         * is the one place inside the app a user can type a value outside its declared range, and
+         * without the guard here it would be live in the renderer until the watcher round-tripped
+         * it. Correcting in memory only: main writes the file, this process never does.
+         */
+        if (id.kind === 'settings') return { ...prev, settings: guardedSettingsValidator(parsed) };
         if (id.kind === 'keybindings') return { ...prev, keybindings: parseKeybindings(parsed) };
         // A theme write only changes what is on screen when it IS the theme on screen.
         if (id.kind === 'theme' && id.name === prev.settings.appearance.theme && parsed && typeof parsed === 'object') {

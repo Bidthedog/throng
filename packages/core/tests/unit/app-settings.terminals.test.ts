@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAppSettings, DEFAULT_APP_SETTINGS } from '@throng/core';
+import { parseAppSettings, parseSettingsGuarded, DEFAULT_APP_SETTINGS } from '@throng/core';
 
 describe('parseAppSettings — terminals section (005 Phase B)', () => {
   it('defaults to empty flavours / disabledBuiltins / defaultShellArguments (+ showStatusBar on) when absent', () => {
@@ -74,13 +74,24 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
     });
   });
 
-  it('parses terminals.linkHoverDelayMs (024 US7; default 500, clamp to [0,5000], round, reject non-number)', () => {
+  /*
+   * 031 T033 (#227) — this test used to assert a clamp to [0, 5000] HERE, and that was the bug.
+   *
+   * The descriptor declared 0–2000 all along; the clamp accepted 0–5000; and because the clamp was
+   * the only one of the two that ran on read, the declaration was decorative. The range now lives
+   * in one place, so the assertion moves with it: `parseAppSettings` keeps TYPE tolerance and
+   * rounding, and the guarded read path is what enforces the declared range.
+   */
+  it('parses terminals.linkHoverDelayMs tolerantly (024 US7; default 500, round, reject non-number)', () => {
     expect(parseAppSettings({}).terminals.linkHoverDelayMs).toBe(500);
     expect(parseAppSettings({ terminals: { linkHoverDelayMs: 0 } }).terminals.linkHoverDelayMs).toBe(0);
     expect(parseAppSettings({ terminals: { linkHoverDelayMs: 750.4 } }).terminals.linkHoverDelayMs).toBe(750);
-    expect(parseAppSettings({ terminals: { linkHoverDelayMs: -20 } }).terminals.linkHoverDelayMs).toBe(0);
-    expect(parseAppSettings({ terminals: { linkHoverDelayMs: 99999 } }).terminals.linkHoverDelayMs).toBe(5000);
     expect(parseAppSettings({ terminals: { linkHoverDelayMs: 'soon' } }).terminals.linkHoverDelayMs).toBe(500);
+  });
+
+  it('bounds terminals.linkHoverDelayMs at its DECLARED 0–2000 on the guarded read path (031, FR-015)', () => {
+    expect(parseSettingsGuarded({ terminals: { linkHoverDelayMs: -20 } }).value.terminals.linkHoverDelayMs).toBe(0);
+    expect(parseSettingsGuarded({ terminals: { linkHoverDelayMs: 99999 } }).value.terminals.linkHoverDelayMs).toBe(2000);
   });
 
   it('parses terminals.showStatusBar (024 US1; default true, honour false, reject non-boolean)', () => {
