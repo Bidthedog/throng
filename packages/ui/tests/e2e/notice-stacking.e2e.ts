@@ -8,6 +8,24 @@
  *
  * Driven through real file operations: two moves into a folder that already holds a file of that
  * name, which the daemon refuses by name.
+ *
+ * ══ 030 US3 / T043 — WHY THIS FILE WAS TOUCHED, AND WHY NOTHING IN IT CHANGED ══
+ *
+ * US3 makes several failures collapse into ONE notice, which is the exact opposite of what this
+ * spec asserts, so it is the first place a consolidation bug would show up. It still passes
+ * unaltered, and that is a result rather than an oversight — consolidation is bounded by two things
+ * both absent here:
+ *
+ *   • a GROUP KEY. It is minted for panel casualties of a project-scoped action, and these two
+ *     failures are user-initiated file operations against a project that is perfectly healthy.
+ *     Without a group key `notify` behaves exactly as it did before US3.
+ *   • a CAUSE. "A file or folder with this name already exists." matches none of 029's five kinds,
+ *     so it carries no `causeKey` either — which is what stops it from being collapsed by 029's
+ *     older rule, and is why that rule has always left this spec alone.
+ *
+ * Its fixtures needed no subjects: every notice here is raised through real explorer operations, not
+ * through a `notify()` the spec composes, so US2's required `subject` reached them at the call site.
+ * The assertions below are therefore the regression guard for both stories at once.
  */
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

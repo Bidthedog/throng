@@ -598,10 +598,21 @@ earlier one.
 - **FR-029**: A single cause that defeats several panels MUST raise exactly one notice **per project
   affected**, naming the cause and the project once, and listing every panel of that project the cause
   affected.
-- **FR-029a**: Where a failure carries no identified cause, the notice MUST group by the operation
-  that produced it — one project load, one tab restore, one bulk delete raises one notice however many
-  panels it defeated. Grouping is therefore by cause where a cause exists and by originating operation
-  otherwise; a failure with neither is the only case that raises a notice per panel.
+- **FR-029a**: **Panel casualties group by the originating operation, always** — not by cause. The
+  cause branch serves failures that have no action behind them. This is a correction made when US3
+  met the real classification: `causeKey` is `kind + subject`, and a *panel's* subject is its own
+  file, so six editors defeated by one missing project root classify as **six different causes** and
+  would have raised six notices — the storm this feature removes, renamed. Worse, an editor's load
+  failure carries a `LoadResult` reason and no errno, so 029 correctly declines to classify it at all
+  and half the casualties of one root have no cause to group by. Grouping is therefore: by operation
+  for anything that defeated panels, by cause otherwise, and per-panel only where there is neither.
+- **FR-029c**: The operation id MUST outlive the action that minted it, until the next operation
+  replaces it. FR-037's growth happens minutes later, when the user visits a tab — an id that died
+  with the action could not join those panels to the notice they belong to.
+- **FR-029d**: A consolidated notice MUST NOT be suppressed by cause (029 FR-019), and MUST
+  **supersede** any surface-level notice already on screen sharing its cause. It says strictly more
+  than the file tree's own report of the same failure, so suppression would keep the poorer message;
+  without superseding, arrival order would decide whether the user sees one notice or two.
 - **FR-029b**: Identifying a cause MUST NOT require widening the classified set established by feature
   029. An unclassified failure keeps its own wording exactly as today; only its grouping changes.
 - **FR-030**: The affected-panel list MUST span the whole project rather than a single tab, holding
@@ -627,7 +638,10 @@ earlier one.
   that gains a group MUST NOT cause its entire list to be announced again.
 - **FR-032b**: The affected-panel list MUST be reachable and scrollable by keyboard, and any control
   the notice carries MUST be in the tab order. Reaching the list MUST NOT trap focus: a user who tabs
-  into it can tab out again.
+  into it can tab out again. **Keyboard-only, deliberately**: 018 gives the notice card
+  `pointer-events: none` so a notice can never cover the controls that would fix what it reports, and
+  a mouse-scrollable list would have to take pointer events back. Measured during US3 — a scrollable
+  list intercepted 60 retried clicks on the panel-type dialog underneath it.
 - **FR-033**: Panel type MUST NOT affect grouping — editors and terminals defeated by the same cause
   appear in the same list.
 - **FR-034**: The raw system error MUST NOT be rendered in the notice — 029 FR-016 forbids it and 029

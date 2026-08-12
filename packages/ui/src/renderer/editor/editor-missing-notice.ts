@@ -1,14 +1,37 @@
 /**
- * Builds the "Cannot open file" notice (006, FR-100/105). One dialog covers all the
- * unopenable files discovered when a tab is (re-)opened. The SAME layout is used
- * whether one file or many: intro text + a scrollable bulleted list (bold file
- * names, dim directory paths) — a single file just lists one. Paths render with
- * native OS separators (FR-101). Gated by `editor.warnOnMissingFile` at the call
- * site; this module only formats + shows.
+ * What an editor says when it cannot open its file.
+ *
+ * ══ THE PER-TAB BATCH IS GONE (030 US3, FR-035) ══
+ *
+ * This module used to BUILD the batch: `showMissingFilesNotice(entries)` composed one
+ * "Cannot open 3 files" dialog per tab and pushed it into `editor-notice-store`, and the tab-open
+ * watcher called it once per tab activation. That was 006's answer to a real problem — three editors
+ * each popping their own modal — and it was the right answer until 029 and 030 gave the application
+ * a general one.
+ *
+ * It is removed rather than narrowed, and the difference matters. Batching by TAB is a claim that
+ * the tab is the unit a user thinks in, and it is not: the unit is the CAUSE. One absent project
+ * root defeats editors in four tabs and terminals in two, and a per-tab batch reports that as four
+ * dialogs, none of which mentions the terminals — grouped by the wrong thing, four times. The tab
+ * survives as a HEADING inside the consolidated notice's list (FR-031a), which is where it belongs:
+ * a way of organising the casualties, not a boundary between notices.
+ *
+ * So each unopenable file is now reported as one panel casualty through
+ * `workspace/panel-failure-notice.ts`, and the notification model merges them by cause or by the
+ * action that produced them. What is left here is the WORDING and the classification — the two
+ * things that were never about batching.
+ *
+ * ══ WHAT SURVIVES, AND WHY (T051a) ══
+ *
+ * `editor-notice-store.ts`, `editor-notice-dialog.tsx` and the `NoticeFile` type all STAY. They are
+ * not a per-tab batch and never were: the store is a small reactive channel for editor messages
+ * that need a structured file list, and its other two callers — the "file changed on disk" notice
+ * (`file-changed-notice.ts`, 011/FR-010) and the refused save (`use-editor.ts`, 006/FR-078) — are
+ * outside this feature's scope and unaffected. Removing the store to remove the batch would have
+ * been a change to two behaviours in order to change one.
  */
 import { toDisplayPath } from '@throng/core';
 import type { OsName } from '@throng/core';
-import { showEditorNotice, type NoticeFile } from './editor-notice-store.js';
 
 export interface LoadErrorEntry {
   filePath: string | null;
@@ -41,43 +64,29 @@ export function isMissingReason(reason: string): boolean {
   return !NOT_A_MISSING_FILE.has(reason);
 }
 
-function shortReason(reason: string): string {
-  if (reason === 'binary') return 'not text';
-  if (reason === 'too-large') return 'too large';
+/**
+ * The sentence for ONE unopenable file.
+ *
+ * One file, one sentence — there is no plural form any more, because there is no batch to pluralise.
+ * The notice that carries this states the project once and lists the panels (FR-031), so the
+ * counting the old wording did ("These 3 files could not be opened") is now done by the list, which
+ * can also say WHICH.
+ *
+ * The path is deliberately absent: FR-034 keeps raw paths out of a notice, and the panel's own
+ * banner already shows the one it could not read (FR-040a). What this adds is why.
+ */
+export function missingFileMessage(reason: string): string {
+  if (reason === 'binary') return 'That file is not text, so it cannot be opened in an editor.';
+  if (reason === 'too-large') return 'That file is too large to open in an editor.';
   // The file EXISTS. Saying "missing" here would send the user looking for a file that is sitting
   // exactly where they left it.
-  if (reason === 'out-of-tree') return 'not permitted here';
-  if (reason === 'folder') return 'a folder';
-  return 'missing';
+  if (reason === 'out-of-tree') return 'That file is outside this project, so it cannot be opened here.';
+  if (reason === 'folder') return 'That is a folder, not a file.';
+  return 'The file could not be opened — it may have been moved, renamed or deleted. An editor with a recovered buffer can be saved to write its contents back.';
 }
 
-/** Split a native path into its directory prefix (with trailing separator) + name. */
-function splitPath(p: string): { dir: string; name: string } {
-  const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
-  return i < 0 ? { dir: '', name: p } : { dir: p.slice(0, i + 1), name: p.slice(i + 1) };
-}
-
-/** Show one notice for a set of unopenable files (empty → no-op). Single and multi
- *  share one layout — the single case just lists one file. */
-export function showMissingFilesNotice(entries: readonly LoadErrorEntry[], os: OsName): void {
-  if (entries.length === 0) return;
-  const path = (p: string | null): string => (p ? toDisplayPath(p, os) : '(unsaved document)');
-  const allMissing = entries.every((e) => isMissingReason(e.reason));
-
-  const files: NoticeFile[] = entries.map((e) => {
-    const { dir, name } = splitPath(path(e.filePath));
-    // The panel note carries the per-file reason only when it isn't a plain "missing".
-    const note = allMissing ? `Panel: ${e.panelName}` : `${shortReason(e.reason)} · Panel: ${e.panelName}`;
-    return { dir, name, note };
-  });
-
-  const n = entries.length;
-  const noun = n === 1 ? 'file' : 'files';
-  const subject = n === 1 ? 'This file' : `These ${n} files`;
-  const body = allMissing
-    ? `${subject} could not be opened — ${n === 1 ? 'it' : 'they'} may have been moved, renamed, or deleted. ` +
-      `Editors with a recovered buffer can be saved to write ${n === 1 ? 'its' : 'their'} contents back.`
-    : `${subject} could not be opened.`;
-
-  showEditorNotice({ title: `Cannot open ${n === 1 ? '' : `${n} `}${noun}`, message: body, files });
+/** The file's own path, for the row's `detail` — copied and logged, never rendered (FR-034). */
+export function missingFileDetail(entry: LoadErrorEntry, os: OsName): string {
+  const path = entry.filePath ? toDisplayPath(entry.filePath, os) : '(unsaved document)';
+  return `${path} (${entry.reason})`;
 }

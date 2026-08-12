@@ -49,6 +49,8 @@
     "keybindings.e2e.ts",
     "menu-keyboard.e2e.ts",
     "menus.e2e.ts",
+    "notice-a11y.e2e.ts",
+    "notice-consolidation.e2e.ts",
     "notice-subjects.e2e.ts",
     "notification-prefs.e2e.ts",
     "panel-auto-naming.e2e.ts",

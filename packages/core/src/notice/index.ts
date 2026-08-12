@@ -34,6 +34,16 @@ export {
 } from './subject.js';
 export { groupKey, type GroupInput } from './grouping.js';
 export {
+  affectedDetails,
+  groupAffected,
+  joinedPanels,
+  mergeAffected,
+  type AffectedContext,
+  type AffectedPanel,
+  type AffectedRow,
+  type AffectedTabGroup,
+} from './affected.js';
+export {
   noticeLogRecord,
   type NoticeAffectedDetail,
   type NoticeLogInput,

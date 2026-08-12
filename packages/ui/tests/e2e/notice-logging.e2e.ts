@@ -18,7 +18,9 @@
  * sibling `notification-prefs.e2e.ts` drives the same settings through Preferences and IS serial.
  *
  * The one real shell here is a `cmd` that is started and immediately killed — short-lived, so it
- * does not starve at high worker counts the way `ping`/`findstr` loops do.
+ * does not starve at high worker counts the way `ping`/`findstr` loops do. The three US3 cases at
+ * the foot of the file configure `cmd` terminals that never start AT ALL (their working directory
+ * does not exist), so they cost a refused attach and no process.
  *
  * ══ WHAT EXISTS AND WHAT DOES NOT ══
  *
@@ -365,49 +367,144 @@ test('the record carries the raw system error on its own line (FR-034)', async (
   );
 });
 
+/* ════════════════════════════════════════════════════════════════════════════════════════════════
+ * ENABLED BY T038 — the three cases US1 could not construct.
+ *
+ * All three needed `affected` on the notice model, which US3 (T044) added, and a real raise that
+ * populates it (T050). They are driven here through the cheapest production path that produces a
+ * PANEL casualty: a project whose root folder does not exist, with terminals configured into it.
+ * The daemon cannot lock the missing working directory, refuses the attach with a classified
+ * `path-missing` cause, and the panel reports itself as a casualty — no tabs to visit, no second
+ * app launch, and a `cmd` that never actually starts, so this file stays light and stays parallel.
+ * ════════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/** Configure `panelId` as a `cmd` terminal and wait for the start it cannot complete. */
+async function failingTerminal(win: Page, panelId: string): Promise<void> {
+  await win.getByTestId(`panel-type-select-${panelId}`).selectOption('terminal');
+  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId(`panel-type-confirm-${panelId}`).click();
+  await expect(win.getByTestId(`terminal-start-failed-${panelId}`)).toBeVisible({ timeout: 60_000 });
+}
+
 /**
- * T015a — FIXME until US3.
+ * T015a — a notice that GROWS is a further event, and the log says so (FR-006a).
  *
- * Two halves, one requirement. A notice suppressed as a duplicate or by cause writes NO record; a
- * notice that GROWS — the same cause claiming further panels — writes a further record naming them
- * (FR-006a). The growth half cannot be constructed at all until `affected` exists on the notice
- * model, which is T044, and the two halves are one behaviour: a model that records growth without
- * suppressing repeats writes a record per repeat.
- *
- * ENABLED BY: T038, by name.
+ * A cause that keeps claiming panels writes one record when it first speaks and one more each time
+ * it claims another. Without the second, a user who silenced the severity would have the first batch
+ * of casualties in the log and every later one nowhere — which is most of the story missing from the
+ * only record there is.
  */
-test.fixme('a growing notice writes a further record naming the panels that joined (FR-006a)', async () => {
-  // Needs `affected` on NoticeInput (T044) and the consolidated raise (T050).
-  expect(true).toBe(false);
+test('a growing notice writes a further record naming the panels that joined (FR-006a)', async () => {
+  // Two refused terminal attaches, each waiting on the daemon — more than the 30s default budget.
+  test.setTimeout(120_000);
+  const cfgRoot = seededCfgRoot({});
+  await runApp(
+    async (_app, win, ctx) => {
+      await settle(win);
+      await ghostProject(win, 'GrowLog');
+      const [first] = await panelIds(win);
+      await failingTerminal(win, first!);
+
+      // The first casualty: one record, one panel.
+      const opening = await recordsMatching(ctx.userDataDir, /affected=1/);
+      expect(opening).toHaveLength(1);
+
+      // A second panel defeated by the SAME absent folder joins the live notice rather than raising
+      // its own — and that join is an event.
+      await addPanels(win, 1);
+      const ids = await panelIds(win);
+      await failingTerminal(win, ids.find((id) => id !== first)!);
+
+      const growth = await recordsMatching(ctx.userDataDir, /affected=2/);
+      expect(growth).toHaveLength(1);
+      // It NAMES what joined, rather than merely counting: a record that said "now 2" would leave a
+      // reader unable to tell which panel the second one was.
+      expect(growth[0]!).toMatch(/Terminal|Panel/i);
+      // …and the first record is still there, unaltered. Growth appends; it does not rewrite.
+      expect(noticeRecords(ctx.userDataDir).filter((l) => l.includes('affected=1'))).toHaveLength(1);
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
 });
 
 /**
- * T015d — FIXME until US3.
+ * T015d — and the same is true when the user cannot see any of it (FR-005c).
  *
- * The mirror of the rule above, and the one that stops the shadow from over-suppressing: a silenced
- * notice reporting a panel NOT YET REPORTED for its group key does write a record (FR-005c). The
- * duplicate key contains nothing that changes when new panels are discovered, so without this the
- * silenced path records the first batch and nothing after it — for a cause that keeps claiming
- * panels, that is most of the story missing from the only record there is.
- *
- * ENABLED BY: T038, alongside T015a.
+ * The silenced shadow suppresses a repeat, which is the whole of T015c. This is the other half: an
+ * incoming notice naming a panel the shadow has NOT recorded is not a repeat, and must write its
+ * record. The duplicate tuple — severity, message, title, action, testId, subject — contains nothing
+ * that changes when a cause discovers a further panel, so without the `reported` set the shadow
+ * records the first casualty and swallows every one after it.
  */
-test.fixme('a silenced notice reporting a newly discovered panel writes a record (FR-005c)', async () => {
-  // Needs `affected` and the `reported` panel-id set on the shadow entry (T025b, T044).
-  expect(true).toBe(false);
+test('a silenced notice reporting a newly discovered panel writes a record (FR-005c)', async () => {
+  const cfgRoot = seededCfgRoot({
+    notifications: { error: { mode: 'never', timeoutMs: 60000 } },
+  });
+  await runApp(
+    async (_app, win, ctx) => {
+      await settle(win);
+      await ghostProject(win, 'SilentGrow');
+      const [first] = await panelIds(win);
+      await failingTerminal(win, first!);
+      // Nothing is on screen — the panel's own badge is not a notice, and the notice list is empty.
+      await expect(win.getByTestId('panel-failure-notice')).toHaveCount(0);
+
+      expect(await recordsMatching(ctx.userDataDir, /affected=1/)).toHaveLength(1);
+
+      await addPanels(win, 1);
+      const ids = await panelIds(win);
+      await failingTerminal(win, ids.find((id) => id !== first)!);
+
+      /*
+       * TWO records, each naming its own panel — and NOT one growth record saying "now 2".
+       *
+       * The asymmetry with the displayed path is real and is a consequence of what a silenced notice
+       * is: there is no live notice to grow, so each raise is its own event carrying its own single
+       * casualty. What FR-005c requires is that the second raise is not swallowed as a duplicate,
+       * and the count of records is how that is observable. The shadow's `reported` set is the only
+       * thing standing between this and one record for the whole storm.
+       */
+      await expect
+        .poll(
+          () => noticeRecords(ctx.userDataDir).filter((l) => /affected=1/.test(l)).length,
+          { timeout: 15_000, message: 'the second silenced casualty left no record' },
+        )
+        .toBe(2);
+      const details = noticeRecords(ctx.userDataDir).filter((l) => /panel=".*" detail \| /.test(l));
+      expect(new Set(details.map((l) => /panel="([^"]+)"/.exec(l)?.[1])).size).toBe(2);
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
 });
 
 /**
- * T015f — FIXME until US3.
+ * T015f — one further line per panel, each carrying that panel's OWN error (FR-048a).
  *
- * FR-048a: a notice carrying per-panel errors writes one further line per panel, each naming its
- * own. `affected` does not exist on `NoticeInput` until T044, so no US1 test can construct such a
- * notice — the handler's ability to WRITE those lines is already there (`noticeLogLines`) and is
- * pinned by the anchor test above; what is missing is anything to populate them from.
- *
- * ENABLED BY: T038, alongside T015a and T015d.
+ * The notice states the shared cause; the per-panel errno is what differs between casualties and is
+ * never rendered (FR-034). Copy is one route to it and this file is the other, so a record that
+ * counted its panels without carrying their errors would leave the machine text reachable nowhere
+ * for a severity the user has silenced.
  */
-test.fixme('a notice with per-panel errors writes one further line per panel (FR-048a)', async () => {
-  // Needs `affectedDetails` populated from `affected` (T025c + T044/T050).
-  expect(true).toBe(false);
+test('a notice with per-panel errors writes one further line per panel (FR-048a)', async () => {
+  const cfgRoot = seededCfgRoot({});
+  await runApp(
+    async (_app, win, ctx) => {
+      await settle(win);
+      await ghostProject(win, 'PerPanel');
+      const [first] = await panelIds(win);
+      await failingTerminal(win, first!);
+
+      const [line] = await recordsMatching(ctx.userDataDir, /^.*panel=".*" detail \| /m);
+      // The panel is named in the workspace's own terms — the log line has no group heading above it
+      // to lean on, so it carries the tab too.
+      expect(line).toMatch(/panel="[^"]+"/);
+      // …and the raw error the notice refused to render.
+      expect(line).toMatch(/Cannot lock|ENOENT|Internal error/i);
+
+      // The head line, meanwhile, is still clean of it (FR-034 both ways).
+      const [head] = await recordsMatching(ctx.userDataDir, /affected=1/);
+      expect(head).not.toMatch(/Cannot lock|ENOENT/i);
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
 });

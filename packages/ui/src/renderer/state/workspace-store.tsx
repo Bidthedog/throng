@@ -45,6 +45,7 @@ import {
 import type { WorkspaceClient } from './workspace-client.js';
 import { registerLayoutFlusher, trackLayoutSave } from './layout-saves.js';
 import { useAppSettings } from '../config/config-store.js';
+import { beginOperation } from '../workspace/operation.js';
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
 
@@ -217,6 +218,19 @@ export function WorkspaceProvider({
       setRestoreFailed(false);
       return;
     }
+    /*
+     * 030 US3 (T049) — THE ACTION every failure of this open belongs to.
+     *
+     * Minted HERE and not in `projects-store`, because this effect is the one place every project
+     * open passes through: the user clicking a project in the sidebar, `createProject`, and the
+     * restore that happens on launch with no user involved at all. Minting at the click would leave
+     * a restored session's casualties with no operation, which is exactly the session where a
+     * project root has had time to disappear.
+     *
+     * Once per open, and no more: restoring a tab inside this open does not mint a second, or two
+     * panels defeated by one absent folder would land in two notices (FR-029a).
+     */
+    beginOperation(activeProjectId);
     setLoading(true);
     void client
       .load(activeProjectId)

@@ -4,9 +4,19 @@ import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
+/**
+ * Clear whichever notice a restore may have raised about the file that is not there.
+ *
+ * Both are checked because both are real: `editor-notice-ok` is the editor notice store's dialog
+ * (still very much alive — the file-changed and refused-save notices route through it), and
+ * `panel-failure-notice-dismiss` is the consolidated notice 030 US3 introduced, which is what the
+ * missing-file path raises now (FR-035).
+ */
 async function dismissNoticeIfPresent(win: Page): Promise<void> {
-  const ok = win.getByTestId('editor-notice-ok');
-  if (await ok.isVisible().catch(() => false)) await ok.click();
+  for (const testId of ['editor-notice-ok', 'panel-failure-notice-dismiss']) {
+    const control = win.getByTestId(testId);
+    if (await control.isVisible().catch(() => false)) await control.click();
+  }
 }
 
 // Session 2026-07-06d: "Last Active Editor (<Panel>)" label (FR-098); deleting a file
@@ -82,18 +92,27 @@ test('deleting an open file marks the editor dirty; save re-creates it; re-selec
         .poll(() => existsSync(file), { timeout: 6000 })
         .toBe(false);
 
-      // FR-100: re-selecting the tab surfaces a detailed "Cannot open file" dialog.
+      /*
+       * FR-100 → 030 FR-035 (T052). Re-selecting the tab still surfaces the failure; what changed is
+       * WHICH notice carries it.
+       *
+       * The per-tab "Cannot open file" dialog is gone outright — batching by tab was grouping by the
+       * wrong thing, since one absent folder defeats panels across several tabs and terminals too.
+       * The panel is now a row of the consolidated notice, and the assertion moves with it: the file
+       * NAME is no longer on the row (FR-034 keeps paths out of a notice; the row is the PANEL, and
+       * the path rides as the copied `detail`), so what is asserted is the panel, once.
+       */
       await win.getByTestId('tab-add').click(); // creates + switches to a 2nd tab
       const firstTab = win.locator('.tab-chip').first();
       await firstTab.click(); // back to the editor's tab → remount
-      const dialog = win.getByTestId('editor-notice-dialog');
-      await expect(dialog).toBeVisible({ timeout: 8000 });
-      // Same layout as the multi-file dialog — one bulleted file, bold name + panel note.
-      const files = win.getByTestId('editor-notice-files');
-      await expect(files.locator('.editor-notice__file')).toHaveCount(1);
-      await expect(files.locator('.editor-notice__file-name', { hasText: 'note.txt' })).toBeVisible();
-      await expect(files).toContainText('Panel:'); // which panel
-      await win.getByTestId('editor-notice-ok').click();
+      const notice = win.getByTestId('panel-failure-notice');
+      await expect(notice).toBeVisible({ timeout: 15_000 });
+      const listed = notice.getByTestId('notice-affected-row');
+      await expect(listed).toHaveCount(1);
+      await expect(listed).toHaveAttribute('data-panel-id', pid);
+      // The old dialog is not merely unused here — it no longer exists on this path (FR-035).
+      await expect(win.getByTestId('editor-notice-dialog')).toHaveCount(0);
+      await win.getByTestId('panel-failure-notice-dismiss').click();
 
       // Save writes the buffer back to the original path, re-creating the file.
       // Focus the editor pane first so Ctrl+S targets it (active-pane gating).

@@ -129,8 +129,10 @@ export interface EditorSettings {
   projectPathDisplay: EditorPathDisplay;
   /** Sub-workspace-owned editor pill: full (absolute) path, or just the name (FR-088). */
   subWorkspacePathDisplay: EditorPathDisplay;
-  /** Show the "Cannot open file" popup when an editor's file is missing/deleted
-   *  (FR-105). When false, missing-file editors restore silently. */
+  /** Report an editor whose file is missing/deleted (FR-105). When false, missing-file editors
+   *  restore silently. 030 US3 changed WHERE that report appears — the panel joins the project's
+   *  consolidated notice rather than popping a per-tab dialog (FR-035) — and not whether it
+   *  appears, which is what this setting has always governed. */
   warnOnMissingFile: boolean;
   /**
    * The GLOBAL indentation profile (016, FR-018) — the fallback when nothing more specific applies.

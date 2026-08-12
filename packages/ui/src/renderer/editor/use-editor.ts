@@ -44,7 +44,12 @@ import {
   searchHighlightExtension,
 } from '../search/editor-search.js';
 import { showEditorNotice } from './editor-notice-store.js';
-import { isMissingReason, showMissingFilesNotice } from './editor-missing-notice.js';
+import {
+  isMissingReason,
+  missingFileDetail,
+  missingFileMessage,
+} from './editor-missing-notice.js';
+import { useReportPanelFailure } from '../workspace/panel-failure-notice.js';
 import { buildFileChangedNotice } from './file-changed-notice.js';
 import { throngHighlighting } from './highlight-style.js';
 import {
@@ -195,6 +200,16 @@ export function useEditor(params: UseEditorParams): void {
   const ws = useWorkspace();
   const { projects } = useProjects();
   const settings = useAppSettings().editor;
+  /**
+   * The consolidated raise (030 FR-029/FR-035), through a ref.
+   *
+   * `maybeWarn` is called from inside async closures that were built when the view mounted, so it
+   * must reach the CURRENT reporter rather than the one that existed at mount — the layout it reads
+   * changes as tabs and panels move.
+   */
+  const reportPanelFailure = useReportPanelFailure();
+  const reportPanelFailureRef = useRef(reportPanelFailure);
+  reportPanelFailureRef.current = reportPanelFailure;
   // The live bindings. `editor.cutLine` is rebindable (FR-017), and the keymap below is built from
   // them — minus any chord 012's window-level commands own (FR-024b).
   const keybindings = useKeybindings();
@@ -394,15 +409,28 @@ export function useEditor(params: UseEditorParams): void {
     });
   };
 
-  // Show the "cannot open" notice for a deliberate open — missing-file warnings are
-  // gated by editor.warnOnMissingFile; everything else always shows (FR-105).
+  /**
+   * Report a deliberate open that failed (FR-105 · 030 FR-030/FR-035).
+   *
+   * Missing-file warnings are gated by `editor.warnOnMissingFile`; everything else always shows.
+   *
+   * 030 removed the per-tab batch this used to build (FR-035), so this reports the PANEL as one
+   * casualty and the notification model decides whether it joins a notice already speaking for the
+   * same cause. A deliberate open is a single file by construction, so nothing here ever had a batch
+   * to lose.
+   */
   const maybeWarn = (
     entries: { filePath: string | null; panelName: string; reason: string }[],
   ): void => {
-    const shown = entries.filter(
-      (e) => !isMissingReason(e.reason) || metaRef.current.settings.warnOnMissingFile,
-    );
-    showMissingFilesNotice(shown, win()?.osName ?? 'windows');
+    const os = win()?.osName ?? 'windows';
+    for (const entry of entries) {
+      if (isMissingReason(entry.reason) && !metaRef.current.settings.warnOnMissingFile) continue;
+      reportPanelFailureRef.current({
+        panelId,
+        message: missingFileMessage(entry.reason),
+        detail: missingFileDetail(entry, os),
+      });
+    }
   };
 
   const dirname = (p: string): string => {

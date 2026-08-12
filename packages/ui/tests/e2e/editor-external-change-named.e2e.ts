@@ -4,8 +4,18 @@ import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
-// 011 US4 (FR-010): the "file changed on disk" warning NAMES the containing tab, the
-// panel, and the file's full path — not a generic message.
+/*
+ * 011 US4 (FR-010): the "file changed on disk" warning NAMES the containing tab, the panel, and the
+ * file's full path — not a generic message.
+ *
+ * ══ 030 US3 / T052 — LEFT ALONE, AND WHY ══
+ *
+ * FR-035 removed per-tab batching and with it the "Cannot open N files" dialog, which shared this
+ * dialog's markup and its `editor-notice-files` list. This spec is untouched because the notice it
+ * drives is a DIFFERENT one: `file-changed-notice.ts` builds it, it is not a failure, and it is the
+ * reason `editor-notice-store.ts` survives at all (T051a). Its identifiers are preserved exactly
+ * (T051b) and this file is where the structured file list is still asserted in full.
+ */
 
 async function openFileEditor(win: Page, fileName: string, panelName: string): Promise<string> {
   const pid = await firstPanelId(win);

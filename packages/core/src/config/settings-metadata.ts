@@ -475,7 +475,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'editor.warnOnMissingFile',
     label: 'Warn on missing file',
-    description: 'Show a popup when an editor’s file is missing or deleted.',
+    description: 'Report an editor whose file is missing or deleted.',
     group: 'Editor',
     control: 'toggle',
   },

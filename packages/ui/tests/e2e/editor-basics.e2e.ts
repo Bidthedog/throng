@@ -150,7 +150,14 @@ test('warns (does not lock) when a dirty saved file changes on disk; Save-All wr
       }
       expect(externalWriteSucceeded).toBe(true);
 
-      // …and throng surfaces a soft "changed on disk" notice (FR-028), keeping the buffer.
+      /*
+       * …and throng surfaces a soft "changed on disk" notice (FR-028), keeping the buffer.
+       *
+       * 030 US3 / T052 — LEFT ALONE, deliberately. This is `file-changed-notice.ts`, which still
+       * routes through `editor-notice-store.ts`; what FR-035 removed was the per-tab MISSING-FILE
+       * batch, not the store. The three identifiers below are preserved exactly for that reason
+       * (T051b), and this test is one of the six assertions that keeps them honest.
+       */
       await expect(win.getByTestId('editor-notice-dialog')).toBeVisible({ timeout: 8000 });
       await expect(win.getByTestId('editor-notice-message')).toContainText('changed');
       await win.getByTestId('editor-notice-ok').click();

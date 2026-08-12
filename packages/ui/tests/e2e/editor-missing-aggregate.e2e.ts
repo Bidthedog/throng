@@ -4,9 +4,27 @@ import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
-// Session 2026-07-06f: the "cannot open file" popup lists ALL missing files on a tab
-// in ONE dialog (FR-100), fires only on tab open/re-select — never on a panel
-// drag/remount (FR-105) — and can be disabled via editor.warnOnMissingFile.
+/*
+ * Session 2026-07-06f: the "cannot open file" report lists ALL missing files discovered when a tab
+ * is (re-)opened, fires only on tab open/re-select — never on a panel drag/remount (FR-105) — and
+ * can be disabled via `editor.warnOnMissingFile`.
+ *
+ * ══ REPOINTED BY 030 US3 / T052 ══
+ *
+ * Two of the three facts above are untouched: the SCAN still happens once per tab activation, and
+ * `warnOnMissingFile` still turns it off. What changed is the third — WHERE the result is reported.
+ *
+ * 006's answer was one modal dialog per tab, and this file asserted it structurally
+ * (`editor-notice-dialog`, `editor-notice-files`, two `.editor-notice__file` rows) rather than by
+ * its literal "Cannot open 2 files" string. FR-035 removes per-tab batching OUTRIGHT, because the
+ * tab is not the unit a user thinks in: one absent project root defeats editors in four tabs and
+ * terminals in two, and a per-tab dialog reports that four times while mentioning no terminal at
+ * all. The casualties are now rows of ONE consolidated notice per cause per project, grouped by tab
+ * — the tab survives as a heading inside the list rather than as a boundary between notices.
+ *
+ * So the structure each test asserts moves from the dialog to the notice, one for one. The FR-105
+ * and `warnOnMissingFile` tests keep their subject exactly; only their locator changes.
+ */
 
 function makeProject(): string {
   const root = mkdtempSync(join(tmpdir(), 'throng-agg-'));
@@ -28,7 +46,7 @@ async function reselectFirstTab(win: Page): Promise<void> {
   await win.locator('.tab-chip').first().click(); // back to the editors' tab
 }
 
-test('lists ALL missing files on a tab in one dialog (FR-100)', async () => {
+test('lists ALL missing files on a tab in one notice (FR-100 · 030 FR-029/FR-035)', async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -56,31 +74,36 @@ test('lists ALL missing files on a tab in one dialog (FR-100)', async () => {
       const wry = win.getByTestId('confirm-accept');
       if (await wry.isVisible().catch(() => false)) await wry.click();
 
-      // Re-select the tab → ONE dialog naming both files.
+      // Re-select the tab → ONE notice, listing both defeated panels.
       await reselectFirstTab(win);
-      const dialog = win.getByTestId('editor-notice-dialog');
-      await expect(dialog).toBeVisible({ timeout: 8000 });
-      // Both files listed in the scrollable box, each as a distinct bullet with the
-      // file NAME bold (its directory path is not).
-      const files = win.getByTestId('editor-notice-files');
-      await expect(files.locator('.editor-notice__file')).toHaveCount(2);
-      // Each file name is its own bold element (its directory path is a separate,
-      // non-bold element).
-      await expect(files.locator('.editor-notice__file-name', { hasText: 'alpha.txt' })).toBeVisible();
-      await expect(files.locator('.editor-notice__file-name', { hasText: 'beta.txt' })).toBeVisible();
-      await expect(files.locator('.editor-notice__file-dir').first()).toBeVisible();
-      // The bold name renders with a bold font weight.
-      const weight = await files
-        .locator('.editor-notice__file-name', { hasText: 'alpha.txt' })
-        .evaluate((el) => Number(getComputedStyle(el).fontWeight));
-      expect(weight).toBeGreaterThanOrEqual(600);
+      const notice = win.getByTestId('panel-failure-notice');
+      await expect(notice).toBeVisible({ timeout: 15_000 });
+      await expect(notice, 'two missing files raised two notices').toHaveCount(1);
+
+      // Both panels listed, each as its own row, under the heading for the tab they share.
+      const rows = notice.getByTestId('notice-affected-row');
+      await expect(rows).toHaveCount(2);
+      await expect(notice.getByTestId('notice-affected-tab')).toHaveCount(1);
+
+      /*
+       * The rows name the PANELS, not the files — and that is the change, not an omission.
+       *
+       * The old dialog listed paths, split into a dim directory and a bold name. FR-034 forbids a
+       * notice from rendering the raw system error and 030 keeps absolute paths out with it; the
+       * unit the notice speaks in is the panel, whose banner shows its own path in place (FR-040a).
+       * Each file's path still reaches the user, through Copy and the log (FR-048a).
+       */
+      const rowText = (await rows.allInnerTexts()).join('\n');
+      expect(rowText).not.toMatch(/[A-Za-z]:\\/);
+      // The old dialog is gone from this path entirely, not merely unused (FR-035).
+      await expect(win.getByTestId('editor-notice-dialog')).toHaveCount(0);
     });
   } finally {
     cleanupTemp(root);
   }
 });
 
-test('does NOT pop the dialog on delete / remount while the tab stays active (FR-105)', async () => {
+test('does NOT raise the notice on delete / remount while the tab stays active (FR-105)', async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -101,21 +124,21 @@ test('does NOT pop the dialog on delete / remount while the tab stays active (FR
       if (await wry.isVisible().catch(() => false)) await wry.click();
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible({ timeout: 8000 });
 
-      // Give the tab-open watcher's window (300ms) time to pass — still no dialog,
+      // Give the tab-open watcher's window (300ms) time to pass — still no notice,
       // because the active tab never changed (this is what a panel drag also does).
       await win.waitForTimeout(700);
-      await expect(win.getByTestId('editor-notice-dialog')).toHaveCount(0);
+      await expect(win.getByTestId('panel-failure-notice')).toHaveCount(0);
 
       // Only a tab re-selection surfaces it.
       await reselectFirstTab(win);
-      await expect(win.getByTestId('editor-notice-dialog')).toBeVisible({ timeout: 8000 });
+      await expect(win.getByTestId('panel-failure-notice')).toBeVisible({ timeout: 15_000 });
     });
   } finally {
     cleanupTemp(root);
   }
 });
 
-test('editor.warnOnMissingFile=false suppresses the popup entirely', async () => {
+test('editor.warnOnMissingFile=false suppresses the report entirely', async () => {
   const root = makeProject();
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-agg-cfg-'));
   writeFileSync(
@@ -141,10 +164,10 @@ test('editor.warnOnMissingFile=false suppresses the popup entirely', async () =>
         if (await wry.isVisible().catch(() => false)) await wry.click();
         await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible({ timeout: 8000 });
 
-        // Re-select the tab — with the setting off, NO dialog appears.
+        // Re-select the tab — with the setting off, NO notice appears.
         await reselectFirstTab(win);
         await win.waitForTimeout(700);
-        await expect(win.getByTestId('editor-notice-dialog')).toHaveCount(0);
+        await expect(win.getByTestId('panel-failure-notice')).toHaveCount(0);
       },
       { env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
