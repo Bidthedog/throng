@@ -108,11 +108,28 @@ export function Picker({
    * them, and "press Escape then click back into what you were doing" is not a dismissal.
    */
   const returnFocusTo = useRef<HTMLElement | null>(null);
-  useEffect(() => {
+  const captured = useRef(false);
+  /*
+   * Captured during RENDER, which is the only phase early enough.
+   *
+   * The query input carries `autoFocus`, and React applies that in the COMMIT phase — before layout
+   * effects and long before passive ones. So an effect asking "where was focus?" is answered with
+   * the picker's own input, and on unmount that element is already gone: `document.contains` is
+   * false, the restore is skipped, and focus is left on `body`. The user pressed Escape and landed
+   * nowhere. Rendering happens before the commit, so at this point `document.activeElement` is still
+   * whatever the user was actually on — read once, and never again, so a re-render mid-typing cannot
+   * overwrite it with the input.
+   */
+  if (!captured.current) {
+    captured.current = true;
     returnFocusTo.current = document.activeElement as HTMLElement | null;
+  }
+  useEffect(() => {
     return () => {
       const previous = returnFocusTo.current;
-      if (previous && document.contains(previous)) previous.focus();
+      // `document.body` is not a place to send anyone back to, and it is what `activeElement` reads
+      // when nothing is focused — restoring it would fight the trap for no gain.
+      if (previous && previous !== document.body && document.contains(previous)) previous.focus();
     };
   }, []);
 

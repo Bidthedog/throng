@@ -165,6 +165,9 @@ export type { MatchSpan } from './picker/match.js';
 export { countGraphemes, truncateGraphemes, wasTruncated } from './text/grapheme.js';
 // 031 FR-040 — the persistence half: names are bounded at the layout WRITE boundary, never on read.
 export { boundLayoutNames } from './workspace/bound-names.js';
+// 031 FR-053a — where a new tab lands. Declared by the OPERATION (see app-settings.ts for why),
+// so this is the single export and the setting is typed from it.
+export type { NewTabPosition } from './workspace/operations.js';
 export type { StartingFolderConfig, StartingFolderContext } from './config/starting-folder.js';
 export { resolveStartingFolder, isOverrideResolvable } from './config/starting-folder.js';
 // Shared zoom range & mapping (012) — global + per-type zoom use one source.

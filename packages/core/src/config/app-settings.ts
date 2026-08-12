@@ -238,11 +238,32 @@ export interface DiagnosticsSettings {
 }
 
 /**
+ * Where a tab created with **+** lands (031 US6, FR-053/FR-053a).
+ *
+ * `afterActive` is the default because a new tab is nearly always *about* the tab you were just
+ * on — appending it to the end put it wherever the strip happened to have grown to, which on a
+ * scrolled strip is somewhere you cannot even see.
+ */
+/*
+ * 031 FR-053a — re-exported, NOT redeclared.
+ *
+ * Two agents introduced this type independently, with identical values, which would have been a
+ * duplicate identifier the moment the barrel exported both. The OPERATION owns it: `addTab`'s
+ * position is the operation's own vocabulary, and the setting exists to choose between the values
+ * the operation offers. Typing the setting from the operation makes it impossible for the two to
+ * drift into disagreement; the reverse would point the layout layer at the settings layer for a
+ * word that is really about layout.
+ */
+export type { NewTabPosition } from '../workspace/operations.js';
+import type { NewTabPosition } from '../workspace/operations.js';
+
+/**
  * Tab-strip preferences (031).
  *
- * All three are bounded by their DESCRIPTOR alone (FR-041): there is no hand-written clamp here,
- * and there must never be one — the read-side guard enforces what `settings-metadata.ts` declares,
- * so a range stated twice is a range that can disagree with itself (#227).
+ * Every one of these is bounded by its DESCRIPTOR alone (FR-041): there is no hand-written clamp
+ * here, and there must never be one — the read-side guard enforces what `settings-metadata.ts`
+ * declares, so a range stated twice is a range that can disagree with itself (#227). The same goes
+ * for `newTabPosition`'s two allowed values, which are declared once, on its descriptor.
  */
 export interface TabSettings {
   /**
@@ -262,6 +283,23 @@ export interface TabSettings {
    * and two limits would be two things to discover and keep in agreement.
    */
   maxNameLength: number;
+  /**
+   * The widest a tab may render, in CHARACTERS (FR-050) — the same unit as `maxNameLength`, so the
+   * two can be read against each other without converting anything.
+   *
+   * It is a cap on the VIEW, not on the name: a title past it is ellipsised where it is drawn and
+   * shown in full on hover (FR-050a/b), while the name itself is untouched. A tab can therefore be
+   * ellipsised without ever being truncated.
+   */
+  maxWidth: number;
+  /** Where a tab created with **+** is inserted (FR-053a). */
+  newTabPosition: NewTabPosition;
+  /**
+   * How long (ms) a press-and-hold on a scroll chevron waits before it starts repeating (FR-054a).
+   * Short enough that holding is the obvious way to cross a long strip; long enough that an
+   * ordinary click never turns into one.
+   */
+  chevronRepeatDelayMs: number;
 }
 
 /** In-panel search preferences (013, FR-002a / SC-007). */
@@ -336,6 +374,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     smoothScrollMs: 300,
     closeArmingDelayMs: 300,
     maxNameLength: 64,
+    maxWidth: 32,
+    newTabPosition: 'afterActive',
+    chevronRepeatDelayMs: 500,
   },
   newProject: {
     startingFolder: 'lastViewed',
@@ -384,9 +425,14 @@ function diagnosticsSettings(raw: unknown, d: DiagnosticsSettings): DiagnosticsS
 /**
  * Tolerant parse of the tabs section (031).
  *
- * TYPE only — no range check. Every bound these three have is declared on their descriptors and
- * enforced by the read-side guard (FR-009/FR-041); repeating it here is exactly the duplication
- * that let a declared range and a parsed range drift apart in the first place (#227).
+ * TYPE only — no range check, and no membership check either. Every bound these settings have is
+ * declared on their descriptors and enforced by the read-side guard (FR-009/FR-041); repeating it
+ * here is exactly the duplication that let a declared range and a parsed range drift apart in the
+ * first place (#227).
+ *
+ * So `newTabPosition` is accepted as any STRING and handed on. An unrecognised one is not this
+ * function's business — `allowedValues` on the descriptor is the single statement of the set, and
+ * the guard substitutes the default for anything outside it.
  */
 function tabsSettings(raw: unknown, d: TabSettings): TabSettings {
   const v = isRecord(raw) ? raw : {};
@@ -394,6 +440,10 @@ function tabsSettings(raw: unknown, d: TabSettings): TabSettings {
     smoothScrollMs: wholeNumber(v.smoothScrollMs, d.smoothScrollMs),
     closeArmingDelayMs: wholeNumber(v.closeArmingDelayMs, d.closeArmingDelayMs),
     maxNameLength: wholeNumber(v.maxNameLength, d.maxNameLength),
+    maxWidth: wholeNumber(v.maxWidth, d.maxWidth),
+    newTabPosition:
+      typeof v.newTabPosition === 'string' ? (v.newTabPosition as NewTabPosition) : d.newTabPosition,
+    chevronRepeatDelayMs: wholeNumber(v.chevronRepeatDelayMs, d.chevronRepeatDelayMs),
   };
 }
 

@@ -63,14 +63,18 @@ async function sendChord(prefs: Page, key: string): Promise<void> {
   }, key);
 }
 
-/** Every tab setting, with the range and default the metadata declares. */
+/** Every BOUNDED tab setting, with the range and default the metadata declares. */
 const TAB_SETTINGS = [
   { key: 'tabs.smoothScrollMs', min: '0', max: '3000', step: '50', value: '300' },
   { key: 'tabs.closeArmingDelayMs', min: '0', max: '2000', step: '50', value: '300' },
   { key: 'tabs.maxNameLength', min: '10', max: '128', step: '2', value: '64' },
+  // US6 (FR-050, FR-054a). `maxWidth` shares the name limit's range because it shares its UNIT —
+  // characters — so the two can be read against each other.
+  { key: 'tabs.maxWidth', min: '10', max: '128', step: '2', value: '32' },
+  { key: 'tabs.chevronRepeatDelayMs', min: '100', max: '3000', step: '50', value: '500' },
 ] as const;
 
-test('T057 — the Tabs section exposes all three settings, with their ranges and defaults', async () => {
+test('T057 — the Tabs section exposes every setting, with their ranges and defaults', async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(
     async (app, win) => {
@@ -103,10 +107,18 @@ test('T057 — the Tabs section exposes all three settings, with their ranges an
       // The values on screen are the ones ON DISK: throng writes its shipped defaults out at first
       // run, so "the default" is a fact about the file as well as about the form, and the two must
       // agree before any of the editing tests below mean anything.
+      // The new-tab position is the group's one non-numeric: a select, so it declares a SET rather
+      // than a range and is checked here rather than in the loop above.
+      await expect(group.getByTestId('setting-tabs.newTabPosition')).toHaveCount(1);
+      await expect(prefs.getByTestId('control-tabs.newTabPosition')).toHaveValue('afterActive');
+
       expect(readSettings(cfgRoot)?.tabs).toEqual({
         smoothScrollMs: 300,
         closeArmingDelayMs: 300,
         maxNameLength: 64,
+        maxWidth: 32,
+        newTabPosition: 'afterActive',
+        chevronRepeatDelayMs: 500,
       });
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },

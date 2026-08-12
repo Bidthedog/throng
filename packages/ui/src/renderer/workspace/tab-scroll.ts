@@ -30,6 +30,12 @@ import { ease } from '@throng/core';
 const REDUCE_MOTION = '(prefers-reduced-motion: reduce)';
 
 /**
+ * Sub-pixel slack, matching core's geometry epsilon. A third of a pixel is not a journey, and
+ * layout produces fractional positions constantly.
+ */
+const SETTLED_EPSILON = 0.5;
+
+/**
  * The live media query, or `null` where there is no `matchMedia` (a non-DOM test environment).
  * Absence means "no preference expressed", which is the same answer as a query that does not match.
  */
@@ -73,6 +79,19 @@ export interface TabScroller {
    * (A2) without every call site having to test for it.
    */
   scrollTo: (target: number | null) => void;
+  /**
+   * Where the strip is HEADING — the in-flight scroll's target — or `null` when nothing is in
+   * flight and "where it is heading" is simply where it is (A7, A9).
+   *
+   * Callers decide against this rather than against the live `scrollLeft`, because the live value
+   * 50ms into a 400ms glide is still essentially the position the glide started from. A step
+   * measured there chooses the SAME destination the previous press did (so presses fail to
+   * accumulate), and a reveal measured there judges visibility against a viewport the strip is in
+   * the act of leaving (so a scroll towards a tab that has since been destroyed is never
+   * recomputed). Both are the same mistake: asking where the strip is, when the question is where
+   * it will be.
+   */
+  pendingTarget: () => number | null;
   /** True while the instant path is in force — duration 0, or the OS asking for reduced motion. */
   instant: boolean;
 }
@@ -144,6 +163,24 @@ export function useTabScroll(
     (target: number | null): void => {
       const track = trackRef.current;
       if (track === null || target === null) return;
+      /*
+       * "Be here" — the strip is already at the target, to the sub-pixel.
+       *
+       * There is nothing to animate, and a zero-distance run is not harmless: it writes `scrollLeft`
+       * on EVERY frame for the whole duration, so for those 300ms the strip is pinned against
+       * anything else that tries to move it. That is not hypothetical — the browser scrolls a
+       * newly-mounted, focused tab chip into view natively, which lands the strip on the very
+       * position the reveal is about to ask for, and the resulting no-op glide then undid a scroll
+       * made a frame later.
+       *
+       * It SUPERSEDES like any other scroll (A6): the journey in flight is abandoned where it is,
+       * rather than resuming and pulling the strip off the target it has just been given.
+       */
+      if (Math.abs(track.scrollLeft - target) <= SETTLED_EPSILON) {
+        run.current = null;
+        cancelFrame();
+        return;
+      }
       if (instantRef.current) {
         run.current = null;
         cancelFrame();
@@ -162,6 +199,10 @@ export function useTabScroll(
     [cancelFrame, start, trackRef],
   );
 
+  // Stable identity: the reveal effect depends on this, and a new function each render would
+  // re-fire (and re-scroll) for no reason at all.
+  const pendingTarget = useCallback((): number | null => run.current?.to ?? null, []);
+
   // A13 — the preference turning on settles whatever is in flight, rather than only affecting the
   // next scroll. A user who asks for less motion mid-glide has asked about THIS glide.
   useEffect(() => {
@@ -170,5 +211,5 @@ export function useTabScroll(
 
   useEffect(() => cancelFrame, [cancelFrame]);
 
-  return { scrollTo, instant };
+  return { scrollTo, pendingTarget, instant };
 }

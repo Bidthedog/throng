@@ -437,10 +437,30 @@ export function TabGroup(): ReactElement {
   // painting a gradient over them. Measured rather than guessed: the group's width changes with the
   // number of digits in its counts.
   const [actionsWidth, setActionsWidth] = useState(0);
+  /*
+   * The track's own visible width, as last measured.
+   *
+   * State rather than a ref because the REVEAL depends on it (FR-029, A1). The width is not a
+   * constant of the strip: the tab-actions group appears only on overflow and takes its width out of
+   * the track when it does, so a reveal computed the instant a layout is restored is computed
+   * against a viewport ~118px wider than the one that exists a render later — and the restored
+   * active tab is then left cut off by exactly that much. Re-running the reveal when the width
+   * changes is what makes "brought into view" true of the viewport the user actually has.
+   */
+  const [viewportWidth, setViewportWidth] = useState(0);
+  /**
+   * The scroll position the last reveal concluded with — its target, or where the strip already was
+   * when the tab was already visible. `null` until the first reveal.
+   *
+   * This is what tells "the strip is still where the reveal put it" (so a viewport change has
+   * invalidated that reveal's arithmetic) from "the user has scrolled somewhere else since" (so it
+   * has not, and dragging them back would be the bug).
+   */
+  const revealedTo = useRef<number | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const { maxNameLength, smoothScrollMs, closeArmingDelayMs } = settings.tabs;
-  const { scrollTo } = useTabScroll(trackRef, smoothScrollMs);
+  const { scrollTo, pendingTarget } = useTabScroll(trackRef, smoothScrollMs);
 
   /**
    * The strip as core's geometry module wants it: every tab's edges in the track's own content
@@ -448,18 +468,30 @@ export function TabGroup(): ReactElement {
    *
    * `offsetLeft` is relative to the track (which is `position: relative`), so these ARE content-space
    * coordinates and need no correction for the current scroll.
+   *
+   * `from` overrides "where the viewport sits" with where it is HEADING (A7, A9) — see
+   * {@link TabScroller.pendingTarget}. It is clamped to the CURRENT content, which is what makes a
+   * recomputation against a destroyed tab honest: a target chosen for a strip that had one more tab
+   * in it is not a position this strip has, and measuring visibility from it would answer about a
+   * viewport that cannot exist. Omitted (the default) it reads the live scroll, which is what the
+   * counts and the fades must always use.
    */
-  const readMetrics = useCallback((): StripMetrics | null => {
+  const readMetrics = useCallback((from?: number | null): StripMetrics | null => {
     const track = trackRef.current;
     if (!track) return null;
     const chips = Array.from(track.querySelectorAll<HTMLElement>('.tab-chip'));
+    const tabOffsets = chips.map((chip) => ({
+      left: chip.offsetLeft,
+      right: chip.offsetLeft + chip.offsetWidth,
+    }));
+    const viewportWidth = track.clientWidth;
+    const contentWidth = tabOffsets.reduce((widest, tab) => Math.max(widest, tab.right), 0);
+    const maxScroll = Math.max(0, contentWidth - viewportWidth);
     return {
-      tabOffsets: chips.map((chip) => ({
-        left: chip.offsetLeft,
-        right: chip.offsetLeft + chip.offsetWidth,
-      })),
-      scrollLeft: track.scrollLeft,
-      viewportWidth: track.clientWidth,
+      tabOffsets,
+      scrollLeft:
+        from === undefined || from === null ? track.scrollLeft : Math.min(Math.max(from, 0), maxScroll),
+      viewportWidth,
     };
   }, []);
 
@@ -493,6 +525,10 @@ export function TabGroup(): ReactElement {
     }
     const width = actionsRef.current?.offsetWidth ?? 0;
     setActionsWidth((prev) => (prev === width ? prev : width));
+    // Rounded, because a fractional layout width would make this state churn on renders that
+    // changed nothing. It is a REVEAL dependency (see below), not decoration.
+    const viewport = Math.round(track.clientWidth);
+    setViewportWidth((prev) => (prev === viewport ? prev : viewport));
   }, [readMetrics]);
 
   /*
@@ -534,14 +570,58 @@ export function TabGroup(): ReactElement {
    *
    * `revealTarget` returns `null` for an already-fully-visible tab, so A2 costs nothing: a click on
    * a tab the user can already see causes no movement at all.
+   *
+   * Measured from the PENDING target, not from the live `scrollLeft`: visibility is judged from
+   * where the strip is heading. Judged from where it currently is, a tab destroyed mid-flight leaves
+   * this effect looking at the strip's starting position, finding the new active tab already visible
+   * there, and returning `null` — and `null` means "no movement needed", not "cancel the movement in
+   * flight", so the strip finishes a journey to a tab that no longer exists (A9).
+   */
+  const revealActiveTab = useCallback((): void => {
+    const current = layoutRef.current;
+    const active = current?.activeTabId ?? null;
+    if (active === null) return;
+    const index = current?.tabs.findIndex((t) => t.id === active) ?? -1;
+    if (index < 0) return;
+    const metrics = readMetrics(pendingTarget());
+    if (!metrics) return;
+    const target = revealTarget(metrics, index);
+    // Where this reveal concluded the strip belongs — its target, or where it already was when the
+    // answer was "nowhere to go". See the geometry effect below, which needs to know whether the
+    // strip is still there.
+    revealedTo.current = target ?? metrics.scrollLeft;
+    scrollTo(target);
+  }, [readMetrics, pendingTarget, scrollTo]);
+
+  useEffect(() => {
+    revealActiveTab();
+  }, [activeTabId, tabIds, revealActiveTab]);
+
+  /*
+   * FR-029 again, for the case where the ACTIVE TAB did not change but the arithmetic did.
+   *
+   * A reveal is a sum over the track's visible width, and that width is not a constant of the strip:
+   * the tab-actions group appears only on overflow and takes its width out of the track when it
+   * does. On a restored layout both happen in the same beat — the tabs arrive, the reveal is
+   * computed against a full-width track, and the group then appears and takes ~118px of it — so the
+   * strip comes to rest against a viewport that no longer exists and the tab the user was last on is
+   * left cut off by exactly the group's width.
+   *
+   * The GUARD is the substance here. Re-revealing on every width change would make the strip
+   * un-scrollable: the counts change as it scrolls, the group's controls change with them, and any
+   * width change that followed would haul the user straight back to the active tab. So the recompute
+   * applies only while the strip is still where the last reveal put it (or still heading there) —
+   * which is precisely the case where that reveal's conclusion was the thing invalidated. Once the
+   * user has gone somewhere else, where they are is not a stale answer to be corrected.
    */
   useEffect(() => {
-    if (activeTabId === null) return;
-    const index = layoutRef.current?.tabs.findIndex((t) => t.id === activeTabId) ?? -1;
-    if (index < 0) return;
-    const metrics = readMetrics();
-    if (metrics) scrollTo(revealTarget(metrics, index));
-  }, [activeTabId, tabIds, readMetrics, scrollTo]);
+    const track = trackRef.current;
+    const anchor = revealedTo.current;
+    if (!track || anchor === null) return;
+    const heading = pendingTarget() ?? track.scrollLeft;
+    if (Math.abs(heading - anchor) > 1) return;
+    revealActiveTab();
+  }, [viewportWidth, revealActiveTab, pendingTarget]);
 
   // T5/T7 — the `tabs.openPicker` chord opens the SAME picker the "show all" control does.
   useEffect(() => {
@@ -917,9 +997,17 @@ export function TabGroup(): ReactElement {
     ws.closeOtherTabs(tabId);
   };
 
-  /** Move by exactly one tab, landing it flush with the left edge (S3). `null` → nothing to do. */
+  /**
+   * Move by exactly one tab, landing it flush with the left edge (S3). `null` → nothing to do.
+   *
+   * Measured from the scroll's PENDING target, so presses ACCUMULATE (A7): two quick steps move two
+   * tabs. Measured from the live `scrollLeft` they did not — 50ms into a 400ms glide the strip has
+   * barely left its mark, so the second press recomputed the same anchor and chose the same
+   * destination the first one had, and the strip settled one tab along having been asked twice.
+   * Superseding was never the problem; the arithmetic feeding it was.
+   */
   const step = (direction: 'left' | 'right'): void => {
-    const metrics = readMetrics();
+    const metrics = readMetrics(pendingTarget());
     if (metrics) scrollTo(stepTarget(metrics, direction));
   };
 
@@ -934,7 +1022,9 @@ export function TabGroup(): ReactElement {
     setPickerOpen(false);
     ws.setActiveTab(tabId);
     const index = layout.tabs.findIndex((t) => t.id === tabId);
-    const metrics = readMetrics();
+    // From the pending target, for the same reason the reveal effect does: choosing a second tab
+    // while the first choice is still gliding must decide against where the strip is going.
+    const metrics = readMetrics(pendingTarget());
     if (metrics && index >= 0) scrollTo(revealTarget(metrics, index));
   };
 

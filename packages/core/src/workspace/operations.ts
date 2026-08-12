@@ -125,15 +125,37 @@ export function createDefaultLayout(projectId: string, ids: NewTabIds): Workspac
   };
 }
 
-/** Add a new Tab (one placeholder Panel) and activate it (FR-012a). */
-export function addTab(layout: WorkspaceLayout, ids: NewTabIds): WorkspaceLayout {
+/**
+ * Where a newly created Tab lands in the strip (FR-053/FR-053a). `'afterActive'`
+ * puts it immediately to the right of the active Tab; `'end'` appends it. The
+ * caller supplies this (from `tabs.newTabPosition`) so core stays free of config
+ * lookups.
+ */
+export type NewTabPosition = 'afterActive' | 'end';
+
+/**
+ * Add a new Tab (one placeholder Panel) and activate it (FR-012a).
+ *
+ * `position` decides the insertion index (FR-053): `'end'` appends, which is the
+ * default and the historical behaviour; `'afterActive'` inserts at
+ * `activeIndex + 1`. An `activeTabId` that resolves to no Tab falls back to
+ * appending, so the result always satisfies INV-7.
+ */
+export function addTab(
+  layout: WorkspaceLayout,
+  ids: NewTabIds,
+  position: NewTabPosition = 'end',
+): WorkspaceLayout {
   const tab: Tab = {
     id: ids.tab,
     title: `Tab ${layout.tabs.length + 1}`,
     root: makePanel(ids.panel, layout.projectId, `Panel ${totalPanels(layout) + 1}`),
     activePanelId: ids.panel,
   };
-  return { ...layout, tabs: [...layout.tabs, tab], activeTabId: ids.tab };
+  const activeIndex = layout.tabs.findIndex((t) => t.id === layout.activeTabId);
+  const at = position === 'afterActive' && activeIndex >= 0 ? activeIndex + 1 : layout.tabs.length;
+  const tabs = [...layout.tabs.slice(0, at), tab, ...layout.tabs.slice(at)];
+  return { ...layout, tabs, activeTabId: ids.tab };
 }
 
 /** Add an empty placeholder Panel into a Tab (FR-012a). */
