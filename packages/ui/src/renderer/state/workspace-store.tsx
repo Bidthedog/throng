@@ -146,6 +146,17 @@ export function WorkspaceProvider({
   const settings = useAppSettings();
   const maxNameLength = useRef(settings.tabs.maxNameLength);
   maxNameLength.current = settings.tabs.maxNameLength;
+  /*
+   * 031 FR-053/FR-053a — where a new Tab lands.
+   *
+   * Read HERE rather than passed in by the strip, so the context method keeps its no-argument
+   * signature and every route to "create a tab" obeys the setting by construction — the strip's +,
+   * a future command, a future menu item. A ref for the same reason `maxNameLength` is one: the
+   * context value is memoised on things that are not settings, and adding a settings dependency to
+   * it would rebuild every callback in the store each time any preference changed.
+   */
+  const newTabPosition = useRef(settings.tabs.newTabPosition);
+  newTabPosition.current = settings.tabs.newTabPosition;
   const boundForSave = useCallback(
     (l: WorkspaceLayout): WorkspaceLayout => boundLayoutNames(l, maxNameLength.current),
     [],
@@ -257,7 +268,7 @@ export function WorkspaceProvider({
       clearLastAddedPanel: () => setLastAddedPanelId(null),
       addTab: () => {
         const tab = newId();
-        apply((l) => opAddTab(l, { tab, panel: newId() }));
+        apply((l) => opAddTab(l, { tab, panel: newId() }, newTabPosition.current));
         return tab;
       },
       addPanel: (tabId) => {

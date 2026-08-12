@@ -723,10 +723,30 @@ textarea,
   cursor: default;
 }
 
-/* The count beside an action icon. Tabular figures so the control does not twitch as it changes. */
+/*
+ * The count beside an action icon. It also wears `.throng-count-pill` (031 FR-052b), which is
+ * defined further down and therefore wins on the properties both declare — that is the reuse, not a
+ * coincidence: the pill's rules live in ONE place and both the per-tab count and these counts read
+ * them from there.
+ */
 .icon-button__badge {
-  font-size: 10px;
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * FR-052a — the CHEVRON is centred in its control.
+ *
+ * The button already centres its flex line, but a bare glyph's box is only as tall as its line box,
+ * so what got centred was a line box rather than the icon. Giving the icon an explicit square and
+ * centring inside it makes the icon's own box concentric with the button's, which is the thing
+ * "vertically centred within its control" can be measured as.
+ */
+.tabstrip-actions__btn .icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 16px;
   line-height: 1;
 }
 
@@ -1539,13 +1559,16 @@ textarea,
   color: var(--throng-colour-destroyButtonHoverText);
 }
 
-/* --- Tab panel-count badge (FR-045; 031 FR-042 made it a PILL) -------- */
+/* --- The count pill (FR-045; 031 FR-042 made it a PILL, FR-052b shares it) -------- */
 /*
  * P1 — a pill, and no `[3]` square-bracket form remains anywhere. The brackets read as markup
  * rather than as "this tab contains three things", which is what the number actually says.
+ *
+ * FR-052b then made it the ONE way a count is drawn: the tab-actions group's hidden-left,
+ * hidden-right and total counts wear this same class rather than a copy of its rules, so "3 of
+ * something" looks the same wherever the strip says it, and restyling it restyles all four.
  */
-.tab-chip__count {
-  margin-left: 6px;
+.throng-count-pill {
   padding: 1px 6px;
   font-size: 10px;
   line-height: 1.4;
@@ -1554,6 +1577,11 @@ textarea,
   background: var(--surface-active);
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
+}
+
+/* The per-tab count's only difference from the shared pill: it sits after the label. */
+.tab-chip__count {
+  margin-left: 6px;
 }
 
 .tab-chip--active .tab-chip__count {
@@ -1627,6 +1655,89 @@ textarea,
 .tab-chip__label--truncated::after,
 .panel-box__title--truncated::after {
   content: '…';
+}
+
+/*
+ * --- Max tab WIDTH (031 US6 / FR-050, FR-050a) --------------------------
+ *
+ * Distinct from the name limit above, and deliberately so: `tabs.maxNameLength` bounds the NAME (it
+ * shortens what is stored at the next ordinary save), while `tabs.maxWidth` bounds only how much of
+ * it this strip is willing to spend room on. A tab can therefore be ellipsised here while its name
+ * is untouched — which is the case a fixed strip full of long-but-legal names produces, and the one
+ * the maintainer actually hit.
+ *
+ * The cap arrives as `--tabstrip-max-width` on the strip (tab-group.tsx), in `ch`, so the character
+ * count in the setting is a character count of the tab label's own themed font.
+ */
+.tab-chip__label {
+  /*
+   * ROUNDED DOWN TO A WHOLE PIXEL, and this is not cosmetic.
+   *
+   * The strip's whole geometry — core's `stripCounts`/`stepTarget`/`revealTarget`, the renderer's
+   * `readMetrics`, and the E2E helpers — works in `offsetLeft`/`offsetWidth`, which are INTEGERS.
+   * A cap of `32ch` is a fraction of a pixel, so every capped chip rounded up by a fraction, six of
+   * them accumulated ~0.6px, and the reveal then asked to scroll one pixel further than the content
+   * actually extends. The browser clamped it, and the last tab was left measurably — if invisibly —
+   * short of the right edge, which is exactly the state FR-029 exists to forbid. Rounding the cap
+   * makes the integer space the strip reasons in true of the layout it reasons about.
+   */
+  max-width: round(down, var(--tabstrip-max-width, 32ch), 1px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * --- The tab hover popover (031 US6 / FR-051) ---------------------------
+ *
+ * `position: fixed` and portaled to the body, because `.tab-strip` is `overflow: hidden` and would
+ * otherwise clip it to the strip. Its left/top are written by `clampToViewport` in tab-popover.tsx —
+ * this rule must never introduce a `translate`, which would move the surface away from the position
+ * that was measured and clamped.
+ *
+ * `pointer-events: none` is load-bearing rather than tidy: the surface opens directly under the
+ * pointer that summoned it, so anything else would let it swallow the click meant for the chip and
+ * strand a hover of its own the moment it closed.
+ */
+.tabstrip-popover {
+  position: fixed;
+  z-index: 1000;
+  max-width: 340px;
+  padding: 8px 10px;
+  background: var(--throng-colour-surfaceActive);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.tabstrip-popover__name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.tabstrip-popover__count {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/*
+ * THE INDENTATION FR-051 IS ABOUT. The panels are contained BY the tab, and a flat run of text says
+ * nothing about that — which is precisely what the native `title` attribute could not express and
+ * why this surface exists at all.
+ */
+.tabstrip-popover__panels {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.tabstrip-popover__panel {
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
 }
 
 /*
