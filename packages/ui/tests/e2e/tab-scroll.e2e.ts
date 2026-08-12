@@ -270,57 +270,6 @@ test.describe('an eased strip', () => {
 
     // Somewhere in the middle, so movement in EITHER direction would be visible.
     const initial = await stripState(shared.win);
-    // eslint-disable-next-line no-console
-    console.log('DEBUG A2 initial', JSON.stringify({ ...initial, chips: initial.chips.length }));
-    // eslint-disable-next-line no-console
-    console.log(
-      'DEBUG A2 after-set',
-      JSON.stringify(
-        await shared.win.evaluate((v) => {
-          const track = document.querySelector('[data-testid="tabstrip-track"]') as HTMLElement;
-          track.scrollLeft = v;
-          return {
-            immediate: track.scrollLeft,
-            w: track.clientWidth,
-            sw: track.scrollWidth,
-            tracks: document.querySelectorAll('[data-testid="tabstrip-track"]').length,
-            strips: document.querySelectorAll('[data-testid="tab-strip"]').length,
-            chipsInDoc: document.querySelectorAll('.tab-chip').length,
-            chipsInTrack: track.querySelectorAll('.tab-chip').length,
-          };
-        }, Math.round(initial.maxScroll / 2)),
-      ),
-    );
-    // eslint-disable-next-line no-console
-    console.log(
-      'DEBUG A2 later',
-      JSON.stringify(
-        await shared.win.evaluate(
-          () =>
-            new Promise((resolve) => {
-              const first = document.querySelector(
-                '[data-testid="tabstrip-track"]',
-              ) as HTMLElement & { __mark?: number };
-              first.__mark = 1;
-              const out: Array<{ t: number; s: number; same: boolean }> = [];
-              const t0 = performance.now();
-              const tick = (): void => {
-                const track = document.querySelector(
-                  '[data-testid="tabstrip-track"]',
-                ) as HTMLElement & { __mark?: number };
-                out.push({
-                  t: Math.round(performance.now() - t0),
-                  s: track.scrollLeft,
-                  same: track.__mark === 1,
-                });
-                if (performance.now() - t0 < 1500) requestAnimationFrame(tick);
-                else resolve(out.filter((_, i) => i % 8 === 0));
-              };
-              requestAnimationFrame(tick);
-            }),
-        ),
-      ),
-    );
     await setScrollLeft(shared.win, Math.round(initial.maxScroll / 2));
 
     const positioned = await stripState(shared.win);
@@ -392,20 +341,35 @@ test.describe('an eased strip', () => {
 
     const trace = await endScrollTrace(shared.win);
     const after = await stripState(shared.win);
-    // eslint-disable-next-line no-console
-    console.log(
-      'DEBUG T047',
-      JSON.stringify({
-        beforeScroll: before.scrollLeft,
-        afterScroll: after.scrollLeft,
-        chips: after.chips.map((c) => [c.left, c.right]),
-        vw: after.viewportWidth,
-        max: after.maxScroll,
-        trace: trace.filter((_, i) => i % 4 === 0),
-      }),
-    );
 
-    // A7 — two presses, two tabs.
+    /*
+     * A6/A8 first, because they PASS and A7 does not — asserting them ahead of the failure keeps the
+     * red pointing at the one guarantee that is actually unmet.
+     *
+     * The superseding scroll starts from where the strip IS and leaves nothing behind: the series
+     * only ever moves one way, so there is no jump back and no drift towards the old target…
+     */
+    expect(isMonotonic(trace), 'the strip reversed direction — a superseded scroll left residue').toBe(
+      true,
+    );
+    // …and having settled, it stays settled. A queued second animation would show up here.
+    const resting = await expectStillAfterSettling(shared.win);
+    expect(Math.abs(resting - after.scrollLeft)).toBeLessThanOrEqual(1);
+
+    /*
+     * A7 — two presses, TWO tabs. KNOWN RED.
+     *
+     * Measured: the frame-by-frame trace is a single clean ease from 0 to 110 and stops there — one
+     * tab, not two. The cause is visible in the arithmetic rather than in the animation, and the
+     * animation is not where the fix goes: `step()` recomputes `stepTarget` from the track's LIVE
+     * `scrollLeft`, which 50ms into a 400ms glide is still essentially zero, so the second press
+     * chooses the SAME destination the first one did. Superseding is working exactly as designed;
+     * what is missing is that a step should be measured from the scroll's PENDING target, so that
+     * presses accumulate.
+     *
+     * This is the guarantee the contract's implementation note assumed fell out of the one-rAF-loop
+     * design ("A7 and A8 are then structural"). A8 does; A7 does not.
+     */
     expect(anchorIndex(after), 'two quick steps move the strip on by two tabs').toBe(
       anchorBefore + 2,
     );
@@ -413,16 +377,6 @@ test.describe('an eased strip', () => {
       Math.abs(after.scrollLeft - after.chips[anchorBefore + 2]!.left),
       'the second revealed tab is flush with the left edge',
     ).toBeLessThanOrEqual(1);
-
-    // A6/A8 — the superseding scroll starts from where the strip IS and leaves nothing behind: the
-    // series only ever moves one way, so there is no jump back and no drift towards the old target.
-    expect(isMonotonic(trace), 'the strip reversed direction — a superseded scroll left residue').toBe(
-      true,
-    );
-
-    // …and having settled, it stays settled. A queued second animation would show up here.
-    const resting = await expectStillAfterSettling(shared.win);
-    expect(Math.abs(resting - after.scrollLeft)).toBeLessThanOrEqual(1);
   });
 });
 
@@ -515,6 +469,23 @@ test.describe('a slow strip', () => {
     const anchorBefore = anchorIndex(before);
     await beginScrollTrace(shared.win);
     await shared.win.getByTestId('tabstrip-step-right').click();
+
+    /*
+     * Wait for the glide to be genuinely UNDER WAY before turning the preference on.
+     *
+     * Without this the test is vacuous in the most misleading way: `emulateMedia` lands within a few
+     * milliseconds, before the first animation frame, so the scroll is instant from the outset and
+     * nothing has been interrupted at all — a pass that proves the instant path (A11) a second time
+     * and says nothing about A13. Waiting on the CONDITION "the strip has moved off its mark" is
+     * what makes the interruption real.
+     */
+    await expect
+      .poll(async () => (await stripState(shared.win)).scrollLeft, {
+        timeout: 2000,
+        message: 'the eased scroll never got under way, so there was nothing to interrupt',
+      })
+      .toBeGreaterThan(before.scrollLeft + 1);
+
     // The preference turns on while the scroll is running. A user who asks for less motion
     // mid-glide has asked about THIS glide.
     await shared.win.emulateMedia({ reducedMotion: 'reduce' });
@@ -544,10 +515,22 @@ test.describe('a slow strip', () => {
     await freshProject(shared.win);
     await seedOverflowingTabs(shared.win, 'scroll-instant-outcome');
 
-    // Animated, to establish what the outcome IS.
+    /*
+     * Animated, to establish what the outcome IS.
+     *
+     * The wait is on the ANCHOR reaching its new tab, not on the strip going still. A 3000ms glide
+     * over 110px moves less than a physical pixel per frame at the start, and Chromium snaps
+     * `scrollLeft` to whole device pixels — so a value-based stillness test reads a moving strip as
+     * a stopped one and hands back a rest position of nearly zero. A semantic condition cannot be
+     * fooled that way.
+     */
     await setScrollLeft(shared.win, 0);
+    const anchorBefore = anchorIndex(await stripState(shared.win));
     await beginScrollTrace(shared.win);
     await shared.win.getByTestId('tabstrip-step-right').click();
+    await expect
+      .poll(async () => anchorIndex(await stripState(shared.win)), { timeout: 8000 })
+      .toBe(anchorBefore + 1);
     await waitForScrollStill(shared.win);
     const animated = await stripState(shared.win);
     const animatedCounts = await expectCountsInSync(shared.win);
@@ -557,6 +540,9 @@ test.describe('a slow strip', () => {
     await shared.win.emulateMedia({ reducedMotion: 'reduce' });
     await beginScrollTrace(shared.win);
     await shared.win.getByTestId('tabstrip-step-right').click();
+    await expect
+      .poll(async () => anchorIndex(await stripState(shared.win)), { timeout: 8000 })
+      .toBe(anchorBefore + 1);
     await waitForScrollStill(shared.win);
     const instant = await stripState(shared.win);
     const instantCounts = await expectCountsInSync(shared.win);
@@ -584,9 +570,31 @@ test.describe('a slow strip', () => {
      */
     await shared.win.getByTestId(`tabstrip-close-${doomed.tabId}`).dispatchEvent('click');
     await expect(shared.win.getByTestId(doomed.testId)).toHaveCount(0);
+    // Semantic wait, for the same reason A14 uses one: a long glide's opening frames move less than
+    // a device pixel, so "the value stopped changing" is not evidence that it stopped.
+    await expect
+      .poll(
+        async () => {
+          const state = await stripState(shared.win);
+          return isFullyVisible(state, activeChip(state));
+        },
+        { timeout: 8000, message: 'the surviving active tab never came into view' },
+      )
+      .toBe(true);
     await waitForScrollStill(shared.win);
 
     const after = await stripState(shared.win);
+    // eslint-disable-next-line no-console
+    console.log(
+      'DEBUG A9',
+      JSON.stringify({
+        scrollLeft: after.scrollLeft,
+        max: after.maxScroll,
+        vw: after.viewportWidth,
+        active: after.chips.findIndex((c) => c.active),
+        chips: after.chips.map((c) => [c.left, c.right]),
+      }),
+    );
     expect(
       after.scrollLeft,
       'the strip rested past the end of what is left — it scrolled to a tab that no longer exists',
@@ -621,6 +629,15 @@ test.describe('a slow strip', () => {
           message: 'the track never widened with the window',
         })
         .toBeGreaterThan(widthBefore);
+      await expect
+        .poll(
+          async () => {
+            const state = await stripState(shared.win);
+            return isFullyVisible(state, activeChip(state));
+          },
+          { timeout: 8000, message: 'the strip never brought its active tab into the new width' },
+        )
+        .toBe(true);
       await waitForScrollStill(shared.win);
 
       const after = await stripState(shared.win);

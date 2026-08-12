@@ -372,18 +372,39 @@ export async function endScrollTrace(win: Page): Promise<number[]> {
  */
 export async function waitForScrollStill(
   win: Page,
-  { stillFrames = 12, timeout = 12_000 }: { stillFrames?: number; timeout?: number } = {},
+  {
+    stillFrames = 12,
+    /**
+     * Frames that must pass before stillness is allowed to COUNT.
+     *
+     * Without this the wait cannot tell "the scroll has finished" from "the scroll has not started
+     * yet": a click returns before the first animation frame, so the plateau still sitting in the
+     * trace from before the gesture satisfies a bare stillness test on the very first poll. The
+     * whole wait then returns instantly and every assertion after it measures a strip that never
+     * moved — which is precisely how a two-step assertion reported "moved zero tabs" against a
+     * renderer that was about to move two.
+     */
+    graceFrames = 20,
+    timeout = 12_000,
+  }: { stillFrames?: number; graceFrames?: number; timeout?: number } = {},
 ): Promise<void> {
+  const base = await win.evaluate(
+    () => ((window as unknown as { __throngTabTrace?: number[] }).__throngTabTrace ?? []).length,
+  );
   await expect
     .poll(
       async () =>
-        win.evaluate((need) => {
-          const samples =
-            (window as unknown as { __throngTabTrace?: number[] }).__throngTabTrace ?? [];
-          if (samples.length < need + 1) return false;
-          const tail = samples.slice(-need);
-          return tail.every((v) => Math.abs(v - tail[0]!) <= 0.5);
-        }, stillFrames),
+        win.evaluate(
+          ({ need, from, grace }) => {
+            const samples =
+              (window as unknown as { __throngTabTrace?: number[] }).__throngTabTrace ?? [];
+            if (samples.length < from + grace) return false;
+            if (samples.length < need + 1) return false;
+            const tail = samples.slice(-need);
+            return tail.every((v) => Math.abs(v - tail[0]!) <= 0.5);
+          },
+          { need: stillFrames, from: base, grace: graceFrames },
+        ),
       { timeout, message: 'the tab strip never stopped moving' },
     )
     .toBe(true);

@@ -12,6 +12,7 @@ import {
 import {
   addPanel as opAddPanel,
   addTab as opAddTab,
+  boundLayoutNames,
   movePanelToEdge as opMovePanelToEdge,
   movePanelToTab as opMovePanelToTab,
   addTabFromPanel as opAddTabFromPanel,
@@ -43,6 +44,7 @@ import {
 } from '@throng/core';
 import type { WorkspaceClient } from './workspace-client.js';
 import { registerLayoutFlusher, trackLayoutSave } from './layout-saves.js';
+import { useAppSettings } from '../config/config-store.js';
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
 
@@ -130,6 +132,25 @@ export function WorkspaceProvider({
   // project switch or unmount rather than being dropped (no silent data loss).
   const pendingSave = useRef<WorkspaceLayout | null>(null);
 
+  /*
+   * 031 FR-040 — the PERSISTENCE half of the name limit, applied at the WRITE boundary.
+   *
+   * Shortening a name for display must never rewrite what is stored, which is what makes lowering
+   * the limit and raising it again reversible. The shortened form IS persisted the next time the
+   * layout is written for some OTHER reason, and this is that moment — the only place both halves
+   * can be true at once.
+   *
+   * Held in a ref rather than closed over: `flushSave` and `scheduleSave` are memoised on `client`,
+   * and rebuilding them whenever the limit changed would cancel a pending debounce mid-drag.
+   */
+  const settings = useAppSettings();
+  const maxNameLength = useRef(settings.tabs.maxNameLength);
+  maxNameLength.current = settings.tabs.maxNameLength;
+  const boundForSave = useCallback(
+    (l: WorkspaceLayout): WorkspaceLayout => boundLayoutNames(l, maxNameLength.current),
+    [],
+  );
+
   // RETURNS the save, rather than dropping it with `void` (019 FR-010): a drain that is not
   // awaited is not a drain — `await` on a void function awaits `undefined` and acks having
   // settled nothing, which is the very defect #86 reports. Nothing pending resolves
@@ -145,8 +166,8 @@ export function WorkspaceProvider({
     if (!pending) return;
     // Tracked as well as awaited: a save is not one hop (a sub-workspace's is two round-trips),
     // and this same promise is what a concurrent drain must await rather than race.
-    await trackLayoutSave(client.save(pending.projectId, pending));
-  }, [client]);
+    await trackLayoutSave(client.save(pending.projectId, boundForSave(pending)));
+  }, [client, boundForSave]);
 
   // Join the window's drain (019 FR-010). Registered for as long as the provider is mounted,
   // so the close settles this layout wherever it is hosted — main window or sub-workspace (C6).
@@ -166,11 +187,11 @@ export function WorkspaceProvider({
           // pending to report, so this is the only record that the write exists; without it a
           // drain arriving now acks a write that is still in flight, and the close that follows
           // destroys the window mid-round-trip (019 FR-010).
-          void trackLayoutSave(client.save(pending.projectId, pending));
+          void trackLayoutSave(client.save(pending.projectId, boundForSave(pending)));
         }
       }, AUTOSAVE_DEBOUNCE_MS);
     },
-    [client],
+    [client, boundForSave],
   );
 
   // Load the active project's layout whenever it changes. Flush any pending save
