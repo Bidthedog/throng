@@ -44,8 +44,6 @@ import {
   type StripState,
 } from './helpers/tabs.js';
 
-test.describe.configure({ mode: 'serial' });
-
 const roots: string[] = [];
 const cfgRoots: string[] = [];
 
@@ -125,6 +123,7 @@ async function expectStillAfterSettling(win: Page): Promise<number> {
  * An eased strip (400ms) — the ordinary guarantees.
  * ══════════════════════════════════════════════════════════════════════════════════════════════ */
 test.describe('an eased strip', () => {
+  test.describe.configure({ mode: 'serial' });
   let shared: OpenApp;
 
   test.beforeAll(async () => {
@@ -206,57 +205,6 @@ test.describe('an eased strip', () => {
     const now = after.chips.find((c) => c.testId === target.testId)!;
     expect(now.active).toBe(true);
     expect(isFullyVisible(after, now), 'the chosen tab is scrolled into view').toBe(true);
-  });
-
-  test('T048 — a restored layout brings the active tab into view (A1: layout restore)', async () => {
-    const name = await freshProject(shared.win);
-    const ids = await seedOverflowingTabs(shared.win, 'scroll-restore');
-    const wanted = ids[ids.length - 1]!;
-    await setScrollLeft(shared.win, 0);
-
-    /*
-     * LAYOUT RESTORE, by leaving the project and coming back.
-     *
-     * Switching projects unmounts the strip and remounts it from persistence, so the track starts at
-     * zero and the restored `activeTabId` has to be brought into view by the same effect every other
-     * route goes through. (A renderer reload would be the other way to reach this, but throng
-     * deliberately auto-opens NO project at startup, so a reload restores nothing to look at.)
-     */
-    await freshProject(shared.win);
-    await shared.win
-      .locator('.project-item', { hasText: name })
-      .locator('[data-testid^="project-switch-"]')
-      .click();
-    await expect(shared.win.locator('.project-item', { hasText: name })).toHaveClass(
-      /project-item--active/,
-    );
-    await expect(shared.win.getByTestId(wanted)).toBeVisible();
-    /*
-     * KNOWN RED, and the measurement is worth writing down because the number identifies the cause.
-     *
-     * On a restore the strip DOES scroll — sampled frame by frame it eases from 1 to 1501 and stops
-     * — but it stops 118px short of the 1619 that would put the active tab flush with the right
-     * edge, leaving the tab the user was last on cut off. 118px is the width of the tab-actions
-     * group: the reveal target is computed while the strip still believes its track is 664px wide,
-     * and the group then appears and takes those 118px out of the track. Nothing recomputes, so the
-     * strip rests against a viewport that no longer exists.
-     *
-     * That is FR-029's own scenario ("restored") and A2's arithmetic done against a stale
-     * `viewportWidth`; the fix belongs in `tab-group.tsx`'s reveal effect, not here.
-     */
-    await expect
-      .poll(
-        async () => {
-          const state = await stripState(shared.win);
-          const chip = state.chips.find((c) => c.testId === wanted);
-          return chip ? isFullyVisible(state, chip) : false;
-        },
-        { message: 'the restored active tab was never brought into view' },
-      )
-      .toBe(true);
-    const state = await stripState(shared.win);
-    expect(activeChip(state).testId, 'the restored layout keeps its active tab').toBe(wanted);
-    await expectCountsInSync(shared.win);
   });
 
   test('T049 — an already-fully-visible tab causes no movement at all (A2)', async () => {
@@ -381,6 +329,76 @@ test.describe('an eased strip', () => {
 });
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
+ * A strip restored from persistence — A1's "layout restore" route.
+ *
+ * Its own app, and its own describe, for a reporting reason rather than a technical one: this test
+ * is currently RED against a real defect (see below), and Playwright's serial mode skips the rest of
+ * a group once one of its tests fails. Left among the others it would hide them.
+ * ══════════════════════════════════════════════════════════════════════════════════════════════ */
+test.describe('a restored strip', () => {
+  test.describe.configure({ mode: 'serial' });
+  let shared: OpenApp;
+
+  test.beforeAll(async () => {
+    shared = await openApp({ env: { THRONG_CONFIG_ROOT: seedConfig({ smoothScrollMs: 400 }) } });
+  });
+  test.afterAll(async () => {
+    await shared?.close();
+  });
+
+  test('T048 — a restored layout brings the active tab into view (A1: layout restore)', async () => {
+    const name = await freshProject(shared.win);
+    const ids = await seedOverflowingTabs(shared.win, 'scroll-restore');
+    const wanted = ids[ids.length - 1]!;
+    await setScrollLeft(shared.win, 0);
+
+    /*
+     * LAYOUT RESTORE, by leaving the project and coming back.
+     *
+     * Switching projects unmounts the strip and remounts it from persistence, so the track starts at
+     * zero and the restored `activeTabId` has to be brought into view by the same effect every other
+     * route goes through. (A renderer reload would be the other way to reach this, but throng
+     * deliberately auto-opens NO project at startup, so a reload restores nothing to look at.)
+     */
+    await freshProject(shared.win);
+    await shared.win
+      .locator('.project-item', { hasText: name })
+      .locator('[data-testid^="project-switch-"]')
+      .click();
+    await expect(shared.win.locator('.project-item', { hasText: name })).toHaveClass(
+      /project-item--active/,
+    );
+    await expect(shared.win.getByTestId(wanted)).toBeVisible();
+    /*
+     * KNOWN RED, and the measurement is worth writing down because the number identifies the cause.
+     *
+     * On a restore the strip DOES scroll — sampled frame by frame it eases from 1 to 1501 and stops
+     * — but it stops 118px short of the 1619 that would put the active tab flush with the right
+     * edge, leaving the tab the user was last on cut off. 118px is the width of the tab-actions
+     * group: the reveal target is computed while the strip still believes its track is 664px wide,
+     * and the group then appears and takes those 118px out of the track. Nothing recomputes, so the
+     * strip rests against a viewport that no longer exists.
+     *
+     * That is FR-029's own scenario ("restored") and A2's arithmetic done against a stale
+     * `viewportWidth`; the fix belongs in `tab-group.tsx`'s reveal effect, not here.
+     */
+    await expect
+      .poll(
+        async () => {
+          const state = await stripState(shared.win);
+          const chip = state.chips.find((c) => c.testId === wanted);
+          return chip ? isFullyVisible(state, chip) : false;
+        },
+        { message: 'the restored active tab was never brought into view' },
+      )
+      .toBe(true);
+    const state = await stripState(shared.win);
+    expect(activeChip(state).testId, 'the restored layout keeps its active tab').toBe(wanted);
+    await expectCountsInSync(shared.win);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
  * A deliberately SLOW strip (3000ms) — everything that must be caught mid-flight.
  *
  * Three seconds is the declared maximum for `tabs.smoothScrollMs`, chosen here so that "did the
@@ -388,6 +406,7 @@ test.describe('an eased strip', () => {
  * within a second and a half plainly did not run its course.
  * ══════════════════════════════════════════════════════════════════════════════════════════════ */
 test.describe('a slow strip', () => {
+  test.describe.configure({ mode: 'serial' });
   let shared: OpenApp;
   let cfgRoot: string;
 
@@ -552,6 +571,55 @@ test.describe('a slow strip', () => {
     expect(instantCounts).toEqual(animatedCounts);
   });
 
+  test('T057a — a window resize mid-scroll settles the strip and recomputes the counts', async () => {
+    await freshProject(shared.win);
+    await seedOverflowingTabs(shared.win, 'scroll-resize-inflight');
+    await setScrollLeft(shared.win, 0);
+
+    // `app.browserWindow(page)`, not `getAllWindows()[0]`: the application owns more than one
+    // BrowserWindow (the drag ghost among them), and resizing whichever came first resizes something
+    // the strip has never heard of.
+    const browserWindow = await shared.app.browserWindow(shared.win);
+    const original = await browserWindow.evaluate((w) => w.getSize());
+    const widthBefore = (await stripState(shared.win)).viewportWidth;
+
+    await beginScrollTrace(shared.win);
+    await startLongScrollToLastTab();
+    try {
+      // Widened, not narrowed: at the default window size the workspace pane is already at its
+      // declared minimum, so narrowing collapses the side panes and never reaches the track.
+      await browserWindow.evaluate((w, size) => w.setSize(size[0]!, size[1]!), [
+        original[0]! + 360,
+        original[1]!,
+      ]);
+      await expect
+        .poll(async () => (await stripState(shared.win)).viewportWidth, {
+          message: 'the track never widened with the window',
+        })
+        .toBeGreaterThan(widthBefore);
+      await expect
+        .poll(
+          async () => {
+            const state = await stripState(shared.win);
+            return isFullyVisible(state, activeChip(state));
+          },
+          { timeout: 8000, message: 'the strip never brought its active tab into the new width' },
+        )
+        .toBe(true);
+      await waitForScrollStill(shared.win);
+
+      const after = await stripState(shared.win);
+      expect(after.scrollLeft, 'the strip is not resting past the end').toBeLessThanOrEqual(
+        after.maxScroll + 1,
+      );
+      expect(after.scrollLeft).toBeGreaterThanOrEqual(-1);
+      // Counts and overflow state are recomputed against the NEW width, not the old one.
+      await expectCountsInSync(shared.win);
+    } finally {
+      await browserWindow.evaluate((w, size) => w.setSize(size[0]!, size[1]!), original);
+      await expectCountsInSync(shared.win);
+    }
+  });
   test('T051 — a tab destroyed mid-scroll leaves the strip at a valid position (A9)', async () => {
     await freshProject(shared.win);
     await seedOverflowingTabs(shared.win, 'scroll-destroy-inflight');
@@ -584,82 +652,38 @@ test.describe('a slow strip', () => {
     await waitForScrollStill(shared.win);
 
     const after = await stripState(shared.win);
-    // eslint-disable-next-line no-console
-    console.log(
-      'DEBUG A9',
-      JSON.stringify({
-        scrollLeft: after.scrollLeft,
-        max: after.maxScroll,
-        vw: after.viewportWidth,
-        active: after.chips.findIndex((c) => c.active),
-        chips: after.chips.map((c) => [c.left, c.right]),
-      }),
-    );
     expect(
       after.scrollLeft,
       'the strip rested past the end of what is left — it scrolled to a tab that no longer exists',
     ).toBeLessThanOrEqual(after.maxScroll + 1);
     expect(after.scrollLeft).toBeGreaterThanOrEqual(-1);
+    /*
+     * KNOWN RED — and it is the substance of A9, not decoration.
+     *
+     * Measured: with seven tabs, destroying the one the strip is gliding towards leaves the FIRST tab
+     * active (that is what `closeTab` chooses) at 0–108, while the strip carries on and rests at 1517
+     * — the far end, which is where the now-deleted tab used to be. The old journey finished.
+     *
+     * The mechanism is an interaction between two correct-looking pieces: the reveal effect fires for
+     * the new active tab while the glide has barely begun, so `revealTarget` measures against a
+     * `scrollLeft` of about 1, sees tab 0 fully visible, and returns `null` — a deliberate no-op. But
+     * `null` means "no movement needed", and the movement already in flight is not cancelled by it.
+     * So the strip is left travelling to a target that no longer means anything, which is exactly
+     * what A9 ("a tab destroyed mid-flight cannot be scrolled to") forbids.
+     */
     expect(isFullyVisible(after, activeChip(after)), 'the surviving active tab is in view').toBe(
       true,
     );
     await expectCountsInSync(shared.win);
   });
 
-  test('T057a — a window resize mid-scroll settles the strip and recomputes the counts', async () => {
-    await freshProject(shared.win);
-    await seedOverflowingTabs(shared.win, 'scroll-resize-inflight');
-    await setScrollLeft(shared.win, 0);
-
-    const original = await shared.app.evaluate(({ BrowserWindow }) =>
-      BrowserWindow.getAllWindows()[0]!.getSize(),
-    );
-    const widthBefore = (await stripState(shared.win)).viewportWidth;
-
-    await beginScrollTrace(shared.win);
-    await startLongScrollToLastTab();
-    try {
-      // Widened, not narrowed: at the default window size the workspace pane is already at its
-      // declared minimum, so narrowing collapses the side panes and never reaches the track.
-      await shared.app.evaluate(({ BrowserWindow }, size) => {
-        BrowserWindow.getAllWindows()[0]!.setSize(size[0], size[1]);
-      }, [original[0]! + 360, original[1]!] as [number, number]);
-      await expect
-        .poll(async () => (await stripState(shared.win)).viewportWidth, {
-          message: 'the track never widened with the window',
-        })
-        .toBeGreaterThan(widthBefore);
-      await expect
-        .poll(
-          async () => {
-            const state = await stripState(shared.win);
-            return isFullyVisible(state, activeChip(state));
-          },
-          { timeout: 8000, message: 'the strip never brought its active tab into the new width' },
-        )
-        .toBe(true);
-      await waitForScrollStill(shared.win);
-
-      const after = await stripState(shared.win);
-      expect(after.scrollLeft, 'the strip is not resting past the end').toBeLessThanOrEqual(
-        after.maxScroll + 1,
-      );
-      expect(after.scrollLeft).toBeGreaterThanOrEqual(-1);
-      // Counts and overflow state are recomputed against the NEW width, not the old one.
-      await expectCountsInSync(shared.win);
-    } finally {
-      await shared.app.evaluate(({ BrowserWindow }, size) => {
-        BrowserWindow.getAllWindows()[0]!.setSize(size[0], size[1]);
-      }, original as [number, number]);
-      await expectCountsInSync(shared.win);
-    }
-  });
 });
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
  * A strip with the animation switched off (0ms) — A10.
  * ══════════════════════════════════════════════════════════════════════════════════════════════ */
 test.describe('an unanimated strip', () => {
+  test.describe.configure({ mode: 'serial' });
   let shared: OpenApp;
 
   test.beforeAll(async () => {
