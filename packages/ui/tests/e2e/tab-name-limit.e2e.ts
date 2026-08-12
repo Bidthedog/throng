@@ -557,29 +557,61 @@ test('T084a — lower then raise the limit with nothing else changed, and the fu
 });
 
 /*
- * ══ NP2 IS NOT COVERED HERE, AND THIS IS WHY ═════════════════════════════════════════════════
+ * NP2 — the deliberately lossy half of FR-040.
  *
- * `contracts/name-limit.md` NP2 (FR-040) says the shortened form "is persisted only when the layout
- * is next written for another reason", and the spec spells out the consequence: "an ordinary save at
- * the lower limit makes the shortening permanent".
- *
- * The application does not do that, and the test that asserted it was written, run, and failed on
- * exactly that assertion — not on a timing problem. Measured: lower the limit to 16, rename a
- * DIFFERENT tab (an ordinary layout write, confirmed landed by polling the store for the new name),
- * and the store still holds the sixty-four-character name in full.
- *
- * The cause is structural rather than a missed line. The limit is applied at RENDER time only —
- * `tab-group.tsx` computes `shownTitle = truncateGraphemes(tab.title, maxNameLength)` for display,
- * `tab-picker.tsx` does the same, and `panelDisplayTitle` bounds its result — while the layout the
- * renderer hands to `workspace.save` is the in-memory one, whose titles were never touched. There is
- * no hook anywhere on the write path, and tasks.md has no task that would have added one: T092 asks
- * only that names be shortened "the next time they are READ".
- *
- * So this is an unimplemented guarantee, not a flaky test, and asserting it here would put a red
- * test into a suite whose gate is that every test passes first time. It needs either a renderer
- * change (bound the titles in the layout being saved) or an amendment to FR-040 — a product
- * decision, and not one an E2E spec should make by picking whichever assertion goes green.
- *
- * NP1, NP3 and NP4 — the guarantees that protect the stored name — are covered above and hold.
- * ═════════════════════════════════════════════════════════════════════════════════════════════ */
+ * This block used to say NP2 was UNIMPLEMENTED, and it was right when it was written: the limit
+ * was applied at render time only, so lowering it and saving the layout for another reason left
+ * the full name in the store. That is now fixed at the write boundary (`boundLayoutNames`, wired
+ * into both save paths in `workspace-store.tsx`), so the guarantee is real and testable — and the
+ * test below is the one the old comment said could not be written yet.
+ */
+test('T084b — an ordinary layout save at the lower limit makes the shortening permanent (NP2)', async () => {
+  const win = shared.win;
+  const projectName = await project('Persists');
+  const tab = await onlyTabId(win);
+
+  writeTabSettings(cfgRoot, { maxNameLength: 64 });
+  const input = await startTabRename(win, tab);
+  await awaitFieldLimit(input, tabRenameCounter(win, tab), 64);
+  await input.fill(name(64));
+  await input.press('Enter');
+  await expectStored(projectName, name(64), 'the full name was never persisted, so nothing is proven');
+
+  // Lower the limit. Display shortens; the STORE must still hold the full name (NP1).
+  writeTabSettings(cfgRoot, { maxNameLength: 16 });
+  const label = win.getByTestId(`tab-title-${tab}`);
+  await expect(label).toHaveText(name(16), { timeout: 15_000 });
+  expect(
+    storedLayout(projectName)?.includes(name(64)),
+    'precondition: reading alone has not rewritten it',
+  ).toBe(true);
+
+  /*
+   * Now write the layout FOR ANOTHER REASON. Creating a second tab is an ordinary layout change —
+   * it is not about this tab's name at all, which is precisely what NP2 is about: the shortened
+   * form rides along on the next save that was going to happen anyway.
+   */
+  await win.getByTestId('tab-add').click();
+  await commitTabRename(win);
+
+  await expect
+    .poll(() => storedLayout(projectName)?.includes(name(64)), {
+      message: 'NP2: an ordinary save at the lower limit must persist the SHORTENED name',
+      timeout: 15_000,
+    })
+    .toBe(false);
+
+  /*
+   * And it is permanent. Raising the limit cannot bring back what is no longer stored — this is the
+   * half of FR-040 that is deliberately lossy, and the reason the rule is stated in two parts.
+   */
+  writeTabSettings(cfgRoot, { maxNameLength: 64 });
+  await project('Elsewhere-np2');
+  await switchTo(win, projectName);
+  await expect(
+    label,
+    'NP2: the shortening survived the raise, because a save had already made it the stored name',
+  ).toHaveText(name(16));
+});
+
 
