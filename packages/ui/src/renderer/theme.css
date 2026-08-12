@@ -2367,6 +2367,79 @@ textarea,
   color: var(--text-dim);
 }
 
+/* 030 US3 (FR-030/FR-031/FR-032) — THE PANELS ONE CAUSE DEFEATED.
+ *
+ * A consolidated notice replaces a storm of toasts with one, and the list is what it replaces them
+ * WITH: a user who is told "some panels could not be opened" and not which is no better off than a
+ * user counting twelve toasts. So it renders, grouped by tab — and it is BOUNDED, because a project
+ * with forty broken panels must not produce a notice taller than the window.
+ *
+ * ══ IT DOES NOT TAKE POINTER EVENTS, AND THAT IS DELIBERATE ══
+ *
+ * A scrollable region wants the wheel, so `pointer-events: auto` here is the obvious thing to write.
+ * It was, and it broke something immediately: the card is `pointer-events: none` precisely so a
+ * notice never parks itself over the controls a user needs in order to FIX what it is reporting, and
+ * this list is the tallest thing in the tallest notice in the application. Measured — a notice
+ * listing two panels sat over the panel-type form's Confirm button and swallowed 60 retried clicks.
+ *
+ * So the list is reached by KEYBOARD (`tabindex="0"`; a focused overflow container scrolls with the
+ * arrow keys), which is what FR-032b asks for anyway. The rows themselves are inert whichever way
+ * you arrive — no cursor change, no handler — because a row that looked clickable and did nothing is
+ * a worse promise than a row that never made one. */
+.notice__affected {
+  --throng-notice-affected-max-height: 12rem;
+
+  margin: 8px 0 0;
+  max-height: var(--throng-notice-affected-max-height);
+  overflow-y: auto;
+}
+
+.notice__affected:focus-visible {
+  outline: 2px solid var(--throng-colour-accent);
+  outline-offset: 2px;
+}
+
+.notice__affected-group + .notice__affected-group {
+  margin-top: 6px;
+}
+
+/* The tab, once, above its own rows — the project is in the heading and appears nowhere here. */
+.notice__affected-tab {
+  margin: 0;
+  font-size: 0.85em;
+  font-weight: 600;
+  opacity: 0.75;
+  overflow-wrap: anywhere;
+}
+
+.notice__affected-rows {
+  margin: 2px 0 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.notice__affected-row {
+  /* The same reason as `.notice__title`: a panel title is a name the USER chose, and a long one with
+     no break opportunity would scroll the card sideways. Truncation bounds the LENGTH in
+     `formatSubject`; this bounds the WIDTH. */
+  overflow-wrap: anywhere;
+}
+
+/* The growth announcement (FR-032a). Visually hidden rather than `display: none`, which would take
+   it out of the accessibility tree along with the pixels — and then the delta would be announced to
+   nobody, silently, which is exactly the failure this region exists to prevent. */
+.notice-growth-live {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* The notice's two controls — copy and dismiss — share one treatment: they sit at the top-right of
    the card, muted until pointed at, and they are the ONLY parts of a notice that take a click (the
    card itself is `pointer-events: none` so it never covers the controls a user needs in order to fix

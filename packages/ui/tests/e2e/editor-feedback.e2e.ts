@@ -96,7 +96,13 @@ test('a refused out-of-tree save shows a visible message and leaves the buffer u
       await stubSaveDialog(app, join(outside, 'escape.txt'));
       await win.keyboard.press('Control+s');
 
-      // A visible notice, not a silent no-op (FR-078).
+      /*
+       * A visible notice, not a silent no-op (FR-078).
+       *
+       * 030 US3 / T052 — LEFT ALONE. A REFUSED SAVE is not a missing file: it goes through
+       * `use-editor.ts`'s own `showEditorNotice`, which FR-035 does not touch. Only the per-tab
+       * missing-file batch moved to the consolidated notice.
+       */
       await expect(win.getByTestId('editor-notice-dialog')).toBeVisible();
       await expect(win.getByTestId('editor-notice-message')).toContainText('project');
       await win.getByTestId('editor-notice-ok').click();

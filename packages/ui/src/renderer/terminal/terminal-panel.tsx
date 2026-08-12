@@ -53,6 +53,7 @@ import { useContextMenu } from '../context-menu-provider.js';
 import type { MenuItem } from '../workspace/context-menu.js';
 import { Icon } from '../common/icon.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
+import { useReportPanelFailure } from '../workspace/panel-failure-notice.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import { clearPanelExit, setPanelExit } from './exit-store.js';
 import { useTerminal, type TerminalApi } from './use-terminal.js';
@@ -144,6 +145,16 @@ export function TerminalPanel({
    * and every remembered setting survive untouched.
    */
   const [startFailure, setStartFailure] = useState<{ message: string; cause: FailureCause } | null>(null);
+  /**
+   * The consolidated raise (030 FR-029), held in a ref.
+   *
+   * `onError` is memoised on `[end, panel.id]` and is handed to `useTerminal` once; depending on the
+   * reporter directly would re-arm the attach on every layout change, which is a re-attach for a
+   * panel drag.
+   */
+  const reportPanelFailure = useReportPanelFailure();
+  const reportPanelFailureRef = useRef(reportPanelFailure);
+  reportPanelFailureRef.current = reportPanelFailure;
   // Read by the context-menu callback, which is memoised and would otherwise close over a stale
   // value — the menu must offer Retry/Clear based on the state at the moment it OPENS (FR-004d).
   const startFailureRef = useRef(startFailure);
@@ -615,6 +626,25 @@ export function TerminalPanel({
     (message: string, cause?: FailureCause) => {
       if (startFailurePreservesPanelType(cause ?? null)) {
         setStartFailure({ message: causeMessage(cause as FailureCause), cause: cause as FailureCause });
+        /*
+         * 030 US3 (FR-029/FR-038) — AND SAY SO ONCE, FOR THE WHOLE PROJECT.
+         *
+         * The badge above stays exactly as it is: it is this panel's own statement, and FR-038 says
+         * consolidation changes the notice count and nothing else. What it cannot do is tell a user
+         * looking at ONE panel that five others are broken too — a project whose root folder went
+         * away produces a badge per terminal and, before this, no notice at all, so the user found
+         * out by visiting each panel in turn.
+         *
+         * The cause is passed through rather than re-derived: it is the daemon's, it decided the
+         * panel type survives, and it is the key by which the file tree's report of the same absent
+         * folder is superseded rather than shown alongside.
+         */
+        reportPanelFailureRef.current({
+          panelId: panel.id,
+          message: causeMessage(cause as FailureCause),
+          detail: (cause as FailureCause).raw,
+          cause: cause as FailureCause,
+        });
         setStillStarting(false);
         // Drop the loading skeleton NOW. It renders while `!attached && !giveUpSkeleton`, and
         // `giveUpSkeleton` is a 4000ms delayed flag — a panel that failed to start never attaches,

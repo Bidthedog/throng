@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { runApp, createProject, firstPanelId, cleanupTemp } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
@@ -107,11 +107,24 @@ async function explorerProject(win: Page): Promise<string> {
   return (await btn.count()) > 0 ? ((await btn.getAttribute('aria-label')) ?? (await btn.getAttribute('title')) ?? '') : '(none)';
 }
 
-/** Every notice on screen, whatever raised it. */
+/**
+ * Every notice on screen, whatever surface raised it.
+ *
+ * Matched on the notices CONTAINER and the `.notice` card rather than on a list of test-id
+ * shapes. The id list was `[data-testid$="-error"], [data-testid^="panel-exit-"],
+ * [data-testid^="notice-"]`, and 030 US3 walked straight through it: the consolidated notice
+ * this failure now raises is `panel-failure-notice`, which starts with none of them and ends
+ * with none of them — so the count below read ZERO while the notice was on screen and being
+ * read by the assertions above it. A locator that asks "what notices are there" cannot be an
+ * enumeration of the ids that happened to exist when it was written: that list goes stale
+ * silently, and in the direction of a false green.
+ */
+function noticeCards(win: Page): Locator {
+  return win.getByTestId('notices').locator('.notice');
+}
+
 async function allNoticeText(win: Page): Promise<string> {
-  const parts = await win
-    .locator('[data-testid$="-error"], [data-testid^="panel-exit-"], [data-testid^="notice-"]')
-    .allInnerTexts();
+  const parts = await noticeCards(win).allInnerTexts();
   return parts.join(' | ').replace(/\n/g, ' ') || '(no notices)';
 }
 
@@ -262,8 +275,13 @@ test('entering a project whose folder is gone reports it and does not split the 
          * exactly once, and each panel that could not start still answers "what" in place. Without
          * this pair asserted together, "collapse the notices" and "hide the damage" look identical
          * from the outside.
+         *
+         * 030 US3 strengthened the surviving notice rather than changing this count: it is now
+         * the CONSOLIDATED one, which additionally lists the panels the folder defeated, and it
+         * SUPERSEDES the file tree's report of the same cause instead of merely arriving after
+         * it. Whichever of the two reports first, exactly one notice stands.
          */
-        const notices = win.locator('[data-testid$="-error"]');
+        const notices = noticeCards(win);
         expect(await notices.count(), 'one cause should raise one notice').toBe(1);
         await expect(
           win.locator('[data-testid^="terminal-start-failed-"]'),

@@ -163,6 +163,9 @@ test('AC1 — a cut+paste move re-points the editor; it does not go dirty and ra
       // It was never edited, so nothing about a move may make it look edited.
       await expect.soft(win.getByTestId(`panel-unsaved-${pid}`)).toHaveCount(0);
       await expect.soft(win.getByTestId('editor-notice-dialog')).toHaveCount(0);
+      // 030 US3 / T052 — the missing-file report moved to the consolidated notice (FR-035), so the
+      // line above no longer covers this path on its own and would pass vacuously without this one.
+      await expect.soft(win.getByTestId('panel-failure-notice')).toHaveCount(0);
       // The panel header's file pill follows it too (its title is the full path).
       await expect.soft(win.getByTestId(`panel-file-${pid}`)).toHaveAttribute('title', newPath);
     });
@@ -393,9 +396,12 @@ test('AC8 — a move reaches the persisted layout of a panel in a BACKGROUND tab
         const editor = win.locator('.editor-panel').first();
         await expect(editor).toBeVisible({ timeout: 10000 });
         await expect(editor.locator('.cm-content')).toContainText('MOVE-ME-BODY', { timeout: 10000 });
-        // Restored onto the real file: clean, no recovered buffer, and no "cannot open" dialog.
+        // Restored onto the real file: clean, no recovered buffer, and nothing reporting a file it
+        // could not open — asserted on BOTH surfaces, since 030 US3 moved that report from the
+        // dialog to the consolidated notice (T052).
         await expect(win.locator('.throng-unsaved-dot')).toHaveCount(0);
         await expect(win.getByTestId('editor-notice-dialog')).toHaveCount(0);
+        await expect(win.getByTestId('panel-failure-notice')).toHaveCount(0);
       },
       { dataDir, userDataDir },
     );
