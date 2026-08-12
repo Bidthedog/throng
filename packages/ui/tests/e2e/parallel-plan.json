@@ -49,6 +49,7 @@
     "keybindings.e2e.ts",
     "menu-keyboard.e2e.ts",
     "menus.e2e.ts",
+    "notification-prefs.e2e.ts",
     "panel-auto-naming.e2e.ts",
     "panel-name-unique.e2e.ts",
     "panel-rename-key.e2e.ts",

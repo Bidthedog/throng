@@ -76,8 +76,16 @@ Two corrections made after meeting the real registry:
 
 - The `timeoutMs` control is disabled whenever the sibling `mode` is not `timed` (FR-011).
 - Committing a `timeoutMs` outside bounds is prevented by the control (FR-010).
-- Selecting `never` for `error` or `warning` raises a confirmation naming the consequence; declining
-  restores the previous mode (FR-008). `info`/`success` apply with no prompt.
+- Selecting `never` for `error` or `warning` raises a confirmation naming the consequence (FR-008).
+  `info`/`success` apply with no prompt.
+- **Declining writes nothing** — it does not write the old value back. "Restores the previous mode"
+  reads as an action and implementing it as one would be wrong: the control is React-controlled from
+  `settings`, which has not changed, so declining restores it for free. An explicit restore-write
+  would mean both buttons touch `settings.json`, which is a dialog that changes the setting whichever
+  one you press.
+- A disabled control needs a disabled **state**, not just a disabled input: the stale `-invalid`
+  message beneath it is suppressed too, since a complaint about a box nobody can type into is wrong
+  by construction.
 
 ## Runtime contract
 

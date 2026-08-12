@@ -10,12 +10,31 @@ import {
   type ReactNode,
 } from 'react';
 
-import { causeMessage, causeKey, isTransportFailure, type FailureCause } from '@throng/core';
+import {
+  causeMessage,
+  causeKey,
+  isTransportFailure,
+  noticeLogRecord,
+  DEFAULT_NOTIFICATION_SETTINGS,
+  type FailureCause,
+  type NoticeSeverity,
+  type NotificationSettings,
+  type SeverityNotificationSettings,
+} from '@throng/core';
+import { useAppSettings } from '../config/config-store.js';
 import { IconButton } from './icon-button.js';
-import { shouldSuppressForCause } from './notice-suppression.js';
+import {
+  pruneSilenced,
+  rememberSilenced,
+  shouldSuppressForCause,
+  shouldSuppressSilenced,
+  silencedCauseKeys,
+  silencedNoticeKey,
+  type SilencedNotices,
+} from './notice-suppression.js';
 
 /**
- * THE notification model (018 / US6, FR-048/048b/050).
+ * THE notification model (018 / US6, FR-048/048b/050; 030 / US1, FR-005/FR-012/FR-016).
  *
  * Being told something failed used to happen in six different ways: an inline strip in the
  * preferences window, four copy-pasted dismissable strips in the main window (each with its own
@@ -28,28 +47,31 @@ import { shouldSuppressForCause } from './notice-suppression.js';
  * theme, and the themes error strip fell through to `--accent`, rendering a FAILURE in the SUCCESS
  * colour, directly contradicting the comment sitting above it.
  *
- * SEVERITY GOVERNS PERSISTENCE, and that is one model with one property, not two models:
+ * ══ THE USER GOVERNS PERSISTENCE, NOT THE SEVERITY (030, #224) ══
  *
- *   error   — persists until dismissed. An error that silently auto-vanishes would be a worse defect
- *             than the six idioms being replaced.
- *   success — dismisses itself after five seconds.
- *   info    — same.
- *   warning — same: it reports something that HAPPENED, just not as asked.
- */
-
-/**
- * `warning` sits with success and info, not with error, and that is the point: it auto-dismisses.
+ * This model used to decide persistence from the severity alone: `severity !== 'error'` armed a
+ * timer for a hardcoded five seconds, so an error waited forever and everything else vanished
+ * whether or not it had been read. Both halves were wrong for the same reason — the raiser was
+ * deciding how long the reader needs, and a notice that disappeared before it was read is
+ * indistinguishable from one that never happened.
  *
- * A warning reports something that WENT AHEAD but not exactly as asked — a panel name adjusted
- * because it was already taken. There is nothing for the user to decide and nothing at risk, so
- * making them dismiss it would be nagging. An error, where something did NOT happen, still
- * persists until acknowledged.
+ * So each severity now carries a MODE the user sets (`notifications.<severity>` in settings):
+ *
+ *   never    — nothing is rendered at all. The notice is still ACCEPTED and still written to the
+ *              diagnostic log, which is the whole basis on which turning a severity off can be
+ *              offered (FR-005/FR-006); silence on screen is never silence in the record.
+ *   timed    — rendered, then dismissed after that severity's `timeoutMs`.
+ *   dismiss  — rendered until the user says otherwise. No severity is exempt from any of the three.
+ *
+ * The settings are read at RAISE time (FR-016): a change applies to the next notice, and never
+ * retroactively to one already on screen, whose dwell the user has already begun.
+ *
+ * ══ WHAT IS LOGGED, AND WHAT IS NOT ══
+ *
+ * Every ACCEPTED notice writes exactly one record, whatever its mode. A notice SUPPRESSED — as a
+ * duplicate, or by its cause — writes none, because nothing happened: it is the same event the log
+ * already carries. That symmetry is the point of the shadow map below.
  */
-export type NoticeSeverity = 'error' | 'success' | 'info' | 'warning';
-
-/** Long enough to read, short enough not to linger — and a STATED number, so a test can assert it. */
-export const AUTO_DISMISS_MS = 5000;
-
 export interface Notice {
   id: string;
   severity: NoticeSeverity;
@@ -95,6 +117,14 @@ export interface Notice {
    */
   causeKey?: string;
   /**
+   * What decides whether two failures are ONE notice (030 FR-029) — `causeKey` plus the project.
+   *
+   * Populated by the consolidated raise in US3; declared here because the silenced shadow already
+   * has to key on it. `causeKey` alone cannot serve: it drops the project and operation dimensions,
+   * so one absent folder would collapse across every project open at once.
+   */
+  groupKey?: string;
+  /**
    * The message's and dismiss control's identifiers, where a folded-in surface used its own.
    *
    * The editor notice's suites drive `editor-notice-message` and `editor-notice-ok`; five specs
@@ -116,6 +146,16 @@ export interface Notice {
 }
 
 export type NoticeInput = Omit<Notice, 'id'>;
+
+/**
+ * The severity set is `@throng/core`'s, not this module's (030 T031).
+ *
+ * It was declared here, and the same four words were then needed by the settings shape, by the
+ * severity→level mapping and by the log record — three consumers in two processes, and a second copy
+ * drifts in exactly one direction: a severity that silently has no configured display mode.
+ * Re-exported so the surfaces that already import it from here are unaffected.
+ */
+export type { NoticeSeverity };
 
 interface NotifyContextValue {
   notify(notice: NoticeInput): void;
@@ -154,97 +194,192 @@ export function noticeToText(
 
 let seq = 0;
 
+/**
+ * The panels a raise names, for the shadow's `reported` set (FR-005c).
+ *
+ * US3 (T044) gives `NoticeInput` its `affected` list; until then every notice names none, and a
+ * raise naming no panels reports nothing new by definition — so the ordinary duplicate rule applies
+ * to it unchanged. Reading it through one function means the shadow needs no edit when the list
+ * arrives.
+ */
+function panelIdsOf(_input: NoticeInput): readonly string[] {
+  return [];
+}
+
 export function NotificationProvider({ children }: { children: ReactNode }): ReactElement {
   const [notices, setNotices] = useState<Notice[]>([]);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  // The committed list, so `dismiss` can find the notice it is removing WITHOUT reading state inside a
-  // state updater. Kept stable so `dismiss` — and therefore the context value — never changes identity.
+  /**
+   * The list, held in a ref as well as in state — and the ref is the AUTHORITY.
+   *
+   * The duplicate and cause rules have to see every notice already accepted, including ones accepted
+   * earlier in the same tick whose render has not happened yet. They used to run inside the state
+   * updater for exactly that reason, reading `cur`. That is no longer possible: an accepted notice
+   * now has a side effect (its log record), a state updater must be pure, and StrictMode
+   * double-invokes updaters — which would file every record twice.
+   *
+   * So the decision is made here, synchronously, against a list this module maintains itself, and
+   * `setNotices` merely mirrors it for rendering.
+   */
   const live = useRef<Notice[]>([]);
-  useEffect(() => {
-    live.current = notices;
-  }, [notices]);
+  /** 030 FR-005b — silenced events, which never join the list above. See `notice-suppression.ts`. */
+  const silenced = useRef<SilencedNotices>(new Map());
 
-  const dismiss = useCallback((id: string) => {
-    const t = timers.current.get(id);
-    if (t) {
-      clearTimeout(t);
-      timers.current.delete(id);
-    }
-    // The updater must be PURE. `onDismiss` reaches into a STORE (it is how a migrated error strip says
-    // "the failure has been acknowledged"), and calling it from inside the updater means calling another
-    // component's setState during this one's render — which React warns about, and which StrictMode
-    // double-invokes, so the store was told twice. Take the effect OUT of the updater and run it after.
-    const going = live.current.find((n) => n.id === id);
-    setNotices((cur) => cur.filter((n) => n.id !== id));
-    going?.onDismiss?.();
+  /**
+   * The display settings, read at RAISE time (FR-016).
+   *
+   * Assigned during render rather than in an effect, and kept out of `notify`'s dependencies, for
+   * two reasons that pull the same way. A parent renders before its children commit, so a ref
+   * written here is already current for any notice a child effect raises in that same commit — which
+   * an effect on this component could not promise, since child effects run first. And `notify` stays
+   * identity-stable, so a settings change does not invalidate `useErrorNotice`'s dependency list and
+   * re-raise every live store error as a fresh event in the log.
+   */
+  const settings = useAppSettings().notifications;
+  const displaySettings = useRef<NotificationSettings>(settings);
+  displaySettings.current = settings;
+
+  /** Mirror the authoritative list into state. The ref moves first; rendering follows it. */
+  const publish = useCallback((next: Notice[]) => {
+    live.current = next;
+    setNotices(next);
   }, []);
+
+  const dismiss = useCallback(
+    (id: string) => {
+      const t = timers.current.get(id);
+      if (t) {
+        clearTimeout(t);
+        timers.current.delete(id);
+      }
+      // `onDismiss` reaches into a STORE (it is how a migrated error strip says "the failure has been
+      // acknowledged"), so it must not run inside a state updater: that is calling another component's
+      // setState during this one's render, which React warns about and StrictMode double-invokes — the
+      // store was told twice. It runs after the list has moved on instead.
+      const going = live.current.find((n) => n.id === id);
+      if (!going) return;
+      publish(live.current.filter((n) => n.id !== id));
+      going.onDismiss?.();
+    },
+    [publish],
+  );
 
   const notify = useCallback(
     (input: NoticeInput) => {
-      const id = `n${++seq}`;
-      setNotices((cur) => {
-        /*
-         * NOTICES STACK. Two failures are two things the user needs to know.
-         *
-         * This used to drop any live notice sharing the incoming one's test id, so a second delete
-         * that failed replaced the first rather than joining it — the user was told about one of
-         * their two problems, and the surface silently chose which. Test ids identify a SURFACE
-         * ("the explorer reported something"), not an EVENT, so they were never the right thing to
-         * collapse on.
-         *
-         * What must still not stack is the SAME notice raised repeatedly — a file watcher firing on
-         * every change re-reporting one unchanged failure. So the comparison is on what the notice
-         * SAYS. Identical content is one event seen twice; different content is two events.
-         */
-        const duplicate = cur.some(
-          (n) =>
-            n.severity === input.severity &&
-            n.message === input.message &&
-            n.title === input.title &&
-            n.action === input.action &&
-            n.testId === input.testId,
-        );
-        if (duplicate) return cur;
-        /*
-         * ONE CAUSE, ONE NOTICE (029 FR-019).
-         *
-         * The rule above collapses IDENTICAL notices — one event seen twice. This one collapses
-         * DIFFERENT notices that share an underlying cause: a missing project root breaks the file
-         * tree AND every terminal, and measured on master that was two notices, in two vocabularies,
-         * for one absent folder.
-         *
-         * Bounded by the live list, which is what makes dismissal re-arm the cause (FR-019c) with no
-         * timer to tune. Deliberately NOT keyed on the surface or the message text — the two measured
-         * messages differ, and `notice-stacking.e2e.ts` proves two genuinely different failures must
-         * still stack.
-         */
-        if (shouldSuppressForCause(cur.map((n) => n.causeKey ?? ''), input.causeKey)) return cur;
-        return [...cur, { ...input, id }];
-      });
+      const behaviour: SeverityNotificationSettings =
+        displaySettings.current?.[input.severity] ?? DEFAULT_NOTIFICATION_SETTINGS[input.severity];
+      const now = Date.now();
+      // Lazily, on the way in: the shadow's only clock is the next raise, so it owns no timer and is
+      // bounded by the distinct silenced events inside one window.
+      pruneSilenced(silenced.current, now);
 
-      if (input.severity !== 'error') {
+      const shadowKey = silencedNoticeKey(input);
+      const panelIds = panelIdsOf(input);
+
+      /*
+       * NOTICES STACK. Two failures are two things the user needs to know.
+       *
+       * This used to drop any live notice sharing the incoming one's test id, so a second delete
+       * that failed replaced the first rather than joining it — the user was told about one of
+       * their two problems, and the surface silently chose which. Test ids identify a SURFACE
+       * ("the explorer reported something"), not an EVENT, so they were never the right thing to
+       * collapse on.
+       *
+       * What must still not stack is the SAME notice raised repeatedly — a file watcher firing on
+       * every change re-reporting one unchanged failure. So the comparison is on what the notice
+       * SAYS. Identical content is one event seen twice; different content is two events.
+       */
+      const duplicate = live.current.some(
+        (n) =>
+          n.severity === input.severity &&
+          n.message === input.message &&
+          n.title === input.title &&
+          n.action === input.action &&
+          n.testId === input.testId,
+      );
+      if (duplicate) return;
+      // …and the same question asked of the notices the user chose not to see (FR-005b). Without
+      // this half a silenced repeat is compared against an empty list and files a record every time,
+      // so a severity turned off is LOUDER in the log than the same events displayed (SC-003).
+      if (shouldSuppressSilenced(silenced.current, shadowKey, panelIds, now)) return;
+      /*
+       * ONE CAUSE, ONE NOTICE (029 FR-019).
+       *
+       * The rule above collapses IDENTICAL notices — one event seen twice. This one collapses
+       * DIFFERENT notices that share an underlying cause: a missing project root breaks the file
+       * tree AND every terminal, and measured on master that was two notices, in two vocabularies,
+       * for one absent folder.
+       *
+       * Bounded by the live list — which is what makes dismissal re-arm the cause (FR-019c) with no
+       * timer to tune — plus the silenced shadow, so the rule means the same thing whether or not
+       * the user can see it. Deliberately NOT keyed on the surface or the message text: the two
+       * measured messages differ, and `notice-stacking.e2e.ts` proves two genuinely different
+       * failures must still stack.
+       */
+      const causeKeys = [
+        ...live.current.map((n) => n.causeKey ?? ''),
+        ...silencedCauseKeys(silenced.current, now),
+      ];
+      if (shouldSuppressForCause(causeKeys, input.causeKey)) return;
+
+      /*
+       * ACCEPTED — so it is logged, whatever the user chose to see (FR-006).
+       *
+       * Before the rendering decision, and unconditionally: *Never display* is only offerable
+       * because the event still reaches `logs/main.log`, and that promise cannot be made by a branch
+       * that a mode could skip. Fire-and-forget by design — a diagnostics write that failed must
+       * never become a notice about failing to log a notice.
+       */
+      window.throng?.notices?.log?.(
+        noticeLogRecord({
+          severity: input.severity,
+          message: input.message,
+          causeKey: input.causeKey,
+          // FR-034: the raw system error. `Notice.copyDetail` is the source, `NoticeLogRecord.detail`
+          // is what crosses the bridge — the same string, re-derived by nobody. For a silenced
+          // severity there is no toast to copy from, so this is its only route to the user.
+          detail: input.copyDetail,
+        }),
+      );
+
+      if (behaviour.mode === 'never') {
+        // The only state a silenced notice creates: no id, never rendered, never dismissible.
+        rememberSilenced(silenced.current, shadowKey, {
+          expiresAt: now + behaviour.timeoutMs,
+          causeKey: input.causeKey,
+          panelIds,
+        });
+        return;
+      }
+
+      const id = `n${++seq}`;
+      publish([...live.current, { ...input, id }]);
+      // `dismiss` leaves the notice standing; only `timed` arms a clock, and it is the user's number.
+      if (behaviour.mode === 'timed') {
         timers.current.set(
           id,
-          setTimeout(() => dismiss(id), AUTO_DISMISS_MS),
+          setTimeout(() => dismiss(id), behaviour.timeoutMs),
         );
       }
     },
-    [dismiss],
+    [dismiss, publish],
   );
 
-  const clear = useCallback((testId: string) => {
-    setNotices((cur) => {
-      // Return the SAME array when there is nothing to remove.
+  const clear = useCallback(
+    (testId: string) => {
+      // Do NOTHING when there is nothing to remove.
       //
       // A new array — even an identical one — is a new state value, and React re-renders the whole
       // provider subtree for it. `useErrorNotice` calls this on mount and on every render where the
       // store's error is null, which is almost always: the churn re-rendered the entire application
       // continuously and knocked DOM focus out of the file tree, so a keyboard shortcut pressed
       // straight after an action simply went nowhere.
-      const next = cur.filter((n) => n.testId !== testId);
-      return next.length === cur.length ? cur : next;
-    });
-  }, []);
+      const next = live.current.filter((n) => n.testId !== testId);
+      if (next.length === live.current.length) return;
+      publish(next);
+    },
+    [publish],
+  );
 
   useEffect(() => {
     const pending = timers.current;
