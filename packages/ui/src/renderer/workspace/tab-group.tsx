@@ -675,6 +675,11 @@ export function TabGroup(): ReactElement {
    * A tab added, destroyed or renamed changes the CONTENT width rather than the track's own box, so
    * that case is covered by re-measuring on each render below instead.
    */
+  // Declared before the effects that depend on them — a dependency array cannot reach a `const`
+  // below it.
+  const activeTabId = layout?.activeTabId ?? null;
+  const tabIds = layout?.tabs.map((t) => t.id).join('\0') ?? '';
+
   useEffect(() => {
     const track = trackRef.current;
     if (!track) return;
@@ -683,17 +688,29 @@ export function TabGroup(): ReactElement {
     return () => observer.disconnect();
   }, [syncStrip]);
 
-  // Re-measure after every render: cheap, and `syncStrip` bails out without setting state when
-  // nothing changed, so this cannot loop.
-  //
-  // Nor can showing the actions group oscillate against its own width. With the group HIDDEN the
-  // track is `W` wide and the group appears when the tabs exceed `W`; with it SHOWN the track is
-  // `W - A` and it stays while they exceed `W - A`. Every content width satisfies at most one of
-  // those transitions, so the band between them is hysteresis rather than a flip-flop.
-  useEffect(syncStrip);
-
-  const activeTabId = layout?.activeTabId ?? null;
-  const tabIds = layout?.tabs.map((t) => t.id).join('\0') ?? '';
+  /*
+   * Re-measure when the TAB SET changes — not after every render.
+   *
+   * This was `useEffect(syncStrip)` with no dependency array, on the reasoning that it "bails out
+   * without setting state when nothing changed, so this cannot loop". That is true and it was not
+   * the problem. `syncStrip` reads `scrollLeft`/`clientWidth`/`scrollWidth`, which forces a
+   * synchronous layout, and the workspace re-renders constantly in an app whose panels are live
+   * terminals — so every one of those renders paid for a reflow of the whole strip.
+   *
+   * Measured, not theorised: the parallel E2E tier went from 3.9 minutes to 12.6, and terminal
+   * specs across ten unrelated files began timing out at thirty seconds. It looked exactly like
+   * machine contention, which is what makes this class of defect expensive — the symptom appears
+   * everywhere except where the cause is.
+   *
+   * Geometry only changes when the track resizes (the ResizeObserver above), when the strip
+   * scrolls (`onScroll`), or when the tabs themselves change — which is this.
+   *
+   * The hysteresis argument still holds and is still worth keeping: with the actions group HIDDEN
+   * the track is `W` wide and the group appears when the tabs exceed `W`; with it SHOWN the track
+   * is `W - A` and it stays while they exceed `W - A`. Every content width satisfies at most one of
+   * those transitions, so the band between them cannot flip-flop.
+   */
+  useEffect(syncStrip, [syncStrip, tabIds, activeTabId]);
 
   /*
    * A1–A3 / FR-029–FR-029b — bring the active tab into view whenever it changes, BY ANY ROUTE.
