@@ -28,6 +28,7 @@ import {
 } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { NameLimitField } from '../common/name-limit-field.js';
+import { TabPopover } from './tab-popover.js';
 import { useTabScroll } from './tab-scroll.js';
 import { TabPicker, registerTabPicker } from './tab-picker.js';
 import { useWorkspace } from '../state/workspace-store.js';
@@ -225,20 +226,41 @@ function TabChip({
   const titleTruncated = wasTruncated(tab.title, maxNameLength);
 
   /*
-   * P2 / FR-043 — the hover title names the tab, counts its panels, and then lists them one per
-   * line. A tab is a container, and "what is in it?" is the question a user hovers one to ask;
-   * before this, the tooltip repeated the label they were already reading.
+   * P2 / FR-043, as FR-051 supersedes it — the hover is a POPOVER, not a `title`.
+   *
+   * The content is unchanged in substance (the tab's name, how many panels it holds, then each of
+   * them) and changed entirely in form: a native tooltip cannot indent, so the panels read as peers
+   * of the tab itself. The name here is the FULL one (FR-050b) — `shownTitle` is what the strip
+   * shows, and the whole point of hovering an ellipsised tab is to see past the ellipsis.
+   *
+   * Suppressed during a drag: a surface following the pointer while a chip is in flight is noise
+   * over the drop targets the user is actually aiming at.
    */
   const panels = collectPanels(tab.root);
-  const hoverTitle = [
-    shownTitle,
-    `${panels.length} panel${panels.length === 1 ? '' : 's'}`,
-    ...panels.map((panel) => panelDisplayTitle(panel, undefined, maxNameLength)),
-  ].join('\n');
+  const panelNames = panels.map((panel) => panelDisplayTitle(panel, undefined, maxNameLength));
+  /*
+   * The chip the popover anchors to, held in a REF and never in state.
+   *
+   * `mergeRefs` builds a new callback on every render, so React detaches and re-attaches this ref on
+   * every render — with `null` first. A state setter in that position is a render loop: `null`, then
+   * the node, then a render because the state changed, then `null` again, for ever. It cost three
+   * reveal E2Es (the strip never settled long enough to be brought into view) before it was
+   * anything visible.
+   *
+   * A ref is enough because the popover only ever renders on a hover, and a hover is itself a
+   * re-render that arrives after the chip has been committed — so `current` is the live node by the
+   * time anything reads it.
+   */
+  const chipRef = useRef<HTMLElement | null>(null);
+  const holdChip = useCallback((node: HTMLElement | null): void => {
+    chipRef.current = node;
+  }, []);
+  const showPopover =
+    hovered && !renaming && !treeOver && !panelOver && draggingPanelId === null && !drag.isDragging;
 
   return (
     <div
-      ref={mergeRefs(drag.setNodeRef, drop.setNodeRef)}
+      ref={mergeRefs(drag.setNodeRef, drop.setNodeRef, holdChip)}
       className={`tab-chip${active ? ' tab-chip--active' : ''}${panelOver || treeOver ? ' tab-chip--over' : ''}`}
       data-testid={`tab-${tab.id}`}
       data-active={active ? 'true' : 'false'}
@@ -272,10 +294,10 @@ function TabChip({
       onClick={() => ws.setActiveTab(tab.id)}
       onDoubleClick={() => onStartRename()}
       /*
-       * 017 / #57 — the TITLE, not instructions. The interactions stay in the right-click menu.
-       * 031 FR-043 extends it to the tab's CONTENTS: name, panel count, then one panel per line.
+       * 017 / #57 — the hover says WHAT THIS IS, never what you can do to it; the interactions stay
+       * in the right-click menu. 031 FR-051 moved it off the `title` attribute and onto a formatted
+       * popover, so there is deliberately no `title` here: two tooltips for one chip is one too many.
        */
-      title={hoverTitle}
       onContextMenu={(e) => {
         e.preventDefault();
         onMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
@@ -313,7 +335,10 @@ function TabChip({
           ) : null}
           {/* P1 / FR-042 — a PILL, not `[3]`. The bracketed form read as markup rather than as a
               count of the things inside the tab. */}
-          <span className="tab-chip__count" data-testid={`tab-count-${tab.id}`}>
+          <span
+            className="throng-count-pill tab-chip__count"
+            data-testid={`tab-count-${tab.id}`}
+          >
             {countPanels(tab.root)}
           </span>
         </>
@@ -338,6 +363,14 @@ function TabChip({
           onClose();
         }}
       />
+      {showPopover ? (
+        <TabPopover
+          tabId={tab.id}
+          name={tab.title}
+          panelNames={panelNames}
+          anchor={chipRef.current}
+        />
+      ) : null}
     </div>
   );
 }
@@ -364,6 +397,108 @@ function NewTabButton({ onNewTab }: { onNewTab: () => void }): ReactElement {
       +
     </button>
   );
+}
+
+/**
+ * How often a held chevron takes its next step, once the hold delay has elapsed (031 FR-054).
+ *
+ * Deliberately shorter than the shipped smooth-scroll duration (300ms). Each repeat measures from
+ * the scroll's PENDING target rather than its live position, so a step issued mid-glide advances the
+ * destination by one more tab instead of re-choosing the one already in flight — which is what turns
+ * a series of discrete steps into the continuous travel FR-054 asks for, using nothing but the
+ * supersede rule that was already there.
+ */
+const CHEVRON_REPEAT_INTERVAL_MS = 120;
+
+/**
+ * FR-054 / FR-054b / FR-054c — press-and-hold on a chevron.
+ *
+ * `onStep` returns whether the strip actually moved; `false` (nothing left to reveal that way) ends
+ * the hold, because a repeat that keeps firing against an edge is a control that looks alive and is
+ * not.
+ *
+ * **Nothing is queued** (FR-054c). The repeat only ever writes the scroller's single replaceable
+ * target, so releasing stops the *stepping* and the strip eases to the last target it was given.
+ * There is no backlog to drain and no timer closing over a destination that outlives the gesture —
+ * the same structural guarantee A6–A8 already give every other scroll.
+ *
+ * Release is caught on `window`, not on the button. A control that becomes disabled under the
+ * pointer (the count reaching zero) never sees its own `pointerup`, and a pointer released outside
+ * the window never would either — both would leave the strip scrolling on its own.
+ */
+function useHoldRepeat(
+  delayMs: number,
+  onStep: (direction: 'left' | 'right') => boolean,
+): {
+  start: (direction: 'left' | 'right') => void;
+  stop: () => void;
+  /** Which direction is currently repeating, for `data-repeating` on the control. */
+  repeating: 'left' | 'right' | null;
+  /** True when the hold has produced movement, so the release click must not add one more step. */
+  consumedClick: () => boolean;
+} {
+  const [repeating, setRepeating] = useState<'left' | 'right' | null>(null);
+  const delay = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const repeated = useRef(false);
+  // Read through a ref so `start`/`stop` keep a stable identity across renders — the strip
+  // re-renders on every scroll event, and rebuilding these would tear down a hold in progress.
+  const stepRef = useRef(onStep);
+  stepRef.current = onStep;
+
+  const stop = useCallback((): void => {
+    if (delay.current) {
+      clearTimeout(delay.current);
+      delay.current = null;
+    }
+    if (timer.current) {
+      clearInterval(timer.current);
+      timer.current = null;
+    }
+    setRepeating((prev) => (prev === null ? prev : null));
+  }, []);
+
+  const start = useCallback(
+    (direction: 'left' | 'right'): void => {
+      stop();
+      repeated.current = false;
+      delay.current = setTimeout(() => {
+        delay.current = null;
+        setRepeating(direction);
+        timer.current = setInterval(() => {
+          repeated.current = true;
+          if (!stepRef.current(direction)) stop();
+        }, CHEVRON_REPEAT_INTERVAL_MS);
+      }, delayMs);
+    },
+    [delayMs, stop],
+  );
+
+  useEffect(() => stop, [stop]);
+
+  useEffect(() => {
+    const end = (): void => stop();
+    window.addEventListener('pointerup', end, true);
+    window.addEventListener('pointercancel', end, true);
+    window.addEventListener('blur', end);
+    return () => {
+      window.removeEventListener('pointerup', end, true);
+      window.removeEventListener('pointercancel', end, true);
+      window.removeEventListener('blur', end);
+    };
+  }, [stop]);
+
+  /*
+   * A `click` fires on release even after a long hold, and taking it would move the strip one tab
+   * further than the user asked for — the gesture would always overshoot by exactly one.
+   */
+  const consumedClick = useCallback((): boolean => {
+    const was = repeated.current;
+    repeated.current = false;
+    return was;
+  }, []);
+
+  return { start, stop, repeating, consumedClick };
 }
 
 /**
@@ -459,7 +594,8 @@ export function TabGroup(): ReactElement {
   const revealedTo = useRef<number | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const { maxNameLength, smoothScrollMs, closeArmingDelayMs } = settings.tabs;
+  const { maxNameLength, maxWidth, smoothScrollMs, closeArmingDelayMs, chevronRepeatDelayMs } =
+    settings.tabs;
   const { scrollTo, pendingTarget } = useTabScroll(trackRef, smoothScrollMs);
 
   /**
@@ -557,7 +693,7 @@ export function TabGroup(): ReactElement {
   useEffect(syncStrip);
 
   const activeTabId = layout?.activeTabId ?? null;
-  const tabIds = layout?.tabs.map((t) => t.id).join(' ') ?? '';
+  const tabIds = layout?.tabs.map((t) => t.id).join('\0') ?? '';
 
   /*
    * A1–A3 / FR-029–FR-029b — bring the active tab into view whenever it changes, BY ANY ROUTE.
@@ -628,6 +764,15 @@ export function TabGroup(): ReactElement {
     registerTabPicker(() => setPickerOpen(true));
     return () => registerTabPicker(null);
   }, []);
+
+  /*
+   * FR-054 — press-and-hold. Declared HERE, above the `!layout` bail-out, because it is a hook and
+   * every hook has to run on every render. It steps through a ref because `step` itself is defined
+   * below (it needs the live layout), and a hold that outlived a render would otherwise be calling
+   * the arithmetic of the strip as it used to be.
+   */
+  const stepRef = useRef<(direction: 'left' | 'right') => boolean>(() => false);
+  const hold = useHoldRepeat(chevronRepeatDelayMs, (direction) => stepRef.current(direction));
 
   if (!layout) return <></>;
   const activeTab = layout.tabs.find((t) => t.id === layout.activeTabId) ?? layout.tabs[0];
@@ -1006,10 +1151,15 @@ export function TabGroup(): ReactElement {
    * destination the first one had, and the strip settled one tab along having been asked twice.
    * Superseding was never the problem; the arithmetic feeding it was.
    */
-  const step = (direction: 'left' | 'right'): void => {
+  const step = (direction: 'left' | 'right'): boolean => {
     const metrics = readMetrics(pendingTarget());
-    if (metrics) scrollTo(stepTarget(metrics, direction));
+    if (!metrics) return false;
+    const target = stepTarget(metrics, direction);
+    scrollTo(target);
+    // `null` is "there is nowhere further that way" — which is what ends a press-and-hold (FR-054).
+    return target !== null;
   };
+  stepRef.current = step;
 
   /**
    * K2 — choosing in the picker scrolls the strip to that tab **and** makes it active.
@@ -1086,15 +1236,32 @@ export function TabGroup(): ReactElement {
           data-testid="tab-strip"
           data-fade-left={fades.left ? 'true' : 'false'}
           data-fade-right={fades.right ? 'true' : 'false'}
+          // FR-050 — the width cap in force, in characters, for anything that needs to state it.
+          data-max-width={maxWidth}
           ref={stripRef}
           // Reaching for a tab is using the WORKSPACE, so it stops being the Files & Folders pane's
           // turn — otherwise the tree kept its selection highlight lit while the user was plainly
           // somewhere else, and two surfaces claimed to be current at once. Panels already do this
           // on pointerdown; the strip above them was the gap.
           onPointerDown={() => setActivePane('workspace')}
-          // Measured, not guessed: the right-hand fade must stop at the trailing controls' leading
-          // edge, and their width changes with the number of digits in the counts they show.
-          style={{ '--tabstrip-actions-width': `${actionsWidth}px` } as CSSProperties}
+          /*
+           * Two measurements the stylesheet cannot make for itself.
+           *
+           * `--tabstrip-actions-width` is MEASURED, not guessed: the right-hand fade must stop at
+           * the trailing controls' leading edge, and their width changes with the number of digits
+           * in the counts they show.
+           *
+           * `--tabstrip-max-width` is FR-050's cap. It is expressed in `ch` because the setting is
+           * declared in CHARACTERS — the same unit as `tabs.maxNameLength`, so the two are directly
+           * comparable — and a custom property resolves its units where it is USED, so the `ch`
+           * here is a character of the tab label's own themed font rather than of this element's.
+           */
+          style={
+            {
+              '--tabstrip-actions-width': `${actionsWidth}px`,
+              '--tabstrip-max-width': `${maxWidth}ch`,
+            } as CSSProperties
+          }
         >
           <div
             className="tab-strip__track"
@@ -1139,6 +1306,14 @@ export function TabGroup(): ReactElement {
            */}
           {counts.overflowing ? (
             <div className="tabstrip-actions" data-testid="tabstrip-actions" ref={actionsRef}>
+              {/*
+               * FR-052 — the order reads `[ ‹ n ] [ n › ] [ ⌄ n ]`.
+               *
+               * Each count sits on the side its control points at, so the group reads outward from
+               * the tabs in both directions instead of as three identically-shaped lumps. Only the
+               * right-hand step is `badgeFirst`; the show-all chevron leads its total because it
+               * points at the list it opens, not at either edge of the strip.
+               */}
               <IconButton
                 token="chevronLeft"
                 className="tabstrip-actions__btn"
@@ -1148,7 +1323,19 @@ export function TabGroup(): ReactElement {
                 // unavailable rather than a click that does nothing.
                 disabled={counts.hiddenLeft === 0}
                 badge={counts.hiddenLeft}
-                onClick={() => step('left')}
+                dataAttrs={{ 'data-repeating': hold.repeating === 'left' ? 'true' : 'false' }}
+                onPointerDown={() => {
+                  step('left'); // the press itself is the first step; the hold only repeats it
+                  hold.start('left');
+                }}
+                onPointerUp={hold.stop}
+                onPointerLeave={hold.stop} // FR-054b — leaving the control stops it immediately
+                onPointerCancel={hold.stop}
+                onClick={() => {
+                  // The press already took the first step; the release must not take a second, and
+                  // after a hold it must not take one at all (FR-054).
+                  hold.consumedClick();
+                }}
               />
               <IconButton
                 token="chevronRight"
@@ -1157,11 +1344,24 @@ export function TabGroup(): ReactElement {
                 title={`Scroll to the next tab (${counts.hiddenRight} hidden to the right)`}
                 disabled={counts.hiddenRight === 0}
                 badge={counts.hiddenRight}
-                onClick={() => step('right')}
+                badgeFirst
+                dataAttrs={{ 'data-repeating': hold.repeating === 'right' ? 'true' : 'false' }}
+                onPointerDown={() => {
+                  step('right');
+                  hold.start('right');
+                }}
+                onPointerUp={hold.stop}
+                onPointerLeave={hold.stop}
+                onPointerCancel={hold.stop}
+                onClick={() => {
+                  hold.consumedClick();
+                }}
               />
               <IconButton
                 token="chevronDown"
-                className="tabstrip-actions__btn"
+                // FR-052a — the modifier is what centres the chevron in its own box; see the
+                // stylesheet, where the icon is given a square and centred inside it.
+                className="tabstrip-actions__btn tabstrip-actions__btn--show-all"
                 testId="tabstrip-show-all"
                 title={`Show all tabs (${counts.total})`}
                 badge={counts.total}

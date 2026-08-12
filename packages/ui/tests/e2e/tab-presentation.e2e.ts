@@ -128,7 +128,18 @@ test.describe('at the shipped arming delay', () => {
     );
   });
 
-  test('T096 — hovering a tab shows its name, its panel count, and each panel on its own line (P2)', async () => {
+  /*
+   * ══ WHY THIS TEST READS A POPOVER AND NOT A `title` ══
+   *
+   * FR-051 (US6) SUPERSEDES FR-043's "one per line" phrasing, and says why in as many words: a
+   * native `title` attribute is one run of plain text, so it cannot indent the panels under the tab
+   * that contains them. The hover is now a formatted HTML surface, and the chip deliberately
+   * carries no `title` at all — two tooltips for one chip is one too many.
+   *
+   * P2's actual CLAIM is unchanged and is still asserted in full here: the tab names itself, says
+   * how many panels it holds, and then lists them. Only the surface it is read from has moved.
+   */
+  test('T096 — hovering a tab shows its name, its panel count, and each panel (P2, FR-051)', async () => {
     const win = shared.win;
     await project(win, 'Tooltip');
     await addPanels(win, 1); // two panels
@@ -139,13 +150,52 @@ test.describe('at the shipped arming delay', () => {
       .evaluateAll((els) => els.map((el) => (el.textContent ?? '').trim()));
     expect(panelNames.length, 'two panels to be listed').toBe(2);
 
-    const title = (await win.getByTestId(`tab-${tab}`).getAttribute('title')) ?? '';
-    const lines = title.split('\n');
+    await pointerAwayFromStrip(win);
+    await expect(
+      win.getByTestId('tabstrip-popover'),
+      'nothing is hovered, so nothing is described',
+    ).toHaveCount(0);
+
+    await win.getByTestId(`tab-${tab}`).hover();
+    const popover = win.getByTestId('tabstrip-popover');
+    await expect(popover).toBeVisible();
+    await expect(popover, 'the popover describes the tab under the pointer').toHaveAttribute(
+      'data-tab-id',
+      tab,
+    );
 
     const label = (await win.getByTestId(`tab-title-${tab}`).textContent()) ?? '';
-    expect(lines[0], 'P2: the tab names itself first').toBe(label);
-    expect(lines[1], 'P2: then how many panels it holds').toBe('2 panels');
-    expect(lines.slice(2), "P2: then each panel's name, one per line").toEqual(panelNames);
+    await expect(
+      win.getByTestId('tabstrip-popover-name'),
+      'P2: the tab names itself first',
+    ).toHaveText(label);
+    await expect(
+      win.getByTestId('tabstrip-popover-count'),
+      'P2: then how many panels it holds',
+    ).toHaveText('2 panels');
+    expect(
+      await win
+        .getByTestId('tabstrip-popover-panels')
+        .locator('.tabstrip-popover__panel')
+        .evaluateAll((els) => els.map((el) => (el.textContent ?? '').trim())),
+      "P2: then each panel's name",
+    ).toEqual(panelNames);
+
+    // FR-051's own claim — the panels are INDENTED under the tab, not a flat run of peers.
+    const nameLeft = (await geom(win.getByTestId('tabstrip-popover-name'))).x;
+    const firstPanelLeft = (await geom(popover.locator('.tabstrip-popover__panel').first())).x;
+    expect(firstPanelLeft, 'FR-051: the panels sit inside the tab, and are drawn that way').toBeGreaterThan(
+      nameLeft,
+    );
+
+    // The superseded mechanism is gone: a `title` here would sit on top of this surface.
+    expect(
+      await win.getByTestId(`tab-${tab}`).getAttribute('title'),
+      'FR-051: the native tooltip is not left behind alongside the popover',
+    ).toBeNull();
+
+    await pointerAwayFromStrip(win);
+    await expect(popover, 'and it goes away with the pointer').toHaveCount(0);
   });
 
   test('T097 — the affordance is on the active tab always, and on the tab under the pointer (P4)', async () => {

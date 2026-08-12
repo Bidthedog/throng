@@ -41,6 +41,7 @@ import {
   cleanupTemp,
   firstPanelId,
   settle,
+  commitTabRename,
   type OpenApp,
 } from './harness.js';
 import { stripGeometry } from './helpers/tabs.js';

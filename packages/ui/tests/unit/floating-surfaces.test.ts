@@ -73,6 +73,8 @@ const REGISTERED: Readonly<Record<string, string>> = {
   '.terminal-panel__starting': 'chrome — a status overlay filling its own panel',
   '.tab-strip':
     'chrome — the tab strip itself. Its z-index belongs to the ::before/::after OVERFLOW FADES (031/#225), which are decoration painted over the scrolling track and are `pointer-events: none`. Nothing opens out of it, so there is no edge to flip away from; the fades are clamped to the strip by construction',
+  '.tabstrip-popover':
+    "workspace/tab-popover.tsx — the tab hover popover (031 US6 / FR-051). ANCHORED to its chip, so it has edges to run off and really does flip: it opens down-left by default and clampToViewport right-aligns it to the chip when opening at the chip's left edge would overflow the window (the LAST tab in the strip, which is where a hover is most likely to be asked for), flips it above the chip when there is no room below, and clamps whatever remains so no part leaves the viewport. Measured in a layout effect and held `visibility: hidden` until placed, so it never paints at the wrong position first",
   '.project-insert': 'a drag INSERTION MARKER inside its list — a line, not a surface',
   '.subworkspace-insert': 'a drag insertion marker inside its list',
   '.tab-insert': 'a drag insertion marker inside the tab strip',
