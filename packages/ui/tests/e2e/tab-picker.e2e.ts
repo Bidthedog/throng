@@ -317,14 +317,15 @@ test('T056 — dismissing returns focus to where it was (T8)', async () => {
   await shared.win.keyboard.press('Escape');
   await expect(shared.win.getByTestId('tabpicker')).toHaveCount(0);
   /*
-   * KNOWN RED. Measured: `document.activeElement` after the dismissal is `BODY` — focus is not
-   * returned to the control it came from, and is not left on the picker either. It is simply lost.
+   * Measured, before the fix: `document.activeElement` after the dismissal was `BODY` — focus was
+   * not returned to the control it came from, and was not left on the picker either. It was simply
+   * lost.
    *
-   * The mechanism is an ordering one. `Picker` records where focus was in a `useEffect`, but the
+   * The mechanism was an ordering one. `Picker` recorded where focus was in a `useEffect`, but the
    * query input carries `autoFocus`, which React applies during the COMMIT phase — before passive
-   * effects run. So the value recorded as "where focus was" is already the picker's own input; on
-   * unmount that element is gone, `document.contains(previous)` is false, and the restore is skipped.
-   * The capture has to happen before the picker mounts (or in a layout effect), not after.
+   * effects run. So the value recorded as "where focus was" was already the picker's own input; on
+   * unmount that element is gone, `document.contains(previous)` is false, and the restore was
+   * skipped. The capture happens during RENDER now, which is the only phase early enough.
    */
   // …and gave it back. Leaving focus on a dismissed overlay's corpse strands the user.
   await expect(shared.win.getByTestId('tab-add')).toBeFocused();

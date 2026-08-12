@@ -50,6 +50,81 @@ describe('addTab', () => {
   });
 });
 
+describe('addTab position (FR-053/FR-053a)', () => {
+  /** t1,t2,t3 in order; caller then chooses which is active. */
+  function three(): WorkspaceLayout {
+    let l = addTab(base(), { tab: 't2', panel: 'p2' });
+    l = addTab(l, { tab: 't3', panel: 'p3' });
+    return l;
+  }
+
+  it('appends at the end by default (today’s behaviour, unchanged)', () => {
+    const l = addTab(setActiveTab(three(), 't1'), { tab: 't4', panel: 'p4' });
+    expect(l.tabs.map((t) => t.id)).toEqual(['t1', 't2', 't3', 't4']);
+    expect(l.activeTabId).toBe('t4');
+    expect(isMainLayoutValid(l)).toBe(true);
+  });
+
+  it('appends at the end when asked explicitly, identically to the default', () => {
+    const seed = setActiveTab(three(), 't1');
+    expect(addTab(seed, { tab: 't4', panel: 'p4' }, 'end')).toEqual(
+      addTab(seed, { tab: 't4', panel: 'p4' }),
+    );
+  });
+
+  it('inserts beside the active Tab when it is FIRST in the strip', () => {
+    const l = addTab(setActiveTab(three(), 't1'), { tab: 't4', panel: 'p4' }, 'afterActive');
+    expect(l.tabs.map((t) => t.id)).toEqual(['t1', 't4', 't2', 't3']);
+    expect(l.activeTabId).toBe('t4');
+    expect(isMainLayoutValid(l)).toBe(true);
+  });
+
+  it('inserts beside the active Tab when it is in the MIDDLE of the strip', () => {
+    const l = addTab(setActiveTab(three(), 't2'), { tab: 't4', panel: 'p4' }, 'afterActive');
+    expect(l.tabs.map((t) => t.id)).toEqual(['t1', 't2', 't4', 't3']);
+    expect(l.activeTabId).toBe('t4');
+    expect(isMainLayoutValid(l)).toBe(true);
+  });
+
+  it('inserts beside the active Tab when it is LAST in the strip (i.e. at the end)', () => {
+    const l = addTab(setActiveTab(three(), 't3'), { tab: 't4', panel: 'p4' }, 'afterActive');
+    expect(l.tabs.map((t) => t.id)).toEqual(['t1', 't2', 't3', 't4']);
+    expect(l.activeTabId).toBe('t4');
+    expect(isMainLayoutValid(l)).toBe(true);
+  });
+
+  it('carries the same new Tab and Panel regardless of where it lands', () => {
+    const seed = setActiveTab(three(), 't1');
+    const at = (l: WorkspaceLayout, id: string) => l.tabs.find((t) => t.id === id)!;
+    const beside = at(addTab(seed, { tab: 't4', panel: 'p4' }, 'afterActive'), 't4');
+    const end = at(addTab(seed, { tab: 't4', panel: 'p4' }, 'end'), 't4');
+    expect(beside).toEqual(end);
+    expect(countPanels(beside.root)).toBe(1);
+    expect(collectPanels(beside.root)[0].id).toBe('p4');
+    expect(collectPanels(beside.root)[0].originProjectId).toBe('proj');
+  });
+
+  it('appends when activeTabId resolves to no Tab (defensive, keeps INV-7)', () => {
+    const seed: WorkspaceLayout = { ...three(), activeTabId: 'gone' };
+    const l = addTab(seed, { tab: 't4', panel: 'p4' }, 'afterActive');
+    expect(l.tabs.map((t) => t.id)).toEqual(['t1', 't2', 't3', 't4']);
+    expect(l.activeTabId).toBe('t4');
+    expect(isMainLayoutValid(l)).toBe(true);
+  });
+
+  it('keeps every invariant across a run of beside-active insertions', () => {
+    let l = base();
+    for (let i = 2; i <= 6; i += 1) {
+      l = addTab(l, { tab: `t${i}`, panel: `p${i}` }, 'afterActive');
+      expect(isMainLayoutValid(l)).toBe(true);
+      expect(l.tabs.some((t) => t.id === l.activeTabId)).toBe(true);
+      expect(l.tabs.length).toBe(i);
+    }
+    // Each new Tab lands right after the previous one, which was active.
+    expect(l.tabs.map((t) => t.id)).toEqual(['t1', 't2', 't3', 't4', 't5', 't6']);
+  });
+});
+
 describe('addPanel', () => {
   it('adds a placeholder Panel to the given Tab', () => {
     const l = addPanel(base(), 't1', 'p2');

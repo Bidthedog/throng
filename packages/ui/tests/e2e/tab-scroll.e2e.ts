@@ -103,8 +103,17 @@ function activeChip(state: StripState): Chip {
   return chip;
 }
 
-/** The strip has not moved for another window of frames — "settled", not merely "slow". */
+/**
+ * The strip has not moved for another window of frames — "settled", not merely "slow".
+ *
+ * The trace is (re)started FIRST, because callers reach this having already read their own trace and
+ * `endScrollTrace` cancels the sampler that feeds it. `waitForScrollStill` waits for the sample array
+ * to GROW past a grace window, so on a stopped trace it can never be satisfied and every call here
+ * timed out at 12s with "the tab strip never stopped moving" — a report about the sampler, not about
+ * the strip. Owning the trace makes this helper's precondition its own.
+ */
 async function expectStillAfterSettling(win: Page): Promise<number> {
+  await beginScrollTrace(win);
   await waitForScrollStill(win);
   const resting = (await stripState(win)).scrollLeft;
   await beginScrollTrace(win); // a fresh window of observation, after the settle
@@ -291,11 +300,8 @@ test.describe('an eased strip', () => {
     const after = await stripState(shared.win);
 
     /*
-     * A6/A8 first, because they PASS and A7 does not — asserting them ahead of the failure keeps the
-     * red pointing at the one guarantee that is actually unmet.
-     *
-     * The superseding scroll starts from where the strip IS and leaves nothing behind: the series
-     * only ever moves one way, so there is no jump back and no drift towards the old target…
+     * A6/A8 first: the superseding scroll starts from where the strip IS and leaves nothing behind,
+     * so the series only ever moves one way — no jump back and no drift towards the old target…
      */
     expect(isMonotonic(trace), 'the strip reversed direction — a superseded scroll left residue').toBe(
       true,
@@ -305,18 +311,18 @@ test.describe('an eased strip', () => {
     expect(Math.abs(resting - after.scrollLeft)).toBeLessThanOrEqual(1);
 
     /*
-     * A7 — two presses, TWO tabs. KNOWN RED.
+     * A7 — two presses, TWO tabs.
      *
-     * Measured: the frame-by-frame trace is a single clean ease from 0 to 110 and stops there — one
-     * tab, not two. The cause is visible in the arithmetic rather than in the animation, and the
-     * animation is not where the fix goes: `step()` recomputes `stepTarget` from the track's LIVE
-     * `scrollLeft`, which 50ms into a 400ms glide is still essentially zero, so the second press
-     * chooses the SAME destination the first one did. Superseding is working exactly as designed;
-     * what is missing is that a step should be measured from the scroll's PENDING target, so that
-     * presses accumulate.
+     * This was the defect this test was written against, and the shape of it is worth keeping: the
+     * trace was a single clean ease from 0 to 110 and stopped there — one tab, not two. The cause
+     * was in the arithmetic, not the animation. `step()` recomputed `stepTarget` from the track's
+     * LIVE `scrollLeft`, which 50ms into a 400ms glide is still essentially zero, so the second
+     * press chose the SAME destination the first one did. Superseding was working exactly as
+     * designed; what was missing is that a step is measured from the scroll's PENDING target, which
+     * is what makes presses accumulate (`tab-scroll.ts: pendingTarget`).
      *
-     * This is the guarantee the contract's implementation note assumed fell out of the one-rAF-loop
-     * design ("A7 and A8 are then structural"). A8 does; A7 does not.
+     * The contract's implementation note assumed A7 fell out of the one-rAF-loop design along with
+     * A8 ("A7 and A8 are then structural"). A8 does; A7 needed the caller to ask the right question.
      */
     expect(anchorIndex(after), 'two quick steps move the strip on by two tabs').toBe(
       anchorBefore + 2,
@@ -370,17 +376,18 @@ test.describe('a restored strip', () => {
     );
     await expect(shared.win.getByTestId(wanted)).toBeVisible();
     /*
-     * KNOWN RED, and the measurement is worth writing down because the number identifies the cause.
+     * The measurement that identified the original defect is worth keeping, because the number IS
+     * the cause.
      *
-     * On a restore the strip DOES scroll — sampled frame by frame it eases from 1 to 1501 and stops
-     * — but it stops 118px short of the 1619 that would put the active tab flush with the right
+     * On a restore the strip did scroll — sampled frame by frame it eased from 1 to 1501 and stopped
+     * — but it stopped 118px short of the 1619 that would put the active tab flush with the right
      * edge, leaving the tab the user was last on cut off. 118px is the width of the tab-actions
-     * group: the reveal target is computed while the strip still believes its track is 664px wide,
-     * and the group then appears and takes those 118px out of the track. Nothing recomputes, so the
-     * strip rests against a viewport that no longer exists.
+     * group: the reveal target was computed while the strip still believed its track was 664px wide,
+     * and the group then appeared and took those 118px out of the track. Nothing recomputed, so the
+     * strip rested against a viewport that no longer existed.
      *
-     * That is FR-029's own scenario ("restored") and A2's arithmetic done against a stale
-     * `viewportWidth`; the fix belongs in `tab-group.tsx`'s reveal effect, not here.
+     * `tab-group.tsx` now re-runs the reveal when the track's measured width changes, guarded on the
+     * strip still being where that reveal put it.
      */
     await expect
       .poll(
@@ -658,18 +665,19 @@ test.describe('a slow strip', () => {
     ).toBeLessThanOrEqual(after.maxScroll + 1);
     expect(after.scrollLeft).toBeGreaterThanOrEqual(-1);
     /*
-     * KNOWN RED — and it is the substance of A9, not decoration.
+     * This is the substance of A9, not decoration.
      *
-     * Measured: with seven tabs, destroying the one the strip is gliding towards leaves the FIRST tab
-     * active (that is what `closeTab` chooses) at 0–108, while the strip carries on and rests at 1517
-     * — the far end, which is where the now-deleted tab used to be. The old journey finished.
+     * Measured, before the fix: with seven tabs, destroying the one the strip was gliding towards
+     * left the FIRST tab active (that is what `closeTab` chooses) at 0–108, while the strip carried
+     * on and rested at 1517 — the far end, where the now-deleted tab used to be. The old journey
+     * finished.
      *
-     * The mechanism is an interaction between two correct-looking pieces: the reveal effect fires for
-     * the new active tab while the glide has barely begun, so `revealTarget` measures against a
-     * `scrollLeft` of about 1, sees tab 0 fully visible, and returns `null` — a deliberate no-op. But
-     * `null` means "no movement needed", and the movement already in flight is not cancelled by it.
-     * So the strip is left travelling to a target that no longer means anything, which is exactly
-     * what A9 ("a tab destroyed mid-flight cannot be scrolled to") forbids.
+     * The mechanism was an interaction between two correct-looking pieces: the reveal effect fires
+     * for the new active tab while the glide has barely begun, so `revealTarget` measured against a
+     * `scrollLeft` of about 1, saw tab 0 fully visible, and returned `null` — a deliberate no-op.
+     * But `null` means "no movement needed", and the movement already in flight was not cancelled by
+     * it. The reveal now measures from the scroll's PENDING target instead, so it asks whether the
+     * active tab will be visible where the strip is GOING, which is the question A9 is about.
      */
     expect(isFullyVisible(after, activeChip(after)), 'the surviving active tab is in view').toBe(
       true,

@@ -174,6 +174,44 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     max: 128,
     step: 2,
   },
+  {
+    // US6 / FR-050. Deliberately the SAME unit and range as the name limit above: a width in pixels
+    // and a name in characters cannot be compared, and these two settings are read together.
+    key: 'tabs.maxWidth',
+    label: 'Widest tab',
+    description:
+      'The widest a tab may be drawn, in characters. A longer title is ellipsised in the strip and shown in full on hover — the name itself is not shortened, which is what the name limit above does.',
+    group: 'Tabs',
+    control: 'slider',
+    min: 10,
+    max: 128,
+    // Two, for the same reason as the name limit: 1 across a 118-wide range is 0.85% and the
+    // aimable-slider rule wants at least 1%. The shipped 32 stays reachable at 10 + 2×11.
+    step: 2,
+  },
+  {
+    // US6 / FR-053a. A select, so it declares its set and NO range — a numeric min+max is read
+    // elsewhere as "this wanted a slider" (SC-007's converse guard).
+    key: 'tabs.newTabPosition',
+    label: 'New tabs open',
+    description:
+      'Where a tab created with + is inserted: immediately to the right of the active tab, or at the end of the strip.',
+    group: 'Tabs',
+    control: 'select',
+    allowedValues: ['afterActive', 'end'],
+  },
+  {
+    // US6 / FR-054a. 50 across a 2900 range is 1.72%, and 500 lands on a stop at 100 + 50×8.
+    key: 'tabs.chevronRepeatDelayMs',
+    label: 'Chevron repeat delay',
+    description:
+      'How long a press-and-hold on a scroll chevron waits before the strip starts scrolling continuously, in milliseconds. Releasing the pointer stops it immediately.',
+    group: 'Tabs',
+    control: 'slider',
+    min: 100,
+    max: 3000,
+    step: 50,
+  },
 
   // File Explorer
   //
