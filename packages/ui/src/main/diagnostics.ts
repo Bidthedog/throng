@@ -29,6 +29,15 @@ export interface UiDiagnostics {
   recordCrash(details: Omit<CrashDetails, 'version' | 'buildId'>): void;
   /** Apply the user's configured level once settings have been read. */
   setLevel(level: LogLevel): void;
+  /**
+   * Write a record the configured threshold must not be allowed to drop (030 FR-006b).
+   *
+   * The notice channel's route to the file. A notice the user set to "Never display" is promised a
+   * log record in exchange — so `diagnostics.logLevel: 'error'` silently swallowing every `info`
+   * and `warning` notice would make that promise false, and nothing would say so. `component`
+   * names the record's origin (`renderer-notice`) in place of `ui-main`.
+   */
+  logAlways(level: LogLevel, message: string, component?: string): void;
 }
 
 export interface UiDiagnosticsOptions {
@@ -57,6 +66,7 @@ export function startUiDiagnostics(options: UiDiagnosticsOptions): UiDiagnostics
     log,
     logDir,
     setLevel: (level) => log.setLevel(level),
+    logAlways: (level, message, component) => log.logAlways(level, message, component),
     recordCrash(details): void {
       const full: CrashDetails = { ...details, version: options.version, buildId: options.buildId };
       const path = writeCrashReport(logDir, full);

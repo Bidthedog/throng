@@ -57,6 +57,61 @@ describe('createFileLog (durable diagnostics)', () => {
     expect(read()).toContain('now visible');
   });
 
+  it('writes through the threshold on logAlways, which an ordinary write cannot (030 FR-006b)', () => {
+    // The point of the method: a notice the user asked NOT to see must still leave a record, and
+    // `diagnostics.logLevel: 'error'` is exactly the setting that would otherwise swallow it —
+    // silently, which is the failure mode 030 FR-008's consent text promises cannot happen.
+    const log = createFileLog({
+      dir, fileName: 'main.log', component: 'ui-main', level: 'error', mirrorToConsole: false,
+    });
+    log.info('an ordinary write, below the threshold');
+    log.logAlways('info', 'a notice record, below the same threshold');
+    log.logAlways('warn', 'a warning notice record');
+
+    const text = read();
+    expect(text).not.toContain('an ordinary write');
+    expect(text).toContain('INFO  [ui-main] a notice record, below the same threshold');
+    expect(text).toContain('WARN  [ui-main] a warning notice record');
+  });
+
+  it('keeps one record on one line, however many newlines the record contains', () => {
+    // A notice's raw system error can be a whole stack. A log line is a line: a record that broke
+    // across three of them would be three records to anything reading the file, and the two orphans
+    // would carry no timestamp, level or component at all.
+    const log = createFileLog({
+      dir, fileName: 'main.log', component: 'renderer-notice', level: 'error', mirrorToConsole: false,
+    });
+    log.logAlways('error', 'detail | EPERM: first\r\nsecond line\nthird line');
+    const lines = read().trimEnd().split('\n');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('detail | EPERM: first\\nsecond line\\nthird line');
+  });
+
+  it('lets one record name its own component, so renderer notices are findable in the file', () => {
+    const log = createFileLog({
+      dir, fileName: 'main.log', component: 'ui-main', level: 'debug', mirrorToConsole: false,
+    });
+    log.logAlways('error', 'severity=error | Could not rename the file.', 'renderer-notice');
+    log.error('main is still main');
+    const text = read();
+    expect(text).toContain('ERROR [renderer-notice] severity=error | Could not rename the file.');
+    expect(text).toContain('ERROR [ui-main] main is still main');
+  });
+
+  it('rotates a threshold-bypassing record like any other — logAlways skips the level, not the policy', () => {
+    const log = createFileLog({
+      dir,
+      fileName: 'main.log',
+      component: 'ui-main',
+      level: 'error',
+      mirrorToConsole: false,
+      policy: { maxBytes: 1024, keep: 3 },
+    });
+    for (let i = 0; i < 200; i += 1) log.logAlways('info', `notice ${i} ${'x'.repeat(100)}`);
+    expect(readdirSync(dir).sort()).toEqual(['main.1.log', 'main.2.log', 'main.log']);
+    expect(statSync(join(dir, 'main.log')).size).toBeLessThanOrEqual(1024 + 200);
+  });
+
   it('rotates and retains, so a long-lived daemon cannot fill the disk', () => {
     const log = createFileLog({
       dir,

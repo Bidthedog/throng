@@ -31,6 +31,13 @@ The user-facing configuration surface for #224. Consumed by Preferences (generic
 | `{ info: { mode: 'timed', timeoutMs: 900 } }` | `info.timeoutMs` = 10000 (out of range → default) |
 | `{ info: { mode: 'sometimes' } }` | `info.mode` = `'timed'` (unrecognised → default) |
 | `{ fatal: {...} }` | Ignored; the four known severities resolve normally |
+| `{ error: 5 }` — a severity whose value is not an object | That severity's defaults; the rest honoured |
+| `{ info: { timeoutMs: 10000.4 } }` | Rounded, matching `diagnosticsSettings`' existing `Math.round` |
+| `{ info: { timeoutMs: Infinity } }` | Out of range → that severity's default |
+
+The returned object is **fresh** — a caller mutating it cannot corrupt the shared defaults. (These
+four rows were added after Phase 2: the original table was silent on all of them, and every one is
+something a hand-edited `settings.json` produces.)
 
 **Property to test**: for any JSON value whatsoever, `parseNotificationSettings` returns an object
 with exactly four severities, each with a valid `mode` and a `timeoutMs` within bounds.
@@ -41,9 +48,27 @@ Eight descriptors under `group: 'Notifications'`:
 
 | Key | Control | Bounds |
 |---|---|---|
-| `notifications.error.mode` | enum | never / timed / dismiss |
-| `notifications.error.timeoutMs` | number | 1500–60000 |
+| `notifications.error.mode` | `select` | never / timed / dismiss |
+| `notifications.error.timeoutMs` | `slider`, step 750 | 1500–60000 |
 | …the same pair for `warning`, `info`, `success` | | |
+
+Two corrections made after meeting the real registry:
+
+- **`select`, not `enum`.** Both exist in `ControlKind`, but every enumerated *setting* uses `select`;
+  `form-controls.tsx` routes `enum` to a text fallback.
+- **`slider`, not `number`, and the shipped defaults are off-grid.** `slider-descriptors.test.ts`
+  fails any descriptor declaring both `min` and `max` with a control other than `slider`, and the step
+  guard demands step ≥ 1% of range. Range 58500 → step ≥ 585; landing on both 5000 and 10000 from
+  1500 needs a step dividing gcd(3500, 8500) = 500, which is below the floor. **This is arithmetically
+  impossible, not a choice.** Step 750 is used: 1.28%, divides 58500 exactly so the maximum stays
+  drag-reachable. Consequence to accept knowingly — dragging yields 1500, 2250, 3000…, and the shipped
+  5000/10000 are reachable only by typing or by the row's reset. Every other slider in the registry has
+  its default on-grid, so this is the first exception. The alternatives are worse: changing the
+  defaults contradicts #224, widening `TIMEOUT_MIN_MS` breaks descriptor/clamp agreement, and relaxing
+  the guard removes a check that is doing its job.
+
+`NumberControl` renders both a range input and a typed field, so T020's "inert when the mode is not
+*Display for*" must disable **both**.
 
 `settings-metadata.test.ts` asserts one descriptor per configurable leaf — all eight are mandatory.
 

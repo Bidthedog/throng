@@ -19,6 +19,14 @@ declare global {
         onChanged: (cb: () => void) => () => void;
       };
       getDaemonStatus?: () => Promise<unknown>;
+      /**
+       * 030 FR-006 — a notice's record on its way to the diagnostic log. Fire-and-forget: the
+       * renderer learns nothing about the write, because a failed diagnostics write must never
+       * turn into a second notice.
+       */
+      notices?: {
+        log: (record: import('@throng/core').NoticeLogRecord) => void;
+      };
       /** 029 FR-013 — panel id to displayed title, published so main can name a throng holder. */
       panels?: {
         publishIdentities: (

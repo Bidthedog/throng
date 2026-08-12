@@ -31,8 +31,8 @@ for the right reason, before the code that satisfies it.
 
 ## Phase 1: Setup
 
-- [ ] T001 Create `packages/core/src/notice/` with an `index.ts` barrel, exported from `packages/core/src/index.ts`
-- [ ] T002 Create `packages/core/tests/unit/notice/` for the foundational unit tests. Each E2E spec file is created by the task that writes its first test, not up front — an empty `.e2e.ts` registered in no shard group fails `shard-plan.test.ts`
+- [x] T001 Create `packages/core/src/notice/` with an `index.ts` barrel, exported from `packages/core/src/index.ts`
+- [x] T002 Create `packages/core/tests/unit/notice/` for the foundational unit tests. Each E2E spec file is created by the task that writes its first test, not up front — an empty `.e2e.ts` registered in no shard group fails `shard-plan.test.ts`
 
 ---
 
@@ -41,14 +41,14 @@ for the right reason, before the code that satisfies it.
 **Blocking**: nothing in Phase 3+ may start until these are done — every story renders a subject or
 reads a display mode.
 
-- [ ] T003 Write failing unit tests for `DisplayMode` parsing and bounds in `packages/core/tests/unit/notice/display-mode.test.ts` — covers the whole table in `contracts/notification-settings.md` (absent section, absent severity, unrecognised mode, out-of-range/NaN/negative timeout, unknown severity key)
-- [ ] T004 Implement `DisplayMode`, `SeverityNotificationSettings`, `parseNotificationSettings` and `TIMEOUT_MIN_MS`/`TIMEOUT_MAX_MS` (1500/60000) in `packages/core/src/notice/display-mode.ts`
-- [ ] T005 [P] Write failing unit tests for severity→`LogLevel` mapping in `packages/core/tests/unit/notice/log-level.test.ts` (error→error, warning→warn, info→info, success→info)
-- [ ] T006 [P] Implement `noticeLogLevel(severity)` in `packages/core/src/notice/log-level.ts`
-- [ ] T007 [P] Write failing unit tests for `NoticeSubject` formatting in `packages/core/tests/unit/notice/subject.test.ts` — every union member **including `pane`**, `Project — Tab — Panel` for a full panel, omission of absent parts with no dangling separators, context elision (FR-022a), truncation at 48 characters per part with a trailing `…` applied per part and never to the joined string, `{ kind: 'none' }` → empty string
-- [ ] T008 [P] Implement `NoticeSubject`, `SubjectContext` and `formatSubject` in `packages/core/src/notice/subject.ts`
-- [ ] T009 Write failing unit tests for `groupKey` in `packages/core/tests/unit/notice/grouping.test.ts` — classified cause, unclassified with operation id, neither, and the project id participating in the key so two projects yield two keys
-- [ ] T010 Implement `groupKey` in `packages/core/src/notice/grouping.ts`, reusing `causeKey` from `packages/core/src/failure/cause.ts` without widening its closed set
+- [x] T003 Write failing unit tests for `DisplayMode` parsing and bounds in `packages/core/tests/unit/notice/display-mode.test.ts` — covers the whole table in `contracts/notification-settings.md` (absent section, absent severity, unrecognised mode, out-of-range/NaN/negative timeout, unknown severity key)
+- [x] T004 Implement `DisplayMode`, `SeverityNotificationSettings`, `parseNotificationSettings` and `TIMEOUT_MIN_MS`/`TIMEOUT_MAX_MS` (1500/60000) in `packages/core/src/notice/display-mode.ts`
+- [x] T005 [P] Write failing unit tests for severity→`LogLevel` mapping in `packages/core/tests/unit/notice/log-level.test.ts` (error→error, warning→warn, info→info, success→info)
+- [x] T006 [P] Implement `noticeLogLevel(severity)` in `packages/core/src/notice/log-level.ts`
+- [x] T007 [P] Write failing unit tests for `NoticeSubject` formatting in `packages/core/tests/unit/notice/subject.test.ts` — every union member **including `pane`**, `Project — Tab — Panel` for a full panel, omission of absent parts with no dangling separators, context elision (FR-022a), truncation at 48 characters per part with a trailing `…` applied per part and never to the joined string, `{ kind: 'none' }` → empty string
+- [x] T008 [P] Implement `NoticeSubject`, `SubjectContext` and `formatSubject` in `packages/core/src/notice/subject.ts`
+- [x] T009 Write failing unit tests for `groupKey` in `packages/core/tests/unit/notice/grouping.test.ts` — classified cause, unclassified with operation id, neither, and the project id participating in the key so two projects yield two keys
+- [x] T010 Implement `groupKey` in `packages/core/src/notice/grouping.ts`, reusing `causeKey` from `packages/core/src/failure/cause.ts` without widening its closed set
 
 ---
 
@@ -62,8 +62,8 @@ behaves accordingly, and that the event is in `logs/main.log` in all three.
 
 ### Tests first
 
-- [ ] T011 [P] [US1] Write failing contract test for `notifications` merge in `packages/core/tests/contract/notification-settings.contract.test.ts` — an older `settings.json` with no `notifications` section resolves to the shipped defaults and the rest of the file survives
-- [ ] T012 [P] [US1] Extend the existing `packages/core/tests/unit/settings-metadata.test.ts` with the notification leaves' **bounds** (min 1500 / max 60000) — its one-descriptor-per-leaf completeness assertion already covers the count, so do not add a second bespoke test file
+- [X] T011 [P] [US1] Write failing contract test for `notifications` merge in `packages/core/tests/contract/notification-settings.contract.test.ts` — an older `settings.json` with no `notifications` section resolves to the shipped defaults and the rest of the file survives
+- [X] T012 [P] [US1] Extend the existing `packages/core/tests/unit/settings-metadata.test.ts` with the notification leaves' **bounds** (min 1500 / max 60000) — its one-descriptor-per-leaf completeness assertion already covers the count, so do not add a second bespoke test file
 - [ ] T013 [US1] Write failing E2E `packages/ui/tests/e2e/notification-prefs.e2e.ts` — the Notifications category exists with four rows; Dismiss only persists past any timeout; **Display for N leaves after N, asserted on `error` specifically** (the one severity hard-coded to persist today at `notification.tsx:225` — a test using `info` would pass while the exemption survived, which is FR-012/US1 AC6's entire point); Never display shows nothing; the timeout control is inert unless the mode is Display for; a value below 1500 or above 60000 cannot be committed
 - [ ] T014 [US1] Write failing E2E in the same spec — choosing Never display for `error` asks to confirm and declining leaves the mode unchanged; choosing it for `info` does not ask
 - [ ] T014a [US1] Assert explicitly that a preference change applies to the **next notice raised in the same session**, with no restart (FR-016) — T013 exercises this incidentally, which is not the same as asserting it
@@ -78,15 +78,15 @@ behaves accordingly, and that the event is in `logs/main.log` in all three.
 
 ### Implementation
 
-- [ ] T017 [US1] Add `NotificationSettings` to `AppSettings` and the shipped defaults to `DEFAULT_APP_SETTINGS` in `packages/core/src/config/app-settings.ts`
-- [ ] T018 [US1] Wire `parseNotificationSettings` into the settings merge path in `packages/core/src/config/` so a malformed value resolves per-value without discarding the file
-- [ ] T019 [US1] Add the eight `group: 'Notifications'` descriptors to `packages/core/src/config/settings-metadata.ts`, with `min: 1500` / `max: 60000` on the timeouts
+- [X] T017 [US1] Add `NotificationSettings` to `AppSettings` in `packages/core/src/config/app-settings.ts`, and set `DEFAULT_APP_SETTINGS.notifications = DEFAULT_NOTIFICATION_SETTINGS` — **import it from `notice/display-mode.ts`, do not re-type the four-row table**. Phase 2 had to own the defaults because `parseNotificationSettings(raw)` takes one argument and must therefore hold its own fallbacks; a second copy of that table is one nobody keeps in step
+- [X] T018 [US1] Wire `parseNotificationSettings` into the settings merge path in `packages/core/src/config/` so a malformed value resolves per-value without discarding the file
+- [X] T019 [US1] Add the eight `group: 'Notifications'` descriptors to `packages/core/src/config/settings-metadata.ts`, with `min: 1500` / `max: 60000` on the timeouts
 - [ ] T020 [US1] Make the timeout control inert when the sibling mode is not `timed`, in the generic settings renderer `packages/ui/src/renderer/preferences/settings-tab.tsx`
 - [ ] T021 [US1] Add the confirmation on choosing `never` for `error`/`warning` in `packages/ui/src/renderer/preferences/settings-tab.tsx`, reusing the existing confirmation affordance
-- [ ] T022 [US1] Add `NoticeLogRecord` and `noticeLogRecord()` to `packages/core/src/notice/index.ts`
-- [ ] T023 [US1] Expose `throng.notices.log(record)` in `packages/ui/src/preload/preload.cts`
-- [ ] T023a [US1] Add `logAlways(level, message)` to `DiagnosticLog` in `packages/platform-windows/src/node-file-log.ts` — the existing `write` minus the `passesThreshold` guard at line 127, rotation and formatting unchanged — and surface it on `UiDiagnostics` in `packages/ui/src/main/diagnostics.ts`. Without this FR-006b is unimplementable: every write is threshold-filtered and there is no bypass
-- [ ] T024 [US1] Add the IPC handler writing through `UiDiagnostics.logAlways` with component `renderer-notice` in `packages/ui/src/main/notice-log.ts`, and register it from the composition root in `packages/ui/src/main/main.ts`
+- [X] T022 [US1] Add `NoticeLogRecord` and `noticeLogRecord()` to `packages/core/src/notice/index.ts`
+- [X] T023 [US1] Expose `throng.notices.log(record)` in `packages/ui/src/preload/preload.cts`
+- [X] T023a [US1] Add `logAlways(level, message)` to `DiagnosticLog` in `packages/platform-windows/src/node-file-log.ts` — the existing `write` minus the `passesThreshold` guard at line 127, rotation and formatting unchanged — and surface it on `UiDiagnostics` in `packages/ui/src/main/diagnostics.ts`. Without this FR-006b is unimplementable: every write is threshold-filtered and there is no bypass
+- [X] T024 [US1] Add the IPC handler writing through `UiDiagnostics.logAlways` with component `renderer-notice` in `packages/ui/src/main/notice-log.ts`, and register it from the composition root in `packages/ui/src/main/main.ts`
 - [ ] T025 [US1] Replace the `severity !== 'error'` branch and `AUTO_DISMISS_MS` in `packages/ui/src/renderer/common/notification.tsx` with the per-severity mode; a `never` notice is logged and never enters the rendered list
 - [ ] T025a [US1] Add the `silencedRecently` map per `data-model.md` so a silenced notice is de-duplicated exactly as a displayed one is (FR-005b) — keyed by the notice's `groupKey` where it has one and the duplicate-check tuple only where it does not — never `causeKey` alone, which drops the project and operation dimensions the key exists to carry — expiring after that severity's `timeoutMs`, pruned lazily on the next `notify`. Without it a repeating watcher failure writes one record per repeat and SC-003 is false
 - [ ] T025b [US1] Carry the `reported` panel-id set on each entry so the shadow suppresses only a notice reporting nothing new (FR-005c) — the mirror of FR-006a's growth record. Without it the shadow swallows every record after the first for a cause that keeps claiming panels
@@ -115,7 +115,8 @@ names both, and never says "this item".
 
 ### Implementation
 
-- [ ] T031pre [US2] Write the observation for the structural guard first: a `@ts-expect-error` case in `packages/ui/tests/unit/notice-subject-required.test.ts` proving a `notify()` call without a subject does not compile. FR-057 currently rests on `tsc` failing with nothing watching it fail, and SC-013 claims both halves are rejected by the project's own checks
+- [ ] T031pre [US2] Write the observation for the structural guard first — and **not** with a bare `@ts-expect-error`, which is inert here: `packages/core/tsconfig.json` includes only `src/**/*` and the root config references packages only, so `tsc -b` never sees a test file and neither typecheck nor lint would notice a suppression that had stopped suppressing anything (measured in Phase 2). Use a mechanism that actually runs the compiler: a unit test in `packages/ui/tests/unit/notice-subject-required.test.ts` that invokes `tsc --noEmit` over a small fixture calling `notify()` with no `subject`, and asserts it exits non-zero naming that property. Without a real mechanism FR-057 and SC-013 rest on nothing
+- [ ] T031 [US2] Make the renderer import `NoticeSeverity` from `@throng/core` (`notice/severity.ts`, added in Phase 2) rather than keeping its own declaration at `notification.tsx:48` — two copies of the severity set is exactly the drift the shared type exists to prevent
 - [ ] T031 [US2] Make `subject: NoticeSubject` a required field of `NoticeInput` in `packages/ui/src/renderer/common/notification.tsx` — this breaks the build at every call site, which is the point
 - [ ] T032 [US2] Present the subject in `noticeHeading()`; the message renders below and must not restate it
 - [ ] T033 [P] [US2] Give every one of the 12 `notify()` call sites a real subject or an explicit `{ kind: 'none' }`, one file at a time: `config/config-write-notices.ts`, `common/notification.tsx` (the failure path), `panel-type/panel-type-form.tsx`, `statusbar/daemon-indicator.tsx` (×2), `preferences/themes-tab.tsx`, `preferences/reset-notice.tsx`, `workspace/panel-placeholder.tsx`, `terminal/terminal-panel.tsx`, `editor/drop-target.tsx` (×2), `editor/editor-notice-dialog.tsx`
