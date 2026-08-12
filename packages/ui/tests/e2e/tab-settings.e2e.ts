@@ -1,0 +1,199 @@
+/**
+ * 031 US3/US4 — the Tabs preferences, and the picker's binding (#225, #227).
+ *
+ * Three settings and one chord, all of which exist to be CHANGED by a person who never opens a JSON
+ * file. contracts/tab-strip.md T6 requires the binding to appear in the Key Bindings editor and be
+ * rebindable; the settings side is FR-030/FR-047 plus the bounds declared in
+ * `settings-metadata.ts` — which, since #227, are the ONLY statement of those bounds anywhere.
+ * There is no second clamp in `app-settings.ts` to fall back on, so a range that is wrong here is
+ * wrong everywhere, and that is exactly why it is asserted from the rendered control.
+ *
+ * This spec drives the preferences WINDOW, so it belongs in the serial tier: a second headed app
+ * stealing focus closes menus and dialogs underneath it.
+ */
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
+import { runApp, setSlider, cleanupTemp } from './harness.js';
+
+const cfgRoots: string[] = [];
+function freshCfgRoot(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'throng-cfg-tabsettings-'));
+  cfgRoots.push(dir);
+  return dir;
+}
+test.afterAll(() => {
+  for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
+});
+
+function readSettings(cfgRoot: string): { tabs?: Record<string, number> } | undefined {
+  const file = join(cfgRoot, 'settings.json');
+  if (!existsSync(file)) return undefined;
+  return JSON.parse(readFileSync(file, 'utf8')) as { tabs?: Record<string, number> };
+}
+
+function readBindings(cfgRoot: string): Record<string, string[]> | undefined {
+  const file = join(cfgRoot, 'keybindings.json');
+  if (!existsSync(file)) return undefined;
+  return (JSON.parse(readFileSync(file, 'utf8')) as { bindings: Record<string, string[]> }).bindings;
+}
+
+async function openPreferences(
+  app: ElectronApplication,
+  win: Page,
+  tab: 'settings' | 'keybindings',
+): Promise<Page> {
+  await win.getByTestId('title-bar-cog').click();
+  const [prefs] = await Promise.all([
+    app.waitForEvent('window'),
+    win.getByTestId(`cog-menu-${tab}`).click(),
+  ]);
+  await prefs.waitForLoadState('domcontentloaded');
+  await expect(prefs.getByTestId(`${tab}-tab`)).toBeVisible();
+  return prefs;
+}
+
+/** Dispatch a synthetic chord on the prefs window (never let a reserved combo reach the OS). */
+async function sendChord(prefs: Page, key: string): Promise<void> {
+  await prefs.evaluate((k) => {
+    const init = { key: k, bubbles: true } as KeyboardEventInit;
+    window.dispatchEvent(new KeyboardEvent('keydown', init));
+    window.dispatchEvent(new KeyboardEvent('keyup', init));
+  }, key);
+}
+
+/** Every tab setting, with the range and default the metadata declares. */
+const TAB_SETTINGS = [
+  { key: 'tabs.smoothScrollMs', min: '0', max: '3000', step: '50', value: '300' },
+  { key: 'tabs.closeArmingDelayMs', min: '0', max: '2000', step: '50', value: '300' },
+  { key: 'tabs.maxNameLength', min: '10', max: '128', step: '2', value: '64' },
+] as const;
+
+test('T057 — the Tabs section exposes all three settings, with their ranges and defaults', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openPreferences(app, win, 'settings');
+
+      // ONE section, named for the thing it configures — the same word the Key Bindings editor uses
+      // for the picker's chord, so a user hunting for anything about tabs finds one word in both.
+      const group = prefs.getByTestId('settings-group-Tabs');
+      await expect(group).toBeVisible();
+
+      for (const setting of TAB_SETTINGS) {
+        await expect(
+          group.getByTestId(`setting-${setting.key}`),
+          `${setting.key} is in the Tabs section`,
+        ).toHaveCount(1);
+
+        // A bounded numeric renders a slider AND a field. The slider is where the DECLARED range
+        // becomes visible: min, max and the step that makes it aimable.
+        const slider = prefs.getByTestId(`control-${setting.key}-slider`);
+        await expect(slider).toBeVisible();
+        await expect(slider).toHaveAttribute('min', setting.min);
+        await expect(slider).toHaveAttribute('max', setting.max);
+        await expect(slider).toHaveAttribute('step', setting.step);
+
+        // …and the shipped default is what an untouched install shows.
+        await expect(prefs.getByTestId(`control-${setting.key}`)).toHaveValue(setting.value);
+        await expect(slider).toHaveValue(setting.value);
+      }
+
+      // Nothing has been changed, so nothing has been written.
+      expect(readSettings(cfgRoot)?.tabs).toBeUndefined();
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
+
+test('T057 — each tab setting is editable by slider and by field, and persists', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openPreferences(app, win, 'settings');
+
+      // Drag the scroll duration to a value on its step grid.
+      await setSlider(prefs.getByTestId('control-tabs.smoothScrollMs-slider'), '1500');
+      await expect.poll(() => readSettings(cfgRoot)?.tabs?.smoothScrollMs).toBe(1500);
+      await expect(prefs.getByTestId('control-tabs.smoothScrollMs')).toHaveValue('1,500');
+
+      // Type the arming delay instead: the field and the slider drive one value.
+      const arming = prefs.getByTestId('control-tabs.closeArmingDelayMs');
+      await arming.fill('800');
+      await arming.press('Enter');
+      await expect.poll(() => readSettings(cfgRoot)?.tabs?.closeArmingDelayMs).toBe(800);
+      await expect.poll(() => prefs.getByTestId('control-tabs.closeArmingDelayMs-slider').inputValue()).toBe(
+        '800',
+      );
+
+      // And the name limit, whose step of 2 exists so that 64 stays reachable from a minimum of 10.
+      await setSlider(prefs.getByTestId('control-tabs.maxNameLength-slider'), '30');
+      await expect.poll(() => readSettings(cfgRoot)?.tabs?.maxNameLength).toBe(30);
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
+
+test('T057 — a value outside a declared range is refused, and the last valid one stands', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openPreferences(app, win, 'settings');
+
+      // Establish a known-good value first, so "unchanged" is a value this test put there rather
+      // than a default that would have been present either way.
+      const field = prefs.getByTestId('control-tabs.smoothScrollMs');
+      await field.fill('900');
+      await field.press('Enter');
+      await expect.poll(() => readSettings(cfgRoot)?.tabs?.smoothScrollMs).toBe(900);
+
+      // Above the declared maximum: refused, surfaced, not applied.
+      await field.fill('9999');
+      await field.press('Enter');
+      await expect(prefs.getByTestId('control-tabs.smoothScrollMs-invalid')).toBeVisible();
+      expect(readSettings(cfgRoot)?.tabs?.smoothScrollMs).toBe(900);
+
+      // Below the declared minimum, on the setting that has a non-zero one.
+      const limit = prefs.getByTestId('control-tabs.maxNameLength');
+      await limit.fill('4');
+      await limit.press('Enter');
+      await expect(prefs.getByTestId('control-tabs.maxNameLength-invalid')).toBeVisible();
+      expect(readSettings(cfgRoot)?.tabs?.maxNameLength).toBeUndefined();
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
+
+test('T057 — tabs.openPicker appears in the Key Bindings editor and is rebindable (T6)', async () => {
+  const cfgRoot = freshCfgRoot();
+  await runApp(
+    async (app, win) => {
+      const prefs = await openPreferences(app, win, 'keybindings');
+
+      // Listed, under the same "Tabs" heading the Settings editor uses, with its shipped chord and a
+      // scope that says it works everywhere — which is what T5's "at any tab count, from anywhere"
+      // looks like from the editor's side.
+      const row = prefs.getByTestId('binding-tabs.openPicker');
+      await expect(row).toBeVisible();
+      await expect(
+        prefs.getByTestId('keybindings-group-Tabs').getByTestId('binding-tabs.openPicker'),
+      ).toHaveCount(1);
+      await expect(prefs.getByTestId('binding-tabs.openPicker-chord')).toContainText('Ctrl+Alt+T');
+      await expect(prefs.getByTestId('binding-tabs.openPicker-scope')).toHaveText('Everywhere');
+
+      // REBINDABLE — capture is additive, so the shipped chord survives beside the new one.
+      await row.dblclick();
+      await expect(prefs.getByTestId('capture-modal')).toBeVisible();
+      await sendChord(prefs, 'F9');
+      await expect(prefs.getByTestId('capture-modal')).toBeHidden();
+      await expect
+        .poll(() => readBindings(cfgRoot)?.['tabs.openPicker'])
+        .toEqual(['Ctrl+Alt+T', 'F9']);
+
+      // …and the new chord is what the editor now shows.
+      await expect(prefs.getByTestId('binding-tabs.openPicker-chord')).toContainText('F9');
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
