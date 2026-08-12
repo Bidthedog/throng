@@ -442,6 +442,21 @@ export const THRONG_THEME: Theme = {
        project to its original name. A rotated arrow that is NOT `retry` ↻ (re-run a failed action),
        `revert` ↶ (undo one preference) or `undo` ↩ (editor undo), so the four never blur together. */
     resetName: '↺',
+    /* 031 / FR-032. The tab strip's step-left, step-right and show-all controls. Every control in
+       the strip is a themeable icon carrying a hover title — never a text label, never an inline
+       vector (SC-002).
+
+       Deliberately NOT `collapse` ‹ / `expand` ›, whose default glyphs are the same two characters.
+       Those mean TREE-NODE STATE in the explorer, and one token serving both would mean a user
+       re-skinning their tree chevrons silently re-skinned the tab strip as well — the same reasoning
+       that keeps `dismiss` apart from `destroy` and `editJson` apart from `fileJson`. The glyphs
+       coinciding today is a coincidence of the shipped set, not a shared meaning.
+
+       `chevronDown` is the show-all control: it opens the picker downwards, so it reads as "more
+       below", distinct from the horizontal pair beside it and from the tree's `chevron` ▸. */
+    chevronLeft: '‹',
+    chevronRight: '›',
+    chevronDown: '⌄',
   },
 };
 

@@ -666,13 +666,68 @@ textarea,
 
 .tab-strip::after {
   /*
-   * Sits at the track's trailing edge. Today that is just inside the New Tab button; when US3 adds
-   * the tab-action controls this becomes their combined width. Deliberately a literal rather than a
-   * `var(--tab-actions-width, …)` fallback: a custom property nothing defines is invisible to a
-   * reader and to the theme editor, and `css-variables-defined.test.ts` rightly refuses one.
+   * Sits at the track's trailing edge: past the New Tab button (24px + its 4px margin, plus the
+   * strip's own 4px padding) and past the tab-action controls when they are shown.
+   *
+   * Their width is MEASURED and written onto the strip as `--tabstrip-actions-width` (tab-group.tsx)
+   * rather than hard-coded, because the group's width changes with the number of digits in the
+   * counts it displays — a strip with 128 hidden tabs is wider than one with 2. The property is
+   * always set, including as `0px` when the group is not shown, so nothing here reads an undefined
+   * variable.
    */
-  right: 32px;
+  right: calc(32px + var(--tabstrip-actions-width, 0px));
   background: linear-gradient(to left, var(--bg) 0%, transparent 100%);
+}
+
+/*
+ * --- Tab actions (031 US3 / FR-019–FR-021, FR-032) ----------------------
+ *
+ * Step left, step right, show all — pinned beside New Tab, OUTSIDE the scrolling track so they
+ * cannot scroll away from the tabs they are steering. Each is an `IconButton`: a themed icon plus a
+ * hover title, with its live count as a badge rather than a label (constitution, Themeable icon
+ * controls).
+ */
+.tabstrip-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  align-self: center;
+  margin-left: 4px;
+}
+
+.tabstrip-actions__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 24px;
+  padding: 0 5px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+:where(body:not([data-window-blurred])) .tabstrip-actions__btn:hover:not(:disabled) {
+  background: var(--throng-colour-hoverSurface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+/* S4 — nothing hidden that way, so there is nothing to reveal. */
+.tabstrip-actions__btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* The count beside an action icon. Tabular figures so the control does not twitch as it changes. */
+.icon-button__badge {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
 .tab-strip[data-fade-left='true']::before,
@@ -1484,15 +1539,111 @@ textarea,
   color: var(--throng-colour-destroyButtonHoverText);
 }
 
-/* --- Tab panel-count badge (FR-045) ---------------------------------- */
+/* --- Tab panel-count badge (FR-045; 031 FR-042 made it a PILL) -------- */
+/*
+ * P1 — a pill, and no `[3]` square-bracket form remains anywhere. The brackets read as markup
+ * rather than as "this tab contains three things", which is what the number actually says.
+ */
 .tab-chip__count {
   margin-left: 6px;
-  font-size: 11px;
+  padding: 1px 6px;
+  font-size: 10px;
+  line-height: 1.4;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-active);
   color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
 }
 
 .tab-chip--active .tab-chip__count {
   color: var(--text);
+}
+
+/*
+ * --- Tab close affordance (031 US5 / FR-044–FR-044g) --------------------
+ *
+ * P5: rendered on EVERY tab and laid out on every tab. `visibility` — not `display` — is what makes
+ * the reservation real: the box is there whether or not it is drawn, so a tab's width and its
+ * label's position are identical shown and hidden, and nothing reflows as the pointer moves along
+ * the strip. That reflow is the whole reason the affordance could not simply be conditionally
+ * rendered.
+ */
+.tab-chip__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  visibility: hidden;
+}
+
+/* P4 — on the active tab always, and on the tab under the pointer. Never on all of them at once. */
+.tab-chip__close--shown {
+  visibility: visible;
+}
+
+/*
+ * FR-044f — SUBDUED while inert.
+ *
+ * The affordance is deliberately dead for the arming delay (P6), and a control that looks entirely
+ * ready but ignores a click is worse than one that is plainly not ready yet. This is what makes the
+ * dead click explicable rather than a bug the user reports.
+ */
+.tab-chip__close--inert {
+  opacity: 0.4;
+  cursor: default;
+}
+
+:where(body:not([data-window-blurred]))
+  .tab-chip__close--shown:not(.tab-chip__close--inert):not(:disabled):hover {
+  background: var(--throng-colour-hoverSurface);
+  color: var(--text);
+}
+
+/* P10 — unavailable exactly where the Destroy Tab menu item is. */
+.tab-chip__close:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/*
+ * --- Render-time truncation marker (031 FR-037c / N4) -------------------
+ *
+ * The ellipsis is drawn by CSS and exists in no string. It is therefore impossible for it to reach
+ * the stored name, to be copied out of a selection, or to accumulate across successive reductions —
+ * which is exactly what `truncateGraphemes` being marker-free buys, and this is the other half of it.
+ */
+.tab-chip__label--truncated::after,
+.panel-box__title--truncated::after {
+  content: '…';
+}
+
+/*
+ * --- Rename approach counter (031 US4 / C1–C3) --------------------------
+ *
+ * Deliberately styled as INFORMATION, not as an error: no danger colour, no border, no weight
+ * change at the limit. Reaching a name limit is not a mistake (C3), and colouring it red would
+ * teach the user that it was.
+ */
+.tab-chip__rename-count,
+.panel-box__rename-count {
+  margin-left: 6px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* --- Project drag-to-reorder (FR-046) -------------------------------- */
@@ -2116,4 +2267,93 @@ textarea,
   font-family: var(--throng-font-family);
   font-size: var(--throng-font-size);
   font-weight: var(--throng-font-weight-normal);
+}
+
+/*
+ * --- The general list-and-choose picker (031 US3 / FR-026–FR-028g) ------
+ *
+ * Rides on `.modal-overlay` rather than declaring its own scrim: it is the same thing — a
+ * full-viewport, centred, modal surface — and the floating-surface guard has already answered the
+ * "does it flip and clamp?" question for that class (there is no edge to flip away from).
+ */
+.picker {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 90vw);
+  max-height: min(60vh, 420px);
+  overflow: hidden;
+  background: var(--throng-colour-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+  font-family: var(--throng-font-family);
+  font-size: var(--throng-font-size);
+}
+
+.picker__input {
+  flex: 0 0 auto;
+  margin: 10px;
+  padding: 6px 8px;
+  background: var(--throng-colour-inputSurface);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+  font: inherit;
+}
+
+.picker__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 6px;
+}
+
+.picker__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  /* Reserved on every row so the current-tab marker below cannot shift the labels. */
+  border-left: 2px solid transparent;
+}
+
+.picker__row--highlighted {
+  background: var(--surface-active);
+  color: var(--text);
+}
+
+/* K9 — the entry the user is already on. A rail rather than a word, so it needs no translation. */
+.picker__row--current {
+  border-left-color: var(--accent);
+}
+
+.picker__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* K10 — why this row matched, marked in place. Terms may have matched in an order the user did not
+   type, which is exactly when showing the runs stops the result looking arbitrary. */
+.picker__mark {
+  background: var(--throng-colour-searchMatchCurrent);
+  color: var(--text);
+  border-radius: 2px;
+}
+
+.picker__meta {
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* K12 — no match keeps the picker open and SAYS SO, so a typo is a backspace, not a re-open. */
+.picker__empty {
+  padding: 10px 12px;
+  color: var(--text-dim);
 }

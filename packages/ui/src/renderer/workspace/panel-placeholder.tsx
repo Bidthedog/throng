@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactElement } from 'react';
+import { useEffect, useState, type ReactElement } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import {
   collectPanels,
@@ -26,6 +26,7 @@ import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { requestRedraw } from '../terminal/redraw.js';
 import { focusTerminal } from '../terminal/focus-registry.js';
 import { Icon } from '../common/icon.js';
+import { NameLimitField } from '../common/name-limit-field.js';
 import { panelHasLiveTerminal, panelHasRunningSubprocess } from './subprocess.js';
 import { useCapabilities } from '../panel-type/use-capabilities.js';
 import { useDetach } from './detach-context.js';
@@ -147,7 +148,17 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   // future surface that has to name a panel cannot drift apart: a user rename outranks everything,
   // then the live/secondary automatic source for the panel's kind, then the placeholder — which is
   // correct only while the panel is untyped.
-  const effectiveTitle = panelDisplayTitle(panel, { terminalTitle, editorFilePath });
+  //
+  // 031 US4 (N8, T093) — the limit is applied HERE, at the one place every panel-name source is
+  // resolved. `panelDisplayTitle` bounds its RESULT, so a user override, a live shell title, a
+  // flavour label and a file path are all shortened by the same rule rather than by four of them.
+  // The unbounded form is computed alongside purely to decide whether the ellipsis is drawn; the
+  // marker itself is a `::after` (FR-037c), so it never enters the value or anything persisted.
+  const maxNameLength = settings.tabs.maxNameLength;
+  const titleSources = { terminalTitle, editorFilePath };
+  const fullTitle = panelDisplayTitle(panel, titleSources);
+  const effectiveTitle = panelDisplayTitle(panel, titleSources, maxNameLength);
+  const titleTruncated = effectiveTitle !== fullTitle;
 
   // Removal verb per ownership + location (011, FR-030/031). Inside a sub-workspace a
   // Panel backed by a real project (`originProject` resolved above) is a mirrored VIEW:
@@ -190,8 +201,10 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
    * asked to open: the two can already differ by then, because the box opens from an effect and
    * mounts on a later render. The element's own value is what the user is looking at, so it is the
    * only honest yardstick for "did they change it?".
+   *
+   * 031 US4 moved the box itself into the shared {@link NameLimitField}, which now carries the seed
+   * to `commit` for exactly this reason — the rule is unchanged, it simply lives with the box.
    */
-  const renameSeed = useRef('');
 
   /**
    * Confirm (or dismiss) the inline rename box.
@@ -204,9 +217,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
    * created. Running "Reset Name" cleared the mark and made them work, which is precisely the
    * symptom that was reported. A user who typed nothing has renamed nothing.
    */
-  const commit = (value: string): void => {
-    const trimmed = value.trim();
-    if (trimmed.length > 0 && trimmed !== renameSeed.current.trim()) {
+  const commit = (trimmed: string, seed: string): void => {
+    if (trimmed.length > 0 && trimmed !== seed.trim()) {
       /*
        * A panel's name is unique across the WHOLE application (024 follow-up) — every project and
        * every sub-workspace — because the name is how a user refers to a panel: in the tab strip, in
@@ -688,34 +700,23 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             })()
           : null}
         {renaming ? (
-          <input
+          // FR-035g — the panel's rename cap is the tab's cap. One implementation, so they cannot
+          // drift into behaving differently for the same limit.
+          <NameLimitField
             className="panel-box__rename"
-            data-testid={`panel-rename-input-${panel.id}`}
-            defaultValue={panel.title}
-            autoFocus
-            onFocus={(e) => {
-              renameSeed.current = e.target.value; // the yardstick — see `commit`
-              e.target.select();
-            }}
-            onClick={(e) => e.stopPropagation()}
-            onBlur={(e) => commit(e.target.value)}
-            onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-              // Both keys are CONSUMED here: they finish the rename and mean nothing to anything
-              // behind it. Letting them through is what sent Enter on to the panel.
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                e.stopPropagation();
-                commit((e.target as HTMLInputElement).value);
-              }
-              if (e.key === 'Escape') {
-                e.preventDefault();
-                e.stopPropagation();
-                endRename(); // cancelled, but still not stranded
-              }
-            }}
+            testId={`panel-rename-input-${panel.id}`}
+            counterClassName="panel-box__rename-count"
+            counterTestId={`panel-rename-count-${panel.id}`}
+            initialValue={panel.title}
+            limit={maxNameLength}
+            onCommit={commit}
+            onCancel={endRename} // cancelled, but still not stranded
           />
         ) : (
-          <span className="panel-box__title" data-testid={`panel-title-${panel.id}`}>
+          <span
+            className={`panel-box__title${titleTruncated ? ' panel-box__title--truncated' : ''}`}
+            data-testid={`panel-title-${panel.id}`}
+          >
             {effectiveTitle}
           </span>
         )}

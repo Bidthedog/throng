@@ -89,7 +89,11 @@ export type ActionId =
   // 024 follow-up: rename the ACTIVE PANEL from the keyboard. F2 is the rename key everywhere else
   // in throng (the file tree's `file.rename`) and everywhere else in Windows, so a panel header that
   // could only be renamed by double-click or a menu was the odd one out.
-  | 'panel.rename';
+  | 'panel.rename'
+  // 031 US3 (#225): open the tab picker — a searchable list of every tab in the window. Ctrl+Alt+T,
+  // in the Ctrl+Alt family throng already owns; in neither the reserved nor the shadowable tier
+  // (constitution IV), so it displaces no line-editor binding and needs no recorded exception.
+  | 'tabs.openPicker';
 
 export interface Keybindings {
   version: number;
@@ -142,6 +146,10 @@ export const COMMAND_SCOPES: CommandScopes = {
   // 024 US6: the keyboard "open context menu" works wherever a focusable item has one (explorer,
   // editor, terminal) — EVERYWHERE covers those three scopes.
   'menu.open': EVERYWHERE,
+  // 031 FR-032a: the tab picker is a WINDOW-level navigation aid, and must work at any tab count
+  // from any surface — a user with six visible tabs may still prefer to type a name than aim at one.
+  // PANELS would make it dead in the file tree, which is precisely where a user loses their place.
+  'tabs.openPicker': EVERYWHERE,
   // The File Explorer's clipboard chords act on FILES, and only while the tree has focus.
   'file.rename': EXPLORER_ONLY,
   'file.cut': EXPLORER_ONLY,
@@ -232,6 +240,16 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'view.toggleProjects': ['Ctrl+Alt+B'],
     'view.toggleExplorer': ['Ctrl+Alt+N'],
     'menu.open': ['Shift+F10', 'ContextMenu'],
+    /*
+     * 031 / FR-032a — open the tab picker. `Ctrl+Alt+T` joins the family throng already owns
+     * (`panel.zoom*`, `focus.*`, `view.toggle*`, `editor.saveAs`, `editor.toggleWordWrap`).
+     *
+     * Bare `Ctrl+T` was rejected: it is a terminal's "new tab" in several hosts and a browser habit,
+     * and this command is scoped EVERYWHERE — including a focused terminal. `Ctrl+Alt+T` is in
+     * neither constitutional tier (FR-032c, asserted in keybindings.test.ts rather than claimed), so
+     * the enumerated exception list is unchanged by this feature.
+     */
+    'tabs.openPicker': ['Ctrl+Alt+T'],
     'file.rename': ['F2'],
     'file.cut': ['Ctrl+X'],
     'file.copy': ['Ctrl+C'],

@@ -157,8 +157,10 @@ describe('the surface token split (FR-001 / SC-001)', () => {
     // DIALOG/MODAL/NOTICE cards folded back onto `surface`. So the pane token now paints pane bodies,
     // panel boxes AND those dialog cards — and nothing else. The set is enumerated (not open) so a
     // NEW, un-audited surface reaching for the pane token still fails, exactly as before.
+    // `.picker` (031 US3) is the general list-and-choose card: a modal surface on `.modal-overlay`,
+    // audited here as a dialog card for the same reason `.modal` and `.colour-picker` are.
     const DIALOG_CARDS =
-      /^\.(modal|notice|capture-modal|colour-picker|find-bar|app-closing__card|terminal-panel__starting|about-root)$|^\.app-close-table th$/;
+      /^\.(modal|notice|capture-modal|colour-picker|picker|find-bar|app-closing__card|terminal-panel__starting|about-root)$|^\.app-close-table th$/;
     const offenders = readsOf(aliasesOf('surface')).filter(
       (h) => !/^\.pane--\w+$|^\.panel-box$/.test(h.selector) && !DIALOG_CARDS.test(h.selector),
     );

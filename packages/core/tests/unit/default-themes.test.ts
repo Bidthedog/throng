@@ -251,4 +251,35 @@ describe('theme-quality guards hold for the shipped set (009, US6)', () => {
     }
     expect(THRONG_THEME.icons.dismiss).toBe('✕');
   });
+
+  /**
+   * 031 / FR-032 (T063). The tab strip's step and show-all controls are icons drawn from the active
+   * theme, so the chevrons they need must exist as tokens in EVERY shipped set — a control whose
+   * token is missing renders an empty box.
+   *
+   * They are their OWN tokens, deliberately not `collapse`/`expand`: those mean tree-node state, and
+   * sharing them would make re-skinning a tree chevron silently re-skin the tab strip. Both pairs
+   * must therefore survive as four distinct keys, whatever glyphs they happen to default to.
+   */
+  it('ships the tab-strip chevron icon tokens, separate from collapse/expand (031, FR-032)', () => {
+    const chevrons = ['chevronLeft', 'chevronRight', 'chevronDown'] as const;
+    for (const token of chevrons) {
+      expect(THRONG_THEME.icons[token], `THRONG_THEME.icons.${token}`).toBeTruthy();
+    }
+    expect(THRONG_THEME.icons.chevronLeft).toBe('‹');
+    expect(THRONG_THEME.icons.chevronRight).toBe('›');
+    expect(THRONG_THEME.icons.chevronDown).toBe('⌄');
+
+    // Four distinct keys — the tree-node pair is untouched and still resolvable on its own.
+    for (const token of [...chevrons, 'collapse', 'expand']) {
+      expect(Object.prototype.hasOwnProperty.call(THRONG_THEME.icons, token), token).toBe(true);
+    }
+
+    // Every shipped theme spreads the icon set, so all 14 resolve the new tokens.
+    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
+      for (const token of chevrons) {
+        expect(theme.icons[token], `${name}.icons.${token}`).toBeTruthy();
+      }
+    }
+  });
 });

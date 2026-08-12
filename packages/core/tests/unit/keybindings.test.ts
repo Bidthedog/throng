@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  COMMAND_SCOPES,
   DEFAULT_KEYBINDINGS,
   eventToToken,
   normalizeToken,
@@ -115,6 +116,47 @@ describe('Keybindings resolver (FR-033)', () => {
         ).toBe(normalizeToken(token));
       }
     }
+  });
+
+  /**
+   * 031 / FR-032a–c (T064, T043a).
+   *
+   * FR-032c *claims* `Ctrl+Alt+T` is Principle IV-clean. A claim in prose cannot fail, so a later
+   * rebinding could quietly move the tab picker onto `Ctrl+R` or `Ctrl+S` and nothing would object.
+   * This asserts it instead: the shipped chord, and its distance from both constitutional tiers.
+   */
+  describe('tabs.openPicker (031, FR-032a–c)', () => {
+    /** Constitution IV, reserved tier — no command may take these in a terminal-live scope. */
+    const RESERVED = ['C', 'D', 'Z', 'A', 'E', 'W', 'U', 'K', 'R', 'L', 'Q'].map((k) => `Ctrl+${k}`);
+    /** Constitution IV as of v4.4.0 — the exhaustive list of recorded shadowable exceptions. */
+    const SHADOWABLE_EXCEPTIONS = ['Ctrl+F', 'Ctrl+H', 'Ctrl+S', 'Ctrl+F5'];
+
+    it('ships bound to Ctrl+Alt+T', () => {
+      expect(DEFAULT_KEYBINDINGS.bindings['tabs.openPicker']).toEqual(['Ctrl+Alt+T']);
+    });
+
+    it('is live in every scope, so the picker opens from anywhere (FR-032a)', () => {
+      const ev = { ctrl: true, alt: true, key: 't' };
+      expect(COMMAND_SCOPES['tabs.openPicker']).toBeDefined();
+      for (const scope of ['editor', 'terminal', 'explorer'] as const) {
+        expect(resolveAction(DEFAULT_KEYBINDINGS, ev, scope), scope).toBe('tabs.openPicker');
+      }
+    });
+
+    it('takes no reserved key and no recorded shadowable exception (FR-032c)', () => {
+      const tokens = DEFAULT_KEYBINDINGS.bindings['tabs.openPicker'] ?? [];
+      // Without this the loop below is vacuous, and an UNBOUND command would pass the tier check.
+      expect(tokens.length, 'tabs.openPicker ships no chord at all').toBeGreaterThan(0);
+      for (const token of tokens) {
+        const chord = normalizeToken(token);
+        expect(RESERVED, `${chord} is in the RESERVED tier — Principle IV forbids it outright`)
+          .not.toContain(chord);
+        expect(
+          SHADOWABLE_EXCEPTIONS,
+          `${chord} is a recorded shadowable exception — taking it needs its own justification`,
+        ).not.toContain(chord);
+      }
+    });
   });
 
   it('parses defaults and merges custom bindings', () => {
