@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, renameSync, rmSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import Database from 'better-sqlite3';
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import {
   runApp,
   createProject,
@@ -34,7 +34,57 @@ import { skipIfElevated } from './admin.js';
  * The Constitution binds a feature that adds a panel action to add its menu item in the same
  * increment: an icon-only control with no menu equivalent is unreachable by keyboard and
  * undiscoverable by anyone who does not recognise the glyph.
+ *
+ * ══ REPOINTED BY 030 US4 (T056e) — WHAT MOVED, AND WHAT DID NOT ══
+ *
+ * 030 FR-039 replaces this panel's `terminal-panel__starting` failure strip with the shared
+ * `PanelFailureBanner` every panel type uses, so the SURFACE these tests address changes while the
+ * BEHAVIOUR they describe does not. Precisely:
+ *
+ *   CHANGED — `terminal-start-failed-{pid}` becomes `panel-failure-{pid}` ({@link failureBanner}),
+ *     and `terminal-retry-{pid}` / `terminal-clear-{pid}` become controls addressed by their
+ *     accessible names INSIDE that banner ({@link bannerControl}). The names are unchanged: FR-042d
+ *     keeps 029's *Try again* and *Clear panel type* in every panel type precisely so this file's
+ *     claims survive. Addressing them by name rather than by a new test id also states the
+ *     requirement itself — a control the constitution demands be named is found by its name.
+ *   CHANGED — the FR-004 prose check, split in two. See the comment at its site.
+ *   UNCHANGED — every menu-item assertion (`menu-item-Try again`, `menu-item-Clear panel type`),
+ *     every `panel-type-form-{pid}` assertion, the context-menu open/close, the persisted-layout
+ *     polls and the whole daemon-death test's subject matter.
+ *
+ * ══ WHY ONE HELPER, AND NOT AN INLINE `getByTestId` PER SITE ══
+ *
+ * Two of this file's assertions are `toHaveCount(0)` — the banner is GONE after Clear, and no
+ * failure banner exists at all on the cwd-fallback path. A negative keyed on a test id that no
+ * longer exists passes by matching nothing, silently, which is the exact false green 030 US3 found
+ * in `project-missing-root-wedge`'s locator. Routing every reference — positive and negative —
+ * through one helper is what closes that: the positives in the first test would fail loudly if the
+ * id were ever wrong, so the negatives elsewhere cannot quietly stop testing anything.
+ *
+ * NOTE for whoever picks up #246 ("reads the layout after a fixed sleep, not after the write"): that
+ * defect is in this file's `waitForTimeout(3000)` + `layoutJson` reads and is untouched here. This
+ * change moves locators only.
  */
+
+/**
+ * The failure banner of panel `pid` — 030's shared component (contracts/panel-failure-banner.md).
+ *
+ * The ONE place this file names that surface. See the header for why that matters.
+ */
+function failureBanner(win: Page, pid: string): Locator {
+  return win.getByTestId(`panel-failure-${pid}`);
+}
+
+/**
+ * A banner control, by the accessible name FR-042d fixes for every panel type.
+ *
+ * Deliberately scoped INSIDE the banner. `terminal-retry-{pid}` survives 030 on the still-starting
+ * strip, which FR-039a keeps exactly as it is — so an unscoped locator would go on resolving after
+ * this change while quietly addressing a different state of a different kind.
+ */
+function bannerControl(win: Page, pid: string, name: string): Locator {
+  return failureBanner(win, pid).getByRole('button', { name, exact: true });
+}
 
 /** The persisted layout blob for `projectName`, or '' if there isn't one yet. */
 function layoutJson(dataDir: string, projectName: string): string {
@@ -133,37 +183,55 @@ test('a terminal that could not start offers Try again and Clear, on the badge a
         const pid = await firstPanelId(win);
 
         // SETUP: the panel really is in the start-failure state — everything below describes it.
-        const badge = win.getByTestId(`terminal-start-failed-${pid}`);
+        const badge = failureBanner(win, pid);
         await expect(badge).toBeVisible({ timeout: 60_000 });
 
         /**
-         * FR-004 — the failure is stated in the panel, in prose, naming the folder.
+         * FR-004 — the failure is stated in the panel, in prose, naming the folder, and never as an
+         * errno.
          *
-         * Paths are stripped first: the folder's name appears inside the raw error's path, so an
-         * unstripped match passes while the message is still an errno.
+         * SPLIT IN TWO by 030 T056e, and this is the one substantive change in the file.
+         *
+         * It used to be one assertion over path-stripped text: strip `C:\…` first, because the
+         * folder's name appears INSIDE the raw error's path and an unstripped match would pass while
+         * the message was still an errno. That was right while the terminal composed its own
+         * sentence around the folder name. Under FR-039 the per-type wording is confined to the
+         * headline and the folder reaches the user through the banner's own path line (FR-040a) —
+         * so stripping paths would strip the very thing the first half asserts, and the test would
+         * fail for being satisfied.
+         *
+         * Both halves of the original claim survive, addressed separately:
+         *   • the folder IS named — anywhere in the banner, prose or path line;
+         *   • what the user READS is not an errno — still asserted on the stripped text, because
+         *     that half's whole point is that a path must not be able to smuggle one in.
          */
-        const prose = (await badge.innerText()).replace(/[A-Za-z]:\\[^\s'"|]+/g, '<path>');
+        const shown = await badge.innerText();
         // The ORIGINAL folder name: that is the path the project still points at, and the one that
         // is missing. `moved` is where it went, which the user has no way to know and no reason to
         // be told.
-        expect(prose).toContain(basename(root));
+        expect(shown, 'the banner does not name the folder that is missing').toContain(basename(root));
+        const prose = shown.replace(/[A-Za-z]:\\[^\s'"|]+/g, '<path>');
         expect(prose).not.toMatch(/ENOENT|Cannot lock|Internal error/i);
 
         /**
-         * FR-004b — both controls are ICONS with hover titles (Constitution VI).
+         * FR-004b / 030 FR-042b — both controls are ICONS with hover titles (Constitution VI).
          *
          * The empty-text assertion is the one that matters: an icon token the shipped theme does not
          * define renders NOTHING, silently, and the control becomes an invisible button. That has
          * already happened once in this feature.
+         *
+         * Addressed by accessible name now, not by test id (see the header). Note that the names
+         * ARE the assertion for FR-042d: a control that lost its title would not be found at all,
+         * and `toBeVisible` on a locator that matches nothing fails rather than passing.
          */
-        for (const testId of [`terminal-retry-${pid}`, `terminal-clear-${pid}`]) {
-          const control = win.getByTestId(testId);
+        for (const name of ['Try again', 'Clear panel type']) {
+          const control = bannerControl(win, pid, name);
           await expect(control).toBeVisible();
           await expect(control).toHaveAttribute('title', /.+/);
           const glyph = (await control.innerText()).trim();
-          expect(glyph, `${testId} rendered nothing — an invisible control`).not.toBe('');
-          expect(glyph.length, `${testId} should be an icon, not a word`).toBeLessThanOrEqual(2);
-          expect(glyph, `${testId} should be an icon, not a word`).not.toMatch(/[A-Za-z]/);
+          expect(glyph, `${name} rendered nothing — an invisible control`).not.toBe('');
+          expect(glyph.length, `${name} should be an icon, not a word`).toBeLessThanOrEqual(2);
+          expect(glyph, `${name} should be an icon, not a word`).not.toMatch(/[A-Za-z]/);
         }
 
         /**
@@ -194,7 +262,7 @@ test('a terminal that could not start offers Try again and Clear, on the badge a
          * Asserted as "the panel is still the one that failed, and is still a terminal": a retry that
          * cascaded would take the panel type with it, which is #204 by another route.
          */
-        await win.getByTestId(`terminal-retry-${pid}`).click();
+        await bannerControl(win, pid, 'Try again').click();
         await expect(badge).toBeVisible({ timeout: 60_000 });
         await expect(win.getByTestId(`panel-type-form-${pid}`)).toHaveCount(0);
 
@@ -204,8 +272,10 @@ test('a terminal that could not start offers Try again and Clear, on the badge a
          * The panel returns to the type-selection form, in place — same position, same panel.
          */
         const titleBefore = await win.locator('.panel-box').first().getAttribute('data-panel-id');
-        await win.getByTestId(`terminal-clear-${pid}`).click();
+        await bannerControl(win, pid, 'Clear panel type').click();
         await expect(win.getByTestId(`panel-type-form-${pid}`)).toBeVisible({ timeout: 20_000 });
+        // Non-vacuous by construction: `badge` is the same locator asserted VISIBLE four times above
+        // in this test, so a stale id could never reach this line quietly.
         await expect(badge).toHaveCount(0);
         // Still the SAME panel in the SAME place — cleared, not destroyed and recreated.
         expect(await win.locator('.panel-box').first().getAttribute('data-panel-id')).toBe(titleBefore);
@@ -324,7 +394,13 @@ test('a remembered directory that has gone is reported in the panel, and is not 
         await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), {
           timeout: 30_000,
         });
-        await expect(win.getByTestId(`terminal-start-failed-${pid}`)).toHaveCount(0);
+        /*
+         * The failure surface is ABSENT — through the same {@link failureBanner} helper the first
+         * test asserts VISIBLE. That shared route is what stops this negative from becoming a false
+         * green: an id that had gone stale would redden the first test long before it could let this
+         * one pass by matching nothing.
+         */
+        await expect(failureBanner(win, pid)).toHaveCount(0);
         await expect(win.locator('[data-testid$="-error"]')).toHaveCount(0);
 
         // Dismissable — it is information, and information the user has read should go away.
@@ -421,7 +497,15 @@ test('a terminal keeps its configuration when the daemon is gone, not just when 
          * The control exists to protect the configuration; before this fix, using it while the daemon
          * was down was the fastest way to lose it.
          */
-        const retry = win.getByTestId(`terminal-retry-${pid}`);
+        /*
+         * Scoped to the BANNER (T056e), not to a bare `terminal-retry-{pid}`.
+         *
+         * FR-039a keeps the still-starting strip exactly as it is, retry control and test id
+         * included — so after 030 the unscoped id still resolves, to a control that means "reattach
+         * to a session that is taking its time" rather than "re-run the start that failed". The
+         * conditional would have gone on passing while testing the wrong thing entirely.
+         */
+        const retry = bannerControl(win, pid, 'Try again');
         if (await retry.isVisible().catch(() => false)) {
           await retry.click();
           await win.waitForTimeout(3000);
