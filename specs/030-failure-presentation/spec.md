@@ -674,7 +674,15 @@ earlier one.
 - **FR-040**: The banner MUST state what could not be done in that panel type's terms, followed by a
   consistent pointer to where the detail is, and MUST NOT repeat the cause and affected-panel list the
   consolidated notice carries.
-- **FR-040a**: The banner MUST keep naming the path it could not read, where it has one. This is not
+- **FR-040a**: The banner MUST name the path involved, in **both** panel types — the editor's
+  unreadable file *and* the terminal's working directory. "Where it has one" is not a licence to drop
+  the terminal's: 029 FR-004 requires a terminal's start failure to name the folder, and this feature
+  confines per-type wording to the headline (`This terminal could not be opened`), which does not
+  contain it. Read the other way, US4 would silently delete a 029 requirement — caught only because
+  `terminal-start-failure-controls.e2e.ts` asserts the folder name appears.
+- **FR-040b**: The retry-failure wording MUST be fixed the way the headline and the pointer are.
+  Leaving it to the implementer makes a test that asserts it either wording-brittle or vacuous.
+  The banner keeps its headline and adds: `That did not work — the condition is still there.` This is not
   duplicated detail: 027 (#161) FR-011 makes the visible path load-bearing, because an editor holding
   a recovered buffer over a path throng could not open looks entirely ordinary, and a Ctrl+S would
   write the remembered text back over that path. Removing it to "delegate detail to the notice" would
