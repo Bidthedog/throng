@@ -44,6 +44,14 @@ export function ResetNoticeProvider({ children }: { children: ReactNode }): Reac
       if (!result?.ok) {
         notify({
           severity: 'error', // an error PERSISTS until dismissed — it must not auto-vanish
+          /*
+           * NO SUBJECT (030 FR-019/FR-027). What was reset is a PREFERENCES SCOPE — "Reset all
+           * settings", "Restore this theme" — which `operation` names in full and which the closed
+           * `NoticeSubject` union has no member for. The one thing a caller must not do is invent a
+           * near-miss kind to satisfy the type; saying none is available is the honest statement,
+           * and it leaves the sentence exactly as it read before.
+           */
+          subject: { kind: 'none' },
           message: `${operation} failed. Nothing was changed.`,
           testId: 'prefs-notice',
         });

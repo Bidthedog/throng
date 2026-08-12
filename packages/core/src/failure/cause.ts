@@ -136,6 +136,28 @@ function holderPhrase(holder: Holder | undefined): string {
 }
 
 /**
+ * How the sentence should refer to the thing it is about.
+ *
+ * 030 FR-020/FR-023 — a notice PRESENTS its subject in its heading, and the message below it then
+ * "states only what went wrong". A sentence that opens by re-quoting the name the heading has just
+ * given reads as a stutter, and FR-023 forbids it outright.
+ *
+ * This is one option rather than a second set of sentences on purpose. Five causes have five
+ * sentences and no more: a parallel "short form" table would be the wording living in two places,
+ * which is precisely what FR-019e puts it here to prevent.
+ */
+export interface CauseMessageOptions {
+  /**
+   * The reporter has already named the subject, so this sentence must not.
+   *
+   * Set ONLY when the presented subject IS this cause's subject. They can differ — renaming a file
+   * can fail because its containing folder is held — and blanking a name the reader has not been
+   * given would replace an ambiguity with a nothing.
+   */
+  subjectPresented?: boolean;
+}
+
+/**
  * The user-facing sentence for a cause.
  *
  * The CAUSE owns this, not the reporter (FR-019e). Without that rule the wording depends on which
@@ -143,20 +165,27 @@ function holderPhrase(holder: Holder | undefined): string {
  * non-deterministic order — so the same fault would read differently run to run and FR-015 could
  * never be guaranteed. Five causes, five sentences.
  */
-export function causeMessage(cause: FailureCause): string {
+export function causeMessage(cause: FailureCause, opts: CauseMessageOptions = {}): string {
   const { subject, holder } = cause;
+  // "It" where the heading has already said which — the sentence is otherwise character-identical,
+  // because it is the same sentence.
+  const it = opts.subjectPresented ? 'It' : `"${subject}"`;
   switch (cause.kind) {
     case 'held':
       return holder?.isThrong
-        ? `"${subject}" is open in throng${holderPhrase(holder)}.`
-        : `"${subject}" is open in another program${holderPhrase(holder)}.`;
+        ? `${it} is open in throng${holderPhrase(holder)}.`
+        : `${it} is open in another program${holderPhrase(holder)}.`;
     case 'path-missing':
-      return `"${subject}" could not be found. It may have been moved, renamed or deleted.`;
+      return `${it} could not be found. It may have been moved, renamed or deleted.`;
     case 'permission-denied':
-      return `You do not have permission to change "${subject}".`;
+      return opts.subjectPresented
+        ? 'You do not have permission to change it.'
+        : `You do not have permission to change "${subject}".`;
     case 'not-empty':
-      return `"${subject}" still contains items.`;
+      return `${it} still contains items.`;
     case 'daemon-stopped':
+      // No subject in this sentence at all: the daemon is named because it IS the subject, and a
+      // notice about it presents `{ kind: 'none' }` — there is no daemon member of `NoticeSubject`.
       return `throng's daemon has stopped. Restart it from the status bar to continue.`;
   }
 }

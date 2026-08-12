@@ -21,6 +21,7 @@ import { useProjects } from '../state/projects-store.js';
 import { useServices } from '../composition-root.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useNotify } from '../common/notification.js';
+import { usePanelPlace } from '../common/panel-subject.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { requestRedraw } from '../terminal/redraw.js';
@@ -76,6 +77,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const subWin = useSubWorkspaceWindow();
   const services = useServices();
   const { notify } = useNotify();
+  /** Where this panel lives, for any notice raised about it (030 FR-022). */
+  const place = usePanelPlace(panel.id);
   const { elevated } = useCapabilities();
   const { draggingPanelId } = useDragState();
   // The live chords, so a rebind moves what the menu SHOWS as well as what the key does.
@@ -237,7 +240,18 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         if (adjusted) {
           notify({
             severity: 'warning',
-            message: `Another panel is already called “${trimmed}”, so this one was named “${granted}”.`,
+            /*
+             * 030 FR-022 — the panel is named `Project — Tab — Panel`, with the name it was ACTUALLY
+             * granted. Built here rather than read back from `usePanelPlace`, because `renamePanel`
+             * has only just been called and the layout this render closed over still holds the old
+             * title: the notice would name the panel by the name it no longer has.
+             *
+             * FR-023 then takes “${granted}” OUT of the sentence — the heading has just said it, and
+             * saying it twice is the stutter that requirement exists to stop. The name the user
+             * ASKED for stays, because that is a different fact and the only one left to explain.
+             */
+            subject: { kind: 'panel', name: granted, tab: place?.tab, project: place?.project },
+            message: `Another panel is already called “${trimmed}”, so this one was renamed.`,
             testId: 'panel-name-adjusted',
           });
         }

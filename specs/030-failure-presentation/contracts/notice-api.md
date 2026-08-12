@@ -43,6 +43,24 @@ the guard is the type system, not a lint rule bolted on afterwards.
 
 The message renders below and states only what went wrong (FR-020).
 
+**FR-023 collides with 029 FR-019e, and the collision is real.** 029 gives the *cause* ownership of
+the wording, and its sentences bake the subject in — `"Held" is open in another program.` So the
+moment a heading presents that subject, the message restates it, which FR-023 forbids. Neither spec
+saw the other. Resolved by one backwards-compatible option on `causeMessage`:
+
+```ts
+causeMessage(cause, { subjectPresented: true })   // → "It is open in another program."
+```
+
+Same five sentences, one substitution, defaults byte-identical — so every 029 assertion is untouched
+and 029 keeps ownership of the wording. This is part of the model, not an implementation detail.
+
+**Giving a call site a subject also means rewriting its action.** The heading is
+`Couldn't {action} {subject}`, so `action` must become a bare verb phrase: `'rename this item'` →
+`'rename'`, `'list the contents of this folder'` → `'list the contents of'`. An action ending in a
+preposition reads correctly and is not a workaround. No artifact mentioned this before US2 met the
+call sites, and it is half the work of threading a subject through one.
+
 ## Consolidation
 
 When `groupKey` is present:

@@ -31,6 +31,7 @@ import {
 } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useNotify } from '../common/notification.js';
+import { panelSubject, usePanelPlace } from '../common/panel-subject.js';
 import {
   ensureTerminalCommandBridge,
   forgetTerminalCommand,
@@ -120,6 +121,8 @@ export function TerminalPanel({
 }): ReactElement {
   const ws = useWorkspace();
   const { notify } = useNotify();
+  /** Where this panel lives, for any notice raised about it (030 FR-022). Pure over the layout. */
+  const place = usePanelPlace(panel.id);
   // Whether this terminal is the active panel of the active tab — read through a ref so the terminal's
   // (async) attach focus sees the CURRENT active panel and never steals focus when it isn't (issue 144).
   const activeTab = ws.layout?.tabs.find((t) => t.id === tabId);
@@ -509,8 +512,21 @@ export function TerminalPanel({
         notify({
           severity: 'warning',
           title: 'Command not remembered',
+          /*
+           * 030 US2 — THE PANEL, not the terminal (FR-022 rather than FR-026).
+           *
+           * What failed is a write to the PANEL's `terminalMemory`, which is why that memory
+           * deliberately outlives the terminal that produced it. Naming the flavour here would mean
+           * resolving its label, and the only route to a label from this component is
+           * `listFlavours`, which re-detects installed shells on every call — a filesystem probe per
+           * terminal panel mount, for a string this notice's own `title` already outranks in the
+           * heading and which would therefore only ever reach the log record.
+           */
+          subject: panelSubject(place),
+          // FR-025/FR-034 — "this terminal" named nothing a user could act on, and the subject now
+          // says which panel it was. What is left is the fact: a command was running and was lost.
           message:
-            'The command running in this terminal could not be saved as its startup command. The previous value is unchanged.',
+            'The command that was running could not be saved as the startup command. The previous value is unchanged.',
           testId: 'notice-capture-failed',
         });
       }
@@ -530,7 +546,7 @@ export function TerminalPanel({
 
       ws.clearPanelType(panel.id); // revert to the type-selection form (FR-020)
     },
-    [panel.id, ws, config.flavourId, terminalConfig, notify],
+    [panel.id, ws, config.flavourId, terminalConfig, notify, place],
   );
 
   // A failure notice arrives AFTER the Panel has reverted to its type-selection form, so there is

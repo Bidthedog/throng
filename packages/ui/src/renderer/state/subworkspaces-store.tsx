@@ -8,6 +8,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import type { NoticeSubject } from '@throng/core';
 import type { SubWorkspaceMetaDto } from '@throng/ipc-contract';
 import type { SubWorkspacesClient } from './subworkspaces-client.js';
 
@@ -28,8 +29,15 @@ export interface SubWorkspacesContextValue {
   error: string | null;
   /** What was being attempted when {@link error} happened, phrased to complete "…you tried to". */
   errorAction: string | null;
-  /** Record an error to surface to the user, with what the user was trying to do. */
-  reportError(message: string, action?: string): void;
+  /**
+   * WHICH SUB-WORKSPACE the failure was about (030 FR-019/T033a).
+   *
+   * Carried alongside the action for the same reason it is: "An error occurred when you tried to
+   * sync this to a sub-workspace" names neither the sub-workspace nor which of several was meant.
+   */
+  errorSubject: NoticeSubject | null;
+  /** Record an error to surface to the user, with what the user was trying to do and to what. */
+  reportError(message: string, action?: string, subject?: NoticeSubject): void;
   /** Dismiss the current error. */
   clearError(): void;
   /** Open (and mark loaded) a sub-workspace window — the lazy reopen path (FR-013). */
@@ -62,13 +70,16 @@ export function SubWorkspacesProvider({
   const [loadedIds, setLoadedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const [errorAction, setErrorAction] = useState<string | null>(null);
-  const reportError = useCallback((message: string, action?: string) => {
+  const [errorSubject, setErrorSubject] = useState<NoticeSubject | null>(null);
+  const reportError = useCallback((message: string, action?: string, subject?: NoticeSubject) => {
     setError(message);
     setErrorAction(action ?? null);
+    setErrorSubject(subject ?? null);
   }, []);
   const clearError = useCallback(() => {
     setError(null);
     setErrorAction(null);
+    setErrorSubject(null);
   }, []);
   const markLoaded = useCallback((id: string) => {
     setLoadedIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
@@ -100,6 +111,7 @@ export function SubWorkspacesProvider({
       refresh,
       error,
       errorAction,
+      errorSubject,
       reportError,
       clearError,
       open,
@@ -146,7 +158,7 @@ export function SubWorkspacesProvider({
         await client.reorder(orderedIds);
       },
     }),
-    [subWorkspaces, loadedIds, error, errorAction, reportError, clearError, open, markLoaded, refresh, client],
+    [subWorkspaces, loadedIds, error, errorAction, errorSubject, reportError, clearError, open, markLoaded, refresh, client],
   );
 
   return <SubWorkspacesContext.Provider value={value}>{children}</SubWorkspacesContext.Provider>;

@@ -45,11 +45,11 @@ function SubWorkspaceGrip({ id }: { id: string }): ReactElement {
  */
 export function SubworkspacesPanel(): ReactElement {
   const {
-    subWorkspaces, loadedIds, open, rename, recolour, remove, reorder, error, errorAction, clearError,
+    subWorkspaces, loadedIds, open, rename, recolour, remove, reorder, error, errorAction, errorSubject, clearError,
   } = useSubWorkspaces();
 
   // 018 / FR-051 — was an inline strip whose CSS was a verbatim copy of the Projects panel's.
-  useErrorNotice(error, 'subworkspace-error', clearError, errorAction);
+  useErrorNotice(error, 'subworkspace-error', errorSubject ?? { kind: 'none' }, clearError, errorAction);
 
   const confirm = useConfirm();
   const settings = useAppSettings();

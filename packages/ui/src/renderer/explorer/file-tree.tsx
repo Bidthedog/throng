@@ -86,6 +86,7 @@ export function FileTree({
     error,
     errorAction,
     errorCause,
+    errorSubject,
     clearError,
     initialOpenState,
     onToggle,
@@ -129,7 +130,10 @@ export function FileTree({
   }, [rootFolder, revealInTree]);
 
   // 018 / FR-051 — was an inline strip; now the one notification model.
-  useErrorNotice(error, 'explorer-error', clearError, errorAction, errorCause);
+  // 030 T033a — the explorer is THE surface #195 was filed about: "this item could not be renamed"
+  // with four projects open. `errorSubject` travels with the failure from the operation that knew
+  // what it was acting on (`use-explorer-data.ts`), exactly as `errorAction` and `errorCause` do.
+  useErrorNotice(error, 'explorer-error', errorSubject ?? { kind: 'none' }, clearError, errorAction, errorCause);
 
   // 024 US3 (#85): make undo/redo reachable whenever this PANE is the active one, not only while a
   // DOM element inside the tree happens to hold focus — see explorer-commands.ts.

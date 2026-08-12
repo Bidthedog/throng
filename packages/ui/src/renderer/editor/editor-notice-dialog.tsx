@@ -27,6 +27,23 @@ export function EditorNoticeDialog(): ReactElement | null {
     if (!notice) return;
     notify({
       severity: 'error',
+      /*
+       * 030 FR-019 — the file, where there is exactly ONE.
+       *
+       * An editor notice may be about a whole batch ("these files changed on disk"), and the batch
+       * is already rendered as the structured list below: `NoticeSubject` names one thing, and the
+       * many-things mechanism is the affected list US3 introduces (FR-029/FR-031b). So a single-file
+       * notice names its file and a multi-file one states that it has no single subject rather than
+       * picking one of them arbitrarily — which would be a guess, and FR-027 forbids guesses.
+       *
+       * The subject does not reach this notice's HEADING either way: it carries an explicit `title`
+       * ("File changed on disk"), which wins. It reaches the log record, where the question "which
+       * file?" has nothing else to answer it.
+       */
+      subject:
+        notice.files?.length === 1
+          ? { kind: 'file', name: notice.files[0]!.name, dir: notice.files[0]!.dir }
+          : { kind: 'none' },
       title: notice.title,
       message: notice.message,
       testId: 'editor-notice-dialog',

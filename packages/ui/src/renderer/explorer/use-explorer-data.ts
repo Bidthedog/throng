@@ -35,6 +35,7 @@ import {
   type FailureCause,
   type FileOpUndoEntry,
   type FileOpUndoStack,
+  type NoticeSubject,
   type TargetNode,
 } from '@throng/core';
 import type { FilesOkOrError } from '../global.js';
@@ -78,6 +79,19 @@ export interface ExplorerApi {
    * its suppression on the cause rather than on the wording.
    */
   errorCause: FailureCause | null;
+  /**
+   * WHAT THE FAILED OPERATION WAS ABOUT (030 FR-019/FR-025, T033a).
+   *
+   * The file or folder the user acted on, structured rather than spelled — this is the surface #195
+   * was filed against, where "An error occurred when you tried to rename this item" is all a user
+   * with four projects open was ever told. Recorded WITH the error for the same reason the action
+   * is: only the call site knows, and by the time the message exists the answer is gone from it.
+   *
+   * `{ kind: 'none' }` where the operation genuinely spans a SET — a multi-item move, paste, delete
+   * or an undo of one — because a subject names one thing and picking one of several would name an
+   * item that may not be the one that failed.
+   */
+  errorSubject: NoticeSubject | null;
   /** Dismiss the current error banner immediately (011, US1, FR-002). */
   clearError: () => void;
   initialOpenState: OpenMap;
@@ -262,16 +276,30 @@ export function useExplorerData(
   const [error, setError] = useState<string | null>(null);
   const [errorAction, setErrorAction] = useState<string | null>(null);
   const [errorCause, setErrorCause] = useState<FailureCause | null>(null);
+  const [errorSubject, setErrorSubject] = useState<NoticeSubject | null>(null);
   const deleteMode = settings.explorer.deleteMode;
 
-  /** Record a failure with what was being attempted and how main classified it; `null` clears all. */
-  const fail = useCallback((message: string | null, action?: string, cause?: FailureCause) => {
-    setError(message);
-    setErrorAction(message === null ? null : (action ?? null));
-    setErrorCause(message === null ? null : (cause ?? null));
-  }, []);
+  /** Record a failure with what was attempted, what it was about, and how main classified it. */
+  const fail = useCallback(
+    (message: string | null, action?: string, subject?: NoticeSubject, cause?: FailureCause) => {
+      setError(message);
+      setErrorAction(message === null ? null : (action ?? null));
+      setErrorSubject(message === null ? null : (subject ?? null));
+      setErrorCause(message === null ? null : (cause ?? null));
+    },
+    [],
+  );
   const failRef = useRef(fail);
   failRef.current = fail;
+  /**
+   * `nodeSubject`, reachable from the async listing path (030 FR-025).
+   *
+   * Assigned below, once `kindOf` exists. `fetchChildren` is declared long before it and is only
+   * ever CALLED from an effect or a handler, so the ref is always populated by then — and reading
+   * it through a ref keeps `fetchChildren`'s identity independent of the loaded tree, which is what
+   * stops a re-list from re-running every effect that depends on it.
+   */
+  const nodeSubjectRef = useRef<(relPath: string) => NoticeSubject>(() => ({ kind: 'none' }));
 
   // Read directory contents, filter excludes, sort folders-first. No state writes.
   const fetchChildren = useCallback(
@@ -298,7 +326,9 @@ export function useExplorerData(
               `[explorer] discarding unresolvable persisted path "${relDir}" for project ${projectId}: ${res.error}`,
             );
           } else {
-            failRef.current(res.error, 'list the contents of this folder', res.cause);
+            // FR-025 — "this folder" named nothing; the folder is now the subject, and the action
+            // ends where the subject begins: "Couldn't list the contents of Src".
+            failRef.current(res.error, 'list the contents of', nodeSubjectRef.current(relDir), res.cause);
           }
         }
         return null;
@@ -518,9 +548,19 @@ export function useExplorerData(
   useEffect(() => {
     if (!rootFolder) return;
     return window.throng?.files?.onWatchFailed?.(() => {
+      /*
+        * 030 FR-025 — the FOLDER being watched is the subject, so the action stops standing in for
+        * it ("keep this folder up to date" named nothing at all).
+        *
+        * The MESSAGE is deliberately untouched. `editor-stranded-restart.e2e.ts:163` asserts this
+        * exact sentence is ABSENT after a recovery, and an assertion of absence is silently
+        * satisfied by any rewording — changing it here would turn someone else's guard into a
+        * no-op without a single test going red. It restates no subject, so FR-023 is not at stake.
+        */
       failRef.current(
         'Live updates have stopped for this project. Reopen it to resume watching for changes.',
-        'keep this folder up to date',
+        'keep watch on',
+        nodeSubjectRef.current(''),
       );
     });
   }, [rootFolder]);
@@ -723,8 +763,8 @@ export function useExplorerData(
   // bridge (confinement + naming enforced in the main process); the live-sync
   // watcher then refreshes the tree. Errors surface in the pane's error banner. ---
   const report = useCallback(
-    (res: FilesOkOrError | undefined | null, action: string): void => {
-      if (res && 'error' in res) fail(res.error, action, res.cause);
+    (res: FilesOkOrError | undefined | null, action: string, subject: NoticeSubject): void => {
+      if (res && 'error' in res) fail(res.error, action, subject, res.cause);
       else fail(null);
     },
     [fail],
@@ -741,6 +781,34 @@ export function useExplorerData(
     },
     [childrenMap],
   );
+  /**
+   * A tree path as a NOTICE SUBJECT (030 FR-025).
+   *
+   * File or folder is answered by the tree's own listing, because that is what the user is looking
+   * at; a path the tree has not loaded is reported as a folder, which is the harmless direction —
+   * only the word "file"/"folder" would be wrong, never the NAME, and the name is the answer #195
+   * is asking for.
+   *
+   * The containing folder rides along as `dir` (FR-025: include the path where the name alone would
+   * be ambiguous), and the empty path is the project's ROOT folder, named by its own last segment
+   * rather than by the project — 029 FR-017 is about the folder, and they can differ.
+   */
+  const nodeSubject = useCallback(
+    (relPath: string): NoticeSubject => {
+      const segments = (p: string): string[] => p.split(/[\\/]/).filter(Boolean);
+      if (relPath === '') {
+        const root = rootFolder ? segments(rootFolder).pop() : undefined;
+        return { kind: 'folder', name: root ?? rootName };
+      }
+      const parts = segments(relPath);
+      const name = parts[parts.length - 1] ?? relPath;
+      const dir = parts.length > 1 ? parts[parts.length - 2] : undefined;
+      return { kind: kindOf(relPath) === 'file' ? 'file' : 'folder', name, dir };
+    },
+    [kindOf, rootFolder, rootName],
+  );
+  nodeSubjectRef.current = nodeSubject;
+
   const primarySelected = useMemo<TargetNode | null>(() => {
     if (selectedId === null) return null;
     const kind = kindOf(selectedId);
@@ -787,7 +855,7 @@ export function useExplorerData(
         }
       }
       void window.throng?.files?.rename?.(rel, next).then((res) => {
-        report(res, 'rename this item');
+        report(res, 'rename', nodeSubject(rel));
         if (!(res && 'error' in res)) {
           // 024 US3: a successful rename is undoable. Recorded with ABSOLUTE paths so the entry
           // still names the same file after a restart.
@@ -816,7 +884,7 @@ export function useExplorerData(
         });
       });
     },
-    [report, documents, projectId, reloadDirs, pushUndo, toAbs, snapshotOpen],
+    [report, nodeSubject, documents, projectId, reloadDirs, pushUndo, toAbs, snapshotOpen],
   );
 
   const cut = useCallback((relPaths: string[]) => {
@@ -843,7 +911,9 @@ export function useExplorerData(
         const affected = [...new Set([...clipboard.relPaths.map(parentRel), dest])];
         const moving = clipboard.relPaths;
         void window.throng?.files?.move?.(moving, dest).then((res) => {
-          report(res, 'move these items');
+          // A SET, so no single subject (FR-027). `moving` may hold one item or twenty, and the
+          // failure may be about any of them; US3's affected list is what names several.
+          report(res, 'move these items', { kind: 'none' });
           if (!(res && 'error' in res)) {
             pushUndo({
               kind: 'move',
@@ -861,7 +931,7 @@ export function useExplorerData(
         setClipboard(null);
       } else {
         void window.throng?.files?.copy?.(clipboard.relPaths, dest).then((res) => {
-          report(res, 'paste these items');
+          report(res, 'paste these items', { kind: 'none' });
           void reloadDirs([dest]);
         });
       }
@@ -916,7 +986,13 @@ export function useExplorerData(
         return changed ? next : prev;
       });
       void window.throng?.files?.delete?.(items, deleteMode).then((res) => {
-        report(res, items.length === 1 ? 'delete this item' : 'delete these items');
+        // One item is a subject; several are a set. The wording follows the same split, which is
+        // what removes the "this item" stand-in without pretending a batch has one subject.
+        report(
+          res,
+          items.length === 1 ? 'delete' : 'delete these items',
+          items.length === 1 ? nodeSubject(items[0]!) : { kind: 'none' },
+        );
         if (res && 'error' in res) {
           // It is still on disk. Restore exactly what was on screen, then reconcile the parents
           // from the filesystem so a PARTIAL batch failure converges on the truth rather than on
@@ -945,7 +1021,7 @@ export function useExplorerData(
         }
       });
     },
-    [confirm, deleteMode, report, documents, projectId, pushUndo, toAbs, reloadDirs],
+    [confirm, deleteMode, report, nodeSubject, documents, projectId, pushUndo, toAbs, reloadDirs],
   );
 
   // After creating a folder, enter inline rename on it once it appears (FR-033).
@@ -968,10 +1044,12 @@ export function useExplorerData(
         treeRef.current?.open(dest);
       }
       const res = await window.throng?.files?.newFolder?.(dest);
-      if (res && 'error' in res) fail(res.error, 'create a new folder', res.cause);
+      // The DESTINATION is the subject: the new folder has no name yet, and the thing that refused
+      // the create is the folder it was to go in.
+      if (res && 'error' in res) fail(res.error, 'create a new folder in', nodeSubject(dest), res.cause);
       else if (res && 'relPath' in res) pendingRename.current = res.relPath;
     },
-    [ensureLoaded, treeRef, fail],
+    [ensureLoaded, treeRef, fail, nodeSubject],
   );
 
   // New File (FR-096): create under the selected folder (a file → its parent),
@@ -984,17 +1062,19 @@ export function useExplorerData(
         treeRef.current?.open(dest);
       }
       const res = await window.throng?.files?.newFile?.(dest);
-      if (res && 'error' in res) fail(res.error, 'create a new file', res.cause);
+      if (res && 'error' in res) fail(res.error, 'create a new file in', nodeSubject(dest), res.cause);
       else if (res && 'relPath' in res) pendingRename.current = res.relPath;
     },
-    [ensureLoaded, treeRef, fail],
+    [ensureLoaded, treeRef, fail, nodeSubject],
   );
 
   const reveal = useCallback(
     (relPath: string) => {
-      void window.throng?.files?.reveal?.(relPath).then((res) => report(res, 'open this item in the system file explorer'));
+      void window.throng?.files
+        ?.reveal?.(relPath)
+        .then((res) => report(res, 'reveal', nodeSubject(relPath)));
     },
-    [report],
+    [report, nodeSubject],
   );
 
   // Drag-and-drop result (FR-019): plain drag moves; Ctrl+drag copies. Targets
@@ -1010,7 +1090,7 @@ export function useExplorerData(
       const openBefore = asCopy ? [] : snapshotOpen();
       const op = asCopy ? window.throng?.files?.copy : window.throng?.files?.move;
       void op?.(items, destRelDir).then(async (res) => {
-        report(res, asCopy ? 'copy these items' : 'move these items');
+        report(res, asCopy ? 'copy these items' : 'move these items', { kind: 'none' });
         // A COPY is not undoable by this stack: nothing was lost, and "undo" would mean deleting a
         // file the user can simply delete themselves. A MOVE is.
         if (!asCopy && !(res && 'error' in res)) {
@@ -1108,7 +1188,8 @@ export function useExplorerData(
       const exists = (abs: string): boolean => known.get(abs) ?? false;
       const check = validateFileOp(entry, direction, exists);
       if (!check.ok) {
-        fail(check.reason, action);
+        // NO SUBJECT: an undo entry can carry many moves, and the refusal may be about any of them.
+        fail(check.reason, action, { kind: 'none' });
         return false;
       }
 
@@ -1123,7 +1204,7 @@ export function useExplorerData(
             : [await window.throng?.files?.delete?.(rels, deleteMode)];
         const failed = res.find((r) => r && 'error' in r);
         if (failed && 'error' in failed) {
-          fail(failed.error, action, failed.cause);
+          fail(failed.error, action, { kind: 'none' }, failed.cause);
           return false;
         }
         await reloadDirs([...new Set(rels.map(parentRel))]);
@@ -1136,7 +1217,7 @@ export function useExplorerData(
         const fromRel = toRel(move.from);
         const toRelPath = toRel(move.to);
         if (fromRel === null || toRelPath === null) {
-          fail('That file is no longer inside this project.', action);
+          fail('That file is no longer inside this project.', action, { kind: 'none' });
           return false;
         }
         const sameParent = parentRel(fromRel) === parentRel(toRelPath);
@@ -1145,7 +1226,7 @@ export function useExplorerData(
           ? await window.throng?.files?.rename?.(fromRel, leaf)
           : await window.throng?.files?.move?.([fromRel], parentRel(toRelPath));
         if (res && 'error' in res) {
-          fail(res.error, action, res.cause);
+          fail(res.error, action, { kind: 'none' }, res.cause);
           return false;
         }
         carryOverride(fromRel, parentRel(toRelPath));
@@ -1184,6 +1265,7 @@ export function useExplorerData(
     error,
     errorAction,
     errorCause,
+    errorSubject,
     clearError: () => fail(null),
     initialOpenState,
     onToggle,

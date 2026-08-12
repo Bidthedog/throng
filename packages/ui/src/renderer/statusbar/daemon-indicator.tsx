@@ -50,6 +50,13 @@ export function DaemonIndicator(): ReactElement | null {
     if (status !== 'stopped') return;
     notify({
       severity: 'error',
+      /*
+       * NO SUBJECT (030 FR-019/FR-027). The subject is throng's DAEMON, which the closed union does
+       * not name — and does not need to: this notice carries an explicit `title` that names it,
+       * and a title wins the heading outright. There is exactly one daemon, so "which one?" — the
+       * question a subject answers — cannot be asked about it.
+       */
+      subject: { kind: 'none' },
       title: 'throng’s daemon has stopped',
       message:
         'Terminals will not respond and changes will not be saved until it restarts. Use the daemon indicator in the status bar to restart it.',
@@ -65,6 +72,9 @@ export function DaemonIndicator(): ReactElement | null {
     if (res && !res.ok) {
       notify({
         severity: 'error',
+        // No subject, for the reason above: the daemon is not a member of the union, and this
+        // notice's own title names it.
+        subject: { kind: 'none' },
         title: 'Could not restart the daemon',
         message: res.error ?? 'throng could not restart its daemon.',
         testId: 'daemon-error',

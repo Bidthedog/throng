@@ -41,6 +41,18 @@ export function useConfigWriteFailureNotices(): void {
           // An error PERSISTS until dismissed. A preference that did not save is exactly the kind of
           // thing a user must not be allowed to miss by looking away for five seconds.
           severity: 'error',
+          /*
+           * NO SUBJECT, deliberately (030 FR-019/FR-027).
+           *
+           * What failed to save is a CONFIGURATION DOCUMENT — the settings, the key bindings, a
+           * theme — and `NoticeSubject`'s union is the workspace's own vocabulary: Pane, Tab, Panel,
+           * Panel Type, Project, Sub-workspace. There is no member for a document, the set is
+           * closed by design, and widening it is a spec-level decision rather than something a call
+           * site may do to make itself compile. `describe(id)` already names the document inside
+           * the sentence, which is where it has always read correctly, so FR-027 applies exactly:
+           * the message is left as it is rather than padded.
+           */
+          subject: { kind: 'none' },
           message: `Saving ${describe(id)} failed. Nothing was changed.`,
           testId: 'prefs-notice',
         });
