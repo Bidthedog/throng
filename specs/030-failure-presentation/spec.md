@@ -510,7 +510,11 @@ earlier one.
   which is the opposite of what silencing is allowed to cost.
 - **FR-005a**: The notification preferences MUST govern notices and nothing else. A panel's failure
   banner MUST be shown whenever its condition holds, whatever the display mode of any severity, and
-  whatever a shell prints into its own terminal is untouched by these preferences.
+  terminal output is untouched by these preferences — **including the lines throng itself writes into
+  a terminal**, not only those the shell writes. The audit behind FR-017 found throng printing
+  `[throng] Could not run the startup command:` straight into the stream with no accompanying notice
+  (`terminal-service.ts:535`), so an exemption phrased as "whatever a *shell* prints" would exempt a
+  stream by its owner rather than by its speaker, and leave throng's own reports in neither camp.
 - **FR-006**: Every notice MUST be recorded in the diagnostic log, whatever its severity's display
   mode, at a log level derived from its severity: `error` → error, `warning` → warn, `info` and
   `success` → info.
@@ -776,7 +780,12 @@ earlier one.
   duration, or to stay until dismissed, and see the change take effect on the next notice — without
   editing a file by hand and without restarting.
 - **SC-002**: 100% of notices raised by the application are governed by the notification preferences —
-  none has display behaviour the user cannot change.
+  none has display behaviour the user cannot change. **Read this narrowly, because it is narrow**: a
+  "notice" is the toast, and the surfaces a user would most want to control — the panel failure
+  banners — are exempt *by requirement* (FR-005a, and SC-004a positively requires the exemption). The
+  audit behind FR-017 found no second reporting channel at all — no `showMessageBox`, no Electron
+  `Notification`, no tray, no badge — which is what makes this true by construction rather than by
+  enumeration. It does **not** mean "the user controls how failures appear".
 - **SC-003**: Every notice **raised** appears in the diagnostic log exactly once, whatever its display
   mode — an event set to Never display appears zero times on screen and exactly as often in the log as
   the same event does when displayed, repeats included (FR-005b). A notice that grows adds one further

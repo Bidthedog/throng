@@ -15,6 +15,7 @@ import type { DetectedFlavourDto } from '../global.js';
 import { useAppSettings } from '../config/config-store.js';
 import { debounce } from '../config/write-config.js';
 import { IconButton } from '../common/icon-button.js';
+import { useConfirm, type ConfirmOptions } from '../confirm-dialog.js';
 import { useResetNotice } from './reset-notice.js';
 import { useOnEntry } from './on-entry.js';
 import { RowActions } from './row-actions.js';
@@ -60,6 +61,61 @@ function groupDescriptors(items: readonly FieldDescriptor[]): {
 /** The shipped record is frozen and pure — build it once for the overridden-test. */
 const SHIPPED = buildShippedDefaults();
 
+/**
+ * THE FIRST TWO SETTINGS WHOSE CONTROL DEPENDS ON SOMETHING OTHER THAN ITS OWN VALUE (030 US1,
+ * #224) — and the reason they are matched here by key rather than declared in the registry.
+ *
+ * `SETTINGS_METADATA` has no `enabledWhen` and no `confirmWhen`, and adding either is a change to
+ * the shared metadata contract that every descriptor, every completeness test and both other
+ * registries (keybindings, theme) would then have to live with. Against Principle VIII that is the
+ * YAGNI call: a general dependency mechanism whose entire population is the eight descriptors below
+ * is a framework built for one caller, and a framework with one caller is guessed, not designed —
+ * we do not yet know whether the second dependency will want equality, a predicate, a hidden state
+ * rather than a disabled one, or a confirmation keyed on the OLD value rather than the new.
+ *
+ * The precedent is fifty lines down: `dynamicOptions` matches `appearance.theme`,
+ * `editor.languageByExtension` and `terminals.disabledBuiltins` by key, for exactly this reason —
+ * a property of a setting that the registry cannot state stays in the renderer that can.
+ *
+ * The honest answer for the LONGER term is still the registry. Config-editor completeness makes the
+ * descriptor the single place a reader can learn what a setting is, and "this control is inert
+ * unless its sibling says `timed`" is a fact about the setting, not about this form; a second
+ * feature adding a third dependency should lift both of these into `FieldDescriptor` rather than
+ * add a third regular expression. Written as two patterns and two small functions precisely so that
+ * lift is a move, not a rewrite.
+ *
+ * They are patterns, not four literal keys each, so all four severities are covered by one rule and
+ * a fifth severity would need nothing here.
+ */
+const NOTICE_TIMEOUT_KEY = /^notifications\.(?:error|warning|info|success)\.timeoutMs$/;
+const SILENCEABLE_FAILURE_KEY = /^notifications\.(?:error|warning)\.mode$/;
+
+/**
+ * The consent FR-008 requires before a failure stops reporting itself.
+ *
+ * *Never display* is offerable at all only because the user is told, in the moment, what it costs:
+ * a failed operation will say nothing on screen, and the only record left will be the log. That is
+ * the bargain, and it is stated as an OUTCOME — "are you sure?" asks someone to confirm a word.
+ *
+ * Only `error` and `warning` ask. `info` and `success` report things that already happened and
+ * worked, so there is no failure to miss and a prompt would be nagging.
+ *
+ * Returns `null` when no consent is needed, so the caller has one branch and not four.
+ */
+function silenceConfirmation(d: FieldDescriptor, value: unknown): ConfirmOptions | null {
+  if (value !== 'never' || !SILENCEABLE_FAILURE_KEY.test(d.key)) return null;
+  return {
+    // `d.label` is "Error notices" / "Warning notices" — the setting named the way the user just
+    // read it in the row above, never a severity token this file re-spells.
+    title: `Never display ${d.label.toLowerCase()}?`,
+    message:
+      `${d.label} will not be shown anywhere in the application. When one of these events happens ` +
+      `it will report nothing on screen, and the only record of it will be the diagnostic log.`,
+    confirmLabel: 'Never display them',
+    danger: true,
+  };
+}
+
 export function SettingsTab({
   searchDebounceMs = SEARCH_DEBOUNCE_MS,
 }: {
@@ -68,6 +124,9 @@ export function SettingsTab({
   const settings = useAppSettings();
   const entry = useOnEntry().settings;
   const { report } = useResetNotice();
+  // THE confirmation model — the one `preferences-app.tsx` already mounts around this tab. A second
+  // dialog in this window is the exact duplication 018/FR-054 exists to have removed.
+  const confirm = useConfirm();
   const apply = useMemo(() => createApplyClient({ kind: 'settings' }), []);
 
   // `query` drives the input (instant); `applied` drives the filter (debounced).
@@ -147,13 +206,58 @@ export function SettingsTab({
    * the user does. `notify` replaces a notice carrying the same test id, so a control that commits as
    * you type reports one failure, not one per keystroke.
    */
-  const commit = (d: FieldDescriptor, value: unknown): void => {
+  const applyEdit = (d: FieldDescriptor, value: unknown): void => {
     const next = setAtPath(settings, d.key, value);
     void apply.applyNow(next).then(
       (r) => report(`Saving ${d.label}`, r),
       // A throw is the bridge itself failing — still a failure, still not silent.
       () => report(`Saving ${d.label}`, undefined),
     );
+  };
+
+  /**
+   * Apply an edit, ASKING FIRST where the edit costs the user something they should agree to
+   * (030 FR-008).
+   *
+   * Declining writes nothing at all — not the old value back, nothing. The control that raised this
+   * is React-controlled from `settings`, which has not changed, so React restores what it was
+   * showing on its own; a dialog whose Cancel branch performs a write would be a dialog that
+   * changes the setting whichever button you press, which looks like a choice and is not one.
+   *
+   * Revert and clear come through here too, and that is correct: choosing *Never display* by
+   * reverting to a remembered `never` is still choosing it.
+   */
+  const commit = (d: FieldDescriptor, value: unknown): void => {
+    const question = silenceConfirmation(d, value);
+    if (question === null) {
+      applyEdit(d, value);
+      return;
+    }
+    void confirm(question).then(
+      (accepted) => {
+        if (accepted) applyEdit(d, value);
+      },
+      // A confirmation that fails to settle must not apply the change it was guarding — the
+      // unconsented outcome is the one this dialog exists to prevent.
+      () => {},
+    );
+  };
+
+  /**
+   * Is this control SHOWN BUT INERT, because the value beside it has taken its meaning away
+   * (FR-011)?
+   *
+   * A notice duration means nothing under *Never display* or *Dismiss only* — the number is real,
+   * stored and preserved, but nothing reads it. Leaving it live invites the user to tune a value
+   * that will not be consulted, which is the same class of lie as a button that does nothing.
+   *
+   * The sibling is read from `settings`, the same defaults-merged parse the control's own value
+   * comes from, so a `notifications` block missing from the file disables nothing by accident.
+   */
+  const isInert = (d: FieldDescriptor): boolean => {
+    if (!NOTICE_TIMEOUT_KEY.test(d.key)) return false;
+    const modeKey = `${d.key.slice(0, d.key.lastIndexOf('.'))}.mode`;
+    return getAtPath(settings, modeKey) !== 'timed';
   };
 
   /**
@@ -250,6 +354,7 @@ export function SettingsTab({
                   value={getAtPath(settings, d.key)}
                   options={dynamicOptions(d, themes, detected)}
                   optionLabels={dynamicOptionLabels(d, detected)}
+                  disabled={isInert(d)}
                   onCommit={(v) => commit(d, v)}
                 />
               </div>

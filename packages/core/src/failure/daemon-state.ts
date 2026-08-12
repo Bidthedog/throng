@@ -31,7 +31,11 @@ export type DaemonEvent =
  * NOT a setting: its value is a consequence of the reconnect interval, and the two must move
  * together or this machine is wrong. Exposing it would let a grace shorter than one retry
  * manufacture exactly the false alarm `reconnecting` exists to prevent. (Recorded as a Principle X
- * exemption in the plan's Complexity Tracking; the precedent is `AUTO_DISMISS_MS`.)
+ * exemption in the plan's Complexity Tracking. It used to cite `AUTO_DISMISS_MS` as its precedent;
+ * 030 deleted that constant and made a notice's dwell a per-severity setting, which is the opposite
+ * ruling — so this exemption now rests on its own argument, and the difference is real: how long a
+ * notice should stand depends on how fast its reader reads, while this grace is arithmetic on the
+ * reconnect interval and is simply wrong at any other value.)
  */
 export const DAEMON_GRACE_MS = 1200;
 

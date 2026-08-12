@@ -26,6 +26,19 @@ export interface SettingControlProps {
    * what Command Prompt is called. The stored value is unchanged; this is display only.
    */
   optionLabels?: Readonly<Record<string, string>>;
+  /**
+   * The control is shown but INERT, because a sibling value has taken its meaning away (030,
+   * FR-011): `notifications.<severity>.timeoutMs` means nothing unless the mode beside it is
+   * *Display for*.
+   *
+   * Shown rather than hidden on purpose — a control that vanishes takes the explanation with it,
+   * and the user cannot see that the duration is still there waiting for the mode that uses it.
+   *
+   * Honoured by {@link NumberControl}, which is the only kind anything currently depends on. A
+   * dependency aimed at another control kind means honouring it there too — an ignored `disabled`
+   * would be the same silent degradation the `default:` arm of {@link SettingControl} warns about.
+   */
+  disabled?: boolean;
   /** Apply a valid new value (the tab wires this to the config-write path). */
   onCommit: (value: unknown) => void;
 }
@@ -221,7 +234,7 @@ function MultiSelectControl({
   );
 }
 
-function NumberControl({ descriptor, value, onCommit }: SettingControlProps): ReactElement {
+function NumberControl({ descriptor, value, disabled, onCommit }: SettingControlProps): ReactElement {
   // 018 / FR-037 — the DISPLAYED value is grouped; the STORED value never is.
   //
   // `editor.maxOpenFileBytes` showed as `10485760`: eight digits with no grouping, which nobody
@@ -347,6 +360,7 @@ function NumberControl({ descriptor, value, onCommit }: SettingControlProps): Re
           className="ctl__slider"
           data-testid={`${testId(descriptor.key)}-slider`}
           aria-label={descriptor.label}
+          disabled={disabled}
           min={descriptor.min}
           max={descriptor.max}
           // `step` has been declared since feature 007 and read by NOBODY — dead metadata describing
@@ -371,6 +385,9 @@ function NumberControl({ descriptor, value, onCommit }: SettingControlProps): Re
         className={invalid ? 'ctl__input ctl__input--invalid' : 'ctl__input'}
         data-testid={testId(descriptor.key)}
         aria-invalid={invalid}
+        // BOTH halves, or neither. A disabled thumb beside a live text box is not an inert control —
+        // it is a control with one working way in, which is worse than either honest answer.
+        disabled={disabled}
         value={text}
         min={descriptor.min}
         max={descriptor.max}
@@ -389,7 +406,9 @@ function NumberControl({ descriptor, value, onCommit }: SettingControlProps): Re
           if (e.key === 'Enter') commit(e.currentTarget.value);
         }}
       />
-      {invalid ? (
+      {/* An inert control cannot be typed into, so a complaint about what was typed into it is
+          stale by construction — hide it rather than leave it accusing a box nobody can reach. */}
+      {invalid && !disabled ? (
         <span className="ctl__error" data-testid={`${testId(descriptor.key)}-invalid`}>
           Enter a number{descriptor.min !== undefined ? ` ≥ ${descriptor.min}` : ''}
           {descriptor.max !== undefined ? ` ≤ ${descriptor.max}` : ''}.

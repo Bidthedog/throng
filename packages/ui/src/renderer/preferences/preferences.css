@@ -1176,6 +1176,21 @@
   cursor: pointer;
 }
 
+/* INERT, not absent (030, FR-011). A duration whose mode is not *Display for* controls nothing, so
+ * both halves grey out and stop responding — but they stay exactly where they were. Same treatment
+ * and same reasoning as `.ctl__array-btn:disabled`: the row does not jump, and the user can see the
+ * control is waiting on the mode beside it rather than wondering where it went. Opacity, not a
+ * colour, so it costs no token and reads correctly in every theme. */
+.ctl__slider:disabled,
+.ctl--slider .ctl__input:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.ctl__slider:disabled::-webkit-slider-thumb {
+  cursor: default;
+}
+
 /* The key-binding CAPTURE modal and the name dialog.
  *
  * These are NOT notices and were deliberately left out of the 018 sweep: they neither report a
