@@ -108,8 +108,8 @@ test('confirms before deleting a project (FR-042)', async () => {
 test('shows the panel count on a Tab and confirms tab close (FR-045/043)', async () => {
   await run(async (win) => {
     await createProject(win, 'Counter');
-    // One panel → [1].
-    await expect(win.locator('.tab-chip__count').first()).toHaveText('[1]');
+    // One panel → a pill reading 1. The square-bracket form went with FR-042 (031 US5).
+    await expect(win.locator('.tab-chip__count').first()).toHaveText('1');
 
     const firstPanel = await win
       .locator('.panel-box')
@@ -125,7 +125,7 @@ test('shows the panel count on a Tab and confirms tab close (FR-045/043)', async
     await expect(panelRename).toBeFocused();
     await win.keyboard.press('Enter');
     await expect(panelRename).toHaveCount(0);
-    await expect(win.locator('.tab-chip__count').first()).toHaveText('[2]');
+    await expect(win.locator('.tab-chip__count').first()).toHaveText('2');
 
     // Add a 2nd tab so Close is enabled, then close the first with confirmation.
     await win.getByTestId('tab-add').click();
