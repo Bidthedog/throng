@@ -47,6 +47,7 @@ import { buildAppMenu } from './app-menu.js';
 import { openAbout, type AboutWindowDeps } from './about-window.js';
 import { acquireSingleInstance } from './single-instance.js';
 import { installCrashHandlers, startUiDiagnostics } from './diagnostics.js';
+import { registerNoticeLogIpc } from './notice-log.js';
 import {
   hasUserDataDirSwitch,
   instanceConfigRoot,
@@ -745,6 +746,11 @@ if (isPrimaryInstance)
   // window) + the cog → preferences entry point. The cog opens the single shared,
   // always-on-top, movable preferences window on the requested tab (FR-002/009/010).
   registerWindowControlsIpc();
+
+  // 030 FR-006 — the renderer's notices reach the diagnostic log, whatever the user chose to see.
+  // Wired through `logAlways`, so `diagnostics.logLevel` cannot silently swallow the record of a
+  // notice the user asked never to be shown (FR-006b) — which is the only evidence it happened.
+  registerNoticeLogIpc(diagnostics, ipcMain);
 
   /*
    * Nullable ref to the main window, for the Preferences and About windows' parent.

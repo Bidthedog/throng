@@ -70,6 +70,20 @@ contextBridge.exposeInMainWorld('throng', {
    * so nothing ever noticed. Detection has to arrive without the user doing anything (FR-006), which
    * a pull cannot provide.
    */
+  /*
+   * 030 FR-006 — every notice reaches the diagnostic log, whatever the user chose to SEE.
+   *
+   * One-way and fire-and-forget by design (`send`, not `invoke`): there is no reply, no promise and
+   * no error handed back. A diagnostics write that failed must never become a user-facing failure,
+   * which would be a notice that raises a notice because it could not log the first one.
+   *
+   * The record arrives already composed by `noticeLogRecord()` in core — the level derived from the
+   * severity and the subject formatted — because main applies no policy of its own; it writes what
+   * it is given, at a level the threshold is not allowed to filter (FR-006b).
+   */
+  notices: {
+    log: (record: unknown) => ipcRenderer.send('throng:notices:log', record),
+  },
   /** 029 FR-013 — panel id -> what a user calls it, so main can NAME a throng lock holder. */
   panels: {
     publishIdentities: (list: unknown) => ipcRenderer.send('throng:panels:identities', list),

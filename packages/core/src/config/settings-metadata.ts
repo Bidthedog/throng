@@ -7,6 +7,7 @@
  */
 import { DEFAULT_APP_SETTINGS } from './app-settings.js';
 import { LOG_LEVELS } from '../diagnostics/log-level.js';
+import { DISPLAY_MODES, TIMEOUT_MAX_MS, TIMEOUT_MIN_MS } from '../notice/display-mode.js';
 import { leavesOfDeclared, type FieldDescriptor, type MetadataRegistry } from './metadata.js';
 
 /** Leaves that are internal bookkeeping, not user-configurable settings. */
@@ -54,6 +55,49 @@ const DRAG_MODIFIERS = ['ctrl', 'shift', 'alt'] as const;
 
 function confirmDescriptor(key: string, label: string, description: string): FieldDescriptor {
   return { key, label, description, group: 'Confirmations', control: 'select', allowedValues: CONFIRM_VALUES };
+}
+
+/**
+ * The two descriptors one severity needs (030 US1, #224).
+ *
+ * Written as a pair because they are edited as one decision: choosing *Display for* is what gives
+ * the duration a meaning, and the duration control is inert under the other two modes (FR-011). The
+ * mode's options come from `DISPLAY_MODES` and the bounds from the parse's own constants, so a
+ * control can never offer a value the parser would silently replace — the defect issue #227 records,
+ * where a descriptor's bounds and the code's clamp disagreed and only the clamp was real.
+ */
+function noticeDescriptors(
+  severity: 'error' | 'warning' | 'info' | 'success',
+  noun: string,
+  consequence: string,
+): FieldDescriptor[] {
+  return [
+    {
+      key: `notifications.${severity}.mode`,
+      label: `${noun} notices`,
+      description:
+        `Whether ${noun.toLowerCase()} notices stay until you dismiss them, disappear on their own, or are never shown. ` +
+        `${consequence} Whatever this says, the event is still written to the log.`,
+      group: 'Notifications',
+      control: 'select',
+      allowedValues: DISPLAY_MODES,
+    },
+    {
+      key: `notifications.${severity}.timeoutMs`,
+      label: `${noun} notice duration`,
+      description: `How long a ${noun.toLowerCase()} notice stays on screen, in milliseconds. Only used when the setting above is "Timed".`,
+      group: 'Notifications',
+      // A bounded numeric is a slider in this app (018, FR-032/034) — and the converse guard makes
+      // that mandatory, not optional: anything declaring both a min and a max must declare the
+      // control those bounds exist for. The step is 750 ms because the slider guard wants at most a
+      // hundred stops across the drag (58500 / 750 = 78) and because 58500 divides by it exactly, so
+      // the maximum is reachable by dragging rather than only by typing.
+      control: 'slider',
+      min: TIMEOUT_MIN_MS,
+      max: TIMEOUT_MAX_MS,
+      step: 750,
+    },
+  ];
 }
 
 export const SETTINGS_METADATA: MetadataRegistry = [
@@ -601,6 +645,31 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     max: 1000,
     step: 10,
   },
+  // Notifications (030 US1, #224)
+  //
+  // Eight leaves, two per severity, and every one of them exists because the old behaviour was
+  // hardcoded: severity decided persistence, and everything below `error` vanished after a constant
+  // nobody could change. A notice that disappeared before it was read was indistinguishable from one
+  // that never happened, which is the bug — so the dwell is the USER's to set (Principle X).
+  //
+  // `error` and `warning` come first because they are the ones people change.
+  ...noticeDescriptors(
+    'error',
+    'Error',
+    'Turning errors off means a failed operation reports nothing on screen.',
+  ),
+  ...noticeDescriptors(
+    'warning',
+    'Warning',
+    'Turning warnings off means a partly-failed operation reports nothing on screen.',
+  ),
+  ...noticeDescriptors('info', 'Information', 'These are ordinary progress and status messages.'),
+  ...noticeDescriptors(
+    'success',
+    'Success',
+    'These confirm an operation that worked, so they are the safest to shorten or switch off.',
+  ),
+
   {
     // #123 — the one diagnostics knob a user needs, and the reason it is a setting at all: the
     // build they are running is the one they cannot rebuild, so turning the detail up before

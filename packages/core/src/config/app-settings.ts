@@ -8,6 +8,12 @@ import type { DragModifierKey } from '../explorer/drag.js';
 import { SHIPPED_INDENT_BY_LANGUAGE, type IndentProfile } from '../editor/languages.js';
 import { DEFAULT_LOG_LEVEL, parseLogLevel, type LogLevel } from '../diagnostics/log-level.js';
 import { DEFAULT_ROTATION } from '../diagnostics/rotation.js';
+import {
+  DEFAULT_NOTIFICATION_SETTINGS,
+  parseNotificationSettings,
+  type NotificationSettings,
+} from '../notice/display-mode.js';
+import { NOTICE_SEVERITIES } from '../notice/severity.js';
 
 /** Confirmation depth for a destroy action: none / single / double (wry second). */
 export type ConfirmLevel = 'none' | 'single' | 'double';
@@ -218,6 +224,14 @@ export interface AppSettings {
   search: SearchSettings;
   /** Durable diagnostics (#123). */
   diagnostics: DiagnosticsSettings;
+  /**
+   * How long a notice of each severity stays on screen, or whether it appears at all (030, #224).
+   *
+   * The shape and the defaults belong to `notice/display-mode.ts`, not here: `parseNotificationSettings`
+   * takes no defaults argument, so it must hold its own fallbacks, and a second copy of that
+   * four-row table beside it is a copy nobody keeps in step.
+   */
+  notifications: NotificationSettings;
 }
 
 /**
@@ -401,6 +415,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     maxFileSizeKb: DEFAULT_ROTATION.maxBytes / 1024,
     keepFiles: DEFAULT_ROTATION.keep,
   },
+  // IMPORTED, never retyped (030 T017): the parse falls back to this same object, so a divergence
+  // between "what the file resolves to when the section is absent" and "what a reset returns you
+  // to" could not otherwise be detected by any test either side owns.
+  notifications: DEFAULT_NOTIFICATION_SETTINGS,
 };
 
 /**
@@ -820,6 +838,12 @@ export function parseAppSettings(raw: unknown): AppSettings {
     newProject: newProjectSettings(raw.newProject, d.newProject),
     search: searchSettings(raw.search, d.search),
     diagnostics: diagnosticsSettings(raw.diagnostics, d.diagnostics),
+    // 030 (#224). No `d.notifications` argument: unlike every other section here, this parse owns
+    // its own fallbacks (they live beside it, in notice/display-mode.ts) precisely so the notice
+    // domain can resolve settings without depending on the config package. It is TOTAL, so an
+    // absent section, a malformed value and an unknown severity all resolve here rather than
+    // costing the user the rest of the file (FR-015).
+    notifications: parseNotificationSettings(raw.notifications),
   };
 }
 
@@ -847,5 +871,15 @@ function structuredCloneSettings(s: AppSettings): AppSettings {
     newProject: { ...s.newProject },
     search: { ...s.search },
     diagnostics: { ...s.diagnostics },
+    // Deep-cloned for the same reason as the indent maps above: `DEFAULT_APP_SETTINGS.notifications`
+    // IS the notice module's shipped table, so a shallow spread would hand every caller the same
+    // four severity objects and let one of them edit the defaults for everybody.
+    notifications: cloneNotifications(s.notifications),
   };
+}
+
+function cloneNotifications(n: NotificationSettings): NotificationSettings {
+  const out = {} as NotificationSettings;
+  for (const severity of NOTICE_SEVERITIES) out[severity] = { ...n[severity] };
+  return out;
 }

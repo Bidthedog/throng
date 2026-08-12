@@ -44,6 +44,20 @@ export interface DiagnosticLog {
   /** The directory it lives in — what an "open logs folder" affordance opens. */
   readonly dir: string;
   log(level: LogLevel, message: string): void;
+  /**
+   * Write regardless of the configured threshold (030 FR-006b).
+   *
+   * For records whose absence would break a guarantee made to the user. A notice the user chose
+   * never to SEE is still promised a record — that is the whole basis on which turning a severity
+   * off is offered — and `diagnostics.logLevel: 'error'` would otherwise drop every `info` and
+   * `warn` notice on the floor, silently, leaving the setting's own confirmation text false.
+   *
+   * It is `log` minus the threshold test and nothing else: rotation, formatting and the
+   * never-throw behaviour are the same code. `component` names this record's origin in place of
+   * the log's own — one file holds main's timeline and the renderer's notices, and a reader who
+   * cannot tell them apart has to guess.
+   */
+  logAlways(level: LogLevel, message: string, component?: string): void;
   error(message: string): void;
   warn(message: string): void;
   info(message: string): void;
@@ -125,9 +139,9 @@ export function createFileLog(options: FileLogOptions): DiagnosticLog {
     }
   };
 
-  const write = (level: LogLevel, message: string): void => {
-    if (!passesThreshold(threshold, level)) return;
-    const line = `${formatLogLine({ at: new Date(), level, component: options.component, message })}\n`;
+  /** The write itself — rotation, formatting, disk. No policy of its own. */
+  const emit = (level: LogLevel, message: string, component: string): void => {
+    const line = `${formatLogLine({ at: new Date(), level, component, message })}\n`;
     try {
       rotateIfNeeded(Buffer.byteLength(line));
       appendFileSync(path, line);
@@ -136,10 +150,16 @@ export function createFileLog(options: FileLogOptions): DiagnosticLog {
     }
   };
 
+  const write = (level: LogLevel, message: string): void => {
+    if (!passesThreshold(threshold, level)) return;
+    emit(level, message, options.component);
+  };
+
   return {
     path,
     dir: options.dir,
     log: write,
+    logAlways: (level, message, component) => emit(level, message, component ?? options.component),
     error: (m) => write('error', m),
     warn: (m) => write('warn', m),
     info: (m) => write('info', m),

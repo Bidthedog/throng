@@ -674,3 +674,6 @@ export {
 // 029 — the shared failure-cause concept and daemon liveness. One idea for four bugs: a reason
 // derived from a raw error, which also owns the wording and the "already reported" key.
 export * from './failure/index.js';
+// 030 — failure PRESENTATION: display modes, the severity→log-level map, notice subjects and the
+// grouping key. Pure decisions shared by Preferences, the renderer and the main-process logger.
+export * from './notice/index.js';

@@ -82,7 +82,17 @@ export type NoticeSubject =
 formatSubject(subject: NoticeSubject, context?: SubjectContext): string
 ```
 
-- A `panel` with all parts renders `Project — Tab — Panel` (FR-022).
+- **The general rule, settled after Phase 2**: qualifiers outermost-first, the subject's own name
+  last, joined by `' — '` (U+2014, exported as `SUBJECT_SEPARATOR`). `Project — Tab — Panel` is one
+  instance of it, not a special case. So `file`/`folder` render `dir — name`, and `terminal` renders
+  `Project — Tab — Panel — Flavour`. One rule beats nine per-kind formats, and it is what makes
+  FR-026 (name the terminal flavour) fall out rather than needing its own branch.
+- Elision is by **value equality against the raw part, before truncation** — a context stating
+  project "Alpha" does not silence a subject in project "Bravo", because hiding that difference is
+  the ambiguity #195 exists to remove. It applies to all four qualifiers (`project`, `tab`, `panel`,
+  `dir`), one rule rather than four features.
+- Truncation counts **code points**, not UTF-16 units: slicing mid-surrogate-pair yields a lone
+  surrogate, which is a broken glyph in the toast on somebody's real folder name.
 - `context` states what the surrounding UI already says; those parts are omitted, never re-spelled
   (FR-022a). In the consolidated notice the context is `{ project, tab }`, leaving the panel name.
 - Absent parts are omitted without leaving separators (Edge Cases).

@@ -12,6 +12,7 @@ import {
   leavesOfDeclared,
 } from '../../src/config/metadata.js';
 import { DEFAULT_APP_SETTINGS } from '../../src/config/app-settings.js';
+import { TIMEOUT_MAX_MS, TIMEOUT_MIN_MS } from '../../src/notice/display-mode.js';
 
 describe('SETTINGS_METADATA completeness (FR-047)', () => {
   it('describes every configurable settings leaf and no unknown keys', () => {
@@ -102,6 +103,52 @@ describe('SETTINGS_METADATA control types (FR-028/029)', () => {
       expect(d.label.length, d.key).toBeGreaterThan(0);
       expect(d.description.length, d.key).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('SETTINGS_METADATA notification leaves (030 US1, #224)', () => {
+  const byKey = new Map(SETTINGS_METADATA.map((d) => [d.key, d]));
+  const SEVERITIES = ['error', 'warning', 'info', 'success'] as const;
+
+  /*
+   * The COUNT is not asserted here — the completeness block above already does it, from the leaves
+   * of DEFAULT_APP_SETTINGS. Eight new leaves without eight descriptors fails there, and a ninth
+   * descriptor for a leaf that does not exist fails there too. What that cannot see is whether the
+   * bounds a descriptor declares are the bounds the parser enforces: a control that let you commit
+   * 500 ms into a setting the parser then silently replaced with the default is issue #227's defect,
+   * and it is invisible to any completeness rule.
+   */
+  it('describes both leaves of all four severities', () => {
+    for (const severity of SEVERITIES) {
+      expect(byKey.has(`notifications.${severity}.mode`), severity).toBe(true);
+      expect(byKey.has(`notifications.${severity}.timeoutMs`), severity).toBe(true);
+    }
+  });
+
+  it('offers exactly the three display modes, as a constrained choice', () => {
+    for (const severity of SEVERITIES) {
+      const d = byKey.get(`notifications.${severity}.mode`);
+      expect(d?.control, severity).toBe('select');
+      expect(d?.allowedValues, severity).toEqual(['never', 'timed', 'dismiss']);
+    }
+  });
+
+  it('bounds every timeout at the values the parser enforces (1500–60000)', () => {
+    // Read from the notice module rather than retyped: a descriptor whose bounds drift from the
+    // clamp is the bug, so the test must not carry its own copy of either number.
+    for (const severity of SEVERITIES) {
+      const d = byKey.get(`notifications.${severity}.timeoutMs`);
+      expect(d?.min, severity).toBe(TIMEOUT_MIN_MS);
+      expect(d?.max, severity).toBe(TIMEOUT_MAX_MS);
+      expect(d?.min, severity).toBe(1500);
+      expect(d?.max, severity).toBe(60000);
+    }
+  });
+
+  it('groups all eight under Notifications, so they arrive as one section', () => {
+    const notifications = SETTINGS_METADATA.filter((d) => d.key.startsWith('notifications.'));
+    expect(notifications).toHaveLength(8);
+    for (const d of notifications) expect(d.group, d.key).toBe('Notifications');
   });
 });
 
