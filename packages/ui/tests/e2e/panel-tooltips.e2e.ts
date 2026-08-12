@@ -45,7 +45,14 @@ test('a renamed panel shows its NEW title on hover', async () => {
 
     const input = win.getByTestId(`panel-rename-input-${id}`);
     await expect(input).toBeFocused();
-    const long = 'A panel title far too long to fit inside its header without truncating';
+    /*
+     * 031 — this fixture was 70 characters, and `tabs.maxNameLength` now defaults to 64, so the
+     * rename field capped the input and the header could never have shown all of it. Shortened to
+     * 60: still far wider than the header, so the ellipsis this test is about still happens, but
+     * within the limit, so the test goes on asking its own question instead of the name limit's.
+     * The limit has its own coverage in `tab-name-limit.e2e.ts`.
+     */
+    const long = 'A panel title too long to fit inside its header at all';
     await input.fill(long);
     await win.keyboard.press('Enter');
 
@@ -54,6 +61,16 @@ test('a renamed panel shows its NEW title on hover', async () => {
   });
 });
 
+/*
+ * 031 FR-051 — the tab hover is a POPOVER now, not a `title` attribute.
+ *
+ * The claim this test makes is unchanged and still the right one: hovering a tab tells you what the
+ * tab IS, and never how to interact with it. Only the mechanism moved, because a `title` attribute
+ * cannot indent or format, which is what the maintainer asked for after using the strip.
+ *
+ * Asserting the absence of `title` is deliberate rather than incidental: leaving both would give one
+ * chip two tooltips, and the native one would win the race and show the unformatted version.
+ */
 test('a tab chip shows its TITLE on hover, not instructions', async () => {
   await runApp(async (_app, win) => {
     await settle(win);
@@ -65,10 +82,16 @@ test('a tab chip shows its TITLE on hover, not instructions', async () => {
     const label = await chip.locator('.tab-chip__label').textContent();
     expect(label?.trim()).toBeTruthy();
 
-    await expect(chip).toHaveAttribute('title', label!.trim());
+    await expect(chip, 'FR-051: the native tooltip is gone, so it cannot compete').not.toHaveAttribute(
+      'title',
+      /./,
+    );
 
-    const tooltip = await chip.getAttribute('title');
-    expect(tooltip).not.toContain(TAB_INSTRUCTIONS);
+    await chip.hover();
+    const popover = win.getByTestId('tabstrip-popover');
+    await expect(popover).toBeVisible();
+    await expect(win.getByTestId('tabstrip-popover-name')).toHaveText(label!.trim());
+    await expect(popover).not.toContainText(TAB_INSTRUCTIONS);
   });
 });
 
