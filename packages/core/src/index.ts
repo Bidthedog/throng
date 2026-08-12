@@ -163,6 +163,8 @@ export { matches, matchSpans } from './picker/match.js';
 export type { MatchSpan } from './picker/match.js';
 // 031 US4 — grapheme-cluster counting and truncation (FR-033a-c, FR-037a-e).
 export { countGraphemes, truncateGraphemes, wasTruncated } from './text/grapheme.js';
+// 031 FR-040 — the persistence half: names are bounded at the layout WRITE boundary, never on read.
+export { boundLayoutNames } from './workspace/bound-names.js';
 export type { StartingFolderConfig, StartingFolderContext } from './config/starting-folder.js';
 export { resolveStartingFolder, isOverrideResolvable } from './config/starting-folder.js';
 // Shared zoom range & mapping (012) — global + per-type zoom use one source.
