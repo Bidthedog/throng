@@ -679,19 +679,28 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
   };
 }
 
-/** A malformed profile falls back WHOLE — half a profile is not a convention. */
+/**
+ * A malformed profile falls back WHOLE — half a profile is not a convention.
+ *
+ * 031 (#227): the RANGE checks that used to live here are gone. They hard-coded 1–16, which is
+ * exactly what `editor.indent.indentWidth` / `.tabWidth` and `editor.indentByLanguage`'s columns
+ * already declare, so the number existed twice and only one copy was reachable from the Settings
+ * form. Raising the descriptor's maximum — a change the guard's contract says needs no other edit —
+ * would have left this substituting the default for anything above 16, silently.
+ *
+ * What stays is what the guard cannot do: the TYPE tolerance, and the floor. A fractional width is
+ * meaningless rather than out of range, and the guard clamps ranges without rounding.
+ */
 function indentProfile(v: unknown, fallback: IndentProfile): IndentProfile {
   if (!isRecord(v)) return { ...fallback };
   const style = v.style === 'tabs' || v.style === 'spaces' ? v.style : fallback.style;
-  const indentWidth =
-    typeof v.indentWidth === 'number' && v.indentWidth > 0 && v.indentWidth <= 16
-      ? Math.floor(v.indentWidth)
-      : fallback.indentWidth;
-  const tabWidth =
-    typeof v.tabWidth === 'number' && v.tabWidth > 0 && v.tabWidth <= 16
-      ? Math.floor(v.tabWidth)
-      : fallback.tabWidth;
-  return { style, indentWidth, tabWidth };
+  const width = (raw: unknown, fb: number): number =>
+    typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : fb;
+  return {
+    style,
+    indentWidth: width(v.indentWidth, fallback.indentWidth),
+    tabWidth: width(v.tabWidth, fallback.tabWidth),
+  };
 }
 
 /**

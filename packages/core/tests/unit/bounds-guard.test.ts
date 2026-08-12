@@ -145,6 +145,57 @@ describe('never throws (FR-011)', () => {
   });
 });
 
+describe('absence is not malformation — the upgrade case (F1)', () => {
+  /*
+   * The regression these pin is the worst kind: silent, universal, and on first launch.
+   *
+   * Every settings.json written before a release that ADDS a setting is missing that key. Reporting
+   * a missing key as a correction made `corrected` true for all of them, and the write-back
+   * persists `parseAppSettings(value)`, which drops keys it does not model — so upgrading rewrote
+   * every user's file and deleted anything they had hand-added.
+   *
+   * The fixture is deliberately a REALISTIC old document rather than a synthetic one: the previous
+   * tests all seeded a complete 49-key settings object, which is exactly why they never saw this.
+   */
+  it('reports NO correction for a document that merely predates a new setting', () => {
+    const old = structuredClone(DEFAULT_APP_SETTINGS) as Record<string, unknown>;
+    delete old.tabs; // the whole section 031 introduced
+    const { corrected, corrections } = applyDeclaredBounds(old, SETTINGS_METADATA, DEFAULT_APP_SETTINGS);
+    expect(corrections, 'a missing section is not a correction').toEqual([]);
+    expect(corrected, 'an upgrade must not trigger a rewrite of every user file').toBe(false);
+  });
+
+  it('reports no correction for a single absent leaf', () => {
+    const raw = structuredClone(DEFAULT_APP_SETTINGS) as Record<string, unknown>;
+    delete (raw.panes as Record<string, unknown>).projects;
+    expect(applyDeclaredBounds(raw, SETTINGS_METADATA, DEFAULT_APP_SETTINGS).corrected).toBe(false);
+  });
+
+  it('still corrects a value that is PRESENT and wrong, alongside absent ones', () => {
+    const raw = structuredClone(DEFAULT_APP_SETTINGS) as Record<string, unknown>;
+    delete raw.tabs;
+    (raw.panes as { projects: { maxWidth: number } }).projects.maxWidth = 999_999;
+    const { corrected, corrections } = applyDeclaredBounds(raw, SETTINGS_METADATA, DEFAULT_APP_SETTINGS);
+    expect(corrected).toBe(true);
+    expect(corrections).toHaveLength(1);
+    expect(corrections[0].path).toBe('panes.projects.maxWidth');
+  });
+});
+
+describe('a document that is not an object at all (F2)', () => {
+  // Reported as a correction, this REPLACED a settings.json holding valid-but-wrong JSON with the
+  // shipped defaults — while an unparseable file was left intact. A stray bracket destroyed your
+  // settings; a stray brace did not.
+  for (const raw of [[], 'x', 42, null] as const) {
+    it(`runs on defaults but reports no correction for ${JSON.stringify(raw)}`, () => {
+      const out = applyDeclaredBounds(raw, SETTINGS_METADATA, DEFAULT_APP_SETTINGS);
+      expect(out.value).toEqual(DEFAULT_APP_SETTINGS);
+      expect(out.corrected, 'G8: corrected is true iff a Correction was recorded').toBe(false);
+      expect(out.corrections).toEqual([]);
+    });
+  }
+});
+
 describe('idempotence (FR-013d / G9)', () => {
   it('a second pass over a corrected document records nothing', () => {
     const raw = withValue(DEFAULT_APP_SETTINGS, 'panes.projects.maxWidth', 999_999);

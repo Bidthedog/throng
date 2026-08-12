@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_APP_SETTINGS, parseAppSettings } from '../../src/config/app-settings.js';
+import { parseSettingsGuarded } from '../../src/config/settings-read.js';
 import { SHIPPED_INDENT_BY_LANGUAGE } from '../../src/editor/languages.js';
 
 describe('editorSettings parser (006, contracts/config-additions.md)', () => {
@@ -101,9 +102,31 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
     });
 
     it('rejects a nonsensical width rather than letting it through', () => {
-      // A zero-width indent inserts nothing, and a 500-wide one is not a preference, it is a typo.
+      // A zero-width indent inserts nothing — meaningless rather than out of range, so the parser
+      // still refuses it on its own.
       expect(parseAppSettings({ editor: { indent: { indentWidth: 0 } } }).editor.indent.indentWidth).toBe(2);
-      expect(parseAppSettings({ editor: { indent: { indentWidth: 500 } } }).editor.indent.indentWidth).toBe(2);
+    });
+
+    /*
+     * 031 (#227) — the RANGE moved, it did not disappear.
+     *
+     * `parseAppSettings` used to hard-code 1–16 here, duplicating what
+     * `editor.indent.indentWidth`'s descriptor already declares. That second copy is exactly the
+     * drift #227 exists to remove: raising the descriptor's maximum would have left the parser
+     * silently substituting the default for anything above 16.
+     *
+     * So the assertion moves to the guarded read, which is what every settings reader now calls.
+     * Deleting it instead would have quietly dropped the only coverage of a real bound.
+     */
+    it('clamps an out-of-range width through the GUARDED read, not the bare parser', () => {
+      const raw = { editor: { indent: { indentWidth: 500 } } };
+      expect(
+        parseAppSettings(raw).editor.indent.indentWidth,
+        'the bare parser no longer owns the range',
+      ).toBe(500);
+      const guarded = parseSettingsGuarded(raw);
+      expect(guarded.value.editor.indent.indentWidth, 'the declared maximum is 16').toBe(16);
+      expect(guarded.corrected, 'and it reports the correction, so the file is written back').toBe(true);
     });
 
     it('ships the per-language map FROM THE REGISTRY, so Go indents with tabs', () => {

@@ -82,6 +82,20 @@ function correctScalar(
   const { lo, hi } = bounds(decl);
   const isBounded = typeof lo === 'number' || typeof hi === 'number';
 
+  /*
+   * ABSENCE IS NOT MALFORMATION — the rule this module opens by stating, and which it used to
+   * break here.
+   *
+   * A key that is simply missing is `parseAppSettings`' business: it merges the default in, as it
+   * always has. Reporting it as a CORRECTION made `corrected` true for any document that was not
+   * already complete — which is every settings.json written before a release that adds a setting.
+   * Since the write-back then persists `parseAppSettings(value)`, and that drops every key it does
+   * not model, the first launch after an upgrade rewrote EVERY user's file in full and silently
+   * deleted anything hand-added. A guard whose whole purpose is to leave a valid file alone was
+   * rewriting all of them.
+   */
+  if (raw === undefined) return fallback;
+
   if (isBounded) {
     if (typeof raw !== 'number' || !Number.isFinite(raw)) {
       out.push({ path, kind: 'default-substituted', from: raw, to: fallback });
@@ -191,8 +205,20 @@ export function applyDeclaredBounds<T>(
 ): CorrectionOutcome<T> {
   const corrections: Correction[] = [];
 
+  /*
+   * A document that is not an object at all — `[]`, `"x"`, `null`, a number.
+   *
+   * Returns the defaults to run on, but reports NO correction, for two reasons. G8 says `corrected`
+   * is true iff a Correction was recorded, and this path recorded none. And the store writes back on
+   * `corrected`, so claiming one here meant a settings.json containing valid-but-wrong JSON was
+   * REPLACED with shipped defaults — while an *unparseable* file was preserved untouched. A stray
+   * bracket destroyed your settings and a stray brace did not, which is the reverse of the store's
+   * own stated contract.
+   *
+   * Losing a file this broken is still a decision for the store, not for the guard.
+   */
   if (!isRecord(raw)) {
-    return { value: structuredClone(defaults), corrected: true, corrections: [] };
+    return { value: structuredClone(defaults), corrected: false, corrections: [] };
   }
 
   const value = structuredClone(raw) as Record<string, unknown>;
