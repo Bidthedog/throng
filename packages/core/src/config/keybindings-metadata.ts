@@ -108,6 +108,15 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Rename the active panel — the same key the file tree uses to rename a file.',
   ),
 
+  // Tabs (031, FR-032b). Grouped under the SAME heading the Settings editor gives the tab options,
+  // so a user hunting for anything about tabs finds one word in both windows rather than two.
+  chord(
+    'tabs.openPicker',
+    'Tabs',
+    'Open tab picker',
+    'Open a searchable list of every tab in the window and jump to the one you choose. Works at any tab count, not only when the strip overflows.',
+  ),
+
   // File Explorer (resolved while the File Explorer pane has focus)
   chord('file.rename', 'File Explorer', 'Rename', 'Rename the selected file or folder.'),
   chord(

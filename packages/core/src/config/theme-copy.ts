@@ -688,6 +688,23 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Reset name icon',
     description: 'The glyph on the menu row that returns a renamed tab or project to the name it started with.',
   },
+  /*
+   * 031 / FR-032 — the tab strip's own controls. Named for the strip, not for tree state: the
+   * collapse and expand entries above describe folding a pane, and a user re-skinning those must not
+   * find the tab strip changed underneath them.
+   */
+  'icons.chevronLeft': {
+    label: 'Tab step left icon',
+    description: 'The glyph on the control at the left end of the tab strip that brings the tabs hidden off that edge back into view.',
+  },
+  'icons.chevronRight': {
+    label: 'Tab step right icon',
+    description: 'The glyph on the control at the right end of the tab strip that brings the tabs hidden off that edge back into view.',
+  },
+  'icons.chevronDown': {
+    label: 'Show all tabs icon',
+    description: 'The glyph on the tab strip control that drops open a searchable list of every tab in the window, however many are on screen.',
+  },
   // ── Sizes ─────────────────────────────────────────────────────────────────────────────────────
   'sizes.iconPx': {
     label: 'Icon Size',

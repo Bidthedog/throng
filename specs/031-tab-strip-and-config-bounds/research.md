@@ -201,13 +201,22 @@ that would drift, and neither covers a name arriving from a drag into a new tab.
 - **Icons**: three tokens (`chevronLeft`, `chevronRight`, `chevronDown`) added to `THRONG_THEME.icons`
   in `packages/core/src/config/theme.ts` with glyph defaults.
 
-  **Correction made during research**: an earlier draft of this decision said the tokens also need
-  hand-written descriptors in `theme-metadata.ts`. They do not — that registry *derives* icon
-  descriptors from the theme document's own keys (`key.startsWith('icons.')`, `theme-metadata.ts:47`,
-  `:142`, `:269`, `:326`), so a new token is described, grouped under "Icons" and editable
-  automatically. `theme-metadata.test.ts` is the completeness test that keeps that true. Writing
-  tasks against the wrong mechanism would have produced three tasks that could not be completed as
-  written.
+  **Corrected TWICE, and the second correction matters more than the first.**
+
+  *First pass* said the tokens need hand-written descriptors in `theme-metadata.ts`. They do not —
+  that registry *derives* icon descriptors from the theme document's own keys
+  (`key.startsWith('icons.')`, `theme-metadata.ts:47`, `:142`, `:269`, `:326`).
+
+  *Second pass, found at implementation time*: that is true of `theme-metadata.ts` and **is not the
+  whole gate**. `THEME_TOKEN_COPY` in **`theme-copy.ts`** is a separate, mandatory, hand-written
+  catalogue covering every editable token, and `theme-copy.test.ts` fails four ways without it —
+  `mechanicalCopy()` is explicitly rejected as a source of shipped copy, so a new token fails with
+  *"description merely restates the identifier"*.
+
+  **The real rule for a new icon token**: glyph in `theme.ts` **+** label and description in
+  `theme-copy.ts`, and nothing in `theme-metadata.ts`. An agent following the first correction
+  literally would have shipped a red build — which is what a research note is supposed to prevent,
+  and a reminder that "I checked one registry" is not "I checked the gate".
 
   Note the theme already ships `collapse: '‹'` and `expand: '›'` — visually similar to the chevrons
   needed here. They are **not** reused: they mean tree-node state, and re-skinning one would silently

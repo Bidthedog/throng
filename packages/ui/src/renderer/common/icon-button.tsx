@@ -8,7 +8,7 @@
  *
  * The dedicated {@link DismissButton} is a thin wrapper over this (token `dismiss`).
  */
-import { type ReactElement } from 'react';
+import { type MouseEvent as ReactMouseEvent, type ReactElement, type ReactNode } from 'react';
 import { Icon } from './icon.js';
 
 export interface IconButtonProps {
@@ -16,10 +16,27 @@ export interface IconButtonProps {
   token: string;
   /** Hover title + aria-label naming the action (required — the icon carries no text). */
   title: string;
-  onClick: () => void;
+  onClick: (event: ReactMouseEvent) => void;
   className?: string;
   testId?: string;
   disabled?: boolean;
+  /**
+   * An optional COUNT rendered beside the icon — never a label.
+   *
+   * 031 FR-021 needs three tab-strip controls that each show how many tabs they concern (hidden
+   * left, hidden right, total). That is a live quantity, not a name for the action, so it does not
+   * breach the icon-control rule: the action is still named by the hover title alone, and the icon
+   * is still what identifies it. Adding it here rather than hand-rolling a fourth kind of button is
+   * what keeps every action control in the application on one code path.
+   */
+  badge?: ReactNode;
+  /**
+   * Pointer events the HOST needs to intercept. A control sitting inside a clickable surface — the
+   * tab close affordance inside its chip — must stop the surface's own handlers from also firing,
+   * and only the host knows what those are.
+   */
+  onDoubleClick?: (event: ReactMouseEvent) => void;
+  onMouseDown?: (event: ReactMouseEvent) => void;
 }
 
 export function IconButton({
@@ -29,6 +46,9 @@ export function IconButton({
   className = 'icon-button',
   testId,
   disabled = false,
+  badge,
+  onDoubleClick,
+  onMouseDown,
 }: IconButtonProps): ReactElement {
   return (
     <button
@@ -39,8 +59,15 @@ export function IconButton({
       aria-label={title}
       disabled={disabled}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      onMouseDown={onMouseDown}
     >
       <Icon token={token} />
+      {badge === undefined ? null : (
+        <span className="icon-button__badge" aria-hidden="true">
+          {badge}
+        </span>
+      )}
     </button>
   );
 }

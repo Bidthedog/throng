@@ -5,6 +5,7 @@ import {
   moveFocus,
   cycleOrder,
   nextInCycle,
+  type ActionId,
   type Direction,
   type LayoutNode,
 } from '@throng/core';
@@ -22,6 +23,7 @@ import { focusPanel, requestPanelFocus } from './workspace/panel-focus.js';
 import { setActivePane } from './workspace/active-pane.js';
 import { asKeyboardMenu } from './workspace/keyboard-menu.js';
 import { requestPanelRename } from './workspace/panel-rename.js';
+import { requestTabPicker } from './workspace/tab-picker.js';
 import { getExplorerCommands } from './explorer/explorer-commands.js';
 import { chordKey, isBackquote } from './config/chord-key.js';
 import { DetachProvider } from './workspace/detach-context.js';
@@ -120,6 +122,15 @@ function caretRect(el: HTMLElement): DOMRect | null {
 }
 
 /**
+ * 031 FR-032a — the command that opens the tab picker (`Ctrl+Alt+T` by default, rebindable).
+ *
+ * A named constant rather than a literal in two places, so the HANDLED gate and the dispatch below
+ * cannot drift apart. Typed as an `ActionId`, so a rename in core's registry fails here rather than
+ * silently leaving the chord unhandled.
+ */
+const TABS_OPEN_PICKER: ActionId = 'tabs.openPicker';
+
+/**
  * Resolves keyboard accelerators (zoom / fullscreen / pane toggles) from the user's
  * live keybindings (FR-033) on real DOM keydown events. Zoom/fullscreen dispatch
  * over the preload bridge; the pane toggles call back into the App. Shift is ignored
@@ -209,6 +220,7 @@ function KeybindingsHandler({
       'panel.rename',
       'file.undo',
       'file.redo',
+      TABS_OPEN_PICKER,
     ]);
     const onKeyDown = (e: KeyboardEvent): void => {
       // Shift is deliberately dropped for most keys (the produced character already
@@ -284,6 +296,17 @@ function KeybindingsHandler({
           break;
         case 'view.fullscreen':
           window.throng?.fullscreenToggle?.();
+          break;
+        /*
+         * 031 T5/T7 (FR-032a, FR-032d) — the tab picker, from anywhere.
+         *
+         * Live in every scope, at ANY tab count, including when nothing overflows: a user who knows
+         * the name of the tab they want should not first have to make the strip too small to show
+         * it. Chord and the strip's "show all" control open the SAME picker by construction — there
+         * is one opener, and the strip registers it (tab-picker.tsx).
+         */
+        case TABS_OPEN_PICKER:
+          requestTabPicker();
           break;
         case 'view.toggleProjects':
           cbRef.current.onToggleProjects();
