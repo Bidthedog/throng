@@ -100,8 +100,14 @@ test('T057 — the Tabs section exposes all three settings, with their ranges an
         await expect(slider).toHaveValue(setting.value);
       }
 
-      // Nothing has been changed, so nothing has been written.
-      expect(readSettings(cfgRoot)?.tabs).toBeUndefined();
+      // The values on screen are the ones ON DISK: throng writes its shipped defaults out at first
+      // run, so "the default" is a fact about the file as well as about the form, and the two must
+      // agree before any of the editing tests below mean anything.
+      expect(readSettings(cfgRoot)?.tabs).toEqual({
+        smoothScrollMs: 300,
+        closeArmingDelayMs: 300,
+        maxNameLength: 64,
+      });
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
@@ -116,7 +122,9 @@ test('T057 — each tab setting is editable by slider and by field, and persists
       // Drag the scroll duration to a value on its step grid.
       await setSlider(prefs.getByTestId('control-tabs.smoothScrollMs-slider'), '1500');
       await expect.poll(() => readSettings(cfgRoot)?.tabs?.smoothScrollMs).toBe(1500);
-      await expect(prefs.getByTestId('control-tabs.smoothScrollMs')).toHaveValue('1,500');
+      // Plain, not `1,500`: grouping starts at five digits, because a four-digit millisecond delay
+      // rendered with a separator reads as a typo rather than as a kindness (form-controls.tsx).
+      await expect(prefs.getByTestId('control-tabs.smoothScrollMs')).toHaveValue('1500');
 
       // Type the arming delay instead: the field and the slider drive one value.
       const arming = prefs.getByTestId('control-tabs.closeArmingDelayMs');
@@ -159,7 +167,7 @@ test('T057 — a value outside a declared range is refused, and the last valid o
       await limit.fill('4');
       await limit.press('Enter');
       await expect(prefs.getByTestId('control-tabs.maxNameLength-invalid')).toBeVisible();
-      expect(readSettings(cfgRoot)?.tabs?.maxNameLength).toBeUndefined();
+      expect(readSettings(cfgRoot)?.tabs?.maxNameLength, 'the shipped default stands').toBe(64);
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );

@@ -58,6 +58,14 @@ async function rowIds(): Promise<string[]> {
   );
 }
 
+/**
+ * Open the picker one of the two ways it can be opened.
+ *
+ * `control` is only available while the strip OVERFLOWS — the tab-actions group does not exist
+ * otherwise (T1) — so a test seeded with a handful of short names must ask for the chord. Getting
+ * this wrong does not fail cleanly: the click waits out the whole test timeout on a control that was
+ * never going to appear.
+ */
 async function openPicker(via: 'chord' | 'control'): Promise<void> {
   if (via === 'chord') await shared.win.keyboard.press('Control+Alt+T');
   else await shared.win.getByTestId('tabstrip-show-all').click();
@@ -101,7 +109,7 @@ test('T054 — every tab, in strip order, with its panel count, and the active o
 test('T054 — typing narrows, arrows move, Enter chooses, Escape dismisses (K3)', async () => {
   await freshProject();
   const ids = await seedTabs(shared.win, ['alpha report', 'beta report', 'gamma notes']);
-  await openPicker('control');
+  await openPicker('chord');
 
   const all = await rowIds();
   expect(all.length, 'the picker lists the seeded tabs and the project default').toBeGreaterThan(3);
@@ -131,7 +139,7 @@ test('T054 — typing narrows, arrows move, Enter chooses, Escape dismisses (K3)
     .toBe(ids[1]);
 
   // ESCAPE DISMISSES, choosing nothing: the active tab is the one Enter just chose.
-  await openPicker('control');
+  await openPicker('chord');
   await shared.win.getByTestId('tabpicker-input').fill('gamma');
   await expect.poll(rowIds).toEqual([ids[2]!.replace('tab-', '')]);
   await shared.win.keyboard.press('Escape');
@@ -151,7 +159,7 @@ test('T054 — every term must match, in ANY order, across separators (K4, K5, K
   ]);
   const [reversed, pathish, unrelated] = ids.map((id) => id.replace('tab-', ''));
 
-  await openPicker('control');
+  await openPicker('chord');
   await shared.win.getByTestId('tabpicker-input').fill('find file');
   await expect
     .poll(rowIds, { message: 'order-independent matching did not find the reversed name' })
@@ -173,7 +181,7 @@ test('T054 — every term must match, in ANY order, across separators (K4, K5, K
 test('T057b — matched terms are visibly marked in each row (K10)', async () => {
   await freshProject();
   const ids = await seedTabs(shared.win, ['marker alpha one', 'marker beta two']);
-  await openPicker('control');
+  await openPicker('chord');
 
   await shared.win.getByTestId('tabpicker-input').fill('beta marker');
   const row = shared.win.getByTestId(`tabpicker-row-${ids[1]!.replace('tab-', '')}`);
@@ -199,7 +207,7 @@ test('T057b — matched terms are visibly marked in each row (K10)', async () =>
 test('T054 — no match keeps the picker open and says so (K12)', async () => {
   await freshProject();
   await seedTabs(shared.win, ['findable one']);
-  await openPicker('control');
+  await openPicker('chord');
 
   await shared.win.getByTestId('tabpicker-input').fill('zzz-no-such-tab-anywhere');
   await expect(shared.win.getByTestId('tabpicker-empty')).toBeVisible();
@@ -222,10 +230,14 @@ test('T054 — no match keeps the picker open and says so (K12)', async () => {
 test('T055 — choosing an entry scrolls the strip to that tab AND makes it active (K2)', async () => {
   await freshProject();
   await seedOverflowingTabs(shared.win, 'picker-choose');
-  await setScrollLeft(shared.win, 0);
+
+  // Park at the FAR END and choose the FIRST tab. Seeding leaves the last tab active, so choosing it
+  // would test neither half of K2: it is already active, and the strip is already showing it.
+  const start = await stripState(shared.win);
+  await setScrollLeft(shared.win, start.maxScroll);
 
   const before = await stripState(shared.win);
-  const target = before.chips[before.chips.length - 1]!;
+  const target = before.chips[0]!;
   expect(isFullyVisible(before, target), 'precondition: the target is off screen').toBe(false);
   expect(target.active, 'precondition: the target is not already active').toBe(false);
 
@@ -304,6 +316,16 @@ test('T056 — dismissing returns focus to where it was (T8)', async () => {
   // The picker took focus (that is what the input assertion in `openPicker` established)…
   await shared.win.keyboard.press('Escape');
   await expect(shared.win.getByTestId('tabpicker')).toHaveCount(0);
+  /*
+   * KNOWN RED. Measured: `document.activeElement` after the dismissal is `BODY` — focus is not
+   * returned to the control it came from, and is not left on the picker either. It is simply lost.
+   *
+   * The mechanism is an ordering one. `Picker` records where focus was in a `useEffect`, but the
+   * query input carries `autoFocus`, which React applies during the COMMIT phase — before passive
+   * effects run. So the value recorded as "where focus was" is already the picker's own input; on
+   * unmount that element is gone, `document.contains(previous)` is false, and the restore is skipped.
+   * The capture has to happen before the picker mounts (or in a layout effect), not after.
+   */
   // …and gave it back. Leaving focus on a dismissed overlay's corpse strands the user.
   await expect(shared.win.getByTestId('tab-add')).toBeFocused();
 });

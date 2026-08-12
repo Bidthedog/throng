@@ -876,6 +876,58 @@ context menu's Destroy Tab.
 - **Shortening for display is not a layout change.** FR-040 turns on there being an existing notion
   of "the layout was written because something changed"; this feature does not introduce one.
 
+## User Story 6 - The strip, as the maintainer actually wants it (Priority: P6)
+
+**Added 2026-08-12** from hands-on feedback after US1–US5 landed. This is the first story written
+from *using* the strip rather than from reading the issues, which is why several of its items
+contradict choices US3 and US5 made in good faith.
+
+**Independent test**: open a project with long tab names, and check each item below against the
+running app.
+
+### Functional requirements
+
+- **FR-050**: A new **`tabs.maxWidth`** setting MUST bound how wide the widest tab may be. Range
+  **10–128**, default **32**. (Units follow the existing name limit — characters, not pixels — so
+  the two settings are comparable.)
+- **FR-050a**: A title that would exceed it MUST be **ellipsised in the view**. This is a *width*
+  cap on rendering and is distinct from `tabs.maxNameLength`, which bounds the NAME. A tab may
+  therefore be ellipsised without its name being truncated.
+- **FR-050b**: Hovering such a tab MUST show the **full** tab name — not the ellipsised form.
+- **FR-051**: The tab hover MUST be **properly formatted and indented** rather than a flat run of
+  text. A native `title` attribute cannot do this, so it MUST become an **HTML popover** with its
+  own style.
+  - This **supersedes FR-043**'s "one per line" phrasing, which assumed the `title` attribute.
+- **FR-052**: The tab-action controls MUST read, left to right:
+  `[ ‹  <hidden-left> ]  [ <hidden-right>  › ]  [ ⌄  <total> ]`
+  — the left chevron BEFORE its count, the right chevron AFTER its count, and the show-all chevron
+  before its total.
+- **FR-052a**: The show-all chevron MUST be **vertically centred** within its control.
+- **FR-052b**: Every count MUST render in a **pill**, styled exactly as the per-tab panel-count pill
+  (FR-042), so one visual vocabulary covers both.
+- **FR-053**: Creating a tab with **+** MUST insert it **immediately to the right of the active
+  tab**, not at the end of the strip.
+- **FR-053a**: A new **`tabs.newTabPosition`** setting MUST offer both behaviours — beside the
+  active tab, or at the end — defaulting to **beside the active tab**.
+- **FR-054**: **Press-and-hold** on either chevron MUST scroll the strip **continuously** after a
+  short delay, rather than requiring one click per tab.
+- **FR-054a**: A new **`tabs.chevronRepeatDelayMs`** setting MUST control that delay. Range
+  **100–3000**, default **500**, in **50 ms** increments.
+  - The 50 ms step also satisfies the aimable-slider rule: 50 across a 2900 range is 1.72%, and the
+    default is reachable (100 + 50×8 = 500).
+- **FR-054b**: Releasing the pointer, or leaving the control, MUST stop the repeat immediately.
+- **FR-054c**: The repeat MUST respect the same supersede rule as every other scroll (FR-030c–f) —
+  it may not queue movements that continue after the user lets go.
+
+### Notes for planning
+
+- `tabs.maxWidth` and `tabs.chevronRepeatDelayMs` are bounded, so they inherit US2's guard for free
+  (FR-008); `tabs.newTabPosition` is an enum and inherits FR-012's allowed-values handling.
+- FR-053 changes `addTab`, which is pure core (`packages/core/src/workspace/`) and has existing
+  tests — the insertion index is the whole change.
+- FR-051's popover is a new floating surface, so it must be registered in
+  `floating-surfaces.test.ts` (that guard is an enumeration and will fail otherwise).
+
 ## Dependencies
 
 - **#218 (panel auto-naming) has landed** (on `origin/master` as of 2026-08-11; this branch is
