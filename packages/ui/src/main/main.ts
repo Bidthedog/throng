@@ -7,9 +7,8 @@ import { randomUUID } from 'node:crypto';
 import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell, type WebContents } from 'electron';
 import {
   DEFAULT_APP_SETTINGS,
-  guardedSettingsValidator,
-  parseAppSettings,
   parseKeybindings,
+  parseSettingsGuarded,
   type LogLevel,
   resolveColour,
   themeBootstrap,
@@ -449,7 +448,10 @@ function configuredDiagnostics(): AppSettings['diagnostics'] {
   try {
     const root = instanceConfigRoot(app.getPath('home'), isDevInstance, process.env);
     const raw = JSON.parse(readFileSync(join(root, 'settings.json'), 'utf8')) as unknown;
-    return parseAppSettings(raw).diagnostics;
+    // Guarded (031, #227): this runs before the config store exists, so it corrects IN MEMORY and
+    // writes nothing. A hand-set 0 KB rotation cap would otherwise rotate the log on every line,
+    // for the whole of startup — the earliest window, and the one hardest to diagnose afterwards.
+    return parseSettingsGuarded(raw).value.diagnostics;
   } catch {
     return DEFAULT_APP_SETTINGS.diagnostics;
   }
@@ -610,7 +612,9 @@ if (isPrimaryInstance)
   } else {
     // Defensive: recreate the singleton documents if a user deleted one (sourced
     // from the record), then apply the additive upgrade when the version advanced.
-    await configStore.read({ kind: 'settings' }, shipped.settings, guardedSettingsValidator);
+    // The reporting validator (031, FR-013): this is the startup read, so a settings file that
+    // was hand-edited out of range between sessions is corrected AND written back here.
+    await configStore.read({ kind: 'settings' }, shipped.settings, parseSettingsGuarded);
     await configStore.read({ kind: 'keybindings' }, shipped.keybindings, parseKeybindings);
     if ((await shippedService.readAppliedVersion()) !== shipped.version) {
       const upgraded = await shippedService.upgrade();

@@ -210,6 +210,8 @@ export interface AppSettings {
   terminals: TerminalSettings;
   /** Editor panel preferences (006). */
   editor: EditorSettings;
+  /** Tab-strip preferences (031). */
+  tabs: TabSettings;
   /** New-project folder-picker preferences (011). */
   newProject: NewProjectSettings;
   /** In-panel search preferences (013). */
@@ -233,6 +235,33 @@ export interface DiagnosticsSettings {
   maxFileSizeKb: number;
   /** How many files to keep per log, INCLUDING the live one — the retention window. */
   keepFiles: number;
+}
+
+/**
+ * Tab-strip preferences (031).
+ *
+ * All three are bounded by their DESCRIPTOR alone (FR-041): there is no hand-written clamp here,
+ * and there must never be one — the read-side guard enforces what `settings-metadata.ts` declares,
+ * so a range stated twice is a range that can disagree with itself (#227).
+ */
+export interface TabSettings {
+  /**
+   * How long (ms) the strip takes to ease to a new scroll position (FR-030). 0 scrolls instantly,
+   * as does an active `prefers-reduced-motion`, which overrides this without changing it.
+   */
+  smoothScrollMs: number;
+  /**
+   * How long (ms) the pointer must rest on a tab before its close affordance will act (FR-044h).
+   * The delay is what stops a close arriving on the way past a tab the user never meant to touch.
+   */
+  closeArmingDelayMs: number;
+  /**
+   * The most characters (grapheme clusters, FR-033a) a tab OR panel name may use (FR-034).
+   *
+   * One setting for both, deliberately (FR-033): they are the same kind of name in the same strip,
+   * and two limits would be two things to discover and keep in agreement.
+   */
+  maxNameLength: number;
 }
 
 /** In-panel search preferences (013, FR-002a / SC-007). */
@@ -303,6 +332,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     defaultWordWrap: true,
     showStatusBar: true,
   },
+  tabs: {
+    smoothScrollMs: 300,
+    closeArmingDelayMs: 300,
+    maxNameLength: 64,
+  },
   newProject: {
     startingFolder: 'lastViewed',
     overridePath: '',
@@ -318,31 +352,63 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   },
 };
 
-/** Tolerant parse of the diagnostics section; an unknown level falls back rather than throwing —
- *  a typo in a settings file must never stop the application starting. */
+/**
+ * A whole number, or the shipped default when the file does not hold one.
+ *
+ * TYPE tolerance only — deliberately no range (031 T033, FR-009). A range belongs on the
+ * descriptor, where the Settings form and the read-side guard both read it; a second copy here is
+ * how `diagnostics.keepFiles` came to declare 1–20 and accept 1–50 for a year without anyone
+ * noticing the two had drifted (#227).
+ */
+function wholeNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : fallback;
+}
+
+/**
+ * Tolerant parse of the diagnostics section; an unknown level falls back rather than throwing —
+ * a typo in a settings file must never stop the application starting.
+ *
+ * 031 T033: the 64–65536 and 1–50 range checks are gone. Both keys declare their range on a
+ * descriptor, and the wider ceiling this function used to carry in silence is now declared out
+ * loud as `hardMax: 65536`, so a hand-set 64 MB log cap still survives (FR-015a).
+ */
 function diagnosticsSettings(raw: unknown, d: DiagnosticsSettings): DiagnosticsSettings {
   const v = isRecord(raw) ? raw : {};
-  const positive = (value: unknown, fallback: number, min: number, max: number): number =>
-    typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
-      ? Math.round(value)
-      : fallback;
   return {
     logLevel: parseLogLevel(v.logLevel, d.logLevel),
-    // Bounded either side: a 0 KB cap would rotate on every line, and an unbounded one is the very
-    // thing rotation exists to prevent on a daemon that runs for days.
-    maxFileSizeKb: positive(v.maxFileSizeKb, d.maxFileSizeKb, 64, 65_536),
-    keepFiles: positive(v.keepFiles, d.keepFiles, 1, 50),
+    maxFileSizeKb: wholeNumber(v.maxFileSizeKb, d.maxFileSizeKb),
+    keepFiles: wholeNumber(v.keepFiles, d.keepFiles),
   };
 }
 
-/** Tolerant parse of the search section; a bad or negative value falls back. */
+/**
+ * Tolerant parse of the tabs section (031).
+ *
+ * TYPE only — no range check. Every bound these three have is declared on their descriptors and
+ * enforced by the read-side guard (FR-009/FR-041); repeating it here is exactly the duplication
+ * that let a declared range and a parsed range drift apart in the first place (#227).
+ */
+function tabsSettings(raw: unknown, d: TabSettings): TabSettings {
+  const v = isRecord(raw) ? raw : {};
+  return {
+    smoothScrollMs: wholeNumber(v.smoothScrollMs, d.smoothScrollMs),
+    closeArmingDelayMs: wholeNumber(v.closeArmingDelayMs, d.closeArmingDelayMs),
+    maxNameLength: wholeNumber(v.maxNameLength, d.maxNameLength),
+  };
+}
+
+/**
+ * Tolerant parse of the search section; a value that is not a number falls back.
+ *
+ * 031 T033: the `>= 0` floor is gone with the other clamps. The descriptor declares 0–1000 and the
+ * guard enforces it — where this function enforced a floor and no ceiling whatsoever, so a typo
+ * could set a debounce of a minute and the search would simply appear to have stopped working.
+ */
 function searchSettings(raw: unknown, d: SearchSettings): SearchSettings {
   const v = isRecord(raw) ? raw : {};
   return {
     asYouTypeDebounceMs:
-      typeof v.asYouTypeDebounceMs === 'number' &&
-      Number.isFinite(v.asYouTypeDebounceMs) &&
-      v.asYouTypeDebounceMs >= 0
+      typeof v.asYouTypeDebounceMs === 'number' && Number.isFinite(v.asYouTypeDebounceMs)
         ? v.asYouTypeDebounceMs
         : d.asYouTypeDebounceMs,
   };
@@ -460,18 +526,14 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
   }
   const shellIntegration =
     typeof v.shellIntegration === 'boolean' ? v.shellIntegration : fallback.shellIntegration;
-  const commandPollMs =
-    typeof v.commandPollMs === 'number' && Number.isFinite(v.commandPollMs)
-      ? Math.min(5_000, Math.max(250, Math.round(v.commandPollMs)))
-      : fallback.commandPollMs;
+  // 031 T033: both of these used to clamp here as well as declare a range on their descriptors.
+  // `commandPollMs`'s two agreed (250–5000) and `linkHoverDelayMs`'s did not (declared 0–2000,
+  // clamped 0–5000) — and nothing could have told you which, because only one of the two was ever
+  // enforced. The clamps are gone; the descriptors are the range (FR-015, FR-016).
+  const commandPollMs = wholeNumber(v.commandPollMs, fallback.commandPollMs);
   const showStatusBar =
     typeof v.showStatusBar === 'boolean' ? v.showStatusBar : fallback.showStatusBar;
-  // Clamp the hover delay to a sane range: a real number, non-negative, capped so a typo cannot make
-  // the tip effectively never appear.
-  const linkHoverDelayMs =
-    typeof v.linkHoverDelayMs === 'number' && Number.isFinite(v.linkHoverDelayMs)
-      ? Math.min(5000, Math.max(0, Math.round(v.linkHoverDelayMs)))
-      : fallback.linkHoverDelayMs;
+  const linkHoverDelayMs = wholeNumber(v.linkHoverDelayMs, fallback.linkHoverDelayMs);
   return {
     flavours,
     disabledBuiltins,
@@ -684,6 +746,7 @@ export function parseAppSettings(raw: unknown): AppSettings {
     explorer: explorerSettings(explorer, d.explorer),
     terminals: terminalSettings(raw.terminals, d.terminals),
     editor: editorSettings(raw.editor, d.editor),
+    tabs: tabsSettings(raw.tabs, d.tabs),
     newProject: newProjectSettings(raw.newProject, d.newProject),
     search: searchSettings(raw.search, d.search),
     diagnostics: diagnosticsSettings(raw.diagnostics, d.diagnostics),
@@ -710,6 +773,7 @@ function structuredCloneSettings(s: AppSettings): AppSettings {
       indentByLanguage: cloneIndentMap(s.editor.indentByLanguage),
       languageByExtension: { ...s.editor.languageByExtension },
     },
+    tabs: { ...s.tabs },
     newProject: { ...s.newProject },
     search: { ...s.search },
     diagnostics: { ...s.diagnostics },

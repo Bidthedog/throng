@@ -132,6 +132,49 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     step: 25,
   },
 
+  /*
+   * Tabs (031).
+   *
+   * The first settings added after #227 made a declared range BINDING, so these declarations are
+   * the only statement of their bounds anywhere: there is no matching clamp in `app-settings.ts`
+   * and there must not be one. Each step is at least 1% of its range (the aimable-slider rule)
+   * AND lands on the shipped default, which is what a step of 1 on the name limit could not do —
+   * 1 across 118 is 0.85%, so the limit steps in twos and 64 stays reachable at 10 + 2×27.
+   */
+  {
+    key: 'tabs.smoothScrollMs',
+    label: 'Tab scroll animation',
+    description:
+      'How long the tab strip takes to ease to a new position when it scrolls, in milliseconds. Zero scrolls instantly — as does the system "reduce motion" setting, which overrides this without changing it.',
+    group: 'Tabs',
+    control: 'slider',
+    min: 0,
+    max: 3000,
+    step: 50,
+  },
+  {
+    key: 'tabs.closeArmingDelayMs',
+    label: 'Tab close-button delay',
+    description:
+      'How long the pointer must rest on a tab before its close button will act, in milliseconds. The delay is what stops a click landing on a tab the pointer was only passing over.',
+    group: 'Tabs',
+    control: 'slider',
+    min: 0,
+    max: 2000,
+    step: 50,
+  },
+  {
+    key: 'tabs.maxNameLength',
+    label: 'Longest tab and panel name',
+    description:
+      'The most characters a tab or panel name may use. Longer names are shortened for display, with the full name still shown on hover. One limit covers both, because they are the same name in the same strip.',
+    group: 'Tabs',
+    control: 'slider',
+    min: 10,
+    max: 128,
+    step: 2,
+  },
+
   // File Explorer
   //
   // 019 US5 / #95 (C1/C2): `explorer.openMode` was DELETED here and in app-settings.ts —

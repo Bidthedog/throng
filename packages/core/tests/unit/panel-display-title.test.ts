@@ -73,3 +73,75 @@ describe('panelDisplayTitle', () => {
     expect(panelDisplayTitle(p, { terminalTitle: '  ' })).toBe('Panel 3');
   });
 });
+
+/**
+ * 031 US4 (N8, FR-037) — the limit binds the RESULT, not one favoured source.
+ *
+ * #218 made this function the single place a panel's name is decided, which is precisely why the
+ * bound belongs here: a shell that announces a 400-character window title, a file with a very long
+ * stem and a name the user typed all leave through the same return. Putting the cap in the header
+ * component instead would bound whichever source that component happened to render.
+ */
+describe('panelDisplayTitle bounds its result (N8)', () => {
+  /** man + ZWJ + woman + ZWJ + girl — ONE cluster, 8 UTF-16 units. */
+  const FAMILY = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}';
+
+  it('is unbounded when no limit is given, so existing callers are unaffected', () => {
+    const p = panel({ kind: 'terminal' });
+    const long = 'C:\\Windows\\system32\\cmd.exe — a very long announced window title';
+    expect(panelDisplayTitle(p, { terminalTitle: long })).toBe(long);
+    expect(panelDisplayTitle(p, { terminalTitle: long }, undefined)).toBe(long);
+  });
+
+  it('bounds a name the USER typed', () => {
+    const p = panel({ title: 'Deployment scratchpad', titleIsCustom: true, kind: 'terminal' });
+    expect(panelDisplayTitle(p, {}, 10)).toBe('Deployment');
+  });
+
+  it('bounds a live SHELL title', () => {
+    const p = panel({ kind: 'terminal' });
+    expect(panelDisplayTitle(p, { terminalTitle: 'C:\\Windows\\system32\\cmd.exe' }, 12)).toBe(
+      'C:\\Windows\\s',
+    );
+  });
+
+  it('bounds a terminal FLAVOUR label, and the flavour id behind it', () => {
+    const label = panel({ kind: 'terminal', config: { flavourLabel: 'Command Prompt' } });
+    expect(panelDisplayTitle(label, {}, 7)).toBe('Command');
+    const id = panel({ kind: 'terminal', config: { flavourId: 'powershell-core' } });
+    expect(panelDisplayTitle(id, {}, 5)).toBe('power');
+  });
+
+  it('bounds a name derived from an editor FILE path', () => {
+    const p = panel({ kind: 'editor' });
+    const path = 'C:/proj/src/document-authority.integration.test.ts';
+    expect(panelDisplayTitle(p, { editorFilePath: path }, 9)).toBe('document-');
+  });
+
+  it('bounds the untyped PLACEHOLDER too — whatever the source means whatever the source', () => {
+    expect(panelDisplayTitle(panel({ title: 'Panel 13' }), {}, 5)).toBe('Panel');
+  });
+
+  it('cuts on a grapheme boundary, never mid-cluster', () => {
+    const p = panel({ kind: 'terminal' });
+    const out = panelDisplayTitle(p, { terminalTitle: `ab${FAMILY}cd` }, 3);
+    expect(out).toBe(`ab${FAMILY}`);
+  });
+
+  it('trims the trailing space a cut leaves behind (N9)', () => {
+    // 'Panel 3' cut at 6 lands after the space; a header reading "Panel " is not a name.
+    expect(panelDisplayTitle(panel(), {}, 6)).toBe('Panel');
+  });
+
+  it('leaves a name within the limit exactly as it was', () => {
+    const p = panel({ kind: 'terminal', config: { flavourLabel: 'Command Prompt' } });
+    expect(panelDisplayTitle(p, {}, 14)).toBe('Command Prompt');
+    expect(panelDisplayTitle(p, {}, 64)).toBe('Command Prompt');
+  });
+
+  it('never returns an empty header for an absurd limit', () => {
+    // A limit this small cannot arrive through the settings guard (10–128, FR-034), so this is
+    // defensive: whatever it does, it must not blank the panel's name.
+    expect(panelDisplayTitle(panel(), {}, 1)).toBe('P');
+  });
+});

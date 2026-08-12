@@ -247,6 +247,15 @@ Every setting, binding and theme is a **human-editable file** under `%USERPROFIL
 when you edit it by hand. The **UI ⇄ JSON toggle** in the preferences toolbar edits those same
 files in throng's own editor.
 
+**A hand-edited value that is out of range is brought back inside it, and the file is updated to
+say so.** Each setting's limits are the ones its control shows, so a pane width of `99999` loads as
+the maximum the slider offers rather than as a pane wider than your screen — and `settings.json` is
+rewritten to the corrected value, so the file never disagrees with the app it is configuring. This
+happens whenever the file is read, including a hot-reload while throng is running. A file that is
+already within its limits is **never** rewritten, so nothing is touched without a reason. If a
+setting comes back different from what you typed, that is why — and the limit is visible on the
+control in Settings.
+
 Changed too much? Four separate scopes undo it, all reading the same shipped-defaults record:
 
 | Control | Scope |

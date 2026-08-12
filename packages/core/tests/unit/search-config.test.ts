@@ -16,6 +16,7 @@ import { KEYBINDINGS_METADATA } from '../../src/config/keybindings-metadata.js';
 import { THRONG_THEME } from '../../src/config/theme.js';
 import { THEME_TOKEN_COPY, containsAbbreviation } from '../../src/config/theme-copy.js';
 import { DEFAULT_APP_SETTINGS, parseAppSettings } from '../../src/config/app-settings.js';
+import { parseSettingsGuarded } from '../../src/config/settings-read.js';
 import { SETTINGS_METADATA } from '../../src/config/settings-metadata.js';
 import { ALL_DEFAULT_THEMES } from '../../src/config/default-themes/index.js';
 import { contrastRatio } from '../../src/config/theme-quality.js';
@@ -173,9 +174,19 @@ describe('013 as-you-type debounce setting (Principle X, SC-007)', () => {
     expect(
       parseAppSettings({ search: { asYouTypeDebounceMs: 'soon' } }).search.asYouTypeDebounceMs,
     ).toBe(DEFAULT_APP_SETTINGS.search.asYouTypeDebounceMs);
-    expect(
-      parseAppSettings({ search: { asYouTypeDebounceMs: -5 } }).search.asYouTypeDebounceMs,
-    ).toBe(DEFAULT_APP_SETTINGS.search.asYouTypeDebounceMs);
+  });
+
+  /*
+   * 031 T033 (#227) — the negative case moved here, and gained a ceiling it never had.
+   *
+   * `parseAppSettings` used to substitute the default for a negative debounce and accept ANY
+   * positive one, so a mistyped 60000 made the search look broken with nothing to say why. The
+   * descriptor declared 0–1000 the whole time; the guarded read path is now what enforces it, and
+   * an out-of-range value is CORRECTED to the nearest bound rather than thrown away.
+   */
+  it('bounds the debounce at its declared 0–1000 on the guarded read path (FR-015)', () => {
+    expect(parseSettingsGuarded({ search: { asYouTypeDebounceMs: -5 } }).value.search.asYouTypeDebounceMs).toBe(0);
+    expect(parseSettingsGuarded({ search: { asYouTypeDebounceMs: 60_000 } }).value.search.asYouTypeDebounceMs).toBe(1000);
   });
 
   it('is exposed in the Settings editor (completeness)', () => {
