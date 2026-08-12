@@ -2354,6 +2354,9 @@ textarea,
 
 .notice__message {
   margin: 0;
+  /* The same reason as `.notice__title` below: an unclassified failure's message can carry a raw
+     name or path with no break opportunity. */
+  overflow-wrap: anywhere;
 }
 
 .notice__details {
@@ -2388,6 +2391,16 @@ textarea,
   margin: 0 0 4px;
   font-size: var(--throng-notice-title-font-size);
   font-weight: 600;
+  /* 030 FR-028 — A NAME MUST NOT BURST THE TOAST.
+   *
+   * The heading now presents the notice's subject, and a subject is a name the USER chose: a
+   * 48-character folder with no space, hyphen or dot in it has no break opportunity at all, so
+   * normal wrapping leaves it as one unbreakable word and the card scrolls sideways. Measured at
+   * 82px of horizontal overflow before this rule. `anywhere` breaks mid-word only when there is no
+   * better option, so ordinary multi-word headings are unaffected. Truncation (48 characters per
+   * part, in `formatSubject`) bounds the LENGTH; this bounds the WIDTH, and both are needed — a
+   * three-part `Project — Tab — Panel` is legitimately longer than any one part. */
+  overflow-wrap: anywhere;
 }
 
 /* A file (or document) NAME inside a dialog's sentence.

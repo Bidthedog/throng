@@ -118,6 +118,7 @@
       "keybindings.e2e.ts",
       "loaded-projects.e2e.ts",
       "notice-stacking.e2e.ts",
+      "notice-subjects.e2e.ts",
       "os-drop.e2e.ts",
       "pane-auto-collapse.e2e.ts",
       "panel-sync.e2e.ts",

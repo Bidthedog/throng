@@ -9,6 +9,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import type { NoticeSubject } from '@throng/core';
 import type { ProjectDto, ProjectsCreateParams, ProjectsUpdateParams } from '@throng/ipc-contract';
 import { RpcError } from './bridge.js';
 import type { ProjectsClient } from './projects-client.js';
@@ -23,6 +24,15 @@ export interface ProjectsContextValue {
   /** What was being attempted when {@link error} happened, phrased to complete "…you tried to".
    *  A bare RPC failure names neither the operation nor the project it was for. */
   errorAction: string | null;
+  /**
+   * WHICH PROJECT the failure was about (030 FR-019/T033a).
+   *
+   * Recorded with the error for the same reason {@link errorAction} is: the operation knows what it
+   * was acting on, and by the time an RPC has failed its message says only what went wrong. A user
+   * with four projects open reading "An error occurred when you tried to delete this project" is
+   * #195 exactly.
+   */
+  errorSubject: NoticeSubject | null;
   /** Dismiss the current error immediately (011, US1, FR-002). */
   clearError(): void;
   refresh(): Promise<void>;
@@ -62,10 +72,12 @@ export function ProjectsProvider({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [errorAction, setErrorAction] = useState<string | null>(null);
-  /** Record a failure with what was being attempted; `null` clears both. */
-  const fail = useCallback((message: string | null, action?: string) => {
+  const [errorSubject, setErrorSubject] = useState<NoticeSubject | null>(null);
+  /** Record a failure with what was being attempted and what it was about; `null` clears all three. */
+  const fail = useCallback((message: string | null, action?: string, subject?: NoticeSubject) => {
     setError(message);
     setErrorAction(message === null ? null : (action ?? null));
+    setErrorSubject(message === null ? null : (subject ?? null));
   }, []);
   // Lazy project loading (Constitution "Lazy project loading", research D7):
   // startup opens NOTHING — only the project the user explicitly opens (or just
@@ -105,6 +117,10 @@ export function ProjectsProvider({
   openedIdRef.current = openedId;
   const loadedIdsRef = useRef(loadedIds);
   loadedIdsRef.current = loadedIds;
+  // Read by `projectSubject` so naming a project does not make every command's identity depend on
+  // the list — the same reason the two refs above exist.
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
 
   const refresh = useCallback(async () => {
     try {
@@ -144,7 +160,7 @@ export function ProjectsProvider({
   // `label` completes "an error occurred when you tried to …", so a failed reorder no longer reports
   // a bare RPC string with no hint of which action produced it.
   const run = useCallback(
-    async (label: string, action: () => Promise<unknown>): Promise<boolean> => {
+    async (label: string, subject: NoticeSubject, action: () => Promise<unknown>): Promise<boolean> => {
       try {
         await action();
         fail(null);
@@ -152,11 +168,27 @@ export function ProjectsProvider({
         window.throng?.projects?.notifyChanged?.(); // sync other windows
         return true;
       } catch (err) {
-        fail(messageOf(err), label);
+        fail(messageOf(err), label, subject);
         return false;
       }
     },
     [refresh, fail],
+  );
+
+  /**
+   * The project an operation is about, as a subject (030 FR-024).
+   *
+   * By id, resolved against the list, because that is what every command here is given — and the
+   * NAME is what the user knows it by. A project that has already gone from the list (a delete that
+   * raced a refresh) yields `{ kind: 'none' }` rather than an id rendered as prose: an identifier
+   * the user has never seen is a worse answer than saying nothing (FR-027).
+   */
+  const projectSubject = useCallback(
+    (id: string): NoticeSubject => {
+      const name = projectsRef.current.find((p) => p.id === id)?.name;
+      return name ? { kind: 'project', name } : { kind: 'none' };
+    },
+    [],
   );
 
   const value = useMemo<ProjectsContextValue>(
@@ -167,6 +199,7 @@ export function ProjectsProvider({
       loading,
       error,
       errorAction,
+      errorSubject,
       clearError: () => fail(null),
       refresh,
       createProject: async (input) => {
@@ -179,13 +212,14 @@ export function ProjectsProvider({
           window.throng?.projects?.notifyChanged?.(); // sync other windows
           return true;
         } catch (err) {
-          fail(messageOf(err), 'create a project');
+          // The name the user typed: the project does not exist yet, so the list cannot supply it.
+          fail(messageOf(err), 'create', { kind: 'project', name: input.name });
           return false;
         }
       },
-      updateProject: (params) => run('update this project', () => client.update(params)),
+      updateProject: (params) => run('update', projectSubject(params.id), () => client.update(params)),
       deleteProject: async (id) => {
-        await run('delete this project', () => client.remove(id));
+        await run('delete', projectSubject(id), () => client.remove(id));
         setOpenedId((cur) => (cur === id ? null : cur)); // closing what was open
         setLoadedIds((prev) => {
           if (!prev.has(id)) return prev;
@@ -211,20 +245,22 @@ export function ProjectsProvider({
         const wasLoaded = loadedIdsRef.current.has(id);
         setOpenedId(id); // open on demand (lazy)
         markLoaded(id);
-        const opened = await run('open this project', () => client.setActive(id));
+        const opened = await run('open', projectSubject(id), () => client.setActive(id));
         if (!opened) {
           setOpenedId(previousId);
           if (!wasLoaded) unmarkLoaded(id);
         }
       },
       reorderProjects: async (orderedIds) => {
-        await run('reorder your projects', () => client.reorder(orderedIds));
+        // NO SUBJECT: a reorder is about the LIST, not about any one project in it, and picking one
+        // of them would name a project that did not fail (FR-027).
+        await run('reorder your projects', { kind: 'none' }, () => client.reorder(orderedIds));
       },
       setProjectHidden: async (id, hiddenPaths) => {
-        await run('change what this project hides', () => client.setHidden(id, hiddenPaths));
+        await run('change what is hidden in', projectSubject(id), () => client.setHidden(id, hiddenPaths));
       },
     }),
-    [projects, activeProject, loadedIds, markLoaded, unmarkLoaded, loading, error, errorAction, fail, refresh, run, client],
+    [projects, activeProject, loadedIds, markLoaded, unmarkLoaded, loading, error, errorAction, errorSubject, fail, refresh, run, projectSubject, client],
   );
 
   return <ProjectsContext.Provider value={value}>{children}</ProjectsContext.Provider>;

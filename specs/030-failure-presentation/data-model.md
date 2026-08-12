@@ -107,6 +107,13 @@ formatSubject(subject: NoticeSubject, context?: SubjectContext): string
 **Terms** are fixed to the workspace's own vocabulary (FR-024): Pane, Tab, Panel, Panel Type, Panel
 Title, Project, Sub-workspace.
 
+**The union is the *workspace's* vocabulary, and Preferences is outside it.** Found when US2 met the
+call sites: a configuration document, a preferences reset scope and a theme are none of the ten
+kinds, so four of the twelve call sites take `{ kind: 'none' }` for one structural reason rather than
+four separate misses. Calling a theme a `file` because it is one on disk would name it in a
+vocabulary the Themes surface never uses, which FR-024 forbids. This is a coherent boundary, not a
+gap — FR-056's inventory should record it as a category.
+
 **"Panel Title" is prose vocabulary, not a subject kind.** It is the word a message uses when it talks
 *about* a panel's title ("that Panel Title is already taken"); the thing the notice is about is the
 Panel, whose `name` is its title. There is deliberately no `panelTitle` member, and T007's

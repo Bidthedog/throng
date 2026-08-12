@@ -445,6 +445,13 @@ function WorkspacePane(): ReactElement {
   useErrorNotice(
     restoreFailed ? 'A fresh workspace was opened instead.' : null,
     'restore-notice',
+    /*
+     * NO SUBJECT (030 FR-019/FR-027). What failed to restore is the WHOLE previous layout — every
+     * tab and every panel in it, none of which exists to be named, because the failure is precisely
+     * that they could not be brought back. `NoticeSubject` names one thing; there is no one thing
+     * here, and naming the project would say a project failed when the project opened fine.
+     */
+    { kind: 'none' },
     undefined,
     'restore your previous layout',
   );

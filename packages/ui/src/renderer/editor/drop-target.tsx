@@ -38,6 +38,22 @@ export interface DropContext {
   allProjectRoots: readonly string[];
 }
 
+/**
+ * The two halves of a dropped path, for the notice's subject (030 FR-025).
+ *
+ * `node:path` is not available in the renderer, and both separators occur in paths that reach here,
+ * so the split takes both. The formatter decides how the halves READ; these only supply them.
+ */
+function leafOf(absPath: string): string {
+  const parts = absPath.split(/[/\\]/).filter(Boolean);
+  return parts[parts.length - 1] ?? absPath;
+}
+
+function parentOf(absPath: string): string | undefined {
+  const parts = absPath.split(/[/\\]/).filter(Boolean);
+  return parts.length > 1 ? parts[parts.length - 2] : undefined;
+}
+
 /** The path of a dragged-in File, or '' when it is not an OS file (a renderer-made one never is). */
 function osPathOf(file: File): string {
   return window.throng?.editor?.getPathForFile?.(file) ?? '';
@@ -60,7 +76,11 @@ export function useDropHandler(
       const refuse = (absPath: string, message: string): void => {
         notify({
           severity: 'error',
-          action: 'open a file you dropped here',
+          // FR-025 — the dropped file, by name, with the folder it came from where the name alone
+          // would be ambiguous. A drop of five files that refuses two must say WHICH two, and the
+          // path is the only thing that distinguishes `index.ts` from `index.ts`.
+          subject: { kind: 'file', name: leafOf(absPath), dir: parentOf(absPath) },
+          action: 'open',
           message,
           testId: `os-drop-error-${absPath}`,
         });
@@ -82,11 +102,13 @@ export function useDropHandler(
           });
         } catch {
           // The bridge itself failed. Still a failure, still not silent.
-          refuse(absPath, `${absPath} could not be opened.`);
+          // FR-023: the heading names the file, so the sentence does not repeat its path — which is
+          // also 029 FR-017's rule, since a raw absolute path was never the readable half anyway.
+          refuse(absPath, 'throng could not check whether it may be opened here.');
           continue;
         }
         if (!decision) {
-          refuse(absPath, `${absPath} could not be opened.`);
+          refuse(absPath, 'throng could not check whether it may be opened here.');
           continue;
         }
         if (decision.ok) onOpen(decision.absPath);
@@ -162,6 +184,15 @@ export function PanelDropTarget({
         if (files.length > 0 && paths.length === 0) {
           notify({
             severity: 'error',
+            /*
+             * NO SUBJECT, and this is the case FR-027 was written for.
+             *
+             * The drop yielded no path at all — a virtual folder, a mail attachment, an item that
+             * exists only inside the source application. There is nothing on disk to name, so the
+             * sentence is left as it is rather than padded with a placeholder for a file that does
+             * not exist.
+             */
+            subject: { kind: 'none' },
             action: 'open a file you dropped here',
             message: 'That item has no file on disk, so it cannot be opened.',
             testId: 'os-drop-error-no-path',

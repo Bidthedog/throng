@@ -18,6 +18,7 @@ import {
   nextSubWorkspaceName,
   pickUnusedColour,
   stripPanelFromSubWorkspaces,
+  type NoticeSubject,
   type Panel,
   type SubWorkspace,
   type SubWorkspaceBounds,
@@ -75,6 +76,19 @@ export function DetachProvider({ children }: { children: ReactNode }): ReactElem
   const ws = useWorkspace();
   const { bridge } = useServices();
   const { subWorkspaces, refresh, open, reportError, clearError } = useSubWorkspaces();
+  /**
+   * The sub-workspace an operation is about, by id (030 FR-024).
+   *
+   * From the sidebar's own list, which is what the user is looking at. One that is no longer there
+   * yields `{ kind: 'none' }` — an id the user has never seen would be worse than saying nothing.
+   */
+  const subjectForSub = useCallback(
+    (id: string): NoticeSubject => {
+      const name = subWorkspaces.find((s) => s.id === id)?.name;
+      return name ? { kind: 'subWorkspace', name } : { kind: 'none' };
+    },
+    [subWorkspaces],
+  );
   // Full sub-workspaces (with Tabs) for the "Sync to → sub → Tab" menus.
   const [fullSubs, setFullSubs] = useState<SubWorkspace[]>([]);
 
@@ -145,7 +159,12 @@ export function DetachProvider({ children }: { children: ReactNode }): ReactElem
         } catch (err) {
           // A swallowed failure here is what made "nothing happens" so baffling —
           // surface it instead (FR: no silent persistence failures).
-          reportError(messageOf(err), 'create a sub-workspace');
+          // The sub-workspace the detach was creating — named before the persist, so the notice can
+          // say which window failed to appear even though it never existed (030 FR-019).
+          reportError(messageOf(err), 'create the sub-workspace', {
+            kind: 'subWorkspace',
+            name: identity.name,
+          });
         }
       })();
     },
@@ -185,11 +204,13 @@ export function DetachProvider({ children }: { children: ReactNode }): ReactElem
           await refresh();
           await loadFull();
         } catch (err) {
-          reportError(messageOf(err), 'sync this to a sub-workspace');
+          // Resolved from the list rather than from `target`, which is scoped to the try and may be
+          // the very thing that failed to load.
+          reportError(messageOf(err), 'sync this to', subjectForSub(subId));
         }
       })();
     },
-    [ws, bridge, refresh, loadFull, reportError, clearError],
+    [ws, bridge, refresh, loadFull, reportError, clearError, subjectForSub],
   );
 
   const purgePanel = useCallback<DetachActions['purgePanel']>(
@@ -214,6 +235,9 @@ export function DetachProvider({ children }: { children: ReactNode }): ReactElem
           await refresh();
           await loadFull();
         } catch (err) {
+          // NO SUBJECT: a destroyed panel can be mirrored in SEVERAL sub-workspaces at once, and
+          // `NoticeSubject` names one thing. Naming the first would be a guess (FR-027); the
+          // many-things mechanism is US3's affected list.
           reportError(messageOf(err), 'update your sub-workspaces after destroying a panel');
         }
       })();

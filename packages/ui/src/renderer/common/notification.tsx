@@ -13,11 +13,13 @@ import {
 import {
   causeMessage,
   causeKey,
+  formatSubject,
   isTransportFailure,
   noticeLogRecord,
   DEFAULT_NOTIFICATION_SETTINGS,
   type FailureCause,
   type NoticeSeverity,
+  type NoticeSubject,
   type NotificationSettings,
   type SeverityNotificationSettings,
 } from '@throng/core';
@@ -94,6 +96,19 @@ export interface Notice {
    * need this one derived over the top of it.
    */
   action?: string;
+  /**
+   * WHAT THIS NOTICE IS ABOUT (030 / US2, FR-019).
+   *
+   * "An error occurred when you tried to rename this item" is #195: the one fact the notice exists
+   * to carry — which thing — is the one it withholds. So the subject is a STRUCTURED field with a
+   * single formatter rather than prose at the call site, which means a call site cannot invent its
+   * own spelling of `Project — Tab — Panel`, and truncation happens in one place.
+   *
+   * Optional HERE and required on {@link NoticeInput}. `Notice` is the stored shape — a notice read
+   * back from anywhere that predates the field still renders — while a RAISE must state one or say
+   * `{ kind: 'none' }`, which is what makes omission inexpressible rather than merely discouraged.
+   */
+  subject?: NoticeSubject;
   message: string;
   /** A list carried by the notice — e.g. the files an editor notice is about. */
   details?: readonly string[];
@@ -145,7 +160,17 @@ export interface Notice {
   onDismiss?: () => void;
 }
 
-export type NoticeInput = Omit<Notice, 'id'>;
+/**
+ * What a call site must say to raise a notice (030 FR-019/FR-057, `contracts/notice-api.md`).
+ *
+ * `subject` is REQUIRED — deliberately a breaking change. Every existing call site fails to compile
+ * until it states a subject or `{ kind: 'none' }`, and that compile error IS the enforcement: a
+ * convention can be forgotten by the next person in a hurry, and a lint rule bolted on afterwards
+ * only sees the shapes it was taught. `packages/ui/tests/unit/notice-subject-required.test.ts` runs
+ * the compiler over a fixture to prove this requirement is live, because nothing in this repository
+ * typechecks a test file.
+ */
+export type NoticeInput = Omit<Notice, 'id'> & { subject: NoticeSubject };
 
 /**
  * The severity set is `@throng/core`'s, not this module's (030 T031).
@@ -167,13 +192,53 @@ interface NotifyContextValue {
 const NotifyContext = createContext<NotifyContextValue | null>(null);
 
 /**
- * The heading a notice shows above its message: its own title, else the failure phrased around what
- * the user was doing. Only errors get the derived form — "an error occurred" is a lie over a success.
+ * The heading a notice shows above its message (030 FR-020, `contracts/notice-api.md`).
+ *
+ * WHAT WAS ATTEMPTED, ON WHAT. The two together are the heading; the message below states only what
+ * went wrong. That split is the whole of #195's fix on screen — "An error occurred when you tried to
+ * rename this item" told the user everything except the part they needed.
+ *
+ *   title                          → the title, unchanged: it already names its own event
+ *   subject ≠ none, action         → `Couldn't {action} {subject}`
+ *   subject ≠ none, no action      → the subject alone
+ *   subject = none, action, error  → today's derived sentence
+ *   otherwise                      → no heading, exactly as today
+ *
+ * `formatSubject` renders the subject and NOTHING here does: quoting, ordering, elision and the
+ * 48-character bound are decided in one place (FR-021), so a heading can never disagree with a
+ * banner or a log record about what a panel is called.
+ *
+ * The derived sentence stays behind `severity === 'error'`: "an error occurred" is a lie over a
+ * warning. A subject, by contrast, is a fact at any severity — the panel-rename warning presents one
+ * with no action at all.
  */
-export function noticeHeading(n: Pick<Notice, 'title' | 'action' | 'severity'>): string | undefined {
+export function noticeHeading(
+  n: Pick<Notice, 'title' | 'action' | 'severity' | 'subject'>,
+): string | undefined {
   if (n.title) return n.title;
+  const subject = n.subject ? formatSubject(n.subject) : '';
+  if (subject) return n.action ? `Couldn't ${n.action} ${subject}` : subject;
   if (n.severity === 'error' && n.action) return `An error occurred when you tried to ${n.action}`;
   return undefined;
+}
+
+/**
+ * The subject's OWN name — the part a cause's sentence would be restating (FR-023).
+ *
+ * Not `formatSubject`: that renders the qualifiers too, and a cause never speaks in
+ * `Project — Tab — Panel`. What is being compared here is "is the thing this sentence is about the
+ * thing the heading has already named?", and that is a leaf-name question.
+ */
+function subjectName(subject: NoticeSubject | undefined): string | undefined {
+  if (!subject) return undefined;
+  switch (subject.kind) {
+    case 'none':
+      return undefined;
+    case 'terminal':
+      return subject.flavour;
+    default:
+      return subject.name;
+  }
 }
 
 /**
@@ -185,7 +250,7 @@ export function noticeHeading(n: Pick<Notice, 'title' | 'action' | 'severity'>):
  * precisely the part they cannot retype accurately.
  */
 export function noticeToText(
-  n: Pick<Notice, 'title' | 'action' | 'severity' | 'message' | 'details' | 'copyDetail'>,
+  n: Pick<Notice, 'title' | 'action' | 'severity' | 'subject' | 'message' | 'details' | 'copyDetail'>,
 ): string {
   const heading = noticeHeading(n);
   // `copyDetail` last: a bug report wants the human sentence first and the machine text under it.
@@ -273,7 +338,11 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
       // bounded by the distinct silenced events inside one window.
       pruneSilenced(silenced.current, now);
 
-      const shadowKey = silencedNoticeKey(input);
+      // The subject, rendered ONCE per raise: it takes part in the duplicate rule, in the shadow's
+      // key and in the log record, and three separate `formatSubject` calls would be three chances
+      // for those three to disagree about one notice.
+      const subject = formatSubject(input.subject);
+      const shadowKey = silencedNoticeKey({ ...input, subject });
       const panelIds = panelIdsOf(input);
 
       /*
@@ -288,6 +357,11 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
        * What must still not stack is the SAME notice raised repeatedly — a file watcher firing on
        * every change re-reporting one unchanged failure. So the comparison is on what the notice
        * SAYS. Identical content is one event seen twice; different content is two events.
+       *
+       * 030 US2 — AND WHAT IT IS ABOUT. Two files refused for the same reason produce the same
+       * sentence ("A file or folder with this name already exists.") and differ only in their
+       * subject, so without this clause naming subjects would have made the model SILENTLY DROP the
+       * second of two real problems — reintroducing #178 through a door it did not have before.
        */
       const duplicate = live.current.some(
         (n) =>
@@ -295,7 +369,8 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
           n.message === input.message &&
           n.title === input.title &&
           n.action === input.action &&
-          n.testId === input.testId,
+          n.testId === input.testId &&
+          formatSubject(n.subject ?? { kind: 'none' }) === subject,
       );
       if (duplicate) return;
       // …and the same question asked of the notices the user chose not to see (FR-005b). Without
@@ -334,6 +409,9 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
         noticeLogRecord({
           severity: input.severity,
           message: input.message,
+          // FR-007 — the record names the subject too. `noticeLogRecord` formats it with NO context:
+          // a log line has no heading to lean on, so it carries every part the notice had.
+          subject: input.subject,
           causeKey: input.causeKey,
           // FR-034: the raw system error. `Notice.copyDetail` is the source, `NoticeLogRecord.detail`
           // is what crosses the bridge — the same string, re-derived by nobody. For a silenced
@@ -470,7 +548,18 @@ export function useNotify(): NotifyContextValue {
  * So classification works on the text, which is exactly why the CLOSED set matters: a pattern that
  * matches nothing leaves the string untouched, and nothing that works today can break.
  */
-export function speakFailure(raw: string): { message: string; causeKey?: string; copyDetail?: string } {
+export function speakFailure(
+  raw: string,
+  /**
+   * The subject the NOTICE will present, when it has one (030 FR-023/FR-025).
+   *
+   * Two jobs, both of them about the same fact — that the reporter knows what it was acting on and
+   * this string does not. It is the fallback when the raw message quotes no path at all (the case
+   * that used to produce the literal "this item"), and it is what decides whether the cause's
+   * sentence should stop restating a name the heading has already given.
+   */
+  presented?: string,
+): { message: string; causeKey?: string; copyDetail?: string } {
   /*
    * The daemon is decided by the MESSAGE ALONE, never by its state.
    *
@@ -495,7 +584,7 @@ export function speakFailure(raw: string): { message: string; causeKey?: string;
   }
   const kind = kindFromMessage(raw);
   if (!kind) return { message: raw }; // FR-011b — unmatched failures are untouched
-  const cause: FailureCause = { kind, subject: subjectFromMessage(raw), raw };
+  const cause: FailureCause = { kind, subject: subjectFromMessage(raw, presented), raw };
   /*
    * FR-018 — the raw text is DEMOTED, not discarded.
    *
@@ -505,7 +594,14 @@ export function speakFailure(raw: string): { message: string; causeKey?: string;
    * the user could read the notice but no longer report it. `details` was the second, and it put
    * the errno straight back on screen — which is why `copyDetail` exists as its own field.
    */
-  return { message: causeMessage(cause), causeKey: causeKey(cause), copyDetail: raw };
+  return {
+    // FR-023 — the heading presents the subject, so the sentence below states only what went wrong.
+    // Only when the two are the SAME thing: a rename can fail because the containing folder is held,
+    // and blanking a name the reader was never given would replace an ambiguity with a nothing.
+    message: causeMessage(cause, { subjectPresented: cause.subject === presented }),
+    causeKey: causeKey(cause),
+    copyDetail: raw,
+  };
 }
 
 function kindFromMessage(raw: string): FailureCause['kind'] | null {
@@ -526,10 +622,14 @@ function kindFromMessage(raw: string): FailureCause['kind'] | null {
  * path. Pulling it out here is what turns "a path is in the string somewhere" into "the sentence
  * names the folder".
  */
-function subjectFromMessage(raw: string): string {
+function subjectFromMessage(raw: string, presented?: string): string {
   const quoted = /'([^']+)'|"([^"]+)"/.exec(raw);
   const path = quoted?.[1] ?? quoted?.[2];
-  if (!path) return 'this item';
+  // 030 FR-025 — the RAISER'S subject beats the generic stand-in. The reporter knows what it was
+  // acting on; this string is all that survived of it, and when no path survived at all "this item"
+  // was #195 spelled out. It stays as the last resort, for a message that names nothing and a
+  // caller that has nothing to name (FR-027).
+  if (!path) return presented ?? 'this item';
   const parts = path.split(/[/\\]/).filter(Boolean);
   return parts[parts.length - 1] ?? path;
 }
@@ -548,6 +648,21 @@ function subjectFromMessage(raw: string): string {
 export function useErrorNotice(
   error: string | null | undefined,
   testId: string,
+  /**
+   * WHAT THE FAILURE WAS ABOUT (030 US2 / T033a, FR-019/FR-025).
+   *
+   * Positioned BEFORE the optional parameters so it is genuinely required — TypeScript will not
+   * accept a required parameter after an optional one, and a `subject?` here would have made this
+   * hook the single place in the application where omitting a subject stayed expressible. That
+   * matters more here than anywhere else: this one hook is the raiser for EVERY explorer file and
+   * folder failure and every project and sub-workspace failure, which is precisely the "this item"
+   * path #195 was filed about. Satisfying the compiler with `{ kind: 'none' }` here would leave the
+   * feature's most important surface anonymous while every test went green.
+   *
+   * The stores supply it the same way they already supply {@link action} and the cause: recorded
+   * with the failure at the call site that knew what it was operating on.
+   */
+  subject: NoticeSubject,
   clearError?: () => void,
   /** What the user was doing when it failed — see {@link Notice.action}. Stores that record the
    *  attempted operation alongside the error pass it here, so the notice says both halves. */
@@ -577,6 +692,8 @@ export function useErrorNotice(
    * persist until they are each dismissed, which is what "an error persists until dismissed" means.
    */
   const dismissedByUser = useRef(false);
+  /** The subject as the notice will render it — a stable value to depend on. See the effect's deps. */
+  const subjectKey = formatSubject(subject);
 
   useEffect(() => {
     if (error) {
@@ -595,13 +712,32 @@ export function useErrorNotice(
        *   2. Otherwise, classify the raw error. Anything matching none of the five kinds keeps
        *      today's text exactly (FR-011b), which is what makes this incapable of regressing.
        */
+      /*
+       * 030 FR-023 — the heading names the subject, so the sentence must not name it again.
+       *
+       * A producer-supplied cause arrives with its sentence already spoken by main, and it is the
+       * SAME sentence `causeMessage` writes here (`files-service.ts:failure` composes it from the
+       * cause it returns). Re-deriving it in the subject-free form is therefore not a second
+       * wording — it is the cause's own, asked a different question. The equality check keeps that
+       * true: a producer that supplied a cause alongside some other message keeps its message
+       * untouched, and so does one whose cause is about something the heading has not named.
+       */
+      const presented = subjectName(subject);
       const spoken = cause
-        ? { message: error, causeKey: causeKey(cause), copyDetail: cause.raw }
-        : speakFailure(error);
+        ? {
+            message:
+              presented !== undefined && cause.subject === presented && causeMessage(cause) === error
+                ? causeMessage(cause, { subjectPresented: true })
+                : error,
+            causeKey: causeKey(cause),
+            copyDetail: cause.raw,
+          }
+        : speakFailure(error, presented);
       notify({
         severity: 'error',
         message: spoken.message,
         action: action ?? undefined,
+        subject,
         testId,
         causeKey: spoken.causeKey,
         // FR-018: the raw error rides along where Copy can reach it, below the human sentence.
@@ -613,7 +749,10 @@ export function useErrorNotice(
       });
     } else if (!dismissedByUser.current) clear(testId);
     // `clearError` is a store callback and is stable; including it would re-notify on every render
-    // of a store that rebuilds its handlers.
+    // of a store that rebuilds its handlers. `subject` is depended on THROUGH `subjectKey` for the
+    // same reason: every caller builds it inline, so the object is new on every render and the
+    // effect would re-run continuously — the identity churn that #144 traced to lost keyboard focus.
+    // Its RENDERED form is what the notice is made of, so that is what changing it means.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [error, action, testId, notify, clear, cause]);
+  }, [error, action, testId, notify, clear, cause, subjectKey]);
 }

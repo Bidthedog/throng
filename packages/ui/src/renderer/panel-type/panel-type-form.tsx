@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useSyncExternalStore, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, useSyncExternalStore, type ReactElement } from 'react';
 import {
   defaultPanelTypeRegistry,
   type PanelTypeContext,
@@ -24,6 +24,7 @@ import {
 } from '../terminal/exit-store.js';
 import { markExplicitRetype } from '../terminal/explicit-retype.js';
 import { useNotify } from '../common/notification.js';
+import { terminalSubject, usePanelPlace } from '../common/panel-subject.js';
 import './panel-type.css';
 
 /**
@@ -110,10 +111,33 @@ export function PanelTypeForm({
    * sat there until you clicked it) was arguably wrong.
    */
   const { notify } = useNotify();
+  /*
+   * 030 FR-026 — the notice names the TERMINAL FLAVOUR, and the panel it was in (FR-022).
+   *
+   * The flavour comes from what the Panel REMEMBERED, not from a live session: this notice is
+   * raised by the form the Panel reverts to, which is precisely the moment the terminal is gone.
+   * `terminalMemory` survives `clearPanelType` for exactly this class of reason.
+   *
+   * ══ THE FLAVOUR ID IS THE FALLBACK, AND IT IS NOT DECORATION ══
+   *
+   * `useFlavours` resolves ASYNCHRONOUSLY (a `listFlavours` IPC that re-detects installed shells),
+   * and this form mounts at the same moment the exit lands — so on the first render the label is not
+   * known yet. Measured: raising with the panel subject and then again with the flavour produced TWO
+   * exit notices for one exit, because the duplicate rule now (correctly) treats different subjects
+   * as different events. So the subject is READ THROUGH A REF and the raise depends only on the
+   * exit: one exit, one notice, whatever resolves afterwards. The remembered id is used until the
+   * label arrives, because a notice that names "cmd" is worth more than a notice that names nothing.
+   */
+  const place = usePanelPlace(panelId);
+  const exitFlavour =
+    flavours.find((f) => f.value === terminalMemory?.flavourId)?.label ?? terminalMemory?.flavourId;
+  const exitSubjectRef = useRef(terminalSubject(place, exitFlavour));
+  exitSubjectRef.current = terminalSubject(place, exitFlavour);
   useEffect(() => {
     if (!lastExit) return;
     notify({
       severity: noticeSeverityForExit(lastExit),
+      subject: exitSubjectRef.current,
       message: lastExit.message,
       testId: `panel-exit-${panelId}`,
       testIds: { dismiss: `exit-dismiss-${panelId}` },

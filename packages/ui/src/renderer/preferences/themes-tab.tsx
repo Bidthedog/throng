@@ -173,8 +173,16 @@ export function ThemesTab(): ReactElement {
    * strip — the one the specification's count of four missed — whose colour fell through a variable
    * defined nowhere to `--accent`, rendering a failure in the success colour.
    */
+  /*
+   * NO SUBJECT (030 FR-019/FR-027). A THEME is not a member of `NoticeSubject`'s closed union —
+   * that union is the workspace's vocabulary (Pane, Tab, Panel, Panel Type, Project, Sub-workspace)
+   * and a theme belongs to none of it. Calling it a `file` because it happens to be one on disk
+   * would name it in a vocabulary the Themes surface never uses, which FR-024 forbids more clearly
+   * than it forbids saying nothing. Each message below already names the theme it is about, in the
+   * position where it reads as a sentence, so FR-027 leaves them alone.
+   */
   const setError = (message: string): void =>
-    notify({ severity: 'error', message, testId: 'theme-notice-error' });
+    notify({ severity: 'error', subject: { kind: 'none' }, message, testId: 'theme-notice-error' });
 
   /**
    * The three confirmations, on the SHARED model — which this window can finally reach.

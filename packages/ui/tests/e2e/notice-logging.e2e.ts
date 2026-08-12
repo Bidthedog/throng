@@ -194,16 +194,14 @@ test('a NEVER-DISPLAY error notice writes its record even though nothing is show
 });
 
 /**
- * T015 (subject half) — FIXME until US2.
+ * T015 (subject half) — ENABLED BY US2 (T031/T033a), and live.
  *
- * FR-007 asks the record to carry the notice's SUBJECT, and `NoticeInput` has no `subject` field
- * yet: T031 adds it and T033/T033a give the 12 call sites (and the shared `useErrorNotice` raiser)
- * something to put in it. Until then every record would carry `subject: ''`, which `noticeLogLines`
- * omits — so this can only ever pass by accident or fail for a reason that is not the feature's.
- *
- * ENABLED BY: T029 (US2's `notice-subjects.e2e.ts` lands the subject on the notice model).
+ * FR-007 asks the record to carry the notice's SUBJECT. `NoticeInput.subject` is now required and
+ * the explorer's shared raiser threads the folder it was listing, so a record with no subject is a
+ * real failure rather than the absence of a field. The fixme is removed as the task that enabled it
+ * (T029) predicted.
  */
-test.fixme('the record names the subject the notice is about (FR-007) — needs US2/T031', async () => {
+test('the record names the subject the notice is about (FR-007)', async () => {
   const cfgRoot = seededCfgRoot({ notifications: { error: { mode: 'never', timeoutMs: 60000 } } });
   await runApp(
     async (_app, win, ctx) => {

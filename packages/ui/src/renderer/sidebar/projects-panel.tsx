@@ -120,6 +120,7 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
     loadedIds,
     error,
     errorAction,
+    errorSubject,
     clearError,
     createProject,
     updateProject,
@@ -130,7 +131,7 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
 
   // 018 / FR-051 — this used to be a bespoke error STRIP rendered inline, one of four across the
   // main window, each with its own markup, its own dismiss button and its own CSS block.
-  useErrorNotice(error, 'project-error', clearError, errorAction);
+  useErrorNotice(error, 'project-error', errorSubject ?? { kind: 'none' }, clearError, errorAction);
 
   const confirm = useConfirm();
   const settings = useAppSettings();

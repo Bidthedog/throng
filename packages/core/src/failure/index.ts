@@ -15,6 +15,7 @@ export {
   type Holder,
   type FailureCause,
   type ClassifyOptions,
+  type CauseMessageOptions,
 } from './cause.js';
 export {
   nextDaemonState,
