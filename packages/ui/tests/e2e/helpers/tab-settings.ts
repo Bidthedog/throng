@@ -165,6 +165,62 @@ export async function closeIsInert(win: Page, tabId: string): Promise<boolean> {
   return tabClose(win, tabId).evaluate((el) => el.classList.contains('tab-chip__close--inert'));
 }
 
+/**
+ * Rest on a tab until its close affordance is live, then press it (031 US7 / FR-057).
+ *
+ * FR-057 supersedes FR-044g: the arming delay now applies to EVERY tab, the active one included, so
+ * "the active tab's X is always live" is no longer true and a bare `tabClose(...).click()` on it is
+ * simply a click inside the arming window — ignored, and correctly so.
+ *
+ * The wait is on the control's own `data-armed`, which is a CONDITION rather than a duration. A
+ * sleep of `closeArmingDelayMs` would be the same claim made worse: it would assert that the delay
+ * is the only thing between a hover and a live control, and it would go on passing at the wrong
+ * value for as long as the machine happened to be fast enough.
+ */
+export async function armAndClose(win: Page, tabId: string): Promise<void> {
+  await win.getByTestId(`tab-${tabId}`).hover();
+  await expect(tabClose(win, tabId), `the close affordance on ${tabId} never armed`).toHaveAttribute(
+    'data-armed',
+    'true',
+    { timeout: 10_000 },
+  );
+  await tabClose(win, tabId).click();
+}
+
+/**
+ * Rest the pointer on a tab until its popover appears, and hand the popover back (031 US7/FR-058).
+ *
+ * ══ WHY THIS IS A RETRY AND NOT A BARE `hover()` ══
+ *
+ * FR-058 made the popover WAIT for `tabs.popoverDelayMs` with the pointer at rest, which turns a
+ * single `hover()` into a precondition that has to HOLD for 300ms rather than an event that has to
+ * happen. A pointer parked on a chip that then moves out from under it — a strip still settling on a
+ * cold start — has genuinely left the tab, and the popover is right not to appear; but the test that
+ * moved the pointer once, ten seconds earlier, reads that as a missing surface.
+ *
+ * So each attempt re-performs the gesture from a known state (away, then on), and then WAITS on the
+ * popover rather than sampling for it. That is the same shape `awaitFieldLimit` above uses and for
+ * the same reason: repeating the stimulus is what makes a poll about the condition instead of about
+ * the moment the stimulus happened to land.
+ */
+export async function restOnTabForPopover(win: Page, chip: Locator): Promise<Locator> {
+  const popover = win.getByTestId('tabstrip-popover');
+  await expect
+    .poll(
+      async () => {
+        await pointerAwayFromStrip(win);
+        await chip.hover();
+        return popover.waitFor({ state: 'visible', timeout: 3000 }).then(
+          () => true,
+          () => false,
+        );
+      },
+      { timeout: 20_000, message: 'the tab popover never appeared for a resting pointer' },
+    )
+    .toBe(true);
+  return popover;
+}
+
 /** Move the pointer well away from every tab, so no tab is hovered (P4's "pointer away"). */
 export async function pointerAwayFromStrip(win: Page): Promise<void> {
   const strip = await win.getByTestId('tab-strip').boundingBox();

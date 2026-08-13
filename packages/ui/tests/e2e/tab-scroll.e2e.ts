@@ -43,6 +43,7 @@ import {
   type Chip,
   type StripState,
 } from './helpers/tabs.js';
+import { armAndClose } from './helpers/tab-settings.js';
 
 const roots: string[] = [];
 const cfgRoots: string[] = [];
@@ -266,7 +267,9 @@ test.describe('an eased strip', () => {
     const doomed = activeChip(await stripState(shared.win));
 
     await beginScrollTrace(shared.win);
-    await shared.win.getByTestId(`tabstrip-close-${doomed.tabId}`).click();
+    // 031 US7 / FR-057 — the arming delay now applies to the ACTIVE tab too (it supersedes P9), so
+    // the affordance has to be rested on before it will act. This group runs at the shipped 300ms.
+    await armAndClose(shared.win, doomed.tabId);
     await expect(shared.win.getByTestId(doomed.testId)).toHaveCount(0);
     await waitForScrollStill(shared.win);
 
@@ -406,19 +409,26 @@ test.describe('a restored strip', () => {
 });
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
- * A deliberately SLOW strip (3000ms) — everything that must be caught mid-flight.
+ * A deliberately SLOW strip (1500ms) — everything that must be caught mid-flight.
  *
- * Three seconds is the declared maximum for `tabs.smoothScrollMs`, chosen here so that "did the
+ * The declared MAXIMUM for `tabs.smoothScrollMs`, whatever it currently is, chosen so that "did the
  * interruption take effect?" is answerable without a stopwatch: a scroll that reaches its target
- * within a second and a half plainly did not run its course.
+ * within a second plainly did not run its course.
+ *
+ * It was 3000 until 031 US7 / FR-055 narrowed the range — "three seconds to move one tab is not a
+ * preference anyone holds". A value above the maximum is clamped on read and written back (FR-013),
+ * so seeding 3000 no longer produced a 3000ms strip; it produced a 1500ms one AND rewrote the file,
+ * which is exactly what T052's A12 assertion exists to catch. The seed follows the range.
  * ══════════════════════════════════════════════════════════════════════════════════════════════ */
+const SLOW_MS = 1500;
+
 test.describe('a slow strip', () => {
   test.describe.configure({ mode: 'serial' });
   let shared: OpenApp;
   let cfgRoot: string;
 
   test.beforeAll(async () => {
-    cfgRoot = seedConfig({ smoothScrollMs: 3000, closeArmingDelayMs: 0 });
+    cfgRoot = seedConfig({ smoothScrollMs: SLOW_MS, closeArmingDelayMs: 0 });
     shared = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
   });
   test.afterAll(async () => {
@@ -439,7 +449,7 @@ test.describe('a slow strip', () => {
     return doc.tabs?.smoothScrollMs;
   };
 
-  /** Start a 3-second scroll to the far end of the strip, via the picker. */
+  /** Start a full-length ({@link SLOW_MS}) scroll to the far end of the strip, via the picker. */
   async function startLongScrollToLastTab(): Promise<Chip> {
     const before = await stripState(shared.win);
     const target = before.chips[before.chips.length - 1]!;
@@ -462,7 +472,7 @@ test.describe('a slow strip', () => {
     await beginScrollTrace(shared.win);
     await shared.win.getByTestId('tabstrip-step-right').click();
 
-    // A11 — instant, whatever the setting says. A 3000ms eased scroll is 25% of the way at 1200ms,
+    // A11 — instant, whatever the setting says. A 1500ms eased scroll is barely half way at 800ms,
     // so arriving inside a second is only possible if the animation was never run.
     await expect
       .poll(async () => anchorIndex(await stripState(shared.win)), {
@@ -483,7 +493,7 @@ test.describe('a slow strip', () => {
     expect(
       storedSmoothScrollMs(),
       'reduce motion must not rewrite the configured duration',
-    ).toBe(3000);
+    ).toBe(SLOW_MS);
   });
 
   test('T053 — reduce motion applied MID-FLIGHT settles the scroll immediately (A13)', async () => {
@@ -544,7 +554,7 @@ test.describe('a slow strip', () => {
     /*
      * Animated, to establish what the outcome IS.
      *
-     * The wait is on the ANCHOR reaching its new tab, not on the strip going still. A 3000ms glide
+     * The wait is on the ANCHOR reaching its new tab, not on the strip going still. A long glide
      * over 110px moves less than a physical pixel per frame at the start, and Chromium snaps
      * `scrollLeft` to whole device pixels — so a value-based stillness test reads a moving strip as
      * a stopped one and hands back a rest position of nearly zero. A semantic condition cannot be
@@ -640,8 +650,12 @@ test.describe('a slow strip', () => {
      *
      * The close affordance is dispatched rather than clicked: the target tab is off screen, so there
      * is nothing to aim at, and a real click would wait for the strip to stop moving — which is
-     * precisely the state this test exists to avoid. The affordance is armed regardless, because it
-     * belongs to the active tab (P9).
+     * precisely the state this test exists to avoid.
+     *
+     * It is armed regardless because THIS GROUP RUNS AT `closeArmingDelayMs: 0` (see `seedConfig`
+     * above), and zero means there is no window to wait out at all (FR-044h). It used to be armed
+     * for a different reason — P9's exemption for the active tab — which 031 US7 / FR-057 has since
+     * superseded; the exemption is gone and the setting is what carries this test now.
      */
     await shared.win.getByTestId(`tabstrip-close-${doomed.tabId}`).dispatchEvent('click');
     await expect(shared.win.getByTestId(doomed.testId)).toHaveCount(0);

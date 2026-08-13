@@ -65,13 +65,19 @@ async function sendChord(prefs: Page, key: string): Promise<void> {
 
 /** Every BOUNDED tab setting, with the range and default the metadata declares. */
 const TAB_SETTINGS = [
-  { key: 'tabs.smoothScrollMs', min: '0', max: '3000', step: '50', value: '300' },
-  { key: 'tabs.closeArmingDelayMs', min: '0', max: '2000', step: '50', value: '300' },
+  // US7 (FR-055, FR-056) narrowed the first two ceilings from 3000 and 2000 to 1500: a delay
+  // measured in whole seconds was never a preference, and the top half of the range only cost aim
+  // across the half a user would actually visit.
+  { key: 'tabs.smoothScrollMs', min: '0', max: '1500', step: '50', value: '300' },
+  { key: 'tabs.closeArmingDelayMs', min: '0', max: '1500', step: '50', value: '300' },
   { key: 'tabs.maxNameLength', min: '10', max: '128', step: '2', value: '64' },
   // US6 (FR-050, FR-054a). `maxWidth` shares the name limit's range because it shares its UNIT —
   // characters — so the two can be read against each other.
   { key: 'tabs.maxWidth', min: '10', max: '128', step: '2', value: '32' },
   { key: 'tabs.chevronRepeatDelayMs', min: '100', max: '3000', step: '50', value: '500' },
+  // US7 (FR-058). The one Tabs slider stepping in 25s — the delay a user tunes rather than sets
+  // once, so it wants finer stops than its neighbours. 300 sits on 0 + 25×12.
+  { key: 'tabs.popoverDelayMs', min: '0', max: '1500', step: '25', value: '300' },
 ] as const;
 
 test('T057 — the Tabs section exposes every setting, with their ranges and defaults', async () => {
@@ -119,6 +125,7 @@ test('T057 — the Tabs section exposes every setting, with their ranges and def
         maxWidth: 32,
         newTabPosition: 'afterActive',
         chevronRepeatDelayMs: 500,
+        popoverDelayMs: 300,
       });
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },

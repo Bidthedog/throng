@@ -149,7 +149,11 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Tabs',
     control: 'slider',
     min: 0,
-    max: 3000,
+    // US7 / FR-055. Was 3000. Three seconds to ease the strip to a new position is not a preference
+    // anyone holds — the original ceiling was invented rather than chosen, and a range whose top
+    // half nobody would use costs aim across the half they would. The step stays at 50: 3.33% of
+    // the narrowed range (it was 1.67%), and 300 is still 0 + 50×6.
+    max: 1500,
     step: 50,
   },
   {
@@ -160,7 +164,10 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Tabs',
     control: 'slider',
     min: 0,
-    max: 2000,
+    // US7 / FR-056. Was 2000, narrowed for the same reason as the scroll animation above: a delay
+    // measured in seconds is not a guard against a mis-click, it is a broken close button. 50 is
+    // 3.33% of the narrowed range and 300 stays on a stop at 0 + 50×6.
+    max: 1500,
     step: 50,
   },
   {
@@ -211,6 +218,25 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     min: 100,
     max: 3000,
     step: 50,
+  },
+  {
+    /*
+     * US7 / FR-058. The one Tabs slider with a step of 25 rather than 50.
+     *
+     * It is the delay a user actually tunes — too short and the popover chases the pointer across
+     * the strip, too long and it never arrives — so it wants finer stops than the two above, which
+     * are set once and forgotten. 25 across 0–1500 is 1.67%, clear of the aimable-slider floor, and
+     * the shipped 300 lands exactly on 0 + 25×12.
+     */
+    key: 'tabs.popoverDelayMs',
+    label: 'Tab popover delay',
+    description:
+      'How long the pointer must rest on a tab before its information popover appears, in milliseconds. Zero shows it as soon as the pointer arrives; a longer delay keeps it out of the way while you cross the strip.',
+    group: 'Tabs',
+    control: 'slider',
+    min: 0,
+    max: 1500,
+    step: 25,
   },
 
   // File Explorer
