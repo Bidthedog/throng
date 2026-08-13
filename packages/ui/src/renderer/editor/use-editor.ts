@@ -374,6 +374,8 @@ export function useEditor(params: UseEditorParams): void {
    * the remounts FR-105 exempts.
    */
   const unloadableRef = useRef(false);
+  /** WHY, where this view was the one that tried to read it (030 FR-052) — see `unloadableDetail`. */
+  const unloadableDetailRef = useRef<string | undefined>(undefined);
 
   // Build the metadata UI main needs for confinement / mirror. It rides with every dispatched
   // change because it is MUTABLE — projects come and go, a Save-As re-points the file — and the
@@ -405,6 +407,7 @@ export function useEditor(params: UseEditorParams): void {
       dirty: dirtyRef.current,
       fileMissing: fileMissingRef.current,
       unloadable: unloadableRef.current,
+      unloadableDetail: unloadableRef.current ? unloadableDetailRef.current : undefined,
       ownerProjectId: metaRef.current.ownerProjectId,
     });
   };
@@ -588,6 +591,7 @@ export function useEditor(params: UseEditorParams): void {
       ws.updatePanelConfig(panelId, configRef.current);
       fileMissingRef.current = false;
       unloadableRef.current = false; // the path read, so whatever the banner was about is over
+      unloadableDetailRef.current = undefined;
       publishState();
       // The document's IDENTITY changed, and its name is what decides its language (FR-002a).
       //
@@ -620,6 +624,7 @@ export function useEditor(params: UseEditorParams): void {
     if (!result || result.ok !== true) return false;
     fileMissingRef.current = false;
     unloadableRef.current = false;
+    unloadableDetailRef.current = undefined;
     publishState();
     // The bytes decide the encoding and the name decides the language — both may have changed
     // while the path was unreadable (FR-002a).
@@ -1044,6 +1049,10 @@ export function useEditor(params: UseEditorParams): void {
       // last load attempt.
       if (typeof msg.unloadable === 'boolean') {
         unloadableRef.current = msg.unloadable;
+        // The AUTHORITY decided the condition, and it carries no reason with it — so the reason this
+        // view happened to remember from an earlier read is dropped rather than shown beside a
+        // verdict it may no longer belong to.
+        unloadableDetailRef.current = undefined;
         publishState();
       }
       // throng moved the file, and this document went with it (019, FR-002). Its PATH changed and
@@ -1183,6 +1192,7 @@ export function useEditor(params: UseEditorParams): void {
           };
           fileMissingRef.current = false;
           unloadableRef.current = false;
+          unloadableDetailRef.current = undefined;
           if (recovered && recovered.text !== loaded.text) {
             // Unsaved edits survived a restart — restore them INTO THE AUTHORITY, dirty against the
             // disk file. Restoring them into this view alone would make it disagree with the
@@ -1204,6 +1214,12 @@ export function useEditor(params: UseEditorParams): void {
            * statement, and it is what auto-recovery and `Reload from disk` clear.
            */
           unloadableRef.current = true;
+          // …and WHY, in the same words the notice's own row carries (FR-052/FR-048a). This view is
+          // the one that tried to read the path, so it is the only place the reason exists at all.
+          unloadableDetailRef.current = missingFileDetail(
+            { filePath: cfg.filePath ?? null, panelName: metaRef.current.title, reason: loaded.reason },
+            win()?.osName ?? 'windows',
+          );
           // The file is gone, but its last content may survive in the recovery temp
           // (FR-102): show it (dirty) rather than a blank editor, so a save writes it
           // back to the original location. Blank only when nothing was captured.

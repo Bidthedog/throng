@@ -214,27 +214,28 @@ screen; then dismiss it and copy from a banner.
 
 ### Tests first
 
-- [ ] T064 [P] [US5] Write failing unit tests for `noticeToText` in `packages/ui/tests/unit/notice-text.test.ts` — heading, message, tab-grouped list, **`body`**, details, copyDetail, in reading order. The `body` case is the one today's implementation drops
-- [ ] T064a [P] [US5] Write failing unit tests for the two copied-but-never-rendered parts, which T065's DOM comparison is structurally incapable of catching: `n.copyDetail`, and **`AffectedPanel.detail`** appearing beside its own row (FR-048a)
-- [ ] T065 [US5] Write failing E2E `packages/ui/tests/e2e/failure-copy.e2e.ts` comparing copied text against the rendered DOM text of the notice, so a future rendered part cannot be silently omitted (FR-049), accounting for `copyDetail` as the one deliberate copied-but-never-rendered part
-- [ ] T065a [US5] Assert in the same spec that pasting the copied text into an editor panel reproduces it unchanged — the round trip FR-054 and US5 AC7 actually claim
-- [ ] T066 [US5] Write failing E2E in the same spec — banner copy with no notice on screen, including with the severity set to Never display; and the copied list complete while scrolled. Assert the copied **content** too, not just that copying works: message, the subject as `Project — Tab — Panel`, the path, and the system error (FR-052)
-- [ ] T067 [US5] Register the spec in `shard-plan.json`, and in `parallel-plan.json`'s serial list — it drives a real editor panel for the paste round trip
+- [X] T064 [P] [US5] Write failing unit tests for `noticeToText` in `packages/ui/tests/unit/notice-text.test.ts` — heading, message, tab-grouped list, **`body`**, details, copyDetail, in reading order. The `body` case is the one today's implementation drops
+- [X] T064a [P] [US5] Write failing unit tests for the two copied-but-never-rendered parts, which T065's DOM comparison is structurally incapable of catching: `n.copyDetail`, and **`AffectedPanel.detail`** appearing beside its own row (FR-048a)
+- [X] T065 [US5] Write failing E2E `packages/ui/tests/e2e/failure-copy.e2e.ts` comparing copied text against the rendered DOM text of the notice, so a future rendered part cannot be silently omitted (FR-049), accounting for `copyDetail` as the one deliberate copied-but-never-rendered part
+- [X] T065a [US5] Assert in the same spec that pasting the copied text into an editor panel reproduces it unchanged — the round trip FR-054 and US5 AC7 actually claim
+- [X] T066 [US5] Write failing E2E in the same spec — banner copy with no notice on screen, including with the severity set to Never display; and the copied list complete while scrolled. Assert the copied **content** too, not just that copying works: message, the subject as `Project — Tab — Panel`, the path, and the system error (FR-052)
+- [X] T067 [US5] Register the spec in `shard-plan.json`, and in `parallel-plan.json`'s serial list — it drives a real editor panel for the paste round trip
 
 ### Implementation
 
 > Ordered test-first throughout — every `…pre` task precedes the task that satisfies it. Two were the
 > wrong way round after pass 3, the same defect passes 2 and 3 each corrected once.
 
-- [ ] T068 [US5] Rewrite `noticeToText` in `packages/ui/src/renderer/common/notice-text.ts` so it walks what the notice **renders**, in render order, including `body` — not an enumeration of known fields, which is the defect FR-049 exists to prevent. Re-export from `notification.tsx`
-- [ ] T068a [US5] Emit each affected row's own `detail` beside its row in the copy text (FR-048a) — the only route by which a per-panel raw error reaches a user, since FR-034 forbids rendering it
-- [ ] T069apre [US5] Write the failing assertion first: `panel-failure-banner.e2e.ts` asserts all **three** controls in order, and re-runs the keyboard traversal across all three (T056a could only cover two, and FR-042a/SC-009a name the copy control explicitly)
-- [ ] T069bpre [US5] Write the failing assertion first: **Copy details** is present in the panel menu for both panel types (FR-042c) — the assertion T056b deliberately deferred
-- [ ] T069pre [US5] Write the failing assertion first: the banner's **final** pointer sentence `Copy the details here, or see the notification.`, asserted with the relevant severity set to Never display so FR-041's "must not promise a notice that may not exist" is actually exercised rather than assumed
-- [ ] T069 [US5] Add the copy control to `panel-failure-banner.tsx` using the `copy` theme token (FR-042b) with the text from `contracts/panel-failure-banner.md`
-- [ ] T069b [US5] Add Copy details to the panel menu for both panel types, and switch the banner's pointer to the final sentence
-- [ ] T070pre [US5] Write the failing test for a clipboard failure first — a unit test over the copy path asserting the failure is reported through the notice model (FR-055). Test-first is non-negotiable and this requirement had implementation without one
-- [ ] T070 [US5] Report a clipboard failure through the notice model (FR-055)
+- [X] T068 [US5] Rewrite `noticeToText` in `packages/ui/src/renderer/common/notice-text.ts` so it walks what the notice **renders**, in render order, including `body` — not an enumeration of known fields, which is the defect FR-049 exists to prevent. Re-export from `notification.tsx`
+- [X] T068a [US5] Emit each affected row's own `detail` beside its row in the copy text (FR-048a) — the only route by which a per-panel raw error reaches a user, since FR-034 forbids rendering it
+- [X] T069apre [US5] Write the failing assertion first: `panel-failure-banner.e2e.ts` asserts all **three** controls in order, and re-runs the keyboard traversal across all three (T056a could only cover two, and FR-042a/SC-009a name the copy control explicitly)
+- [X] T069bpre [US5] Write the failing assertion first: **Copy details** is present in the panel menu for both panel types (FR-042c) — the assertion T056b deliberately deferred
+- [X] T069pre [US5] Write the failing assertion first: the banner's **final** pointer sentence `Copy the details here, or see the notification.`, asserted with the relevant severity set to Never display so FR-041's "must not promise a notice that may not exist" is actually exercised rather than assumed
+- [X] T069 [US5] Add the copy control to `panel-failure-banner.tsx` using the `copy` theme token (FR-042b) with the text from `contracts/panel-failure-banner.md`
+- [X] T069a [US5] *(Never existed as its own line.)* T053 and T069apre both refer to "the copy control arrives in T069a", but the control is added by **T069** and its three-control assertion by **T069apre**. Recorded rather than invented: a task list that gains a line to justify a cross-reference is a task list nobody can count.
+- [X] T069b [US5] Add Copy details to the panel menu for both panel types, and switch the banner's pointer to the final sentence
+- [X] T070pre [US5] Write the failing test for a clipboard failure first — a unit test over the copy path asserting the failure is reported through the notice model (FR-055). Test-first is non-negotiable and this requirement had implementation without one
+- [X] T070 [US5] Report a clipboard failure through the notice model (FR-055)
 
 **Checkpoint**: US5 ships. Nothing on screen has to be retyped.
 

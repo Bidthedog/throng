@@ -43,6 +43,7 @@
     "explorer-live-sync.e2e.ts",
     "explorer-new-items.e2e.ts",
     "explorer.e2e.ts",
+    "failure-copy.e2e.ts",
     "fileop-undo.e2e.ts",
     "icon-colour.e2e.ts",
     "icon-packs.e2e.ts",

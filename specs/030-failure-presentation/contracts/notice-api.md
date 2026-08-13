@@ -103,6 +103,11 @@ Parts that must appear, because they render:
 | Details | `n.details` |
 | Raw system error | `n.copyDetail` — never rendered (FR-034), always copied |
 
+**The illustration below is wrong about order, and the rule wins.** It sketches the affected list
+above `body`; the card renders `body` first, and the stated rule is "in the order it renders it".
+US5 followed the render. No notice carries both today, so nothing observable turns on it — but a
+contract whose example contradicts its own rule will mislead whoever reads only the example.
+
 Illustrative output, not a template:
 
 ```

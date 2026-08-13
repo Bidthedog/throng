@@ -21,7 +21,9 @@ import { useProjects } from '../state/projects-store.js';
 import { useServices } from '../composition-root.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useNotify } from '../common/notification.js';
+import { panelFailureText } from '../common/notice-text.js';
 import { usePanelPlace } from '../common/panel-subject.js';
+import { useCopyToClipboard } from '../common/use-copy.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { requestRedraw } from '../terminal/redraw.js';
@@ -40,6 +42,7 @@ import { registerPanelRename, unregisterPanelRename } from './panel-rename.js';
 import { useWindowFocus } from './use-window-focus.js';
 import { useTerminalCwd } from '../terminal/cwd-store.js';
 import { useTerminalTitle } from '../terminal/title-store.js';
+import { useEditorFailure } from '../editor/editor-failure.js';
 import { useEditorState } from '../editor/editor-state.js';
 import { setLastActiveEditor } from '../editor/last-active-editor.js';
 import { getEditorActions } from '../editor/editor-actions.js';
@@ -107,6 +110,15 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   // Editor Panels surface a `filename (relative folder)` pill + the shared unsaved
   // dot (006). Non-editor Panels have no editor state, so this stays undefined.
   const editorUi = useEditorState(panel.id);
+  /**
+   * What an unreadable editor's failure banner is about (030 FR-042c/FR-052).
+   *
+   * The SAME assembly the banner uses (`editor/editor-failure.ts`), so *Copy details* here and
+   * *Copy details* on the banner put identical text on the clipboard. `null` while the panel is
+   * fine, which is what the three failure commands below are gated on.
+   */
+  const editorFailure = useEditorFailure(panel.id);
+  const copyToClipboard = useCopyToClipboard();
   // The editor pill's fully-qualified path (or name), per the per-ownership setting
   // (FR-088), with native OS separators (FR-101). Split into a truncatable directory
   // prefix + always-visible name.
@@ -620,13 +632,26 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                    * they run the same re-read, and the duplication is the price of each surface
                    * naming its own command consistently.
                    */
-                  ...(editorUi?.unloadable
+                  ...(editorFailure
                     ? [
                         {
                           label: 'Try again',
                           icon: 'retry' as const,
                           onClick: () => {
                             void getEditorActions(panel.id)?.reloadFromDisk();
+                          },
+                        },
+                        {
+                          /*
+                           * 030 FR-042c — Copy is not an exception for being "just a copy button".
+                           * It is a discrete command acting on a Panel, and a copy control reachable
+                           * only as a glyph on a banner is unreachable to anyone who does not
+                           * recognise the glyph. The text is the BANNER'S, assembled once.
+                           */
+                          label: 'Copy details',
+                          icon: 'copy' as const,
+                          onClick: () => {
+                            copyToClipboard(panelFailureText(editorFailure), editorFailure.subject);
                           },
                         },
                         {

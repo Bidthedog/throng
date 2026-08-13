@@ -1,10 +1,10 @@
 import { useCallback, type ReactElement } from 'react';
-import { toDisplayPath } from '@throng/core';
 import { PanelFailureBanner } from '../common/panel-failure-banner.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { clearEditorPanelType } from './clear-editor-panel-type.js';
 import { getEditorActions } from './editor-actions.js';
+import { useEditorFailure } from './editor-failure.js';
 import { useEditorState } from './editor-state.js';
 
 /**
@@ -17,8 +17,9 @@ import { useEditorState } from './editor-state.js';
  * its own retry state and its own stylesheet — one of the two designs 030 US4 exists to collapse.
  * What is left here is the three things only the editor knows: the condition (`unloadable`), the
  * sentence in the editor's own terms, and what Try again and Clear panel type MEAN for a document.
- * It deliberately renders no markup of its own; a third panel type gets the same banner by writing
- * a file this small.
+ * (What *Copy details* means is not among them — the banner copies its own text, from facts this
+ * adapter merely states, which is why US5 added no third callback here.) It deliberately renders no
+ * markup of its own; a third panel type gets the same banner by writing a file this small.
  *
  * ══ THE ISSUE THIS STILL ANSWERS ══
  *
@@ -36,6 +37,9 @@ import { useEditorState } from './editor-state.js';
  */
 export function EditorFailureBanner({ panelId }: { panelId: string }): ReactElement | null {
   const state = useEditorState(panelId);
+  // The headline, subject and detail — shared with the panel menu's copy of these commands so the
+  // two surfaces cannot disagree about what this failure is (030 FR-042c/FR-052).
+  const failure = useEditorFailure(panelId);
   const ws = useWorkspace();
   const confirm = useConfirm();
 
@@ -52,14 +56,14 @@ export function EditorFailureBanner({ panelId }: { panelId: string }): ReactElem
     });
   }, [panelId, state?.dirty, state?.displayName, confirm, ws]);
 
-  if (!state?.unloadable) return null;
+  if (!failure) return null;
 
-  const os = window.throng?.osName ?? 'windows';
   return (
     <PanelFailureBanner
       panelId={panelId}
-      headline="This file could not be read"
-      detail={{ path: state.filePath ? toDisplayPath(state.filePath, os) : undefined }}
+      headline={failure.headline}
+      subject={failure.subject}
+      detail={failure.detail}
       onRetry={onRetry}
       onCancel={onCancel}
     />
