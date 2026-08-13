@@ -61,6 +61,40 @@ describe('noticeLogLines (the field layout)', () => {
     expect(line).toBe('severity=error subject="Alpha — Tab 1 — one.txt" | Couldn\'t rename it.');
   });
 
+  it('states what was attempted, so the line identifies the event (FR-007)', () => {
+    /*
+     * The record this exists for, written verbatim by `app.tsx`'s restore notice: before these two
+     * fields the line read `severity=error | A fresh workspace was opened instead.` and said nothing
+     * whatever about the restore that failed. FR-007's literal minimum was met and its sentence —
+     * "enough to identify the event without the screen" — was not.
+     */
+    const [line] = noticeLogLines(
+      noticeLogRecord({
+        severity: 'error',
+        message: 'A fresh workspace was opened instead.',
+        subject: { kind: 'none' },
+        action: 'restore your previous layout',
+      }),
+    );
+    expect(line).toBe(
+      'severity=error action="restore your previous layout" | A fresh workspace was opened instead.',
+    );
+
+    // Quoted for the reason the subject is: an action is a phrase, and an unquoted one would put
+    // its second word where a reader expects the next label.
+    const [titled] = noticeLogLines(
+      noticeLogRecord({
+        severity: 'warning',
+        message: 'Saving will overwrite those changes.',
+        subject: { kind: 'file', name: 'one.txt' },
+        title: 'File changed on disk',
+      }),
+    );
+    expect(titled).toBe(
+      'severity=warning subject="one.txt" title="File changed on disk" | Saving will overwrite those changes.',
+    );
+  });
+
   it('quotes the cause too — a cause key is `kind:subject`, and the subject is a real path', () => {
     const [line] = noticeLogLines(
       noticeLogRecord({ severity: 'error', message: 'Gone.', causeKey: 'path-missing:test 1' }),
@@ -165,6 +199,28 @@ describe('registerNoticeLogIpc (the channel)', () => {
       { level: 'warn', message: 'severity=warning subject="one.txt" | Careful.', component: NOTICE_LOG_COMPONENT },
       { level: 'warn', message: 'detail | EPERM', component: NOTICE_LOG_COMPONENT },
     ]);
+  });
+
+  it('reads the attempted action off the payload, rather than dropping it at the boundary', () => {
+    // `recordFrom` reads the payload field by field, so a field added to the record and not to the
+    // reader is silently lost on the way across — the record would be right in the renderer and the
+    // line wrong in the file, with nothing failing.
+    const sink = fakeSink();
+    const ipc = fakeIpc();
+    registerNoticeLogIpc(sink, ipc);
+    ipc.fire(
+      noticeLogRecord({
+        severity: 'error',
+        message: 'A fresh workspace was opened instead.',
+        subject: { kind: 'none' },
+        action: 'restore your previous layout',
+        title: 'Your layout could not be restored',
+      }),
+    );
+    expect(sink.written[0]?.message).toBe(
+      'severity=error action="restore your previous layout" title="Your layout could not be restored" ' +
+        '| A fresh workspace was opened instead.',
+    );
   });
 
   it('applies no policy of its own — it neither filters by severity nor re-derives the level', () => {

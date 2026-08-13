@@ -38,8 +38,16 @@ main does not re-derive it and the mapping exists once.
 
 ## 2. What is the grouping key, in code? (FR-029, FR-029a)
 
-**Decision**: `groupKey = causeKey(cause) ?? operationId`, paired with the project id:
+**Decision**: `groupKey = operationId ?? causeKey(cause)`, paired with the project id:
 `` `${groupKey}::${projectId ?? 'none'}` ``.
+
+> **Corrected during US3.** This was first recorded the other way round — `causeKey(cause) ??
+> operationId` — on the reasoning that the cause is the more specific statement. Meeting the real
+> classification showed it was wrong: `causeKey` is `kind + subject`, and a *panel's* subject is its
+> own file, so six editors defeated by one missing project root are six different causes and would
+> have raised six notices. FR-029a is the spec sentence that records the correction — panel
+> casualties group by the operation, **always** — and it is what the code and `data-model.md` now
+> say.
 
 **Rationale**: 029 already computes `causeKey(cause)` as `` `${cause.kind}:${cause.subject}` ``
 (`packages/core/src/failure/cause.ts:172`) and deliberately returns `null` for anything outside its

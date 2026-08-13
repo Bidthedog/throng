@@ -7,7 +7,7 @@ description: Use for anything configurable — app settings, key bindings, theme
 
 Configuration is a constitutional area, not a convenience. Two rules govern everything here.
 
-## The two rules
+## The three rules
 
 1. **Externalised configuration (Principle X).** Nothing a user could reasonably want to change is
    hardcoded.
@@ -15,6 +15,13 @@ Configuration is a constitutional area, not a convenience. Two rules govern ever
    and theme token MUST be exposed and editable through the **visual** preference editors. Nothing is
    editable only by hand-editing JSON. This is enforced mechanically by a descriptor registry plus
    completeness tests — a new key without a descriptor fails the build.
+3. **Displayed numbers are digit-grouped; grouping is never stored** (constitution 4.5.0). Use
+   `formatGrouped` / `parseGrouped` from `@throng/core` — never `toLocaleString` at a call site, and
+   never a hand-rolled comma. The parser is the exact inverse of the formatter *for the active
+   locale*: the separator is derived from the locale, not assumed to be a comma, because a locale
+   that groups with `.` turns `1.024` into a corrupted or rejected number depending which way the bug
+   falls. A separator reaching `settings.json`, a theme file or an IPC boundary is the defect this
+   guards.
 
 So a "one-line setting" is never one line. The minimum change set is: the value in the model, a
 descriptor in the matching metadata registry, the shipped default, the editor control, and a test.
@@ -50,7 +57,9 @@ rather than editing the generated output.
    descriptor and any clamp in code must agree; a mismatch between the two is a known past defect
    (issue #227, and the `terminals.linkHoverDelayMs` case).
 3. Regenerate shipped defaults.
-4. Expose it in the right preferences tab, using existing form controls.
+4. Expose it in the right preferences tab, using existing form controls. A numeric control gets digit
+   grouping for free by going through `NumberControl` — anything that renders a number *outside* it
+   must call `formatGrouped` itself (rule 3).
 5. Cover it: `packages/core/tests/unit/settings-metadata.test.ts` and friends
    (`reset-completeness.test.ts`, `theme-metadata.test.ts`, `keybindings-metadata.test.ts`) are the
    completeness gate; add behaviour tests where the value does something.

@@ -23,18 +23,48 @@ export type DisplayMode = 'never' | 'timed' | 'dismiss';
 export const DISPLAY_MODES: readonly DisplayMode[] = ['never', 'timed', 'dismiss'];
 
 /**
- * The bounds on a timed notice (FR-010), matching the six existing `*Ms` settings.
+ * What each mode is CALLED (FR-001) — the three names the specification, the FR-008 confirmation
+ * and every issue comment on #224 use.
  *
- * Below 1500 ms nothing longer than a few words can be read, so the notice would be technically
- * displayed and practically silent — the failure mode the whole feature exists to remove. Above a
- * minute it is indistinguishable from *Dismiss only*, which is the setting to use instead.
+ * The stored values stay the machine tokens above; this is display only. It exists because the
+ * Preferences form's generic fallback Title-Cases the token, which yields "Never", "Timed" and
+ * "Dismiss" — a set of words the requirement never uses, and in which "Dismiss" reads as a button
+ * rather than a mode.
+ *
+ * Beside `DISPLAY_MODES` on purpose: a fourth mode added above without a name here is a dropdown
+ * row rendered in a different register from its neighbours, and the completeness assertion in
+ * `settings-metadata.test.ts` fails the build rather than letting it ship.
  */
-export const TIMEOUT_MIN_MS = 1500;
-export const TIMEOUT_MAX_MS = 60000;
+export const DISPLAY_MODE_LABELS: Readonly<Record<DisplayMode, string>> = {
+  never: 'Never display',
+  timed: 'Display for',
+  dismiss: 'Dismiss only',
+};
+
+/**
+ * The bounds on a timed notice (FR-010).
+ *
+ * Below 3000 ms nothing longer than a few words can be read, so the notice would be technically
+ * displayed and practically silent — the failure mode the whole feature exists to remove. Above
+ * thirty seconds it is indistinguishable from *Dismiss only*, which is the setting to use instead.
+ *
+ * The range is also what makes the CONTROL work, and that is not a coincidence. A slider's step must
+ * be at least 1% of its range (`slider-descriptors.test.ts`), so the old 1500–60000 range forbade
+ * any step below 585 — and the smallest usable one, 750, put both shipped defaults BETWEEN two
+ * stops. A user who dragged the thumb could not get back to the duration their app shipped with
+ * except by Reset or by hand-editing JSON. Across 3000–30000 the 1% floor is 270, so a 500 ms step
+ * is legal, and 5000 (= 3000 + 4×500) and 10000 (= 3000 + 14×500) are both exactly reachable.
+ *
+ * The step belongs to the SLIDER, never to this bound. Any integer in the closed range is a valid
+ * setting — 3567 typed into the field is accepted, saved and read back unchanged — because the
+ * bounds are the contract and the grid is only an affordance for dragging.
+ */
+export const TIMEOUT_MIN_MS = 3000;
+export const TIMEOUT_MAX_MS = 30000;
 
 export interface SeverityNotificationSettings {
   mode: DisplayMode;
-  /** Only consulted when mode is 'timed'. Bounded 1500–60000 (FR-010). */
+  /** Only consulted when mode is 'timed'. Bounded 3000–30000 (FR-010). */
   timeoutMs: number;
 }
 

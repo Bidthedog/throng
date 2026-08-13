@@ -16,7 +16,8 @@ import { useEditorState } from './editor-state.js';
  * An ADAPTER, and nothing else. It replaces `unloadable-banner.tsx`, which carried its own markup,
  * its own retry state and its own stylesheet — one of the two designs 030 US4 exists to collapse.
  * What is left here is the three things only the editor knows: the condition (`unloadable`), the
- * sentence in the editor's own terms, and what Try again and Clear panel type MEAN for a document.
+ * sentences in the editor's own terms — its headline and the one below — and what Try again and
+ * Clear panel type MEAN for a document.
  * (What *Copy details* means is not among them — the banner copies its own text, from facts this
  * adapter merely states, which is why US5 added no third callback here.) It deliberately renders no
  * markup of its own; a third panel type gets the same banner by writing a file this small.
@@ -35,6 +36,29 @@ import { useEditorState } from './editor-state.js';
  * dismissible — it goes when the condition does, whether by auto-recovery noticing the path came
  * back or by the user pressing ↻.
  */
+
+/**
+ * 026 `contracts/editor-unloadable.md` P3 — WHAT IS ON SCREEN IS NOT THE FILE.
+ *
+ * A shipped requirement, and the one thing this panel type says that no other does. It survived the
+ * 030 migration only because a review caught it going: the new banner renders headline + path +
+ * pointer, and this sentence had no slot, so it was deleted with `unloadable-banner.tsx` and no test
+ * noticed (`editor-stranded-recovery.e2e.ts` and `editor-stranded-restart.e2e.ts` both asserted
+ * visibility and the path, which is exactly what remained).
+ *
+ * ══ WHY IT IS NOT MERELY WORDING ══
+ *
+ * `unloadable` guards NO save path in the renderer — 026 P6's save-while-unloadable confirmation is
+ * not implemented here. Until it is, this sentence is the only thing in the panel warning that
+ * Ctrl+S will write a remembered buffer back over a path throng could not read. That is the same
+ * scenario FR-040a gives as its reason for keeping the path visible, and half the reason is not the
+ * requirement.
+ *
+ * Kept VERBATIM from the banner it replaced. "Reload it now" still names a real command — *Reload
+ * from disk*, in this panel's own menu (026 P7) — and it is the retry the banner's ↻ runs.
+ */
+const NOT_THE_FILE =
+  'What is shown here is not the file. Restore the path and it reloads by itself, or reload it now.';
 export function EditorFailureBanner({ panelId }: { panelId: string }): ReactElement | null {
   const state = useEditorState(panelId);
   // The headline, subject and detail — shared with the panel menu's copy of these commands so the
@@ -62,6 +86,7 @@ export function EditorFailureBanner({ panelId }: { panelId: string }): ReactElem
     <PanelFailureBanner
       panelId={panelId}
       headline={failure.headline}
+      note={NOT_THE_FILE}
       subject={failure.subject}
       detail={failure.detail}
       onRetry={onRetry}

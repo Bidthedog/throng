@@ -39,6 +39,21 @@ export interface NoticeLogRecord {
   readonly message: string;
   /** The rendered subject; empty when the notice genuinely has none. */
   readonly subject: string;
+  /**
+   * WHAT WAS ATTEMPTED, and the heading that named the event — the notice's other two spoken parts.
+   *
+   * FR-007 asks for enough to identify the event without the screen, and the message alone is not
+   * that. `A fresh workspace was opened instead.` is a real record this feature wrote: severity,
+   * message, nothing said about what failed. On screen the notice reads `An error occurred when you
+   * tried to restore your previous layout` above that sentence (`notice-text.ts`, FR-020) — the half
+   * that identifies the event is the half the record dropped.
+   *
+   * Carried as the notice's own two fields rather than as the composed heading, because the log has
+   * no heading to compose FOR: a reader greps `action=` to find every failed rename, and a
+   * pre-composed sentence would make that a substring search over prose.
+   */
+  readonly title?: string;
+  readonly action?: string;
   /** The failure cause's stable key, where the notice has one. */
   readonly causeKey?: string;
   /** How many panels this one notice speaks for, when it speaks for more than itself. */
@@ -56,6 +71,10 @@ export interface NoticeLogInput {
   message: string;
   /** The notice's subject; `{ kind: 'none' }` or omitted when it genuinely has none. */
   subject?: NoticeSubject;
+  /** The notice's heading, where it states one of its own. */
+  title?: string;
+  /** What the user was trying to do — `rename`, `restore your previous layout` (FR-007). */
+  action?: string;
   causeKey?: string;
   affectedCount?: number;
   detail?: string;
@@ -98,6 +117,8 @@ export function noticeLogRecord(input: NoticeLogInput): NoticeLogRecord {
     severity: input.severity,
     message: input.message,
     subject: input.subject ? formatSubject(input.subject) : '',
+    ...(trimmed(input.title) ? { title: trimmed(input.title) } : {}),
+    ...(trimmed(input.action) ? { action: trimmed(input.action) } : {}),
     ...(trimmed(input.causeKey) ? { causeKey: trimmed(input.causeKey) } : {}),
     ...(count === undefined ? {} : { affectedCount: count }),
     ...(trimmed(input.detail) ? { detail: trimmed(input.detail) } : {}),

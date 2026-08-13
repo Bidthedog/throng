@@ -18,7 +18,8 @@ The user-facing configuration surface for #224. Consumed by Preferences (generic
 }
 ```
 
-`mode` ∈ `"never" | "timed" | "dismiss"`. `timeoutMs` ∈ [1500, 60000].
+`mode` ∈ `"never" | "timed" | "dismiss"`. `timeoutMs` ∈ [3000, 30000] — **any integer in that
+closed range**, on or off the slider’s step grid.
 
 ## Parse contract
 
@@ -46,29 +47,40 @@ with exactly four severities, each with a valid `mode` and a `timeoutMs` within 
 
 Eight descriptors under `group: 'Notifications'`:
 
-| Key | Control | Bounds |
+| Key | Control | Options / bounds |
 |---|---|---|
-| `notifications.error.mode` | `select` | never / timed / dismiss |
-| `notifications.error.timeoutMs` | `slider`, step 750 | 1500–60000 |
+| `notifications.error.mode` | `select` | `never` / `timed` / `dismiss`, labelled **Never display** / **Display for** / **Dismiss only** |
+| `notifications.error.timeoutMs` | `slider`, step 500 | 3000–30000 |
 | …the same pair for `warning`, `info`, `success` | | |
 
-Two corrections made after meeting the real registry:
+Three corrections made after meeting the real registry:
 
 - **`select`, not `enum`.** Both exist in `ControlKind`, but every enumerated *setting* uses `select`;
   `form-controls.tsx` routes `enum` to a text fallback.
-- **`slider`, not `number`, and the shipped defaults are off-grid.** `slider-descriptors.test.ts`
-  fails any descriptor declaring both `min` and `max` with a control other than `slider`, and the step
-  guard demands step ≥ 1% of range. Range 58500 → step ≥ 585; landing on both 5000 and 10000 from
-  1500 needs a step dividing gcd(3500, 8500) = 500, which is below the floor. **This is arithmetically
-  impossible, not a choice.** Step 750 is used: 1.28%, divides 58500 exactly so the maximum stays
-  drag-reachable. Consequence to accept knowingly — dragging yields 1500, 2250, 3000…, and the shipped
-  5000/10000 are reachable only by typing or by the row's reset. Every other slider in the registry has
-  its default on-grid, so this is the first exception. The alternatives are worse: changing the
-  defaults contradicts #224, widening `TIMEOUT_MIN_MS` breaks descriptor/clamp agreement, and relaxing
-  the guard removes a check that is doing its job.
+- **The three modes need DECLARED labels.** `SelectControl` Title-Cases the stored token for any
+  static enum, which renders the modes as "Never / Timed / Dismiss" — not the names FR-001 gives, and
+  "Dismiss" reads as a verb. `FieldDescriptor.optionLabels` (added by this feature) carries the
+  per-value display names; the stored values are unchanged. The descriptors take them from
+  `DISPLAY_MODE_LABELS`, which lives beside `DISPLAY_MODES` so a fourth mode cannot be added without
+  one. Whole set or nothing — a partial map renders a dropdown in two registers at once, and
+  `settings-metadata.test.ts` fails any descriptor that supplies less than all of its values.
+- **`slider`, not `number`, and the range is what makes the step legal.**
+  `slider-descriptors.test.ts` fails any descriptor declaring both `min` and `max` with a control
+  other than `slider`, and the step guard demands step ≥ 1% of range. Across 3000–30000 that floor is
+  270, so **step 500** is legal; it divides 27000 exactly, so the maximum is drag-reachable; and both
+  shipped defaults sit ON the grid — 3000 + 4×500 = 5000, 3000 + 14×500 = 10000 — so a user who has
+  dragged the thumb can always drag back to what the app came with.
 
-`NumberControl` renders both a range input and a typed field, so T020's "inert when the mode is not
-*Display for*" must disable **both**.
+  This is the reason the bounds moved. Under the earlier 1500–60000 range the floor was 585, so 500
+  was illegal and landing on both 5000 and 10000 from 1500 needed a step dividing
+  gcd(3500, 8500) = 500: arithmetically impossible, and the range was documented as accepting that
+  the shipped defaults were off-grid and reachable only by typing or by the row's reset. 3000–30000
+  removes the exception rather than recording it.
+
+**The step constrains the SLIDER, not the setting.** `NumberControl.parse` checks `min` and `max` and
+nothing else, so the typed field beside the thumb accepts any integer in the closed range — 3567
+commits, persists and reads back unrounded, and is replaced only when the user next drags. Both halves
+render for one value, so T020's "inert when the mode is not *Display for*" must disable **both**.
 
 `settings-metadata.test.ts` asserts one descriptor per configurable leaf — all eight are mandatory.
 

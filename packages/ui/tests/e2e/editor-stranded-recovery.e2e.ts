@@ -208,6 +208,22 @@ test('an editor stranded across a restart recovers when the path is repaired', a
       const unloadable = win.getByTestId(`panel-failure-${restoredPid}`);
       await expect(unloadable).toBeVisible({ timeout: 10_000 });
       await expect(unloadable).toContainText('code.txt');
+      /*
+       * …and it says what the paragraph above says: the text on screen is NOT the file (026
+       * `contracts/editor-unloadable.md` P3).
+       *
+       * Added because its absence let that requirement be deleted without a red. The 030 migration
+       * to the shared banner rendered headline + path + pointer and had nowhere to put this
+       * sentence; visibility and the path are exactly the two things this test was already asserting,
+       * so it went through green. It is the load-bearing half rather than a nicety: `unloadable`
+       * guards no save path in the renderer (026 P6 is unimplemented there), so while it is on
+       * screen this is the only warning that a Ctrl+S writes the remembered buffer back over a path
+       * throng could not read — which is the very hazard the comment above describes.
+       */
+      await expect(
+        unloadable,
+        'the banner no longer says the text on screen is a remembered buffer rather than the file',
+      ).toContainText('What is shown here is not the file.');
 
       // Put the path back, as the user does — with the file having moved on while it was away, so
       // "it recovered" cannot be satisfied by the stale buffer that was already on screen.

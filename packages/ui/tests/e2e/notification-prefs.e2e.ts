@@ -162,16 +162,45 @@ test('the Notifications category offers a mode and a bounded duration for all fo
       for (const severity of SEVERITIES) {
         const mode = prefs.getByTestId(`control-notifications.${severity}.mode`);
         await expect(mode).toBeVisible();
-        // Three modes, exhaustive by design: never display it, display it for a bounded time, or
-        // leave it until it is dismissed.
-        for (const value of ['never', 'timed', 'dismiss']) {
-          await expect(mode.locator(`option[value="${value}"]`)).toHaveCount(1);
+        /*
+         * Three modes, exhaustive by design — and each one CALLED WHAT FR-001 CALLS IT.
+         *
+         * The value assertion below was the whole of this test, and it passed for months while the
+         * dropdown read "Never / Timed / Dismiss": the stored token is what every other test in this
+         * file drives (`selectOption('never')`), so nothing anywhere ever looked at the words on the
+         * screen. The user does not read `never`. Asserting the visible text is the only thing that
+         * can tell the difference between the specified names and the generic Title-Case fallback.
+         */
+        for (const [value, text] of [
+          ['never', 'Never display'],
+          ['timed', 'Display for'],
+          ['dismiss', 'Dismiss only'],
+        ] as const) {
+          const option = mode.locator(`option[value="${value}"]`);
+          await expect(option).toHaveCount(1);
+          await expect(option, `the ${value} option is not called "${text}"`).toHaveText(text);
         }
         // A bounded numeric is a SLIDER in this app, and the bounds are the parse's own — a control
         // offering a value the parser would silently replace is issue #227 all over again.
         const slider = prefs.getByTestId(`control-notifications.${severity}.timeoutMs-slider`);
-        await expect(slider).toHaveAttribute('min', '1500');
-        await expect(slider).toHaveAttribute('max', '60000');
+        await expect(slider).toHaveAttribute('min', '3000');
+        await expect(slider).toHaveAttribute('max', '30000');
+        /*
+         * The STEP, and the shipped default sitting exactly on it.
+         *
+         * A slider whose grid steps past the value the app shipped with is a control the user cannot
+         * undo with the control itself — drag once and Reset (or the JSON file) is the only way back.
+         * 3000 + 4×500 = 5000 and 3000 + 14×500 = 10000, which is what the 3000/30000 range bought
+         * and what 1500/60000 made arithmetically impossible.
+         */
+        await expect(slider).toHaveAttribute('step', '500');
+        // The FIELD groups anything of five digits or more (`formatGrouped`), so `info`'s 10000 reads
+        // "10,000" and a bare `Number()` on it is NaN. Strip what the display added.
+        const shownMs = await prefs
+          .getByTestId(`control-notifications.${severity}.timeoutMs`)
+          .inputValue();
+        const shipped = Number(shownMs.replace(/[^0-9]/g, ''));
+        expect((shipped - 3000) % 500, `${severity} ships ${shipped} ms, between two stops`).toBe(0);
       }
 
       // The shipped defaults (FR-013): a failure waits to be acknowledged, a confirmation does not.
@@ -231,28 +260,144 @@ test('Never display shows nothing at all, and Dismiss only shows it again in the
   );
 });
 
-test('Display for N takes an ERROR notice away after N — the one severity hard-coded to persist (FR-012)', async () => {
+/**
+ * The two dwells this test uses, and why the pair of them is the assertion (FR-004).
+ *
+ * The first version of this test set the floor and asserted the notice was gone within ten seconds.
+ * That is satisfied by the floor, by 5000, by "whatever constant the provider was arming before this
+ * feature", and by every value under ten seconds — so the requirement it claimed to cover, *leaves
+ * once N has elapsed*, was never measured, and a regression that armed every timed notice at one
+ * hard-coded duration would have stayed green.
+ *
+ * Two dwells, at opposite ends of the allowed range, in one session, remove that. A hypothetical
+ * constant C has to satisfy both: C < SHORT_BUDGET to clear the first, C > STILL_UP_AFTER to clear
+ * the second. `C < 8000` and `C > 15000` cannot both hold, so no constant passes — only a provider
+ * actually reading the user's number does.
+ */
+const SHORT_MS = 3_000; // the floor of the allowed range, and on the slider's 500 grid
+const SHORT_BUDGET = 8_000; // generous over 3000, and comfortably under STILL_UP_AFTER
+const LONG_MS = 30_000; // the ceiling
+const STILL_UP_AFTER = 15_000; // …so a notice armed at anything short would already have gone
+
+test('Display for N takes an ERROR notice away after N, and NOT before (FR-004, FR-012)', async () => {
+  test.setTimeout(180_000);
   const cfgRoot = freshCfgRoot();
   await runApp(
     async (app, win) => {
       await settle(win);
       const prefs = await openSettings(app, win);
 
-      // Display for, at the floor of the allowed range. 1500 is on the 750 grid, so the slider can
-      // actually land on it.
+      // ── N at the FLOOR of the allowed range.
       await prefs.getByTestId('control-notifications.error.mode').selectOption('timed');
-      await setSlider(prefs.getByTestId('control-notifications.error.timeoutMs-slider'), '1500');
+      await setSlider(
+        prefs.getByTestId('control-notifications.error.timeoutMs-slider'),
+        String(SHORT_MS),
+      );
       await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.mode).toBe('timed');
-      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.timeoutMs).toBe(1500);
-      await appliedInMainWindow(win, (n) => n?.error, { mode: 'timed', timeoutMs: 1500 });
+      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.timeoutMs).toBe(SHORT_MS);
+      await appliedInMainWindow(win, (n) => n?.error, { mode: 'timed', timeoutMs: SHORT_MS });
 
       const notices = win.getByTestId('explorer-error');
       await raiseErrorNotice(win);
       // It appears — the timed mode does not mean "never shown".
       await expect(notices).toHaveCount(1, { timeout: 20_000 });
+      const shownAt = Date.now();
       // …and then it goes, unaided. On master an `error` waits forever, which is the exemption
       // FR-012 removes.
-      await expect(notices).toHaveCount(0, { timeout: 10_000 });
+      await expect(notices).toHaveCount(0, { timeout: SHORT_BUDGET });
+      // Reported rather than merely bounded: a dwell creeping towards the budget is the early sign
+      // of the timer being armed from something other than the setting.
+      const dwelt = Date.now() - shownAt;
+      expect(dwelt, `a ${SHORT_MS} ms notice stood for ${dwelt} ms`).toBeLessThan(SHORT_BUDGET);
+
+      // ── The same code path, N at the CEILING (FR-016: it applies to the next notice raised).
+      await setSlider(
+        prefs.getByTestId('control-notifications.error.timeoutMs-slider'),
+        String(LONG_MS),
+      );
+      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.timeoutMs).toBe(LONG_MS);
+      await appliedInMainWindow(win, (n) => n?.error, { mode: 'timed', timeoutMs: LONG_MS });
+
+      await raiseErrorNotice(win);
+      await expect(notices).toHaveCount(1, { timeout: 20_000 });
+      // Still there long after the previous dwell — and long after any plausible hard-coded one.
+      // This is the half that makes the first half mean something.
+      await win.waitForTimeout(STILL_UP_AFTER);
+      await expect(
+        notices,
+        `a ${LONG_MS} ms notice left within ${STILL_UP_AFTER} ms — the timer is not the user's number`,
+      ).toHaveCount(1);
+    },
+    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+  );
+});
+
+/**
+ * FR-014 / SC-014 — A SETTINGS FILE WRITTEN BEFORE THIS FEATURE STILL OPENS.
+ *
+ * `parseNotificationSettings` is total and `display-mode.test.ts` proves it on every malformed value
+ * anyone could think of. That is the unit half, and it was the whole of the coverage: nothing
+ * anywhere started the APPLICATION over a document with no `notifications` section, which is the
+ * only place the two halves of the requirement can both be observed. FR-014 has two halves and says
+ * so — the file loads and resolves to the shipped defaults, AND it raises no error notice about the
+ * configuration. A parse that resolved correctly while some other layer complained about the missing
+ * section would satisfy a unit test and fail the requirement, and nothing would have said so.
+ *
+ * The seeded document is what a user upgrading into 030 actually has: `version: 1`, no notification
+ * preferences at all, and settings they had already changed from the shipped defaults. Both must
+ * still be theirs afterwards — an upgrade that "worked" by resetting the file would pass a test that
+ * only looked at the notifications.
+ */
+test('a pre-030 settings file opens with its preferences intact and no configuration error (FR-014, SC-014)', async () => {
+  const cfgRoot = freshCfgRoot({
+    editor: { autoSave: true, autoSaveDebounceMs: 900 },
+  });
+  // Stated rather than assumed: the seed has to be genuinely pre-030 for the test to mean anything.
+  expect(readSettings(cfgRoot)?.notifications).toBeUndefined();
+
+  await runApp(
+    async (app, win) => {
+      await settle(win);
+
+      // ── The absent section resolves to the shipped defaults (FR-013), in the running application
+      // and not merely in a parse.
+      await appliedInMainWindow(win, (n) => n, {
+        error: { mode: 'dismiss', timeoutMs: 5000 },
+        warning: { mode: 'dismiss', timeoutMs: 5000 },
+        info: { mode: 'timed', timeoutMs: 10000 },
+        success: { mode: 'timed', timeoutMs: 5000 },
+      });
+
+      // ── …and the preferences the user had already set are still theirs (SC-014).
+      const editor = await win.evaluate(async () => {
+        const payload = await window.throng?.config?.get?.();
+        return (payload?.settings as Record<string, any> | undefined)?.editor ?? null;
+      });
+      expect(editor?.autoSave).toBe(true);
+      expect(editor?.autoSaveDebounceMs).toBe(900);
+
+      // ── NOTHING WAS REPORTED. This is the half FR-014 states explicitly and the half a parse test
+      // structurally cannot see: an upgrade the user has to dismiss a notice about is not a
+      // successful load, whatever the resolved values say.
+      const prefs = await openSettings(app, win);
+      await expect(prefs.getByTestId('settings-group-Notifications')).toBeVisible();
+      await expect(prefs.getByTestId('control-notifications.error.mode')).toHaveValue('dismiss');
+      // The user's own values, on the surface they would go looking at.
+      await expect(prefs.getByTestId('control-editor.autoSave')).toBeChecked();
+
+      for (const [where, page] of [
+        ['the main window', win],
+        ['the preferences window', prefs],
+      ] as const) {
+        // `.notice--error` and not `.notice`: FR-014's words are "raising no ERROR notice about the
+        // configuration", and pinning the absence of every toast would make this fail for reasons
+        // that have nothing to do with the requirement.
+        await expect(
+          page.locator('.notice--error'),
+          `an error notice was raised in ${where} over a settings file with no notification section`,
+        ).toHaveCount(0);
+      }
+      await expect(prefs.getByTestId('prefs-notice')).toHaveCount(0);
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
@@ -340,7 +485,7 @@ test('the duration control is inert unless the mode is Display for (FR-011)', as
   );
 });
 
-test('a duration below 1500 or above 60000 cannot be committed (FR-010)', async () => {
+test('a duration below 3000 or above 30000 cannot be committed (FR-010)', async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(
     async (app, win) => {
@@ -350,7 +495,7 @@ test('a duration below 1500 or above 60000 cannot be committed (FR-010)', async 
       const field = prefs.getByTestId('control-notifications.error.timeoutMs');
       await expect(field).toBeEnabled();
 
-      for (const rejected of ['900', '60001']) {
+      for (const rejected of ['2999', '30001']) {
         await field.fill(rejected);
         await field.press('Enter');
         await expect(prefs.getByTestId('control-notifications.error.timeoutMs-invalid')).toBeVisible();
@@ -358,10 +503,33 @@ test('a duration below 1500 or above 60000 cannot be committed (FR-010)', async 
         expect(readSettings(cfgRoot)?.notifications?.error?.timeoutMs ?? 5000).toBe(5000);
       }
 
-      // …and a value inside the bounds still commits, so the guard is a bound and not a wall.
-      await field.fill('2250');
+      /*
+       * …and ANY value inside the bounds commits — the grid belongs to the slider, not to the
+       * setting (FR-010).
+       *
+       * 3567 is on no stop of a 500 ms slider, and that is the point: the bound is the contract and
+       * the step is an affordance, so typing an exact number the thumb cannot land on is a first-
+       * class way to set this. It must reach the settings file unrounded and STAY there — a control
+       * that quietly snapped it to 3500 would be answering a question the user did not ask.
+       */
+      await field.fill('3567');
       await field.press('Enter');
-      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.timeoutMs).toBe(2250);
+      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.timeoutMs).toBe(3567);
+      /*
+       * Still 3567 after the write has been read back in — the round trip through the config
+       * watcher is where a rounding parse would show up, and where the field would be re-rendered
+       * from the stored value if it had been changed.
+       *
+       * Asserted on the DIGITS, not the exact string: the field renders through `formatGrouped`, so
+       * whether this reads "3567" or "3,567" depends on the digit-grouping threshold, which is a
+       * separate question from whether the value survived. Pinning the punctuation here would make
+       * this test fail for a reason that has nothing to do with FR-010.
+       */
+      await prefs.waitForTimeout(1000);
+      await expect
+        .poll(async () => (await field.inputValue()).replace(/[^0-9]/g, ''))
+        .toBe('3567');
+      expect(readSettings(cfgRoot)?.notifications?.error?.timeoutMs).toBe(3567);
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );

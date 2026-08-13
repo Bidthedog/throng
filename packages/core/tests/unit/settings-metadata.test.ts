@@ -12,7 +12,11 @@ import {
   leavesOfDeclared,
 } from '../../src/config/metadata.js';
 import { DEFAULT_APP_SETTINGS } from '../../src/config/app-settings.js';
-import { TIMEOUT_MAX_MS, TIMEOUT_MIN_MS } from '../../src/notice/display-mode.js';
+import {
+  DEFAULT_NOTIFICATION_SETTINGS,
+  TIMEOUT_MAX_MS,
+  TIMEOUT_MIN_MS,
+} from '../../src/notice/display-mode.js';
 
 describe('SETTINGS_METADATA completeness (FR-047)', () => {
   it('describes every configurable settings leaf and no unknown keys', () => {
@@ -66,6 +70,23 @@ describe('SETTINGS_METADATA control types (FR-028/029)', () => {
     expect(byKey.get('explorer.dragCopyModifier')?.allowedValues).toEqual(['ctrl', 'shift', 'alt']);
     expect(byKey.get('editor.saveAllScope')?.allowedValues).toEqual(['tab', 'project', 'all']);
     expect(byKey.get('editor.defaultLineEnding')?.allowedValues).toEqual(['lf', 'crlf', 'cr']);
+  });
+
+  /*
+   * A LABEL OVERRIDE THAT MISSES A VALUE IS WORSE THAN NONE AT ALL.
+   *
+   * The renderer falls back per-value, so a partial map produces a dropdown in two registers at
+   * once — "Never display", "Display for", "Dismiss" — which reads as a bug in one of the three
+   * rather than an omission in the descriptor. Whole set or nothing.
+   */
+  it('every descriptor that renames its options renames all of them, and no others', () => {
+    for (const d of SETTINGS_METADATA) {
+      if (!d.optionLabels) continue;
+      expect(d.allowedValues, `${d.key} renames options it does not declare`).toBeDefined();
+      expect(Object.keys(d.optionLabels).sort(), d.key).toEqual(
+        d.allowedValues!.map(String).sort(),
+      );
+    }
   });
 
   it('every descriptor with allowedValues uses a choice control, never text', () => {
@@ -133,15 +154,58 @@ describe('SETTINGS_METADATA notification leaves (030 US1, #224)', () => {
     }
   });
 
-  it('bounds every timeout at the values the parser enforces (1500–60000)', () => {
+  /*
+   * FR-001's THREE NAMES, on the control itself.
+   *
+   * The stored values are machine tokens, and the generic Title-Case fallback turns them into
+   * "Never", "Timed" and "Dismiss" — three words the specification never uses, one of which
+   * ("Dismiss") reads as a button that would dismiss something rather than a mode. The names FR-001
+   * gives are the ones the user is asked about in the FR-008 confirmation and the ones every issue
+   * comment uses, so the dropdown has to say them.
+   */
+  it('names the three modes as FR-001 does, not as the token fallback would', () => {
+    for (const severity of SEVERITIES) {
+      const d = byKey.get(`notifications.${severity}.mode`);
+      expect(d?.optionLabels, severity).toEqual({
+        never: 'Never display',
+        timed: 'Display for',
+        dismiss: 'Dismiss only',
+      });
+    }
+  });
+
+  it('bounds every timeout at the values the parser enforces (3000–30000)', () => {
     // Read from the notice module rather than retyped: a descriptor whose bounds drift from the
     // clamp is the bug, so the test must not carry its own copy of either number.
     for (const severity of SEVERITIES) {
       const d = byKey.get(`notifications.${severity}.timeoutMs`);
       expect(d?.min, severity).toBe(TIMEOUT_MIN_MS);
       expect(d?.max, severity).toBe(TIMEOUT_MAX_MS);
-      expect(d?.min, severity).toBe(1500);
-      expect(d?.max, severity).toBe(60000);
+      expect(d?.min, severity).toBe(3000);
+      expect(d?.max, severity).toBe(30000);
+      expect(d?.step, severity).toBe(500);
+    }
+  });
+
+  /*
+   * THE SHIPPED DEFAULTS ARE REACHABLE BY DRAGGING — which is what the bounds change bought.
+   *
+   * Under the old 1500–60000 range a step of 500 was illegal (the slider guard wants at least 1% of
+   * a 58500 range, i.e. 585) and the smallest legal step, 750, put 5000 and 10000 BETWEEN two stops:
+   * a user who dragged the thumb could never get back to the value their app shipped with, and the
+   * only route home was Reset or hand-editing JSON. 3000–30000 makes 1% equal 270, so 500 is legal,
+   * and every shipped default sits exactly on the grid.
+   */
+  it('puts every shipped default on the slider grid, so a drag can return to it', () => {
+    for (const severity of SEVERITIES) {
+      const d = byKey.get(`notifications.${severity}.timeoutMs`)!;
+      const shipped = DEFAULT_NOTIFICATION_SETTINGS[severity].timeoutMs;
+      expect(shipped, severity).toBeGreaterThanOrEqual(d.min!);
+      expect(shipped, severity).toBeLessThanOrEqual(d.max!);
+      expect(
+        (shipped - d.min!) % d.step!,
+        `${severity}: the shipped ${shipped} ms is between two stops of a ${d.step} ms slider`,
+      ).toBe(0);
     }
   });
 

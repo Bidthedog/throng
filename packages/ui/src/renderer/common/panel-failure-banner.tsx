@@ -1,7 +1,9 @@
-import { useCallback, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import type { NoticeSubject } from '@throng/core';
 import { IconButton } from './icon-button.js';
+import { useNotify } from './notification.js';
 import { panelFailureText } from './notice-text.js';
+import { attemptRetry } from './panel-retry.js';
 import { useCopyToClipboard } from './use-copy.js';
 import './panel-failure-banner.css';
 
@@ -18,11 +20,12 @@ import './panel-failure-banner.css';
  *
  * ══ WHAT IS PER-TYPE, AND WHAT IS NOT ══
  *
- * Only the {@link PanelFailureBannerProps.headline} and the path. Layout, spacing, colours, control
- * order, accessible names, the pointer sentence and the retry-failure sentence all belong here, and
- * the E2E proves it structurally: `panel-failure-banner.e2e.ts` compares the two panel types' root
- * class list, role and control names rather than their words, because two independently-written
- * banners can agree on labels and cannot agree on a class list by accident.
+ * Only the {@link PanelFailureBannerProps.headline}, the path, and the optional
+ * {@link PanelFailureBannerProps.note}. Layout, spacing, colours, control order, accessible names,
+ * the pointer sentence and the retry-failure sentence all belong here, and the E2E proves it
+ * structurally: `panel-failure-banner.e2e.ts` compares the two panel types' root class list, role
+ * and control names rather than their words, because two independently-written banners can agree on
+ * labels and cannot agree on a class list by accident.
  *
  * ══ THE PATH IS NOT DECORATION (FR-040a) ══
  *
@@ -57,6 +60,28 @@ export interface PanelFailureBannerProps {
   panelId: string;
   /** The ONE per-type sentence: what could not be done, in this panel type's terms (FR-040). */
   headline: string;
+  /**
+   * A SECOND per-type sentence, where a panel type carries a shipped requirement the headline
+   * cannot hold (026 `contracts/editor-unloadable.md` P3, via 030 FR-039).
+   *
+   * ══ WHY THIS PROP EXISTS AT ALL ══
+   *
+   * FR-039 confines per-type wording to the headline, and it was written to stop TWO DIVERGENT
+   * BANNERS — not to forbid a panel type from carrying a sentence it is required to say. Read the
+   * strict way, the migration to this component silently dropped 026 P3: the editor's banner used to
+   * say *"What is shown here is not the file."*, and that sentence is the only thing on screen
+   * telling a user that the text under it is a REMEMBERED buffer rather than the file, over a path
+   * throng could not read. `unloadable` guards no save path anywhere in the renderer today (026 P6
+   * is not implemented renderer-side), so it was also the only in-panel warning that Ctrl+S would
+   * write that remembered text back — the very scenario FR-040a cites as its own reason for keeping
+   * the path visible.
+   *
+   * So it is one OPTIONAL line, in the shared component, rendered with the shared tokens and in a
+   * fixed position — which is the opposite of the divergence FR-039 forbids. The terminal passes
+   * none, and the structural E2E is unaffected: root class list, role and control set are identical
+   * either way.
+   */
+  note?: string;
   /**
    * WHICH panel this is about, for the copied text (FR-052).
    *
@@ -96,19 +121,56 @@ const POINTER = 'Copy the details here, or see the notification.';
 /** Fixed wording, not the implementer's choice (FR-040b) — a test on it is otherwise vacuous. */
 const RETRY_FAILED = 'That did not work — the condition is still there.';
 
+/**
+ * THE MOUNTED BANNERS' OWN RETRIES, BY PANEL — so the menu item is the SAME COMMAND (FR-042c).
+ *
+ * ══ THE DEFECT THIS CLOSES ══
+ *
+ * FR-042c makes the panel menu's *Try again* the same command as the banner's control, and FR-045
+ * requires a failed retry to remain and say so. But each menu ran the underlying operation DIRECTLY
+ * — `getEditorActions(id).reloadFromDisk()` and the terminal's `retryStart()` — so neither ever
+ * touched the banner's retry state. Retrying from the menu left the banner standing, saying nothing,
+ * which is precisely the "did my click do anything?" failure `terminal-panel.tsx` records the design
+ * as existing to prevent. The requirement held on the button and nowhere else.
+ *
+ * A module registry rather than a prop because the two surfaces are far apart in the tree: the
+ * terminal's menu is built in `terminal-panel.tsx` and the editor's in `workspace/panel-placeholder
+ * .tsx`, neither of which renders the banner. It is the same idiom `editor-actions.ts` already uses
+ * for the editor's imperative commands, and it is per-window by construction — a sub-workspace runs
+ * its own module instance, so a banner in one window can never be driven from another.
+ */
+const MOUNTED_RETRIES = new Map<string, () => void>();
+
+/**
+ * Run the banner's OWN retry for `panelId` — state, disabling and failure report included.
+ *
+ * `false` when no banner is mounted for that panel, which is not a case any caller has to handle
+ * today: every menu offering this command is itself gated on the failure that renders the banner.
+ * The value is returned so that a future caller which is NOT so gated cannot silently do nothing.
+ */
+export function retryPanelFailure(panelId: string): boolean {
+  const run = MOUNTED_RETRIES.get(panelId);
+  if (!run) return false;
+  run();
+  return true;
+}
+
 export function PanelFailureBanner({
   panelId,
   headline,
+  note,
   subject,
   detail,
   onRetry,
   onCancel,
 }: PanelFailureBannerProps): ReactElement {
   const copy = useCopyToClipboard();
+  const { notify } = useNotify();
   const [retrying, setRetrying] = useState(false);
   const [retryFailed, setRetryFailed] = useState(false);
   // A retry in flight when the caller re-renders must not have its result applied twice, and a
   // second click must not start a second attempt — the control is disabled, and this is the belt.
+  // It is also what makes the menu item safe: a menu has no disabled state to borrow.
   const inFlight = useRef(false);
 
   const retry = useCallback((): void => {
@@ -119,7 +181,10 @@ export function PanelFailureBanner({
     void (async () => {
       let ok = false;
       try {
-        ok = await onRetry();
+        // `attemptRetry` never rejects: a REJECTING `onRetry` is a different failure from the one
+        // this banner is about, and it is raised through the notice model rather than disappearing
+        // into a `void`ed promise. Before it existed, the only `catch` here was the absence of one.
+        ok = await attemptRetry(onRetry, subject, { notify });
       } finally {
         inFlight.current = false;
         setRetrying(false);
@@ -128,13 +193,30 @@ export function PanelFailureBanner({
         setRetryFailed(!ok);
       }
     })();
-  }, [onRetry]);
+  }, [onRetry, subject, notify]);
+
+  // Published for as long as this banner is on screen — the menus' *Try again* runs THIS, so the
+  // retry state, the in-flight guard and the failure sentence are shared rather than bypassed.
+  useEffect(() => {
+    MOUNTED_RETRIES.set(panelId, retry);
+    return () => {
+      // Only if it is still ours: a re-registration for the same id has already replaced it, and
+      // deleting unconditionally on the old effect's cleanup would unpublish the live one.
+      if (MOUNTED_RETRIES.get(panelId) === retry) MOUNTED_RETRIES.delete(panelId);
+    };
+  }, [panelId, retry]);
 
   return (
     <div className="panel-failure" data-testid={`panel-failure-${panelId}`} role="status">
       <div className="panel-failure__text">
         <strong className="panel-failure__headline">{headline}</strong>
         {detail?.path ? <span className="panel-failure__path">{detail.path}</span> : null}
+        {/*
+          The per-type note (026 P3), directly under the path it is about and ABOVE the retry
+          result — it states a standing fact about the panel's content, so it must not read as
+          something the last retry produced.
+        */}
+        {note ? <span className="panel-failure__note">{note}</span> : null}
         {retryFailed ? <span className="panel-failure__retry-failed">{RETRY_FAILED}</span> : null}
         <span className="panel-failure__pointer">{POINTER}</span>
       </div>

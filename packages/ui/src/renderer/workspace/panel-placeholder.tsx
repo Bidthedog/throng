@@ -22,6 +22,7 @@ import { useServices } from '../composition-root.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useNotify } from '../common/notification.js';
 import { panelFailureText } from '../common/notice-text.js';
+import { retryPanelFailure } from '../common/panel-failure-banner.js';
 import { usePanelPlace } from '../common/panel-subject.js';
 import { useCopyToClipboard } from '../common/use-copy.js';
 import { useContextMenu } from '../context-menu-provider.js';
@@ -637,8 +638,19 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                         {
                           label: 'Try again',
                           icon: 'retry' as const,
+                          /*
+                           * The BANNER'S retry, not a second call to the same operation.
+                           *
+                           * This used to run `reloadFromDisk()` directly, which is the same re-read
+                           * and therefore looked equivalent — but it bypassed the banner's retry
+                           * state entirely, so FR-045 ("a failed retry remains and says so") held on
+                           * the button and nowhere else. Retrying from the menu left the banner
+                           * standing in silence: the "did my click do anything?" failure the design
+                           * exists to prevent, reintroduced by the surface added to satisfy FR-042c.
+                           * Same command now means the same call.
+                           */
                           onClick: () => {
-                            void getEditorActions(panel.id)?.reloadFromDisk();
+                            retryPanelFailure(panel.id);
                           },
                         },
                         {

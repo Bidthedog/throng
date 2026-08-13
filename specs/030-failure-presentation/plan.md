@@ -120,7 +120,7 @@ packages/core/src/
 │   ├── app-settings.ts            # + NotificationSettings, DEFAULT_APP_SETTINGS entries
 │   └── settings-metadata.ts       # + group: 'Notifications' descriptors (8 leaves)
 ├── notice/                        # NEW — pure decisions, no DOM, no Node
-│   ├── display-mode.ts            # DisplayMode, parse/merge, bounds (1500–60000)
+│   ├── display-mode.ts            # DisplayMode, parse/merge, bounds (3000–30000)
 │   ├── log-level.ts               # noticeLogLevel(severity) — the mapping, once
 │   ├── subject.ts                 # NoticeSubject, formatSubject, context elision
 │   ├── grouping.ts                # groupKey(cause | operation, projectId)

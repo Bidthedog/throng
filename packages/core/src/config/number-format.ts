@@ -12,13 +12,19 @@
  */
 
 /**
- * Values below this many digits are NOT grouped.
+ * Every number is grouped, at every magnitude.
  *
- * "Large-magnitude" was left undefined by the specification, which is not a detail: grouping
- * everything renders a 5000-millisecond delay as `5,000` and a 1024-byte minimum as `1,024`, and
- * both read as a typo rather than a kindness. Five digits is where a number stops being scannable.
+ * 018 (FR-037) set a five-digit floor here, reasoning that a 5000-millisecond delay rendered as
+ * `5,000` "reads as a typo rather than a kindness". Defensible for one number in isolation, and
+ * wrong for a column: 030's notification timeouts put `5000` directly beside `10,000`, which teaches
+ * the reader that the separator *means* something when it means only that one value crossed a
+ * threshold. A rule that changes shape halfway up a column is harder to read than either rule
+ * applied consistently.
+ *
+ * The floor was removed by constitution **4.5.0**, which also promoted this rule out of 018's spec —
+ * a per-feature spec was the wrong home for a constraint governing every numeric control added
+ * afterwards, and it was discoverable only by reading a shipped feature's requirements.
  */
-const GROUP_FROM_DIGITS = 5;
 
 /** The characters this locale uses to group, so the parser can undo exactly what the formatter did. */
 function separatorsFor(locale?: string): string[] {
@@ -28,11 +34,9 @@ function separatorsFor(locale?: string): string[] {
   return group ? [group, ' ', ' '] : [' ', ' '];
 }
 
-/** Render a number for DISPLAY. Values under the threshold are returned bare. */
+/** Render a number for DISPLAY, grouped at every magnitude (constitution 4.5.0). */
 export function formatGrouped(value: number, locale?: string): string {
   if (!Number.isFinite(value)) return '';
-  const digits = Math.abs(Math.trunc(value)).toString().length;
-  if (digits < GROUP_FROM_DIGITS) return String(value);
   return new Intl.NumberFormat(locale, { useGrouping: true, maximumFractionDigits: 20 }).format(
     value,
   );

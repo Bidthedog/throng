@@ -39,6 +39,31 @@ describe('noticeLogRecord (FR-006, FR-007)', () => {
     expect(record.subject).toBe('Alpha — Tab 1 — one.txt');
   });
 
+  it('carries what was attempted, not only what went wrong (FR-007)', () => {
+    /*
+     * The real record this closes: `severity=error | A fresh workspace was opened instead.`
+     * (`app.tsx`, the restore notice). Accurate, and it never says what failed — on screen the
+     * heading above it reads "An error occurred when you tried to restore your previous layout".
+     * A record carrying only the message assumes a heading the log does not have.
+     */
+    const record = noticeLogRecord({
+      severity: 'error',
+      message: 'A fresh workspace was opened instead.',
+      subject: { kind: 'none' },
+      action: 'restore your previous layout',
+    });
+    expect(record.action).toBe('restore your previous layout');
+
+    // A notice that names its own event carries the title instead — both, when it has both.
+    const titled = noticeLogRecord({
+      severity: 'warning',
+      message: 'Saving will overwrite those changes.',
+      subject: { kind: 'file', name: 'one.txt' },
+      title: 'File changed on disk',
+    });
+    expect(titled.title).toBe('File changed on disk');
+  });
+
   it('renders a subject of kind none as an empty string, never the word "none"', () => {
     const record = noticeLogRecord({ severity: 'info', message: 'x', subject: { kind: 'none' } });
     expect(record.subject).toBe('');

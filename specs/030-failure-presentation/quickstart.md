@@ -24,8 +24,9 @@ and a terminal, and **Tab 2** with one editor and one terminal. Leave Tab 1 acti
 ## A — Display modes (#224)
 
 1. `npm run start:ui`. Preferences → Settings → **Notifications**. Four rows, each with a mode and a
-   timeout in ms.
-2. Set `info` to **Display for** `1500`. Do something that raises an info notice; it goes after ~1.5s.
+   timeout in ms. The mode dropdown reads **Never display / Display for / Dismiss only** — those exact
+   words, not "Never / Timed / Dismiss".
+2. Set `info` to **Display for** `3000`. Do something that raises an info notice; it goes after ~3s.
 3. Set `info` to **Dismiss only**. Raise it again — it stays until you dismiss it.
 4. Set `info` to **Never display**. Raise it — nothing appears. Then check the log:
 
@@ -46,7 +47,9 @@ and a terminal, and **Tab 2** with one editor and one terminal. Leave Tab 1 acti
 5. Set `error` to **Never display** — you are asked to confirm and told errors will only reach the
    log. Decline; the mode stays as it was. Accept; then break something and confirm no toast appears
    **but the panel still shows its banner**.
-6. Try to type `900` into a timeout. It cannot be committed (min 1500).
+6. Try to type `2999` into a timeout. It cannot be committed (min 3000). Now type `3567` — off every
+   stop of the 500 ms slider — and press Enter. It commits, and it is still 3567 when you reopen
+   Preferences. Drag the thumb and it snaps to the grid again; nothing else changes it.
 
 ## B — Named subjects (#195)
 

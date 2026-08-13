@@ -37,6 +37,11 @@ stores: `renderer/state/` (`workspace-store.tsx`, `projects-store.tsx`, `subwork
   Panel's menu; a status bar control or chord is an accelerator over the menu, not a substitute.
   Continuous/navigational input (scroll, find-next, column-select) is exempt but still rebindable.
   The constitution enumerates the known pre-existing gaps — do not add to them.
+- **Displayed numbers are digit-grouped** (constitution 4.5.0). Any number the UI renders goes
+  through `formatGrouped` from `@throng/core`, and anything read back goes through `parseGrouped` —
+  never `toLocaleString` at a call site, never a hand-rolled comma, and never a separator in a value
+  that gets stored or crosses IPC. The two are exact inverses *for the active locale*, which is the
+  point: a locale that groups with `.` turns `1.024` into a corrupted or rejected number otherwise.
 - **Every UI change ships with passing E2E coverage.** Build/unit evidence alone does not make a UI
   change complete (Principle V).
 - Configuration added here must be exposed in the preferences editors — see

@@ -1391,6 +1391,21 @@ let it acquire many conflicting truths.
   considered complete, and a PR MUST NOT be merged, while any configurable key lacks its editor
   descriptor. (A raw-JSON escape hatch MAY be offered in addition to, never instead of, the visual
   editor.)
+- **Displayed numbers MUST be digit-grouped, and grouping MUST NEVER be stored (NON-NEGOTIABLE).**
+  Every number a preference editor *displays* — settings, key bindings, theme tokens, and any editor
+  added later — MUST be rendered with the **active locale's** digit grouping, so `10485760` reads as
+  `10,485,760` rather than as eight digits nobody can scan. Grouping applies at every magnitude: a
+  column in which `5000` sits beside `10,000` teaches the reader that the separator means something,
+  when it means only that one number crossed a threshold.
+  - **Grouping is strictly a view concern.** A grouping character MUST NEVER reach a stored value, a
+    settings file, a theme file, or anything crossing a process boundary. The parser that reads a
+    displayed number back MUST be the exact inverse of the formatter **for the same locale** — the
+    separator is derived from the locale, never assumed to be a comma, because a locale that groups
+    with `.` otherwise turns `1.024` into either a corrupted number or a rejected one depending on
+    which way the bug falls.
+  - Formatting and parsing MUST live in **one** platform-agnostic place, so no editor grows its own.
+  A change that adds or alters a numeric editor control MUST NOT be considered complete while that
+  control displays an ungrouped number or lets a separator reach a stored value.
 - **Action controls MUST be themeable icons with hover titles (NON-NEGOTIABLE).**
   Every interactive control that performs an action — toolbar buttons, row affordances, dismiss and
   clear controls, panel and tab chrome — MUST be presented as an **icon drawn from the active theme's
@@ -1436,4 +1451,23 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 4.4.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-07-31
+**Version**: 4.5.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-08-13
+
+<!--
+  4.5.0 — MINOR. Adds the digit-grouping gate above.
+
+  Rationale: the rule already existed as 018 FR-037/FR-038 and was implemented, but a per-feature
+  spec is the wrong home for a constraint that governs every numeric control added afterwards — it
+  was discoverable only by reading a shipped feature's spec, and 030 nearly re-litigated it from
+  scratch. Promoted so a plan's Constitution Check has to answer for it.
+
+  One substantive change on promotion, decided by the maintainer: 018's five-digit floor is removed.
+  Its stated reason was that `5,000` "reads as a typo rather than a kindness" — a defensible
+  judgement, reversed because a threshold makes a *column* inconsistent, and 030's own timeout rows
+  would have shown `5000` beside `10,000`.
+-->
+
+<!--
+  Amendment note for 4.4.0 and earlier is recorded in git history rather than inline.
+-->
+
