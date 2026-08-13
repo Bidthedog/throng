@@ -140,12 +140,19 @@ goal is to pull all of that into a single, simple customisable workspace.
   rename one, delete it and add it back.
 - **One way to be told things** — the application has exactly **two** notice models: a
   *confirmation* (modal, blocking, text-labelled buttons, because the label is the statement of
-  what you are consenting to) and a *notification* (transient, non-blocking, dismissable, where
-  severity governs persistence — an error waits for you, a success or a warning clears itself).
-  Nothing else. Notifications **stack** rather than replacing one another, so two failures are two
-  messages and dismissing one leaves the other alone; each says **what you were doing** when it
-  happened, not merely what went wrong; and each carries a **copy button**, because the useful thing
-  to do with an error is paste it somewhere.
+  what you are consenting to) and a *notification* (non-blocking, and **you** decide how long it
+  stays). Nothing else. Each of the four severities — error, warning, info, success — carries a
+  **display mode** you set in Preferences: *dismiss* (it waits for you), *timed* (it clears itself
+  after a duration you choose, 1.5–60 s), or *never* (it is not shown at all). Errors and warnings
+  wait by default; info clears after ten seconds and success after five. No severity is exempt from
+  any of the three, and turning one off does not turn it into silence: the notice is still raised
+  and still written to the diagnostics log, and a panel that has **failed** shows its own banner
+  regardless of what the notification settings say. Notifications **stack** rather than replacing
+  one another, so two failures are two messages and dismissing one leaves the other alone; each
+  states **what it is about** — the file, folder, panel, tab, project, sub-workspace or terminal —
+  as well as **what you were doing** when it happened, or says plainly that there is no one thing
+  to name; and each carries a **copy button**, because the useful thing to do with an error is
+  paste it somewhere.
 - **Themed everywhere** — the colour picker is drawn from theme tokens rather than the operating
   system's dialog; inputs, hovers and scrollbars each have their own theme token, menus and dialogs
   share the active- and panel-surface tokens, and text buttons come in three themeable types
@@ -163,8 +170,9 @@ goal is to pull all of that into a single, simple customisable workspace.
   - **Revert All Preferences** — a **session undo**: back to how the window looked when you opened
     it. Not a reset to defaults.
 
-  A reset that cannot be written never fails quietly: a dismissable message names the operation and
-  states that nothing was changed.
+  A reset that cannot be written never fails quietly: it raises an error naming the operation and
+  stating that nothing was changed. If you have set errors to *never*, it is still recorded in the
+  diagnostics log — silencing a severity hides it from the screen, not from the record.
 - **Themes & icon packs** — user-scoped, human-editable, hot-reloading settings, keybindings and
   themes, plus **14 bundled default themes**, dedicated **button style tokens** (colours + font),
   a themeable **editor gutter** (its own background and line-number colours), and **icon packs**

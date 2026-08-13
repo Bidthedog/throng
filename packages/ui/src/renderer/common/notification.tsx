@@ -872,7 +872,14 @@ export function speakFailure(
   }
   const kind = kindFromMessage(raw);
   if (!kind) return { message: raw }; // FR-011b — unmatched failures are untouched
-  const cause: FailureCause = { kind, subject: subjectFromMessage(raw, presented), raw };
+  /*
+   * `undefined` means NOTHING in this failure has a name — the message quoted no path and the
+   * raiser stated `{ kind: 'none' }`. FR-027: the sentence is left as it is rather than padded, so
+   * the cause speaks its subject-free form and `causeKey` collapses on the kind alone, which is
+   * what it already did when every nameless failure shared the string "this item".
+   */
+  const named = subjectFromMessage(raw, presented);
+  const cause: FailureCause = { kind, subject: named ?? '', raw };
   /*
    * FR-018 — the raw text is DEMOTED, not discarded.
    *
@@ -886,7 +893,9 @@ export function speakFailure(
     // FR-023 — the heading presents the subject, so the sentence below states only what went wrong.
     // Only when the two are the SAME thing: a rename can fail because the containing folder is held,
     // and blanking a name the reader was never given would replace an ambiguity with a nothing.
-    message: causeMessage(cause, { subjectPresented: cause.subject === presented }),
+    // `named === undefined` takes the same branch for the opposite reason (FR-027): there is no name
+    // to blank, and quoting an empty subject would read as `"" could not be found.`
+    message: causeMessage(cause, { subjectPresented: named === undefined || named === presented }),
     causeKey: causeKey(cause),
     copyDetail: raw,
   };
@@ -910,14 +919,24 @@ function kindFromMessage(raw: string): FailureCause['kind'] | null {
  * path. Pulling it out here is what turns "a path is in the string somewhere" into "the sentence
  * names the folder".
  */
-function subjectFromMessage(raw: string, presented?: string): string {
+function subjectFromMessage(raw: string, presented?: string): string | undefined {
   const quoted = /'([^']+)'|"([^"]+)"/.exec(raw);
   const path = quoted?.[1] ?? quoted?.[2];
-  // 030 FR-025 — the RAISER'S subject beats the generic stand-in. The reporter knows what it was
-  // acting on; this string is all that survived of it, and when no path survived at all "this item"
-  // was #195 spelled out. It stays as the last resort, for a message that names nothing and a
-  // caller that has nothing to name (FR-027).
-  if (!path) return presented ?? 'this item';
+  /*
+   * 030 FR-025/FR-027 — the RAISER'S subject beats the message's, and NOTHING beats a placeholder.
+   *
+   * The reporter knows what it was acting on and this string is all that survived of it, so
+   * `presented` is preferred. When neither has a name, this used to return the literal `'this item'`
+   * — which `causeMessage` then QUOTED, putting `"this item" could not be found.` on screen. That is
+   * #195 spelled out, surviving inside the fix for it: US2 made the subject a required field and
+   * `{ kind: 'none' }` a legal answer, and this line quietly turned that honest "I have no name" back
+   * into a fake one. `packages/ui/tests/unit/notice-phrases.test.ts` is what found it.
+   *
+   * `undefined` is the honest answer, and FR-027 says what to do with it: leave the sentence as it
+   * is rather than padding it with a placeholder or a guess. The caller speaks the cause in its
+   * subject-free form — the same form FR-023 already uses when the heading has named the subject.
+   */
+  if (!path) return presented;
   const parts = path.split(/[/\\]/).filter(Boolean);
   return parts[parts.length - 1] ?? path;
 }
