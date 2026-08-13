@@ -453,10 +453,17 @@ export const THRONG_THEME: Theme = {
        coinciding today is a coincidence of the shipped set, not a shared meaning.
 
        `chevronDown` is the show-all control: it opens the picker downwards, so it reads as "more
-       below", distinct from the horizontal pair beside it and from the tree's `chevron` ▸. */
+       below", distinct from the horizontal pair beside it and from the tree's `chevron` ▸.
+
+       It is ▾ and NOT ⌄ (U+2304 DOWN ARROWHEAD), which shipped first and sat visibly low beside its
+       neighbours. The cause is the GLYPH, not the box: ‹ and › are centred within their em box,
+       while U+2304's ink sits near the baseline. Centring the container — which is what the CSS
+       does, and what a box-versus-box measurement confirms — cannot move ink that is off-centre
+       inside its own advance. ▾ is centred in its em box, so it lines up with the pills and the two
+       horizontal chevrons without a per-glyph nudge that a re-skin would invalidate. */
     chevronLeft: '‹',
     chevronRight: '›',
-    chevronDown: '⌄',
+    chevronDown: '▾',
   },
 };
 
