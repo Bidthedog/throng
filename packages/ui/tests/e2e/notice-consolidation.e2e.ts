@@ -275,10 +275,12 @@ test('one cause across several tabs is one notice, listing every panel it defeat
         );
         expect(listed.filter(Boolean)).toHaveLength(2);
         for (const id of listed) {
+          // 030 US4 / T060b — one id for both panel types now (FR-039). The union above existed
+          // because an editor and a terminal said the same thing through two unrelated pieces of
+          // markup; `panel-failure-{panelId}` is what replaced both, which makes this assertion
+          // read as what it always meant: whatever the panel is, it states its own failure.
           await expect(
-            win.locator(
-              `[data-testid="editor-unloadable-${id}"], [data-testid="terminal-start-failed-${id}"]`,
-            ),
+            win.locator(`[data-testid="panel-failure-${id}"]`),
             `panel ${id} is listed in the notice but shows no failure of its own`,
           ).toHaveCount(1);
         }

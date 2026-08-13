@@ -1,0 +1,63 @@
+/* The shared panel failure banner (030 US4 / #236, FR-039 / FR-047).
+ *
+ * NOT ONE LITERAL COLOUR. Every colour comes from a theme token, which is what makes the banner
+ * legible in all fifteen shipped themes rather than in the one it was authored against.
+ * `default-themes.e2e.ts` enforces this by reading the rendered element's OWN class list and
+ * auditing every stylesheet rule that mentions any of those classes — so a hard-coded `#3a1d22`
+ * here fails the build, and so does a rule that matches nothing.
+ *
+ * The error pair is the same one the error notice uses, so a failure reads as a failure in every
+ * theme rather than as a hint in some of them.
+ *
+ * PLACEMENT: both panel wraps (`.editor-panel-wrap`, `.terminal-panel-wrap`) are relative flex
+ * columns, so ONE set of rules puts the banner at the top of either — full width, above the content
+ * it is warning about, never overlapping it and never pushed off screen by a long path. That is
+ * FR-039's "same layout, same spacing" meant literally: the banner does not learn where it is. */
+.panel-failure {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--throng-colour-errorSurface);
+  color: var(--throng-colour-errorText);
+  border-bottom: 1px solid var(--throng-colour-danger);
+  /* Above the content it is about, and never squeezed out by it. */
+  order: -1;
+  flex: 0 0 auto;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.panel-failure__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0; /* so the path can ellipsise instead of stretching the panel */
+  flex: 1 1 auto;
+}
+
+.panel-failure__headline {
+  font-weight: 600;
+}
+
+/* The path is the actionable part — it is what the user has to put back — so it is drawn in the
+   monospace face and is selectable, and it ellipsises rather than wrapping the banner into the
+   panel body below it. */
+.panel-failure__path {
+  font-family: var(--throng-font-editor-family);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
+.panel-failure__pointer,
+.panel-failure__retry-failed {
+  opacity: 0.85;
+}
+
+/* An icon control: it keeps the neutral icon-button treatment and inherits the banner's own error
+   colour, so it can never be a button-type token's business (FR-030's exclusion). */
+.panel-failure__control {
+  flex: 0 0 auto;
+  color: inherit;
+}

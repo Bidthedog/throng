@@ -43,6 +43,7 @@ import { useTerminalTitle } from '../terminal/title-store.js';
 import { useEditorState } from '../editor/editor-state.js';
 import { setLastActiveEditor } from '../editor/last-active-editor.js';
 import { getEditorActions } from '../editor/editor-actions.js';
+import { clearEditorPanelType } from '../editor/clear-editor-panel-type.js';
 import { disposeEditor } from '../editor/use-editor.js';
 import { clearTerminalViewState } from '../terminal/terminal-view-state.js';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
@@ -599,6 +600,45 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                                 ? abs.slice(root.length + 1)
                                 : null;
                             if (rel !== null) void window.throng?.files?.reveal?.(rel);
+                          },
+                        },
+                      ]
+                    : []),
+                  /*
+                   * 030 FR-042c — the failure banner's OWN two commands, in the panel's own menu.
+                   *
+                   * The Constitution binds a feature that adds a panel action to add its menu item
+                   * in the same increment: an action reachable only as an icon on a banner is
+                   * unreachable from where users look for panel commands, and undiscoverable by
+                   * anyone who does not recognise the glyph. 029 set the precedent on the terminal's
+                   * side (`terminal-panel.tsx`), and both of these are new work on the editor's.
+                   *
+                   * Shown only while the banner is, because that is the only state in which either
+                   * is meaningful — and the LABELS are the banner's, unchanged (FR-042d), which is
+                   * what makes them the same command rather than a second one that looks like it.
+                   * *Try again* therefore sits beside *Reload from disk* while a file is unreadable:
+                   * they run the same re-read, and the duplication is the price of each surface
+                   * naming its own command consistently.
+                   */
+                  ...(editorUi?.unloadable
+                    ? [
+                        {
+                          label: 'Try again',
+                          icon: 'retry' as const,
+                          onClick: () => {
+                            void getEditorActions(panel.id)?.reloadFromDisk();
+                          },
+                        },
+                        {
+                          label: 'Clear panel type',
+                          icon: 'dismiss' as const,
+                          onClick: () => {
+                            void clearEditorPanelType(panel.id, {
+                              dirty: editorUi?.dirty ?? false,
+                              name: editorUi?.displayName ?? panel.title,
+                              confirm,
+                              clearPanelType: ws.clearPanelType,
+                            });
                           },
                         },
                       ]

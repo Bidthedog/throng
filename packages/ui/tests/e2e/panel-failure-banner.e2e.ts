@@ -318,8 +318,19 @@ test('an editor and a terminal that failed are drawn by the same banner, with th
   // Copy details is US5's (T069a). A banner that already had it here could not go green at US4.
   expect(editorShape.buttons, 'the banner carries a control US4 has not built yet').toBe(2);
 
-  // Every control is a themeable icon with a hover title (FR-042b, Constitution VI).
-  for (const pid of [editorPid, termPid]) {
+  /*
+   * Every control is a themeable icon with a hover title (FR-042b, Constitution VI).
+   *
+   * Each panel is inspected while ITS OWN project is open. The two broken panels deliberately live
+   * in two different projects (see the file header), and throng mounts one project's workspace at a
+   * time — MEASURED here: with `Ghost` open, the DOM holds Ghost's panel and nothing of `Real`. So a
+   * single loop over both ids asked for an element that cannot exist and reported "the editor has no
+   * Try again control" about a banner that was never on screen. The claim is unchanged; only the
+   * moment each half of it is read.
+   */
+  for (const kind of ['editor', 'terminal'] as const) {
+    const pid = kind === 'editor' ? await editorPanel(win) : await terminalPanel(win);
+    await inFailureState(win, pid, kind);
     for (const name of ['Try again', 'Clear panel type']) {
       const c = control(win, pid, name);
       await expect(c).toBeVisible();

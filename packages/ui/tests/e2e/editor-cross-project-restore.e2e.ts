@@ -164,7 +164,15 @@ test('switching to a second project restores ITS files, not the one the last pro
          */
         await expect(win.getByTestId('editor-notice-dialog')).toHaveCount(0);
         await expect(win.getByTestId('panel-failure-notice')).toHaveCount(0);
-        await expect(win.getByTestId(`editor-unloadable-${pid}`)).toHaveCount(0);
+        /*
+         * 030 US4 / T060a — `editor-unloadable-{pid}` became `panel-failure-{pid}` (FR-039).
+         *
+         * This is a NEGATIVE on a test id, which is the shape that goes silently vacuous when the id
+         * it names stops existing: it would have passed for the same reason it passes now, while
+         * testing nothing at all. `panel-failure-banner.e2e.ts` asserts the same id VISIBLE, so a
+         * future rename cannot quietly retire this line without going red somewhere loud first.
+         */
+        await expect(win.getByTestId(`panel-failure-${pid}`)).toHaveCount(0);
       },
       { dataDir, userDataDir },
     );
@@ -228,7 +236,9 @@ test('a dirty buffer restored in another project keeps ITS OWN path (#228)', asy
         await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
           'BETA-UNSAVED-EDIT',
         );
-        await expect(win.getByTestId(`editor-unloadable-${pid}`)).toHaveCount(0);
+        // 030 US4 / T060a — see the note on the first of these: the editor's own banner id is gone,
+        // and a negative left pointing at it would have passed by matching nothing.
+        await expect(win.getByTestId(`panel-failure-${pid}`)).toHaveCount(0);
         await expect(win.getByTestId('editor-notice-dialog')).toHaveCount(0);
         // 030 US3 / T052 — see the note on the first of these: the dialog alone no longer covers the
         // missing-file path, so the consolidated notice is asserted absent too.

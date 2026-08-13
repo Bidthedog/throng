@@ -178,10 +178,11 @@ test('the shared failure banner takes its colours from every shipped theme, and 
         const brokenPid = await firstPanelId(win);
         // SETUP, stated in whichever markup is current: the panel really is in its failure state,
         // so a red below is about the banner's colours and not about a panel that is perfectly fine.
+        // The union this carried while T060 was outstanding — `editor-unloadable-{pid}` — is gone
+        // with the markup it named (T060a): the editor's failure state IS the shared banner now, so
+        // a second arm could only ever match nothing.
         await expect(
-          win.locator(
-            `[data-testid="panel-failure-${brokenPid}"], [data-testid="editor-unloadable-${brokenPid}"]`,
-          ),
+          win.locator(`[data-testid="panel-failure-${brokenPid}"]`),
           'the editor never reached its failure state — SETUP failure, not a theme failure',
         ).toHaveCount(1, { timeout: 30_000 });
         const banner = win.getByTestId(`panel-failure-${brokenPid}`);

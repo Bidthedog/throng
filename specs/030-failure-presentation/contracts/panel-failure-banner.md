@@ -3,6 +3,14 @@
 One component, every panel type (#236). Replaces `editor/unloadable-banner.tsx` and the terminal's
 `terminal-panel__starting` failure strip.
 
+> **Two namespaces collide by prefix, and only by prefix.** `panel-failure-{panelId}` (this banner)
+> and `panel-failure-notice` / `panel-failure-notice-dismiss` (US3's consolidated notice) both match
+> `[data-testid^="panel-failure-"]`. Exact ids can never collide — panel ids are uuids — but any
+> locator that sweeps by prefix counts the notice card and its dismiss button as panels. Measured:
+> the wedge spec counted 3 where one panel had failed. An *equality* exclusion is not enough; it
+> catches the card and leaves the button. Anything sweeping this prefix — US5's copy control included
+> — needs a prefix exclusion.
+
 ## Props
 
 ```ts

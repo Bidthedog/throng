@@ -24,6 +24,7 @@ import {
   readTerminalPanelConfig,
   startFailurePreservesPanelType,
   causeMessage,
+  toDisplayPath,
   type FailureCause,
   type Panel,
   type TerminalPanelConfig,
@@ -52,6 +53,7 @@ import {
 import { useContextMenu } from '../context-menu-provider.js';
 import type { MenuItem } from '../workspace/context-menu.js';
 import { Icon } from '../common/icon.js';
+import { PanelFailureBanner } from '../common/panel-failure-banner.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
 import { useReportPanelFailure } from '../workspace/panel-failure-notice.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
@@ -162,6 +164,23 @@ export function TerminalPanel({
   // Same reason, and additionally because `clearWithMemory` is declared BELOW the menu callback:
   // a ref is read when the menu opens, not when the callback was built.
   const clearWithMemoryRef = useRef<() => void>(() => {});
+  /** The same, for the retry the menu offers — one implementation shared with the banner (FR-042c). */
+  const retryStartRef = useRef<() => Promise<boolean>>(async () => false);
+  /**
+   * The pending *Try again* (030 FR-045), resolved by whichever of the three attach outcomes lands.
+   *
+   * The banner has to be told whether the retry WORKED, and the terminal only learns that when the
+   * attach resolves — asynchronously, in a callback `useTerminal` holds. So the retry hands out a
+   * promise and the attach outcomes settle it: attached → true, failed → false, and "still starting"
+   * → false as well, because the terminal is demonstrably not open and a promise nobody ever settles
+   * would leave the control disabled for the rest of the panel's life.
+   */
+  const retryWaiterRef = useRef<((ok: boolean) => void) | null>(null);
+  const settleRetry = useCallback((ok: boolean): void => {
+    const resolve = retryWaiterRef.current;
+    retryWaiterRef.current = null;
+    resolve?.(ok);
+  }, []);
   /** A remembered directory that had gone; the terminal started at the project root (FR-005b). */
   const [cwdFallback, setCwdFallback] = useState<string | null>(null);
   // Show a themed skeleton over the blank xterm until the session attaches and its
@@ -307,13 +326,11 @@ export function TerminalPanel({
               {
                 label: 'Try again',
                 testId: 'menu-item-Try again',
-                // Inlined rather than reusing `onRetry`, which is declared below this callback —
-                // and read through a ref rather than a dependency, so opening the menu always sees
-                // the CURRENT failure state instead of whatever it was when the callback was made.
+                // The SAME retry the banner's control runs (030 FR-042c) — read through a ref
+                // because it is declared below this callback, and so that opening the menu always
+                // sees the CURRENT state instead of whatever it was when the callback was made.
                 onClick: () => {
-                  setStillStarting(false);
-                  setStartFailure(null);
-                  setAttempt((n) => n + 1);
+                  void retryStartRef.current();
                 },
               },
               {
@@ -646,6 +663,7 @@ export function TerminalPanel({
           cause: cause as FailureCause,
         });
         setStillStarting(false);
+        settleRetry(false); // a retry that landed here did not work (FR-045)
         // Drop the loading skeleton NOW. It renders while `!attached && !giveUpSkeleton`, and
         // `giveUpSkeleton` is a 4000ms delayed flag — a panel that failed to start never attaches,
         // so without this the failure sits under an opaque "loading" cover for four seconds. That is
@@ -656,12 +674,16 @@ export function TerminalPanel({
       }
       end(message, null, true);
     },
-    [end, panel.id],
+    [end, panel.id, settleRetry],
   );
-  const onStillStarting = useCallback(() => setStillStarting(true), []);
+  const onStillStarting = useCallback(() => {
+    setStillStarting(true);
+    settleRetry(false); // not open yet — see the note on retryWaiterRef
+  }, [settleRetry]);
   const onAttached = useCallback((cwdFallback?: string) => {
     setStillStarting(false);
     setStartFailure(null); // a working attach clears any start failure this panel was showing
+    settleRetry(true); // …and it is what a *Try again* was waiting to hear (FR-045)
     /*
      * 029 FR-005b — the terminal started, but NOT where it was asked to.
      *
@@ -672,7 +694,7 @@ export function TerminalPanel({
      */
     setCwdFallback(cwdFallback ?? null);
     setAttached(true); // session live + scrollback replayed — drop the loading skeleton
-  }, []);
+  }, [settleRetry]);
   const onRetry = useCallback(() => {
     setStillStarting(false);
     // 029 FR-004c: this retries THIS panel and nothing else. No retry-all, and a success here does
@@ -680,6 +702,26 @@ export function TerminalPanel({
     setStartFailure(null);
     setAttempt((n) => n + 1); // re-run the attach effect → reattach (idempotent by reuse)
   }, []);
+  /**
+   * *Try again* on a START FAILURE — the banner's control and the menu item, one implementation.
+   *
+   * Differs from {@link onRetry} (the "still starting" badge's retry) in one deliberate way: the
+   * start failure is NOT cleared first. 030 FR-045 requires a failed retry to SAY that it failed,
+   * and a banner that unmounts the moment the button is pressed cannot report anything about what
+   * happened next — it would simply reappear, identical, and the user would be left guessing whether
+   * their click did anything at all. So the banner stands, the attach re-runs underneath it, and
+   * whichever outcome arrives either clears the condition (and the banner with it) or settles the
+   * promise `false` so the banner can say so.
+   */
+  const retryStart = useCallback((): Promise<boolean> => {
+    setStillStarting(false);
+    setAttempt((n) => n + 1); // re-run the attach effect → reattach (idempotent by reuse)
+    return new Promise<boolean>((resolve) => {
+      retryWaiterRef.current?.(false); // a superseded retry is answered, never left hanging
+      retryWaiterRef.current = resolve;
+    });
+  }, []);
+  retryStartRef.current = retryStart;
 
   // Register this terminal's focus with the panel-focus registry (012) so keyboard
   // move-focus can route DOM focus into its input surface.
@@ -718,6 +760,18 @@ export function TerminalPanel({
     isActive: () => isActivePanelRef.current,
   });
 
+  /*
+   * The working directory this terminal could not be opened in (030 FR-040a).
+   *
+   * The PROJECT ROOT first, because that is "the folder" 029 FR-004 requires a start failure to
+   * name and the one whose absence produces this state; a panel with no project root at all (a
+   * sub-workspace-owned terminal) falls back to the directory it was last working in. Neither is
+   * available for a rootless panel that has never run, and the banner simply omits the line rather
+   * than inventing one.
+   */
+  const osName = window.throng?.osName ?? 'windows';
+  const startFailurePath = projectRoot ?? panel.terminalMemory?.lastCwd ?? null;
+
   return (
     <div className="terminal-panel-wrap" style={{ background: xtermTheme.background }}>
       <div
@@ -750,46 +804,48 @@ export function TerminalPanel({
       <FindBar panelId={panel.id} />
       {/*
         029 FR-004 — the terminal could not START, and the panel says so IN PLACE rather than
-        dissolving into an unconfigured form. Same shape as the "still starting" badge because it is
-        the same kind of news: non-fatal, actionable, and belonging to this panel.
+        dissolving into an unconfigured form.
+
+        030 FR-039 — said through the banner EVERY panel type shares. This used to be markup of the
+        terminal's own, which the editor's unloadable banner then duplicated in a different shape
+        for the same idea. What survives verbatim is everything 029 decided: the two controls, their
+        labels (FR-042d), Clear-with-memory's semantics (FR-044), and the folder being named — which
+        now reaches the user through the banner's own path line, because per-type wording is confined
+        to the headline and "This terminal could not be opened" does not contain it (FR-040a).
+
+        The cause MESSAGE is deliberately not repeated here: the consolidated notice carries the
+        cause and the list of panels it defeated (FR-040), and the raw system error is never rendered
+        at all (FR-034) — it is in the diagnostic log, which is what the banner points at.
       */}
       {startFailure ? (
-        <div
-          className="terminal-panel__starting"
-          data-testid={`terminal-start-failed-${panel.id}`}
-          role="status"
-        >
-          <span className="terminal-panel__starting-msg">{startFailure.message}</span>
-          {/* Action controls (Principle VI): themeable icons with hover titles, never text buttons. */}
-          <button
-            type="button"
-            className="terminal-panel__retry"
-            title="Try again"
-            aria-label="Try again"
-            data-testid={`terminal-retry-${panel.id}`}
-            onClick={onRetry}
-          >
-            <Icon token="retry" />
-          </button>
-          {/*
-            FR-004a — the escape hatch that preserving the panel type takes away.
-            Before 029 a failed start reverted the panel for you; now it does not, so a user who no
-            longer wants a terminal here must be able to SAY so, without destroying the panel and
-            losing its position and title. Clearing becomes their decision instead of a side effect
-            of a folder being briefly unavailable — which is the whole distinction this feature draws.
-          */}
-          <button
-            type="button"
-            className="terminal-panel__retry"
-            title="Clear panel type"
-            aria-label="Clear panel type"
-            data-testid={`terminal-clear-${panel.id}`}
-            onClick={clearWithMemory}
-          >
-            <Icon token="dismiss" />
-          </button>
-        </div>
+        <PanelFailureBanner
+          panelId={panel.id}
+          headline="This terminal could not be opened"
+          detail={{ path: startFailurePath ? toDisplayPath(startFailurePath, osName) : undefined }}
+          onRetry={retryStart}
+          onCancel={clearWithMemory}
+        />
       ) : null}
+      {/*
+        ══ THE OTHER TWO `terminal-panel__starting` STRIPS STAY AS THEY ARE (030 FR-039a, T062a) ══
+
+        A settled decision, recorded here because the two below LOOK like the strip 030 just replaced
+        and the obvious tidy-up is to fold them into the same component. They are not failures:
+
+          • the remembered-cwd fallback reports a SUBSTITUTION — the shell is live, nothing was lost,
+            and 029 FR-005b requires it to be informative and dismissible and NOT an error;
+          • "still starting" reports PROGRESS — an attach that has exceeded its budget and may yet
+            succeed on its own.
+
+        Neither has a cause, neither offers Clear panel type, and both are dismissible or transient —
+        so drawing them as failure banners would tell the user, in the app's own error colours, that
+        something had gone wrong when nothing had. SC-009 counts failure banners only.
+
+        Note also that `terminal-retry-{panel.id}` SURVIVES on the still-starting strip below. Any
+        unscoped E2E locator on that id therefore keeps resolving after 030 while silently addressing
+        a different state of a different kind; every control locator in the failure specs is scoped
+        inside the banner root for exactly that reason.
+      */}
       {cwdFallback ? (
         <div
           className="terminal-panel__starting"
@@ -811,7 +867,10 @@ export function TerminalPanel({
           </button>
         </div>
       ) : null}
-      {stillStarting ? (
+      {/* Never alongside the failure banner: a retry that overruns its budget would otherwise put a
+          second, differently-worded retry control on screen for the same panel. The banner is the
+          more specific statement, and it is the one that reports what the retry did. */}
+      {stillStarting && !startFailure ? (
         <div
           className="terminal-panel__starting"
           data-testid={`terminal-starting-${panel.id}`}

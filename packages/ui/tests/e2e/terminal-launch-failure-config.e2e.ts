@@ -189,12 +189,21 @@ test('a terminal that fails to launch keeps its configuration and comes back onc
         /**
          * RED #2 — the failure is shown WHERE THE TERMINAL IS, with a way to try again.
          *
-         * `terminal-starting-*` / `terminal-retry-*` is the existing non-fatal failure surface
+         * `terminal-starting-*` / `terminal-retry-*` was the existing non-fatal failure surface
          * (008 FR-005, proven by `terminal-slow-start.e2e.ts:32`). Routing a launch failure there
-         * rather than through `end()` is the shape of the fix, so this asserts an affordance that
-         * already exists rather than inventing one.
+         * rather than through `end()` was the shape of the fix, so this asserted an affordance that
+         * already existed rather than inventing one.
+         *
+         * 030 US4 / T060b — a START FAILURE is now the shared banner (FR-039), and its retry is
+         * addressed by the accessible name FR-042d fixes rather than by a test id. The locator is
+         * SCOPED INSIDE the banner deliberately: `terminal-retry-{pid}` still exists on the
+         * still-starting strip, which FR-039a keeps exactly as it was, so an unscoped locator on it
+         * would go on passing here while addressing a different state of a different kind — the
+         * failure would look fixed and would not be.
          */
-        await expect(win.getByTestId(`terminal-retry-${pid}`)).toBeVisible({ timeout: 5000 });
+        const banner = win.getByTestId(`panel-failure-${pid}`);
+        await expect(banner).toBeVisible({ timeout: 5000 });
+        await expect(banner.getByRole('button', { name: 'Try again', exact: true })).toBeVisible();
       },
       { dataDir, userDataDir },
     );
