@@ -928,6 +928,50 @@ running app.
 - FR-051's popover is a new floating surface, so it must be registered in
   `floating-surfaces.test.ts` (that guard is an enumeration and will fail otherwise).
 
+## User Story 7 - A second pass over the strip in use (Priority: P7)
+
+**Added 2026-08-12**, from the maintainer using US6. Two of these are defects this feature
+introduced; the rest are ranges and behaviours that only reveal themselves in use.
+
+### Functional requirements
+
+- **FR-055**: `tabs.smoothScrollMs`'s maximum MUST be **1500**, not 3000. Three seconds to move one
+  tab is not a preference anyone holds; the range was invented, not chosen.
+- **FR-056**: `tabs.closeArmingDelayMs`'s maximum MUST likewise be **1500**.
+- **FR-057**: The arming delay MUST apply to **every** tab, **including the active one**.
+  - **This supersedes FR-044g**, which exempted the active tab on the reasoning that its affordance
+    is always present, so there is no moment at which it appears and therefore no accidental click
+    to guard against. In use that is wrong: the active tab's X is the one most often adjacent to
+    where the pointer already is, and "the rule depends on which tab you are over" is harder to hold
+    than "the X arms after you rest on it".
+- **FR-058**: A new **`tabs.popoverDelayMs`** setting MUST control how long the pointer rests on a
+  tab before its info popover appears. Range **0–1500**, default **300**.
+- **FR-059**: While a **drag is in progress** — a tab being reordered, or a panel being dragged over
+  a tab — the close affordance MUST NOT activate at all, and its arming delay MUST NOT even begin
+  counting.
+  - A drag passes the pointer over tabs by definition, so an arming delay alone is not protection:
+    a long drag would arm it in passing and the drop would land on a destroy.
+- **FR-060**: A tab MUST render its **top border**. The chips are currently clipped along the top —
+  the corner radius shows and the border line does not.
+  - Cause, to be confirmed by measurement rather than assumed: the track clips vertically (CSS
+    forces `overflow-y` to a non-visible value once `overflow-x` is one), so a chip even a pixel
+    taller than the track's content box loses its top edge. The **active** chip is exactly one pixel
+    taller than an inactive one, because `.tab-chip--active` carries a 2px accent border where the
+    others carry 1px.
+- **FR-061**: **Right-clicking a tab MUST hide its popover**, which otherwise obscures the context
+  menu it just opened.
+- **FR-061a**: Once hidden that way, the popover MUST NOT reappear until the pointer **leaves the
+  tab and returns**. Re-showing it while the menu is still open would restore the obstruction.
+
+### Notes for planning
+
+- FR-055/FR-056 narrow an existing range. Both are already guarded, so a user whose stored value is
+  above the new maximum is clamped on read — no migration, and FR-013's write-back records it.
+- FR-058's step must satisfy the aimable-slider rule (≥1% of range) **and** land on its default:
+  across 0–1500 a step of 25 is 1.67% and reaches 300 exactly.
+- FR-060 is a regression from US1's restructure and needs a **measured** diagnosis; the cause above
+  is a hypothesis with supporting evidence, not a finding.
+
 ## Dependencies
 
 - **#218 (panel auto-naming) has landed** (on `origin/master` as of 2026-08-11; this branch is
