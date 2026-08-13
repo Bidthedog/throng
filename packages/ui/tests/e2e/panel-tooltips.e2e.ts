@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { runApp, createProject, firstPanelId, settle } from './harness.js';
+import { restOnTabForPopover } from './helpers/tab-settings.js';
 
 /**
  * 017 / #57 — a header tooltip must show the TITLE, not a list of instructions.
@@ -87,8 +88,9 @@ test('a tab chip shows its TITLE on hover, not instructions', async () => {
       /./,
     );
 
-    await chip.hover();
-    const popover = win.getByTestId('tabstrip-popover');
+    // 031 US7 / FR-058 — the popover WAITS for a resting pointer now, so the gesture is "rest on
+    // the tab" rather than "move onto it once". See `restOnTabForPopover`.
+    const popover = await restOnTabForPopover(win, chip);
     await expect(popover).toBeVisible();
     await expect(win.getByTestId('tabstrip-popover-name')).toHaveText(label!.trim());
     await expect(popover).not.toContainText(TAB_INSTRUCTIONS);

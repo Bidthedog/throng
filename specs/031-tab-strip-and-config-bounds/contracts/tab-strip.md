@@ -125,7 +125,10 @@ export function matchSpans(text: string, query: string): MatchSpan[];
 | P6 | A hover-revealed affordance is **inert** for the arming delay | FR-044c |
 | P7 | The delay restarts on each appearance, never accumulates, and a click inside it is **ignored, not queued** | FR-044d |
 | P8 | Such a click also does not activate the tab or start a rename | FR-044e, FR-045 |
-| P9 | The **active** tab's always-present affordance has no arming delay | FR-044g |
+| ~~P9~~ | ~~The **active** tab's always-present affordance has no arming delay~~ — **SUPERSEDED by FR-057 (US7)**. The exemption reasoned that an always-present affordance has no moment of appearing and so no accidental click to guard against. In use that was wrong: the active tab's X is the one most often next to where the pointer already is, and a rule that depends on which tab you are over is harder to hold than "the X arms after you rest on it". The delay now applies to **every** tab | ~~FR-044g~~ → FR-057 |
+| P11 | **No affordance arms while a drag is in progress** — a tab being reordered, or a panel dragged over a tab. The delay does not merely fail to elapse, it never starts. A drag passes the pointer over tabs by definition, so a long enough drag would otherwise arm the X in passing and the drop would land on a destroy | FR-059 |
+| P12 | The info popover appears only after the pointer **rests** for `tabs.popoverDelayMs`; leaving earlier shows nothing | FR-058 |
+| P13 | **Right-clicking a tab hides its popover**, which otherwise obscures the context menu it just opened, and it stays hidden until the pointer leaves the tab and returns | FR-061, FR-061a |
 | P10 | Unavailable wherever Destroy Tab is unavailable | FR-046 |
 
 ## Test obligations

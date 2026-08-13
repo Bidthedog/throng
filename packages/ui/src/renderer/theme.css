@@ -755,10 +755,34 @@ textarea,
   opacity: 1;
 }
 
+/*
+ * 031 US7 / FR-060 — the chip is EXACTLY AS TALL AS THE TRACK, and this is what stops it being
+ * clipped along the top.
+ *
+ * MEASURED, not assumed. Before this rule the track's content box was 29px (the 34px strip, less its
+ * 4px top padding and its 1px bottom border) while a chip laid itself out at 31px — 18px of line box
+ * from the count pill, 12px of padding, 1px of top border — and the track is `align-items: flex-end`
+ * with `overflow-y` forced to a non-visible value by its `overflow-x`. So every chip hung 2px above
+ * the track's content box and had those 2px cut off: the rounded corner survived (it is drawn inside
+ * the surviving part) and the top border line, which lives entirely in the cut, did not. The ACTIVE
+ * chip was 32px and lost 3px, so it was worse — but it was never the only one affected, and the "one
+ * pixel taller" difference was a symptom rather than the cause.
+ *
+ * `align-self: stretch` makes the chip's BORDER BOX the flex line's cross size, which in a
+ * single-line container with a definite height is the track's content box exactly. The top border is
+ * therefore inside the clip by construction — at any tab font, in any theme, and whether or not the
+ * strip overflows — rather than by an arithmetic coincidence that the next font change would undo.
+ *
+ * Vertical padding is now a MINIMUM INSET rather than a contributor to the height: with the height
+ * fixed, 3px leaves 22px of content box against the 18px the pill actually needs, so a theme with a
+ * larger tab font has room before anything has to give.
+ */
 .tab-chip {
   display: flex;
   align-items: center;
-  padding: 6px 14px;
+  align-self: stretch;
+  box-sizing: border-box;
+  padding: 3px 14px;
   font-size: 12px;
   color: var(--text-dim);
   background: var(--bg-raised);
@@ -770,6 +794,12 @@ textarea,
   white-space: nowrap;
 }
 
+/*
+ * The accent border no longer changes the chip's HEIGHT — `align-self: stretch` fixes that at the
+ * track's — so the active tab is exactly as tall, and sits at exactly the same y, as every other
+ * one. The 1px difference that used to exist was real (E2E had to compare like with like to avoid
+ * reporting it as a regression) and is simply gone.
+ */
 .tab-chip--active {
   color: var(--text);
   background: var(--throng-colour-surfaceActive);

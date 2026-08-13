@@ -35,6 +35,7 @@ import {
   stripState,
   traceScroll,
 } from './helpers/tabs.js';
+import { armAndClose } from './helpers/tab-settings.js';
 
 // One app for the file: no test here seeds state per-launch. The config root IS seeded once, before
 // the single launch, because destroying a tab must not stop to ask — the confirmation dialog is
@@ -186,11 +187,17 @@ test('T045 — the counts follow an add and a destroy (S2)', async () => {
   const added = await expectCountsInSync(shared.win);
   expect(added.total, 'a new tab is counted').toBe(start + 1);
 
-  // DESTROY — the active tab's close affordance is always present and never delayed (P9), so this
-  // is one click, and `confirmations.destroyTab: none` (seeded before launch) means no dialog.
+  /*
+   * DESTROY — rest on the tab until its affordance arms, then press it.
+   *
+   * It used to be one bare click, because P9 exempted the ACTIVE tab from the arming delay. 031 US7
+   * / FR-057 supersedes that: the delay now applies to every tab, so a click without the rest is a
+   * click inside the arming window and is ignored. `confirmations.destroyTab: none` (seeded before
+   * launch) still means no dialog once it does land.
+   */
   const active = (await stripState(shared.win)).chips.find((chip) => chip.active);
   expect(active, 'some tab is active').toBeTruthy();
-  await shared.win.getByTestId(`tabstrip-close-${active!.tabId}`).click();
+  await armAndClose(shared.win, active!.tabId);
   await expect(shared.win.getByTestId(active!.testId)).toHaveCount(0);
   const destroyed = await expectCountsInSync(shared.win);
   expect(destroyed.total, 'a destroyed tab stops being counted').toBe(start);

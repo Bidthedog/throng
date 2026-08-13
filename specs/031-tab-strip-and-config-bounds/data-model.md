@@ -11,11 +11,22 @@ this feature adds three settings leaves and a body of derived, in-memory state.
 
 ### 1.1 New leaves
 
+**Current as of User Story 7.** Nine settings in the `Tabs` group; the three US6 added and the one
+US7 added are included, and the two maxima US7 narrowed are shown at their current values.
+
 | Key | Type | Range | **Step** | Default | Requirement |
 |---|---|---|---|---|---|
-| `tabs.smoothScrollMs` | number | 0–3000 | **50** | **300** | FR-030 |
-| `tabs.closeArmingDelayMs` | number | 0–2000 | **50** | **300** | FR-044h |
+| `tabs.smoothScrollMs` | number | 0–**1500** | **50** | **300** | FR-030, narrowed by FR-055 |
+| `tabs.closeArmingDelayMs` | number | 0–**1500** | **50** | **300** | FR-044h, narrowed by FR-056 |
+| `tabs.popoverDelayMs` | number | 0–1500 | **25** | **300** | FR-058 |
 | `tabs.maxNameLength` | number | 10–128 | **2** | **64** | FR-034 |
+| `tabs.maxWidth` | number | 10–128 | **2** | **32** | FR-050 |
+| `tabs.newTabPosition` | enum | `afterActive` \| `end` | — | `afterActive` | FR-053a |
+| `tabs.chevronRepeatDelayMs` | number | 100–3000 | **50** | **500** | FR-054a |
+
+Both US7 narrowings are of **already-guarded** settings, so a stored value above the new maximum is
+clamped on read and the write-back records the correction (FR-013). No migration exists or is needed
+— which is exactly the property #227 was built to give.
 
 **The steps are not free choices.** `slider-descriptors.test.ts` enforces that a slider's step is at
 least **1% of its range** — "a slider you can actually aim". A step of 1 on `tabs.maxNameLength`

@@ -103,8 +103,18 @@ function TabChip({
   onMenu: (state: TabMenuState) => void;
 }): ReactElement {
   const ws = useWorkspace();
-  const { draggingPanelId } = useDragState();
-  const hoverActivateMs = useAppSettings().behaviour.tabHoverActivateMs;
+  const { draggingPanelId, draggingTabId } = useDragState();
+  const settings = useAppSettings();
+  const hoverActivateMs = settings.behaviour.tabHoverActivateMs;
+  const popoverDelayMs = settings.tabs.popoverDelayMs;
+  /**
+   * FR-059 — a drag is in progress ANYWHERE in the strip.
+   *
+   * Deliberately the whole strip's state rather than this chip's own `drag.isDragging`: the chip
+   * being dragged is not the one at risk. A reorder or a panel drag sweeps the pointer over every
+   * OTHER chip on the way to its target, and it is those chips whose X must stay dead.
+   */
+  const dragInProgress = draggingPanelId !== null || draggingTabId !== null;
   // Any unsaved editor in this Tab lights the shared dot (006, US8).
   const tabDirty = useEditorDirty(collectPanels(tab.root).map((p) => p.id));
   const drag = useDraggable({ id: tabDragId(tab.id) });
@@ -195,15 +205,37 @@ function TabChip({
    *
    * The timer is keyed on the hover, so it restarts on each appearance and can never accumulate: a
    * pointer that leaves and returns waits the full delay again, and one that stays waits it once.
-   * The ACTIVE tab's affordance is always present, so it was never revealed by a hover and has no
-   * delay at all (P9).
+   *
+   * ══ 031 US7 / FR-057 — THE DELAY APPLIES TO EVERY TAB, INCLUDING THE ACTIVE ONE ══
+   *
+   * This SUPERSEDES FR-044g (P9), which exempted the active tab on the reasoning that its affordance
+   * is always present, so nothing materialises under the pointer and there is no mis-click to guard
+   * against. In use that reasoning is wrong twice over. The active tab's X is the one most often
+   * adjacent to where the pointer already is, so it is the most likely to be caught in passing; and
+   * "the rule depends on which tab you are over" is a harder thing to hold than "the X arms once you
+   * rest on it". The rule is now uniform, and `active` is no longer part of this arithmetic at all.
+   *
+   * ══ FR-059 — AND IT DOES NOT EVEN START COUNTING DURING A DRAG ══
+   *
+   * A drag passes the pointer over tabs by definition, so an arming delay alone is no protection: a
+   * long reorder would arm the X of every chip it crossed, and the drop would land on a destroy.
+   * The guard is on the TIMER, not just on the click — hence the bail-out here rather than only in
+   * the handler — because a delay that ran to completion under a drag would leave the affordance
+   * live the instant the drop finished, with the pointer still on top of it.
    */
   const [hovered, setHovered] = useState(false);
   const showClose = active || hovered;
   const [armed, setArmed] = useState(false);
   useEffect(() => {
-    if (active) {
-      setArmed(true); // P9 — always present, so nothing appeared under the pointer
+    if (dragInProgress) {
+      setArmed(false);
+      return;
+    }
+    // FR-044h — zero is "no window to wait out", so there is nothing for a hover to start counting
+    // and the affordance is simply live. Stated as its own branch rather than falling out of a
+    // `setTimeout(…, 0)`, which would only arm a tab the pointer had already been seen to enter.
+    if (closeArmingDelayMs <= 0) {
+      setArmed(true);
       return;
     }
     if (!hovered) {
@@ -213,7 +245,7 @@ function TabChip({
     setArmed(false);
     const timer = setTimeout(() => setArmed(true), closeArmingDelayMs);
     return () => clearTimeout(timer);
-  }, [active, hovered, closeArmingDelayMs]);
+  }, [hovered, dragInProgress, closeArmingDelayMs]);
 
   /*
    * FR-037/FR-037c — the name is bounded for DISPLAY and the ellipsis is drawn by CSS.
@@ -255,8 +287,53 @@ function TabChip({
   const holdChip = useCallback((node: HTMLElement | null): void => {
     chipRef.current = node;
   }, []);
+
+  /*
+   * FR-058 — the popover WAITS for `tabs.popoverDelayMs` with the pointer at rest.
+   *
+   * It used to open the instant the pointer touched a chip, so simply crossing the strip on the way
+   * to somewhere else flashed a surface over every tab in between. The delay is what distinguishes
+   * "I want to know what is in this tab" from "I am passing through", and leaving before it elapses
+   * shows nothing at all — the timer is torn down by the effect's own cleanup, so it cannot fire
+   * behind a pointer that has already gone.
+   *
+   * A setting rather than a constant because it is the same class of judgement as the close
+   * affordance's arming delay, and the maintainer wanted both aimable.
+   *
+   * FR-061 / FR-061a — a RIGHT-CLICK hides it, and it stays hidden until the pointer leaves.
+   *
+   * The context menu opens directly under the pointer, which is exactly where the popover already
+   * is, so the popover obscured the menu it had just summoned. Hiding it is half the fix; the other
+   * half is that it must not come back while the menu is open, and "the pointer has not moved" is
+   * not a state React re-renders on. So the suppression is sticky and is cleared by the one event
+   * that unambiguously means the user has finished with this tab: `pointerleave`. Re-entering the
+   * chip starts the whole delay again from zero.
+   */
+  const [restedOn, setRestedOn] = useState(false);
+  const [popoverSuppressed, setPopoverSuppressed] = useState(false);
+  useEffect(() => {
+    if (!hovered) {
+      setRestedOn(false);
+      return;
+    }
+    setRestedOn(false);
+    const timer = setTimeout(() => setRestedOn(true), popoverDelayMs);
+    return () => clearTimeout(timer);
+  }, [hovered, popoverDelayMs]);
+
   const showPopover =
-    hovered && !renaming && !treeOver && !panelOver && draggingPanelId === null && !drag.isDragging;
+    hovered &&
+    restedOn &&
+    !popoverSuppressed &&
+    !renaming &&
+    !treeOver &&
+    !panelOver &&
+    // `dragInProgress` rather than `draggingPanelId === null && !drag.isDragging`: a tab being
+    // REORDERED sweeps the pointer across every other chip, and a popover blooming under each one
+    // in turn is noise laid directly over the drop targets the user is aiming at (the same reason
+    // FR-059 keeps the close affordance dead).
+    !dragInProgress &&
+    !drag.isDragging;
 
   return (
     <div
@@ -290,7 +367,25 @@ function TabChip({
         acceptTreeDrop(treeDrag.paths, treeDrag.singleFile);
       }}
       onPointerEnter={() => setHovered(true)}
-      onPointerLeave={() => setHovered(false)}
+      /*
+       * A MOVE re-establishes the hover, and this matters now that something waits on it (FR-058).
+       *
+       * `pointerenter` fires once, on the way in. If the chip is then re-mounted or re-laid-out
+       * under a stationary pointer — a tab renamed as its project settles, the strip re-rendering
+       * around it — the browser can leave React's `hovered` reading false with no further event to
+       * correct it, because the pointer never moved. The old popover appeared on the enter and had
+       * nothing to lose; a delayed one would simply never arrive, and the user would be resting on a
+       * tab that stayed silent for as long as they held still.
+       *
+       * Setting the same value costs nothing: React bails out of an identical state, so this is a
+       * no-op on every move of an already-hovered chip and does NOT restart the delay.
+       */
+      onPointerMove={() => setHovered(true)}
+      onPointerLeave={() => {
+        setHovered(false);
+        // FR-061a — leaving is the ONLY thing that lifts a right-click's suppression.
+        setPopoverSuppressed(false);
+      }}
       onClick={() => ws.setActiveTab(tab.id)}
       onDoubleClick={() => onStartRename()}
       /*
@@ -300,6 +395,8 @@ function TabChip({
        */
       onContextMenu={(e) => {
         e.preventDefault();
+        // FR-061 — the menu opens where the popover is, so the popover goes first.
+        setPopoverSuppressed(true);
         onMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
       }}
       {...(renaming ? {} : drag.listeners)}
@@ -352,6 +449,15 @@ function TabChip({
         }`}
         testId={`tabstrip-close-${tab.id}`}
         disabled={closeDisabled}
+        /*
+         * The arming state, made READABLE (FR-057/FR-059).
+         *
+         * `--inert` is a visual class and `opacity` is a rendering detail; whether the control will
+         * act is a fact about the control. Exposing it is what lets "the active tab's X is inert
+         * until you have rested on it" and "nothing arms during a drag" be asserted on the state
+         * rather than on a stylesheet, or worse, on a stopwatch.
+         */
+        dataAttrs={{ 'data-armed': armed ? 'true' : 'false' }}
         // Never reaches the chip: it must not activate the tab (P8) and a double-click on it must
         // not open the rename box.
         onMouseDown={(event) => event.stopPropagation()}
@@ -359,7 +465,11 @@ function TabChip({
         onClick={(event) => {
           event.stopPropagation();
           event.preventDefault();
-          if (!armed) return; // P7 — ignored, not queued. Nothing happens later either.
+          // P7 — ignored, not queued. Nothing happens later either. `dragInProgress` is redundant
+          // with `armed` (the effect above never arms during a drag) and stated anyway: FR-059 is
+          // about the close never ACTIVATING, and a guard that depends on a timer having been
+          // cancelled correctly is a guard one refactor away from not being one.
+          if (dragInProgress || !armed) return;
           onClose();
         }}
       />
@@ -1247,7 +1357,7 @@ export function TabGroup(): ReactElement {
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
     >
-      <DragStateContext.Provider value={{ draggingPanelId }}>
+      <DragStateContext.Provider value={{ draggingPanelId, draggingTabId }}>
         <div
           className="tab-strip"
           data-testid="tab-strip"

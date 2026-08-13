@@ -4,9 +4,20 @@ import { createContext, useContext } from 'react';
  *  their edge drop-zones only while another Panel is being dragged (FR-018). */
 export interface DragState {
   draggingPanelId: string | null;
+  /**
+   * The Tab being reordered, if any (031 US7 / FR-059).
+   *
+   * A tab drag was previously known only to `TabGroup` itself, because nothing below it cared. The
+   * close affordance does: a reorder drags the pointer ACROSS the strip by definition, so every chip
+   * it passes over would otherwise start arming its X, and the drop would land on a destroy.
+   */
+  draggingTabId: string | null;
 }
 
-export const DragStateContext = createContext<DragState>({ draggingPanelId: null });
+export const DragStateContext = createContext<DragState>({
+  draggingPanelId: null,
+  draggingTabId: null,
+});
 
 export function useDragState(): DragState {
   return useContext(DragStateContext);

@@ -43,6 +43,7 @@ import {
   tabClose,
   closeIsInert,
   pointerAwayFromStrip,
+  restOnTabForPopover,
 } from './helpers/tab-settings.js';
 
 test.describe.configure({ mode: 'serial' });
@@ -156,8 +157,9 @@ test.describe('at the shipped arming delay', () => {
       'nothing is hovered, so nothing is described',
     ).toHaveCount(0);
 
-    await win.getByTestId(`tab-${tab}`).hover();
-    const popover = win.getByTestId('tabstrip-popover');
+    // FR-058 — a RESTING pointer, not a passing one. `restOnTabForPopover` re-performs the gesture
+    // if the strip moved out from under it, which a bare `hover()` cannot notice.
+    const popover = await restOnTabForPopover(win, win.getByTestId(`tab-${tab}`));
     await expect(popover).toBeVisible();
     await expect(popover, 'the popover describes the tab under the pointer').toHaveAttribute(
       'data-tab-id',
@@ -419,24 +421,55 @@ test.describe('with a long arming delay', () => {
     expect(await tabIds(win), 'exactly the one tab went').toEqual(ids.filter((id) => id !== target));
   });
 
-  test('T101 — the active tab’s always-present affordance has no arming delay (P9)', async () => {
+  /*
+   * ══ THIS TEST USED TO ASSERT THE OPPOSITE, AND WAS RIGHT TO ══
+   *
+   * It read "the active tab's always-present affordance has no arming delay (P9)" and proved it by
+   * clicking with the pointer away from the strip. FR-044g's reasoning was that the affordance is
+   * always present on the active tab, so nothing materialises under a pointer already in motion and
+   * there is nothing to guard against.
+   *
+   * 031 US7 / **FR-057 supersedes FR-044g** on evidence from using it. The active tab's X is the one
+   * most often adjacent to where the pointer already is, so it is the likeliest of all of them to be
+   * caught in passing; and a rule that changes depending on which tab you are over is harder to hold
+   * than "the X arms once you rest on it". So the assertion is INVERTED rather than deleted — the
+   * same control, at the same delay, now has to be inert until it has been rested on, and the P7
+   * "ignored, not queued" proof is carried over intact because a click that lands early on the
+   * ACTIVE tab must not destroy anything later either.
+   */
+  test('T101 — the active tab’s affordance arms on a rest like every other one (FR-057)', async () => {
     const win = shared.win;
     await project(win, 'Immediate');
     await seedTabs(win, ['bravo']);
     const active = await activeTabId(win);
 
     /*
-     * Read with the pointer AWAY from the strip: the active tab's affordance was never revealed by
-     * a hover, so there was no moment at which it appeared and nothing to guard against. At a
-     * 1500ms delay an inert one here would be unmistakable.
+     * Read with the pointer AWAY from the strip. The affordance is still DRAWN — it is the active
+     * tab, and P4 has not changed — but it is no longer live merely for being drawn.
      */
     await pointerAwayFromStrip(win);
-    await expect(tabClose(win, active)).toBeVisible();
-    expect(await closeIsInert(win, active), 'P9: never inert, at any delay').toBe(false);
+    await expect(tabClose(win, active), 'P4: still always present on the active tab').toBeVisible();
+    expect(
+      await closeIsInert(win, active),
+      'FR-057: the active tab is not exempt — unrested, it is inert',
+    ).toBe(true);
 
-    // And it acts on the first click, with no waiting at all.
+    // A click now is a click inside the arming window: ignored, and not queued behind it either.
     await tabClose(win, active).click();
-    await expect(win.getByTestId('confirm-dialog'), 'P9: it acted immediately').toBeVisible();
+    await expect(
+      win.getByTestId('confirm-dialog'),
+      'FR-057: an unrested click on the active tab does nothing',
+    ).toHaveCount(0);
+
+    // Resting on the tab arms it, and then it acts — the same control, reached the same way as any
+    // other tab's.
+    await win.getByTestId(`tab-${active}`).hover();
+    await waitUntilArmed(win, active);
+    expect(await tabIds(win), 'P7: and the early click never fired late').toContain(active);
+    await expect(win.getByTestId('confirm-dialog'), 'P7: nor asked late').toHaveCount(0);
+
+    await tabClose(win, active).click();
+    await expect(win.getByTestId('confirm-dialog'), 'armed, so it acts').toBeVisible();
     await win.getByTestId('confirm-cancel').click();
     await expect(win.getByTestId('confirm-dialog')).toHaveCount(0);
     await expect(win.getByTestId(`tab-${active}`), 'cancelled, so nothing was destroyed').toBeVisible();

@@ -300,6 +300,15 @@ export interface TabSettings {
    * ordinary click never turns into one.
    */
   chevronRepeatDelayMs: number;
+  /**
+   * How long (ms) the pointer must rest on a tab before its info popover appears (US7, FR-058).
+   *
+   * A separate setting from {@link closeArmingDelayMs} even though both time a hover, because they
+   * guard opposite mistakes: the arming delay stops something DESTRUCTIVE from happening too
+   * eagerly, while this one only decides when a read-only surface shows up. Anyone who wants the
+   * popover instantly (0) still wants the close button to make them wait.
+   */
+  popoverDelayMs: number;
 }
 
 /** In-panel search preferences (013, FR-002a / SC-007). */
@@ -377,6 +386,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     maxWidth: 32,
     newTabPosition: 'afterActive',
     chevronRepeatDelayMs: 500,
+    popoverDelayMs: 300,
   },
   newProject: {
     startingFolder: 'lastViewed',
@@ -444,6 +454,7 @@ function tabsSettings(raw: unknown, d: TabSettings): TabSettings {
     newTabPosition:
       typeof v.newTabPosition === 'string' ? (v.newTabPosition as NewTabPosition) : d.newTabPosition,
     chevronRepeatDelayMs: wholeNumber(v.chevronRepeatDelayMs, d.chevronRepeatDelayMs),
+    popoverDelayMs: wholeNumber(v.popoverDelayMs, d.popoverDelayMs),
   };
 }
 
