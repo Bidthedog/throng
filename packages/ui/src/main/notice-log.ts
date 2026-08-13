@@ -86,6 +86,12 @@ function quoted(value: string): string {
 export function noticeLogLines(record: NoticeLogRecord): string[] {
   const fields = [`severity=${record.severity}`];
   if (record.subject) fields.push(`subject=${quoted(record.subject)}`);
+  // WHAT WAS ATTEMPTED (FR-007). The message says what went wrong and the heading says what the user
+  // was doing when it did; a record carrying only the first is `A fresh workspace was opened
+  // instead.` with nothing naming the failure — which is what this file's own log said before these
+  // two fields existed. Labelled rather than composed into the prose, so `action=` is greppable.
+  if (record.action) fields.push(`action=${quoted(record.action)}`);
+  if (record.title) fields.push(`title=${quoted(record.title)}`);
   // Quoted like the subject, and for the same reason: a cause key is `kind:subject`, and that
   // subject is routinely a path or a project name with spaces in it.
   if (record.causeKey) fields.push(`cause=${quoted(record.causeKey)}`);
@@ -144,6 +150,8 @@ function recordFrom(payload: unknown): NoticeLogRecord {
     severity,
     message: typeof raw.message === 'string' ? raw.message : '',
     subject: typeof raw.subject === 'string' ? raw.subject : '',
+    title: optionalText(raw.title),
+    action: optionalText(raw.action),
     causeKey: optionalText(raw.causeKey),
     affectedCount: typeof raw.affectedCount === 'number' ? raw.affectedCount : undefined,
     detail: optionalText(raw.detail),

@@ -14,7 +14,7 @@ export type DisplayMode = 'never' | 'timed' | 'dismiss';
 
 export interface SeverityNotificationSettings {
   mode: DisplayMode;
-  /** Only consulted when mode is 'timed'. Bounded 1500–60000 (FR-010). */
+  /** Only consulted when mode is 'timed'. Bounded 3000–30000 (FR-010). */
   timeoutMs: number;
 }
 
@@ -45,15 +45,18 @@ in Preferences does not present an empty control.
 | Section absent entirely | All four resolve to defaults (FR-014) |
 | A severity absent | That severity resolves to its default |
 | `mode` unrecognised | That severity's `mode` resolves to its default; `timeoutMs` is still honoured if valid |
-| `timeoutMs` non-numeric, NaN, or outside 1500–60000 | Resolves to that severity's default timeout |
+| `timeoutMs` non-numeric, NaN, or outside 3000–30000 | Resolves to that severity's default timeout |
 | An unknown severity key | Ignored; the rest of the section is honoured |
 
 Nothing in this table throws, and none of it prevents Preferences opening.
 
 **Settings metadata** (FR-002): eight leaves — one `mode` and one `timeoutMs` per severity — under
 `group: 'Notifications'`. `settings-metadata.test.ts` asserts one descriptor per configurable leaf,
-so all eight are required or the build fails. The `timeoutMs` descriptors carry `min: 1500`,
-`max: 60000`, matching the six existing `*Ms` settings.
+so all eight are required or the build fails. The `timeoutMs` descriptors carry `min: 3000`,
+`max: 30000`, `step: 500` — a range chosen so the step guard permits 500 (1% of 27000 is 270) and
+both shipped defaults, 5000 and 10000, land exactly on the grid. The `mode` descriptors carry
+`optionLabels` so the dropdown reads **Never display** / **Display for** / **Dismiss only** rather
+than the Title-Cased tokens.
 
 ---
 
@@ -134,9 +137,17 @@ export interface GroupInput {
 export function groupKey(input: GroupInput): string | undefined;
 ```
 
-- Classified → `` `${causeKey(cause)}::${projectId ?? 'none'}` `` (FR-029).
-- Unclassified but with an operation → `` `op:${operationId}::${projectId ?? 'none'}` `` (FR-029a).
+- With an operation → `` `op:${operationId}::${projectId ?? 'none'}` `` (FR-029a), **whether or not
+  the failure was classified**.
+- No operation, but classified → `` `${causeKey(cause)}::${projectId ?? 'none'}` `` (FR-029).
 - Neither → `undefined`; the notice does not consolidate and behaves as today.
+
+**The operation outranks the cause** (FR-029a), which is the reverse of the order this document first
+recorded. `causeKey` is `kind + subject`, and a *panel's* subject is its own file — so six editors
+defeated by one missing project root are six different causes and, cause-first, six notices: the
+storm FR-029 exists to end, renamed. Half of them have no cause at all, because an editor's load
+failure carries a `LoadResult` reason and no errno and 029 correctly declines to classify it. Putting
+the operation first also means a raise site cannot get this wrong by supplying both.
 
 **Operation id lifetime** — minted **once per user- or system-initiated action**, at the point the
 action starts, and carried to every failure that action produces. Opening a project mints one;
@@ -232,6 +243,12 @@ silencedRecently: Map<string, SilencedEntry>
   `severity + message + title + action + testId`, none of which change when a fresh notice reports
   newly discovered panels, so without this clause the shadow would swallow exactly the records the
   displayed path emits.
+- **And the record it writes is the displayed path's growth record** — the same message ("… Also
+  affecting: …"), naming only the panels that joined, over a count of everything the key now holds.
+  FR-005c asks for a match "in content as well as in count", and `reported.size` is what supplies the
+  count with no live notice to read it from. Filing each silenced raise as if it were the first —
+  `affected=1` twice for one cause holding two panels — is indistinguishable in the log from two
+  unrelated failures, which is the reading the count exists to prevent.
 - Entries are dropped lazily on the next `notify`, so the map is bounded by the number of distinct
   silenced events inside one timeout window and needs no timer of its own.
 

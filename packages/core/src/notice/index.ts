@@ -15,6 +15,7 @@
 export { NOTICE_SEVERITIES, type NoticeSeverity } from './severity.js';
 export {
   DISPLAY_MODES,
+  DISPLAY_MODE_LABELS,
   DEFAULT_NOTIFICATION_SETTINGS,
   TIMEOUT_MIN_MS,
   TIMEOUT_MAX_MS,

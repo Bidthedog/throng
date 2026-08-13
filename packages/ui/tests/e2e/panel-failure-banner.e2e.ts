@@ -96,21 +96,23 @@ async function controlNames(win: Page, panelId: string): Promise<string[]> {
 }
 
 /**
- * SETUP GUARD — the panel really is in its failure state, however that state is currently drawn.
+ * SETUP GATE — WAIT until the panel has reached its failure state, before acting on it.
  *
- * Deliberately a UNION of the shared banner and the per-type surface it replaces. Before US4 lands
- * the legacy arm matches; after T060/T062 delete that markup the banner arm matches; at no point can
- * it pass while the panel is healthy, because `toHaveCount(1)` cannot be satisfied by nothing.
+ * This began as a UNION of the shared banner and the two per-type surfaces it replaces, so that a
+ * red in the RED half could be read as "the banner is missing" rather than "the app never got the
+ * panel into trouble". T060a/T062 deleted that markup, so `editor-unloadable-{pid}` and
+ * `terminal-start-failed-{pid}` name nothing and the union's second arm could only ever match
+ * nothing — which made the "this is a SETUP failure, not the banner" message misleading, because
+ * the two are now the same element. `default-themes.e2e.ts:181` records the same cleanup.
  *
- * Without this, every failure in this file would read "panel-failure-… not found" whether the banner
- * was missing or the app had simply never got the panel into trouble — and telling those two apart
- * is the entire value of writing the RED half first.
+ * It stays as a named function rather than dissolving into `expect(banner(…)).toBeVisible()` at
+ * every call site, because what it carries is the 90-second budget: a terminal start failure has to
+ * go out to the daemon and back, and every caller needs the same wait before it acts.
  */
 async function inFailureState(win: Page, panelId: string, kind: 'editor' | 'terminal'): Promise<void> {
-  const legacy = kind === 'editor' ? `editor-unloadable-${panelId}` : `terminal-start-failed-${panelId}`;
   await expect(
-    win.locator(`[data-testid="panel-failure-${panelId}"], [data-testid="${legacy}"]`),
-    `panel ${panelId} never reached its ${kind} failure state — this is a SETUP failure, not the banner`,
+    win.locator(`[data-testid="panel-failure-${panelId}"]`),
+    `panel ${panelId} never reached its ${kind} failure state`,
   ).toHaveCount(1, { timeout: 90_000 });
 }
 
@@ -393,6 +395,54 @@ test('the editor banner names the file it could not read', async () => {
 });
 
 /**
+ * 026 `contracts/editor-unloadable.md` P3 — THE TEXT UNDER THE BANNER IS NOT THE FILE.
+ *
+ * ══ WHY THIS TEST EXISTS ══
+ *
+ * Because its absence let a shipped requirement be deleted in silence. `unloadable-banner.tsx` said
+ * *"What is shown here is not the file. Restore the path and it reloads by itself, or reload it
+ * now."*; the shared banner renders headline + path + pointer, so the migration had nowhere to put
+ * it and it went. Every test that touched the editor's failure state — this file's own path test,
+ * `editor-stranded-recovery.e2e.ts` and `editor-stranded-restart.e2e.ts` — asserted visibility and
+ * the path, which is exactly the part that survived.
+ *
+ * ══ WHY IT IS NOT MERELY WORDING ══
+ *
+ * `unloadable` guards NO save path in the renderer: 026 P6's save-while-unloadable confirmation is
+ * not implemented here. So this sentence is the only thing in the panel warning that a Ctrl+S will
+ * write a REMEMBERED buffer back over a path throng could not read — the same scenario FR-040a
+ * gives as its own reason for keeping the path visible. Losing it leaves the path on screen and the
+ * reason for looking at it gone.
+ *
+ * ══ AND IT IS PER-TYPE, WHICH IS THE OTHER HALF ══
+ *
+ * The terminal must NOT acquire it. A terminal that could not start has no remembered buffer and
+ * nothing on screen pretending to be one, so the sentence would be false there — and a note that
+ * appeared in both panel types would be the shared component's wording rather than the editor's,
+ * which is how the two banners start diverging in content while agreeing in shape.
+ */
+test('the editor banner says the text below it is not the file, and the terminal says no such thing', async () => {
+  test.setTimeout(240_000);
+  const win = h.win;
+  const NOT_THE_FILE =
+    'What is shown here is not the file. Restore the path and it reloads by itself, or reload it now.';
+
+  const editorPid = await editorPanel(win);
+  await inFailureState(win, editorPid, 'editor');
+  await expect(
+    banner(win, editorPid),
+    'the editor banner no longer warns that the text below it is a remembered buffer (026 P3)',
+  ).toContainText(NOT_THE_FILE);
+
+  const termPid = await terminalPanel(win);
+  await inFailureState(win, termPid, 'terminal');
+  expect(
+    await banner(win, termPid).innerText(),
+    'the terminal banner claims its content is not the file — it has no buffer to be wrong about',
+  ).not.toContain('is not the file');
+});
+
+/**
  * T056a / T069apre — ALL THREE controls are reachable and OPERABLE by keyboard, in the order they
  * are displayed (FR-042a, the banner half of SC-009a).
  *
@@ -515,6 +565,79 @@ test('Try again, Copy details and Clear panel type are in the panel menu, for bo
   await expect(menuItem('Clear panel type')).toBeVisible();
   await win.getByTestId('tab-body').click({ position: { x: 5, y: 5 } });
   await expect(win.getByTestId('context-menu')).toHaveCount(0);
+});
+
+/**
+ * FR-042c × FR-045 — A RETRY FROM THE **MENU** REPORTS ITS FAILURE, IN BOTH PANEL TYPES.
+ *
+ * ══ THE DEFECT ══
+ *
+ * FR-042c makes the menu item the SAME command as the banner's control; FR-045 requires a failed
+ * retry to remain and say so. Each menu ran the underlying operation directly instead — the editor's
+ * `getEditorActions(id).reloadFromDisk()`, the terminal's `retryStart()` — so neither ever reached
+ * the banner's retry state. The re-attempt really happened and the banner said nothing about it: the
+ * user is left with a banner that has not moved and no way to tell a retry that failed from a click
+ * that never landed. `terminal-panel.tsx` records that exact "did my click do anything?" failure as
+ * the reason the design exists, so the requirement held on the button and nowhere else.
+ *
+ * The test above asserts the menu items EXIST. Existence is what was already true; this asserts they
+ * are the same command.
+ *
+ * ══ WHY EACH HALF STARTS BY SWITCHING PROJECTS ══
+ *
+ * NOT to reach the panel — to REMOUNT it. The retry-failure sentence is the banner's own state, and
+ * two earlier tests in this serial file leave it showing on the editor's banner. Asserting it after a
+ * menu click would then pass against a banner that ignored the click completely, which is the same
+ * vacuous green this whole file is written to avoid. Throng mounts one project's workspace at a
+ * time, so `terminalPanel` → `editorPanel` unmounts and rebuilds the banner, and the assertion that
+ * the sentence is ABSENT first is what makes its later presence mean something.
+ */
+test('Try again from the panel MENU reports a failed retry, in both panel types', async () => {
+  test.setTimeout(240_000);
+  const win = h.win;
+  // The fixed wording (FR-040b), asserted verbatim rather than as /still|failed/: the whole point is
+  // that the menu reaches the BANNER'S state, and only the banner writes this sentence.
+  const RETRY_FAILED = 'That did not work — the condition is still there.';
+
+  // ── Editor: right-click the panel HANDLE, where its own menu lives. ─────────────────────────
+  await terminalPanel(win); // leave `Real`, so entering it below rebuilds the editor's banner
+  const editorPid = await editorPanel(win);
+  await inFailureState(win, editorPid, 'editor');
+  await expect(
+    banner(win, editorPid),
+    'the banner came back already reporting a failed retry — this test cannot prove anything',
+  ).not.toContainText(RETRY_FAILED);
+
+  await win.getByTestId(`panel-handle-${editorPid}`).click({ button: 'right' });
+  await expect(win.getByTestId('context-menu')).toBeVisible();
+  await win.getByTestId('menu-item-Try again').click();
+  await expect(win.getByTestId('context-menu')).toHaveCount(0);
+
+  // The folder is still gone, so the re-read fails — and the banner has to SAY so, exactly as it
+  // does when its own icon is pressed.
+  await expect(banner(win, editorPid)).toBeVisible();
+  await expect(
+    banner(win, editorPid),
+    'a menu retry that failed left the banner standing in silence (FR-042c/FR-045)',
+  ).toContainText(RETRY_FAILED, { timeout: 20_000 });
+
+  // ── Terminal: right-click the panel BODY, the route 029 established. ────────────────────────
+  // Coming from `Real`, so this switch IS the terminal panel's remount — its banner is new, and the
+  // absence assertion below is a fact about it rather than about whatever the last test left behind.
+  const termPid = await terminalPanel(win);
+  await inFailureState(win, termPid, 'terminal');
+  await expect(banner(win, termPid)).not.toContainText(RETRY_FAILED);
+
+  await win.locator('.panel-box').first().click({ button: 'right', position: { x: 20, y: 120 } });
+  await expect(win.getByTestId('context-menu')).toBeVisible();
+  await win.getByTestId('menu-item-Try again').click();
+  await expect(win.getByTestId('context-menu')).toHaveCount(0);
+
+  await expect(banner(win, termPid)).toBeVisible();
+  await expect(
+    banner(win, termPid),
+    'a menu retry that failed left the banner standing in silence (FR-042c/FR-045)',
+  ).toContainText(RETRY_FAILED, { timeout: 60_000 });
 });
 
 /**
@@ -716,10 +839,10 @@ test('the banner appears with every severity set to Never display', async () => 
     JSON.stringify({
       version: 1,
       notifications: {
-        error: { mode: 'never', timeoutMs: 60000 },
-        warning: { mode: 'never', timeoutMs: 60000 },
-        info: { mode: 'never', timeoutMs: 60000 },
-        success: { mode: 'never', timeoutMs: 60000 },
+        error: { mode: 'never', timeoutMs: 30000 },
+        warning: { mode: 'never', timeoutMs: 30000 },
+        info: { mode: 'never', timeoutMs: 30000 },
+        success: { mode: 'never', timeoutMs: 30000 },
       },
     }),
     'utf8',

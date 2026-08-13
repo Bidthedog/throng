@@ -143,6 +143,21 @@ test('an editor and the tree recover when the project folder is renamed back aft
         const unloadable = win.getByTestId(`panel-failure-${pid}`);
         await expect(unloadable).toBeVisible({ timeout: 15_000 });
         await expect(unloadable).toContainText('code.txt');
+        /*
+         * …and it says the second half of the paragraph above out loud: what is on screen is not the
+         * file (026 `contracts/editor-unloadable.md` P3).
+         *
+         * This assertion is here because it was NOT here, and that is how the sentence came to be
+         * deleted in the 030 migration without a single red: the shared banner renders headline +
+         * path + pointer, and visibility plus the path is precisely what this test already pinned.
+         * With 026 P6's save-while-unloadable confirmation still unimplemented in the renderer, this
+         * sentence is the only thing standing between the user and a Ctrl+S that writes remembered
+         * text back over a path throng could not open.
+         */
+        await expect(
+          unloadable,
+          'the banner no longer distinguishes "this is your file" from "this is what it used to say"',
+        ).toContainText('What is shown here is not the file.');
 
         // ── Rectify the cause. The file has moved on while it was away, so "it recovered" cannot
         //    be satisfied by whatever was already on screen. ──

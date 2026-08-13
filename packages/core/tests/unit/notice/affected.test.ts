@@ -92,10 +92,15 @@ describe('groupAffected', () => {
     expect(group!.label).toBe('First');
   });
 
-  it('drops a tab whose name is blank rather than rendering an empty heading', () => {
+  it('drops the HEADING of a tab whose name is blank, and keeps its rows', () => {
+    // The title used to say the tab was dropped, while the assertion says the opposite — the group
+    // survives with an empty label, and `partText`/`notification.tsx` render the heading only when
+    // there is one. Losing the rows would lose the panels, which is the one thing a consolidated
+    // notice exists to name.
     const [group] = groupAffected([panel({ panelId: 'p1', panelName: 'Alpha', tabName: '  ' })]);
     expect(group!.label).toBe('');
     expect(group!.rows).toHaveLength(1);
+    expect(group!.rows[0]!.label).toBe('Alpha');
   });
 });
 

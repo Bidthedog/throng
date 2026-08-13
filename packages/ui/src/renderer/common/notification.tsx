@@ -40,6 +40,7 @@ import {
   shouldSuppressForCause,
   shouldSuppressSilenced,
   silencedCauseKeys,
+  silencedGrowth,
   silencedNoticeKey,
   type SilencedNotices,
 } from './notice-suppression.js';
@@ -425,6 +426,17 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
             // FR-007 — the record names the subject too. `noticeLogRecord` formats it with NO
             // context: a log line has no heading to lean on, so it carries every part the notice had.
             subject: input.subject,
+            /*
+             * …AND WHAT WAS BEING ATTEMPTED (FR-007).
+             *
+             * The message states what went wrong; these two are the notice's heading, which states
+             * the event (FR-020). Sending only the message filed `severity=error | A fresh workspace
+             * was opened instead.` — accurate, and silent about the restore that failed. "Enough to
+             * identify the event without the screen" is not met by the half of the notice that
+             * assumes the other half is above it.
+             */
+            title: input.title,
+            action: input.action,
             causeKey: input.causeKey,
             // FR-034: the raw system error. `Notice.copyDetail` is the source, `NoticeLogRecord.detail`
             // is what crosses the bridge — the same string, re-derived by nobody. For a silenced
@@ -555,11 +567,40 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
        * that a mode could skip. Fire-and-forget by design — a diagnostics write that failed must
        * never become a notice about failing to log a notice.
        */
-      fileRecord({
-        message: input.message,
-        details: input.affected ?? NO_PANELS,
-        ...(input.affected?.length ? { count: input.affected.length } : {}),
-      });
+      /*
+       * …AND A SILENCED NOTICE THAT GREW WRITES THE SAME RECORD A DISPLAYED ONE WOULD (FR-005c).
+       *
+       * The displayed path grows a LIVE notice, so the merge above knows what joined and how many
+       * there are in total. Nothing is live here, and the first attempt at this filed each raise as
+       * if it were the first: the plain message, and a count of whatever that one raise carried. Two
+       * casualties of one cause therefore read as `affected=1` twice in the log — indistinguishable
+       * from two unrelated failures, which is exactly the distinction the count is there to draw.
+       *
+       * FR-005c asks for the two records to match in content as well as in count, and the shadow's
+       * `reported` set is all that was needed to answer it. So a silenced growth says what joined and
+       * how big the whole thing is now, and `logs/main.log` reads the same whether or not the user
+       * chose to watch it happen — which is the whole basis on which *Never display* is offerable.
+       */
+      const shadow =
+        behaviour.mode === 'never'
+          ? silencedGrowth(silenced.current, shadowKey, panelIds, now)
+          : undefined;
+      if (shadow?.grew) {
+        const joined = (input.affected ?? NO_PANELS).filter((p) =>
+          shadow.unreported.includes(p.panelId),
+        );
+        fileRecord({
+          message: growthMessage(input.message, joined, project),
+          details: joined,
+          count: shadow.total,
+        });
+      } else {
+        fileRecord({
+          message: input.message,
+          details: input.affected ?? NO_PANELS,
+          ...(input.affected?.length ? { count: input.affected.length } : {}),
+        });
+      }
 
       if (behaviour.mode === 'never') {
         // The only state a silenced notice creates: no id, never rendered, never dismissible.

@@ -18,13 +18,20 @@ describe('formatGrouped (FR-037)', () => {
     expect(formatGrouped(10485760, 'en-GB')).toBe('10,485,760');
   });
 
-  it('does NOT group a small one', () => {
-    // "Large-magnitude" was undefined in the specification, and that is not a detail: grouping
-    // everything renders a 5000 ms delay as `5,000` and a 1024-byte floor as `1,024`, which read as
-    // typos rather than kindnesses.
-    expect(formatGrouped(5000, 'en-GB')).toBe('5000');
-    expect(formatGrouped(1024, 'en-GB')).toBe('1024');
+  it('groups a small one too — there is no threshold (constitution 4.5.0)', () => {
+    // 018 exempted values under five digits, reasoning that `5,000` "reads as a typo rather than a
+    // kindness". Reversed: a threshold makes a COLUMN inconsistent, and 030's notification timeouts
+    // put 5000 directly beside 10000. A separator that appears halfway up a column teaches the
+    // reader it means something, when it means only that one value crossed a boundary.
+    expect(formatGrouped(5000, 'en-GB')).toBe('5,000');
+    expect(formatGrouped(1024, 'en-GB')).toBe('1,024');
+    expect(formatGrouped(3567, 'en-GB')).toBe('3,567');
+  });
+
+  it('leaves a number with nothing to group alone', () => {
     expect(formatGrouped(13, 'en-GB')).toBe('13');
+    expect(formatGrouped(300, 'en-GB')).toBe('300');
+    expect(formatGrouped(0, 'en-GB')).toBe('0');
   });
 });
 

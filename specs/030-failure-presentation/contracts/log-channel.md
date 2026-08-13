@@ -22,6 +22,8 @@ interface NoticeLogRecord {
   severity: NoticeSeverity;
   message: string;
   subject: string;          // pre-formatted; main does not re-derive it
+  title?: string;           // the notice's own heading, where it states one
+  action?: string;          // what was being attempted (FR-007) — 'rename', 'restore your layout'
   causeKey?: string;
   affectedCount?: number;
   detail?: string;          // the raw system error (FR-034)
@@ -84,7 +86,7 @@ the prose makes it unfindable.
 So the handler composes the message as a small set of labelled fields:
 
 ```
-2026-08-11T14:08:07.188Z ERROR [renderer-notice] severity=error subject="Panel — Tab 1 — one.txt" cause=path-missing:test 1 affected=3 | Couldn't rename "PJ Replacement" — a file or folder with this name already exists.
+2026-08-11T14:08:07.188Z ERROR [renderer-notice] severity=error subject="Panel — Tab 1 — one.txt" action="rename" cause="path-missing:test 1" affected=3 | Couldn't rename "PJ Replacement" — a file or folder with this name already exists.
 2026-08-11T14:08:07.190Z ERROR [renderer-notice] detail | ENOENT: no such file or directory, realpath 'D:\git\throng_tests\test 1'
 2026-08-11T14:08:07.191Z ERROR [renderer-notice] panel="Tab 1 — one.txt" detail | EPERM: operation not permitted, open
 ```
@@ -92,7 +94,13 @@ So the handler composes the message as a small set of labelled fields:
 - `severity=` is always present; the level alone cannot carry it.
 - `subject=` is present whenever the notice has one, quoted so a subject containing spaces stays one
   field.
-- `cause=` and `affected=` appear when the notice has them.
+- `action=` and `title=` carry the notice's heading — **what was being attempted**, and the event it
+  named. The message states only what went wrong (FR-020/FR-023), so a record without these is
+  `severity=error | A fresh workspace was opened instead.`: FR-007's literal minimum, and not "enough
+  to identify the event without the screen". Labelled rather than composed into the prose, so
+  `action=` is greppable across every failed rename.
+- `cause=` and `affected=` appear when the notice has them. `cause=` is quoted for the same reason
+  `subject=` is: a cause key is `kind:subject`, and that subject is routinely a path with spaces.
 - The message follows a `|` so the prose can contain anything without ambiguity.
 - Each `affectedDetails` entry is its own line, naming its panel.
 
@@ -102,7 +110,7 @@ So the handler composes the message as a small set of labelled fields:
 |---|---|
 | FR-006 | One record per accepted notice, whatever its display mode |
 | FR-006b | Written regardless of `diagnostics.logLevel` |
-| FR-007 | The record carries severity, message and subject |
+| FR-007 | The record carries severity, message, subject, and the heading that says what was attempted |
 | FR-034 | The raw system error reaches the log, exactly once — the *only* route to it when the severity is silenced, since there is then no toast to copy from |
 | FR-048a | Each affected panel's own raw error reaches the log, on its own line |
 | SC-003 | A `never` notice appears in the log exactly as often as the same event does when displayed — raise and growths alike |

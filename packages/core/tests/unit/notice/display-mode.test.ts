@@ -42,9 +42,9 @@ describe('the shipped defaults (FR-013)', () => {
     }
   });
 
-  it('bounds the timeout at 1500–60000', () => {
-    expect(TIMEOUT_MIN_MS).toBe(1500);
-    expect(TIMEOUT_MAX_MS).toBe(60000);
+  it('bounds the timeout at 3000–30000', () => {
+    expect(TIMEOUT_MIN_MS).toBe(3000);
+    expect(TIMEOUT_MAX_MS).toBe(30000);
   });
 
   it('names the four severities once, so callers iterate rather than re-list them', () => {
@@ -69,8 +69,8 @@ describe('parseNotificationSettings — the contract truth table', () => {
   );
 
   it('resolves an absent severity to its own default', () => {
-    const parsed = parseNotificationSettings({ error: { mode: 'never', timeoutMs: 2000 } });
-    expect(parsed.error).toEqual({ mode: 'never', timeoutMs: 2000 });
+    const parsed = parseNotificationSettings({ error: { mode: 'never', timeoutMs: 4000 } });
+    expect(parsed.error).toEqual({ mode: 'never', timeoutMs: 4000 });
     expect(parsed.warning).toEqual(DEFAULT_NOTIFICATION_SETTINGS.warning);
     expect(parsed.info).toEqual(DEFAULT_NOTIFICATION_SETTINGS.info);
     expect(parsed.success).toEqual(DEFAULT_NOTIFICATION_SETTINGS.success);
@@ -87,8 +87,8 @@ describe('parseNotificationSettings — the contract truth table', () => {
   });
 
   it.each([
-    ['below the minimum', 900],
-    ['above the maximum', 60001],
+    ['below the minimum', 2999],
+    ['above the maximum', 30001],
     ['negative', -1],
     ['zero', 0],
     ['NaN', Number.NaN],
@@ -108,12 +108,29 @@ describe('parseNotificationSettings — the contract truth table', () => {
   );
 
   it('accepts the bounds themselves', () => {
-    expect(parseNotificationSettings({ error: { timeoutMs: TIMEOUT_MIN_MS } }).error.timeoutMs).toBe(1500);
-    expect(parseNotificationSettings({ error: { timeoutMs: TIMEOUT_MAX_MS } }).error.timeoutMs).toBe(60000);
+    expect(parseNotificationSettings({ error: { timeoutMs: TIMEOUT_MIN_MS } }).error.timeoutMs).toBe(3000);
+    expect(parseNotificationSettings({ error: { timeoutMs: TIMEOUT_MAX_MS } }).error.timeoutMs).toBe(30000);
   });
 
   it('rounds a fractional timeout rather than rejecting it', () => {
-    expect(parseNotificationSettings({ info: { timeoutMs: 2000.6 } }).info.timeoutMs).toBe(2001);
+    expect(parseNotificationSettings({ info: { timeoutMs: 4000.6 } }).info.timeoutMs).toBe(4001);
+  });
+
+  /*
+   * OFF THE SLIDER'S GRID IS STILL A VALID SETTING (FR-010).
+   *
+   * The step is the SLIDER's, not the setting's: a user who types 3567 into the field beside it has
+   * asked for 3567, and the parse that reads the file back must not round it to the nearest stop.
+   * The two constraints are deliberately different — the bounds are the contract, the step is an
+   * affordance — and conflating them would silently rewrite a value the user saved.
+   */
+  it('keeps a typed value that is between two slider stops', () => {
+    for (const timeoutMs of [3001, 3567, 12345, 29999]) {
+      expect(
+        parseNotificationSettings({ info: { mode: 'timed', timeoutMs } }).info.timeoutMs,
+        `${timeoutMs} is inside the bounds and must survive`,
+      ).toBe(timeoutMs);
+    }
   });
 
   it('ignores an unknown severity key and honours the rest of the section', () => {

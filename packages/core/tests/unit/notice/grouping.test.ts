@@ -6,9 +6,10 @@ import { causeKey, groupKey, type FailureCause } from '@throng/core';
  *
  * Renaming a project's root folder while it has editors and terminals open produces a failure per
  * casualty: today that is a storm of near-identical toasts. The key below is what collapses them,
- * and the two dimensions it carries are the two that make consolidation correct rather than merely
- * quiet — the CAUSE (so unrelated failures never merge) and the PROJECT (so "one notice per project"
- * is a property of the key rather than a rule somebody has to remember).
+ * and the dimensions it carries are the ones that make consolidation correct rather than merely
+ * quiet — the OPERATION (so everything one action defeated lands together, FR-029a), the CAUSE for a
+ * failure with no action behind it (so unrelated failures never merge) and the PROJECT (so "one
+ * notice per project" is a property of the key rather than a rule somebody has to remember).
  *
  * It is built on 029's `causeKey` and does NOT widen `FailureKind` (FR-029b). The closed set is the
  * design: a set with a completion signal can be tested to exhaustion, and anything unmatched keeps
@@ -56,11 +57,36 @@ describe('groupKey — a classified cause (FR-029)', () => {
     expect(groupKey({ cause: c })).toBe(groupKey({ cause: c, projectId: undefined }));
   });
 
-  it('ignores an operation id when the failure is classified — the cause is the stronger key', () => {
-    const c = cause('held', 'notes.txt');
-    expect(groupKey({ cause: c, operationId: 'op-1', projectId: 'p1' })).toBe(
-      groupKey({ cause: c, projectId: 'p1' }),
+  it('ignores an operation id ONLY when there is none — the operation is the stronger key (FR-029a)', () => {
+    /*
+     * The natural reading is the opposite one, and it is the one this used to assert: the cause is
+     * the more specific statement, so let it win. Measured against the real classification it is
+     * wrong, and wrongly in the direction of the storm FR-029 removes.
+     *
+     * `causeKey` is `kind + subject`, and a PANEL's subject is its own file. Six editors defeated by
+     * one missing project root are therefore six DIFFERENT causes: cause-first, they are six
+     * notices. FR-029a says panel casualties group by the operation, ALWAYS, and this is that
+     * sentence as an assertion — two casualties of one action share a key even when their causes
+     * differ, which is the whole property the consolidated notice rests on.
+     */
+    const held = cause('held', 'notes.txt');
+    const missing = cause('path-missing', 'server.ts');
+    expect(groupKey({ cause: held, operationId: 'op-1', projectId: 'p1' })).toBe('op:op-1::p1');
+    expect(groupKey({ cause: held, operationId: 'op-1', projectId: 'p1' })).toBe(
+      groupKey({ cause: missing, operationId: 'op-1', projectId: 'p1' }),
     );
+    // …and it is NOT the key the same cause gets with no action behind it, or the operation
+    // dimension would be decorative.
+    expect(groupKey({ cause: held, operationId: 'op-1', projectId: 'p1' })).not.toBe(
+      groupKey({ cause: held, projectId: 'p1' }),
+    );
+  });
+
+  it('still groups by the cause when no action produced the failure', () => {
+    // The cause branch is not vestigial: a daemon that stopped on its own defeats panels with no
+    // user action anywhere near it, and that is the case FR-029a leaves to the cause.
+    const c = cause('daemon-stopped', 'daemon');
+    expect(groupKey({ cause: c, projectId: 'p1' })).toBe(`${causeKey(c)}::p1`);
   });
 });
 

@@ -175,7 +175,7 @@ test('a displayed error notice writes a record at ERROR carrying its severity an
  */
 test('a NEVER-DISPLAY error notice writes its record even though nothing is shown (FR-005/FR-006)', async () => {
   const cfgRoot = seededCfgRoot({
-    notifications: { error: { mode: 'never', timeoutMs: 60000 } },
+    notifications: { error: { mode: 'never', timeoutMs: 30000 } },
   });
   await runApp(
     async (_app, win, ctx) => {
@@ -204,7 +204,7 @@ test('a NEVER-DISPLAY error notice writes its record even though nothing is show
  * (T029) predicted.
  */
 test('the record names the subject the notice is about (FR-007)', async () => {
-  const cfgRoot = seededCfgRoot({ notifications: { error: { mode: 'never', timeoutMs: 60000 } } });
+  const cfgRoot = seededCfgRoot({ notifications: { error: { mode: 'never', timeoutMs: 30000 } } });
   await runApp(
     async (_app, win, ctx) => {
       await settle(win);
@@ -232,8 +232,8 @@ test('info and warning records survive diagnostics.logLevel: error (FR-006b)', a
   const cfgRoot = seededCfgRoot({
     diagnostics: { logLevel: 'error' },
     notifications: {
-      warning: { mode: 'dismiss', timeoutMs: 60000 },
-      info: { mode: 'timed', timeoutMs: 60000 },
+      warning: { mode: 'dismiss', timeoutMs: 30000 },
+      info: { mode: 'timed', timeoutMs: 30000 },
     },
   });
   try {
@@ -297,7 +297,7 @@ test('info and warning records survive diagnostics.logLevel: error (FR-006b)', a
 test('the same event raised twice under Never display writes ONE record, not two (SC-003)', async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-notice-log-dedupe-'));
   const cfgRoot = seededCfgRoot({
-    notifications: { warning: { mode: 'never', timeoutMs: 60000 } },
+    notifications: { warning: { mode: 'never', timeoutMs: 30000 } },
   });
   try {
     await runApp(
@@ -346,7 +346,7 @@ test('the same event raised twice under Never display writes ONE record, not two
  */
 test('the record carries the raw system error on its own line (FR-034)', async () => {
   const cfgRoot = seededCfgRoot({
-    notifications: { error: { mode: 'never', timeoutMs: 60000 } },
+    notifications: { error: { mode: 'never', timeoutMs: 30000 } },
   });
   await runApp(
     async (_app, win, ctx) => {
@@ -437,10 +437,15 @@ test('a growing notice writes a further record naming the panels that joined (FR
  * record. The duplicate tuple — severity, message, title, action, testId, subject — contains nothing
  * that changes when a cause discovers a further panel, so without the `reported` set the shadow
  * records the first casualty and swallows every one after it.
+ *
+ * And the record it writes is the one T015a asserts for the DISPLAYED path, not a lesser version of
+ * it: same growth message, same naming of what joined, same cumulative count. That is FR-005c's own
+ * sentence — "matching the displayed growth record in content as well as in count" — and it is what
+ * makes SC-003 true in the log rather than only in the count of lines.
  */
-test('a silenced notice reporting a newly discovered panel writes a record (FR-005c)', async () => {
+test('a silenced notice reporting a newly discovered panel writes the growth record (FR-005c)', async () => {
   const cfgRoot = seededCfgRoot({
-    notifications: { error: { mode: 'never', timeoutMs: 60000 } },
+    notifications: { error: { mode: 'never', timeoutMs: 30000 } },
   });
   await runApp(
     async (_app, win, ctx) => {
@@ -458,20 +463,31 @@ test('a silenced notice reporting a newly discovered panel writes a record (FR-0
       await failingTerminal(win, ids.find((id) => id !== first)!);
 
       /*
-       * TWO records, each naming its own panel — and NOT one growth record saying "now 2".
+       * TWO records — and the second is the GROWTH record, character for character the shape the
+       * displayed path writes (FR-005c: "matching the displayed growth record in content as well as
+       * in count").
        *
-       * The asymmetry with the displayed path is real and is a consequence of what a silenced notice
-       * is: there is no live notice to grow, so each raise is its own event carrying its own single
-       * casualty. What FR-005c requires is that the second raise is not swallowed as a duplicate,
-       * and the count of records is how that is observable. The shadow's `reported` set is the only
-       * thing standing between this and one record for the whole storm.
+       * This test used to assert `affected=1` twice and explain the asymmetry as a consequence of
+       * there being no live notice to grow. It is not: the shadow already remembers which panels the
+       * key has reported, so both questions a reader asks of a growing notice — what is new, how big
+       * is it now — are answerable without one. And the divergence cost the reading that matters
+       * most, because two records each saying `affected=1` are what TWO UNRELATED failures look
+       * like. Silencing a severity may cost the user the screen; it may not cost them the record.
        */
       await expect
         .poll(
-          () => noticeRecords(ctx.userDataDir).filter((l) => /affected=1/.test(l)).length,
-          { timeout: 15_000, message: 'the second silenced casualty left no record' },
+          () => noticeRecords(ctx.userDataDir).filter((l) => /affected=2/.test(l)).length,
+          { timeout: 15_000, message: 'the second silenced casualty left no growth record' },
         )
-        .toBe(2);
+        .toBe(1);
+      // The first record stands unaltered beside it. Growth appends; it does not rewrite.
+      expect(noticeRecords(ctx.userDataDir).filter((l) => /affected=1/.test(l))).toHaveLength(1);
+      // It NAMES what joined (FR-006a), rather than merely counting to two.
+      const [grown] = noticeRecords(ctx.userDataDir).filter((l) => /affected=2/.test(l));
+      expect(grown!).toMatch(/Also affecting:/);
+
+      // …and each record still carries its own panel's raw error (FR-048a) — the growth record names
+      // only the panel that joined, so between them the two records name both.
       const details = noticeRecords(ctx.userDataDir).filter((l) => /panel=".*" detail \| /.test(l));
       expect(new Set(details.map((l) => /panel="([^"]+)"/.exec(l)?.[1])).size).toBe(2);
     },

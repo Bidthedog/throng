@@ -26,7 +26,7 @@ the guard is the type system, not a lint rule bolted on afterwards.
 |---|---|---|
 | A subject or an explicit none | Type system | FR-019 |
 | The message does not restate the subject | Review + phrase check | FR-023 |
-| No generic stand-in ("this item", "the item", "this file") in message text | Automated check | FR-023 / FR-058 |
+| No generic stand-in ("this item", "the item", "this file") in message text | Automated check — `notice-phrases.test.ts`, which resolves a message hoisted into a module-level constant rather than only an inline literal | FR-023 / FR-058 |
 | Subject terms match the UI's vocabulary | `NoticeSubject` union — there is no free-text kind | FR-024 |
 
 ## Presentation

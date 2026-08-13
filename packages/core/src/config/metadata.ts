@@ -84,6 +84,20 @@ export interface FieldDescriptor {
   control: ControlKind;
   /** allowed set for select/multiselect/enum (FR-029). */
   allowedValues?: readonly (string | number)[];
+  /**
+   * What to CALL each allowed value, where Title-Casing the token gets the name wrong (030, FR-001).
+   *
+   * The stored value is unchanged — this is display only, and the same idea the renderer already
+   * applied to DYNAMIC option lists (a detected shell's id is `cmd`; what it is called is "Command
+   * Prompt"). Static enums had no equivalent, so their labels came from a generic Title-Case of the
+   * token and could not be corrected without hard-coding a value→label map in the renderer, which is
+   * exactly the kind of un-externalised decision Principle X exists to prevent.
+   *
+   * Declare the WHOLE set or none of it. The renderer falls back per value, so a partial map renders
+   * a dropdown in two registers at once, which reads as a bug in one option rather than an omission
+   * in the descriptor. `settings-metadata.test.ts` holds every declaration to that.
+   */
+  optionLabels?: Readonly<Record<string, string>>;
   /** numeric/font-size constraints — the CONTROL's range. */
   min?: number;
   max?: number;

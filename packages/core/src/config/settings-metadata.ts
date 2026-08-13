@@ -7,7 +7,12 @@
  */
 import { DEFAULT_APP_SETTINGS } from './app-settings.js';
 import { LOG_LEVELS } from '../diagnostics/log-level.js';
-import { DISPLAY_MODES, TIMEOUT_MAX_MS, TIMEOUT_MIN_MS } from '../notice/display-mode.js';
+import {
+  DISPLAY_MODES,
+  DISPLAY_MODE_LABELS,
+  TIMEOUT_MAX_MS,
+  TIMEOUT_MIN_MS,
+} from '../notice/display-mode.js';
 import { leavesOfDeclared, type FieldDescriptor, type MetadataRegistry } from './metadata.js';
 
 /** Leaves that are internal bookkeeping, not user-configurable settings. */
@@ -81,21 +86,39 @@ function noticeDescriptors(
       group: 'Notifications',
       control: 'select',
       allowedValues: DISPLAY_MODES,
+      /*
+       * FR-001's OWN NAMES, because the fallback's are not the specification's.
+       *
+       * `humanizeOptionLabel` Title-Cases the stored token, which is right for `lastViewed` and
+       * wrong here: it produces "Never", "Timed" and "Dismiss". "Timed" names a mechanism rather
+       * than a choice, and "Dismiss" reads as a verb — as though picking it would dismiss something.
+       * FR-001, the FR-008 confirmation and every issue comment on #224 all say *Never display*,
+       * *Display for* and *Dismiss only*, and this is what makes the control say them too.
+       */
+      optionLabels: DISPLAY_MODE_LABELS,
     },
     {
       key: `notifications.${severity}.timeoutMs`,
       label: `${noun} notice duration`,
-      description: `How long a ${noun.toLowerCase()} notice stays on screen, in milliseconds. Only used when the setting above is "Timed".`,
+      description: `How long a ${noun.toLowerCase()} notice stays on screen, in milliseconds. Only used when the setting above is "Display for".`,
       group: 'Notifications',
       // A bounded numeric is a slider in this app (018, FR-032/034) — and the converse guard makes
       // that mandatory, not optional: anything declaring both a min and a max must declare the
-      // control those bounds exist for. The step is 750 ms because the slider guard wants at most a
-      // hundred stops across the drag (58500 / 750 = 78) and because 58500 divides by it exactly, so
-      // the maximum is reachable by dragging rather than only by typing.
+      // control those bounds exist for.
+      //
+      // The step is 500 ms, and it is the range that permits it: the slider guard wants at most a
+      // hundred stops across the drag, so a step must be at least 1% of the range — 270 ms across
+      // 3000–30000. 500 clears that, divides 27000 exactly so the maximum is drag-reachable, and
+      // lands ON both shipped defaults (3000 + 4×500 = 5000, 3000 + 14×500 = 10000) so a drag can
+      // always return to the value the app came with. None of that was possible under 1500–60000,
+      // where the smallest legal step was 750 and neither default sat on the grid.
+      //
+      // It constrains DRAGGING only. The field beside it accepts any integer in the bounds, on the
+      // grid or off it, and `NumberControl.parse` checks min and max and nothing else.
       control: 'slider',
       min: TIMEOUT_MIN_MS,
       max: TIMEOUT_MAX_MS,
-      step: 750,
+      step: 500,
     },
   ];
 }

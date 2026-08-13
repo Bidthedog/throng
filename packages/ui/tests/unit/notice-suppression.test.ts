@@ -5,6 +5,7 @@ import {
   shouldSuppressForCause,
   shouldSuppressSilenced,
   silencedCauseKeys,
+  silencedGrowth,
   silencedNoticeKey,
   unreportedPanels,
   type SilencedNotices,
@@ -182,5 +183,52 @@ describe('the shadow suppresses only a notice reporting nothing new (FR-005c)', 
     const m: SilencedNotices = new Map();
     rememberSilenced(m, 'k', { expiresAt: 9_000 });
     expect(shouldSuppressSilenced(m, 'k', [], 0)).toBe(true);
+  });
+});
+
+describe('a silenced growth records what a displayed one would (FR-005c)', () => {
+  /*
+   * FR-005c requires the silenced record to match the displayed growth record IN CONTENT AS WELL AS
+   * IN COUNT. Getting the first half right and the second half wrong is what it read like before:
+   * two casualties of one cause each filed `affected=1` naming their own panel, which in the log is
+   * indistinguishable from two unrelated failures — the exact reading the count exists to prevent.
+   */
+  it('names only what joined, and counts everything the key holds', () => {
+    const m: SilencedNotices = new Map();
+
+    // The first casualty: nothing has been reported, so this is a first report and not a growth.
+    const first = silencedGrowth(m, 'g', ['p1'], 0);
+    expect(first).toEqual({ unreported: ['p1'], total: 1, grew: false });
+    rememberSilenced(m, 'g', { expiresAt: 9_000, panelIds: ['p1'] });
+
+    // The second: one panel joins, and the notice now speaks for two — which is what the DISPLAYED
+    // path's `mergeAffected(existing, incoming).length` says at the same moment.
+    const second = silencedGrowth(m, 'g', ['p2'], 0);
+    expect(second).toEqual({ unreported: ['p2'], total: 2, grew: true });
+  });
+
+  it('counts a re-reported panel once, however many times the raise names it', () => {
+    const m: SilencedNotices = new Map();
+    rememberSilenced(m, 'g', { expiresAt: 9_000, panelIds: ['p1'] });
+    // A raise carrying the whole list rather than the delta — which is what a reporter that rebuilds
+    // its casualties from the layout sends. Only `p2` is new; the total is still two, not three.
+    expect(silencedGrowth(m, 'g', ['p1', 'p2'], 0)).toEqual({
+      unreported: ['p2'],
+      total: 2,
+      grew: true,
+    });
+  });
+
+  it('an expired entry makes the next raise a first report again', () => {
+    // The dwell is the window inside which the event is the same event (FR-005b). Past it, a reader
+    // of the log is looking at something new, and a growth record over a count nobody can see the
+    // start of would be worse than a fresh one.
+    const m: SilencedNotices = new Map();
+    rememberSilenced(m, 'g', { expiresAt: 1_000, panelIds: ['p1'] });
+    expect(silencedGrowth(m, 'g', ['p2'], 5_000)).toEqual({
+      unreported: ['p2'],
+      total: 1,
+      grew: false,
+    });
   });
 });

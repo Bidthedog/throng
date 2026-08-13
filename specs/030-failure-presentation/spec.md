@@ -40,7 +40,7 @@ component and copies #235's list. Landing them in any other order means building
 
 - Q: How should a severity's display behaviour be configured, and what timeout range is accepted?
   → A: Three modes per severity — **Never display** (not shown, still logged), **Display for X ms**
-  (X between 1500 and 60000), and **Dismiss only** (stays until dismissed).
+  (X between 3000 and 30000), and **Dismiss only** (stays until dismissed).
 - Q: Which notices reach the diagnostic log — all of them, or only the undisplayed ones?
   → A: Every notice is logged whatever its mode, at a level derived from its severity
   (error → error, warning → warn, info and success → info).
@@ -145,7 +145,7 @@ its own. Set it to Never display and confirm nothing appears while the event sti
 6. **Given** the user sets `error` to **Display for** 3000 ms, **When** an error notice is raised,
    **Then** it auto-dismisses after 3000 ms like any other severity — errors have no built-in
    exemption.
-7. **Given** the user enters a timeout below 1500 ms or above 60000 ms, **When** they try to commit it,
+7. **Given** the user enters a timeout below 3000 ms or above 30000 ms, **When** they try to commit it,
    **Then** the interface prevents it — the value is not accepted, and no notice ends up with a
    timeout outside that range.
 8. **Given** the user chooses **Never display** for `error` or `warning`, **When** the choice is made,
@@ -377,7 +377,7 @@ reject it. Separately, read the inventory and find every notice accounted for.
 - **A settings file written before this change** — it has no notification preferences at all. It must
   load and yield the shipped defaults, with no error notice about the configuration.
 - **A malformed or out-of-range value** — a negative or non-numeric timeout, a timeout outside
-  1500–60000 ms, an unrecognised mode, an unknown severity name, a missing severity row. The affected
+  3000–30000 ms, an unrecognised mode, an unknown severity name, a missing severity row. The affected
   value resolves to its shipped default; the rest of the file is honoured; nothing throws and the user
   is not blocked from opening Preferences.
 - **Errors set to Never display** — permitted once confirmed; the preference is the user's. The
@@ -485,6 +485,11 @@ earlier one.
   value.
 - **FR-002**: Preferences MUST expose these values in a **Notifications** category with one row per
   severity, each offering the mode choice and a timeout value entered as a number of milliseconds.
+  The three modes MUST be **shown to the user by the names FR-001 gives them** — *Never display*,
+  *Display for*, *Dismiss only* — and not by the stored values they abbreviate. The stored values
+  remain `never` / `timed` / `dismiss`; this is a display requirement, and it is stated because the
+  form's generic label derivation gets it wrong: it would render them "Never", "Timed" and "Dismiss",
+  three words this specification never uses, the last of which reads as a verb.
 - **FR-003**: A notice of a severity set to **Dismiss only** MUST remain on screen until the user
   dismisses it, regardless of its configured timeout.
 - **FR-004**: A notice of a severity set to **Display for** *N* ms MUST leave on its own once *N* has
@@ -535,8 +540,11 @@ earlier one.
   leave the mode as it was. Choosing it for `info` or `success` MUST NOT ask.
 - **FR-009**: No other part of the interface is required to indicate that a severity is silenced; the
   Preferences row is the record.
-- **FR-010**: The accepted timeout range MUST be 1500 ms to 60000 ms inclusive. Preferences MUST NOT
-  allow a value outside that range to be committed.
+- **FR-010**: The accepted timeout range MUST be 3000 ms to 30000 ms inclusive. Preferences MUST NOT
+  allow a value outside that range to be committed. **Any integer within the range is acceptable**,
+  whether or not it falls on the timeout slider’s step: the step constrains dragging only, so a
+  value typed into the field beside the slider — 3567, say — MUST be committed and persisted
+  unrounded, and MUST survive being read back. It changes only when the user moves the slider again.
 - **FR-011**: The timeout control MUST be `disabled` while the severity's mode is anything other than
   **Display for** — inert and visibly so, by the same affordance the settings editor already uses for
   a control that does not apply.
@@ -665,8 +673,14 @@ earlier one.
 #### Group 4 — One shared failure banner (#236, US4)
 
 - **FR-039**: Every panel type's **failure** banner MUST be rendered by one shared component — same
-  layout, same tokens, same spacing, same controls in the same order — with per-type wording confined
-  to the sentence that names what could not be done.
+  layout, same tokens, same spacing, same controls in the same order. Per-type wording is confined to
+  the sentence that names what could not be done, **and to one optional further line a panel type
+  needs for a requirement of its own**. The first clause exists to stop two banners diverging into
+  two designs; it was never meant to forbid a panel type from stating something true only of it. The
+  editor needs exactly that: 026's *"What is shown here is not the file…"* is the only in-panel
+  warning that Ctrl+S would write remembered text over a path throng could not read, and confining
+  the banner to one sentence dropped it silently. Structure, controls and their order stay identical
+  — that is what "one banner" means, and it is what the E2E compares.
 - **FR-039a**: The terminal's non-failure strips — "starting…" and the remembered-cwd fallback — are
   **not** failure banners and stay as they are. They report progress and a substitution, neither of
   which offers Retry, Cancel or a cause; folding them into a failure component would make them look
@@ -782,7 +796,7 @@ earlier one.
   this feature.
 - **Display mode**: One of exactly three values — Never display, Display for, Dismiss only. Held per
   severity.
-- **Notification preference**: Per severity, a display mode and a timeout in milliseconds (1500–60000).
+- **Notification preference**: Per severity, a display mode and a timeout in milliseconds (3000–30000).
   Part of the user's application settings, editable in Preferences, and tolerant of older or damaged
   files.
 - **Notice subject**: The concrete thing a notice is about — a file, folder, pane, tab, panel, panel

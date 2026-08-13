@@ -66,14 +66,30 @@ describe('notifications merge contract', () => {
       ...preFeatureFile,
       notifications: {
         error: { mode: 'timed', timeoutMs: 20000 },
-        success: { mode: 'never', timeoutMs: 2000 },
+        success: { mode: 'never', timeoutMs: 4000 },
       },
     });
     expect(resolved.notifications.error).toEqual({ mode: 'timed', timeoutMs: 20000 });
-    expect(resolved.notifications.success).toEqual({ mode: 'never', timeoutMs: 2000 });
+    expect(resolved.notifications.success).toEqual({ mode: 'never', timeoutMs: 4000 });
     // Unwritten severities are still the shipped values, not undefined.
     expect(resolved.notifications.warning).toEqual(DEFAULT_NOTIFICATION_SETTINGS.warning);
     expect(resolved.notifications.info).toEqual(DEFAULT_NOTIFICATION_SETTINGS.info);
+  });
+
+  /*
+   * A DURATION SAVED BETWEEN TWO SLIDER STOPS IS STILL THE USER'S DURATION (FR-010).
+   *
+   * The contract admits any integer in [3000, 30000]. The 500 ms step is the slider's grid and
+   * belongs to the control, so a file carrying 3567 — typed rather than dragged — must load as 3567.
+   * Asserted here as well as in the parser's own tests because this is the path the APPLICATION
+   * takes on startup, and a snap introduced in the merge would be invisible to a parse test.
+   */
+  it('loads a typed duration that no slider stop can produce', () => {
+    const resolved = parseAppSettings({
+      ...preFeatureFile,
+      notifications: { info: { mode: 'timed', timeoutMs: 3567 } },
+    });
+    expect(resolved.notifications.info).toEqual({ mode: 'timed', timeoutMs: 3567 });
   });
 
   it('resolves a malformed value per-value, discarding neither the section nor the file (FR-015)', () => {

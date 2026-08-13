@@ -50,6 +50,10 @@
   user-select: text;
 }
 
+/* The per-type note (026 P3) reads with the pointer and the retry result rather than with the
+   headline: it is context, not the statement of what failed. No colour of its own — it inherits the
+   banner's error text token like everything else in here. */
+.panel-failure__note,
 .panel-failure__pointer,
 .panel-failure__retry-failed {
   opacity: 0.85;

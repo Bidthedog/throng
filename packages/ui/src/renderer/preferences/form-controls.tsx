@@ -137,12 +137,31 @@ function ToggleControl({ descriptor, value, onCommit }: SettingControlProps): Re
   );
 }
 
-function SelectControl({ descriptor, value, options, onCommit }: SettingControlProps): ReactElement {
+function SelectControl({
+  descriptor,
+  value,
+  options,
+  optionLabels,
+  onCommit,
+}: SettingControlProps): ReactElement {
   // Dynamic option lists (e.g. themes on disk) are real names shown verbatim; static
   // enum options are machine tokens shown in Title Case (display-only, 011 polish).
   const isDynamic = options != null;
   const opts = (options ?? descriptor.allowedValues ?? []).map(String);
-  const label = (v: string): string => (isDynamic ? v : humanizeOptionLabel(v));
+  /*
+   * A DECLARED name beats a derived one (030, FR-001).
+   *
+   * Title-Casing the token is a good guess and not always a right one: `never`/`timed`/`dismiss`
+   * come out as "Never / Timed / Dismiss", and the modes are called *Never display*, *Display for*
+   * and *Dismiss only*. The descriptor can now say so, which keeps the correction in the metadata
+   * registry where every other configurable decision lives rather than in a lookup table in here.
+   *
+   * Runtime labels still win over declared ones — they name values that only exist at runtime, so a
+   * descriptor could not have carried them — and the Title-Case fallback is unchanged for every
+   * static enum that never declares anything.
+   */
+  const label = (v: string): string =>
+    optionLabels?.[v] ?? descriptor.optionLabels?.[v] ?? (isDynamic ? v : humanizeOptionLabel(v));
   const current = value === undefined || value === null ? '' : String(value);
   return (
     <select

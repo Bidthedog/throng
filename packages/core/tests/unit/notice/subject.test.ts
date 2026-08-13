@@ -283,9 +283,39 @@ describe('truncation — 48 characters PER PART, and nowhere else (FR-021)', () 
 });
 
 describe('two failures about one subject read identically (FR-021)', () => {
-  it('renders the same string for the same subject, whoever raised it', () => {
-    const a: NoticeSubject = { kind: 'panel', name: 'server.ts', tab: 'Work', project: 'Alpha' };
-    const b: NoticeSubject = { kind: 'panel', name: 'server.ts', tab: 'Work', project: 'Alpha' };
-    expect(formatSubject(a)).toBe(formatSubject(b));
+  /*
+   * This used to compare two IDENTICAL object literals, which asserts that `formatSubject` is a
+   * function of its argument and nothing more — true of any pure function, and true of one that got
+   * every rule below wrong. FR-021 is a claim about two SURFACES agreeing, so the two calls have to
+   * differ in the way two real call sites differ.
+   */
+  it('renders from the subject VALUES, not from how the call site spelled them', () => {
+    const heading = formatSubject({ kind: 'panel', name: 'server.ts', tab: 'Work', project: 'Alpha' });
+    // The same panel, reached by a second surface whose strings came from somewhere else — an input
+    // box, a path split, a tab title read back from the layout — and therefore padded.
+    const banner = formatSubject({
+      kind: 'panel',
+      name: ' server.ts',
+      tab: 'Work ',
+      project: '  Alpha  ',
+    });
+    expect(banner).toBe(heading);
+    expect(heading).toBe('Alpha — Work — server.ts');
+  });
+
+  it('context removes parts and never re-spells the ones that remain (FR-022a)', () => {
+    // A name past the bound is where a second formatting rule would show itself: a row that
+    // truncated its own name would agree with the heading on short names and diverge on long ones,
+    // which is exactly the defect that ships.
+    const long = 'w'.repeat(60);
+    const subject: NoticeSubject = { kind: 'panel', name: long, tab: 'Work', project: 'Alpha' };
+    const heading = formatSubject(subject);
+    const row = formatSubject(subject, { project: 'Alpha', tab: 'Work' });
+
+    expect(row).toBe(`${'w'.repeat(SUBJECT_NAME_MAX - 1)}…`);
+    // Character for character the tail of the full name: the row dropped two parts and re-spelled
+    // nothing.
+    expect(heading.endsWith(row)).toBe(true);
+    expect(heading).toBe(`Alpha — Work — ${row}`);
   });
 });

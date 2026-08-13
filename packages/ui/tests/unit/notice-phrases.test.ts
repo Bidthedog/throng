@@ -61,6 +61,13 @@ import { describe, expect, it } from 'vitest';
  *
  * ══ WHAT THIS CHECK CANNOT SEE, STATED SO NOBODY MISTAKES ITS SILENCE FOR PROOF ══
  *
+ * Rule B follows ONE indirection: a sentence hoisted into a module-level `const` and referenced at
+ * the raise is resolved to its value (see {@link constantsIn}). That is not a nicety — it is the
+ * house style for a wording two surfaces share (FR-042d), so before it the guard was defeated by the
+ * plainest refactor available, and this feature's own `clipboard-copy.ts` had the defeating shape.
+ * A constant IMPORTED from elsewhere, or built by concatenation or a call, is still not followed:
+ * this reads source text and does not run it.
+ *
  * A message that reaches `useErrorNotice` through a STORE is written where the store is, and the
  * store is not a notice call site. `explorer/use-explorer-data.ts` is the working example: its watch
  * failure sentence becomes a notice and this file never reads it. Rule A still covers every file
@@ -243,20 +250,104 @@ const NO_SUBJECT = /\bsubject\s*:\s*\{\s*kind\s*:\s*'none'\s*\}/;
 /** The three fields a reader actually reads. `details` and `copyDetail` are the raw error (FR-034). */
 const READ_ALOUD = ['message', 'title', 'action'] as const;
 
-function standsInForItsSubject(body: string): { field: string; text: string }[] {
+/**
+ * A named string constant — `const NAME = '…'` — a whole sentence given a name (FR-042d's style).
+ *
+ * ══ WHY THIS EXISTS ══
+ *
+ * Rule B below reads the value of `message`, `title` and `action`. It used to read only a value that
+ * STARTS with a string literal, which is the correct restriction for `message: spoken.message` — a
+ * sentence computed elsewhere, whose next literal in the object belongs to a different field
+ * entirely. But it made the guard defeatable by the plainest refactor there is: hoist the sentence
+ * into a constant, reference the constant, and a phrase that fails the build inline passes it.
+ *
+ * That is not a hypothetical. `common/clipboard-copy.ts` is written exactly that way, because one
+ * wording has to reach two surfaces (FR-042d) and a named constant is how you say so. So the shape
+ * the guard could not see was the shape this feature's own code uses, and SC-013's claim — that such
+ * a notice is rejected by the project's own checks before it can be merged — was false for it.
+ *
+ * ══ WHAT IT DELIBERATELY DOES NOT DO ══
+ *
+ * One module, one hop. A constant IMPORTED from another file is not followed, and a value built by
+ * concatenation or a function call is not evaluated: this reads source text, it does not run it.
+ * Rule A still reads every literal in the file whatever it is assigned to, and
+ * `notice-subjects.e2e.ts:108` still asserts the ban against a REAL notice's rendered text. The
+ * boundary is the same one the header states, moved by exactly one indirection — the one that is
+ * routinely used.
+ */
+const CONSTANT =
+  /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;\n]+)?=\s*(?:'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|`((?:[^`\\]|\\.)*)`)/g;
+
+/**
+ * name → the string it holds, for every string constant declared in the file.
+ *
+ * Scope is not tracked, deliberately: a sentence in a function-local `const` referenced by a raise in
+ * the same function is the same defect as one at the top of the module, and a shadowed name would at
+ * worst attribute one banned phrase to the wrong line of the same file — a report to correct, not a
+ * defect to miss.
+ */
+function constantsIn(file: Source): ReadonlyMap<string, string> {
+  const out = new Map<string, string>();
+  CONSTANT.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = CONSTANT.exec(file.text))) {
+    out.set(m[1]!, m[2] ?? m[3] ?? m[4] ?? '');
+  }
+  return out;
+}
+
+/** A field whose value is a bare identifier — `message: COPY_FAILED,`. */
+const REFERENCE = /^\s*([A-Za-z_$][\w$]*)\s*(?:,|\}|$)/;
+
+/**
+ * What a field SAYS: its own literal, or the constant it names.
+ *
+ * `undefined` for anything else — a member expression, a call, a template with a hole in it. A guard
+ * that guessed at those would report the file rather than the notice.
+ */
+function spokenValue(rest: string, constants: ReadonlyMap<string, string>): string | undefined {
+  LITERAL.lastIndex = 0;
+  const literal = LITERAL.exec(rest);
+  // Only when the value STARTS with a literal: `message: spoken.message` is computed elsewhere and
+  // the next literal in the object would belong to a different field entirely.
+  if (literal && literal.index <= 2) return literal[1] ?? literal[2] ?? literal[3] ?? '';
+  const named = REFERENCE.exec(rest);
+  return named ? constants.get(named[1]!) : undefined;
+}
+
+/**
+ * How many raises in a file speak through a constant.
+ *
+ * The control fixtures above prove the resolver works on a source that offends. This proves it is
+ * doing work on the REAL tree: if `constantsIn` silently matched nothing — a regex edited, a
+ * declaration form nobody thought of — every assertion below would still be green, and the guard
+ * would be back to the hole it was written to close. `clipboard-copy.ts` supplies the count today.
+ */
+function raisesResolvingAConstant(file: Source): number {
+  const constants = constantsIn(file);
+  let found = 0;
+  for (const raise of raisesIn(file)) {
+    for (const field of READ_ALOUD) {
+      const key = new RegExp(`\\b${field}\\s*:\\s*`).exec(raise.body);
+      if (!key) continue;
+      const named = REFERENCE.exec(raise.body.slice(key.index + key[0].length));
+      if (named && constants.has(named[1]!)) found += 1;
+    }
+  }
+  return found;
+}
+
+function standsInForItsSubject(
+  body: string,
+  constants: ReadonlyMap<string, string>,
+): { field: string; text: string }[] {
   if (NO_SUBJECT.test(body)) return [];
   const out: { field: string; text: string }[] = [];
   for (const field of READ_ALOUD) {
     const key = new RegExp(`\\b${field}\\s*:\\s*`).exec(body);
     if (!key) continue;
-    const rest = body.slice(key.index + key[0].length);
-    LITERAL.lastIndex = 0;
-    const literal = LITERAL.exec(rest);
-    // Only when the value STARTS with a literal: `message: spoken.message` is computed elsewhere and
-    // the next literal in the object would belong to a different field entirely.
-    if (!literal || literal.index > 2) continue;
-    const text = literal[1] ?? literal[2] ?? literal[3] ?? '';
-    if (STAND_IN.test(text)) out.push({ field, text });
+    const text = spokenValue(body.slice(key.index + key[0].length), constants);
+    if (text !== undefined && STAND_IN.test(text)) out.push({ field, text });
   }
   return out;
 }
@@ -277,6 +368,16 @@ describe('FR-058 — the discovery itself', () => {
     // Every parsed body must be a closed object. An unterminated match silently makes Rule B read
     // the rest of the file as one raise, which would be a guard that reports nothing for any reason.
     for (const r of found) expect(r.body.endsWith('}'), `unterminated raise at ${r.at}`).toBe(true);
+  });
+
+  it('follows a raise that speaks through a constant, rather than resolving none', () => {
+    const resolved = noticeSources.reduce((n, f) => n + raisesResolvingAConstant(f), 0);
+    expect(
+      resolved,
+      'No raise in the notice model was seen to reference a string constant. Either the resolver is ' +
+        'broken — in which case Rule B is back to being defeatable by the plainest refactor there ' +
+        'is — or the house style changed and this number needs revisiting deliberately.',
+    ).toBeGreaterThan(0);
   });
 });
 
@@ -305,9 +406,64 @@ describe('FR-058 — the rules fire (the control)', () => {
   it('Rule B sees a stand-in in a raise that states a real subject', () => {
     const [raise] = raisesIn(OFFENDING);
     expect(raise, 'the fixture raise was not parsed').toBeDefined();
-    expect(standsInForItsSubject(raise!.body)).toEqual([
+    expect(standsInForItsSubject(raise!.body, constantsIn(OFFENDING))).toEqual([
       { field: 'message', text: 'The file could not be renamed.' },
     ]);
+  });
+
+  /**
+   * …AND SEES IT WHEN THE SENTENCE IS HOISTED INTO A CONSTANT.
+   *
+   * This is the shape that defeated the guard. Rule B only read a field whose value STARTS with a
+   * literal, and Rule A only fires on a literal that is a stand-in noun phrase and nothing else — so
+   * a whole sentence moved into a module-level `const` and referenced at the raise passed both, while
+   * the identical sentence written inline was caught. `common/clipboard-copy.ts` is written exactly
+   * that way (`const COPY_FAILED = …` at the top, `message: COPY_FAILED` at the raise), and it is
+   * the house style for a string two surfaces must share (FR-042d) — so the defeating shape is not
+   * hypothetical, it is the one this feature's own code uses.
+   *
+   * SC-013 claims such a notice is rejected before it can be merged. It is only true if the guard
+   * follows the reference.
+   */
+  const HOISTED: Source = {
+    name: 'fixture.ts',
+    text: [
+      "const RENAME_FAILED = 'The file could not be renamed.';",
+      'notify({',
+      "  severity: 'error',",
+      "  subject: { kind: 'file', name: 'alpha.txt' },",
+      '  message: RENAME_FAILED,',
+      '});',
+    ].join('\n'),
+  };
+
+  it('Rule A does NOT see it — which is why Rule B has to', () => {
+    // Stated rather than assumed: if Rule A ever grew to cover this, the test below would pass for
+    // a reason that had nothing to do with the fix, and the hole would reopen unnoticed.
+    expect(namesNothing(HOISTED)).toEqual([]);
+  });
+
+  it('Rule B resolves a message hoisted into a module-level constant', () => {
+    const [raise] = raisesIn(HOISTED);
+    expect(raise, 'the fixture raise was not parsed').toBeDefined();
+    expect(standsInForItsSubject(raise!.body, constantsIn(HOISTED))).toEqual([
+      { field: 'message', text: 'The file could not be renamed.' },
+    ]);
+  });
+
+  it('a constant a raise does not use is not attributed to it', () => {
+    // The resolver reads the whole module, so an unrelated constant is in the map. It may only be
+    // reported where a raise actually NAMES it — otherwise the guard reports the file, not the
+    // notice, and the failure message points at a line the reader cannot act on.
+    const unused: Source = {
+      name: 'fixture.ts',
+      text: `const UNUSED = 'That folder could not be read.';\n${HOISTED.text.replace(
+        'message: RENAME_FAILED,',
+        "message: 'It could not be renamed.',",
+      )}`,
+    };
+    const [raise] = raisesIn(unused);
+    expect(standsInForItsSubject(raise!.body, constantsIn(unused))).toEqual([]);
   });
 
   it('Rule B lets a raise that states { kind: \'none\' } speak generically (FR-027)', () => {
@@ -319,7 +475,7 @@ describe('FR-058 — the rules fire (the control)', () => {
       ),
     };
     const [raise] = raisesIn(excused);
-    expect(standsInForItsSubject(raise!.body)).toEqual([]);
+    expect(standsInForItsSubject(raise!.body, constantsIn(excused))).toEqual([]);
   });
 
   it('the compound-noun lookahead keeps an adjective out of it', () => {
@@ -342,11 +498,13 @@ describe('FR-058 — no notice refers to its subject with a generic stand-in', (
   });
 
   it('no notify() raise that states a subject then talks about "this item"', () => {
-    const offences = noticeSources.flatMap((f) =>
-      raisesIn(f).flatMap((r) =>
-        standsInForItsSubject(r.body).map((o) => `${r.at}  ${o.field}: ${o.text}`),
-      ),
-    );
+    const offences = noticeSources.flatMap((f) => {
+      // Resolved ONCE per file: the constants belong to the module, not to any one raise inside it.
+      const constants = constantsIn(f);
+      return raisesIn(f).flatMap((r) =>
+        standsInForItsSubject(r.body, constants).map((o) => `${r.at}  ${o.field}: ${o.text}`),
+      );
+    });
     expect(
       offences,
       'This raise KNOWS what it is about — it states a subject — and its text refers to that ' +

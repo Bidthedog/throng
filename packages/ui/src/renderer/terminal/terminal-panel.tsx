@@ -55,7 +55,7 @@ import {
 import { useContextMenu } from '../context-menu-provider.js';
 import type { MenuItem } from '../workspace/context-menu.js';
 import { Icon } from '../common/icon.js';
-import { PanelFailureBanner } from '../common/panel-failure-banner.js';
+import { PanelFailureBanner, retryPanelFailure } from '../common/panel-failure-banner.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
 import { useReportPanelFailure } from '../workspace/panel-failure-notice.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
@@ -166,8 +166,11 @@ export function TerminalPanel({
   // Same reason, and additionally because `clearWithMemory` is declared BELOW the menu callback:
   // a ref is read when the menu opens, not when the callback was built.
   const clearWithMemoryRef = useRef<() => void>(() => {});
-  /** The same, for the retry the menu offers — one implementation shared with the banner (FR-042c). */
-  const retryStartRef = useRef<() => Promise<boolean>>(async () => false);
+  /*
+   * There is deliberately NO ref for the retry. The menu item calls `retryPanelFailure(panel.id)`,
+   * which runs the MOUNTED BANNER's retry — the one place the retry's in-flight guard and its
+   * failure sentence live. A ref straight to `retryStart` is what made the menu bypass both.
+   */
   /** …and for *Copy details*, which is assembled below this callback for the same reason (FR-042c). */
   const copyFailureRef = useRef<() => void>(() => {});
   /**
@@ -330,11 +333,19 @@ export function TerminalPanel({
               {
                 label: 'Try again',
                 testId: 'menu-item-Try again',
-                // The SAME retry the banner's control runs (030 FR-042c) — read through a ref
-                // because it is declared below this callback, and so that opening the menu always
-                // sees the CURRENT state instead of whatever it was when the callback was made.
+                /*
+                 * The SAME retry the banner's control runs (030 FR-042c) — and it now goes THROUGH
+                 * the banner rather than calling `retryStart()` beside it.
+                 *
+                 * Calling `retryStart()` directly re-ran the attach correctly and never touched the
+                 * banner's retry state, so a menu retry that failed left the banner standing and
+                 * silent. That is exactly the "did my click do anything?" failure this design exists
+                 * to prevent (see `retryStart` below), so FR-045 held on the icon and nowhere else.
+                 * `retryPanelFailure` runs the mounted banner's own retry — its in-flight guard, its
+                 * disabling and its failure sentence included.
+                 */
                 onClick: () => {
-                  void retryStartRef.current();
+                  retryPanelFailure(panel.id);
                 },
               },
               {
@@ -733,7 +744,6 @@ export function TerminalPanel({
       retryWaiterRef.current = resolve;
     });
   }, []);
-  retryStartRef.current = retryStart;
 
   // Register this terminal's focus with the panel-focus registry (012) so keyboard
   // move-focus can route DOM focus into its input surface.
