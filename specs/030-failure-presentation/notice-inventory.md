@@ -616,7 +616,205 @@ explicitly generated once and not maintained — is not one either.
 
 ## Half B
 
-Appended by **T073** (US6): every user-facing notice and banner string, whether it names its subject,
-and why not where it does not. FR-056 and SC-012.
+Written by **T073** (US6), after US2–US5 finished rewriting the notices, so it describes them as they
+finally are. FR-056; the evidence for SC-012.
 
-<!-- T073: append below this line. -->
+Line numbers are as of the commit this half was added on.
+
+### B.0 · What is counted, and how it was found
+
+Half A's subject was everything **outside** `notify()`. This half's subject is everything **inside**
+it, plus the panel failure banners — the two surfaces FR-056 names.
+
+The list below is not a reading of the twelve call sites Half A recorded. There are **eighteen** raise
+sites now, and two of them (`common/clipboard-copy.ts`, `workspace/panel-failure-notice.ts`) did not
+exist when Half A was written — which is exactly why the accompanying guard,
+`packages/ui/tests/unit/notice-phrases.test.ts`, **discovers** its scope instead of listing it: a
+renderer file is in the notice model when it calls `notify(` or `useErrorNotice(`, and a core file is
+when it names `FailureCause` or `NoticeSubject`. That discovery currently returns 16 renderer files
+and 6 core files, and it returned this table.
+
+Three sources of truth were used, and they measure different things:
+
+| | What it can see | What it cannot |
+|---|---|---|
+| `notice-phrases.test.ts` (T071/T072) | every string literal in a file that raises; the `subject` of every inline `notify({…})` | a message assembled in a store and handed to `useErrorNotice` |
+| `notice-subjects.e2e.ts:83–109` | a REAL notice's rendered text, asserted free of "this item / the item / this file" | anything not on the path that spec drives |
+| this document | everything, by hand | nothing — and it is a snapshot, not a register |
+
+### B.1 · The eighteen raise sites
+
+"Names its subject" is about the notice as the user meets it: the heading (`noticeHeading` — an
+explicit `title`, else `Couldn't {action} {subject}`, else `An error occurred when you tried to
+{action}`), then the message.
+
+| # | Raise | Sev. | Subject | What the user reads | Names its subject? |
+|---|---|---|---|---|---|
+| N-01 | `common/clipboard-copy.ts:60` | error | the caller's — the notice or panel being copied | `Couldn't copy Ghost — Main — Shell` · *The details could not be put on the clipboard.* | **Yes**, inherited from what was copied |
+| N-02 | `common/notification.tsx:1043` (`useErrorNotice`) | error | the store's, per raise — see N-15 – N-18 | `Couldn't {action} {subject}` · a cause sentence (B.2) | **Yes** wherever the store recorded one |
+| N-03 | `config/config-write-notices.ts:40` | error | `{ kind: 'none' }` | *Saving your settings / your key bindings / the theme "X" failed. Nothing was changed.* | **In the sentence.** See category C-1 |
+| N-04 | `editor/drop-target.tsx:77` | error | `{ kind: 'file', name, dir }` | `Couldn't open alpha.ts` · the refusal from `core/editor/drop.ts` | **Yes** — with the folder, because a five-file drop that refuses two must say which two |
+| N-05 | `editor/drop-target.tsx:185` | error | `{ kind: 'none' }` | *An error occurred when you tried to open a file you dropped here* · *That item has no file on disk, so it cannot be opened.* | **No — and correctly.** See C-2 |
+| N-06 | `editor/editor-notice-dialog.tsx:28` ← `editor/file-changed-notice.ts:11` | error | `{ kind: 'file' }` from the one-entry list | *File changed on disk* · *This file was changed by another program…* + the file, its panel and its tab | **Yes**, in the body list |
+| N-07 | `editor/editor-notice-dialog.tsx:28` ← `editor/use-editor.ts:1288` | error | `{ kind: 'none' }` | *Cannot save* · one of three sentences (*…only be saved INSIDE that project's folder* / *Choose where to save first.* / *Save failed — the file may be missing, locked, or read-only.*) | **No — and the subject WAS available.** The one genuine miss; see B.5 |
+| N-08 | `panel-type/panel-type-form.tsx:138` | error \| info | `{ kind: 'terminal' }` — flavour + place | *Terminal exited (code 1) — Proj › Tab › Panel (PowerShell)* | **Yes**, twice over: `terminalExitNotice` carries the identity and the subject repeats it structurally |
+| N-09 | `preferences/reset-notice.tsx:45` | error | `{ kind: 'none' }` | *Reset all settings failed. Nothing was changed.* | **In the sentence.** See C-1 |
+| N-10 | `preferences/themes-tab.tsx:185` | error | `{ kind: 'none' }` | six messages (`:393`, `:403`, `:430`, `:437`, `:443`, `:455`) | **In the sentence**, in five of six. See C-1 and B.5 |
+| N-11 | `statusbar/daemon-indicator.tsx:51` | error | `{ kind: 'none' }` | *throng's daemon has stopped* · *Terminals will not respond and changes will not be saved until it restarts…* | **In the title.** See C-3 |
+| N-12 | `statusbar/daemon-indicator.tsx:73` | error | `{ kind: 'none' }` | *Could not restart the daemon* · the daemon's own reason, else *throng could not restart its daemon.* | **In the title.** See C-3 |
+| N-13 | `terminal/terminal-panel.tsx:552` | warning | `{ kind: 'panel' }` | *Command not remembered* · *The command that was running could not be saved as the startup command. The previous value is unchanged.* | **Yes** — the panel, deliberately, not the flavour (FR-022 over FR-026) |
+| N-14 | `workspace/panel-failure-notice.ts:129` | error | `{ kind: 'project' }`, else `{ kind: 'none' }` | `Couldn't open MyProject` · the reporter's sentence · the affected-panel list | **Yes**, unless the project id no longer resolves to a name (C-4) |
+| N-15 | `workspace/panel-placeholder.tsx:242` | warning | `{ kind: 'panel' }` — the name it was GRANTED | *Another panel is already called "X", so this one was renamed.* | **Yes.** "this one" is anaphora after the heading has named it (FR-023), not a stand-in |
+| N-16 | `app.tsx:422` (`useErrorNotice`) | error | `{ kind: 'none' }` | *An error occurred when you tried to restore your workspace* · *A fresh workspace was opened instead.* | **No — genuinely unavailable.** See C-5 |
+| N-17 | `explorer/file-tree.tsx:136` (`useErrorNotice`) | error | per operation, from `use-explorer-data.ts` | `Couldn't rename alpha.txt` · a cause sentence | **Yes** for a single item; `{ kind: 'none' }` for a batch (C-4) |
+| N-18 | `sidebar/projects-panel.tsx:134` and `sidebar/subworkspaces-panel.tsx:52` (`useErrorNotice`) | error | `{ kind: 'project' }` / `{ kind: 'subWorkspace' }` from the store | `Couldn't delete MyProject` · a cause sentence | **Yes**, unless the id no longer resolves (C-4) |
+
+### B.2 · The sentences the shared raiser speaks
+
+N-02 raises for four surfaces and writes none of its own words. Its message is one of three things,
+and only the first two are throng's:
+
+1. **A cause sentence** — `packages/core/src/failure/cause.ts:168` (`causeMessage`), five kinds and
+   five sentences: `"X" is open in another program…`, `"X" could not be found. It may have been
+   moved, renamed or deleted.`, `You do not have permission to change "X".`, `"X" still contains
+   items.`, `throng's daemon has stopped. Restart it from the status bar to continue.` Each has a
+   **subject-free twin** selected by `{ subjectPresented: true }` — *It is open in another
+   program…*, *You do not have permission to change it.* — used when the heading has already named
+   the thing. **That twin is the house style for referring back to a named subject**, and it is why
+   pronouns are not treated as stand-ins by the guard.
+2. **A producer's cause**, composed by main (`files-service.ts:failure`) from the same function, so
+   the words cannot differ between the two routes.
+3. **The raw failure, untouched** — FR-011b, for anything matching none of the five kinds. It names
+   nothing by design, and the subject beside it is what makes the notice legible.
+
+### B.3 · The banner strings
+
+Not notices, and deliberately not governed by the notification preferences (FR-005a/FR-041,
+SC-004a). Counted here because FR-056 says "notice **and banner**".
+
+| ID | String | Where | Names its subject? |
+|---|---|---|---|
+| B-01 | *This file could not be read* | `editor/editor-failure.ts:26` (headline) | **Structurally.** FR-040 makes the headline the one sentence a panel TYPE owns, so it cannot contain a name; FR-040a renders the path directly beneath it, and `subject: panelSubject(place)` puts `Project — Tab — Panel` into the copied text (FR-052) |
+| B-02 | *This terminal could not be opened* | `terminal/terminal-panel.tsx:796` (headline) | Same, same reasons |
+| B-03 | *Copy the details here, or see the notification.* | `common/panel-failure-banner.tsx:94` | n/a — a pointer, not a report |
+| B-04 | *That did not work — the condition is still there.* | `common/panel-failure-banner.tsx:97` | n/a — the outcome of a Retry the user just pressed, on the banner that already names the panel |
+
+"This file" and "This terminal" in B-01/B-02 are **deictic, not generic**: the referent is the panel
+the reader is looking at, and the path is on the next line. A guard that banned them would leave no
+satisfiable wording for a requirement that says the sentence belongs to the type — which is why the
+check inspects `notify()` raises and not banner props.
+
+### B.4 · Why a notice says `{ kind: 'none' }` — five reasons, not thirteen misses
+
+`{ kind: 'none' }` is written at more than twenty places in the renderer — at raise sites, and in the
+helpers that derive a subject and fall back. Reading them as that many unnamed notices would be
+wrong: they fall into five categories, and only the first is structural.
+
+**C-1 · The subject is real, and `NoticeSubject` has no word for it.** *(N-03, N-09, N-10 — and see
+the count note below.)*
+
+`NoticeSubject` is the **workspace's** vocabulary — Pane, Tab, Panel, Panel Type, Project,
+Sub-workspace, file, folder, terminal flavour — and the spec closes the set on purpose (FR-024: the
+terms the interface itself uses, "with no synonyms invented"). The Preferences window's subjects are
+none of those:
+
+- a **configuration document** — settings, key bindings, a theme file (`config-write-notices.ts:40`);
+- a **reset scope** — "Reset all settings", "Restore this theme" (`reset-notice.tsx:45`);
+- a **theme** (`themes-tab.tsx:185`).
+
+All three already name the thing **inside the sentence**, where it has always read correctly:
+*Saving your key bindings failed*, *Reset all settings failed*, *Could not read "Solarized"*. FR-027
+therefore applies exactly — the message is left as it is rather than padded — and the honest answer
+is `{ kind: 'none' }` rather than a near-miss kind chosen to satisfy the compiler. Widening the union
+is a spec-level decision and not one a call site may make.
+
+*Count note: this brief described this category as **four** call sites. Three were measured
+(`config-write-notices.ts:55`, `reset-notice.tsx:54`, `themes-tab.tsx:185`). The likely fourth is one
+of the daemon's two (C-3), which shares the structure — a real subject with no word for it — while
+belonging to the status bar rather than to Preferences. Recorded as measured rather than as
+described.*
+
+**C-2 · There is genuinely nothing to name.** *(N-05.)* `drop-target.tsx:185` handles a drop that
+yielded no path at all — a virtual folder, a mail attachment, an item that exists only inside the
+source application. *That item has no file on disk* is not a stand-in; it is the fact. This is the
+case FR-027 was written for, and it is the reason the guard excuses a raise that states
+`{ kind: 'none' }` rather than banning the phrase everywhere.
+
+**C-3 · The daemon.** *(N-11, N-12.)* There is exactly one, so "which one?" — the question a subject
+answers — cannot be asked about it. Both raises carry an explicit `title` naming it, and a title wins
+the heading outright.
+
+**C-4 · The operation spans a set, or the name no longer resolves.** A multi-item move, paste, copy
+or delete (`use-explorer-data.ts:916`, `:934`, `:994`, `:1093`) has no single subject, and the wording
+splits on the same line: one item is named, several become *"delete these items"*. A project or
+sub-workspace whose id no longer resolves to a name (`projects-store.tsx:189`,
+`detach-context.tsx:88`, `panel-failure-notice.ts:127`) yields `{ kind: 'none' }` rather than an
+identifier the user has never seen. Both are FR-027, applied per raise.
+
+**C-5 · The subject is the thing that failed to exist.** *(N-16.)* What did not restore is the whole
+previous layout — every tab and panel in it, none of which exists to be named, because the failure is
+precisely that they could not be brought back.
+
+### B.5 · What this sweep found
+
+Two things, and they are different in kind.
+
+**1. A generic stand-in still reaching the user — `common/notification.tsx:920`, as the guard first
+reported it.** Found on the guard's first run, before the fix below moved the line. `subjectFromMessage` ended `return presented ?? 'this item'`, and
+`causeMessage` then **quoted** that value, so a classified failure whose raw message contained no
+quoted path and whose raiser stated `{ kind: 'none' }` rendered as **`"this item" could not be found.
+It may have been moved, renamed or deleted.`** — #195 verbatim, surviving inside the fix for it. T034
+("replace generic stand-ins") closed with this line intact, and nothing could have failed: the E2E
+that bans the phrase drives a path where the errno does quote a name.
+
+Fixed under T072. The function now returns `undefined` when nothing has a name, and the caller speaks
+the cause in its subject-free form (*It could not be found…*), which is FR-027's instruction — leave
+the sentence as it is rather than pad it with a placeholder — and the same form FR-023 already uses.
+Rendering of every named case is unchanged, and `causeKey` collapses exactly as it did when every
+nameless failure shared the string `this item`.
+
+**2. One notice whose subject was available and is not stated — N-07.** `reportSaveError`
+(`use-editor.ts:1277–1288`) calls `showEditorNotice({ title, message })` with **no** `files`, so
+`editor-notice-dialog.tsx:46` takes the `{ kind: 'none' }` branch. The heading is *Cannot save* and
+the message is about "this editor" or "the file"; with two dirty editors open, neither says which.
+The document's path is in `configRef.current.filePath` at that point — the sibling caller,
+`buildFileChangedNotice`, passes exactly that and gets a named subject (N-06).
+
+This is **not** an FR-058 offence — no banned phrase appears — which is why the guard is silent on it
+and this hand audit is not. It is an FR-019/SC-012 one, and it is the only raise in the table whose
+"names its subject" answer is *no* for a reason other than the subject being unavailable. Not fixed
+here: US6's tasks are the check and the record, and a change to the save-refusal path belongs with an
+issue of its own.
+
+A third, smaller one: `themes-tab.tsx:455` raises *A theme with that name already exists.* /
+*Invalid name.* without the name the user just typed — the one string in N-10's six that does not
+name what it is about, and the same class as N-07 at a much smaller scale.
+
+### B.6 · SC-012, measured
+
+> **SC-012**: Every user-facing notice and banner string is accounted for in the inventory, and 100%
+> of those with an available subject name it.
+
+**Accounted for**: 18 raise sites and 4 banner strings above, plus the cause sentences they speak
+(B.2) and the 40 non-notice surfaces of Half A. The two halves together are the sweep FR-017's second
+half asks for.
+
+**100% of those with an available subject name it**: **not yet — 12 of 13.** Thirteen entries have a
+subject `NoticeSubject` can express and that was known at the moment of the raise (N-01, N-02, N-04,
+N-06, N-07, N-08, N-13, N-14, N-15, N-17, N-18, B-01, B-02); twelve of them state it. **N-07 is the
+exception**, and it is stated rather than argued away.
+
+Of the remaining nine: five have a real subject the closed union has no word for and name it in the
+sentence instead (C-1, C-3 — N-03, N-09, N-10, N-11, N-12); two have no subject to name (C-2, C-5 —
+N-05, N-16); and two are pointers rather than reports (B-03, B-04).
+
+**What now enforces it going forward**, and what does not:
+
+- the **type** makes omission inexpressible (FR-057, `notice-subject-required.test.ts` compiles a
+  fixture to prove the requirement is live);
+- the **guard** makes a generic stand-in fail the build, over a scope it rediscovers on every run
+  (FR-058, `notice-phrases.test.ts`);
+- **nothing** makes a store record a subject it could have recorded. N-07 compiles, passes every
+  check, and is wrong — which is the honest shape of this success criterion: the automated half
+  covers *saying nothing* and *saying "this item"*, and a hand audit is still what covers *saying
+  nothing when you knew*.
