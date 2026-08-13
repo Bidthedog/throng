@@ -268,7 +268,7 @@ describe('theme-quality guards hold for the shipped set (009, US6)', () => {
     }
     expect(THRONG_THEME.icons.chevronLeft).toBe('‹');
     expect(THRONG_THEME.icons.chevronRight).toBe('›');
-    expect(THRONG_THEME.icons.chevronDown).toBe('⌄');
+    expect(THRONG_THEME.icons.chevronDown).toBe('▾');
 
     // Four distinct keys — the tree-node pair is untouched and still resolvable on its own.
     for (const token of [...chevrons, 'collapse', 'expand']) {

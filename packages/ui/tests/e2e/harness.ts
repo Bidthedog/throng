@@ -931,7 +931,24 @@ export async function daemonPid(pipeName: string): Promise<number> {
  * per live ConPTY. A terminal that has fully released its OS resources leaves none
  * behind, so this is the orphan-leak probe for the no-orphans E2E.
  */
-export function conhostChildren(parentPid: number): number[] {
+/**
+ * The result of ASKING the OS about a process's conhosts — which is not the same thing as the
+ * answer.
+ *
+ * `conhostChildren` used to swallow every failure and return `[]`, so a probe that timed out was
+ * indistinguishable from "this process has no conhosts". In {@link expectNoOrphanConhosts} that is
+ * the dangerous direction: the assertion that exists to catch leaked OS processes would PASS
+ * because it could not look. Under load — which is exactly when a reap is most likely to be slow —
+ * the 8-second PowerShell budget is reachable, so this was not theoretical.
+ */
+export interface ConhostProbe {
+  /** False when the query itself failed. `pids` is then meaningless, not empty. */
+  ok: boolean;
+  pids: number[];
+}
+
+/** Ask the OS which `--headless` conhosts are children of `parentPid`, reporting probe failure. */
+export function probeConhostChildren(parentPid: number): ConhostProbe {
   try {
     const out = execFileSync(
       'powershell.exe',
@@ -943,16 +960,38 @@ export function conhostChildren(parentPid: number): number[] {
       ],
       { encoding: 'utf8', timeout: 8000, windowsHide: true },
     );
-    return out
-      .split(/\r?\n/)
-      .map((l) => Number(l.trim()))
-      .filter((n) => Number.isFinite(n) && n > 0);
+    return {
+      ok: true,
+      pids: out
+        .split(/\r?\n/)
+        .map((l) => Number(l.trim()))
+        .filter((n) => Number.isFinite(n) && n > 0),
+    };
   } catch {
-    return [];
+    return { ok: false, pids: [] };
   }
 }
 
-/** Poll until `conhostChildren(pid)` is a subset of `baseline` (orphans reaped), or fail. */
+/**
+ * As {@link probeConhostChildren}, but flattening a failed probe to "none".
+ *
+ * Only safe where an empty answer costs nothing — best-effort CLEANUP, where missing a pid means a
+ * stray process rather than a false assertion. Never use it to decide whether a reap happened.
+ */
+export function conhostChildren(parentPid: number): number[] {
+  return probeConhostChildren(parentPid).pids;
+}
+
+/**
+ * Poll until this daemon's conhosts are a subset of `baseline` (orphans reaped), or fail.
+ *
+ * Scoped to `parentPid` throughout — it asks only about conhosts the DAEMON owns, so another
+ * throng, an installed build, or the tooling running the suite cannot make it pass or fail.
+ *
+ * A probe that FAILS is treated as "not yet known", never as "nothing there". The distinction is
+ * the whole point of this assertion: reporting success because the query broke would be the one
+ * outcome worse than a false failure.
+ */
 export async function expectNoOrphanConhosts(
   parentPid: number,
   baseline: number[],
@@ -961,10 +1000,21 @@ export async function expectNoOrphanConhosts(
   const base = new Set(baseline);
   const deadline = Date.now() + timeoutMs;
   let extra: number[] = [];
+  let everProbed = false;
   while (Date.now() < deadline) {
-    extra = conhostChildren(parentPid).filter((p) => !base.has(p));
-    if (extra.length === 0) return;
+    const probe = probeConhostChildren(parentPid);
+    if (probe.ok) {
+      everProbed = true;
+      extra = probe.pids.filter((p) => !base.has(p));
+      if (extra.length === 0) return;
+    }
     await new Promise((r) => setTimeout(r, 400));
+  }
+  if (!everProbed) {
+    throw new Error(
+      `could not read the daemon's conhosts (pid ${parentPid}) in ${timeoutMs}ms — every probe ` +
+        `failed, so whether anything leaked is UNKNOWN. This is a broken measurement, not a pass.`,
+    );
   }
   throw new Error(`orphaned conhost hosts survived termination: ${extra.join(', ')}`);
 }

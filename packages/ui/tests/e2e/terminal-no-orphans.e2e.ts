@@ -85,6 +85,21 @@ test('panel-destroy reaps the conhost for EVERY detected terminal flavour', asyn
       const flavours = await detectedFlavours(win, await firstPanelId(win));
       expect(flavours.length).toBeGreaterThan(0);
 
+      /*
+       * The budget has to scale with the work, because this test's cost is not fixed.
+       *
+       * It opens and destroys a real terminal PER INSTALLED FLAVOUR, and each round spawns several
+       * `powershell.exe` probes to ask the OS which conhosts the daemon owns. On a machine with two
+       * shells that fits inside Playwright's default 30s; on one with five, or when PowerShell is
+       * slow because the machine is busy, it cannot — and the test then failed as a flat TIMEOUT,
+       * with no assertion having failed and nothing to point at.
+       *
+       * That is a measurement problem wearing a defect's clothes: it reports "terminals leak" on a
+       * loaded machine and says nothing at all about terminals. Sizing the budget by the actual
+       * flavour count keeps the assertion honest on any machine.
+       */
+      test.setTimeout(20_000 + flavours.length * 25_000);
+
       for (const flavour of flavours) {
         const pid = await firstPanelId(win);
         // A second Panel so destroying the terminal Panel is allowed (keep ≥ 1).

@@ -1324,7 +1324,7 @@ export function TabGroup(): ReactElement {
           {counts.overflowing ? (
             <div className="tabstrip-actions" data-testid="tabstrip-actions" ref={actionsRef}>
               {/*
-               * FR-052 — the order reads `[ ‹ n ] [ n › ] [ ⌄ n ]`.
+               * FR-052 — the order reads `[ ‹ n ] [ n › ] [ ▾ n ]`.
                *
                * Each count sits on the side its control points at, so the group reads outward from
                * the tabs in both directions instead of as three identically-shaped lumps. Only the
