@@ -283,8 +283,19 @@ test('entering a project whose folder is gone reports it and does not split the 
          */
         const notices = noticeCards(win);
         expect(await notices.count(), 'one cause should raise one notice').toBe(1);
+        /*
+         * 030 US4 / T060b — `terminal-start-failed-*` is now the shared `panel-failure-*` banner.
+         *
+         * The `:not()` is load-bearing, not tidiness. The consolidated notice's own ids all begin
+         * `panel-failure-notice` (`workspace/panel-failure-notice.ts` — the card AND its dismiss
+         * control), and that notice is on screen here, so a bare prefix match on `panel-failure-`
+         * selects three elements where one panel failed. MEASURED: it did, exactly that, which is
+         * why the exclusion is itself a PREFIX and not an equality — an equality caught the card and
+         * left its button behind. Panel ids are uuids, so the two families can never collide on an
+         * exact id; only a prefix match confuses them.
+         */
         await expect(
-          win.locator('[data-testid^="terminal-start-failed-"]'),
+          win.locator('[data-testid^="panel-failure-"]:not([data-testid^="panel-failure-notice"])'),
           'the panel that could not start says so in place',
         ).toHaveCount(1);
 

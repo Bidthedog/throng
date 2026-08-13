@@ -137,7 +137,10 @@ test('an editor and the tree recover when the project folder is renamed back aft
          * remembered text and looking entirely ordinary, and a Ctrl+S would write that text back
          * over a path throng could not even open.
          */
-        const unloadable = win.getByTestId(`editor-unloadable-${pid}`);
+        // 030 US4 (T060a): the editor's own `editor-unloadable-{pid}` markup is gone — this state is
+        // now drawn by the shared `panel-failure-{panelId}` banner (FR-039). Behaviour unchanged:
+        // the same condition, the same visible path, and the same disappearance when it is repaired.
+        const unloadable = win.getByTestId(`panel-failure-${pid}`);
         await expect(unloadable).toBeVisible({ timeout: 15_000 });
         await expect(unloadable).toContainText('code.txt');
 

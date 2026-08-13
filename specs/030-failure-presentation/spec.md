@@ -712,12 +712,22 @@ earlier one.
   panel-type selection screen *is* clearing its type, which is why
   `packages/core/src/editor/panel-type.ts` records that `clearPanelType` is simply not wired for
   editors yet. Where this spec says "Cancel" it names the concept; the label is *Clear panel type*.
-- **FR-043**: ✕ Cancel on an editor MUST return the panel to the panel-type selection screen, keeping
-  the panel, its position in the layout and its title. It MUST NOT delete the panel.
+- **FR-043**: Clear panel type on an editor MUST return the panel to the panel-type selection screen,
+  keeping the panel, its position in the layout and its title. It MUST NOT delete the panel.
+- **FR-043a**: Where the editor holds **unsaved** text, clearing MUST ask first. The banner is
+  reachable by a route that leaves a dirty buffer whose content exists nowhere else — clearing
+  silently would destroy the user's work to fix a display problem. A clean buffer is never
+  interrupted.
 - **FR-044**: ✕ Cancel on a terminal MUST behave as Clear panel type does today, with no regression to
   029 FR-004a.
-- **FR-045**: ↻ Retry MUST re-attempt the operation that failed. On success the banner MUST disappear
-  with the condition; on failure it MUST remain and say that the retry failed.
+- **FR-045**: Try again MUST re-attempt the operation that failed. On success the banner MUST
+  disappear with the condition; on failure it MUST remain and say that the retry failed. **This
+  changes 029's terminal behaviour deliberately**: 029 cleared the start failure on retry, so the
+  banner unmounted the instant it was clicked and could not report that the retry had failed. The
+  failure state now survives the attempt and is settled by its outcome.
+- **FR-045a**: A retry MUST always settle. A terminal that is still starting resolves the attempt as
+  *not yet succeeded* rather than leaving it pending — a promise that never settles leaves the
+  control disabled forever, which is a worse failure than the one being reported.
 - **FR-046**: The banner MUST NOT be dismissible while its condition holds, and MUST disappear when the
   condition clears, whether or not the panel is visible at the time.
 - **FR-047**: The banner MUST render legibly in every shipped theme, taking its colours from the

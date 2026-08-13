@@ -201,9 +201,11 @@ test('an editor stranded across a restart recovers when the path is repaired', a
       // file used to say", and a Save would write the stale text back to a path throng cannot read.
       //
       // AC 1 requires an explicit unloadable state naming the path it could not read. The testid
-      // below is a PROPOSED affordance — the spec has to settle its real name; what this pins is
-      // that some such state must exist and must carry the path.
-      const unloadable = win.getByTestId(`editor-unloadable-${restoredPid}`);
+      // below was a PROPOSED affordance when this was written; 030 US4 (#236, FR-039) settled it as
+      // `panel-failure-{panelId}` — the ONE banner every panel type renders, replacing this
+      // editor-only markup. What is pinned here is unchanged: some such state must exist, and it
+      // must carry the path (FR-040a is that requirement, kept because of this test).
+      const unloadable = win.getByTestId(`panel-failure-${restoredPid}`);
       await expect(unloadable).toBeVisible({ timeout: 10_000 });
       await expect(unloadable).toContainText('code.txt');
 

@@ -383,7 +383,9 @@ async function failingTerminal(win: Page, panelId: string): Promise<void> {
   await win.getByTestId(`panel-type-select-${panelId}`).selectOption('terminal');
   await win.getByTestId('terminal-flavour').selectOption('cmd');
   await win.getByTestId(`panel-type-confirm-${panelId}`).click();
-  await expect(win.getByTestId(`terminal-start-failed-${panelId}`)).toBeVisible({ timeout: 60_000 });
+  // 030 US4 / T060b — the terminal's own failure strip is now the shared banner (FR-039), so the
+  // state this waits for is spelled `panel-failure-{panelId}`. Same state, same wait, one id.
+  await expect(win.getByTestId(`panel-failure-${panelId}`)).toBeVisible({ timeout: 60_000 });
 }
 
 /**
