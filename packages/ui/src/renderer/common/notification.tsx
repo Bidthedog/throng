@@ -1,5 +1,6 @@
 import {
   createContext,
+  Fragment,
   useCallback,
   useContext,
   useEffect,
@@ -22,6 +23,7 @@ import {
   noticeLogRecord,
   DEFAULT_NOTIFICATION_SETTINGS,
   type AffectedPanel,
+  type AffectedTabGroup,
   type FailureCause,
   type NoticeSeverity,
   type NoticeSubject,
@@ -29,7 +31,9 @@ import {
   type SeverityNotificationSettings,
 } from '@throng/core';
 import { useAppSettings } from '../config/config-store.js';
+import { copyToClipboard } from './clipboard-copy.js';
 import { IconButton } from './icon-button.js';
+import { noticeParts, noticeToText, projectOf, type NoticePart } from './notice-text.js';
 import {
   pruneSilenced,
   rememberSilenced,
@@ -221,35 +225,14 @@ interface NotifyContextValue {
 const NotifyContext = createContext<NotifyContextValue | null>(null);
 
 /**
- * The heading a notice shows above its message (030 FR-020, `contracts/notice-api.md`).
+ * The heading, and the notice AS TEXT, both re-exported from `notice-text.ts` (030 US5, FR-049).
  *
- * WHAT WAS ATTEMPTED, ON WHAT. The two together are the heading; the message below states only what
- * went wrong. That split is the whole of #195's fix on screen — "An error occurred when you tried to
- * rename this item" told the user everything except the part they needed.
- *
- *   title                          → the title, unchanged: it already names its own event
- *   subject ≠ none, action         → `Couldn't {action} {subject}`
- *   subject ≠ none, no action      → the subject alone
- *   subject = none, action, error  → today's derived sentence
- *   otherwise                      → no heading, exactly as today
- *
- * `formatSubject` renders the subject and NOTHING here does: quoting, ordering, elision and the
- * 48-character bound are decided in one place (FR-021), so a heading can never disagree with a
- * banner or a log record about what a panel is called.
- *
- * The derived sentence stays behind `severity === 'error'`: "an error occurred" is a lie over a
- * warning. A subject, by contrast, is a fact at any severity — the panel-rename warning presents one
- * with no action at all.
+ * They moved because the copy text must be derived from what the notice RENDERS — one ordered list
+ * of parts, rendered below and serialised there, so a part cannot exist in one and not the other.
+ * The heading is that list's first part, so it belongs beside it. Re-exported because every surface
+ * that already imports either of them from here is unaffected by where they now live.
  */
-export function noticeHeading(
-  n: Pick<Notice, 'title' | 'action' | 'severity' | 'subject'>,
-): string | undefined {
-  if (n.title) return n.title;
-  const subject = n.subject ? formatSubject(n.subject) : '';
-  if (subject) return n.action ? `Couldn't ${n.action} ${subject}` : subject;
-  if (n.severity === 'error' && n.action) return `An error occurred when you tried to ${n.action}`;
-  return undefined;
-}
+export { noticeHeading, noticeToText } from './notice-text.js';
 
 /**
  * The subject's OWN name — the part a cause's sentence would be restating (FR-023).
@@ -270,22 +253,6 @@ function subjectName(subject: NoticeSubject | undefined): string | undefined {
   }
 }
 
-/**
- * A notice as PLAIN TEXT, for the clipboard.
- *
- * The whole notice, in the order it is read on screen: the context line ("what you were trying to
- * do"), the failure itself, then any details. A user pasting this into a bug report should not have
- * to retype the half of it that was rendered as separate elements — and the raw failure string is
- * precisely the part they cannot retype accurately.
- */
-export function noticeToText(
-  n: Pick<Notice, 'title' | 'action' | 'severity' | 'subject' | 'message' | 'details' | 'copyDetail'>,
-): string {
-  const heading = noticeHeading(n);
-  // `copyDetail` last: a bug report wants the human sentence first and the machine text under it.
-  return [heading, n.message, ...(n.details ?? []), n.copyDetail].filter(Boolean).join('\n');
-}
-
 let seq = 0;
 
 /**
@@ -300,28 +267,6 @@ function panelIdsOf(input: NoticeInput): readonly string[] {
 
 /** Shared empty list, so `mergeAffected`'s "nothing joined" identity check has something to match. */
 const NO_PANELS: readonly AffectedPanel[] = [];
-
-/**
- * The project a subject names, for the list's context (FR-031b).
- *
- * The heading already states it, so the rows must not — and rather than carry a second field saying
- * what the subject already says, the context is READ OFF the subject. A notice about anything but a
- * project or something inside one has no project to elide, which is the correct answer and not a
- * missing case.
- */
-function projectOf(subject: NoticeSubject | undefined): string | undefined {
-  if (!subject) return undefined;
-  switch (subject.kind) {
-    case 'project':
-      return subject.name;
-    case 'tab':
-    case 'panel':
-    case 'terminal':
-      return subject.project;
-    default:
-      return undefined;
-  }
-}
 
 /**
  * What a GROWTH record says (FR-006a).
@@ -721,21 +666,16 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
                  from being re-read in full. */
               aria-live={announced.includes(n.id) ? 'off' : undefined}
             >
-              {noticeHeading(n) ? <h4 className="notice__title">{noticeHeading(n)}</h4> : null}
-              <p className="notice__message" data-testid={n.testIds?.message}>
-                {n.message}
-              </p>
-              {n.body}
-              {n.affected?.length ? (
-                <AffectedList affected={n.affected} project={projectOf(n.subject)} />
-              ) : null}
-              {n.details?.length ? (
-                <ul className="notice__details" data-testid={`${n.testId ?? 'notice'}-details`}>
-                  {n.details.map((d) => (
-                    <li key={d}>{d}</li>
-                  ))}
-                </ul>
-              ) : null}
+              {/*
+                RENDERED FROM THE SAME LIST THE CLIPBOARD IS SERIALISED FROM (030 FR-049).
+                `noticeParts` is the notice's content, in order; `noticeToText` walks the same array.
+                That is what makes the copy text derived from what is RENDERED rather than from a
+                remembered list of fields — the defect that dropped `body` silently (#238). Markup
+                added here directly, outside a part, is what the E2E's DOM comparison catches.
+              */}
+              {noticeParts(n).map((part, index) => (
+                <NoticePartView key={`${part.kind}-${index}`} notice={n} part={part} />
+              ))}
             </div>
             {/* COPY. A failure message is the one thing in the application a user is most likely to
                 need somewhere else — in an issue, in a message to us — and it is also the one thing
@@ -747,9 +687,13 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
               testId={n.testId ? `${n.testId}-copy` : `notice-${n.severity}-copy`}
               title="Copy this message"
               onClick={() => {
-                // `verbatim` — the text goes on the clipboard exactly as it reads, with no editor
-                // line/rectangle semantics attached to it.
-                void window.throng?.clipboard?.write({ text: noticeToText(n), mode: 'verbatim' });
+                // Through the shared copy path, so a clipboard that refused the write is REPORTED
+                // rather than looking exactly like one that accepted it (FR-055). `notify` is this
+                // provider's own — the notice about the failed copy is a notice like any other.
+                void copyToClipboard(noticeToText(n), n.subject ?? { kind: 'none' }, {
+                  write: window.throng?.clipboard?.write,
+                  notify,
+                });
               }}
             />
             {/* EVERY notice is dismissable — including the restore notice, which was a stateless
@@ -783,6 +727,41 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
 }
 
 /**
+ * ONE PART of a notice, drawn (030 FR-049).
+ *
+ * The switch is exhaustive over {@link NoticePart}, so a part added to `notice-text.ts` fails to
+ * compile until it is drawn — which is the half of the rule TypeScript can enforce. The other half,
+ * markup added to the card that is not a part at all, is what the E2E's DOM comparison is for.
+ *
+ * The notice itself is passed only for the two test ids a folded-in surface brought with it
+ * (FR-053); nothing here re-derives content.
+ */
+function NoticePartView({ notice, part }: { notice: Notice; part: NoticePart }): ReactElement | null {
+  switch (part.kind) {
+    case 'heading':
+      return <h4 className="notice__title">{part.text}</h4>;
+    case 'message':
+      return (
+        <p className="notice__message" data-testid={notice.testIds?.message}>
+          {part.text}
+        </p>
+      );
+    case 'body':
+      return <Fragment>{part.node}</Fragment>;
+    case 'affected':
+      return <AffectedList groups={part.groups} />;
+    case 'details':
+      return (
+        <ul className="notice__details" data-testid={`${notice.testId ?? 'notice'}-details`}>
+          {part.items.map((d) => (
+            <li key={d}>{d}</li>
+          ))}
+        </ul>
+      );
+  }
+}
+
+/**
  * The panels one cause defeated, grouped by tab (030 FR-030/FR-031/FR-032).
  *
  * Everything about WHAT this shows was decided in `@throng/core` — order, de-duplication, and every
@@ -795,14 +774,14 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
  * the behaviour is worse than not offering it. The LIST is focusable, because a bounded scroll
  * region whose lower rows can only be reached with a wheel is unreadable by keyboard.
  */
-function AffectedList({
-  affected,
-  project,
-}: {
-  affected: readonly AffectedPanel[];
-  project?: string;
-}): ReactElement {
-  const groups = useMemo(() => groupAffected(affected, { project }), [affected, project]);
+function AffectedList({ groups }: { groups: readonly AffectedTabGroup[] }): ReactElement {
+  /*
+   * ALREADY GROUPED, by `noticeParts` (030 FR-049).
+   *
+   * The grouping used to happen here, which meant the drawn list and the COPIED list each called
+   * `groupAffected` for themselves — two paths that could drift in ordering or naming. There is one
+   * now, and this component draws what it is handed.
+   */
   return (
     <div
       className="notice__affected"

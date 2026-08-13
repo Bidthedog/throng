@@ -99,13 +99,12 @@ The banner renders whenever its condition holds, whatever any severity's display
 (FR-005a/FR-041). Its pointer text must remain true when there is no notice, which is why the fixed
 sentence above leads with Copy rather than with the notification.
 
-**Transitional wording while US4 ships without Copy**: until the copy control exists (US5), the
-banner's pointer reads `Details are in the diagnostic log.` It names the **only** route that is
-unconditionally true at that point — Copy does not exist yet, and the notification may have been
-dismissed, timed out, or never shown, which is exactly what FR-041 forbids a pointer from promising.
-US4 asserts the banner appears with every severity silenced (T056), so a transitional sentence
-mentioning the notification would contradict its own phase. T069b switches it to the fixed sentence
-above in the same change that adds the control.
+**The transitional wording is spent.** While US4 shipped without Copy, the pointer read `Details are
+in the diagnostic log.` — the only route that was unconditionally true at that point, since Copy did
+not exist and the notification may have been dismissed, timed out, or never shown. US5 (T069b)
+switched it to the fixed sentence above in the same change that added the control, and
+`panel-failure-banner.e2e.ts` now asserts the final sentence with every severity set to *Never
+display*, which is the state FR-041 was written about.
 
 ## Call sites
 

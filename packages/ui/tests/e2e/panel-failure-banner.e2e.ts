@@ -18,18 +18,19 @@
  * either the shared banner or the per-type surface it replaces. That guard is what makes "the
  * banner is missing" the only thing left for the assertion to be reporting.
  *
- * ══ TWO CONTROLS, NOT THREE ══
+ * ══ THREE CONTROLS, IN ORDER (US5, T069apre) ══
  *
- * **Copy details arrives in US5 (T069a/T069apre), not here.** A banner asserted to carry three
- * controls could not go green at US4's checkpoint, and US4 has to be independently shippable. The
- * control set is asserted EXHAUSTIVELY — `['Try again', 'Clear panel type']`, in that order and
- * nothing else — which is also how "not dismissible" (FR-046) is stated: a close button would be a
- * third name in that list, so the positive assertion carries the negative one and cannot pass
- * vacuously the way `expect(closeButton).toHaveCount(0)` would while no banner exists at all.
+ * US4 shipped with two and this file asserted two, exhaustively, so that US5's *Copy details* would
+ * have to be INSERTED into a stated order rather than appended after whatever was already there. It
+ * is now `['Try again', 'Copy details', 'Clear panel type']`, still exhaustive — which is also how
+ * "not dismissible" (FR-046) is stated: a close button would be a fourth name in that list, so the
+ * positive assertion carries the negative one and cannot pass vacuously the way
+ * `expect(closeButton).toHaveCount(0)` would.
  *
- * The pointer sentence is the TRANSITIONAL one for the same reason — `Details are in the diagnostic
- * log.` (T063). The final `Copy the details here, or see the notification.` arrives with the control
- * it advertises.
+ * The pointer sentence moves with it (T069pre/T069b). US4's transitional `Details are in the
+ * diagnostic log.` named the only route that was unconditionally true while no copy control existed;
+ * the final `Copy the details here, or see the notification.` leads with the control that always
+ * works, and offers the notice second because it may have been dismissed, timed out or silenced.
  *
  * ══ HOW THE TWO FAILURES ARE PRODUCED, WITHOUT A SECOND LAUNCH ══
  *
@@ -278,7 +279,7 @@ test.afterAll(async () => {
  * not define renders NOTHING, silently, and the control becomes an invisible button. That has
  * already happened once in 029.
  */
-test('an editor and a terminal that failed are drawn by the same banner, with the same two controls', async () => {
+test('an editor and a terminal that failed are drawn by the same banner, with the same three controls', async () => {
   test.setTimeout(240_000);
   const win = h.win;
 
@@ -306,17 +307,16 @@ test('an editor and a terminal that failed are drawn by the same banner, with th
   expect(termShape, 'the two panel types are still drawn by two different banners').toEqual(editorShape);
 
   /*
-   * The control set, EXHAUSTIVELY and in order (FR-042, FR-042d).
+   * The control set, EXHAUSTIVELY and in order (FR-042, FR-042d, FR-051).
    *
-   * Exhaustive is doing two jobs. It pins the order Copy will be inserted INTO at US5 rather than
-   * appended after, and it states FR-046's "not dismissible" as a positive fact — a close button
-   * would be a third name here. Written as `toHaveCount(0)` on a close button instead, that half
-   * would pass vacuously for as long as no banner exists at all.
+   * Exhaustive is doing two jobs. Copy sits in the MIDDLE — inserted into the order US4 stated, not
+   * appended after it — and the list states FR-046's "not dismissible" as a positive fact: a close
+   * button would be a fourth name here. Written as `toHaveCount(0)` on a close button instead, that
+   * half would pass vacuously for as long as no banner exists at all.
    */
-  expect(editorControls).toEqual(['Try again', 'Clear panel type']);
-  expect(termControls).toEqual(['Try again', 'Clear panel type']);
-  // Copy details is US5's (T069a). A banner that already had it here could not go green at US4.
-  expect(editorShape.buttons, 'the banner carries a control US4 has not built yet').toBe(2);
+  expect(editorControls).toEqual(['Try again', 'Copy details', 'Clear panel type']);
+  expect(termControls).toEqual(['Try again', 'Copy details', 'Clear panel type']);
+  expect(editorShape.buttons, 'the banner is missing a control (FR-051)').toBe(3);
 
   /*
    * Every control is a themeable icon with a hover title (FR-042b, Constitution VI).
@@ -331,7 +331,7 @@ test('an editor and a terminal that failed are drawn by the same banner, with th
   for (const kind of ['editor', 'terminal'] as const) {
     const pid = kind === 'editor' ? await editorPanel(win) : await terminalPanel(win);
     await inFailureState(win, pid, kind);
-    for (const name of ['Try again', 'Clear panel type']) {
+    for (const name of ['Try again', 'Copy details', 'Clear panel type']) {
       const c = control(win, pid, name);
       await expect(c).toBeVisible();
       await expect(c).toHaveAttribute('title', /.+/);
@@ -344,17 +344,21 @@ test('an editor and a terminal that failed are drawn by the same banner, with th
 });
 
 /**
- * T056f — the pointer sentence, in both panel types.
+ * T056f / T069pre — the pointer sentence, in both panel types, in its FINAL wording.
  *
  * User-facing text with no test is the defect the second analysis pass fixed for FR-055. FR-040
- * requires a consistent pointer and FR-041 constrains what it may promise: while US4 ships without
- * the copy control, the diagnostic log is the ONLY route that is unconditionally true — the notice
- * may have been dismissed, timed out, or silenced outright (which T056 proves it can be).
+ * requires a consistent pointer and FR-041 constrains what it may promise. US4's transitional
+ * sentence named the diagnostic log because it was the only route that existed; now that the copy
+ * control does, the pointer leads with it — Copy always works, and the notice is the secondary route
+ * precisely because it may have been dismissed, timed out or silenced.
+ *
+ * The severity-silenced case is where that distinction stops being theoretical, so it is asserted
+ * under *Never display* below (T069pre) rather than assumed here.
  */
-test('both banners point at the diagnostic log, in the same words', async () => {
+test('both banners point at their own copy control, in the same words', async () => {
   test.setTimeout(240_000);
   const win = h.win;
-  const POINTER = 'Details are in the diagnostic log.';
+  const POINTER = 'Copy the details here, or see the notification.';
 
   const editorPid = await editorPanel(win);
   await inFailureState(win, editorPid, 'editor');
@@ -364,8 +368,9 @@ test('both banners point at the diagnostic log, in the same words', async () => 
   await inFailureState(win, termPid, 'terminal');
   await expect(banner(win, termPid)).toContainText(POINTER);
 
-  // The FINAL sentence advertises a control this increment does not have (T069b switches it).
-  expect(await banner(win, termPid).innerText()).not.toContain('Copy the details here');
+  // The transitional sentence is GONE, not merely joined — a banner carrying both would be pointing
+  // at two routes and committing to neither.
+  expect(await banner(win, termPid).innerText()).not.toContain('diagnostic log');
 });
 
 /**
@@ -388,14 +393,18 @@ test('the editor banner names the file it could not read', async () => {
 });
 
 /**
- * T056a — both controls are reachable and OPERABLE by keyboard, in the order they are displayed
- * (FR-042a, the banner half of SC-009a).
+ * T056a / T069apre — ALL THREE controls are reachable and OPERABLE by keyboard, in the order they
+ * are displayed (FR-042a, the banner half of SC-009a).
  *
  * Focus first, then Tab, then a real key on the control — the idiom `notice-a11y.e2e.ts` uses. Each
  * step answers a different question, and none of them answers the others:
- *   • focus() lands       → the control is focusable at all
- *   • Tab moves to the 2nd → the DISPLAYED order IS the tab order, and the 1st does not trap focus
+ *   • focus() lands        → the control is focusable at all
+ *   • Tab walks the set    → the DISPLAYED order IS the tab order, and no control traps focus
  *   • Enter activates      → it is a real button, not a div with an onClick a keyboard cannot reach
+ *
+ * The traversal is re-run across the whole set rather than the pair US4 could reach: a control
+ * inserted in the MIDDLE is exactly the change that can leave the tab order disagreeing with the
+ * drawn order, and FR-042a/SC-009a name the copy control explicitly.
  *
  * Enter goes to *Try again*, never to *Clear panel type*: the retry cannot succeed (the folder is
  * still gone), so the panel is in exactly the same state afterwards and the tests after this one are
@@ -409,12 +418,12 @@ test('the banner controls are reachable and operable by keyboard, in displayed o
   const editorPid = await editorPanel(win);
   await inFailureState(win, editorPid, 'editor');
   const retry = control(win, editorPid, 'Try again');
+  const copy = control(win, editorPid, 'Copy details');
   const clear = control(win, editorPid, 'Clear panel type');
-  await expect(retry).toBeVisible();
-  await expect(clear).toBeVisible();
+  for (const c of [retry, copy, clear]) await expect(c).toBeVisible();
 
-  // Neither has been taken out of the tab order — the quiet way an icon button stops being reachable.
-  for (const c of [retry, clear]) {
+  // None has been taken out of the tab order — the quiet way an icon button stops being reachable.
+  for (const c of [retry, copy, clear]) {
     expect(await c.evaluate((el) => (el as HTMLElement).tabIndex)).toBeGreaterThanOrEqual(0);
     await expect(c).toBeEnabled();
   }
@@ -424,12 +433,15 @@ test('the banner controls are reachable and operable by keyboard, in displayed o
     .poll(() => win.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? '(none)'))
     .toBe('Try again');
 
-  await win.keyboard.press('Tab');
-  await expect
-    .poll(() => win.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? '(none)'), {
-      message: 'Tab did not move from Try again to Clear panel type — the banner is not in order',
-    })
-    .toBe('Clear panel type');
+  // Tab walks the SET, in the displayed order — the assertion the middle insertion could break.
+  for (const next of ['Copy details', 'Clear panel type']) {
+    await win.keyboard.press('Tab');
+    await expect
+      .poll(() => win.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? '(none)'), {
+        message: `Tab did not reach ${next} — the tab order is not the displayed order`,
+      })
+      .toBe(next);
+  }
 
   /*
    * Operable: Enter on the focused control really retries, and the retry really fails (FR-045).
@@ -456,7 +468,7 @@ test('the banner controls are reachable and operable by keyboard, in displayed o
 });
 
 /**
- * T056b — Try again and Clear panel type are also COMMANDS IN THE PANEL'S OWN MENU (FR-042c).
+ * T056b / T069bpre — ALL THREE banner commands are also COMMANDS IN THE PANEL'S OWN MENU (FR-042c).
  *
  * A discrete command acting on a Panel that exists only as an icon on a banner is unreachable from
  * where users look for panel commands; 029 FR-004d set the precedent for the terminal, and the
@@ -469,9 +481,11 @@ test('the banner controls are reachable and operable by keyboard, in displayed o
  *   • EDITOR — a right-click on the panel HANDLE, which is where `Send to Tab` and `Destroy Panel`
  *     already live (`editor-menus.e2e.ts`). That is the editor panel's own menu.
  *
- * Copy details is US5's (T069bpre), so it is deliberately not asserted here.
+ * *Copy details* is not exempt for being "just a copy button": it is a discrete command acting on a
+ * Panel, which is the whole test the rule applies, and a banner-only copy control is unreachable to
+ * anyone who does not recognise the glyph.
  */
-test('Try again and Clear panel type are in the panel menu, for both panel types', async () => {
+test('Try again, Copy details and Clear panel type are in the panel menu, for both panel types', async () => {
   test.setTimeout(240_000);
   const win = h.win;
   const menuItem = (label: string): Locator => win.getByTestId(`menu-item-${label}`);
@@ -483,6 +497,7 @@ test('Try again and Clear panel type are in the panel menu, for both panel types
   await win.getByTestId(`panel-handle-${editorPid}`).click({ button: 'right' });
   await expect(win.getByTestId('context-menu')).toBeVisible();
   await expect(menuItem('Try again')).toBeVisible();
+  await expect(menuItem('Copy details')).toBeVisible();
   await expect(menuItem('Clear panel type')).toBeVisible();
   // Dismissed by clicking away, not by Escape — `context-menu.e2e.ts:113`'s pattern, and the one
   // that measurably beat a 10s Escape budget in `terminal-start-failure-controls.e2e.ts`.
@@ -496,6 +511,7 @@ test('Try again and Clear panel type are in the panel menu, for both panel types
   await win.locator('.panel-box').first().click({ button: 'right', position: { x: 20, y: 120 } });
   await expect(win.getByTestId('context-menu')).toBeVisible();
   await expect(menuItem('Try again')).toBeVisible();
+  await expect(menuItem('Copy details')).toBeVisible();
   await expect(menuItem('Clear panel type')).toBeVisible();
   await win.getByTestId('tab-body').click({ position: { x: 5, y: 5 } });
   await expect(win.getByTestId('context-menu')).toHaveCount(0);
@@ -608,7 +624,7 @@ test('retry clears the banner on success, reports failure on failure, and a hidd
       expect(
         await controlNames(win, brokenPid),
         'the banner offers a way to close itself while its condition still holds',
-      ).toEqual(['Try again', 'Clear panel type']);
+      ).toEqual(['Try again', 'Copy details', 'Clear panel type']);
 
       // ═══ 1 — a retry that FAILS says so, and the banner stays. ═══
       //
@@ -716,10 +732,24 @@ test('the banner appears with every severity set to Never display', async () => 
         const pid = await firstPanelId(win);
         await failingTerminalOn(win, pid);
 
-        // The banner is there, whole — headline, pointer and both controls.
+        // The banner is there, whole — headline, pointer and all three controls.
         await expect(banner(win, pid)).toBeVisible({ timeout: 90_000 });
-        await expect(banner(win, pid)).toContainText('Details are in the diagnostic log.');
-        expect(await controlNames(win, pid)).toEqual(['Try again', 'Clear panel type']);
+        expect(await controlNames(win, pid)).toEqual([
+          'Try again',
+          'Copy details',
+          'Clear panel type',
+        ]);
+
+        /*
+         * T069pre — THE FINAL POINTER SENTENCE, ASSERTED WHERE IT HAS TO BE TRUE.
+         *
+         * FR-041 forbids a pointer from promising a route that may not exist, and this is the case
+         * that decides it: every severity is *Never display*, so there is no notice and never was
+         * one. The sentence leads with Copy for exactly that reason — and the assertion below proves
+         * the notice really is absent, so this is the sentence being read in the state it was
+         * written for rather than in a comfortable one.
+         */
+        await expect(banner(win, pid)).toContainText('Copy the details here, or see the notification.');
 
         // …and it is genuinely alone: every severity is off, so no notice is on screen to have
         // carried the news instead. This is what FR-041 forbids the pointer from promising.

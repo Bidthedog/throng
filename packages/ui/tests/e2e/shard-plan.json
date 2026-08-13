@@ -186,6 +186,7 @@
       "explorer-keyboard-selection.e2e.ts",
       "explorer-new-items.e2e.ts",
       "explorer-rename-focus.e2e.ts",
+      "failure-copy.e2e.ts",
       "focus-context.e2e.ts",
       "ghost-drag-noise.e2e.ts",
       "hover-suppression.e2e.ts",

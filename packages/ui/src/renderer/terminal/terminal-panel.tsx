@@ -32,7 +32,9 @@ import {
 } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useNotify } from '../common/notification.js';
+import { panelFailureText, type PanelFailureCopy } from '../common/notice-text.js';
 import { panelSubject, usePanelPlace } from '../common/panel-subject.js';
+import { useCopyToClipboard } from '../common/use-copy.js';
 import {
   ensureTerminalCommandBridge,
   forgetTerminalCommand,
@@ -166,6 +168,8 @@ export function TerminalPanel({
   const clearWithMemoryRef = useRef<() => void>(() => {});
   /** The same, for the retry the menu offers — one implementation shared with the banner (FR-042c). */
   const retryStartRef = useRef<() => Promise<boolean>>(async () => false);
+  /** …and for *Copy details*, which is assembled below this callback for the same reason (FR-042c). */
+  const copyFailureRef = useRef<() => void>(() => {});
   /**
    * The pending *Try again* (030 FR-045), resolved by whichever of the three attach outcomes lands.
    *
@@ -332,6 +336,14 @@ export function TerminalPanel({
                 onClick: () => {
                   void retryStartRef.current();
                 },
+              },
+              {
+                // 030 FR-042c — the banner's THIRD command, in the menu beside the other two. Same
+                // text, same assembly (`failureCopy` below), read through a ref so the menu copies
+                // the failure as it stands when it OPENS.
+                label: 'Copy details',
+                testId: 'menu-item-Copy details',
+                onClick: () => copyFailureRef.current(),
               },
               {
                 label: 'Clear panel type',
@@ -771,6 +783,31 @@ export function TerminalPanel({
    */
   const osName = window.throng?.osName ?? 'windows';
   const startFailurePath = projectRoot ?? panel.terminalMemory?.lastCwd ?? null;
+  /**
+   * What the banner and the menu's *Copy details* both put on the clipboard (030 FR-042c/FR-052).
+   *
+   * Assembled ONCE: the banner's control and the menu item are the same command, and building the
+   * text twice is how the two come to disagree about a path within a release. `subject` is the
+   * PANEL — `Project — Tab — Panel` (FR-022) — rather than the terminal's flavour, because what a
+   * reader of a pasted error needs first is which panel on their screen it came from.
+   */
+  const failureCopy: PanelFailureCopy | null = startFailure
+    ? {
+        headline: 'This terminal could not be opened',
+        subject: panelSubject(place),
+        detail: {
+          path: startFailurePath ? toDisplayPath(startFailurePath, osName) : undefined,
+          // The daemon's OWN words, never rendered (FR-034). For a silenced severity this string
+          // exists in exactly two places: the diagnostic log, and whatever Copy puts on the
+          // clipboard.
+          systemError: startFailure.cause.raw,
+        },
+      }
+    : null;
+  const copyToClipboard = useCopyToClipboard();
+  copyFailureRef.current = () => {
+    if (failureCopy) copyToClipboard(panelFailureText(failureCopy), failureCopy.subject);
+  };
 
   return (
     <div className="terminal-panel-wrap" style={{ background: xtermTheme.background }}>
@@ -815,13 +852,15 @@ export function TerminalPanel({
 
         The cause MESSAGE is deliberately not repeated here: the consolidated notice carries the
         cause and the list of panels it defeated (FR-040), and the raw system error is never rendered
-        at all (FR-034) — it is in the diagnostic log, which is what the banner points at.
+        at all (FR-034). 030 US5 gives that error a route the user can take without a notice — the
+        banner's own *Copy details*, which is what the pointer sentence now leads with (FR-053).
       */}
-      {startFailure ? (
+      {failureCopy ? (
         <PanelFailureBanner
           panelId={panel.id}
-          headline="This terminal could not be opened"
-          detail={{ path: startFailurePath ? toDisplayPath(startFailurePath, osName) : undefined }}
+          headline={failureCopy.headline}
+          subject={failureCopy.subject}
+          detail={failureCopy.detail}
           onRetry={retryStart}
           onCancel={clearWithMemory}
         />

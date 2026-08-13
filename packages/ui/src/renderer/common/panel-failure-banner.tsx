@@ -1,5 +1,8 @@
 import { useCallback, useRef, useState, type ReactElement } from 'react';
+import type { NoticeSubject } from '@throng/core';
 import { IconButton } from './icon-button.js';
+import { panelFailureText } from './notice-text.js';
+import { useCopyToClipboard } from './use-copy.js';
 import './panel-failure-banner.css';
 
 /**
@@ -32,26 +35,43 @@ import './panel-failure-banner.css';
  *
  * ══ NOT DISMISSIBLE (FR-046) ══
  *
- * There are two controls and neither closes the banner. *Clear panel type* is not a close button:
- * it says "I no longer want this panel to be this type", which is a different decision with a
- * different consequence. The banner goes when its CONDITION goes — including while the panel is off
- * screen, which is why the condition is the caller's state and never this component's.
+ * There are three controls and none of them closes the banner. *Clear panel type* is not a close
+ * button: it says "I no longer want this panel to be this type", which is a different decision with
+ * a different consequence. The banner goes when its CONDITION goes — including while the panel is
+ * off screen, which is why the condition is the caller's state and never this component's.
  *
- * ══ WHAT ARRIVES IN US5 ══
+ * ══ COPY IS WHY THE POINTER SENTENCE CHANGED (030 US5 / #238, FR-051/FR-053) ══
  *
- * The third control (*Copy details*, the `copy` token), the `subject` and `systemError` it copies,
- * and the final pointer sentence. Until then the pointer names the diagnostic log and nothing else:
- * FR-041 forbids it from promising a route that may not exist, and US4 itself proves the banner
- * appears with every severity set to *Never display* (T056), so a notice cannot be promised and
- * neither can a copy control that has not been built (T063). Props for the parts US5 needs are
- * deliberately NOT declared here — a prop no call site can use is speculation, not preparation.
+ * US4 shipped two controls and pointed at the diagnostic log, because that was the only route that
+ * was unconditionally true: a notice may have been dismissed, timed out, or never displayed at all
+ * (US1 lets a user silence a whole severity, and T056 proves the banner still appears when they
+ * have). FR-041 forbids a pointer from promising a route that may not exist.
+ *
+ * The copy control removes that constraint by being the route that always exists. It is added ONCE,
+ * here, rather than per panel type — which is the same reason this component exists at all — and it
+ * copies the four facts FR-052 names, through `panelFailureText`. `subject` is a REQUIRED prop for
+ * that reason: a banner that could not say which panel it was about would copy a paragraph the
+ * reader cannot place, which is #195 one level down.
  */
 export interface PanelFailureBannerProps {
   panelId: string;
   /** The ONE per-type sentence: what could not be done, in this panel type's terms (FR-040). */
   headline: string;
-  /** The path involved, ready to display. Required in both panel types where there is one (FR-040a). */
-  detail?: { path?: string };
+  /**
+   * WHICH panel this is about, for the copied text (FR-052).
+   *
+   * Required, and structured: `formatSubject` renders it in the full `Project — Tab — Panel` form
+   * because a copied paragraph carries no surrounding context to elide against. Never a string —
+   * that would let each call site spell the form its own way, which is the defect 030 US2 closed.
+   */
+  subject: NoticeSubject;
+  /**
+   * The path involved, ready to display (FR-040a), and the raw system error (FR-052).
+   *
+   * The path RENDERS; the system error does NOT (FR-034) and reaches the user only through Copy and
+   * the diagnostic log. For a silenced severity those two are the whole of its route.
+   */
+  detail?: { path?: string; systemError?: string };
   /**
    * Re-attempt the operation that failed (FR-045).
    *
@@ -64,8 +84,14 @@ export interface PanelFailureBannerProps {
   onCancel: () => void;
 }
 
-/** Where the detail is, while US5's copy control does not exist yet (FR-041, T063). */
-const POINTER = 'Details are in the diagnostic log.';
+/**
+ * Where the detail is (FR-041, T069b) — fixed wording, not the implementer's choice.
+ *
+ * Copy LEADS, because it always works. The notification is the secondary route precisely because it
+ * may have been dismissed, timed out or silenced, and a pointer that promised it first would be
+ * false in exactly the case the user most needs it to be true.
+ */
+const POINTER = 'Copy the details here, or see the notification.';
 
 /** Fixed wording, not the implementer's choice (FR-040b) — a test on it is otherwise vacuous. */
 const RETRY_FAILED = 'That did not work — the condition is still there.';
@@ -73,10 +99,12 @@ const RETRY_FAILED = 'That did not work — the condition is still there.';
 export function PanelFailureBanner({
   panelId,
   headline,
+  subject,
   detail,
   onRetry,
   onCancel,
 }: PanelFailureBannerProps): ReactElement {
+  const copy = useCopyToClipboard();
   const [retrying, setRetrying] = useState(false);
   const [retryFailed, setRetryFailed] = useState(false);
   // A retry in flight when the caller re-renders must not have its result applied twice, and a
@@ -111,7 +139,7 @@ export function PanelFailureBanner({
         <span className="panel-failure__pointer">{POINTER}</span>
       </div>
       {/*
-        Two controls, in a fixed order, identical in every panel type (FR-042/FR-042d), each a
+        Three controls, in a fixed order, identical in every panel type (FR-042/FR-042d), each a
         themeable icon resolving a theme token with a hover title (FR-042b, Constitution VI). The
         labels are 029's own, unchanged, which is what keeps the terminal's shipped behaviour and
         its tests describing the same thing they always did.
@@ -122,6 +150,17 @@ export function PanelFailureBanner({
         className="icon-button panel-failure__control"
         disabled={retrying}
         onClick={retry}
+      />
+      {/*
+        COPY, in the MIDDLE (FR-051). Never a literal glyph: `copy` is a theme token, and the theme
+        ships `⎘` for it — a component that hard-coded 📋 would ignore the user's icon pack and
+        render something the rest of the application does not use.
+      */}
+      <IconButton
+        token="copy"
+        title="Copy details"
+        className="icon-button panel-failure__control"
+        onClick={() => copy(panelFailureText({ headline, subject, detail }), subject)}
       />
       <IconButton
         token="dismiss"
