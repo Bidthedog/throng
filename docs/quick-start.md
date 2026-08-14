@@ -68,6 +68,42 @@ The middle pane is a dock of **tabs**, each holding **panels**.
 - **Split** — drag a panel by its header and drop it against another panel's edge; drop onto a
   panel's centre to stack it as a tab.
 
+**When there are more tabs than fit.** The strip never grows a scrollbar and the tabs never change
+height or shift up — it scrolls instead, and three controls appear between the tabs and the **+**:
+
+| Control | What it does |
+|---|---|
+| **‹** | Step one tab left. Its pill counts the tabs hidden off the left edge |
+| **›** | Step one tab right. Its pill counts the tabs hidden off the right |
+| **▾** | Open the tab picker. Its pill counts *all* tabs |
+
+Press and hold either chevron and the strip starts scrolling continuously; releasing stops it. A
+fade over the edge of the first and last visible tab marks that there is more in that direction. The
+**+** stays pinned on the right at every tab count, and the active tab is always scrolled into view —
+however it became active.
+
+**The tab picker** (**▾**, or **Ctrl+Alt+T** from anywhere, at any tab count) lists every tab, hidden
+or not. Type to narrow it: the terms match in **any order** and anywhere in the name, so `find file`
+finds "file find.txt" as readily as "find any file.md". Choosing a tab scrolls the strip to it and
+makes it active; **Escape** dismisses without moving anything.
+
+**On each tab.** The number of panels shows as a pill. Resting the pointer on a tab brings up a
+popover naming the tab and listing its panels one per line — resting, not merely crossing, so it
+stays out of your way while you traverse the strip. Right-clicking hides the popover so it cannot sit
+on top of the menu it just opened.
+
+Each tab also carries a **×** that runs the ordinary **Destroy Tab** action, with the same
+confirmations. It is inert for a moment after appearing, so a click cannot land on a tab the pointer
+was only passing over, and it never arms at all while you are dragging something across the strip.
+
+**Names have a limit** — long ones are shortened for display only, never in storage, and always on a
+whole character, so an emoji or an accented letter is never cut in half. Lower the limit and raise it
+again and your full names come back.
+
+Every one of these — the scroll animation, the picker, the delays, the name limit, the widest a tab
+may be drawn, and whether **+** opens beside the active tab or at the end — is under **Settings →
+Tabs**.
+
 A new panel starts **untyped** — its body shows a **Panel Type** dropdown. Pick **Terminal** or
 **Editor Panel** and press **Confirm** (or **Clear** to start over). A freshly added panel opens
 in rename mode, so you can name it immediately.
@@ -273,6 +309,7 @@ also the full list.
 | | |
 |---|---|
 | **Ctrl+Alt+B** / **Ctrl+Alt+N** | Show/hide the Projects pane / the Files & Folders pane |
+| **Ctrl+Alt+T** | Open the tab picker — type to filter, **Up/Down** to move, **Enter** to choose |
 | **F11** | Full screen |
 | **Ctrl+`** / **Ctrl+Shift+`** | Cycle the active panel forward / back |
 | **Ctrl+Alt+Arrow** | Move focus to the panel left / right / up / down |
