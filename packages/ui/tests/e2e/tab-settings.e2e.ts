@@ -74,10 +74,21 @@ const TAB_SETTINGS = [
   // US6 (FR-050, FR-054a). `maxWidth` shares the name limit's range because it shares its UNIT —
   // characters — so the two can be read against each other.
   { key: 'tabs.maxWidth', min: '10', max: '128', step: '2', value: '32' },
-  { key: 'tabs.chevronRepeatDelayMs', min: '100', max: '3000', step: '50', value: '500' },
+  { key: 'tabs.chevronRepeatDelayMs', min: '100', max: '3000', step: '50', value: '350' },
   // US7 (FR-058). The one Tabs slider stepping in 25s — the delay a user tunes rather than sets
-  // once, so it wants finer stops than its neighbours. 300 sits on 0 + 25×12.
-  { key: 'tabs.popoverDelayMs', min: '0', max: '1500', step: '25', value: '300' },
+  // once, so it wants finer stops than its neighbours. 500 sits on 0 + 25×20.
+  { key: 'tabs.popoverDelayMs', min: '0', max: '1500', step: '25', value: '500' },
+  /*
+   * The one member of this section whose key does NOT start `tabs.` — it moved here from the
+   * Behaviour group, where a tab-strip dwell delay sat under a heading that named no surface at
+   * all. Only `group` moved: the key is the settings.json contract, and renaming it would discard
+   * the value in every existing file.
+   *
+   * It is in this list precisely BECAUSE the key disagrees with the section. A reader checking
+   * "does the Tabs section expose every tab setting" by eye greps for `tabs.` and misses it, which
+   * is exactly the kind of gap this loop exists to close.
+   */
+  { key: 'behaviour.tabHoverActivateMs', min: '0', max: '5000', step: '50', value: '600' },
 ] as const;
 
 test('T057 — the Tabs section exposes every setting, with their ranges and defaults', async () => {
@@ -124,8 +135,8 @@ test('T057 — the Tabs section exposes every setting, with their ranges and def
         maxNameLength: 64,
         maxWidth: 32,
         newTabPosition: 'afterActive',
-        chevronRepeatDelayMs: 500,
-        popoverDelayMs: 300,
+        chevronRepeatDelayMs: 350,
+        popoverDelayMs: 500,
       });
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },

@@ -37,11 +37,11 @@ const EXPECTED = [
   // converting between units — and it inherits the same forced step of 2, because 1 across 118 is
   // 0.85% and the aimable-slider rule rejects it.
   { key: 'tabs.maxWidth', min: 10, max: 128, step: 2, value: 32 },
-  { key: 'tabs.chevronRepeatDelayMs', min: 100, max: 3000, step: 50, value: 500 },
+  { key: 'tabs.chevronRepeatDelayMs', min: 100, max: 3000, step: 50, value: 350 },
   // US7 / FR-058. A finer step than its two neighbours because the popover delay is the one a user
   // tunes in small amounts — 25 across 0–1500 is 1.67%, still clear of the aimable-slider floor,
-  // and 300 lands exactly on 0 + 25×12.
-  { key: 'tabs.popoverDelayMs', min: 0, max: 1500, step: 25, value: 300 },
+  // and 500 lands exactly on 0 + 25×20.
+  { key: 'tabs.popoverDelayMs', min: 0, max: 1500, step: 25, value: 500 },
 ] as const;
 
 describe('the Tabs settings group (FR-030, FR-034, FR-044h, FR-047, FR-050, FR-054a, FR-058)', () => {
@@ -52,8 +52,8 @@ describe('the Tabs settings group (FR-030, FR-034, FR-044h, FR-047, FR-050, FR-0
       maxNameLength: 64,
       maxWidth: 32,
       newTabPosition: 'afterActive',
-      chevronRepeatDelayMs: 500,
-      popoverDelayMs: 300,
+      chevronRepeatDelayMs: 350,
+      popoverDelayMs: 500,
     });
   });
 
@@ -226,8 +226,8 @@ describe('the Tabs settings are bounded by their DECLARATION alone (FR-041)', ()
     expect(parsed.tabs.smoothScrollMs).toBe(300);
     expect(parsed.tabs.maxNameLength).toBe(64);
     expect(parsed.tabs.maxWidth).toBe(32);
-    expect(parsed.tabs.chevronRepeatDelayMs).toBe(500);
+    expect(parsed.tabs.chevronRepeatDelayMs).toBe(350);
     expect(parsed.tabs.newTabPosition).toBe('afterActive');
-    expect(parsed.tabs.popoverDelayMs).toBe(300);
+    expect(parsed.tabs.popoverDelayMs).toBe(500);
   });
 });

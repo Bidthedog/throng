@@ -112,16 +112,6 @@ export const SETTINGS_METADATA: MetadataRegistry = [
 
   // Behaviour
   {
-    key: 'behaviour.tabHoverActivateMs',
-    label: 'Tab hover-activate delay',
-    description: 'Dwell time (ms) hovering a tab during a panel drag before it activates.',
-    group: 'Behaviour',
-    control: 'slider',
-    min: 0,
-    max: 5000,
-    step: 50,
-  },
-  {
     key: 'behaviour.submenuHoverMs',
     label: 'Submenu hover delay',
     description: 'Dwell time (ms) before a context-menu submenu opens.',
@@ -208,7 +198,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     allowedValues: ['afterActive', 'end'],
   },
   {
-    // US6 / FR-054a. 50 across a 2900 range is 1.72%, and 500 lands on a stop at 100 + 50×8.
+    // US6 / FR-054a. 50 across a 2900 range is 1.72%, and 350 lands on a stop at 100 + 50×5.
     key: 'tabs.chevronRepeatDelayMs',
     label: 'Chevron repeat delay',
     description:
@@ -226,7 +216,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
      * It is the delay a user actually tunes — too short and the popover chases the pointer across
      * the strip, too long and it never arrives — so it wants finer stops than the two above, which
      * are set once and forgotten. 25 across 0–1500 is 1.67%, clear of the aimable-slider floor, and
-     * the shipped 300 lands exactly on 0 + 25×12.
+     * the shipped 500 lands exactly on 0 + 25×20.
      */
     key: 'tabs.popoverDelayMs',
     label: 'Tab popover delay',
@@ -237,6 +227,25 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     min: 0,
     max: 1500,
     step: 25,
+  },
+  {
+    /*
+     * Moved here from the Behaviour group: it is a tab-strip dwell delay, and it belongs beside the
+     * other two rather than under a heading that says nothing about which surface it governs.
+     *
+     * The KEY stays `behaviour.tabHoverActivateMs`. `group` is presentation; the key is the config
+     * file's contract, and renaming it would silently discard the value in every existing
+     * settings.json — a migration's worth of cost to tidy a heading.
+     */
+    key: 'behaviour.tabHoverActivateMs',
+    label: 'Tab hover-activate delay',
+    description:
+      'How long a panel or tab you are DRAGGING must dwell over another tab before that tab comes to the front, in milliseconds. It is what lets you drop onto a tab that is not the one currently showing: hold the drag over that tab, wait, and it switches so you can drop inside it. An ordinary mouse-over does nothing — this delay applies only while a drag is in progress.',
+    group: 'Tabs',
+    control: 'slider',
+    min: 0,
+    max: 5000,
+    step: 50,
   },
 
   // File Explorer
