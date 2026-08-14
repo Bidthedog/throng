@@ -27,6 +27,7 @@ import {
   collectPanels,
   type AffectedPanel,
   type FailureCause,
+  type FailureKind,
   type LayoutNode,
   type NoticeSubject,
   type WorkspaceLayout,
@@ -46,8 +47,39 @@ export interface PanelFailureReport {
   message: string;
   /** The raw system error, for Copy and the log only. */
   detail?: string;
-  /** 029's classification, where the reporter has one. Absent is the common case for editors. */
+  /** 029's classification, where the reporter has one already built (the terminal path). */
   cause?: FailureCause | null;
+  /**
+   * The KIND alone, for a reporter that knows what went wrong but not what to call it (FR-029).
+   *
+   * ══ WHY A KIND AND NOT A CAUSE ══
+   *
+   * A `causeKey` is `kind:subject`, and the subject has to be the one this notice is ABOUT — the
+   * project — or the key cannot match the surface-level notice it must supersede. The reporters do
+   * not know the project's name; this hook already resolves it for the heading. So they say the kind
+   * and the subject is supplied below, which makes "a notice's cause is about the notice's own
+   * subject" true by construction rather than by every call site remembering.
+   *
+   * That invariant was broken, and a user found it: the editor's missing-file scan reported with no
+   * cause at all — this type said "absent is the common case for editors" — so the consolidated
+   * notice carried no key, could supersede nothing, and renaming a project's root produced TWO
+   * notices for one absent folder. The terminal path passed a cause, which is why the E2E asserting
+   * the rule passed throughout.
+   */
+  causeKind?: FailureKind;
+}
+
+/**
+ * The last segment of a path, either separator.
+ *
+ * Hand-rolled rather than `node:path`: this is renderer code, and the separator is whichever the
+ * stored root folder was written with. It mirrors `files-service.ts#subjectOf`, which is what the
+ * key produced here has to agree with — a trailing separator yields the segment before it, so a root
+ * stored as `D:\work\test 1\` keys the same as `D:\work\test 1`.
+ */
+function folderName(absPath: string): string {
+  const parts = absPath.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? '';
 }
 
 interface Place {
@@ -126,6 +158,32 @@ export function useReportPanelFailure(): (report: PanelFailureReport) => void {
         ? { kind: 'project', name: projectName }
         : { kind: 'none' };
 
+      /*
+       * The cause, keyed to THE FOLDER THAT WENT MISSING — not to this notice's own subject.
+       *
+       * A supplied cause wins: the terminal path has already classified the failure and knows more
+       * than a kind. Otherwise the kind is paired with the project's ROOT FOLDER NAME, because that
+       * is what the other half of the pair keys on. Main classifies a filesystem failure against
+       * `subjectOf(raw)` — the last segment of the first path the errno quotes (`files-service.ts`)
+       * — so the file tree's report of an absent root carries `path-missing:<folder>`.
+       *
+       * The project's NAME is the obvious-looking choice and is wrong: a project may be called
+       * anything, and keying on it matches only when the two happen to coincide. They did in the
+       * session that reported this — a project named "test 1" in a folder named "test 1" — which is
+       * exactly the kind of coincidence that ships a fix working for one case.
+       *
+       * The notice's own subject stays the project (the heading names what the user chose to call
+       * it); the CAUSE is about the thing that disappeared.
+       */
+      const rootName = folderName(
+        projectsRef.current.find((p) => p.id === projectId)?.rootFolder ?? '',
+      );
+      const cause: FailureCause | undefined =
+        report.cause ??
+        (report.causeKind && rootName
+          ? { kind: report.causeKind, subject: rootName, raw: report.detail ?? '' }
+          : undefined);
+
       notify({
         severity: 'error',
         subject,
@@ -133,7 +191,7 @@ export function useReportPanelFailure(): (report: PanelFailureReport) => void {
         action: 'open',
         message: report.message,
         testId: PANEL_FAILURE_TEST_ID,
-        ...(report.cause ? { causeKey: causeKey(report.cause) } : {}),
+        ...(cause ? { causeKey: causeKey(cause) } : {}),
         groupKey: operationGroupKey(projectId),
         affected: [affected],
       });
