@@ -324,3 +324,26 @@ ordering dependency removes the marker.
 **User Story 1 alone** is a defensible release: it fixes the reported defect, needs no new settings,
 and leaves the strip legible at any tab count. US2 is the natural second — invisible to users but the
 thing that makes every later setting trustworthy.
+
+## Phase 9: Convergence
+
+Assessed after User Story 7, on a tree where 2481 unit/contract/integration tests and all 58 of the
+feature's own E2E specs pass.
+
+**No `missing` findings.** Every one of the spec's 133 functional requirements has an implementation
+and a test. Nineteen of them carry no `FR-###` citation in either source or tests, which is a
+traceability gap rather than a functional one — the behaviour each describes was located and
+confirmed covered (for example FR-037b's idempotent truncation in `grapheme.test.ts`, FR-035a's
+counter in `tab-name-limit.e2e.ts`, and FR-044c/d's arming window in `tab-presentation.e2e.ts`,
+which cites the contract's P7 by name).
+
+The findings below are dominated by three maintainer decisions taken **after** US7 landed, which the
+spec has not yet caught up with. They are recorded here rather than applied, because `spec.md` and
+`data-model.md` are Spec Kit's to write.
+
+- [ ] T117 Amend FR-054a to record `tabs.chevronRepeatDelayMs`'s shipped default as **350**, not 500, per FR-054a (contradicts)
+- [ ] T118 Amend FR-058 to record `tabs.popoverDelayMs`'s shipped default as **500**, not 300, per FR-058 (contradicts)
+- [ ] T119 Correct `data-model.md` §1.1: its prose says "Nine settings in the `Tabs` group" while its own table lists seven `tabs.*` leaves, and the group now renders eight rows — update both the count and the two changed defaults per data-model §1.1 (contradicts)
+- [ ] T120 Record the relocation of `behaviour.tabHoverActivateMs` into the `Tabs` settings group, with its rewritten description: the key is deliberately unchanged so no existing `settings.json` loses its value, but no requirement currently calls for the move per plan: settings grouping (unrequested)
+- [ ] T121 Reconcile this file's tick state — no task is ticked although the work is complete, so the progress record cannot be relied on to say what remains per tasks.md (partial)
+- [ ] T122 Add `FR-###` citations to the nineteen requirements implemented and tested without one, so traceability can be checked mechanically rather than by reading per spec traceability (partial)
