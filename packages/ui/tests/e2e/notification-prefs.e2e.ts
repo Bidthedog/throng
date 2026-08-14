@@ -288,7 +288,20 @@ test('Display for N takes an ERROR notice away after N, and NOT before (FR-004, 
       const prefs = await openSettings(app, win);
 
       // ── N at the FLOOR of the allowed range.
-      await prefs.getByTestId('control-notifications.error.mode').selectOption('timed');
+      const mode = prefs.getByTestId('control-notifications.error.mode');
+      await mode.selectOption('timed');
+      /*
+       * The CONTROL took it — asserted separately from the file below, so the next failure says
+       * which half broke.
+       *
+       * Measured once in a full serial run: the poll on `settings.json` expired with the mode still
+       * `dismiss`, its default, and the same test passed 5/5 in isolation. That leaves two very
+       * different explanations — the dropdown never registered the change, or it did and the write
+       * was lost or reverted — and the file poll alone cannot tell them apart. It is not a longer
+       * timeout: a slow write and a lost write must not look the same, which is exactly what
+       * widening the budget would arrange. Tracked separately; this only makes the evidence land.
+       */
+      await expect(mode, 'the mode dropdown did not take the selection').toHaveValue('timed');
       await setSlider(
         prefs.getByTestId('control-notifications.error.timeoutMs-slider'),
         String(SHORT_MS),
