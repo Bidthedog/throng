@@ -206,7 +206,19 @@ test('T078 — the field stops at the limit; the counter shows within ten of it 
   );
   expect(atLimit.fontWeight, 'C3: nor re-weight it').toBe(approaching.fontWeight);
   await expect(input, 'C3: the field is not marked invalid').not.toHaveAttribute('aria-invalid', /.*/);
-  await expect(win.locator('[data-testid^="notice-"]'), 'C3: no notice is raised').toHaveCount(0);
+  /*
+   * Counted as CHILDREN OF THE NOTICE LIST, not by a `notice-` test-id prefix.
+   *
+   * The prefix stopped meaning "a notice" when 030 added the growth delta region (FR-032a) — a
+   * visually-hidden `aria-live` element, `notice-growth-live`, which is always in the DOM and empty
+   * until a consolidated notice grows. A prefix match therefore counted 1 here forever, and read as
+   * "the tab name limit raises a notice", which it does not. The container's children are the
+   * notices themselves, so this says what it means and cannot be broken by a part gaining a name.
+   */
+  await expect(
+    win.getByTestId('notices').locator('> *'),
+    'C3: no notice is raised',
+  ).toHaveCount(0);
 
   // C3 — and the commit is not blocked.
   await input.press('Enter');

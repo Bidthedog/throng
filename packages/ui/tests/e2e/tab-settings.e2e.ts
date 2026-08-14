@@ -152,9 +152,14 @@ test('T057 — each tab setting is editable by slider and by field, and persists
       // Drag the scroll duration to a value on its step grid.
       await setSlider(prefs.getByTestId('control-tabs.smoothScrollMs-slider'), '1500');
       await expect.poll(() => readSettings(cfgRoot)?.tabs?.smoothScrollMs).toBe(1500);
-      // Plain, not `1,500`: grouping starts at five digits, because a four-digit millisecond delay
-      // rendered with a separator reads as a typo rather than as a kindness (form-controls.tsx).
-      await expect(prefs.getByTestId('control-tabs.smoothScrollMs')).toHaveValue('1500');
+      // `1,500`, grouped — REVERSED since this test was written. 018 exempted values under five
+      // digits, on the reasoning quoted here before: a four-digit millisecond delay rendered with a
+      // separator reads as a typo rather than as a kindness. Constitution 4.5.0 drops that floor,
+      // because a threshold makes a COLUMN inconsistent — these tab delays sit directly beside
+      // values that do cross it, and a separator appearing halfway up a column teaches the reader
+      // it means something when it means only that one value grew a digit. The STORED value above
+      // is still plain, which is the half that was never in question.
+      await expect(prefs.getByTestId('control-tabs.smoothScrollMs')).toHaveValue('1,500');
 
       // Type the arming delay instead: the field and the slider drive one value.
       const arming = prefs.getByTestId('control-tabs.closeArmingDelayMs');
