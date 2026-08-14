@@ -1,5 +1,12 @@
 # throng
 
+[![CI](https://github.com/Bidthedog/throng/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Bidthedog/throng/actions/workflows/ci.yml?query=branch%3Amaster)
+[![Release](https://github.com/Bidthedog/throng/actions/workflows/release.yml/badge.svg)](https://github.com/Bidthedog/throng/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/Bidthedog/throng?include_prereleases&sort=semver&label=release&color=blue)](https://github.com/Bidthedog/throng/releases/latest)
+[![v1.0.0 progress](https://img.shields.io/github/milestones/progress-percent/Bidthedog/throng/1?label=v1.0.0)](https://github.com/Bidthedog/throng/milestone/1)
+[![Platform](https://img.shields.io/badge/platform-Windows%2011-0078D4)](#platform-support)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
+
 throng is a modern **project-first, terminal-second, agent-third** desktop app for running many
 independent command-line terminals across cleanly isolated projects. Each project binds to a
 root folder and a colour; you lay its workspace out as a VS Code-style dock of tabs and split
@@ -30,177 +37,30 @@ goal is to pull all of that into a single, simple customisable workspace.
 
 ## Highlights
 
-- **Projects** — isolated per-project contexts with exclusive root folders and a dominant
-  colour; create / edit / switch / reorder, stored locally per user.
-- **Dockable workspace** — three panes (projects & sub-workspaces, workspace, and files & folders —
-  the side panes collapse to a labelled rail, by keyboard or chevron, and auto-collapse when the
-  window gets too narrow), unlimited tabs, and drag-to-split panels; the full per-project layout is
-  saved and restored every session.
-- **Multi-window sub-workspaces** — tear tabs or panels off into separate OS windows that
-  stay in sync and move as one focus group.
-- **Focus contexts & per-panel zoom** — every window has one visible *active panel*, drawn
-  from theme tokens (a foreground treatment, dimmed to a distinct inactive treatment when the
-  window is in the background) and movable from the keyboard (directional and layout-order
-  cycle, carrying real input focus into and out of terminals and editors); each panel zooms
-  its text **independently** — from the keyboard or its right-click menu — composing on top of
-  the app-wide zoom and persisted with the layout. Each panel shows a small type icon, and a
-  terminal shows its **live working directory** in its header (even when a full-screen program
-  hides the prompt). **F2** renames the active panel, and a panel's name identifies exactly one
-  panel: names are unique across every project and every sub-workspace, because two panels called
-  "Build" would make the window title, the tab strip and the "still running" close prompt into
-  riddles. Panels throng names itself run in **one sequence** — Panel 1, Panel 2, Panel 3 — across
-  the whole application rather than restarting in each project, and a deleted number is reused. A
-  name **you** type keeps the words you chose: if it is already taken it gains a suffix, and a
-  notice tells you where it landed.
-- **In-panel search** — one find bar that adapts to whichever panel is active: an editor gets
-  find **and replace** (replace-all is a single undoable step that leaves the file's encoding
-  and line endings untouched); a terminal gets a **read-only** find over its retained
-  scrollback that never types at the shell, and parking on a match holds the view there while
-  output keeps streaming. Matches highlight as you type with a running count, case and
-  whole-word toggles, and highlight colours drawn from theme tokens. Terminals are also
-  navigable from the keyboard alone — page, line, top, bottom, and jump between matches.
-- **File explorer** — a live, project-scoped file tree with full operations (rename, move,
-  copy, Recycle-Bin delete, per-project hide, editable exclude globs). Hiding is **reversible**:
-  a project-settings dialog on the pane header lists everything the project hides and lets you
-  un-hide it, marking any path a global exclusion glob *also* excludes — because removing that
-  one will not bring the file back. File operations are **undoable**: Ctrl+Z reverses the last
-  rename, move or delete — a delete comes back out of the Recycle Bin — and Ctrl+Y replays it.
-  The stack is per project and persisted, so it survives a restart, and an undo whose world has
-  changed underneath it (something else now occupies the name) is **refused and explained** rather
-  than replayed over the top. A file with unsaved changes in an editor shows the same dot in the
-  tree that its panel shows.
-- **Terminal panels** — PowerShell, Git Bash, CMD, and custom shell flavours run inline via
-  xterm.js on **detached, daemon-owned PTYs**: they survive UI restarts and reattach with
-  scrollback, with safe close/exit handling, a project root lock, optional run-as-admin, and
-  no orphaned processes. Each carries a **status bar** naming its shell flavour. Dragging files or
-  folders from the tree onto a terminal **pastes their paths** at the shell cursor — quoted if they
-  contain spaces, space-joined when there are several, and never submitted for you. **URLs open in
-  your own browser**: Ctrl+click a link — whether the program emitted a real hyperlink or just
-  printed the address as text — and it opens in the system browser, never in a window throng draws.
-  Right-clicking a link offers Open Link and Copy Link Address. A terminal that **cannot start** —
-  its project folder renamed away while throng was closed, say — keeps its panel and its
-  configuration, names the missing folder in plain words, and offers Try again and Clear panel type;
-  nothing is discarded on your behalf.
-- **Failures that name their cause** — a file operation blocked by something holding the folder says
-  *what* is holding it, and identifies **throng's own terminal** by name when the answer is one of
-  yours, rather than reporting `EBUSY: resource busy or locked`. One underlying problem raises one
-  message, not one per thing it broke, and the raw error rides along in the message's Copy so a bug
-  report loses nothing. If the background daemon stops, throng says so once and puts a **restart
-  control in the status bar** — where it survives the message being dismissed — while everything that
-  does not need the daemon carries on working.
-- **Editor panels** — open and edit a project's text files inline via a **CodeMirror** editor:
-  encoding and line endings are detected and preserved, saves are confined to the project (Ctrl+S /
-  scoped Ctrl+Shift+S Save-All), a dirty file is locked against external changes, one buffer is
-  shared per file across all windows, unsaved changes show a shared dot, and in-progress edits —
-  **and their undo history** — survive a crash via recovery files. Files open from the tree into the
-  last active editor; a synced editor mirrors one document across windows, sharing **one undo
-  stack**, so Ctrl+Z in either window reverts an edit made in the other. Files can also be
-  **dragged in from the operating system** — onto an editor, or onto an empty panel, which becomes
-  an editor showing the file — and from **throng's own file tree** onto an empty panel, the same way.
-  **Word wrap** is a property of the document, not the panel: toggle it from the status bar, the
-  content menu or `Ctrl+Alt+W`, and every panel showing that file rewraps together. A panel opened on
-  a file **names itself after the file** until you rename it, and "Reset Name" puts it back. **What can be opened is exactly what can be saved**: symlinks are
-  resolved first, and a file an editor could not write back is refused up front, visibly, rather
-  than opened into a buffer with nowhere to go. An editor whose path **stops being readable** —
-  a folder renamed outside throng, a branch switch — says so on the panel and names the path, so
-  remembered text is never presented as the file; it **reloads itself** when the path comes back,
-  and **Reload from disk** re-reads it on demand (distinct from Revert, which restores the last
-  saved version and refuses when there is nothing to restore to).
-- **Code editing** — **syntax highlighting** for 31 languages, detected by extension and correctable
-  from a **language picker** in the status strip (the choice is remembered per file). A right-click
-  **content menu** puts cut/copy/paste, Select All, Undo/Redo and "Set Language…" under the cursor,
-  so the editor is usable with the mouse alone. **Ctrl+X with no selection cuts the whole line**, and
-  paste remembers the *shape* of what was cut: a cut line comes back as a line, above the caret.
-  **Rectangular (column) selection** by Alt+drag or `Shift+Alt+Arrow` — type, delete, cut and paste
-  operate on every row of the block at once. Indentation follows **the file's own style** wherever it
-  has one, falling back to a per-language default and then a global one, so throng never quietly
-  converts a tab-indented file to spaces.
-- **Custom title bar** — an application-drawn, full-width title bar replaces the OS window
-  chrome on every window: the **throng mark** + window identity, minimise/maximise/close, and
-  (main window only) a **cog** that opens the preferences window. Sub-workspace windows carry
-  the same bar without the cog. The mark is drawn in the active theme's own colours, so it
-  reads on light and dark themes alike; the taskbar and Alt-Tab show the same icon, with
-  artwork drawn for the size being rendered.
-- **Preferences editor** — a single preferences window (floating above throng's own windows,
-  minimising and restoring with the main window) with visual **Settings**, **Key Bindings**, and
-  **Themes** editors: type-matched controls, with the Themes editor's tokens **grouped by the area of
-  the app they colour** (General, Editor, Terminal, File Explorer…, syntax colours under an
-  *Editor · Syntax* sub-group, icons last); a **typeahead search** across Settings and Themes that
-  matches any typed word against a field's name, description, current value **or its section name** —
-  so typing a section name returns everything in that section (with an inline reset); a
-  press-to-capture shortcut binder that **adds** multiple chords per action (any single non-reserved
-  key allowed), each chord a deletable pill; colour / size / icon pickers and a **multi-select
-  font-family pill** editor; a **global UI⇄JSON toggle** (edit the raw file in the built-in code
-  editor) and **immediate-apply** (no Save). A **Logging** section controls the diagnostics below. Editing a file's raw JSON while it changes on disk
-  surfaces a reload / keep-editing choice rather than silently discarding either version.
-  **Terminal flavours** are edited as a **structured table** — one row per flavour, a typed cell per
-  field — rather than hand-written JSON, and **hidden built-in shells** are a **multi-select that
-  still offers the ones you have already hidden**, so un-hiding is the same control as hiding. A
-  flavour's `id` is fixed once created (it keys that flavour's default startup parameters); to
-  rename one, delete it and add it back.
-- **One way to be told things** — the application has exactly **two** notice models: a
-  *confirmation* (modal, blocking, text-labelled buttons, because the label is the statement of
-  what you are consenting to) and a *notification* (non-blocking, and **you** decide how long it
-  stays). Nothing else. Each of the four severities — error, warning, info, success — carries a
-  **display mode** you set in Preferences: *dismiss* (it waits for you), *timed* (it clears itself
-  after a duration you choose, 3–30 s), or *never* (it is not shown at all). Errors and warnings
-  wait by default; info clears after ten seconds and success after five. No severity is exempt from
-  any of the three, and turning one off does not turn it into silence: the notice is still raised
-  and still written to the diagnostics log, and a panel that has **failed** shows its own banner
-  regardless of what the notification settings say. Notifications **stack** rather than replacing
-  one another, so two failures are two messages and dismissing one leaves the other alone; each
-  states **what it is about** — the file, folder, panel, tab, project, sub-workspace or terminal —
-  as well as **what you were doing** when it happened, or says plainly that there is no one thing
-  to name; and each carries a **copy button**, because the useful thing to do with an error is
-  paste it somewhere.
-- **Themed everywhere** — the colour picker is drawn from theme tokens rather than the operating
-  system's dialog; inputs, hovers and scrollbars each have their own theme token, menus and dialogs
-  share the active- and panel-surface tokens, and text buttons come in three themeable types
-  (confirm, cancel, destroy); numeric settings with a sensible range get sliders; and switching theme
-  repaints every surface with nothing left behind.
-- **Reset controls** — four clearly separated scopes, all reading the same shipped-defaults record,
-  so there is exactly one answer to "what did this ship as":
-  - **Per item** — a setting or a key binding shows a reset icon **only while it differs from its
-    shipped value**, so the icon doubles as the "modified" cue. Clicking it restores that one item
-    (for a binding, its **full** shipped chord set) immediately, leaving every other item alone.
-  - **Per editor** — restores the whole Settings or Key Bindings editor to its shipped defaults.
-  - **Reset All Preferences** — settings, key bindings and every **built-in** theme, in one atomic
-    all-or-nothing operation. Your **projects, window layout, workspace state and custom themes are
-    not touched**, and the confirmation says so. If it cannot complete, nothing changes at all.
-  - **Revert All Preferences** — a **session undo**: back to how the window looked when you opened
-    it. Not a reset to defaults.
-
-  A reset that cannot be written never fails quietly: it raises an error naming the operation and
-  stating that nothing was changed. If you have set errors to *never*, it is still recorded in the
-  diagnostics log — silencing a severity hides it from the screen, not from the record.
-- **Themes & icon packs** — user-scoped, human-editable, hot-reloading settings, keybindings and
-  themes, plus **14 bundled default themes**, dedicated **button style tokens** (colours + font),
-  a themeable **editor gutter** (its own background and line-number colours), and **icon packs**
-  (a glyph or image per token, with per-token overrides). Two packs ship built in — a `throng`
-  glyph pack (default) and an SVG image pack — alongside user-supplyable packs. A selected pack
-  re-skins the **whole application** — the file explorer, panel and tab chrome, menus, toolbars and
-  buttons — live, with no restart. Image icons are **inlined**, so they take their colour from the
-  active theme rather than rendering as fixed black, and they are decorative to assistive
-  technology (the control around them carries the name). A pack that cannot be read never breaks
-  the app: its icons fall back to the theme's, and the Icons picker shows it as unavailable with
-  the reason. Every theme token
-  carries a plain-language label and description in the theme editor, and the bundled themes are
-  guarded automatically for pairwise visual distinctness and (for the redesigned Bash, SUBNET and
-  Cyberpunk themes) WCAG AA contrast. **Code stays legible on every theme**: each syntax colour is
-  measured against the editor background and must clear **6:1** — a house standard stricter than
-  WCAG AA's 4.5:1, because the search-match highlight can only be as strong as the weakest syntax
-  hue allows — on every bundled theme but the three that are deliberately low-contrast (Matrix,
-  VI-VIM, Gothic). The checked pairings are derived from the token set, so a syntax colour cannot be
-  added without being measured.
-- **Theme restore & creation** — the Themes editor pairs a theme dropdown with one set of actions that
-  apply to the selected theme (restore, clone, rename, delete), plus a separate **Restore All Themes to
-  Default**. Restore All (behind a confirmation) returns every edited built-in to its shipped values and
-  recreates any you deleted, atomically, leaving your custom themes untouched — and it is the only way
-  to bring back a deleted built-in, so no built-in is ever lost for good. A single built-in can also be
-  restored on its own (confirmed). **Clone** is how you create a theme: it duplicates the selected theme
-  and opens a name dialog prefilled `"<source> - Clone"`, and renaming uses that same dialog. A theme can
-  never take the name of a built-in — including one you have deleted. Each preferences tab keeps its own
-  scroll position.
+- **Projects** — isolated per-project contexts, each bound to an exclusive root folder and a colour;
+  create, edit, switch and reorder them, stored locally per user.
+- **Dockable workspace** — three collapsible panes, unlimited tabs and drag-to-split panels; the full
+  per-project layout is saved and restored every session.
+- **Multi-window sub-workspaces** — tear tabs or panels off into separate OS windows that stay in
+  sync and move as one focus group.
+- **Terminal panels** — PowerShell, Git Bash, CMD and custom shell flavours run inline on **detached,
+  daemon-owned PTYs**, so they survive a UI restart and reattach with their scrollback.
+- **Editor panels** — a CodeMirror editor that preserves encoding and line endings, shares one buffer
+  per file across every window, and recovers in-progress edits *and their undo history* after a crash.
+- **Code editing** — syntax highlighting for 31 languages, rectangular selection, whole-line cut and
+  paste, and indentation that follows the file's own style rather than a house one.
+- **File explorer** — a live, project-scoped file tree with rename, move, copy, Recycle-Bin delete and
+  per-project hiding, all undoable with Ctrl+Z and persisted across restarts.
+- **In-panel search** — one find bar that adapts to the active panel: find and replace in an editor,
+  and a read-only scrollback search in a terminal that never types at the shell.
+- **Focus and zoom** — one visible active panel per window, movable from the keyboard, with text zoom
+  set independently per panel and panel names that are unique across the whole application.
+- **Preferences** — a single window with visual Settings, Key Bindings and Themes editors: typeahead
+  search, a raw-JSON toggle, immediate apply, and reset scopes from one item up to everything.
+- **Themes and icon packs** — 14 bundled themes plus hot-reloading, user-editable theme, keybinding
+  and icon-pack files that re-skin the whole application live, with contrast guarded automatically.
+- **Failures that name their cause** — errors say what is actually holding a locked file, raise one
+  message per underlying problem, and leave a daemon-restart control in the status bar if it stops.
 
 This list is throng as it exists today. **What's planned lives in the
 [issue tracker](https://github.com/Bidthedog/throng/issues)**, grouped by
