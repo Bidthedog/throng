@@ -655,6 +655,18 @@ earlier one.
 - **FR-034**: The raw system error MUST NOT be rendered in the notice — 029 FR-016 forbids it and 029
   FR-018a demotes it to Copy and the log, both of which this feature preserves. It MUST be carried on
   the notice for copying (FR-048) and written to the log (FR-006), exactly once each.
+- **FR-034a**: A consolidated notice that SUPERSEDES a surface-level one (FR-029) MUST inherit the
+  raw system error the superseded notice was carrying, and MUST NOT render it. Added after a reported
+  session: renaming a project's root folder and reopening the project raised two notices for one
+  absent folder, and the file tree's — the one to be superseded — was the only one naming the FOLDER.
+  The consolidated notice's rows name each defeated panel's own missing FILE (FR-048a); neither names
+  what actually disappeared. Collapsing the pair without carrying the raw error across would satisfy
+  FR-029 by discarding the one fact the duplicate held, and do it invisibly, because a raw error is
+  never on screen for its absence to be noticed.
+  Two consequences follow. The consolidated notice MUST carry a cause key of its own, or it can
+  supersede nothing — a report that names no cause is a notice that cannot participate in FR-029 at
+  all. And that key MUST name the thing that FAILED rather than the notice's own subject: a project
+  may be called anything, and the two coincide only by chance.
 - **FR-035**: Batching by tab MUST be removed outright. The per-tab notices this replaces ("Cannot open
   N files", "Cannot open file") MUST NOT be raised at all, and no multi-panel failure — whatever
   produced it — may group by anything other than its cause. One grouping rule, not two coexisting
