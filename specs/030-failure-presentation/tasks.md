@@ -260,6 +260,24 @@ screen; then dismiss it and copy from a banner.
 - [X] T076 Run the full local gate — `npm run lint`, `npm run typecheck`, `npm test` — and capture the output once. **Done, as the full CI-equivalent gate**: every job in `.github/workflows/ci.yml` that gates a merge has a local line — lint, typecheck, build, `test:unit`, `test:integration`, `test:contract` and both E2E tiers — captured to one file per run and parsed from the capture
 - [X] T077 Re-run only what failed until green, then one full run as the evidence. **Done, and it found three defects this branch owned, all in its own tests.** The first gate came back with 26 E2E failures; re-running them at `--workers=1` with retries off separated 22 contention failures from 3 real ones (`editor-missing-aggregate:49` raced its own delete, `default-themes:141` polled on a condition that was never false, `preferences-slider:44` asserted the five-digit grouping floor 4.5.0 removed). The two races were stress-tested 0/2 before and 5/5 after. The rebase onto master then surfaced two more, where 031's specs asserted things this branch changed. Final full run: lint, typecheck, build, 2190 unit, 417 integration, 69 contract and the serial E2E tier at 462/462 all green
 - [X] T078 **Settled by the rebase, and not by this branch.** Master's `8438cc4` ("the clipboard specs stop pasting the developer's real clipboard") fixed them while 030 was in flight, and rebasing brought it in: all three `terminal-clipboard.e2e.ts` tests pass in the final gate, including `#142: Ctrl+V pastes the clipboard into the terminal exactly once`. So the answer to the question below is the second branch of it — the specs were focus-sensitive and had been measured on a machine running throng, #142 has not returned, and no Bug is filed. The original task follows, because what it asked is the reason the answer is trustworthy. ~~Settle the two pre-existing `terminal-clipboard.e2e.ts` failures before the PR leaves draft. They are the regression tests for **#142** (closed: "Ctrl+V does not paste and right-click can paste twice"), so either that bug has returned or the specs are focus-sensitive and were measured on a machine running throng. Determine which — a clean-desktop run is enough — then file a Bug citing #142 if it is real, or fix the focus assumption if it is not. Constitution V's evidence is a full green run, so "known red" is a bounded, tracked exception or it is not an exception at all~~
+- [X] T079 **FR-034a — reported against the built branch, and fixed here.** Renaming a project's root
+  and reopening the project raised TWO notices for one absent folder; the diagnostics log had both,
+  265 ms apart, the second with no `cause=` at all. The supersede rule was correct and unreachable:
+  `missing-file-watcher.tsx` reported each defeated editor without a cause (`PanelFailureReport`
+  called that "the common case for editors"), so the consolidated notice carried no key and could
+  displace nothing. The terminal path did supply one, which is why `project-missing-root-wedge.e2e.ts`
+  asserts this exact rule, passes, and never covered the editor half. Fixed in three parts: the scan
+  names the KIND and `useReportPanelFailure` supplies the subject; the subject is the root FOLDER's
+  name, not the project's, because main classifies against the last segment of the path the errno
+  quotes and a project may be called anything (they coincided in the reporting session — "test 1" in
+  a folder named "test 1" — which is the coincidence that would have shipped a fix working for one
+  case); and the survivor inherits the superseded notice's raw error, which was the only thing naming
+  the folder. The supersede decision moved out of an inline filter in the provider into
+  `notice-suppression.ts`, where the other pure notice rules live, because being inline is what made
+  it reachable only by an E2E driving a terminal. Covered by `notice-supersede.test.ts` (10 cases)
+  and by the editor half in `editor-missing-aggregate.e2e.ts`, which reproduces the report — two
+  launches, because a renderer reload keeps the main process's document state and the editors come
+  up `unloadable` rather than `fileMissing`
 - [X] T078a **No action needed here, as intended.** `terminal-start-failure-controls.e2e.ts` (repointed by T056e) passes in the final gate — all three of its tests — so 030 leaves it green and **#246** stays with whoever is working it. Recorded rather than acted on, which is what this task asked for: the spec belongs to that issue, and a fix landed here would collide with theirs
 
 ---
