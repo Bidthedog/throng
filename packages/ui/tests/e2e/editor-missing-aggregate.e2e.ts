@@ -1,8 +1,37 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, renameSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
+import Database from 'better-sqlite3';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp } from './harness.js';
+
+/** Wait until the project's layout, editors and all, is on disk — see its one caller. */
+async function expectLayoutSaved(dataDir: string, projectName: string): Promise<void> {
+  await expect
+    .poll(
+      () => {
+        let db: InstanceType<typeof Database> | undefined;
+        try {
+          db = new Database(join(dataDir, 'throng.db'), { readonly: true });
+          const row = db
+            .prepare(
+              `SELECT w.layout_json AS json
+                 FROM workspace_layout w
+                 JOIN projects p ON p.id = w.project_id
+                WHERE p.name = ?`,
+            )
+            .get(projectName) as { json?: string } | undefined;
+          return row?.json?.includes('editor') ?? false;
+        } catch {
+          return false;
+        } finally {
+          db?.close();
+        }
+      },
+      { timeout: 30_000, message: 'the editor layout never reached the database' },
+    )
+    .toBe(true);
+}
 
 /*
  * Session 2026-07-06f: the "cannot open file" report lists ALL missing files discovered when a tab
@@ -120,6 +149,141 @@ test('lists ALL missing files on a tab in one notice (FR-100 · 030 FR-029/FR-03
     });
   } finally {
     cleanupTemp(root);
+  }
+});
+
+test('the file tree got there first, and ONE notice still stands (030 FR-029/FR-034a)', async () => {
+  /*
+   * REPORTED FROM A REAL SESSION, and the diagnostics log had both halves 265 ms apart:
+   *
+   *   ERROR [renderer-notice] subject="test 1" action="list the contents of" cause="path-missing:test 1"
+   *   ERROR [renderer-notice] subject="test 1" action="open"                 affected=1
+   *
+   * Rename a project's root folder, reopen the project, and TWO notices arrive for one absent
+   * folder. The supersede rule that should have collapsed them matches on `causeKey`, and the
+   * consolidated notice had none: the editor's missing-file scan reported without a cause, so the
+   * notice that says MORE could not displace the one that says less.
+   *
+   * `project-missing-root-wedge.e2e.ts` asserts exactly this rule and passes — driving a TERMINAL,
+   * which does supply a cause. This is the editor half, which nothing covered.
+   *
+   * The file tree is made to report FIRST, deliberately: that is the losing order, and a test that
+   * let the two race would pass on the winning one about half the time.
+   */
+  test.setTimeout(180_000);
+  const root = makeProject();
+  const dataDir = mkdtempSync(join(tmpdir(), 'throng-agg-data-'));
+  try {
+    await runApp(
+      async (_app, win) => {
+        await createProject(win, 'Agg', root);
+        const pid = await newEditor(win);
+        await win.getByTestId(`editor-${pid}`).click();
+        const tree = win.getByTestId('file-explorer-tree');
+
+        await tree.getByText('alpha.txt', { exact: true }).click();
+        await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText('AAA', {
+          timeout: 8000,
+        });
+        await tree.getByText('beta.txt', { exact: true }).click({ button: 'right' });
+        await win.getByTestId('menu-item-Open In').click();
+        await win.getByTestId('menu-item-New Editor').click();
+        await expect(win.locator('.editor-panel')).toHaveCount(2, { timeout: 8000 });
+        // The layout must be PERSISTED before throng closes, or there is nothing to restore next
+        // launch and the editors come back as an empty workspace — a green that proves nothing.
+        await expectLayoutSaved(dataDir, 'Agg');
+      },
+      { dataDir },
+    );
+
+    /*
+     * A REAL SECOND LAUNCH, not a renderer reload.
+     *
+     * `reloadWindow` is the usual in-harness stand-in for "close and reopen", and it does not work
+     * here: it restarts the renderer while the MAIN process keeps the editor coordinator's document
+     * state, so the restored editors come up `unloadable` — the mount-time verdict — and never
+     * `fileMissing`, which is the flag the tab-open scan actually reads. The consolidated notice
+     * then has nothing to report and the duplicate cannot be reproduced. Only a fresh main process
+     * re-derives the state the reporter saw.
+     */
+    await expect
+      .poll(
+        () => {
+          try {
+            renameSync(root, `${root}-moved`);
+            return true;
+          } catch {
+            return false; // the daemon's lock outlives teardown by a beat
+          }
+        },
+        { timeout: 30_000, message: 'could not rename the root away (lock never released?)' },
+      )
+      .toBe(true);
+
+    await runApp(
+      async (_app, win) => {
+        // A restarted throng opens on no project; entering Agg is "open the project" in the report.
+        await win
+          .locator('.project-item', { hasText: 'Agg' })
+          .locator('[data-testid^="project-switch-"]')
+          .click();
+
+        // The tree reports first — waited on, so the order under test is the one that was broken.
+        await expect(win.getByTestId('explorer-error')).toBeVisible({ timeout: 30_000 });
+
+        /*
+         * Both editors must have LEARNED their file is gone before the scan is asked to find them.
+         *
+         * The `:not()` is load-bearing: the consolidated notice's own ids all begin
+         * `panel-failure-notice`, so a bare prefix match counts the notice and its controls
+         * alongside the panels (the trap `project-missing-root-wedge.e2e.ts` measured).
+         */
+        const banners = '[data-testid^="panel-failure-"]:not([data-testid^="panel-failure-notice"])';
+        await expect(win.locator(banners)).toHaveCount(2, { timeout: 30_000 });
+
+        /*
+         * Now provoke the scan. It runs ONCE per tab activation, 300 ms in, and on a cold open that
+         * beats the editors' own path verification — so the scan that should have found them saw two
+         * healthy editors and there is no second chance. Re-selecting the tab is the user's next
+         * click, and it is what puts the consolidated notice in flight while the tree's is standing:
+         * the losing order, which is the whole point of this test.
+         */
+        await reselectFirstTab(win);
+        const notice = win.getByTestId('panel-failure-notice');
+        await expect(notice).toBeVisible({ timeout: 30_000 });
+
+        /*
+         * ONE notice, counted on the CONTAINER's cards rather than on a list of test-id shapes — an
+         * enumeration of the ids that happened to exist when it was written goes stale silently, and
+         * in the direction of a false green (the lesson `project-missing-root-wedge.e2e.ts` records).
+         */
+        await expect(
+          win.getByTestId('notices').locator('.notice'),
+          'one absent folder must raise one notice, not one per surface',
+        ).toHaveCount(1);
+        await expect(win.getByTestId('explorer-error')).toHaveCount(0);
+
+        /*
+         * FR-034a — and the survivor INHERITED what the superseded notice was carrying.
+         *
+         * The rows name each missing FILE; only the tree's report named the FOLDER whose
+         * disappearance took them all. Collapsing the notices without carrying that across would fix
+         * the duplicate by losing the one fact it held, and lose it invisibly, since the raw error is
+         * never on screen — so this reads it out of the clipboard, where FR-034 puts it.
+         */
+        await notice.getByTestId('panel-failure-notice-copy').click();
+        // Through the app's own seam: Electron's clipboard does not work in this harness at all
+        // (`failure-copy.e2e.ts` records why), and a test that cannot read it proves nothing.
+        const copied = await win.evaluate(
+          () => window.throng?.clipboard?.paste().then((e) => e?.text ?? '') ?? '',
+        );
+        expect(copied, 'the superseded notice’s raw error must survive the merge').toContain('ENOENT');
+        expect(copied).toContain(basename(root));
+      },
+      { dataDir },
+    );
+  } finally {
+    for (const dir of [root, `${root}-moved`, dataDir]) cleanupTemp(dir);
   }
 });
 

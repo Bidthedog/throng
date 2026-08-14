@@ -42,6 +42,7 @@ import {
   silencedCauseKeys,
   silencedGrowth,
   silencedNoticeKey,
+  supersede,
   type SilencedNotices,
 } from './notice-suppression.js';
 
@@ -624,10 +625,17 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
        * ACKNOWLEDGED a failure, and nobody has: the failure is still on screen, in a notice that says
        * more about it. Clearing the store here would tell the explorer its error was over.
        */
-      const superseded = input.affected?.length
-        ? live.current.filter((n) => !(n.causeKey && n.causeKey === input.causeKey && !n.affected))
-        : live.current;
-      publish([...superseded, { ...input, id }]);
+      const { keep, carried } = supersede(live.current, input);
+      /*
+       * …AND IT INHERITS WHAT THEY WERE CARRYING (FR-034a).
+       *
+       * The superseded notice was usually the only one naming the FOLDER whose disappearance
+       * defeated everything — the rows below name each missing file. Dropping it without its raw
+       * error would fix the duplicate by discarding the one fact it held, and do it invisibly, since
+       * the raw error is never rendered. It joins this notice's copy instead.
+       */
+      const copyDetail = [input.copyDetail, ...carried].filter(Boolean).join('\n') || undefined;
+      publish([...keep, { ...input, id, ...(copyDetail ? { copyDetail } : {}) }]);
       // `dismiss` leaves the notice standing; only `timed` arms a clock, and it is the user's number.
       if (behaviour.mode === 'timed') {
         timers.current.set(

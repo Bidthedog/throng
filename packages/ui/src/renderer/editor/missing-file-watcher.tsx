@@ -55,6 +55,19 @@ export function MissingFileWatcher(): null {
           message: missingFileMessage('missing'),
           // The path rides as the row's own detail — copied and logged, never rendered (FR-034).
           detail: missingFileDetail({ filePath: st.filePath, panelName: p.title, reason: 'missing' }, os),
+          /*
+           * WHAT KIND OF FAILURE THIS IS (FR-029) — the half that was missing.
+           *
+           * A file that is not there is `path-missing`, and saying so is what lets the consolidated
+           * notice supersede the file tree's report of the same absent folder. Reporting without it
+           * left the notice with no cause key, so the two stood side by side: measured in a real
+           * session as "Couldn't list the contents of test 1" and "Couldn't open test 1", 265 ms
+           * apart, for one renamed folder.
+           *
+           * The KIND only. The subject has to be the project the notice is about, and this scan does
+           * not know its name — `useReportPanelFailure` does, and supplies it.
+           */
+          causeKind: 'path-missing',
         });
       }
     }, SCAN_DELAY_MS);

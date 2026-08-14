@@ -33,6 +33,74 @@ export function shouldSuppressForCause(liveKeys: readonly string[], incomingKey:
 }
 
 /* ════════════════════════════════════════════════════════════════════════════════════════════════
+ * 030 FR-029 / FR-034a — a CONSOLIDATED notice supersedes the surface-level one it shares a cause
+ * with, and inherits the raw error it was carrying.
+ * ════════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/** The identity-bearing parts of a live notice, as the supersede rule needs them. */
+export interface SupersedableNotice {
+  causeKey?: string;
+  /** Present on a CONSOLIDATED notice — the panels one cause defeated. */
+  affected?: readonly unknown[];
+  /** The raw system error, copied and logged but never rendered (FR-034). */
+  copyDetail?: string;
+}
+
+export interface SupersedeResult<T> {
+  /** The notices that stand, in order. */
+  keep: readonly T[];
+  /** The raw errors the superseded notices were carrying — the survivor must keep them. */
+  carried: readonly string[];
+}
+
+/**
+ * Which live notices does an incoming raise displace, and what must the survivor inherit?
+ *
+ * 029 collapses two notices that share a cause, and 030 exempts the consolidated one from being the
+ * one dropped: it says which PANELS the cause defeated, which the surface-level notice cannot know.
+ * This is the other half of that exemption — without it the pair is two notices whenever the file
+ * tree reports first, which is the storm FR-029 exists to end, reduced from twelve to two rather
+ * than to one.
+ *
+ * ══ WHY IT LIVES HERE ══
+ *
+ * It was an inline filter in the provider. That put it out of reach of every test except an E2E,
+ * and the one E2E that asserts it drives a TERMINAL — so when the editor path turned out to report
+ * without a cause, and could therefore never supersede anything, nothing failed. A user found it:
+ * rename a project's root, reopen it, and get two notices for one absent folder.
+ *
+ * ══ CARRIED ══
+ *
+ * The superseded notice is usually the only thing naming the FOLDER whose disappearance defeated
+ * everything; the consolidated notice's rows name each missing FILE. Dropping the notice without its
+ * raw error would fix the duplicate by discarding the one fact it held — invisibly, because the raw
+ * error is never on screen. So it comes out here and the caller folds it into the survivor's copy.
+ */
+export function supersede<T extends SupersedableNotice>(
+  live: readonly T[],
+  incoming: SupersedableNotice,
+): SupersedeResult<T> {
+  // Only a consolidated notice displaces anything, and only on a real cause. An empty key is not a
+  // cause (FR-011b) — treating it as one would collapse every unclassified failure into the next
+  // consolidated notice to arrive.
+  if (!incoming.affected?.length || !incoming.causeKey) return { keep: live, carried: [] };
+
+  const keep: T[] = [];
+  const carried: string[] = [];
+  for (const notice of live) {
+    // Never another CONSOLIDATED notice: each holds its own panel list, and dropping one would
+    // silently discard the casualties only it was speaking for.
+    const displaced = notice.causeKey === incoming.causeKey && !notice.affected?.length;
+    if (!displaced) {
+      keep.push(notice);
+      continue;
+    }
+    if (notice.copyDetail && !carried.includes(notice.copyDetail)) carried.push(notice.copyDetail);
+  }
+  return { keep, carried };
+}
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════════
  * 030 FR-005b/FR-005c — the SHADOW, for notices the user chose never to see.
  *
  * Both rules above are bounded by the LIVE list, and that is deliberate: a notice on screen is what
