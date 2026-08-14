@@ -56,6 +56,16 @@ jobs:
           name: throng-installer
           path: dist/installer/*.exe
           if-no-files-found: error
+          # The installer is ~131 MB and this artifact is only a hand-off between the three jobs
+          # below; the bytes anyone actually wants are the ones `publish` attaches to the GitHub
+          # Release, which does not expire. At the 90-day default, seventeen superseded builds from
+          # one afternoon of packaging iteration sat in Actions storage until mid-October.
+          #
+          # It cannot go to 1 day. `publish` is gated on the release Environment's required
+          # reviewers, so the artifact has to outlive however long the human takes to approve —
+          # expire it first and the gated job fails at download-artifact, having passed every check.
+          # Five days is the approval window, not a storage target.
+          retention-days: 5
 
   verify-installer:
     name: Verify on a clean machine
@@ -92,6 +102,9 @@ jobs:
           name: verification-verdict
           path: verification-verdict.json
           if-no-files-found: warn
+          # `publish` downloads this too, so it expires with the installer above rather than
+          # outliving it — a verdict without its build is a gate failure that reads like a bug.
+          retention-days: 5
 
   publish:
     name: Publish GitHub Release (gated)
