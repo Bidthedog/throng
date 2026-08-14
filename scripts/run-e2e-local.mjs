@@ -53,6 +53,20 @@ if (forwarded.length > 0) {
   process.exit(play(forwarded));
 }
 
+/*
+ * FAIL-FAST, opt-in via THRONG_E2E_FAIL_FAST (set by `npm run gate`).
+ *
+ * The default is unchanged — a bare `npm run test:e2e` runs both tiers to completion,
+ * because a developer asking for the whole suite wants the whole failure set, not the
+ * first item of it.
+ *
+ * The gate wants the opposite, and for a reason worth naming: this stage is ~21 minutes,
+ * and a run that already has one confirmed failure cannot come back green. Every test
+ * after that failure is wall-clock spent to learn nothing. So the gate stops the tier at
+ * its first failing test (`--max-failures=1`) and does not start the next tier at all.
+ */
+const failFast = process.env.THRONG_E2E_FAIL_FAST === '1';
+
 const started = Date.now();
 const passes = [
   ['parallel', WORKERS],
@@ -60,8 +74,15 @@ const passes = [
 ];
 const results = [];
 for (const [tier, workers] of passes) {
-  console.log(`\n[e2e] ${tier} tier — ${workers} worker(s)\n`);
-  results.push([tier, play([`--workers=${workers}`], { THRONG_E2E_TIER: tier })]);
+  console.log(`\n[e2e] ${tier} tier — ${workers} worker(s)${failFast ? ' — fail-fast' : ''}\n`);
+  const args = [`--workers=${workers}`];
+  if (failFast) args.push('--max-failures=1');
+  const code = play(args, { THRONG_E2E_TIER: tier });
+  results.push([tier, code]);
+  if (failFast && code !== 0) {
+    console.error(`\n[e2e] ${tier} tier failed — skipping the remaining tier(s) (fail-fast)\n`);
+    break;
+  }
 }
 
 const mins = ((Date.now() - started) / 60000).toFixed(1);

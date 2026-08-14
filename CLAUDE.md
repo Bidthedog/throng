@@ -4,6 +4,35 @@ shell commands, and other important information, read the current plan
 at specs/030-failure-presentation/plan.md
 <!-- SPECKIT END -->
 
+## Verifying done-ness
+
+**`npm run gate` is the only thing that establishes work is done.** Not a green unit run, not a
+passing spec, not "the tests I changed pass" — those are progress, and reporting one as done-ness is
+the specific mistake this rule exists to stop.
+
+It runs the seven gating stages in CI's order, fail-fast: **lint → typecheck → build → unit →
+integration → contract → e2e**. It prints one line per stage, stops at the first failure, and clears
+the app/daemon/pty-agent/Playwright processes a run leaves behind — on success, on failure, and on
+Ctrl+C.
+
+```
+npm run gate
+```
+
+Three rules about using it:
+
+- **Fail-fast means stop, fix, re-run — not read on.** When a stage fails the gate cancels the run.
+  Fix that failure before anything else, using the **running-tests** skill to re-run only what failed
+  and **throng-testing** when the failure is an E2E flake rather than a defect. Do not queue up more
+  work on top of a red gate.
+- **Never bypass the E2E stage to make the gate finish sooner.** E2E is ~21 minutes locally and ~36
+  runner-minutes on CI, and that expense is exactly why it is inside the gate rather than optional:
+  the cheap stages run first precisely so the expensive one is only ever reached by code that has
+  already earned it. Running the individual `npm run test:*` scripts while iterating is fine and
+  expected — it is claiming *done* off the back of them that is not.
+- **A green gate goes stale the moment you edit.** Quote the actual stage summary when reporting
+  done, and re-run if anything changed after it.
+
 ## Specialist agents
 
 `.claude/agents/` holds eleven repo-local subagents, one per area of this codebase — core/DI, daemon

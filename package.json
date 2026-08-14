@@ -40,6 +40,7 @@
     "lint": "eslint .",
     "typecheck": "tsc -b && npm run typecheck:renderer",
     "typecheck:renderer": "tsc -p packages/ui/tsconfig.renderer.json",
+    "gate": "node scripts/gate.mjs",
     "test": "node scripts/run-tests.mjs",
     "pretest:e2e": "npm run build",
     "test:unit": "vitest run --project unit",
