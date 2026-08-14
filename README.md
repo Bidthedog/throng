@@ -143,7 +143,7 @@ goal is to pull all of that into a single, simple customisable workspace.
   what you are consenting to) and a *notification* (non-blocking, and **you** decide how long it
   stays). Nothing else. Each of the four severities — error, warning, info, success — carries a
   **display mode** you set in Preferences: *dismiss* (it waits for you), *timed* (it clears itself
-  after a duration you choose, 1.5–60 s), or *never* (it is not shown at all). Errors and warnings
+  after a duration you choose, 3–30 s), or *never* (it is not shown at all). Errors and warnings
   wait by default; info clears after ten seconds and success after five. No severity is exempt from
   any of the three, and turning one off does not turn it into silence: the notice is still raised
   and still written to the diagnostics log, and a panel that has **failed** shows its own banner
