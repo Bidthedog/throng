@@ -385,8 +385,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     maxNameLength: 64,
     maxWidth: 32,
     newTabPosition: 'afterActive',
-    chevronRepeatDelayMs: 500,
-    popoverDelayMs: 300,
+    chevronRepeatDelayMs: 350,
+    popoverDelayMs: 500,
   },
   newProject: {
     startingFolder: 'lastViewed',

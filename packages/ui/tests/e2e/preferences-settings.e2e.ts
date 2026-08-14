@@ -170,7 +170,9 @@ test('the settings search filters by name, description and value (FR-049)', asyn
       await expect.poll(() => rowCount(prefs, 'behaviour.tabHoverActivateMs')).toBe(0);
       await expect(prefs.getByTestId('settings-group-Confirmations')).toHaveCount(0);
 
-      // Matches a DESCRIPTION word ('Dwell time (ms) hovering a tab…').
+      // Matches a DESCRIPTION word — 'dwell' appears only in tabHoverActivateMs's description
+      // ('…must dwell over another tab before that tab comes to the front…'), never in its label or
+      // key, so a hit here can only have come from matching the description text.
       await search.fill('dwell');
       await expect(prefs.getByTestId('setting-behaviour.tabHoverActivateMs')).toBeVisible();
       await expect.poll(() => rowCount(prefs, 'appearance.theme')).toBe(0);
