@@ -151,6 +151,13 @@ function correctTable(
   const shipped = isRecord(fallback) ? fallback : {};
   const result: Record<string, unknown> = {};
 
+  /*
+   * FR-008f — iterating the entries the FILE actually has is what makes absence uncorrectable.
+   * Nothing here walks the shipped defaults looking for keys the user omitted, so a table the user
+   * deliberately emptied stays empty. Only a PRESENT entry can be restored or dropped; that is the
+   * line between "the user chose nothing" and "the file is broken", and it is structural here
+   * rather than a special case further down.
+   */
   for (const [entryKey, entryValue] of Object.entries(raw)) {
     const path = `${d.key}.${entryKey}`;
     const shippedEntry = shipped[entryKey];
@@ -163,8 +170,18 @@ function correctTable(
     }
 
     if (!isRecord(entryValue)) {
-      // Present but unreadable. Restore it from the shipped default for THIS key if one exists;
-      // otherwise it was the user's own entry and there is nothing to restore it to.
+      /*
+       * FR-008b — one malformed entry must not invalidate the table. The loop continues, so every
+       * other entry still loads.
+       *
+       * FR-008c — present but unreadable. Restore it from the shipped default for THIS key if one
+       * exists; otherwise it was the user's own mapping and there is nothing to restore it to, so
+       * it is dropped.
+       *
+       * FR-008d — because every key the shipped defaults carry always ends up with an entry, a
+       * table declared to have no valid empty state cannot be emptied BY correction. That is why
+       * no special case is needed for a table that happens to reach zero entries.
+       */
       if (shippedEntry !== undefined) {
         out.push({ path, kind: 'entry-restored', from: entryValue, to: shippedEntry });
         result[entryKey] = structuredClone(shippedEntry);
