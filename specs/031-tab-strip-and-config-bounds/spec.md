@@ -912,9 +912,12 @@ running app.
 - **FR-054**: **Press-and-hold** on either chevron MUST scroll the strip **continuously** after a
   short delay, rather than requiring one click per tab.
 - **FR-054a**: A new **`tabs.chevronRepeatDelayMs`** setting MUST control that delay. Range
-  **100–3000**, default **500**, in **50 ms** increments.
+  **100–3000**, default **350**, in **50 ms** increments.
   - The 50 ms step also satisfies the aimable-slider rule: 50 across a 2900 range is 1.72%, and the
-    default is reachable (100 + 50×8 = 500).
+    default is reachable (100 + 50×5 = 350).
+  - The default was **500** as first specified, and was lowered to 350 after use: half a second
+    before a press-and-hold starts moving reads as the control having failed rather than as a guard
+    against an accidental hold.
 - **FR-054b**: Releasing the pointer, or leaving the control, MUST stop the repeat immediately.
 - **FR-054c**: The repeat MUST respect the same supersede rule as every other scroll (FR-030c–f) —
   it may not queue movements that continue after the user lets go.
@@ -945,7 +948,11 @@ introduced; the rest are ranges and behaviours that only reveal themselves in us
     where the pointer already is, and "the rule depends on which tab you are over" is harder to hold
     than "the X arms after you rest on it".
 - **FR-058**: A new **`tabs.popoverDelayMs`** setting MUST control how long the pointer rests on a
-  tab before its info popover appears. Range **0–1500**, default **300**.
+  tab before its info popover appears. Range **0–1500**, default **500**, in **25 ms** increments.
+  - The default was **300** as first specified, and was raised to 500 after use. It is the delay
+    that decides whether the popover *helps* or *chases the pointer*: at 300 it kept appearing while
+    crossing the strip to reach something else, which is the failure FR-058 exists to prevent.
+    500 is reachable on a stop at 0 + 25×20.
 - **FR-059**: While a **drag is in progress** — a tab being reordered, or a panel being dragged over
   a tab — the close affordance MUST NOT activate at all, and its arming delay MUST NOT even begin
   counting.
@@ -962,13 +969,30 @@ introduced; the rest are ranges and behaviours that only reveal themselves in us
   menu it just opened.
 - **FR-061a**: Once hidden that way, the popover MUST NOT reappear until the pointer **leaves the
   tab and returns**. Re-showing it while the menu is still open would restore the obstruction.
+- **FR-062**: The existing **`behaviour.tabHoverActivateMs`** setting MUST be presented in the
+  **`Tabs`** group rather than `Behaviour`. It is a tab-strip dwell delay, and it belonged beside
+  the three this feature adds rather than under a heading that names no surface at all.
+  - Its **key MUST NOT change**. `group` is presentation; the key is the `settings.json` contract,
+    and renaming it would silently discard the stored value in every existing file — a migration's
+    worth of cost to tidy a heading.
+  - Its description MUST say that a **drag** is what must dwell, and that an ordinary mouse-over
+    does nothing. The original wording ("Dwell time (ms) hovering a tab during a panel drag before
+    it activates") never named what was doing the hovering and read as though a plain pointer would
+    trigger it.
+  - The word **"dwell" MUST survive** any rewording: `preferences-settings.e2e.ts` uses it to prove
+    the settings search matches on **description** text rather than on label or key, and this is the
+    only setting whose description carries it.
 
 ### Notes for planning
 
 - FR-055/FR-056 narrow an existing range. Both are already guarded, so a user whose stored value is
   above the new maximum is clamped on read — no migration, and FR-013's write-back records it.
 - FR-058's step must satisfy the aimable-slider rule (≥1% of range) **and** land on its default:
-  across 0–1500 a step of 25 is 1.67% and reaches 300 exactly.
+  across 0–1500 a step of 25 is 1.67% and reaches 500 exactly (0 + 25×20).
+- FR-062 changes no behaviour and adds no capability — it moves a row between headings. It is
+  recorded as a requirement only because it is otherwise untracked work: the `Tabs` group now
+  renders **eight** rows while this feature adds **seven** settings, and nothing else explains the
+  discrepancy to a later reader.
 - FR-060 is a regression from US1's restructure and needs a **measured** diagnosis; the cause above
   is a hypothesis with supporting evidence, not a finding.
 

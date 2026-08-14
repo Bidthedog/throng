@@ -11,18 +11,27 @@ this feature adds three settings leaves and a body of derived, in-memory state.
 
 ### 1.1 New leaves
 
-**Current as of User Story 7.** Nine settings in the `Tabs` group; the three US6 added and the one
-US7 added are included, and the two maxima US7 narrowed are shown at their current values.
+**Current as of User Story 7, including the post-US7 default changes.** This feature adds **seven**
+settings, all keyed `tabs.*`. The `Tabs` **group** renders **eight** rows, because FR-062 moved the
+pre-existing `behaviour.tabHoverActivateMs` into it — that row is listed last and is the only one
+whose key does not begin `tabs.`.
 
 | Key | Type | Range | **Step** | Default | Requirement |
 |---|---|---|---|---|---|
 | `tabs.smoothScrollMs` | number | 0–**1500** | **50** | **300** | FR-030, narrowed by FR-055 |
 | `tabs.closeArmingDelayMs` | number | 0–**1500** | **50** | **300** | FR-044h, narrowed by FR-056 |
-| `tabs.popoverDelayMs` | number | 0–1500 | **25** | **300** | FR-058 |
+| `tabs.popoverDelayMs` | number | 0–1500 | **25** | **500** | FR-058 |
 | `tabs.maxNameLength` | number | 10–128 | **2** | **64** | FR-034 |
 | `tabs.maxWidth` | number | 10–128 | **2** | **32** | FR-050 |
 | `tabs.newTabPosition` | enum | `afterActive` \| `end` | — | `afterActive` | FR-053a |
-| `tabs.chevronRepeatDelayMs` | number | 100–3000 | **50** | **500** | FR-054a |
+| `tabs.chevronRepeatDelayMs` | number | 100–3000 | **50** | **350** | FR-054a |
+| `behaviour.tabHoverActivateMs` | number | 0–5000 | **50** | **600** | FR-062 — **relocated, not added**; key unchanged |
+
+**Two defaults changed after US7 shipped**, from using the strip rather than from a review:
+`chevronRepeatDelayMs` 500 → **350** and `popoverDelayMs` 300 → **500**. Both remain on a slider
+stop and inside their declared range, which is the only property that could have broken. No
+migration exists or is needed — a stored value outside a declared range is already clamped on read,
+which is the whole point of #227.
 
 Both US7 narrowings are of **already-guarded** settings, so a stored value above the new maximum is
 clamped on read and the write-back records the correction (FR-013). No migration exists or is needed
@@ -35,11 +44,18 @@ step was then checked against its own default being reachable:
 
 | Setting | Range | Step | % of range | Default reachable? |
 |---|---|---|---|---|
-| `tabs.smoothScrollMs` | 3000 | 50 | 1.67% | 300 = 0 + 50×6 ✓ |
-| `tabs.closeArmingDelayMs` | 2000 | 50 | 2.50% | 300 = 0 + 50×6 ✓ |
+| `tabs.smoothScrollMs` | 1500 | 50 | 3.33% | 300 = 0 + 50×6 ✓ |
+| `tabs.closeArmingDelayMs` | 1500 | 50 | 3.33% | 300 = 0 + 50×6 ✓ |
 | `tabs.maxNameLength` | 118 | 2 | 1.69% | 64 = 10 + 2×27 ✓ |
+| `tabs.maxWidth` | 118 | 2 | 1.69% | 32 = 10 + 2×11 ✓ |
+| `tabs.chevronRepeatDelayMs` | 2900 | 50 | 1.72% | 350 = 100 + 50×5 ✓ |
+| `tabs.popoverDelayMs` | 1500 | 25 | 1.67% | 500 = 0 + 25×20 ✓ |
 
-All three sit in a new **`Tabs`** settings group. Each gets a `FieldDescriptor` in
+The first two ranges are the **narrowed** ones (FR-055, FR-056): the check has to be re-done against
+the range that ships, not the one first proposed, or a step passes the 1% rule against a range
+nobody has.
+
+All sit in a new **`Tabs`** settings group. Each gets a `FieldDescriptor` in
 `SETTINGS_METADATA` with `control: 'slider'` (the descriptor contract requires `min`, `max` and
 `step` for a slider), which is what makes them editable in the Settings form (FR-047) and, more
 importantly, what makes them *guarded* — the guard reads the same declaration (FR-041).
@@ -208,8 +224,19 @@ satisfied without a recorded exception — see the Constitution Check in `plan.m
 |---|---|---|
 | `chevronLeft` | `‹` | Step-left control |
 | `chevronRight` | `›` | Step-right control |
-| `chevronDown` | `⌄` | Show-all control |
+| `chevronDown` | `▾` | Show-all control |
 
-Descriptors are **derived** from the theme document's keys, so no hand-written metadata entry is
-needed (R9). The existing `collapse` / `expand` tokens are not reused: they mean tree-node state, and
-sharing them would make re-skinning one silently re-skin the other.
+`chevronDown` shipped as `⌄` (U+2304) and was changed to `▾` (U+25BE). U+2304 carries its ink near
+the **baseline**, so the glyph sat visibly low against the two pills beside it while its *box* was
+perfectly centred — which is why the first attempt to fix it by centring the box measured 52.5
+against 52.5 and changed nothing. The fix was the glyph, not the geometry.
+
+**R9, corrected twice.** Icon *descriptors* are derived from the theme document's own keys, so
+nothing is hand-written in `theme-metadata.ts`. But `theme-copy.ts` holds a **separate, mandatory,
+hand-written catalogue**, and `theme-copy.test.ts` fails four ways without an entry. The rule that
+actually holds is: **glyph in `theme.ts`, copy in `theme-copy.ts`, nothing in `theme-metadata.ts`.**
+An earlier draft of this section said no hand-written entry was needed anywhere, which is the half
+of the truth that breaks the build.
+
+The existing `collapse` / `expand` tokens are not reused: they mean tree-node state, and sharing them
+would make re-skinning one silently re-skin the other.
