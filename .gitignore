@@ -37,3 +37,9 @@ verification-verdict.json
 deelevated-*.log
 deelevated-*.cmd
 deelevated-*.code
+
+# 030 FR-058 — the notice-subject guard compiles throwaway fixtures with tsc, under
+# `packages/ui/tests/` so module resolution matches the real renderer's. It removes them in
+# `afterAll`, so the directory only survives a run that was interrupted — and then a later
+# `git add -A` picks up generated files as though they were source.
+packages/ui/tests/.tsc-notice-guard/

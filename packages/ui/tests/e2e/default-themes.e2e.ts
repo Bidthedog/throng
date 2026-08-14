@@ -239,11 +239,24 @@ test('the shared failure banner takes its colours from every shipped theme, and 
         for (const theme of EXPECTED_15) {
           await select.selectOption(theme);
           await expect(select).toHaveValue(theme); // select = activate; wait for it to land
-          // Polled: the theme is applied to the MAIN window over IPC, a beat after the selector
-          // settles in the preferences window.
+          /*
+           * Wait for the theme to land IN THE MAIN WINDOW, on the signal `ThemeProvider` publishes
+           * for exactly this — `root.dataset.theme`, written in the same effect that applies the
+           * tokens, so a match means the custom properties are already on the element.
+           *
+           * What was here before polled the banner's computed `color` until it was non-empty. A
+           * computed colour is never the empty string on a rendered element, so the poll returned
+           * on its first tick and waited for nothing: every iteration read whichever theme the main
+           * window still had. Activation round-trips prefs → config file → watcher → main window,
+           * which is slower than a `selectOption` settling in the preferences window, so the sweep
+           * outran it and sampled one theme fifteen times — reported as "the banner carries its own
+           * colours", which is the one thing it does not do.
+           */
           await expect
-            .poll(async () => (await bannerColours(win, brokenPid)).colour, { timeout: 10_000 })
-            .not.toBe('');
+            .poll(() => win.evaluate(() => document.documentElement.dataset.theme), {
+              timeout: 10_000,
+            })
+            .toBe(theme);
 
           const { colour, background, border } = await bannerColours(win, brokenPid);
           const fg = parseRgb(colour);

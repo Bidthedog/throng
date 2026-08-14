@@ -74,6 +74,26 @@ test('lists ALL missing files on a tab in one notice (FR-100 · 030 FR-029/FR-03
       const wry = win.getByTestId('confirm-accept');
       if (await wry.isVisible().catch(() => false)) await wry.click();
 
+      /*
+       * BOTH editors must have LEARNED their file is gone before the tab is re-selected.
+       *
+       * The delete is asynchronous — it goes out to the shell's recycle bin and comes back through
+       * the watcher — while the scan this test is about runs exactly once, on tab activation, and
+       * reads `fileMissing` as it finds it (FR-105 is what makes it one-shot). Re-selecting the tab
+       * on the tick after `confirm-accept` therefore raced the deletion: measured, the files were
+       * still on disk at that point, so the scan saw two healthy editors and reported nothing, and
+       * the banners appeared a beat later with no scan left to run. Under load it landed halfway —
+       * one editor known-missing, one not — which is the "1 row where 2 were expected" this file
+       * reported before the wait existed.
+       *
+       * `panel-unsaved-*` is the same signal the two tests below already wait on: the editor is
+       * dirty precisely because the file went away under it, and `markDeleted` sets that in the same
+       * pass as `fileMissing`, which is what the scan reads.
+       */
+      await expect(win.locator('[data-testid^="panel-unsaved-"]')).toHaveCount(2, {
+        timeout: 15_000,
+      });
+
       // Re-select the tab → ONE notice, listing both defeated panels.
       await reselectFirstTab(win);
       const notice = win.getByTestId('panel-failure-notice');
