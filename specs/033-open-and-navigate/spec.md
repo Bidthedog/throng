@@ -63,6 +63,7 @@ issues.
 - Q: How is Quick Open's "this editor / new editor" target choice presented, given the shared picker is a title, an input and a list? → A: **A two-option control at the TOP of the modal, above the typeahead input.** Its options are the **currently active editor** and **a new editor panel in this tab**, preselected from the "Open files in" preference. The typeahead input holds focus on open; **Shift+Tab** moves to the control (it is last in the tab order, so a backwards step reaches it), where **Space or Enter changes the value**. Opening is always **Enter with a file highlighted in the list** — Enter on the control never opens a file.
 - Q: What happens when Go To Line is invoked while a find bar is open in the same editor? → A: **The find bar stays open and simply loses focus.** It keeps its query, match count and highlights; the Go To Line modal opens on top and takes focus, and dismissing or confirming it returns focus to the editor rather than to the find bar. **A find bar closes only when the user closes it or its editor closes** — nothing else, this feature included, may close it.
 - Q: Quick Open is chord-only and discoverable nowhere but the Key Bindings editor. Should it have a visible route? → A: **A Files & Folders toolbar button**, beside the existing Expand / Collapse all controls, tooltipped with its current chord. It sits next to the tree it searches. The cost is accepted and recorded: the pane is hideable, so with Files & Folders closed the chord is again the only route.
+- Q: Planning found three places where this spec contradicts itself or the shipped code. How are they resolved? → A: **All three in favour of FR-047 and the constitution, with the losing text marked superseded rather than deleted.** (1) FR-052's cog row demanded a divider inside a single section, which FR-050 forbids — the cog menu takes **no** divider. (2) FR-052 listed Destroy last for two menus while FR-047 fixes it third; its third column is an **inventory of sections, not an ordering**, and FR-047 remains the only statement of order. (3) SC-011 could not hold literally, because `context-menu-sections.e2e.ts:49` asserts a folder's Open In holds exactly one item and US3 adds a second by design — that one assertion is named as the sole permitted change, so any other edit to an existing menu spec is a defect rather than a licence.
 - Q: The terminal's link items sit above Copy/Paste, which the Content-first vocabulary would forbid. Keep an exception, drop it, or reorder the vocabulary? → A: **Keep the "Contextual" section, leading the menu.** An item qualifies only if it would be **absent were the pointer elsewhere** — that is the test, not "it feels contextual". Demoting the link items was rejected as a behaviour regression shipped under a grouping pass, and reordering the vocabulary was rejected because it would re-order the one menu already grouped.
 - Q: What does each modal's input contain when it opens for the second time? → A: **Empty, in both — plus two new preferences that make each one remember, off by default.** The shipped behaviour is an empty box every time. Two toggles under a new **Editor · Navigation** group, `editor.navigation.rememberQuickOpenQuery` and `editor.navigation.rememberGotoLineNumber`, both defaulting to **off**, let a user opt into the modal reopening with the last value it accepted, fully selected so typing replaces it.
 - Q: Where does keyboard focus land after Open In → Terminal → flavour launches a terminal? → A: **In the new terminal.** The panel is created in the active tab by the same sequence "Open In → New Editor" already uses — added, typed immediately, not opened in rename mode, made the active panel — and it additionally takes DOM focus, so the user can type a command without a further click. The action's whole purpose is a shell here, and the next act is always typing.
@@ -540,15 +541,26 @@ the declared sections, in the declared order, with dividers between them.
 - **FR-051**: Dividers MUST be skipped by keyboard navigation and MUST NOT take focus.
 - **FR-052**: The menus that MUST conform, and their state before this feature, are:
 
-  | Menu | Today | Required |
+  | Menu | Today | Sections it will contain |
   |---|---|---|
   | Files & Folders (file, folder, root) | Grouped | Unchanged, plus US3's and US4's items in **Navigate** |
-  | Terminal content menu | Contextual link group separated; rest ungrouped | Contextual, then Content |
-  | Editor content menu | 8 items, no dividers | Content / Navigate (Go To Line) / View & state |
-  | Panel header menu | 11+ items, no dividers | Content / Navigate / View & state / Destroy |
-  | Tab context menu | 4 items, no dividers | Content / Navigate / Destroy |
-  | Cog menu | 5 items, no dividers | Application, split from the diagnostic and About items |
+  | Terminal content menu | Contextual link group separated; rest ungrouped | Contextual, Content |
+  | Editor content menu | 8 items, no dividers | Content, Navigate (Go To Line), View & state |
+  | Panel header menu | 11+ items, no dividers | Content, Destroy, Navigate, View & state |
+  | Tab context menu | 4 items, no dividers | Content, Destroy, Navigate |
+  | Cog menu | 5 items, no dividers | **Application only — one section, therefore no divider** |
   | Key Bindings chord menu | 1 item | Exempt while it holds one item |
+
+  The third column is an **inventory of the sections each menu will contain, not an ordering**. The
+  order is always FR-047's, and FR-047 is the only place it is stated. *(Corrected 2026-08-15: two
+  rows previously listed Destroy last, which contradicted both FR-047 and the constitution — and the
+  Files & Folders menu, named in Assumption 7 as the vocabulary's source, has always drawn Delete
+  before Open In.)*
+
+  *(Corrected 2026-08-15: the cog row previously required the preferences trio to be "split from the
+  diagnostic and About items". All five are **Application** under FR-047's own table and under the
+  constitution, and FR-050 permits a divider only at a section boundary — so the split it asked for
+  was forbidden by the two rules it sits between. Superseded: the cog menu takes no divider.)*
 
 - **FR-053**: No menu item's label, icon, action, order **within** its section, or test identifier may
   change as a result of this work. This is a grouping pass, not a menu redesign.
@@ -647,8 +659,13 @@ the declared sections, in the declared order, with dividers between them.
   the desync condition that produced #120.
 - **SC-010**: Every context menu in the app draws its items in the declared sections in the declared
   order, verified by one check that enumerates the menus rather than by a per-menu eyeball.
-- **SC-011**: No menu item's label, order within its section or test identifier changes — the existing
-  menu-driving end-to-end specs pass unmodified.
+- **SC-011**: No menu item's label, order within its section or test identifier changes. Every
+  existing menu-driving end-to-end spec passes unmodified **with one named exception**:
+  `context-menu-sections.e2e.ts:49` asserts that a folder's Open In submenu holds *exactly one* item,
+  and US3 adds Terminal to it by design. That single assertion is updated; any *other* change to an
+  existing menu spec is a defect in this feature, not a test that needed updating. *(Corrected
+  2026-08-15 — as first written this criterion could not hold, and an unachievable criterion is
+  worse than none: it gets quietly reinterpreted at the moment it fails.)*
 - **SC-012**: Both new commands appear in Preferences → Key Bindings, can be rebound, and the rebound
   chord works while the old one stops — asserted for each.
 - **SC-013**: For a query matching a file both by name and, elsewhere, by directory only, the
