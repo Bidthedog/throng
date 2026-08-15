@@ -74,6 +74,8 @@ import { resolveThrongHolder } from './throng-holder.js';
 import { PanelIdentityRegistry } from './panel-identity.js';
 import { ExplorerWatcher } from './explorer-watcher.js';
 import { registerFilesIpc } from './files-ipc.js';
+import { ProjectFileIndexService } from './project-file-index.js';
+import { pushFileIndexUpdate, registerFileIndexIpc } from './file-index-ipc.js';
 import { EditorService } from './editor-service.js';
 import { EditorRecovery } from './editor-recovery.js';
 import { EditorCoordinator } from './editor-coordinator.js';
@@ -979,6 +981,38 @@ if (isPrimaryInstance)
   // the notice being dismissed. `diagnostics.log` is the same rotating file the daemon writes to.
   filesService.setDiagnosticLog((message) => diagnostics.log.warn(message));
   registerFilesIpc(filesService, explorerWatcher);
+  /*
+   * 033 US1 — the project file index that seeds Quick Open (contracts/file-index.md §2).
+   *
+   * It sits HERE, beside `FilesService` and `ExplorerWatcher`, because this is UI-main's
+   * composition root and the only place the index is ever constructed (Principle IX): the
+   * filesystem seam, the watcher seam, the live settings and the per-window push are all already
+   * in scope, and nothing inside the service reaches for any of them itself.
+   *
+   * `excludeGlobs` is a FUNCTION over `currentSettings`, not a captured array. `currentSettings`
+   * is re-pointed by `broadcast` on every config change, so changing the setting takes effect on
+   * the next reconcile with no restart (S10) — the very habit that disqualified the daemon from
+   * owning this index (research R1) would otherwise be reproduced here.
+   */
+  const projectFileIndex = new ProjectFileIndexService(
+    fileSystem,
+    new NodeFileWatcher(150),
+    () => currentSettings.explorer.excludeGlobs,
+    pushFileIndexUpdate,
+  );
+  registerFileIndexIpc(projectFileIndex);
+  /*
+   * S9 — a window that has gone unsubscribes from EVERY root.
+   *
+   * Without this the last reference to a root is held by a `webContents` that no longer exists, so
+   * its walk, its watch and its 50,000-entry array outlive the window for the life of the app —
+   * and the push at the other end is delivered to nothing. `web-contents-created` catches every
+   * window (main, sub-workspace, preferences) without each creation site having to remember.
+   */
+  app.on('web-contents-created', (_event, contents) => {
+    contents.once('destroyed', () => projectFileIndex.unsubscribe(contents.id));
+  });
+  app.once('will-quit', () => projectFileIndex.dispose());
   /*
    * 029 FR-013 — who is holding a folder a file operation could not touch.
    *
