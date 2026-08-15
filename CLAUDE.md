@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/030-failure-presentation/plan.md
+at specs/032-settings-write-integrity/plan.md
 <!-- SPECKIT END -->
 
 ## Verifying done-ness
@@ -32,6 +32,57 @@ Three rules about using it:
   expected — it is claiming *done* off the back of them that is not.
 - **A green gate goes stale the moment you edit.** Quote the actual stage summary when reporting
   done, and re-run if anything changed after it.
+
+## Before you add a requirement, find the one that already governs it
+
+**A requirement that changes existing behaviour needs a search for the requirement that already
+describes that behaviour — in `specs/*/spec.md` and in the tests — before it is written down.**
+
+Not a general plea for care. Spec 032 added a rule that a settings write preserves keys the schema
+does not model, reasoned from its own guarantee, and wrote a test asserting it. **007 FR-023 required
+the exact opposite**, had shipped two releases earlier, and `preferences-settings.e2e.ts` asserted it
+with the mechanism spelled out in its own comment. The contradiction surfaced a full serial-tier E2E
+run later, and the fix was to revert the new rule, the production change behind it, and four tests
+written to match.
+
+The search is cheap and the failure is not:
+
+```sh
+grep -rn "<the behaviour, in the repo's words>" specs/*/spec.md
+git grep -n "<the observable>" -- packages/*/tests
+```
+
+Two things make this specific mistake likely, so treat both as the trigger to search:
+
+- **The behaviour looks like an oversight rather than a decision.** Unmodelled keys being dropped
+  reads as carelessness until you find the requirement that asked for it.
+- **You are reasoning from a guarantee you just wrote.** A new FR is the newest thing in the room and
+  the easiest to over-apply; the older requirement is the one with shipped code behind it.
+
+An older requirement that genuinely should change is a **supersession** — stated as one, in the new
+spec, naming what it replaces and why (021 FR-042 over 007's modality is the worked example). What is
+never acceptable is contradicting it silently and finding out from a red suite.
+
+## One condition, one notice
+
+**A single condition raises a single notice, and the actions that resolve it live on that notice.**
+
+Spec 032 shipped an invalid JSON document as three: an inline banner, a toast when a tab switch was
+refused, and a strip at the top of the window when a close was refused. One state, three wordings, in
+three places — and two of them told the user they could not leave while a *Discard* button sat a few
+pixels away making that untrue.
+
+The rules that fell out of it, in the order they matter:
+
+- **One surface per condition.** If a second caller wants to report the same state, it makes the first
+  one louder — flash it, do not raise another.
+- **The report belongs to whatever OWNS the state**, not to whichever caller happened to bounce off
+  it. That is the structural half: with each caller reporting for itself, every exit added later
+  raises one more notice.
+- **Say what is wrong, not what the user may not do.** "You cannot leave" is a claim about the user's
+  options, and it is false the moment an escape exists.
+- **Inline, not a toast, for anything with an action attached.** A toast cannot carry a button here,
+  and a message that names a remedy the user cannot reach from it is worse than no message.
 
 ## Specialist agents
 
