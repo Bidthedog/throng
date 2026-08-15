@@ -186,6 +186,8 @@ export function QuickOpen({
           {invokedFrom === null ? null : (
             <QuickOpenTarget
               initial={openTarget}
+              // FR-068 — the button names its destination panel, so it needs to know which one.
+              panelId={invokedFrom.editorPanelId}
               onChange={(next) => {
                 target.current = next;
               }}

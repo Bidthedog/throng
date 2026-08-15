@@ -22,6 +22,9 @@
  *   data-value="lastActive" | "new"  its current value, in the SHIPPED `editor.openTarget`
  *                                    vocabulary — the same two strings the setting takes, so the
  *                                    preselection in T2 is a comparison rather than a translation.
+ *   data-testid="quickopen-target-label"  the sentence INSIDE that one button (FR-068). Named so a
+ *                                    test can click the WORDS rather than the icon, which is the
+ *                                    specific thing "make them one button" means to a user.
  *   data-testid="quickopen-hidden"   the FR-069 exclusion toggle, the target button's sibling
  *   data-value="exclude" | "include" what it is doing NOW, not what pressing it would do — the same
  *                                    convention `quickopen-target` follows
@@ -164,6 +167,89 @@ test('invoked from inside an editor the control sits ABOVE the input, preselecte
       expect(await focusInsideModal(win), 'Tab escaped the modal through the header').toBe(true);
       await win.keyboard.press('Tab');
       expect(await focusInsideModal(win), 'Tab escaped the modal through the header').toBe(true);
+
+      await win.keyboard.press('Escape');
+      await expect(win.getByTestId('quickopen')).toHaveCount(0);
+    });
+  } finally {
+    cleanupDeepTree(tree);
+  }
+});
+
+test('the control says where the file will land IN WORDS, names the panel, and is one click target (SC-020, FR-068)', async () => {
+  const tree = createDeepTree('throng-qot-words-');
+  try {
+    await runApp(async (_app, win) => {
+      const pid = await editorWithProject(win, 'QOTargetWords', tree.root);
+
+      /*
+       * Give the panel the name a user would recognise it by — the file it holds.
+       *
+       * `panelDisplayTitle` is the single rule that decides a panel's name (#218), so asserting the
+       * stem of the open file here is asserting the string the panel header itself shows. A name
+       * derived any other way could agree today and drift tomorrow, which is the whole reason that
+       * function exists.
+       */
+      await openQuickOpen(win);
+      await win.keyboard.type('README');
+      await win.keyboard.press('Enter');
+      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
+        '// README.md',
+        { timeout: 8000 },
+      );
+
+      await focusEditor(win, pid);
+      await openQuickOpen(win);
+
+      /*
+       * SC-020 — WITHOUT hovering. Nothing in this test moves the pointer over the control before
+       * this assertion, so a hover title cannot satisfy it: the sentence is either in the rendered
+       * text or the requirement is unmet.
+       */
+      await expect(target(win)).toHaveAttribute('data-value', 'lastActive');
+      await expect(target(win)).toContainText('Will open in the active editor (README)');
+
+      /*
+       * FR-068 — ONE click target: the icon and the words live inside a single `<button>`, not a
+       * button beside a label. Asked of the DOM, because "they look adjacent" is exactly the shape
+       * the requirement rejects.
+       */
+      const shape = await win.getByTestId('quickopen').evaluate((card) => {
+        const btn = card.querySelector('[data-testid="quickopen-target"]');
+        const label = card.querySelector('[data-testid="quickopen-target-label"]');
+        return {
+          tag: btn?.tagName ?? '(no control)',
+          labelInsideButton: btn !== null && label !== null && btn.contains(label),
+          hasThemeIcon: btn?.querySelector('.icon') != null,
+          nestedButtons: btn?.querySelectorAll('button').length ?? -1,
+        };
+      });
+      expect(shape).toEqual({
+        tag: 'BUTTON',
+        labelInsideButton: true,
+        hasThemeIcon: true,
+        nestedButtons: 0,
+      });
+
+      /*
+       * The modal must not JUMP as the sentence changes length. `.picker` is a fixed-width card, so
+       * the two strings resize the button and nothing else — asserted rather than assumed, because
+       * a header control sized by its content is precisely how a dialog acquires a twitch.
+       */
+      const boxBefore = await win.getByTestId('quickopen').boundingBox();
+
+      // …and clicking the WORDS operates it. This is the assertion the user's request is about:
+      // an icon with a label beside it would pass every other check in this test and fail here.
+      await win.getByTestId('quickopen-target-label').click();
+      await expect(target(win)).toHaveAttribute('data-value', 'new');
+      await expect(target(win)).toContainText('Will open in a new editor');
+      await expect(target(win)).not.toContainText('active editor');
+      expect(await win.getByTestId('quickopen').boundingBox()).toEqual(boxBefore);
+
+      // It toggles back, and names the panel again — the name is read live, not captured on open.
+      await win.getByTestId('quickopen-target-label').click();
+      await expect(target(win)).toHaveAttribute('data-value', 'lastActive');
+      await expect(target(win)).toContainText('Will open in the active editor (README)');
 
       await win.keyboard.press('Escape');
       await expect(win.getByTestId('quickopen')).toHaveCount(0);
