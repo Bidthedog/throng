@@ -5,35 +5,40 @@
  *
  *  - **Nested folders several levels deep** — `src/app/components/widgets/deep-widget.ts` is five
  *    segments down, so "the walk descends" is not a one-level statement.
- *  - **A `node_modules/` folder and a `.git/` folder** — the two exclusion cases, which are NOT the
- *    same case. See the section below; this is the fixture's least obvious property and the one most
- *    likely to be assumed wrong.
+ *  - **A `node_modules/` folder and a `.git/` folder** — both excluded by the shipped defaults since
+ *    FR-070, and both materialised so "nothing leaked" has something to be true of.
  *  - **Two files sharing a basename in different folders** (SC-003) — `src/app/config.ts` and
  *    `src/server/config.ts`. A row showing only `config.ts` twice is indistinguishable to the user,
  *    so the rows must carry the full root-relative path, and this pair is what proves they do.
  *  - **A name match and a directory-only match for one query** (SC-013, FR-007a) — see below.
  *
- * ══ `node_modules` IS NOT EXCLUDED BY DEFAULT. `.git` IS. ══
+ * ══ `node_modules` AND `.git` ARE BOTH EXCLUDED BY DEFAULT (FR-070, since 2026-08-15) ══
  *
  * The shipped `DEFAULT_EXCLUDE_GLOBS` (`packages/core/src/explorer/exclude.ts`) is the VS Code
  * `files.exclude` default list — a doubled-star glob for each of `.git`, `.svn`, `.hg`, `CVS`,
- * `.DS_Store` and `Thumbs.db` — and `node_modules` appears nowhere in it. So a project opened with
- * default settings DOES list `node_modules` files, and a spec that expects otherwise is asserting
- * against a setting it never made.
+ * `.DS_Store` and `Thumbs.db` — **plus `**\/node_modules`**, which FR-070 added because FR-006's
+ * whole claim is that there is one answer to "is this file hidden?" and a dependency tree the user
+ * never edits was the loudest place that answer was wrong.
  *
- * Both cases are therefore materialised and both are named:
+ * This inverted: before FR-070 a project on default settings DID list `node_modules` files, and this
+ * comment said so in terms. If you are reading a spec written against the old behaviour, that is why.
  *
- *  - {@link DeepTree.excludedByDefaults} — hidden with no configuration at all (the `.git` file).
- *  - {@link DeepTree.listedByDefaults} — everything the app lists as shipped, `node_modules`
- *    included.
- *  - {@link DeepTree.globsExcludingNodeModules} / {@link DeepTree.listedExcludingNodeModules} — for a
- *    spec that writes `explorer.excludeGlobs` and proves S10 (the setting is read per walk) or W3
- *    (an excluded folder is not descended into).
+ *  - {@link DeepTree.excludedByDefaults} — hidden with no configuration at all: the `.git` file AND
+ *    the `node_modules` file.
+ *  - {@link DeepTree.listedByDefaults} — everything the app lists as shipped.
  *
  * The globs come from the real exported constant, never a copy. {@link createDeepTree} additionally
  * re-checks the two folders against `isExcluded` at build time, so if the shipped list ever changes
  * the fixture fails loudly with a message naming the drift, rather than quietly describing a project
- * that no longer exists.
+ * that no longer exists. It is the guard that made FR-070 safe to make, and it must keep working in
+ * the other direction — so it is re-pointed at the new expectation, never removed.
+ *
+ * ══ THE HIDDEN-PATH HALF (FR-069a, SC-022) ══
+ *
+ * {@link DEEP_TREE.hidable} names a plain `src/…` file that NO glob touches, so a spec can hide it
+ * through "Hide in this project" and prove the per-project hidden set independently of the globs.
+ * SC-018 requires both halves asserted separately, which needs two distinct files — one hidden by
+ * each mechanism — and this is the second of them.
  *
  * ══ WHY THE RANKING PAIR IS THIS PAIR ══
  *
@@ -77,6 +82,19 @@ export const DEEP_TREE = {
    * query with an expected result of zero rows rather than an absence argued from a long list.
    */
   excludedQuery: 'quarantined',
+  /**
+   * The file SC-018's second half is about (FR-069a): hidden by **"Hide in this project"**, which
+   * no glob in the shipped list touches.
+   *
+   * Deliberately not a `.ts` file — `.ts` is a live query in `quick-open.e2e.ts` with an exact row
+   * count, and a fixture file that quietly joined that result set would make an unrelated assertion
+   * a maintenance burden every time this fixture grew. Its query term appears in no other path, so
+   * "one row" and "no rows" are both exact.
+   */
+  hidable: {
+    query: 'hidden-in-project',
+    path: 'src/hidden-in-project.txt',
+  },
 } as const;
 
 /** Every file written, root-relative POSIX, sorted — the order `walkFiles` produces (W7). */
@@ -87,6 +105,7 @@ const ALL_FILES: readonly string[] = [
   'node_modules/quarantined-pkg/quarantined-module.ts',
   'src/app/components/widgets/deep-widget.ts',
   'src/app/config.ts',
+  'src/hidden-in-project.txt',
   'src/router/handlers.ts',
   'src/server/config.ts',
   'src/server/router.ts',
@@ -95,11 +114,9 @@ const ALL_FILES: readonly string[] = [
 /** The folders the exclusion claims are about, and whether the SHIPPED defaults hide each. */
 const EXCLUDABLE_FOLDERS: readonly { relPath: string; hiddenByDefaults: boolean }[] = [
   { relPath: '.git', hiddenByDefaults: true },
-  { relPath: 'node_modules', hiddenByDefaults: false },
+  // FR-070 — `**/node_modules` joined DEFAULT_EXCLUDE_GLOBS. This row inverted with it.
+  { relPath: 'node_modules', hiddenByDefaults: true },
 ];
-
-/** The glob that hides `node_modules`, which the shipped defaults do not carry. */
-const NODE_MODULES_GLOB = '**/node_modules';
 
 /** How many lines each fixture file holds — enough for a Go To Line target that is not line 1. */
 export const DEEP_TREE_FILE_LINES = 40;
@@ -109,14 +126,10 @@ export interface DeepTree {
   readonly root: string;
   /** Every file on disk, root-relative POSIX, sorted. */
   readonly all: readonly string[];
-  /** Hidden by `DEFAULT_EXCLUDE_GLOBS` with no configuration — the `.git` file. */
+  /** Hidden by `DEFAULT_EXCLUDE_GLOBS` with no configuration — the `.git` and `node_modules` files. */
   readonly excludedByDefaults: readonly string[];
-  /** What the app lists as shipped. `node_modules` is in here, and that is correct. */
+  /** What the app lists as shipped. Neither `.git` nor `node_modules` is in here (FR-070). */
   readonly listedByDefaults: readonly string[];
-  /** `DEFAULT_EXCLUDE_GLOBS` plus a `node_modules` glob, for a spec that writes the setting. */
-  readonly globsExcludingNodeModules: readonly string[];
-  /** What the app lists once {@link globsExcludingNodeModules} is in force. */
-  readonly listedExcludingNodeModules: readonly string[];
 }
 
 /**
@@ -138,19 +151,12 @@ export function createDeepTree(prefix = 'throng-deeptree-'): DeepTree {
     writeFileSync(join(dir, name), bodyFor(relPath), 'utf8');
   }
 
-  const excludedByDefaults = ALL_FILES.filter((relPath) => relPath.startsWith('.git/'));
+  const excludedByDefaults = ALL_FILES.filter(
+    (relPath) => relPath.startsWith('.git/') || relPath.startsWith('node_modules/'),
+  );
   const listedByDefaults = ALL_FILES.filter((relPath) => !excludedByDefaults.includes(relPath));
 
-  return {
-    root,
-    all: ALL_FILES,
-    excludedByDefaults,
-    listedByDefaults,
-    globsExcludingNodeModules: [...DEFAULT_EXCLUDE_GLOBS, NODE_MODULES_GLOB],
-    listedExcludingNodeModules: listedByDefaults.filter(
-      (relPath) => !relPath.startsWith('node_modules/'),
-    ),
-  };
+  return { root, all: ALL_FILES, excludedByDefaults, listedByDefaults };
 }
 
 /**

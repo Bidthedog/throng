@@ -131,6 +131,12 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Quick Open',
     'Open any file in the current project by typing part of its path. Works from an editor, a terminal or the file tree.',
   ),
+  chord(
+    'navigate.gotoLine',
+    'Navigate',
+    'Go To Line',
+    'Jump to a line number in the focused editor. Live in an editor only, so a terminal keeps its own Ctrl+G.',
+  ),
 
   // File Explorer (resolved while the File Explorer pane has focus)
   chord('file.rename', 'File Explorer', 'Rename', 'Rename the selected file or folder.'),

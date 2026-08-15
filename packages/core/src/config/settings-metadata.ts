@@ -516,6 +516,17 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Editor',
     control: 'toggle',
   },
+
+  // Navigation (033, FR-069b). Its own group because these govern the Quick Open and Go To Line
+  // modals, not an editor panel — the distinction the user reads them by.
+  {
+    key: 'editor.navigation.quickOpenExcludeHidden',
+    label: 'Quick Open hides excluded files',
+    description:
+      'Leave the files this project hides out of Quick Open — both the excluded file patterns and anything you chose "Hide in this project" for. The modal has a control that shows them just for that search, without changing this.',
+    group: 'Editor · Navigation',
+    control: 'toggle',
+  },
   {
     key: 'terminals.showStatusBar',
     label: 'Show terminal status bar',

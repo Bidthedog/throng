@@ -53,6 +53,35 @@ describe('scope-aware resolveAction (FR-017b0)', () => {
     }
   });
 
+  /**
+   * 033 US2 (#219) — Go To Line is the MIRROR IMAGE of the case above, and the contrast is the point.
+   *
+   * Quick Open answers the same from anywhere, so it is EVERYWHERE. Go To Line acts inside one
+   * editor's document, so it is EDITOR_ONLY — and that scope is not a preference. `Ctrl+G` is
+   * readline's `abort`: a shell user presses it, and the only thing that keeps their copy of it is
+   * that the chord is never resolved in a terminal scope at all. Nothing claims it, nothing
+   * preventDefaults it, and xterm delivers `^G` (A3, SC-007).
+   *
+   * The `navigate.` namespace therefore holds two commands with two different scopes, deliberately.
+   * Anything that reasons about scope by PREFIX would get one of them wrong.
+   */
+  it('resolves Go To Line in an EDITOR and NOWHERE else — Ctrl+G stays the shell’s (033 US2, FR-025)', () => {
+    const chord = { key: 'g', ctrl: true } as const;
+    expect(resolveAction(DEFAULT_KEYBINDINGS, chord, 'editor')).toBe('navigate.gotoLine');
+    expect(
+      resolveAction(DEFAULT_KEYBINDINGS, chord, 'terminal'),
+      'Ctrl+G resolved in a terminal — readline’s abort has been taken from the shell',
+    ).toBeNull();
+    expect(resolveAction(DEFAULT_KEYBINDINGS, chord, 'explorer')).toBeNull();
+    // …and the two `navigate.` commands really do differ, so a prefix rule would be wrong.
+    expect([...COMMAND_SCOPES['navigate.gotoLine']]).toEqual(['editor']);
+    expect([...COMMAND_SCOPES['navigate.quickOpen']].sort()).toEqual([
+      'editor',
+      'explorer',
+      'terminal',
+    ]);
+  });
+
   it('does not fire an editor command while a terminal is active', () => {
     expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'Tab' }, 'terminal')).toBeNull();
     expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'Tab' }, 'editor')).toBe('editor.indentLines');

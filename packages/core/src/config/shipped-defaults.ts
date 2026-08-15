@@ -50,7 +50,99 @@ import { setAtPath } from './metadata.js';
 //
 // The split tokens are saved by their FR-008 parent chain; `scrollbarTrack`, `scrollbarThumb`,
 // `accentText` has no parent, so nothing else would catch this.
-export const SHIPPED_DEFAULTS_VERSION = 4;
+//
+// Bumped by 033 (4 → 5): `**/node_modules` joined `DEFAULT_EXCLUDE_GLOBS` (FR-070).
+//
+// This is the first bump that is NOT about themes, and it is the same trap 015, 016 and 018 each
+// recorded at this line, arriving from the settings side. First-run `seed()` writes the MATERIALISED
+// settings document, so every install that has ever started the app holds the old six-glob array
+// literally and `parseAppSettings` honours a present array. Changing the constant alone therefore
+// reaches FRESH installs only — which is the one population every E2E in this repository can see,
+// and the only one that does not need the fix (FR-070a).
+//
+// The bump gates {@link planSettingsUpgrade} below, which rewrites exactly one leaf and only when
+// the on-disk array still equals the v4 list. The version is a sequence, not a label.
+export const SHIPPED_DEFAULTS_VERSION = 5;
+
+/**
+ * `explorer.excludeGlobs` as shipped-defaults version 4 wrote it — the VS Code `files.exclude`
+ * list, and the value {@link planSettingsUpgrade} guards on.
+ *
+ * A frozen COPY rather than a reference to `DEFAULT_EXCLUDE_GLOBS`, which has moved on: this is a
+ * record of what was written to users' disks, so it must not follow the live constant. If it ever
+ * did, the guard would compare the current default against itself, match every untouched install
+ * forever, and rewrite nothing — a migration that is silently inert.
+ */
+export const V4_EXCLUDE_GLOBS: readonly string[] = Object.freeze([
+  '**/.git',
+  '**/.svn',
+  '**/.hg',
+  '**/CVS',
+  '**/.DS_Store',
+  '**/Thumbs.db',
+]);
+
+/** One leaf to rewrite, addressed by its dotted path. */
+export interface SettingsLeafUpgrade {
+  path: string;
+  value: unknown;
+}
+
+function sameStringList(value: unknown, expected: readonly string[]): boolean {
+  if (!Array.isArray(value) || value.length !== expected.length) return false;
+  return value.every((entry, i) => entry === expected[i]);
+}
+
+/**
+ * The settings counterpart of {@link planThemeUpgrade} — additive-only, ONE leaf, and guarded
+ * (033, FR-070a/FR-070b).
+ *
+ * ══ WHY A LEAF PLAN AND NOT A DOCUMENT ══
+ *
+ * It is handed the RAW parsed settings JSON, not a typed `AppSettings`, and it names the leaves to
+ * rewrite rather than returning a new document. Both follow from the same requirement: the caller
+ * must be able to change one value and leave every other byte of the user's file as it found it. A
+ * parse round-trip at startup would additionally strip any key the schema does not model — which is
+ * shipped, tested behaviour for an ordinary WRITE (007 FR-023), and would be a surprise for an
+ * upgrade the user never asked for.
+ *
+ * ══ WHAT THE GUARD BUYS ══
+ *
+ * FR-070b: a user who has customised the list keeps EXACTLY what they set. So the one condition is
+ * deep equality with the v4 list. An explicit `[]` is a customisation (FR-022c's precedent — the
+ * user chose to exclude nothing), an extra entry is a customisation, and a reordering is a
+ * customisation, because none of the three is the value that was shipped.
+ *
+ * The guard is also what makes this idempotent: after the rewrite the array equals the v5 list,
+ * which does not equal the v4 list, so a second run plans nothing.
+ */
+export function planSettingsUpgrade(
+  document: unknown,
+  d: ShippedDefaults = buildShippedDefaults(),
+): SettingsLeafUpgrade[] {
+  const path = 'explorer.excludeGlobs';
+  const current = ownAtPath(document, path);
+  if (!sameStringList(current, V4_EXCLUDE_GLOBS)) return [];
+  return [{ path, value: [...d.settings.explorer.excludeGlobs] }];
+}
+
+/**
+ * Apply {@link planSettingsUpgrade} to a raw settings document, returning a fresh object.
+ *
+ * Returns the input unchanged (by value) when nothing is owed, so a caller can compare and skip the
+ * write entirely — an upgrade that rewrites a file it did not change is indistinguishable from one
+ * that did, to anything watching the file.
+ */
+export function applySettingsUpgrade(
+  document: unknown,
+  d: ShippedDefaults = buildShippedDefaults(),
+): unknown {
+  let next = document;
+  for (const leaf of planSettingsUpgrade(document, d)) {
+    next = setAtPath(next as Record<string, unknown>, leaf.path, leaf.value);
+  }
+  return next;
+}
 
 /** The authoritative shipped-defaults record (immutable/frozen once built). */
 export interface ShippedDefaults {

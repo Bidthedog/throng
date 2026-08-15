@@ -30,6 +30,7 @@ import { dirname, relative, sep } from 'node:path';
 import {
   compileExcluder,
   diffPaths,
+  hiddenPathGlobs,
   normaliseForCompare,
   toAbsPath,
   walkFiles,
@@ -41,6 +42,15 @@ import {
 /** What a subscriber is told, on the wire (contracts/file-index.md §3). */
 export interface FileIndexUpdate {
   root: string;
+  /**
+   * Which of the root's two indices this push is about (033 FR-069, plan D2).
+   *
+   * The exclusion state joins the SUBSCRIPTION KEY, so one window may hold two subscriptions to one
+   * root — the standing one at the setting's value and a short-lived one at the opposite. Echoing
+   * the flag is what lets each of them recognise its own pushes; without it a renderer holding both
+   * would fold one index's deltas into the other's set and end up with neither.
+   */
+  includeHidden: boolean;
   status: 'building' | 'ready';
   /** The whole set. Sent AT MOST ONCE per root per subscription (I2). */
   paths?: string[];
@@ -81,10 +91,12 @@ interface Subscriber {
 }
 
 interface RootIndex {
-  /** The comparable form — this index's key in {@link ProjectFileIndexService.roots}. */
+  /** The comparable form PLUS the exclusion flag — this index's key in `roots` (FR-069, D2). */
   key: string;
   /** The first spelling seen, used for every filesystem call. */
   root: string;
+  /** True for the index that applies NO exclusions at all — "show hidden" (FR-069c). */
+  includeHidden: boolean;
   subscribers: Map<number, Subscriber>;
   status: 'building' | 'ready';
   /** The snapshot last BUILT. Replaced wholesale, never mutated, so subscribers may share it. */
@@ -122,6 +134,19 @@ export class ProjectFileIndexService {
      * daemon from owning this index (research R1); repeating it here would import the bug.
      */
     private readonly excludeGlobs: () => readonly string[],
+    /**
+     * The project's OWN hidden set — "Hide in this project" (004) — for `root` (033 FR-069a).
+     *
+     * Symmetrical with `excludeGlobs` in every respect that matters: a function, read at walk time
+     * and at every rescan, never captured. That symmetry IS the requirement. The user experiences
+     * the two mechanisms as one, so a design where one is live and the other is a startup snapshot
+     * would make FR-069c false at exactly the moment somebody changed the stale one.
+     *
+     * Keyed by ROOT rather than by project id, which is legitimate because no two projects may share
+     * a root (project root exclusivity) — so the id→root map the composition root builds is total
+     * and unambiguous.
+     */
+    private readonly hiddenPaths: (root: string) => readonly string[],
     /** Deliver to ONE webContents. Never a broadcast — two windows on two roots (I1, FR-017). */
     private readonly push: (webContentsId: number, payload: FileIndexUpdate) => void,
     options: ProjectFileIndexOptions = {},
@@ -134,15 +159,23 @@ export class ProjectFileIndexService {
    * Subscribe `webContentsId` to `root`, starting the walk and the watch on the first subscriber
    * (S1, S2). Answers immediately: `building` with NO paths while the walk is in flight, so the
    * modal can say so rather than show a partial list as though it were whole (S3).
+   *
+   * `includeHidden` joins the KEY rather than changing an existing index (FR-069, plan D2). Every
+   * guarantee this service makes is stated PER INDEX — the refcount, the dispose-on-last-unsubscribe
+   * (S9), the snapshot-then-delta protocol (I2, S7, S8), the read-at-walk-time rule (S10) — so
+   * widening the key ADDS an index and leaves each of those exactly as it was. Re-pointing one index
+   * would not: a root's index is shared by every subscriber of that root, so one window's toggle
+   * would silently change another window's candidate set.
    */
-  subscribe(webContentsId: number, root: string): FileIndexSnapshot {
+  subscribe(webContentsId: number, root: string, includeHidden = false): FileIndexSnapshot {
     if (this.disposed) return { status: 'building' };
-    const key = normaliseForCompare(root);
+    const key = indexKey(root, includeHidden);
     let index = this.roots.get(key);
     if (!index) {
       index = {
         key,
         root,
+        includeHidden,
         subscribers: new Map(),
         status: 'building',
         paths: [],
@@ -171,16 +204,49 @@ export class ProjectFileIndexService {
   }
 
   /**
-   * Drop a subscriber from `root`, or — with no root — from EVERY root, which is what a destroyed
-   * `webContents` needs (S9). The last subscriber to leave disposes the watch and drops the array.
+   * Drop a subscriber from one INDEX of `root`, or — with no root — from EVERY index, which is what
+   * a destroyed `webContents` needs (S9). The last subscriber to leave disposes the watch and drops
+   * the array.
+   *
+   * The flag is part of the identity being left, not a hint: a window that opened a second
+   * subscription at the opposite flag must be able to give up exactly that one and keep the standing
+   * one, which is the whole reason D2 refuses to re-point a single index.
    */
-  unsubscribe(webContentsId: number, root?: string): void {
+  unsubscribe(webContentsId: number, root?: string, includeHidden = false): void {
     if (root === undefined) {
       for (const index of [...this.roots.values()]) this.drop(index, webContentsId);
       return;
     }
-    const index = this.roots.get(normaliseForCompare(root));
+    const index = this.roots.get(indexKey(root, includeHidden));
     if (index) this.drop(index, webContentsId);
+  }
+
+  /**
+   * Re-walk now, because an INPUT changed rather than the disk (033 FR-069a, plan D3.6/D3.7).
+   *
+   * Both of the walk's inputs live outside this service and neither produces a filesystem event when
+   * it changes: `explorer.excludeGlobs` is a setting, and the per-project hidden set is a column in
+   * the daemon's database. Before this, a change to either took effect only when something else
+   * happened to signal the watch — so a quiescent project served the stale candidate set
+   * indefinitely, while the tree re-filtered immediately. One input live and the other stale is
+   * precisely the divergence FR-069c denies.
+   *
+   * `root` omitted means every root, which is what a settings change needs; a hidden-set change
+   * names the one root it touched. Either way this is a RECONCILE, not a re-subscribe: a ready index
+   * stays ready and its subscribers get a delta, so nobody sees "Still listing…" because somebody
+   * edited a glob.
+   */
+  refresh(root?: string): void {
+    if (this.disposed) return;
+    const target = root === undefined ? null : normaliseForCompare(root);
+    for (const index of [...this.roots.values()]) {
+      if (index.disposed) continue;
+      if (target !== null && normaliseForCompare(index.root) !== target) continue;
+      // An index still building captured its excluder when the walk began, so it is abandoned and
+      // restarted; a ready one takes the ordinary reconcile path and publishes the difference.
+      if (index.status === 'ready') this.runReconcile(index);
+      else if (index.watch) this.startWalk(index);
+    }
   }
 
   dispose(): void {
@@ -229,6 +295,26 @@ export class ProjectFileIndexService {
     return this.disposed || index.disposed || index.generation !== generation;
   }
 
+  /**
+   * The ONE exclusion predicate this index walks with (S10, FR-069c).
+   *
+   * There is exactly one excluder in the system, over the same two inputs the tree obeys, and the
+   * flag chooses whether to build it or to build the empty one — which `compileExcluder([])` already
+   * returns as `() => false`. That is what makes FR-069c true by construction: there is no second
+   * rule set to drift from the first, because there is no second rule set. "Show hidden" therefore
+   * means EVERYTHING the project hides, `.git` and `node_modules` included.
+   *
+   * Both inputs are read HERE, at every call, and never captured — the habit that disqualified the
+   * daemon from owning this index (research R1) would otherwise arrive through the hidden set.
+   */
+  private excluderFor(index: RootIndex): (relPath: string) => boolean {
+    if (index.includeHidden) return compileExcluder([]);
+    return compileExcluder([
+      ...this.excludeGlobs(),
+      ...hiddenPathGlobs(this.hiddenPaths(index.root)),
+    ]);
+  }
+
   /** The initial walk for a root: off the renderer's thread, and abandonable (S2, W5). */
   private startWalk(index: RootIndex): void {
     index.walking = true;
@@ -236,7 +322,7 @@ export class ProjectFileIndexService {
     const generation = index.generation;
     this.enqueue(index, async () => {
       if (this.stale(index, generation)) return;
-      const excluded = compileExcluder(this.excludeGlobs()); // S10 — read at walk time
+      const excluded = this.excluderFor(index); // S10 — both inputs read at walk time
       const paths = await walkFiles(this.fs, index.root, {
         cancelled: () => this.stale(index, generation),
         excluded,
@@ -262,6 +348,7 @@ export class ProjectFileIndexService {
         subscriber.sent = index.paths;
         this.push(webContentsId, {
           root: subscriber.root,
+          includeHidden: index.includeHidden,
           status: 'ready',
           paths: [...index.paths],
         });
@@ -272,6 +359,7 @@ export class ProjectFileIndexService {
       if (added.length === 0 && removed.length === 0) continue; // S7
       this.push(webContentsId, {
         root: subscriber.root,
+        includeHidden: index.includeHidden,
         status: 'ready',
         added: [...added],
         removed: [...removed],
@@ -297,7 +385,7 @@ export class ProjectFileIndexService {
     const dirs = [...index.pending];
     index.pending.clear();
     if (dirs.length === 0) return;
-    const excluded = compileExcluder(this.excludeGlobs()); // S10 — re-read at EVERY rescan
+    const excluded = this.excluderFor(index); // S10 — re-read at EVERY rescan
     let next = index.paths;
     // Sequential on purpose: each listing is applied to the result of the last, so they cannot be
     // read concurrently without one overwriting the other's directory.
@@ -374,7 +462,7 @@ export class ProjectFileIndexService {
     const generation = index.generation;
     this.enqueue(index, async () => {
       if (this.stale(index, generation) || index.status !== 'ready') return;
-      const excluded = compileExcluder(this.excludeGlobs()); // S10
+      const excluded = this.excluderFor(index); // S10
       const next = await walkFiles(this.fs, index.root, {
         cancelled: () => this.stale(index, generation),
         excluded,
@@ -415,9 +503,24 @@ export class ProjectFileIndexService {
     index.burstStartedAt = null;
     for (const [webContentsId, subscriber] of index.subscribers) {
       subscriber.sent = null;
-      this.push(webContentsId, { root: subscriber.root, status: 'building' });
+      this.push(webContentsId, {
+        root: subscriber.root,
+        includeHidden: index.includeHidden,
+        status: 'building',
+      });
     }
   }
+}
+
+/**
+ * This index's key: the comparable root form, plus the exclusion flag (FR-069, plan D2).
+ *
+ * A NUL separator rather than a colon or a slash, because a root is a path and every printable
+ * separator is a character a path may legitimately contain — `C:/a` at one flag and `C:` at another
+ * must not be able to collide.
+ */
+function indexKey(root: string, includeHidden: boolean): string {
+  return `${normaliseForCompare(root)}\u0000${includeHidden ? 'hidden' : 'excluded'}`;
 }
 
 /** Root-relative POSIX path of the directory containing the changed entry — `''` at the root. */

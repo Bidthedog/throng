@@ -24,6 +24,9 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       saveDocumentScroll: false,
       defaultWordWrap: true,
       showStatusBar: true,
+      // 033 FR-069b — the navigation block. Shipped ON: Quick Open starts by excluding what the
+      // project hides, so the modal and the tree give one answer.
+      navigation: { quickOpenExcludeHidden: true },
     });
   });
 
@@ -90,6 +93,9 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       saveDocumentScroll: false,
       defaultWordWrap: true,
       showStatusBar: true,
+      // 033 FR-069b — the navigation block. Shipped ON: Quick Open starts by excluding what the
+      // project hides, so the modal and the tree give one answer.
+      navigation: { quickOpenExcludeHidden: true },
     });
   });
 

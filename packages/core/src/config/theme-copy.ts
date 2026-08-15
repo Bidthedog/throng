@@ -689,6 +689,10 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Hide entry icon',
     description: 'The glyph on the tree menu row that drops a file or folder out of view for this project only.',
   },
+  'icons.showHidden': {
+    label: 'Show hidden entries icon',
+    description: 'The glyph on the Quick Open control that brings the files this project hides back into the list, for that one search.',
+  },
   'icons.resetName': {
     label: 'Reset name icon',
     description: 'The glyph on the menu row that returns a renamed tab or project to the name it started with.',

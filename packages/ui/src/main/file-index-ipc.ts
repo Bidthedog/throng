@@ -23,6 +23,16 @@ const asRoot = (value: unknown): string => {
 };
 
 /**
+ * Which of the root's two indices the payload names (033 FR-069, plan D2).
+ *
+ * Anything that is not literally `true` is `false`, which is the SAFE default in both directions:
+ * the shipped setting excludes hidden files, and a malformed payload that silently opted into the
+ * unexcluded index would offer a project's `node_modules` to a user who never asked for it.
+ */
+const asIncludeHidden = (value: unknown): boolean =>
+  (value as { includeHidden?: unknown } | null)?.includeHidden === true;
+
+/**
  * Deliver one update to one window (I1).
  *
  * Exported so the composition root can hand it to the service as its `push` without either of them
@@ -46,12 +56,18 @@ export function registerFileIndexIpc(service: ProjectFileIndexService): void {
   ipcMain.handle('throng:fileIndex:subscribe', (event, payload: unknown) => {
     const root = asRoot(payload);
     if (root.length === 0) return { status: 'building' as const };
-    return service.subscribe(event.sender.id, root);
+    return service.subscribe(event.sender.id, root, asIncludeHidden(payload));
   });
 
   ipcMain.on('throng:fileIndex:unsubscribe', (event, payload: unknown) => {
     const root = asRoot(payload);
-    // No root means "this window is leaving everything" — the shape a teardown needs (S9).
-    service.unsubscribe(event.sender.id, root.length === 0 ? undefined : root);
+    // No root means "this window is leaving everything" — the shape a teardown needs (S9). With a
+    // root, the flag is part of what is being left: a window holding both of a root's indices must
+    // be able to give up one and keep the other (FR-069).
+    service.unsubscribe(
+      event.sender.id,
+      root.length === 0 ? undefined : root,
+      asIncludeHidden(payload),
+    );
   });
 }

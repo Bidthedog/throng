@@ -55,11 +55,22 @@ export function QuickOpenTarget({
    */
   const [value, setValue] = useState<EditorOpenTarget>(initial);
   const option = OPTIONS[value];
+  /*
+   * No `.picker__header` wrapper of its own any more (033 FR-069).
+   *
+   * The header row now holds TWO controls — this and the exclusion toggle — and FR-069 requires them
+   * to be siblings in it. A control that brought its own row would put them in two rows, and the
+   * toggle would additionally vanish whenever FR-011 declined to draw this one. `quick-open.tsx`
+   * owns the row; each control is just a control.
+   *
+   * The class is `picker__header-button` rather than `icon-button`, and that is a fix rather than a
+   * rename: `.icon-button` is defined in `preferences.css`, which ONLY the preferences window loads,
+   * so this button rendered in the main window with no styling beyond the user-agent default.
+   */
   return (
-    <div className="picker__header">
       <IconButton
         token={option.icon}
-        className="icon-button"
+        className="picker__header-button"
         testId="quickopen-target"
         title={`Open in ${option.name} — press to use ${option.other} instead`}
         dataAttrs={{ 'data-value': value }}
@@ -77,6 +88,5 @@ export function QuickOpenTarget({
           onChange(next);
         }}
       />
-    </div>
   );
 }

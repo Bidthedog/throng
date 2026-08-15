@@ -475,13 +475,20 @@ contextBridge.exposeInMainWorld('throng', {
   // this index is keyed BY root so two windows on two projects never see each other's sets (I4).
   // `subscribe` answers `building` while the walk is in flight and `ready` with the whole set once
   // it is done; everything after that arrives on `onUpdate` as a delta.
+  //
+  // 033 FR-069 — `includeHidden` is part of the SUBSCRIPTION, not a filter applied afterwards. A
+  // root has two indices and this says which one is wanted; every push echoes the flag back so a
+  // window holding both can tell them apart.
   fileIndex: {
-    subscribe: (root: string) => ipcRenderer.invoke('throng:fileIndex:subscribe', { root }),
-    unsubscribe: (root: string) => ipcRenderer.send('throng:fileIndex:unsubscribe', { root }),
+    subscribe: (root: string, includeHidden = false) =>
+      ipcRenderer.invoke('throng:fileIndex:subscribe', { root, includeHidden }),
+    unsubscribe: (root: string, includeHidden = false) =>
+      ipcRenderer.send('throng:fileIndex:unsubscribe', { root, includeHidden }),
     // Returns an unsubscriber, matching every other push channel's idiom (I3).
     onUpdate: (
       cb: (evt: {
         root: string;
+        includeHidden: boolean;
         status: 'building' | 'ready';
         paths?: string[];
         added?: string[];
@@ -492,6 +499,7 @@ contextBridge.exposeInMainWorld('throng', {
         _event: unknown,
         evt: {
           root: string;
+          includeHidden: boolean;
           status: 'building' | 'ready';
           paths?: string[];
           added?: string[];

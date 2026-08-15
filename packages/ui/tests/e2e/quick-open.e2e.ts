@@ -325,7 +325,9 @@ test('Down, Down, Enter opens the THIRD listed file and closes the modal (AS-3)'
 
       await openQuickOpen(win);
       await win.keyboard.type('.ts');
-      await expect(quickOpenRows(win)).toHaveCount(6);
+      // Five, not six: FR-070 took `node_modules/quarantined-pkg/quarantined-module.ts` out of the
+      // candidate set for every project on the shipped default.
+      await expect(quickOpenRows(win)).toHaveCount(5);
 
       /*
        * Read the third row off the LIST rather than naming a file.
@@ -586,17 +588,48 @@ test('a file inside an excluded folder is never listed (AS-12, FR-006)', async (
       /*
        * A POSITIVE query with an exact expected result, not an absence argued from a long list.
        *
-       * `quarantined` is carried by exactly two files: one under `.git`, which the SHIPPED
-       * `DEFAULT_EXCLUDE_GLOBS` hides, and one under `node_modules`, which it does NOT (see
-       * helpers/deep-tree.ts — this is the fixture's least obvious property). So the right answer is
-       * one row, and a `.git` leak shows up as two.
+       * `quarantined` is carried by exactly two files: one under `.git` and one under
+       * `node_modules`. Since FR-070 the SHIPPED `DEFAULT_EXCLUDE_GLOBS` hides BOTH folders, so the
+       * right answer is zero rows and a leak from either shows up as one.
+       *
+       * This assertion used to expect the `node_modules` file and to say in a comment that
+       * `node_modules` was not excluded by default. That was correct when it was written and FR-070
+       * inverted it deliberately — the change is to a shipped default that governs every project's
+       * file tree, which is the intent rather than a side effect.
        */
-      await expect(quickOpenRows(win)).toHaveCount(1);
-      const paths = await quickOpenRowPaths(win);
-      expect(paths).toEqual(['node_modules/quarantined-pkg/quarantined-module.ts']);
-      expect(paths.filter((p) => p.startsWith('.git/'))).toEqual([]);
+      await expect(quickOpenRows(win)).toHaveCount(0);
+      await expect(win.getByTestId('quickopen-empty')).toBeVisible();
 
       await win.keyboard.press('Escape');
+    });
+  } finally {
+    cleanupDeepTree(tree);
+  }
+});
+
+test('with the shipped defaults, no node_modules entry appears in the tree either (SC-019, FR-070)', async () => {
+  const tree = createDeepTree('throng-qo-nm-tree-');
+  try {
+    await runApp(async (_app, win) => {
+      await settle(win);
+      await createProject(win, 'QONodeModules', tree.root);
+
+      /*
+       * SC-019's TREE half, here rather than in an explorer spec.
+       *
+       * This is the only spec that materialises a `node_modules` fixture, and opening a second
+       * project on the same root for one assertion would breach FR-029's root exclusivity. The two
+       * halves of the criterion belong together anyway: FR-070's whole claim is that the modal and
+       * the tree give ONE answer, and a pair of assertions in two files could each pass while the
+       * two surfaces disagreed.
+       */
+      const explorer = win.getByTestId('file-explorer-tree');
+      await expect(explorer.getByText('README.md', { exact: true })).toBeVisible();
+      await expect(explorer.getByText('node_modules', { exact: true })).toHaveCount(0);
+      await expect(explorer.getByText('.git', { exact: true })).toHaveCount(0);
+      // …and the folders that are NOT excluded are still there, so this is not an empty tree.
+      await expect(explorer.getByText('src', { exact: true })).toBeVisible();
+      await expect(explorer.getByText('docs', { exact: true })).toBeVisible();
     });
   } finally {
     cleanupDeepTree(tree);
@@ -673,7 +706,8 @@ test('arrowing through an unchanged result set never reorders it (AS-15, K4)', a
 
       await openQuickOpen(win);
       await win.keyboard.type('.ts');
-      await expect(quickOpenRows(win)).toHaveCount(6);
+      // Five since FR-070 — see the AS-3 test above.
+      await expect(quickOpenRows(win)).toHaveCount(5);
       const drawn = await quickOpenRowPaths(win);
 
       for (const key of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowUp']) {

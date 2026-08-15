@@ -37,11 +37,14 @@ import { getLastActiveEditor } from '../editor/last-active-editor.js';
 import { requestPanelFocus } from '../workspace/panel-focus.js';
 import type { FileIndexView } from './use-file-index.js';
 import { QuickOpenTarget } from './quick-open-target.js';
+import { QuickOpenHidden } from './quick-open-hidden.js';
 
 export function QuickOpen({
   root,
   index,
   invokedFrom,
+  includeHidden,
+  onIncludeHiddenChange,
   onDismiss,
 }: {
   /** This window's project root, absolute and OS-form. Never null — A5 refuses to open without one. */
@@ -59,6 +62,16 @@ export function QuickOpen({
   index: FileIndexView;
   /** The editor panel the chord came from, or `null` from a terminal, the tree or a placeholder. */
   invokedFrom: { editorPanelId: string } | null;
+  /**
+   * FR-069 — is this search seeing what the project hides?
+   *
+   * Held by `NavigationChrome` rather than here, because it selects WHICH INDEX the window mirrors
+   * (`index` above is already the one it chose). A copy in this component would be a second source
+   * of truth for a question main is answering, and the two would disagree for one render every time
+   * the toggle moved.
+   */
+  includeHidden: boolean;
+  onIncludeHiddenChange: (next: boolean) => void;
   onDismiss: () => void;
 }): ReactElement {
   const ws = useWorkspace();
@@ -147,17 +160,38 @@ export function QuickOpen({
           </span>
         )
       }
-      // T3 / FR-011 — drawn ONLY when the chord came from inside an editor panel. "The currently
-      // active editor" has no meaning from a terminal or the tree.
+      /*
+       * The header row, built UNCONDITIONALLY (FR-069).
+       *
+       * It used to be `undefined` whenever the chord did not come from an editor, because the target
+       * control was its only occupant. The exclusion toggle is drawn ALWAYS — a project's hidden
+       * files are no more relevant from an editor than from the tree — so the row exists whenever
+       * the modal does, and FR-011 now governs one control inside it rather than the row itself.
+       */
       header={
-        invokedFrom === null ? undefined : (
-          <QuickOpenTarget
-            initial={openTarget}
-            onChange={(next) => {
-              target.current = next;
-            }}
-          />
-        )
+        <div className="picker__header">
+          {/*
+           * The toggle is FIRST, and the order is a keyboard decision rather than a visual one.
+           *
+           * `Shift+Tab` from the query input reaches the LAST control in the header, and E5 / AS-11b
+           * fix that as the target button — a shipped behaviour with a shipped assertion. Drawing the
+           * new control after it would have quietly re-pointed that chord at something else, which is
+           * the sort of change that passes review because nobody thinks of tab order as an interface.
+           * Reading order follows: scope first ("which files am I searching?"), destination second
+           * ("where does the one I pick land?").
+           */}
+          <QuickOpenHidden includeHidden={includeHidden} onChange={onIncludeHiddenChange} />
+          {/* T3 / FR-011 — "the currently active editor" has no meaning from a terminal or the
+              tree, so this half stays conditional. */}
+          {invokedFrom === null ? null : (
+            <QuickOpenTarget
+              initial={openTarget}
+              onChange={(next) => {
+                target.current = next;
+              }}
+            />
+          )}
+        </div>
       }
       onChoose={choose}
       onDismiss={onDismiss}

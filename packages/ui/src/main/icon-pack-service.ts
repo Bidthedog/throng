@@ -111,6 +111,12 @@ const SVG_SHAPES: Record<string, string> = {
   quickOpen:
     '<path d="M6 3h8l4 4v6"/><path d="M6 3v18h6"/><path d="M14 3v4h4"/><circle cx="16.5" cy="16.5" r="3.5"/><path d="M19 19l2.5 2.5"/>',
   terminal: '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10l3 3-3 3M13 16h4"/>',
+  // 004 / 033 (FR-069) — the hide/show pair, drawn as one shape and its struck-through twin so the
+  // two read as one control in two states. Without shapes here both fall back to GENERIC_SHAPE, and
+  // a toggle whose two states look identical is worse than one with no icon at all.
+  hide: '<path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="2.5"/><path d="M4 20L20 4"/>',
+  showHidden:
+    '<path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="2.5"/>',
   // 018. Without a shape here a token silently falls back to GENERIC_SHAPE — a rounded square — so
   // the icon "works" while looking like nothing in particular. That is worse than failing.
   settings:
