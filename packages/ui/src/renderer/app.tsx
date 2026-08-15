@@ -11,6 +11,8 @@ import {
 } from '@throng/core';
 import { resolveScoped, type ScopeInput } from './keybindings/scope.js';
 import { EditorChrome } from './editor/editor-chrome.js';
+import { NavigationChrome } from './navigate/navigation-chrome.js';
+import { requestQuickOpen } from './navigate/navigation-store.js';
 import { SearchKeybindings } from './search/search-keybindings.js';
 import { useCapabilities } from './panel-type/use-capabilities.js';
 import { ProjectsPanel } from './sidebar/projects-panel.js';
@@ -132,6 +134,17 @@ function caretRect(el: HTMLElement): DOMRect | null {
 const TABS_OPEN_PICKER: ActionId = 'tabs.openPicker';
 
 /**
+ * 033 FR-001/FR-003 (#219) — Quick Open, from any focus context.
+ *
+ * Handled HERE, in the capture phase, which is the whole of AS-1: a focused terminal must receive no
+ * keystroke at all, and only a capture-phase `preventDefault` on the window gets in front of xterm.
+ * Adding it to this allowlist is one of the two edits data-model.md §2 records as SILENT failures —
+ * the other is `isPanelScoped` in `keybindings/scope.ts`. Miss either and the chord compiles, binds,
+ * resolves, and does nothing.
+ */
+const QUICK_OPEN: ActionId = 'navigate.quickOpen';
+
+/**
  * Resolves keyboard accelerators (zoom / fullscreen / pane toggles) from the user's
  * live keybindings (FR-033) on real DOM keydown events. Zoom/fullscreen dispatch
  * over the preload bridge; the pane toggles call back into the App. Shift is ignored
@@ -222,16 +235,29 @@ function KeybindingsHandler({
       'file.undo',
       'file.redo',
       TABS_OPEN_PICKER,
+      QUICK_OPEN,
     ]);
     const onKeyDown = (e: KeyboardEvent): void => {
-      // Shift is deliberately dropped for most keys (the produced character already
-      // encodes it, e.g. "Ctrl++" is Ctrl+Shift+"="). Two exceptions keep Shift: the
-      // BACKTICK key (normalised from its physical key, so Shift distinguishes
-      // focus.cycle from focus.cycleBack across layouts) and FUNCTION keys, where Shift
-      // is NOT encoded in the produced character (Shift+F10 still reports key "F10") —
-      // without this, a Shift+F10 binding like menu.open (024 US6) would never match.
+      /*
+       * Shift is deliberately dropped for most keys (the produced character already encodes it,
+       * e.g. "Ctrl++" is Ctrl+Shift+"="). Three exceptions keep it:
+       *
+       *  - the BACKTICK key (normalised from its physical key, so Shift distinguishes focus.cycle
+       *    from focus.cycleBack across layouts);
+       *  - FUNCTION keys, where Shift is NOT encoded in the produced character (Shift+F10 still
+       *    reports key "F10") — without this, a Shift+F10 binding like menu.open would never match;
+       *  - **LETTERS (033, #219).** `Shift+t` produces "T" rather than "t", and `normalizeToken`
+       *    deliberately folds that case away so a user can write "Ctrl+B" for a keydown reporting
+       *    "b" — so for A–Z the shifted character encodes NOTHING and dropping the modifier
+       *    genuinely loses the chord. `Ctrl+Shift+T` arrived here as `Ctrl+T` and matched no
+       *    binding at all: resolved to null, never dispatched, no error anywhere. This is also what
+       *    every OTHER dispatcher in the app already does — `editor-chrome.tsx` and
+       *    `search-keybindings.tsx` both pass `shift` unconditionally, which is why `Ctrl+Shift+S`
+       *    (editor.saveAll) has always worked and this listener had simply never been given a
+       *    Shift+letter chord to resolve.
+       */
       const backtick = isBackquote(e);
-      const keepShift = backtick || /^F\d{1,2}$/.test(e.key);
+      const keepShift = backtick || /^F\d{1,2}$/.test(e.key) || /^[a-z]$/i.test(e.key);
       // Window-level chords are live in every scope (012, FR-024b) — including from inside an
       // editor's find bar, so the user can always move focus out of wherever they are. The
       // HANDLED gate below is what keeps this listener to zoom/focus/view and nothing else.
@@ -308,6 +334,15 @@ function KeybindingsHandler({
          */
         case TABS_OPEN_PICKER:
           requestTabPicker();
+          break;
+        /*
+         * 033 (FR-001, FR-018, A5) — Quick Open. `requestQuickOpen` returns whether it opened, and
+         * `false` is a legitimate outcome rather than a failure: with no project open in this window
+         * there is nothing to list, so the chord is swallowed and nothing appears. Swallowed rather
+         * than passed on, because a chord the application has claimed must not also reach a shell.
+         */
+        case QUICK_OPEN:
+          requestQuickOpen();
           break;
         case 'view.toggleProjects':
           cbRef.current.onToggleProjects();
@@ -756,6 +791,9 @@ export function App(): ReactElement {
       <PanelNameSync />
             <PanelFocusSync />
             <EditorChrome />
+            {/* 033 (#219) — the navigation modals. Mounted in BOTH window shells; the
+                sub-workspace's copy is in `subworkspace-app.tsx` (Assumption 6). */}
+            <NavigationChrome />
             <SearchKeybindings />
             <KeybindingsHandler onToggleProjects={toggleLeft} onToggleExplorer={toggleRight} />
             <WorkspacePane />

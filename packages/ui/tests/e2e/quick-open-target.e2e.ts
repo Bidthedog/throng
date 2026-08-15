@@ -226,7 +226,17 @@ test('Enter on the control changes its value and opens nothing; Enter in the lis
       await expect(win.getByTestId('quickopen-input')).toBeFocused();
       await win.keyboard.press('Enter');
       await expect(win.getByTestId('quickopen')).toHaveCount(0);
-      await expect(editors(win).locator('.cm-content').first()).toContainText('// README.md', {
+      /*
+       * SOME editor holds the file — deliberately not `.first()`.
+       *
+       * The Enter above was pressed with the control left on `new`, which is the whole point of the
+       * assertion before it, so the file lands in a NEW editor panel and the first panel in DOM
+       * order is the empty one this test started from. `.first()` therefore encoded an assumption
+       * this test had itself just falsified. WHICH panel a target value produces is the subject of
+       * the two T5 tests below, which assert it directly; what belongs here is only that Enter from
+       * the input — and nothing else pressed along the way — opened the file at all.
+       */
+      await expect(editors(win).filter({ hasText: '// README.md' })).toHaveCount(1, {
         timeout: 8000,
       });
     });

@@ -42,6 +42,17 @@ describe('scope-aware resolveAction (FR-017b0)', () => {
     }
   });
 
+  it('resolves Quick Open from the TERMINAL scope — FR-003’s whole point (033 US1)', () => {
+    // The headline claim of the story is that the chord answers the same from wherever you are, and
+    // the terminal is the scope that would otherwise swallow it: `Ctrl+X` above resolves to NOTHING
+    // in a terminal precisely because the shell owns it. Quick Open is declared EVERYWHERE, so it
+    // must survive the same test that kills the editor's chords.
+    const chord = { key: 't', ctrl: true, shift: true } as const;
+    for (const scope of ['editor', 'terminal', 'explorer'] as DispatchScope[]) {
+      expect(resolveAction(DEFAULT_KEYBINDINGS, chord, scope), scope).toBe('navigate.quickOpen');
+    }
+  });
+
   it('does not fire an editor command while a terminal is active', () => {
     expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'Tab' }, 'terminal')).toBeNull();
     expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'Tab' }, 'editor')).toBe('editor.indentLines');

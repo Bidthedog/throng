@@ -93,7 +93,18 @@ export type ActionId =
   // 031 US3 (#225): open the tab picker — a searchable list of every tab in the window. Ctrl+Alt+T,
   // in the Ctrl+Alt family throng already owns; in neither the reserved nor the shadowable tier
   // (constitution IV), so it displaces no line-editor binding and needs no recorded exception.
-  | 'tabs.openPicker';
+  | 'tabs.openPicker'
+  /*
+   * 033 US1 (#219) — open any file in the current project by typing part of its path.
+   *
+   * A NEW `navigate.` namespace rather than an existing one, and the reason is mechanical rather
+   * than aesthetic (data-model.md §2): `useExplorerKeybindings` accepts ONLY `file.*` actions and
+   * dispatches them at the explorer scope, so `file.quickOpen` would be claimed by the tree's own
+   * handler and never reach the window. `view.*` is pane toggles and `editor.*` is text editing.
+   *
+   * `Ctrl+Shift+T` is in neither constitutional tier (IV), so it displaces no line-editor binding.
+   */
+  | 'navigate.quickOpen';
 
 export interface Keybindings {
   version: number;
@@ -150,6 +161,9 @@ export const COMMAND_SCOPES: CommandScopes = {
   // from any surface — a user with six visible tabs may still prefer to type a name than aim at one.
   // PANELS would make it dead in the file tree, which is precisely where a user loses their place.
   'tabs.openPicker': EVERYWHERE,
+  // 033 US1 (#219, FR-003): Quick Open answers the same from a terminal, an editor or the tree, so
+  // it is EVERYWHERE — a chord that only worked in some of them would need the user to know which.
+  'navigate.quickOpen': EVERYWHERE,
   // The File Explorer's clipboard chords act on FILES, and only while the tree has focus.
   'file.rename': EXPLORER_ONLY,
   'file.cut': EXPLORER_ONLY,
@@ -250,6 +264,12 @@ const WINDOWS_BINDINGS: PlatformBindings = {
      * the enumerated exception list is unchanged by this feature.
      */
     'tabs.openPicker': ['Ctrl+Alt+T'],
+    /*
+     * 033 / FR-002 — Quick Open. `Ctrl+Shift+T` is the chord this gesture carries in every editor a
+     * user is likely to arrive from, and it is in neither the reserved nor the shadowable terminal
+     * tier (constitution IV), so it displaces no line-editor binding and needs no exception.
+     */
+    'navigate.quickOpen': ['Ctrl+Shift+T'],
     'file.rename': ['F2'],
     'file.cut': ['Ctrl+X'],
     'file.copy': ['Ctrl+C'],

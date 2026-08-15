@@ -94,6 +94,37 @@ let projectSeq = 0;
 const createProject = (win: Page, name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
+/** The name the big fixture's project is opened under, once, by the first test that needs it. */
+const BIG_PROJECT = 'QOPerfBig';
+let bigProjectOpen = false;
+
+/**
+ * Open the big fixture as a project — ONCE for the whole file — and hand back the moment it lands.
+ *
+ * ══ WHY IT CANNOT BE OPENED PER TEST ══
+ *
+ * A project's root folder is EXCLUSIVE (FR-029, `assertFolderExclusive`): two projects may not share
+ * a root, nor may one be inside the other. Three tests here each want the same 12,000-file fixture,
+ * so the second `createProject` on that root is refused outright — the row never appears and the
+ * failure surfaces as a harness timeout naming a project item, which reads as a slow app rather than
+ * as a rule being enforced.
+ *
+ * ══ WHY THE FR-015 TEST GOES FIRST ══
+ *
+ * Opening the project is what starts the walk, and FR-015 is about a modal opened while that walk is
+ * still in flight — so the test that observes the building state has to be the one that opens it.
+ * The order is load-bearing, and this helper makes it visible: whichever test calls first pays for
+ * the walk, and the file is ordered so that is the FR-015 test.
+ */
+async function useBigProject(win: Page): Promise<void> {
+  if (bigProjectOpen) {
+    await expect(win.locator('.project-item[data-active="true"]')).toContainText(BIG_PROJECT);
+    return;
+  }
+  bigProjectOpen = true;
+  await createProject(win, BIG_PROJECT, bigRoot);
+}
+
 /**
  * Record every `files.*` and `fileIndex.*` message the renderer sends, from the MAIN process.
  *
@@ -167,6 +198,37 @@ const resetIpcCalls = (app: OpenApp['app']): Promise<void> =>
     (globalThis as unknown as { __ipcCalls: string[] }).__ipcCalls = [];
   });
 
+/**
+ * Wait until the application has stopped talking to main of its own accord, then clear the log.
+ *
+ * ══ WHY THE MEASUREMENT WINDOW HAS TO BE EARNED ══
+ *
+ * Opening a project starts work that outlives the assertions that follow it: the explorer tree
+ * settles, a watcher arms, and a `throng:files:list` lands a couple of hundred milliseconds later.
+ * Measured with an instrumented probe against this very fixture: with the modal open and **nothing
+ * typed at all**, one `throng:files:list` still arrived ~215 ms after a reset; with the twelve
+ * characters typed, the log was EMPTY. So the call was never on the keystroke path — it was
+ * background traffic that happened to land inside a window opened too early, and a reset taken at an
+ * arbitrary moment charges the keyboard for it.
+ *
+ * Quiet is waited for as a CONDITION — two consecutive reads with the log unchanged — rather than
+ * slept for, so the test costs what the machine costs and does not encode a duration that stops
+ * being true on a loaded runner.
+ */
+async function quietThenReset(app: OpenApp['app']): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const before = (await ipcCalls(app)).length;
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        return (await ipcCalls(app)).length === before;
+      },
+      { message: 'the application never stopped making files.* calls of its own accord' },
+    )
+    .toBe(true);
+  await resetIpcCalls(app);
+}
+
 /* ────────────────────────────────────────────────────────────────────────────────────────────── */
 
 test('typing performs no IPC at all — no files.* call and no fileIndex subscription on the keystroke path (SC-002, FR-013, R5)', async () => {
@@ -187,7 +249,7 @@ test('typing performs no IPC at all — no files.* call and no fileIndex subscri
       'throng:files:list',
     );
 
-    await createProject(win, 'QOPerfNoIpc', bigRoot);
+    await useBigProject(win);
 
     /*
      * …and the recorder demonstrably RECORDS. Opening a project reads the tree, which is `files.*`
@@ -203,7 +265,9 @@ test('typing performs no IPC at all — no files.* call and no fileIndex subscri
     // Let the index settle to a real list first: the subscription itself is IPC and is entirely
     // legitimate (S2). What FR-013 forbids is IPC on the KEYSTROKE path.
     await expect(quickOpenRows(win).first()).toBeVisible();
-    await resetIpcCalls(app);
+    // …and only once the app has gone quiet is the window this assertion measures a window the
+    // KEYBOARD is responsible for. See `quietThenReset`.
+    await quietThenReset(app);
 
     await win.keyboard.type('components/w');
     await expect(quickOpenRows(win).first()).toBeVisible();
@@ -219,7 +283,8 @@ test('keystroke-to-list stays inside its stated ceiling on a realistic project (
   test.setTimeout(180_000);
   await runApp(async (_app, win) => {
     await settle(win);
-    await createProject(win, 'QOPerfLatency', bigRoot);
+    // The SAME project the test above opened — a second one on this root is refused (FR-029).
+    await useBigProject(win);
 
     await openQuickOpen(win);
     await expect(quickOpenRows(win).first()).toBeVisible();
@@ -264,35 +329,6 @@ test('keystroke-to-list stays inside its stated ceiling on a realistic project (
     // The WORST keystroke, not the average: an average of 40 ms with one 900 ms spike is a modal
     // that visibly stalls, and the average is exactly what would hide it.
     expect(Math.max(...samples)).toBeLessThanOrEqual(250);
-
-    await win.keyboard.press('Escape');
-    await expect(win.getByTestId('quickopen')).toHaveCount(0);
-  });
-});
-
-test('a modal opened before enumeration finishes says it is still listing, then shows results (FR-015, S3)', async () => {
-  test.setTimeout(180_000);
-  await runApp(async (_app, win) => {
-    await settle(win);
-    await createProject(win, 'QOPerfBuilding', bigRoot);
-
-    /*
-     * The chord goes in immediately, while the walk of 12,000 files is still in flight.
-     *
-     * The fixture's SIZE is the lever that makes this observable: a keypress costs milliseconds and
-     * enumerating twelve thousand files costs considerably more, so the building state is on screen
-     * for long enough to be seen. If this ever becomes racy, the fixture grows — the answer is never
-     * to soften the assertion into one a partial list would also satisfy, which is the failure S3
-     * exists to prevent.
-     */
-    await openQuickOpen(win);
-    await expect(win.getByTestId('quickopen-building')).toBeVisible();
-
-    // …and then the real list, which is the second half of S3: a partial list must never be
-    // presented as though it were whole.
-    await expect(win.getByTestId('quickopen-building')).toHaveCount(0, { timeout: 30_000 });
-    await win.keyboard.type('widget-0001');
-    await expect(quickOpenRows(win)).toHaveCount(BIG_TREE_DIRS);
 
     await win.keyboard.press('Escape');
     await expect(win.getByTestId('quickopen')).toHaveCount(0);
@@ -345,4 +381,52 @@ test('a file created and then deleted OUTSIDE throng becomes, and stops being, c
   } finally {
     cleanupTemp(root);
   }
+});
+
+/*
+ * LAST ON PURPOSE, and it depends on the test above having run.
+ *
+ * FR-015 is about a modal opened while the walk is STILL IN FLIGHT, so this test needs a walk it can
+ * outrun. It cannot get one by opening the big fixture as a second project — a root is exclusive
+ * (FR-029) and the big fixture is already open. What it can do is leave and come back: the previous
+ * test switched the window to its own small project, which dropped the big root's last subscriber
+ * and disposed its index in UI main (S9), so switching BACK subscribes afresh and re-walks all
+ * twelve thousand files from nothing.
+ *
+ * That is the same enumeration a first open performs, reached without a second fixture — and it is
+ * why this test sits at the end of the file rather than beside the other two big-project tests.
+ */
+test('a modal opened before enumeration finishes says it is still listing, then shows results (FR-015, S3)', async () => {
+  test.setTimeout(180_000);
+  await runApp(async (_app, win) => {
+    await settle(win);
+
+    // Back to the big fixture — a SWITCH, not a second project.
+    await win
+      .locator('.project-item', { hasText: BIG_PROJECT })
+      .locator('[data-testid^="project-switch-"]')
+      .click();
+    await expect(win.locator('.project-item[data-active="true"]')).toContainText(BIG_PROJECT);
+
+    /*
+     * The chord goes in immediately, while the walk of 12,000 files is still in flight.
+     *
+     * The fixture's SIZE is the lever that makes this observable: a keypress costs milliseconds and
+     * enumerating twelve thousand files costs considerably more, so the building state is on screen
+     * for long enough to be seen. If this ever becomes racy, the fixture grows — the answer is never
+     * to soften the assertion into one a partial list would also satisfy, which is the failure S3
+     * exists to prevent.
+     */
+    await openQuickOpen(win);
+    await expect(win.getByTestId('quickopen-building')).toBeVisible();
+
+    // …and then the real list, which is the second half of S3: a partial list must never be
+    // presented as though it were whole.
+    await expect(win.getByTestId('quickopen-building')).toHaveCount(0, { timeout: 30_000 });
+    await win.keyboard.type('widget-0001');
+    await expect(quickOpenRows(win)).toHaveCount(BIG_TREE_DIRS);
+
+    await win.keyboard.press('Escape');
+    await expect(win.getByTestId('quickopen')).toHaveCount(0);
+  });
 });

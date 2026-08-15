@@ -2584,3 +2584,29 @@ textarea,
   padding: 10px 12px;
   color: var(--text-dim);
 }
+
+/* 033 / FR-014 (P4) — how many matched, when the render cap hid some of them. Drawn as a footnote to
+   the list rather than as a row, because it is not choosable and must not look as though it were. */
+.picker__truncated {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 033 / FR-015 (S3) — the modal opened before enumeration finished. It occupies the space results
+   will occupy, so the user is told the list is still arriving rather than shown an empty one. */
+.picker__building {
+  display: block;
+  color: var(--text-dim);
+}
+
+/* 033 / FR-010 — Quick Open's target control, rendered into the picker's header slot. */
+.picker__header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 10px 0;
+}

@@ -117,6 +117,21 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Open a searchable list of every tab in the window and jump to the one you choose. Works at any tab count, not only when the strip overflows.',
   ),
 
+  /*
+   * Navigate (033, FR-064) — getting to a place, rather than changing what is there.
+   *
+   * Its own group rather than a home in `View` or `File Explorer`: both of the commands that land
+   * here answer "take me to X" from anywhere, and filing them under a pane's heading would suggest
+   * they belong to that pane. The heading matches the `navigate.` namespace and the constitution's
+   * **Navigate** menu section, so one word means one thing in all three places.
+   */
+  chord(
+    'navigate.quickOpen',
+    'Navigate',
+    'Quick Open',
+    'Open any file in the current project by typing part of its path. Works from an editor, a terminal or the file tree.',
+  ),
+
   // File Explorer (resolved while the File Explorer pane has focus)
   chord('file.rename', 'File Explorer', 'Rename', 'Rename the selected file or folder.'),
   chord(

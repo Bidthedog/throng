@@ -583,6 +583,11 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'New folder icon',
     description: 'The glyph on the toolbar control that creates a folder in the tree.',
   },
+  'icons.quickOpen': {
+    label: 'Quick Open icon',
+    description:
+      'The glyph on the toolbar control that opens any file in the project by typing part of its path.',
+  },
   'icons.terminal': {
     label: 'Terminal icon',
     description: 'The glyph that marks a terminal panel or a new-terminal control.',

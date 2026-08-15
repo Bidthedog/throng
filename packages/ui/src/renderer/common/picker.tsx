@@ -18,6 +18,15 @@
  *    mid-type — the one motion that makes an arrow-key list unusable.
  *  - **It does not close on an empty result.** No match keeps the picker open and says so (K12), so
  *    a typo is a backspace rather than a re-open.
+ *
+ * ══ 033 (#219) — FIVE OPTIONAL PROPS, AND THE RULE THEY ALL OBEY ══
+ *
+ * `contracts/picker-extensions.md §§3–4`. Quick Open needs ranking, a render cap, a line saying what
+ * the cap hid, a control above the input and a seeded query. Every one of them is OPTIONAL and inert
+ * when absent, because the governing constraint here is NEGATIVE: **a caller that passes none of
+ * them must behave exactly as it does today**, and `tab-picker.tsx` passes none (SC-013). `rank`
+ * above all — a picker that ranked unasked would reorder the tab strip under the user's arrow keys,
+ * which is 031's K11 and the reason this file did not rank in the first place.
  */
 import {
   useEffect,
@@ -28,7 +37,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
-import { matchSpans, matches } from '@throng/core';
+import { compileQuery, rankStable, type CompiledQuery } from '@throng/core';
 import { useFocusTrap } from './focus-trap.js';
 
 export interface PickerEntry {
@@ -50,10 +59,31 @@ export interface PickerProps {
   onChoose: (entry: PickerEntry) => void;
   onDismiss: () => void;
   placeholder?: string;
-  /** Shown when the query matches nothing (K12). */
-  emptyMessage?: string;
+  /**
+   * Shown when the query matches nothing (K12).
+   *
+   * A `ReactNode` rather than a `string` since 033: Quick Open's "still listing" state (FR-015, S3)
+   * belongs exactly here — in the space where results would be — and it carries a test id of its
+   * own. Widening a prop nobody passes an element to changes no existing caller.
+   */
+  emptyMessage?: ReactNode;
   /** Prefix for this instance's test ids, so two pickers on one screen stay distinguishable. */
   testId?: string;
+  /**
+   * Ranks the FILTERED entries; higher is better. **Absent → the seeded order, unchanged** (K11, P1).
+   *
+   * Applied after filtering and before the cap, so `maxRows` keeps the best rows rather than the
+   * first ones (P2).
+   */
+  rank?: (text: string, query: CompiledQuery) => number;
+  /** The most rows to RENDER. Absent → no cap. Matching is never capped (P3). */
+  maxRows?: number;
+  /** Rendered when `maxRows` truncated the list. Absent → nothing is said (P4). */
+  truncatedMessage?: (shown: number, total: number) => string;
+  /** Rendered ABOVE the input, first in the DOM and so first in the tab order (P7, E5). */
+  header?: ReactNode;
+  /** Seeds the query, fully selected on open, so the first keystroke replaces it (P5, P6). */
+  initialQuery?: string;
 }
 
 /**
@@ -64,8 +94,8 @@ export interface PickerProps {
  * only on a hidden part of its text (a path whose label is just the file name), nothing is marked —
  * correct, and better than marking something arbitrary.
  */
-function Marked({ text, query }: { text: string; query: string }): ReactElement {
-  const spans = useMemo(() => matchSpans(text, query), [text, query]);
+function Marked({ text, query }: { text: string; query: CompiledQuery }): ReactElement {
+  const spans = useMemo(() => query.spans(text), [text, query]);
   if (spans.length === 0) return <>{text}</>;
   const parts: ReactNode[] = [];
   let at = 0;
@@ -90,10 +120,20 @@ export function Picker({
   placeholder = 'Type to filter…',
   emptyMessage = 'No matches',
   testId = 'picker',
+  rank,
+  maxRows,
+  truncatedMessage,
+  header,
+  initialQuery = '',
 }: PickerProps): ReactElement {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery);
   const [highlighted, setHighlighted] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  // E1 — the narrowing needs to know whether a key ORIGINATED here, so the input needs a handle.
+  const inputRef = useRef<HTMLInputElement>(null);
+  // P5's once-only latch: a seeded query is selected when the input first takes focus, and never
+  // again — re-selecting on a later focus would swallow the user's caret position.
+  const selected = useRef(false);
 
   // Declared FIRST on purpose. React runs unmount cleanups in the order their effects were declared,
   // and the trap installs a `focusin` guard that hauls focus back inside. Restoring focus (below)
@@ -133,11 +173,30 @@ export function Picker({
     };
   }, []);
 
-  const visible = useMemo(
+  /*
+   * The query, compiled ONCE per keystroke rather than once per entry (C2).
+   *
+   * `matches(text, query)` builds this query's regular expressions inside every call, which is two
+   * constructions at 031's tab counts and a hundred thousand at 033's fifty-thousand-path corpus.
+   * The compiled form is the same rule — it IS what `matches` now wraps — hoisted out of the loop.
+   */
+  const compiled = useMemo(() => compileQuery(query), [query]);
+
+  const matched = useMemo(
     // `filter` preserves the seeded order — K11 is this line, and it must stay this line.
-    () => entries.filter((entry) => matches(entry.text, query)),
-    [entries, query],
+    () => entries.filter((entry) => compiled.test(entry.text)),
+    [entries, compiled],
   );
+
+  /*
+   * matched → rank (ONLY when given) → slice(maxRows). The order matters and P2 is why: ranking
+   * before the cap keeps the best `maxRows` rows, ranking after it would keep the first ones and
+   * then sort that arbitrary handful.
+   */
+  const visible = useMemo(() => {
+    const ranked = rank ? rankStable(matched, (entry) => rank(entry.text, compiled)) : matched;
+    return maxRows !== undefined && ranked.length > maxRows ? ranked.slice(0, maxRows) : ranked;
+  }, [matched, rank, compiled, maxRows]);
 
   /*
    * Keep the highlight on a real row as the result set narrows. Reset to the top on every query
@@ -172,29 +231,44 @@ export function Picker({
   };
 
   const onKeyDown = (event: ReactKeyboardEvent): void => {
-    switch (event.key) {
-      case 'ArrowDown':
-        event.preventDefault();
-        move(1);
-        return;
-      case 'ArrowUp':
-        event.preventDefault();
-        move(-1);
-        return;
-      case 'Enter':
-        event.preventDefault();
-        event.stopPropagation();
-        choose(visible[index]);
-        return;
-      case 'Escape':
-        event.preventDefault();
-        event.stopPropagation();
-        onDismiss();
-        return;
-      default:
-        // Everything else is typing. The trap still gets Tab.
-        trap.onKeyDown(event);
+    // E2 — Escape is claimed from ANYWHERE inside the modal and always dismisses, header included.
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      onDismiss();
+      return;
     }
+    /*
+     * E1 — the list's three keys are claimed ONLY when the event came from the query input.
+     *
+     * This handler sits on the dialog, so before 033 it claimed `Enter` wherever it originated —
+     * which was invisible while the input was the only focusable element (E4), and wrong the moment
+     * a `header` puts a control beside it: Enter on that control would open a file instead of
+     * operating the control the user was actually on (FR-010b). With no header the condition is
+     * always true and this is the same code path it has always been, which is what keeps the tab
+     * picker's behaviour bit-for-bit unchanged.
+     */
+    if (event.target === inputRef.current) {
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          move(1);
+          return;
+        case 'ArrowUp':
+          event.preventDefault();
+          move(-1);
+          return;
+        case 'Enter':
+          event.preventDefault();
+          event.stopPropagation();
+          choose(visible[index]);
+          return;
+        default:
+          break;
+      }
+    }
+    // Everything else is typing, or a key belonging to the focused control. The trap still gets Tab.
+    trap.onKeyDown(event);
   };
 
   return (
@@ -217,14 +291,27 @@ export function Picker({
         ref={trap.ref}
         onKeyDown={onKeyDown}
       >
+        {/* P7 — above the input, so it is also BEFORE it in the tab order and Shift+Tab reaches it
+            (E5). Inside the card, so it is inside the focus trap and Tab cannot leave through it. */}
+        {header}
         <input
           className="picker__input"
           data-testid={`${testId}-input`}
           type="text"
+          ref={inputRef}
           autoFocus
           value={query}
           placeholder={placeholder}
           aria-label={title}
+          // P5 — a SEEDED query arrives fully selected, so the first keystroke replaces it rather
+          // than appending to it. `onFocus` rather than an effect: `autoFocus` has already fired by
+          // the time an effect could run, and re-selecting on every render would fight the caret.
+          onFocus={(event) => {
+            if (initialQuery !== '' && !selected.current) {
+              selected.current = true;
+              event.target.select();
+            }
+          }}
           onChange={(event) => setQuery(event.target.value)}
         />
         <div className="picker__list" data-testid={`${testId}-list`} role="listbox" ref={listRef}>
@@ -254,12 +341,19 @@ export function Picker({
                 onMouseEnter={() => setHighlighted(i)}
               >
                 <span className="picker__label">
-                  <Marked text={entry.label} query={query} />
+                  <Marked text={entry.label} query={compiled} />
                 </span>
                 {entry.meta ? <span className="picker__meta">{entry.meta}</span> : null}
               </div>
             ))
           )}
+          {/* P3, P4 — the cap limits RENDERING only, so this count is the truth about how many
+              matched. It sits in the list, after the rows, where the list visibly stops. */}
+          {truncatedMessage && visible.length < matched.length ? (
+            <div className="picker__truncated" data-testid={`${testId}-truncated`}>
+              {truncatedMessage(visible.length, matched.length)}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

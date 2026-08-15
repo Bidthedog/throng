@@ -128,23 +128,44 @@ async function newEditor(win: Page): Promise<string> {
 }
 
 /**
- * How many bytes this terminal view has put on the wire, as its own diagnostics count them.
+ * Every chunk this terminal view has put on the wire, in order, as its own diagnostics record them.
  *
  * Reading the SCREEN would not answer AS-1: `Ctrl+Shift+T` prints nothing in `cmd`, so an unchanged
- * screen is equally consistent with the chord having been delivered and swallowed. The counter is
- * the only thing that distinguishes "the terminal received nothing" from "the terminal received
- * something invisible".
+ * screen is equally consistent with the chord having been delivered and swallowed. The write log is
+ * what distinguishes "the terminal received nothing" from "the terminal received something
+ * invisible".
+ *
+ * ══ WHY THE LOG AND NOT `input.written` ══
+ *
+ * This assertion was first written against the `input.written` COUNTER, and the counter is too
+ * coarse to carry it. Measured with an instrumented probe: the chord itself writes nothing, but the
+ * modal taking focus makes the terminal lose it, and a terminal with focus reporting on (DEC 1004)
+ * answers a real focus change with `ESC [ O` — one write, no keystroke. That behaviour is 028's,
+ * deliberate and load-bearing (`use-terminal.ts` gates reports on a capture-phase focus listener
+ * precisely so that a report is sent when, and only when, focus really moved), and it predates this
+ * feature: ANY modal that takes the caret from a terminal produces it. A counter cannot tell that
+ * report apart from a keystroke; the log can, so the log is what AS-1 is asserted against.
  */
-async function inputWritten(win: Page, panelId: string): Promise<number> {
+async function inputWrites(win: Page, panelId: string): Promise<string[]> {
   return win.evaluate((id) => {
     const probe = (
       window as unknown as {
-        __throngTerminalDiagnostics?: () => Record<string, { input: { written: number } }>;
+        __throngTerminalDiagnostics?: () => Record<string, { writes: string[] }>;
       }
     ).__throngTerminalDiagnostics;
-    return probe?.()[id]?.input.written ?? -1;
+    return probe?.()[id]?.writes ?? [];
   }, panelId);
 }
+
+/**
+ * `CSI I` / `CSI O` — a focus report. Not a keystroke, and the only write a modal may cause.
+ *
+ * Spelled with an ESCAPE SEQUENCE, not a raw control byte, because that is how `diagnostics.ts`
+ * stores a write: `recordWrite` pushes `JSON.stringify(data).slice(1, -1)`, so the log holds the
+ * nine characters `[O`. A raw byte here would also make this file's diffs unreviewable — git
+ * classifies a file carrying control bytes as binary.
+ */
+const FOCUS_REPORTS = new Set(['\\u001b[I', '\\u001b[O']);
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * AS-1, AS-5, SC-001, FR-011, Q6, S3 — the chord from a terminal
@@ -171,22 +192,37 @@ test('from a focused terminal the chord opens a centred modal, sends the shell n
       /*
        * PROVE THE PROBE CAN MOVE before asking it to stay still (FR-053b's standard).
        *
-       * "The chord wrote nothing" is unfalsifiable against a counter that never moves — a probe
-       * reading the wrong panel id, or a diagnostics hook that was never installed, reports zero
+       * "The chord wrote nothing" is unfalsifiable against a log that never grows — a probe reading
+       * the wrong panel id, or a diagnostics hook that was never installed, reports an empty array
        * for both the passing and the failing world. One real keystroke first, and the later
        * assertion means something.
        */
-      const beforeTyping = await inputWritten(win, pid);
-      expect(beforeTyping, 'terminal diagnostics are not reachable for this panel').toBeGreaterThanOrEqual(0);
+      const beforeTyping = await inputWrites(win, pid);
       await win.keyboard.type('x');
-      await expect.poll(() => inputWritten(win, pid)).toBeGreaterThan(beforeTyping);
+      await expect.poll(async () => (await inputWrites(win, pid)).length).toBeGreaterThan(
+        beforeTyping.length,
+      );
 
-      const beforeChord = await inputWritten(win, pid);
+      const beforeChord = await inputWrites(win, pid);
+      expect(beforeChord, 'the terminal never recorded the proving keystroke').toContain('x');
       await openQuickOpen(win); // …waits for the dialog AND for its input to hold focus
 
-      // AS-1 — the terminal received NO keystroke. Safe to read now precisely because the modal is
-      // already on screen: anything the chord was going to send has been sent.
-      expect(await inputWritten(win, pid), 'the Quick Open chord reached the shell').toBe(beforeChord);
+      /*
+       * AS-1 — the terminal received NO KEYSTROKE. Safe to read now precisely because the modal is
+       * already on screen: anything the chord was going to send has been sent.
+       *
+       * The delta is allowed to contain a FOCUS REPORT and nothing else. The modal takes the caret,
+       * so the terminal really does lose focus, and a terminal with focus reporting on answers a
+       * real focus change with `ESC [ O` — 028's behaviour, gated on a capture-phase focus listener
+       * for exactly that reason, and produced by every modal in the application rather than by this
+       * one. What AS-1 forbids is a KEY reaching the shell, and a key is what the delta must not
+       * hold. Anything unexpected is named in the failure rather than swallowed by a subset check.
+       */
+      const afterChord = await inputWrites(win, pid);
+      expect(
+        afterChord.slice(beforeChord.length).filter((chunk) => !FOCUS_REPORTS.has(chunk)),
+        'the Quick Open chord reached the shell',
+      ).toEqual([]);
 
       // S3 — the app's shipped modal presentation, and an EMPTY input (FR-057).
       const dialog = win.getByTestId('quickopen');
@@ -840,9 +876,25 @@ test('in a sub-workspace window the candidate set is that window’s own root, n
       await child.keyboard.press('Escape');
       await expect(child.getByTestId('quickopen')).toHaveCount(0);
 
-      // …and the chord works in the main window too, against ITS root — Assumption 6 rejects a chord
-      // that is live in one window and dead in the other.
+      /*
+       * …and the chord works in the main window too, against ITS root — Assumption 6 rejects a chord
+       * that is live in one window and dead in the other.
+       *
+       * RE-ENTER THE PROJECT FIRST. A reloaded window comes up with NO project selected — shipped
+       * behaviour that long predates this feature, asserted directly by
+       * `editor-caret-persist.e2e.ts` (`workspace-no-project` visible straight after a reload) and
+       * worked around in the same way by `editor-stranded-recovery.e2e.ts`. Measured here with an
+       * instrumented probe after this line failed: the main window had zero active projects and no
+       * file tree, so the chord opened nothing — which is FR-018 / A5 behaving exactly as specified,
+       * not the chord being dead. Without this click the assertion tests the reload, not the chord.
+       */
       await win.bringToFront();
+      await win
+        .locator('.project-item', { hasText: 'QOSubMain' })
+        .locator('[data-testid^="project-switch-"]')
+        .click();
+      await expect(win.getByTestId('file-explorer-tree')).toBeVisible();
+
       await win.keyboard.press(QUICK_OPEN_CHORD);
       await expect(win.getByTestId('quickopen')).toBeVisible();
       await win.getByTestId('quickopen-input').fill('zebra');
