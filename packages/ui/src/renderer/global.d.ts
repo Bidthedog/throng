@@ -259,11 +259,20 @@ declare global {
        * this window was last sent (I2), and `onUpdate` returns an unsubscriber (I3).
        */
       fileIndex?: {
-        subscribe: (root: string) => Promise<{ status: 'building' | 'ready'; paths?: string[] }>;
-        unsubscribe: (root: string) => void;
+        /**
+         * `includeHidden` is part of the subscription KEY (033 FR-069), not a filter applied after
+         * the fact: main walks with or without the project's exclusions accordingly, so the two
+         * indices genuinely differ rather than one being a subset the renderer trims.
+         */
+        subscribe: (
+          root: string,
+          includeHidden?: boolean,
+        ) => Promise<{ status: 'building' | 'ready'; paths?: string[] }>;
+        unsubscribe: (root: string, includeHidden?: boolean) => void;
         onUpdate: (
           cb: (evt: {
             root: string;
+            includeHidden: boolean;
             status: 'building' | 'ready';
             paths?: string[];
             added?: string[];

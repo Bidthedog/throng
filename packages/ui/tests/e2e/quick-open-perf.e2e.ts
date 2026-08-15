@@ -335,6 +335,69 @@ test('keystroke-to-list stays inside its stated ceiling on a realistic project (
   });
 });
 
+/*
+ * PLACED HERE, and the position is load-bearing in two directions.
+ *
+ * It needs the big project ACTIVE and its standing index already warm, which is what the test above
+ * leaves behind. And it must not come after the live-index test, because the final test in this file
+ * depends on that one having switched away — leaving the big root's index disposed, so that
+ * switching back re-walks. Sitting between them satisfies both.
+ */
+test('flipping the exclusion toggle on a large project SAYS it is still listing before it widens the list (FR-069d)', async () => {
+  test.setTimeout(180_000);
+  await runApp(async (_app, win) => {
+    await settle(win);
+    await useBigProject(win);
+
+    await openQuickOpen(win);
+    // The standing subscription is warm, so the modal opens with a list and no waiting state — the
+    // baseline this test's claim is measured against.
+    await expect(win.getByTestId('quickopen-building')).toHaveCount(0);
+    await expect(quickOpenRows(win).first()).toBeVisible();
+
+    /*
+     * FR-069d needs NO NEW MECHANISM, which is the design claim being tested (plan D2).
+     *
+     * The flipped flag is a different subscription key, so it is a fresh index: main answers
+     * `{ status: 'building' }` with no paths, and FR-075's rule — a push carrying neither a set nor
+     * a delta means DISCARD — turns that into the "Still listing this project's files…" state
+     * FR-015 already built. If this assertion fails, the finding is not that the wait state is
+     * missing; it is that the flipped subscription is serving something stale.
+     */
+    await win.getByTestId('quickopen-hidden').click();
+    await expect(win.getByTestId('quickopen-hidden')).toHaveAttribute('data-value', 'include');
+    await expect(win.getByTestId('quickopen-building')).toBeVisible();
+
+    /*
+     * A PARTIAL list must never be presented as whole (S3). While the building state is up there
+     * are no rows at all — not a subset of the twelve thousand — which is the half a "shows a
+     * spinner eventually" assertion would miss.
+     */
+    await expect(quickOpenRows(win)).toHaveCount(0);
+
+    await expect(win.getByTestId('quickopen-building')).toHaveCount(0, { timeout: 60_000 });
+    /*
+     * `fill`, not `keyboard.type` — the toggle was CLICKED, so it holds focus.
+     *
+     * Typing after a click would go to the button and change nothing, and the list would still be
+     * showing its uncapped default: two hundred rows, the FR-014 cap. Which is exactly what this
+     * assertion caught the first time it ran, reported as `Expected: 60, Received: 200`. Worth the
+     * note, because "200" reads like a truncation bug rather than a test that typed into a button.
+     */
+    await win.getByTestId('quickopen-input').fill('widget-0001');
+    await expect(quickOpenRows(win)).toHaveCount(BIG_TREE_DIRS);
+
+    // Back to the setting's value: the standing index is still there, so this costs no walk at all.
+    await win.getByTestId('quickopen-input').fill('');
+    await win.getByTestId('quickopen-hidden').click();
+    await expect(win.getByTestId('quickopen-hidden')).toHaveAttribute('data-value', 'exclude');
+    await expect(win.getByTestId('quickopen-building')).toHaveCount(0);
+
+    await win.keyboard.press('Escape');
+    await expect(win.getByTestId('quickopen')).toHaveCount(0);
+  });
+});
+
 test('a file created and then deleted OUTSIDE throng becomes, and stops being, choosable within two seconds (FR-016, SC-005)', async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-qop-live-'));

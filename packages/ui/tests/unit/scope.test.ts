@@ -118,6 +118,17 @@ describe('the focus guard (FR-017f)', () => {
      */
     expect(isPanelScoped('navigate.quickOpen')).toBe(false);
 
+    /*
+     * 033 US2 — and its NAMESPACE SIBLING is the opposite, which is why the line above is an exact
+     * match rather than a `navigate.` prefix.
+     *
+     * Go To Line acts on the content of one editor's document, so a focused transient surface must
+     * suppress it exactly as it suppresses `search.find` and `editor.indentLines`. Widening the
+     * clause above to the prefix would silently make this false, and the symptom would be the find
+     * bar's own keys losing to a modal that took the caret out from under the user mid-search.
+     */
+    expect(isPanelScoped('navigate.gotoLine')).toBe(true);
+
     expect(isPanelScoped('editor.cutLine')).toBe(true);
     expect(isPanelScoped('editor.indentLines')).toBe(true);
     expect(isPanelScoped('search.find')).toBe(true);

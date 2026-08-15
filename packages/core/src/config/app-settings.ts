@@ -107,6 +107,25 @@ export type DefaultLineEnding = 'lf' | 'crlf' | 'cr';
  *  owned editors. */
 export type EditorPathDisplay = 'full' | 'name';
 
+/**
+ * The navigation modals' preferences (033, `Editor · Navigation`).
+ *
+ * Its own block rather than loose keys on `EditorSettings`, because these govern the Quick Open /
+ * Go To Line modals rather than an editor panel, and the preferences group they appear in is the
+ * shape the user reads them in.
+ */
+export interface EditorNavigationSettings {
+  /**
+   * FR-069b — where Quick Open's exclusion toggle STARTS. Ships **on**: files the project hides are
+   * not candidates.
+   *
+   * The toggle changes the current modal; this decides where every modal begins. They are separate
+   * on purpose: showing the hidden ones for one search is a different act from changing what the
+   * project hides, and a toggle that wrote itself back to the setting would conflate the two.
+   */
+  quickOpenExcludeHidden: boolean;
+}
+
 /** Editor panel preferences (006, contracts/config-additions.md). */
 export interface EditorSettings {
   /** How a file-tree click opens into the last active editor. */
@@ -155,6 +174,8 @@ export interface EditorSettings {
   /** 024 US1 (#152): show the editor's per-panel status strip. When off, the strip is hidden and
    *  its row reclaimed; the wrap command and language picker stay reachable by chord/menu. */
   showStatusBar: boolean;
+  /** 033: the navigation modals' own preferences (`Editor · Navigation`). */
+  navigation: EditorNavigationSettings;
 }
 
 /** Where the new-project folder picker opens (011, FR-041). */
@@ -394,6 +415,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     persistUndoHistory: true,
     defaultWordWrap: true,
     showStatusBar: true,
+    // FR-069b — Quick Open starts by excluding what the project hides. The shipped answer to "is
+    // this file hidden?" has to be the same one the tree gives, and the tree hides it.
+    navigation: { quickOpenExcludeHidden: true },
   },
   tabs: {
     smoothScrollMs: 300,
@@ -707,6 +731,21 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     persistUndoHistory,
     defaultWordWrap,
     showStatusBar,
+    navigation: navigationSettings(v.navigation, fallback.navigation),
+  };
+}
+
+/** Tolerant per-field parse of `editor.navigation` (033). A bad leaf falls back to its own default. */
+function navigationSettings(
+  v: unknown,
+  fallback: EditorNavigationSettings,
+): EditorNavigationSettings {
+  if (!isRecord(v)) return { ...fallback };
+  return {
+    quickOpenExcludeHidden:
+      typeof v.quickOpenExcludeHidden === 'boolean'
+        ? v.quickOpenExcludeHidden
+        : fallback.quickOpenExcludeHidden,
   };
 }
 

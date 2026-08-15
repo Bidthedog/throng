@@ -442,6 +442,11 @@ export const THRONG_THEME: Theme = {
     // The explorer's "Hide in this project" row (004) had no token either — a circled slash reads as
     // "kept out of view", distinct from every other glyph in the tree menu.
     hide: '⊘',
+    /* 033 / FR-069. `hide`'s counterpart: Quick Open's exclusion toggle wears `hide` while it is
+       excluding and this while it is not, so the control reads as the same IDEA the tree menu row
+       names rather than as a second vocabulary for it. An eye, because "these are visible to me"
+       is what the flipped state means — and deliberately not `search` 🔍, which is the find bar's. */
+    showHidden: '👁',
     /* 023. Reserved for a "Reset Name" menu item the workspace will add — return a renamed tab or
        project to its original name. A rotated arrow that is NOT `retry` ↻ (re-run a failed action),
        `revert` ↶ (undo one preference) or `undo` ↩ (editor undo), so the four never blur together. */

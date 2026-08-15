@@ -86,6 +86,9 @@ import {
 } from './commands.js';
 import { getPanelLanguage } from './editor-language.js';
 import { editorContentMenu, placeCaretForContextMenu } from './content-menu.js';
+// 033 US2 (FR-027) — the content menu's Go To Line item opens the ONE navigation-modal slot. A leaf
+// store with no imports of its own, so this creates no cycle back into `navigate/`.
+import { setNavigationModal } from '../navigate/navigation-store.js';
 import {
   wordWrapDocKey,
   documentWordWrap,
@@ -861,6 +864,23 @@ export function useEditor(params: UseEditorParams): void {
                     ),
                     toggle: toggleWrap,
                     chord: firstBinding(keybindingsRef.current, 'editor.toggleWordWrap'),
+                  },
+                  /*
+                   * 033 US2 (FR-027) — the menu route to Go To Line.
+                   *
+                   * The modal lives OUTSIDE this view (`navigate/goto-line.tsx`, mounted by
+                   * `NavigationChrome`), so the item asks the one-modal slot to open it rather than
+                   * running a CodeMirror command. That is also why this is not a keymap entry: the
+                   * chord is dispatched at the window level so its EDITOR_ONLY scope gate can run
+                   * (A2), and the menu simply reaches the same opener by a different route.
+                   *
+                   * The chord is read at MENU-OPEN time, like the language name above and unlike a
+                   * captured value: a rebind must show up on the next right-click, not the next
+                   * restart.
+                   */
+                  gotoLine: {
+                    open: () => setNavigationModal({ kind: 'gotoLine', panelId }),
+                    chord: firstBinding(keybindingsRef.current, 'navigate.gotoLine'),
                   },
                   // Read at menu-open time, not captured: the language changes under a live view
                   // (detection settling, an override chosen), and a captured copy would name a

@@ -9,6 +9,9 @@ import {
   DEFAULT_APP_SETTINGS,
   parseKeybindings,
   parseSettingsGuarded,
+  // 033 FR-069a — the index is keyed by root, the daemon keys projects by id; this is what makes
+  // the two line up (no two projects may share a root, so the map is total).
+  normaliseForCompare,
   type LogLevel,
   resolveColour,
   themeBootstrap,
@@ -993,14 +996,92 @@ if (isPrimaryInstance)
    * is re-pointed by `broadcast` on every config change, so changing the setting takes effect on
    * the next reconcile with no restart (S10) — the very habit that disqualified the daemon from
    * owning this index (research R1) would otherwise be reproduced here.
+   *
+   * 033 FR-069a — and the SAME is now true of the project's own hidden set, which is the half the
+   * first cut of this feature missed. It is not renderer state: it is `projects.hidden_paths` in the
+   * daemon's database (004, migration v6), and it reached the renderer as a field on the
+   * `projects.list` DTO while main enforced the globs alone. A file the user chose "Hide in this
+   * project" for was therefore absent from the tree and offered by Quick Open — two mechanisms, two
+   * answers, which is exactly what FR-006 forbids.
    */
+  /**
+   * Main's own root-keyed view of the daemon's projects (033 FR-069a, plan D3).
+   *
+   * ONE reader, not two: `registerEditorIpc`'s `listProjects` closure used to make its own
+   * `projects.list` call and discard `hiddenPaths` from the result, so the field was already one
+   * line away from where it was needed. Both go through here now (Principle VIII).
+   *
+   * Keyed by the index's own normalised root form. That is legitimate rather than convenient: hidden
+   * paths are keyed by project ID and the index by ROOT, and the two line up only because no two
+   * projects may share a root — the constraint that makes the id→root map total and unambiguous.
+   */
+  const projectsByRoot = new Map<string, { id: string; rootFolder: string; hiddenPaths: string[] }>();
+  const sameHidden = (a: readonly string[], b: readonly string[]): boolean =>
+    a.length === b.length && a.every((v, i) => v === b[i]);
+  /** Re-list from the daemon; answer with the roots whose hidden set ACTUALLY changed. */
+  const refreshProjectsCache = async (): Promise<string[]> => {
+    let projects: { id: string; rootFolder: string; hiddenPaths?: string[] }[];
+    try {
+      const result = await daemonClient.call<{
+        projects: { id: string; rootFolder: string; hiddenPaths?: string[] }[];
+      }>('projects.list', {});
+      projects = result.projects;
+    } catch {
+      // The daemon is the authority and it is momentarily unreachable. Keeping the previous cache is
+      // the conservative answer: emptying it would silently UNHIDE every hidden file.
+      return [];
+    }
+    const changed: string[] = [];
+    const seen = new Set<string>();
+    for (const p of projects) {
+      const key = normaliseForCompare(p.rootFolder);
+      seen.add(key);
+      const hiddenPaths = [...(p.hiddenPaths ?? [])];
+      const before = projectsByRoot.get(key);
+      if (!before || !sameHidden(before.hiddenPaths, hiddenPaths)) changed.push(p.rootFolder);
+      projectsByRoot.set(key, { id: p.id, rootFolder: p.rootFolder, hiddenPaths });
+    }
+    for (const [key, gone] of [...projectsByRoot]) {
+      if (seen.has(key)) continue;
+      projectsByRoot.delete(key);
+      // A project that has been closed still has an index for as long as a window holds it open;
+      // its hidden set going away is a change like any other.
+      if (gone.hiddenPaths.length > 0) changed.push(gone.rootFolder);
+    }
+    return changed;
+  };
   const projectFileIndex = new ProjectFileIndexService(
     fileSystem,
     new NodeFileWatcher(150),
     () => currentSettings.explorer.excludeGlobs,
+    (root) => projectsByRoot.get(normaliseForCompare(root))?.hiddenPaths ?? [],
     pushFileIndexUpdate,
   );
   registerFileIndexIpc(projectFileIndex);
+  /*
+   * Fill the cache once at startup, and re-walk whatever the fill changed.
+   *
+   * The first window can subscribe before this resolves, and a walk that ran with an empty hidden
+   * set would then stay wrong until something else happened to signal it — no filesystem event is
+   * coming, because nothing on the filesystem changed. So the fill asks for a re-walk of the roots
+   * it learned something about, which on a cold start is every project that hides anything.
+   */
+  void refreshProjectsCache().then((changed) => {
+    for (const root of changed) projectFileIndex.refresh(root);
+  });
+  /*
+   * FR-069c's other half: an `explorer.excludeGlobs` change must reach the INDEX, not only the tree.
+   *
+   * The index reads its globs at walk time (S10), but nothing asked it to walk when they changed —
+   * there were exactly two `onSettingsChanged` subscribers and neither was this one — so a quiescent
+   * project served the stale candidate set indefinitely while the tree re-filtered immediately
+   * (`use-explorer-data.ts`, `globsKey` in its dependency array). One input live and the other stale
+   * is precisely the divergence "the same glob list and the same hidden set the tree obeys" denies.
+   */
+  onSettingsChanged.push((previous, next) => {
+    if (sameHidden(previous.explorer.excludeGlobs, next.explorer.excludeGlobs)) return;
+    projectFileIndex.refresh();
+  });
   /*
    * S9 — a window that has gone unsubscribes from EVERY root.
    *
@@ -1144,12 +1225,14 @@ if (isPrimaryInstance)
     // MAIN's own view of which projects exist, straight from the daemon that owns them (018 / US9).
     // The renderer no longer supplies the roots that parameterise its own confinement check — it asks
     // about a file, and main decides against facts the renderer cannot author.
+    //
+    // 033 FR-069a — through the SAME cache the file index reads, rather than a second
+    // `projects.list` call whose `hiddenPaths` this one used to discard (VIII). Still a fresh list
+    // on every call: this parameterises a confinement check, so it answers from the daemon and not
+    // from whatever was true last time a window happened to poke it.
     listProjects: async () => {
-      const result = await daemonClient.call<{ projects: { id: string; rootFolder: string }[] }>(
-        'projects.list',
-        {},
-      );
-      return result.projects.map((p) => ({ id: p.id, rootFolder: p.rootFolder }));
+      await refreshProjectsCache();
+      return [...projectsByRoot.values()].map((p) => ({ id: p.id, rootFolder: p.rootFolder }));
     },
   });
   // The OS clipboard, behind the seam (016, FR-013a) — one app-global record of what throng last
@@ -1484,6 +1567,21 @@ if (isPrimaryInstance)
       undefined,
       senderWebContentsId(event.sender) ?? undefined,
     );
+    /*
+     * 033 FR-069a — MAIN listens to its own relay, and that is the whole mechanism (plan D3.6).
+     *
+     * Nothing pushes to main when `projects.setHidden` lands: the only signal is this
+     * renderer→renderer poke, which main was already relaying and otherwise ignoring. So the
+     * freshness gap closes with a listener rather than a new IPC channel — and it re-walks only the
+     * roots whose hidden set ACTUALLY changed, because this poke also fires for a rename, a colour
+     * change and a project being created, none of which the index cares about.
+     *
+     * The sender is NOT excluded here, unlike the broadcast above: main is not a window, and the
+     * window that made the change is exactly the one whose Quick Open must stop offering the file.
+     */
+    void refreshProjectsCache().then((changed) => {
+      for (const root of changed) projectFileIndex.refresh(root);
+    });
   });
 
   // Cross-window Panel identity sync (003): a Panel was renamed in one window;

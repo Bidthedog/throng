@@ -2610,3 +2610,55 @@ textarea,
   gap: 8px;
   margin: 10px 10px 0;
 }
+
+/*
+ * The picker header's action controls (033, FR-069) — Quick Open's target button and its exclusion
+ * toggle.
+ *
+ * DEFINED HERE RATHER THAN IN `preferences.css`, and that is the whole point of the class existing.
+ * `.icon-button` — which the shipped target control asked for — lives in `preferences.css`, and
+ * `preferences.css` is imported only by `preferences-app.tsx`. The main window loads `theme.css`
+ * alone, so the control rendered with no styling beyond the user-agent default: a raw grey button
+ * sitting above the query field. Every other main-window `IconButton` call site passes its own
+ * class, which is why nothing else showed the same symptom.
+ *
+ * The vocabulary is `.tabstrip-actions__btn`'s, deliberately — one look for "a small themeable icon
+ * control in a chrome row", rather than a third of them.
+ */
+.picker__header-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 5px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/*
+ * `hoverSurface`, never `surfaceActive`: this is a control inside a modal card, not a selected row.
+ * Gated on the window being focused, because a hover state that survives the window losing focus
+ * points at a control the click would not reach.
+ */
+:where(body:not([data-window-blurred])) .picker__header-button:hover:not(:disabled) {
+  background: var(--throng-colour-hoverSurface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.picker__header-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.picker__header-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

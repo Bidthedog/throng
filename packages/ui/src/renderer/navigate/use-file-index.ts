@@ -16,13 +16,11 @@
  * asserts exactly that by counting the messages the renderer sends while ten characters are typed.
  */
 import { useEffect, useState } from 'react';
+import { IDLE_FILE_INDEX_VIEW, applyIndexUpdate, type FileIndexView } from '@throng/core';
 
-export interface FileIndexView {
-  status: 'idle' | 'building' | 'ready';
-  paths: readonly string[];
-}
+export type { FileIndexView };
 
-const IDLE: FileIndexView = { status: 'idle', paths: [] };
+const IDLE = IDLE_FILE_INDEX_VIEW;
 const BUILDING: FileIndexView = { status: 'building', paths: [] };
 
 /**
@@ -30,8 +28,17 @@ const BUILDING: FileIndexView = { status: 'building', paths: [] };
  *
  * `root === null` — no project open in this window — is `idle` with no subscription (R3), which is
  * what the Quick Open command reads to decide not to open at all.
+ *
+ * `includeHidden` selects WHICH of the root's two indices to mirror (033 FR-069). It is part of the
+ * subscription, not a filter: main walks with or without the project's exclusions, so the toggle
+ * never asks the renderer to hold a set nobody wanted. Two hooks on one root at different flags are
+ * two independent subscriptions, and each recognises its own pushes by the flag they echo.
  */
-export function useFileIndex(root: string | null, active: boolean): FileIndexView {
+export function useFileIndex(
+  root: string | null,
+  active: boolean,
+  includeHidden = false,
+): FileIndexView {
   const [view, setView] = useState<FileIndexView>(IDLE);
 
   useEffect(() => {
@@ -60,26 +67,23 @@ export function useFileIndex(root: string | null, active: boolean): FileIndexVie
 
     // Registered BEFORE subscribing, so a walk that finishes between the two is not missed.
     const off = window.throng?.fileIndex?.onUpdate?.((evt) => {
-      if (!live || evt.root !== root) return;
+      /*
+       * The flag is part of the identity being matched, not decoration.
+       *
+       * A window may hold two subscriptions to one root — the standing one at the setting's value
+       * and a short-lived one at the opposite (FR-069) — and both arrive on this single channel.
+       * Matching on `root` alone would fold one index's deltas into the other's set, which produces
+       * a list that is neither, silently, and only while the toggle is flipped.
+       */
+      if (!live || evt.root !== root || evt.includeHidden !== includeHidden) return;
       pushed = true;
-      setView((current) => {
-        if (evt.paths !== undefined) return { status: evt.status, paths: evt.paths };
-        if (evt.added === undefined && evt.removed === undefined) {
-          return { status: evt.status, paths: current.paths };
-        }
-        const removed = new Set(evt.removed ?? []);
-        const next = current.paths.filter((p) => !removed.has(p));
-        // The index is produced in `Array.prototype.sort()` order (W7) and `diffPaths` merges with
-        // `<` against that same order — so re-sorting the patched array the same way keeps the
-        // renderer's copy identical to main's rather than merely equal as a set.
-        for (const added of evt.added ?? []) next.push(added);
-        next.sort();
-        return { status: evt.status, paths: next };
-      });
+      // The fold itself is pure and lives in core (FR-075) — including the rule that a push carrying
+      // NEITHER a set nor a delta means main has disowned this one, so what is held is discarded.
+      setView((current) => applyIndexUpdate(current, evt));
     });
 
     void (async () => {
-      const initial = await window.throng?.fileIndex?.subscribe?.(root);
+      const initial = await window.throng?.fileIndex?.subscribe?.(root, includeHidden);
       if (!live || !initial || pushed) return;
       setView({ status: initial.status, paths: initial.paths ?? [] });
     })();
@@ -87,9 +91,9 @@ export function useFileIndex(root: string | null, active: boolean): FileIndexVie
     return () => {
       live = false;
       off?.();
-      window.throng?.fileIndex?.unsubscribe?.(root);
+      window.throng?.fileIndex?.unsubscribe?.(root, includeHidden);
     };
-  }, [root, active]);
+  }, [root, active, includeHidden]);
 
   return view;
 }

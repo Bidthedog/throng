@@ -65,6 +65,15 @@ class Harness {
 
   globs: string[] = [];
 
+  /**
+   * The per-project hidden set (004, "Hide in this project"), keyed by root — FR-069a.
+   *
+   * Mutable, and read by the service AT WALK TIME rather than captured, exactly as `globs` is (S10).
+   * That symmetry is the requirement: the two inputs the tree obeys must behave identically here, or
+   * FR-069c's "the same glob list and the same hidden set" is false for one of them.
+   */
+  hidden = new Map<string, string[]>();
+
   /** Assigned immediately after construction — the service's `push` closes over this harness. */
   service!: ProjectFileIndexService;
 
@@ -83,6 +92,7 @@ class Harness {
       new NodeFileSystem(async () => {}),
       options?.watcher ?? new NodeFileWatcher(150),
       () => harness.globs,
+      (root) => harness.hidden.get(root) ?? [],
       (id, payload) => harness.sent.push({ id, payload }),
       {
         quietMs: options?.quietMs ?? 750,
@@ -122,6 +132,27 @@ async function waitForReady(h: Harness, id: number): Promise<string[]> {
   const { value } = await waitFor(
     `the initial walk to reach webContents ${id}`,
     () => h.to(id).find((p) => p.status === 'ready' && p.paths !== undefined),
+    10_000,
+  );
+  return [...(value.paths ?? [])];
+}
+
+/**
+ * The same wait, but for ONE of the two indices a root can have (FR-069, plan D2).
+ *
+ * The exclusion state joins the subscription key, so a window may hold two subscriptions to one
+ * root. Every push therefore carries `includeHidden` as well as `root` — without it a renderer with
+ * both subscriptions could not tell which set it had just been handed, and would mix them.
+ */
+async function waitForReadyAt(h: Harness, id: number, includeHidden: boolean): Promise<string[]> {
+  const { value } = await waitFor(
+    `the walk at includeHidden=${includeHidden} to reach webContents ${id}`,
+    () =>
+      h
+        .to(id)
+        .find(
+          (p) => p.status === 'ready' && p.paths !== undefined && p.includeHidden === includeHidden,
+        ),
     10_000,
   );
   return [...(value.paths ?? [])];
@@ -457,4 +488,222 @@ describe('ProjectFileIndexService over a real tree and a real watcher (033, §2)
       await h.destroy();
     }
   }, 30_000);
+
+  /* ──────────────────────────────────────────────────────────────────────────────────────────────
+   * FR-069a — the per-project hidden set, enforced HERE rather than in the renderer (plan D3)
+   *
+   * The defect this closes (baseline F1) was not "the index applies the wrong rules". It was that
+   * the index applied ONE of the project's two hiding mechanisms and the tree applied both, so a
+   * file the user had chosen "Hide in this project" for was absent from the tree and offered by
+   * Quick Open — the two-mechanisms-two-answers outcome FR-006 exists to forbid.
+   * ────────────────────────────────────────────────────────────────────────────────────────────── */
+
+  it('FR-069a — a hidden FILE is omitted from the walk', async () => {
+    const h = await Harness.create();
+    try {
+      await seedProject(h.root);
+      h.hidden.set(h.root, ['src/a.ts']);
+      h.service.subscribe(1, h.root);
+      const paths = await waitForReady(h, 1);
+      expect(paths).not.toContain('src/a.ts');
+      expect(paths, 'its siblings are untouched').toContain('src/deep/b.ts');
+    } finally {
+      await h.destroy();
+    }
+  }, 30_000);
+
+  it('FR-069a — a hidden FOLDER omits everything beneath it, not just itself', async () => {
+    /*
+     * The flat-index trap the plan names (D3.5). The tree hides a folder by removing its node, so
+     * its descendants vanish implicitly; a flat path index doing `hidden.has(rel)` would hide `src`
+     * — which is not even in the index, because the index holds FILES — and go on listing
+     * `src/a.ts`. Hence `p` AND `p/**`, through the same excluder.
+     */
+    const h = await Harness.create();
+    try {
+      await seedProject(h.root);
+      h.hidden.set(h.root, ['src']);
+      h.service.subscribe(1, h.root);
+      const paths = await waitForReady(h, 1);
+      expect(paths.filter((p) => p.startsWith('src/'))).toEqual([]);
+      expect(paths).toContain('readme.md');
+    } finally {
+      await h.destroy();
+    }
+  }, 30_000);
+
+  it('FR-069c — the globs and the hidden set compose in ONE walk', async () => {
+    const h = await Harness.create({ globs: ['**/node_modules'] });
+    try {
+      await seedProject(h.root);
+      h.hidden.set(h.root, ['src/deep']);
+      h.service.subscribe(1, h.root);
+      const paths = await waitForReady(h, 1);
+      expect(paths).toEqual(['readme.md', 'src/a.ts']);
+    } finally {
+      await h.destroy();
+    }
+  }, 30_000);
+
+  it('FR-069a — changing the hidden set re-walks the root and pushes the difference', async () => {
+    /*
+     * Nothing on the filesystem changed, so no watch signal is coming. Without a push from the
+     * composition root when `projects.setHidden` lands, a quiescent project would serve the stale
+     * candidate set indefinitely — the tree re-filters immediately, and the two would disagree for
+     * as long as nobody touched the disk.
+     */
+    const h = await Harness.create();
+    try {
+      await seedProject(h.root);
+      h.service.subscribe(1, h.root);
+      expect(await waitForReady(h, 1)).toContain('src/a.ts');
+
+      const mark = h.sent.length;
+      h.hidden.set(h.root, ['src/a.ts']);
+      h.service.refresh(h.root);
+      await waitFor(
+        'the hidden file to be reported removed',
+        () => h.to(1, mark).find((p) => (p.removed ?? []).includes('src/a.ts')),
+        10_000,
+      );
+      expect(h.view(1, []), 'and nothing else moved').toEqual([
+        'node_modules/junk.js',
+        'readme.md',
+        'src/deep/b.ts',
+      ]);
+    } finally {
+      await h.destroy();
+    }
+  }, 30_000);
+
+  it('S10 twice over — a GLOB change re-walks on request, without waiting for a disk event', async () => {
+    // The other half of the same gap (plan D3.7): the index read its globs at walk time but nothing
+    // asked it to walk when they changed, so one input was live and the other stale.
+    const h = await Harness.create();
+    try {
+      await seedProject(h.root);
+      h.service.subscribe(1, h.root);
+      expect(await waitForReady(h, 1)).toContain('node_modules/junk.js');
+
+      const mark = h.sent.length;
+      h.globs = ['**/node_modules'];
+      h.service.refresh();
+      await waitFor(
+        'the newly-excluded file to be reported removed',
+        () => h.to(1, mark).find((p) => (p.removed ?? []).includes('node_modules/junk.js')),
+        10_000,
+      );
+    } finally {
+      await h.destroy();
+    }
+  }, 30_000);
+
+  /* ──────────────────────────────────────────────────────────────────────────────────────────────
+   * FR-069 / D2 — the exclusion state joins the SUBSCRIPTION KEY
+   *
+   * Widening the key ADDS an index rather than changing what one is, so every guarantee the service
+   * already makes is untouched: they are all stated per index.
+   * ────────────────────────────────────────────────────────────────────────────────────────────── */
+
+  it('two subscriptions to one root at different includeHidden values get DIFFERENT sets', async () => {
+    const h = await Harness.create({ globs: ['**/node_modules'] });
+    try {
+      await seedProject(h.root);
+      h.hidden.set(h.root, ['src/deep']);
+
+      h.service.subscribe(1, h.root, false);
+      h.service.subscribe(1, h.root, true);
+
+      const excluding = await waitForReadyAt(h, 1, false);
+      const including = await waitForReadyAt(h, 1, true);
+      expect(excluding).toEqual(['readme.md', 'src/a.ts']);
+      // "Show hidden" means EVERYTHING the project hides — the globs as well as the hidden set.
+      // There is one excluder and the flag chooses whether to build it or the empty one.
+      expect(including).toEqual([
+        'node_modules/junk.js',
+        'readme.md',
+        'src/a.ts',
+        'src/deep/b.ts',
+      ]);
+    } finally {
+      await h.destroy();
+    }
+  }, 30_000);
+
+  it('each of the two indices is disposed on its OWN last unsubscribe (S9)', async () => {
+    const h = await Harness.create({ globs: ['**/node_modules'] });
+    try {
+      await seedProject(h.root);
+      h.service.subscribe(1, h.root, false);
+      h.service.subscribe(1, h.root, true);
+      await waitForReadyAt(h, 1, false);
+      await waitForReadyAt(h, 1, true);
+      await armWatch(h, 1);
+
+      // Leaving the flipped index must not take the standing one down with it.
+      h.service.unsubscribe(1, h.root, true);
+      const mark = h.sent.length;
+      await writeFile(join(h.root, 'still-watched.txt'), 'x');
+      const { value } = await waitFor(
+        'the surviving subscription to still receive deltas',
+        () => h.to(1, mark).find((p) => (p.added ?? []).includes('still-watched.txt')),
+      );
+      expect(value.includeHidden, 'and only the surviving one').toBe(false);
+      expect(
+        h.to(1, mark).filter((p) => p.includeHidden === true),
+        'the disposed index sends nothing',
+      ).toEqual([]);
+
+      h.service.unsubscribe(1, h.root, false);
+      const quiet = h.sent.length;
+      await writeFile(join(h.root, 'after-dispose.txt'), 'x');
+      await new Promise((r) => setTimeout(r, 2500));
+      expect(h.sent.slice(quiet)).toEqual([]);
+    } finally {
+      await h.destroy();
+    }
+  }, 40_000);
+
+  it('the delta protocol is unchanged for each index (I2, S7, S8)', async () => {
+    const h = await Harness.create({ globs: ['**/node_modules'] });
+    try {
+      await seedProject(h.root);
+      h.service.subscribe(1, h.root, false);
+      h.service.subscribe(1, h.root, true);
+      await waitForReadyAt(h, 1, false);
+      await waitForReadyAt(h, 1, true);
+      await armWatch(h, 1);
+
+      const mark = h.sent.length;
+      await writeFile(join(h.root, 'src', 'fresh.ts'), 'f');
+      // A file OUTSIDE the excluded folder reaches both, as a delta and not a whole set (I2).
+      for (const flag of [false, true]) {
+        const { value } = await waitFor(
+          `the new file to reach the includeHidden=${flag} subscription`,
+          () =>
+            h
+              .to(1, mark)
+              .find((p) => p.includeHidden === flag && (p.added ?? []).includes('src/fresh.ts')),
+        );
+        expect(value.paths, 'the whole set is sent AT MOST ONCE per subscription (I2)').toBeUndefined();
+      }
+
+      // …and a file INSIDE it reaches only the one that is not excluding it.
+      const mark2 = h.sent.length;
+      await writeFile(join(h.root, 'node_modules', 'extra.js'), 'e');
+      await waitFor(
+        'the excluded file to reach the includeHidden subscription',
+        () =>
+          h
+            .to(1, mark2)
+            .find((p) => p.includeHidden === true && (p.added ?? []).includes('node_modules/extra.js')),
+      );
+      expect(
+        h.to(1, mark2).filter((p) => p.includeHidden === false && (p.added ?? []).length > 0),
+        'an excluded file is not a change to the excluding set (S7)',
+      ).toEqual([]);
+    } finally {
+      await h.destroy();
+    }
+  }, 40_000);
 });

@@ -89,9 +89,19 @@ Constructed **only** in `packages/ui/src/main/main.ts`, beside `FilesService` an
 
 | Channel | Kind | Payload |
 |---|---|---|
-| `throng:fileIndex:subscribe` | `invoke` | `{ root: string }` → `{ status: 'building' \| 'ready'; paths?: string[] }` |
-| `throng:fileIndex:unsubscribe` | `send` | `{ root: string }` |
-| `throng:fileIndex:update` | push (per-window) | `{ root: string; status: 'building' \| 'ready'; paths?: string[]; added?: string[]; removed?: string[] }` |
+| `throng:fileIndex:subscribe` | `invoke` | `{ root: string; includeHidden: boolean }` → `{ status: 'building' \| 'ready'; paths?: string[] }` |
+| `throng:fileIndex:unsubscribe` | `send` | `{ root: string; includeHidden: boolean }` |
+| `throng:fileIndex:update` | push (per-window) | `{ root: string; includeHidden: boolean; status: 'building' \| 'ready'; paths?: string[]; added?: string[]; removed?: string[] }` |
+
+**`includeHidden` widened all three payloads (2026-08-15, FR-069, plan D2).** It is part of the
+**subscription key**, not a filter applied after the fact: a root has two indices and main walks each
+with or without the project's exclusions. Two consequences the shapes above encode:
+
+- **`unsubscribe` carries it**, because a window holding both of a root's indices must be able to
+  give up exactly one and keep the other.
+- **`update` echoes it**, because both arrive on one channel. A renderer matching on `root` alone
+  would fold one index's deltas into the other's set — producing a list that is neither, silently,
+  and only while the toggle is flipped.
 
 | # | Guarantee | Requirement |
 |---|---|---|
@@ -103,10 +113,17 @@ Constructed **only** in `packages/ui/src/main/main.ts`, beside `FilesService` an
 ## 4. The renderer's side
 
 ```ts
-// packages/ui/src/renderer/navigate/use-file-index.ts
+// packages/core/src/explorer/file-index-view.ts  — the FOLD, pure (FR-075)
 export interface FileIndexView { status: 'idle' | 'building' | 'ready'; paths: readonly string[] }
-/** Subscribes for `root` while `active`; unsubscribes on unmount or root change. */
-export function useFileIndex(root: string | null, active: boolean): FileIndexView;
+export function applyIndexUpdate(view: FileIndexView, update: FileIndexUpdateView): FileIndexView;
+
+// packages/ui/src/renderer/navigate/use-file-index.ts  — the SUBSCRIPTION
+/** Subscribes for (`root`, `includeHidden`) while `active`; unsubscribes on unmount or change. */
+export function useFileIndex(
+  root: string | null,
+  active: boolean,
+  includeHidden?: boolean,
+): FileIndexView;
 ```
 
 | # | Guarantee | Requirement |
@@ -116,6 +133,19 @@ export function useFileIndex(root: string | null, active: boolean): FileIndexVie
 | R3 | `root === null` → `status: 'idle'`, no subscription, and the Quick Open command does not open the modal at all | FR-018 |
 | R4 | A root change unsubscribes the old root before subscribing the new one, and clears `paths` — no window ever holds two roots' files | FR-005, FR-013 |
 | R5 | **Typing performs no IPC.** The candidate array is already in memory; a keystroke reads it and nothing else | FR-013, SC-002 |
+| R7 | A push carrying **neither `paths` nor a delta** means main has **disowned** this index (S11), and the renderer MUST **clear what it holds** — not keep it under a changed status | FR-075 |
+| R8 | A push is applied only when **both** `root` and `includeHidden` match this subscription | FR-069 |
+
+**R7 is stated because its absence was a defect (finding F2), not because it is obvious.** S11 is the
+main-side half: the watch has failed for good, so the root goes back to `building` with an empty
+array and every subscriber is told. §4 said nothing about what the renderer does with that push, and
+the reducer read it as *"the status changed, keep what you have"* — so Quick Open went on offering a
+candidate set nothing was keeping current. Both halves looked correct in isolation, which is exactly
+why the rule belongs in the contract rather than in either implementation.
+
+The fold is **pure and lives in core** for the same reason: `use-file-index.ts` is a hook, this
+repository has no component-test tier, and the rule is arithmetic. In core it is asserted directly
+(`packages/core/tests/unit/file-index-view.test.ts`) instead of only through a running window.
 
 ## 5. Where each success criterion is proved
 

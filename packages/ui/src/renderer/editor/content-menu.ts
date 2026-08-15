@@ -30,6 +30,16 @@ export interface ContentMenuArgs {
   lineEnding: () => LineEndingId;
   /** 024 US1 (#152): the checkable word-wrap toggle — its current state, the action, and its chord. */
   wordWrap: { on: boolean; toggle: () => void; chord?: string };
+  /**
+   * 033 US2 (#219, FR-027): Go To Line — the action, and the chord it is CURRENTLY bound to.
+   *
+   * The chord is passed in rather than read here, and read live rather than captured, for the same
+   * reason Word Wrap's is: a user who rebinds the command must see the new chord on the menu without
+   * restarting, and a menu that names a chord the app no longer honours is worse than one naming
+   * none. The item exists at all because the constitution's "every panel action has a menu item"
+   * rule applies to a discrete command acting on a panel's content, which this is.
+   */
+  gotoLine: { open: () => void; chord?: string };
   /** The document's effective language NAME, shown on the Set Language item so the menu states the
    *  current value as well as offering to change it (024 US1 follow-up). */
   languageName?: string;
@@ -122,6 +132,17 @@ export function editorContentMenu(args: ContentMenuArgs): MenuItem[] {
       icon: 'redo',
       shortcut: 'Ctrl+Y',
       onClick: () => win()?.editor?.redo({ panelId, viewId }),
+    },
+    {
+      // 033 US2 (FR-027) — the menu route to Go To Line, showing the chord it is bound to right now.
+      //
+      // It sits between the editing items and the view items because it is neither: it changes
+      // nothing in the document and nothing about how the document is drawn, it moves you. That is
+      // the Navigate section US5's vocabulary gives it, and this is the position it will occupy.
+      label: 'Go To Line…',
+      testId: 'menu-item-Go To Line…',
+      shortcut: args.gotoLine.chord,
+      onClick: () => args.gotoLine.open(),
     },
     {
       // The second of the two entry points FR-010 asks for; the status strip is the other, and both

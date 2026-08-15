@@ -113,9 +113,14 @@ export {
   parentRel,
   isExcluded,
   compileExcluder,
+  // 033 FR-069a — the per-project hidden set as globs, so ONE excluder answers for both mechanisms.
+  hiddenPathGlobs,
   DEFAULT_EXCLUDE_GLOBS,
   walkFiles,
   diffPaths,
+  // 033 FR-075 — the renderer's fold of one index push.
+  applyIndexUpdate,
+  IDLE_FILE_INDEX_VIEW,
   isWithinRoot,
   isDropAllowed,
   isRoot,
@@ -138,6 +143,7 @@ export type { DragModifierKey, DragModifierConfig } from './explorer/index.js';
 export type { TreeDragPayload, TreeDragInput } from './explorer/index.js';
 // 033 US1 — the project file index's pure half (contracts/file-index.md §1).
 export type { WalkOptions, FileIndexDelta } from './explorer/index.js';
+export type { FileIndexView, FileIndexUpdateView } from './explorer/index.js';
 export type {
   AppSettings,
   ConfirmLevel,
@@ -147,6 +153,7 @@ export type {
   TerminalSettings,
   TerminalFlavourConfig,
   EditorSettings,
+  EditorNavigationSettings,
   EditorOpenOnClick,
   EditorOpenTarget,
   SaveAllScopeSetting,
@@ -300,9 +307,17 @@ export {
 } from './config/theme-reset.js';
 // Shipped defaults (010): the authoritative immutable/versioned record + pure
 // restore/reset/seed/upgrade decision logic. I/O lives in UI-main.
-export type { ShippedDefaults, ThemeUpgradePlan } from './config/shipped-defaults.js';
+export type {
+  ShippedDefaults,
+  ThemeUpgradePlan,
+  SettingsLeafUpgrade,
+} from './config/shipped-defaults.js';
 export {
   SHIPPED_DEFAULTS_VERSION,
+  // 033 FR-070a — the guarded one-leaf settings migration, and the v4 value it guards on.
+  V4_EXCLUDE_GLOBS,
+  planSettingsUpgrade,
+  applySettingsUpgrade,
   buildShippedDefaults,
   serializeShippedDefaults,
   reservedThemeNames,

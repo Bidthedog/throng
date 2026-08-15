@@ -22,6 +22,16 @@
  *   data-value="lastActive" | "new"  its current value, in the SHIPPED `editor.openTarget`
  *                                    vocabulary — the same two strings the setting takes, so the
  *                                    preselection in T2 is a comparison rather than a translation.
+ *   data-testid="quickopen-hidden"   the FR-069 exclusion toggle, the target button's sibling
+ *   data-value="exclude" | "include" what it is doing NOW, not what pressing it would do — the same
+ *                                    convention `quickopen-target` follows
+ *
+ * ══ WHY THIS FILE IS SERIAL ══
+ *
+ * It drives the file tree's CONTEXT MENU, to hide a file the way a user does (SC-022). throng closes
+ * menus when its window loses focus, so a second headed app started concurrently would close the menu
+ * underneath this one — which is why `parallel-plan.json` lists this file. It was in the parallel tier
+ * until the toggle arrived; the move is a consequence of that assertion, not of the file's age.
  */
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -38,8 +48,8 @@ import {
   type AppOptions,
   type OpenApp,
 } from './harness.js';
-import { createDeepTree, cleanupDeepTree } from './helpers/deep-tree.js';
-import { openQuickOpen, quickOpenRows } from './helpers/navigation.js';
+import { createDeepTree, cleanupDeepTree, DEEP_TREE } from './helpers/deep-tree.js';
+import { openQuickOpen, quickOpenRows, quickOpenRowPaths } from './helpers/navigation.js';
 
 /*
  * ONE app for this file. Only the last test seeds state before launch — a config root carrying
@@ -347,5 +357,144 @@ test('with "Open files in" set to New Editor the control opens preselected on th
   } finally {
     cleanupDeepTree(tree);
     cleanupTemp(cfg);
+  }
+});
+
+/* ────────────────────────────────────────────────────────────────────────────────────────────────
+ * The exclusion toggle — FR-069 to FR-069c, SC-018, SC-022
+ *
+ * It lives here because this file owns `.picker__header`, and FR-069 draws the toggle as the target
+ * button's SIBLING in it. The two controls are also asymmetric on purpose — the target button
+ * carries its explanation as text (FR-068) and this one is an icon with a hover title — so a spec
+ * that saw only one of them would read that asymmetry as a defect.
+ *
+ * ══ WHY BOTH HALVES OF SC-018 ARE ASSERTED SEPARATELY ══
+ *
+ * A project hides files by TWO mechanisms and the user experiences them as one: `explorer.excludeGlobs`
+ * and the per-project hidden set that "Hide in this project" writes (004). The delivered code honoured
+ * the first and not the second, so a file the user had hidden was absent from the tree and offered by
+ * Quick Open. A single assertion over "a hidden file" would have passed on the glob half alone —
+ * which is exactly how the defect survived — so SC-022 states the hidden-set half on its own and this
+ * file asserts it against its own file, with its own query.
+ * ──────────────────────────────────────────────────────────────────────────────────────────────── */
+
+/** The toggle. Named here by §5's derivation, exactly as `quickopen-target` is. */
+const hiddenToggle = (win: Page) => win.getByTestId('quickopen-hidden');
+
+/** Hide `relPath` through the route the user has — the tree's own context menu (004). */
+async function hideInProject(win: Page, folder: string, name: string): Promise<void> {
+  const tree = win.getByTestId('file-explorer-tree');
+  await tree.getByTestId(`tree-twisty-${folder}`).click();
+  await expect(tree.getByText(name, { exact: true })).toBeVisible();
+  await tree.getByText(name, { exact: true }).click({ button: 'right' });
+  await win.locator('.context-menu__item', { hasText: 'Hide in this project' }).click();
+  // The tree dropping the row is the acknowledgement that the daemon write landed. Waiting on it
+  // rather than on a duration is what stops the assertions below racing the round trip.
+  await expect(tree.getByText(name, { exact: true })).toHaveCount(0);
+}
+
+test('at the shipped default NEITHER mechanism’s files are candidates, and the toggle brings both back (SC-018, SC-022, FR-069c)', async () => {
+  const tree = createDeepTree('throng-qot-hidden-');
+  try {
+    await runApp(async (_app, win) => {
+      const pid = await editorWithProject(win, 'QOToggleBoth', tree.root);
+      await hideInProject(win, 'src', 'hidden-in-project.txt');
+      await focusEditor(win, pid);
+
+      await openQuickOpen(win);
+      // FR-069b — the shipped setting is "exclude", so the modal opens excluding.
+      await expect(hiddenToggle(win)).toHaveAttribute('data-value', 'exclude');
+
+      /*
+       * The two halves, asserted INDEPENDENTLY and by positive queries with exact expected results.
+       *
+       * `quarantined` is carried only by files under `.git` and `node_modules`, both of which the
+       * shipped globs hide (FR-070). `hidden-in-project` is carried only by the file just hidden
+       * through the tree, which no glob touches. Neither can carry the other.
+       */
+      await win.getByTestId('quickopen-input').fill(DEEP_TREE.excludedQuery);
+      await expect(quickOpenRows(win), 'the glob half of SC-018').toHaveCount(0);
+      await win.getByTestId('quickopen-input').fill(DEEP_TREE.hidable.query);
+      await expect(quickOpenRows(win), 'SC-022 — the hidden-set half').toHaveCount(0);
+
+      // Flip it. "Show hidden" means EVERYTHING the project hides — one rule set, not two (FR-069c).
+      await hiddenToggle(win).click();
+      await expect(hiddenToggle(win)).toHaveAttribute('data-value', 'include');
+
+      await expect(quickOpenRows(win)).toHaveCount(1);
+      expect(await quickOpenRowPaths(win)).toEqual([DEEP_TREE.hidable.path]);
+      await win.getByTestId('quickopen-input').fill(DEEP_TREE.excludedQuery);
+      await expect(quickOpenRows(win)).toHaveCount(2);
+      expect((await quickOpenRowPaths(win)).sort()).toEqual([
+        '.git/quarantined-object.txt',
+        'node_modules/quarantined-pkg/quarantined-module.ts',
+      ]);
+
+      await win.keyboard.press('Escape');
+      await expect(win.getByTestId('quickopen')).toHaveCount(0);
+
+      // FR-069b — the setting decides where every modal STARTS, so the next one starts excluding
+      // again. The toggle changed this invocation, not the preference.
+      await focusEditor(win, pid);
+      await openQuickOpen(win);
+      await expect(hiddenToggle(win)).toHaveAttribute('data-value', 'exclude');
+      await win.getByTestId('quickopen-input').fill(DEEP_TREE.hidable.query);
+      await expect(quickOpenRows(win)).toHaveCount(0);
+      await win.keyboard.press('Escape');
+    });
+  } finally {
+    cleanupDeepTree(tree);
+  }
+});
+
+test('the toggle is the target button’s sibling in the header, and is drawn even when the target button is not (FR-069)', async () => {
+  const tree = createDeepTree('throng-qot-sibling-');
+  try {
+    await runApp(async (_app, win) => {
+      const pid = await editorWithProject(win, 'QOToggleSibling', tree.root);
+      await openQuickOpen(win);
+
+      // Both controls, in ONE header row — "drawn as its sibling", asked of the DOM rather than of
+      // a screenshot.
+      await expect(target(win)).toBeVisible();
+      await expect(hiddenToggle(win)).toBeVisible();
+      const sharedHeader = await win.getByTestId('quickopen').evaluate((card) => {
+        const a = card.querySelector('[data-testid="quickopen-target"]')?.closest('.picker__header');
+        const b = card.querySelector('[data-testid="quickopen-hidden"]')?.closest('.picker__header');
+        return a !== null && a === b;
+      });
+      expect(sharedHeader, 'the two header controls are not siblings in one .picker__header').toBe(
+        true,
+      );
+
+      // A themeable icon control carrying a hover title that names both the state and the action.
+      const title = (await hiddenToggle(win).getAttribute('title')) ?? '';
+      expect(title, 'the toggle has no hover title').not.toBe('');
+
+      await win.keyboard.press('Escape');
+      await expect(win.getByTestId('quickopen')).toHaveCount(0);
+
+      /*
+       * FR-011 draws the target control only from inside an editor; FR-069 draws the toggle ALWAYS.
+       *
+       * The header used to be built as a whole only when the modal was invoked from an editor, so a
+       * toggle rendered inside it would silently vanish for every invocation from the tree or a
+       * terminal — which is most of them.
+       */
+      await win.getByTestId('file-explorer-tree').getByText('README.md', { exact: true }).click();
+      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
+        '// README.md',
+        { timeout: 8000 },
+      );
+      await openQuickOpen(win);
+      await expect(target(win), 'FR-011 — not invoked from an editor').toHaveCount(0);
+      await expect(hiddenToggle(win), 'FR-069 — the toggle is drawn regardless').toBeVisible();
+      await expect(hiddenToggle(win)).toHaveAttribute('data-value', 'exclude');
+
+      await win.keyboard.press('Escape');
+      await expect(win.getByTestId('quickopen')).toHaveCount(0);
+    });
+  } finally {
+    cleanupDeepTree(tree);
   }
 });

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -6,6 +6,7 @@ import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
   SHIPPED_DEFAULTS_VERSION,
+  V4_EXCLUDE_GLOBS,
   buildShippedDefaults,
   reservedThemeNames,
   type ShippedDefaults,
@@ -130,5 +131,86 @@ describe('ShippedDefaultsService.upgrade (additive only)', () => {
       expect(readFileSync(join(root, 'themes', `${n}.json`), 'utf8'), n).toBe(snapshot[i]);
     });
     expect(await service.readAppliedVersion()).toBe(SHIPPED_DEFAULTS_VERSION);
+  });
+
+  /*
+   * 033 FR-070a — the SETTINGS half of the upgrade, and the only population it exists for.
+   *
+   * `planSettingsUpgrade`'s own unit tests prove the guard; these prove the WIRING, against a config
+   * root shaped like an existing installation rather than a fresh one. That distinction is the whole
+   * requirement: first-run `seed()` materialises the entire settings document, so an install that
+   * has ever started the app holds the previous glob array literally, and no fresh-install test in
+   * this repository can observe it — which is how three earlier features each lost a version bump at
+   * exactly this line.
+   */
+  describe('the guarded settings leaf (033, FR-070a / FR-070b)', () => {
+    /** A config root as an installation on shipped-defaults v4 would have left it. */
+    function existingInstall(globs: string[]): { root: string; store: FileConfigStore } {
+      const root = freshRoot();
+      const store = new FileConfigStore(root);
+      writeFileSync(
+        join(root, 'settings.json'),
+        `${JSON.stringify({ ...DEFAULT_APP_SETTINGS, explorer: { ...DEFAULT_APP_SETTINGS.explorer, excludeGlobs: globs } }, null, 2)}\n`,
+        'utf8',
+      );
+      return { root, store };
+    }
+    const globsOnDisk = (root: string): string[] =>
+      (readJson(join(root, 'settings.json')) as { explorer: { excludeGlobs: string[] } }).explorer
+        .excludeGlobs;
+
+    it('moves an install still on the v4 list to the shipped list', async () => {
+      const { root, store } = existingInstall([...V4_EXCLUDE_GLOBS]);
+      expect(await new ShippedDefaultsService(store, SHIPPED).upgrade()).toMatchObject({ ok: true });
+      expect(globsOnDisk(root)).toEqual([...DEFAULT_APP_SETTINGS.explorer.excludeGlobs]);
+      expect(globsOnDisk(root), 'the point of the whole exercise').toContain('**/node_modules');
+    });
+
+    it('leaves every OTHER setting in that document exactly as it found it', async () => {
+      const { root, store } = existingInstall([...V4_EXCLUDE_GLOBS]);
+      const before = readJson(join(root, 'settings.json')) as Record<string, unknown>;
+      await new ShippedDefaultsService(store, SHIPPED).upgrade();
+      const after = readJson(join(root, 'settings.json')) as Record<string, unknown>;
+      expect(Object.keys(after)).toEqual(Object.keys(before));
+      for (const key of Object.keys(before)) {
+        if (key === 'explorer') continue;
+        expect(after[key], key).toEqual(before[key]);
+      }
+      expect((after.explorer as Record<string, unknown>).deleteMode).toEqual(
+        (before.explorer as Record<string, unknown>).deleteMode,
+      );
+    });
+
+    it('leaves a CUSTOMISED list exactly as the user set it (FR-070b)', async () => {
+      const custom = [...V4_EXCLUDE_GLOBS, '**/dist'];
+      const { root, store } = existingInstall(custom);
+      await new ShippedDefaultsService(store, SHIPPED).upgrade();
+      expect(globsOnDisk(root)).toEqual(custom);
+    });
+
+    it('leaves an explicitly EMPTIED list alone (FR-070b)', async () => {
+      const { root, store } = existingInstall([]);
+      await new ShippedDefaultsService(store, SHIPPED).upgrade();
+      expect(globsOnDisk(root)).toEqual([]);
+    });
+
+    it('is idempotent — a second upgrade rewrites nothing', async () => {
+      const { root, store } = existingInstall([...V4_EXCLUDE_GLOBS]);
+      const service = new ShippedDefaultsService(store, SHIPPED);
+      await service.upgrade();
+      const afterFirst = readFileSync(join(root, 'settings.json'), 'utf8');
+      await service.upgrade();
+      expect(readFileSync(join(root, 'settings.json'), 'utf8')).toBe(afterFirst);
+    });
+
+    it('refuses to touch a settings document it cannot parse', async () => {
+      // The rule `resetLeaf` established, and it binds harder here: this runs unattended at startup,
+      // so guessing at a document it cannot read would replace choices the user can still repair.
+      const root = freshRoot();
+      const store = new FileConfigStore(root);
+      writeFileSync(join(root, 'settings.json'), '{ not json', 'utf8');
+      expect(await new ShippedDefaultsService(store, SHIPPED).upgrade()).toMatchObject({ ok: true });
+      expect(readFileSync(join(root, 'settings.json'), 'utf8')).toBe('{ not json');
+    });
   });
 });

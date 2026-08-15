@@ -13,10 +13,12 @@ import {
   DEFAULT_KEYBINDINGS,
   guardedSettingsValidator,
   parseKeybindings,
+  planSettingsUpgrade,
   planThemeUpgrade,
   reservedThemeNames,
   resetBindingValue,
   resetSettingValue,
+  setAtPath,
   type ConfigDocId,
   type ShippedDefaults,
   type Theme,
@@ -277,11 +279,45 @@ export class ShippedDefaultsService {
   }
 
   /**
+   * The SETTINGS half of {@link upgrade} — one leaf, guarded (033 FR-070a/FR-070b).
+   *
+   * Returns the file to write, or `null` when nothing is owed. Reads and rewrites the RAW document
+   * rather than a parsed `AppSettings`, so a key the schema does not model survives an upgrade the
+   * user never asked for; the guard in `planSettingsUpgrade` is what keeps a customised value safe.
+   *
+   * An unparseable settings file is left ALONE. `resetLeaf` established the rule and its reasoning
+   * holds twice over here: this runs unattended at startup, so guessing at a document it cannot read
+   * would replace choices the user could still repair by hand.
+   */
+  private async settingsUpgradeFile(): Promise<{ path: string; content: string } | null> {
+    const doc: ConfigDocId = { kind: 'settings' };
+    const raw = await this.store.readRaw(doc);
+    if (raw.trim().length === 0) return null; // absent → `seed` writes the shipped document
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+    const leaves = planSettingsUpgrade(parsed, this.shipped);
+    if (leaves.length === 0) return null;
+    let next = parsed;
+    for (const leaf of leaves) next = setAtPath(next as Record<string, unknown>, leaf.path, leaf.value);
+    return { path: this.store.pathOf(doc), content: FileConfigStore.serialize(next) };
+  }
+
+  /**
    * FR-015a: additive-only upgrade. Adds newly-shipped themes absent from config
    * and materialises newly-added theme properties into existing theme files
    * (built-ins from their shipped value, customs from the base throng default),
    * NEVER changing a value the user already has. Records the current version.
    * Idempotent.
+   *
+   * 033 FR-070a widened it past themes for the first time: one settings leaf,
+   * `explorer.excludeGlobs`, rewritten only when it still deep-equals the value version 4 shipped.
+   * The settings document joins the lock set for the same reason every other document is in it —
+   * this is a read-modify-write, and the gap between the read and the write is where a concurrent
+   * edit is lost.
    */
   async upgrade(): Promise<UpgradeResult> {
     /*
@@ -297,7 +333,10 @@ export class ShippedDefaultsService {
      */
     const names = new Set([...reservedThemeNames(this.shipped), ...(await this.store.listThemes())]);
     return withDocumentsLock(
-      [...names].map((name): ConfigDocId => ({ kind: 'theme', name })),
+      [
+        ...[...names].map((name): ConfigDocId => ({ kind: 'theme', name })),
+        { kind: 'settings' },
+      ],
       async () => {
         const present = await this.readPresentThemes();
         const plan = planThemeUpgrade({ shipped: this.shipped, present, throngBase: this.shipped.themes.throng });
@@ -308,6 +347,9 @@ export class ShippedDefaultsService {
         for (const { name, theme } of plan.fillThemes) {
           files.push({ path: this.store.pathOf({ kind: 'theme', name }), content: FileConfigStore.serialize(theme) });
         }
+        // 033 FR-070a — the one settings leaf, or nothing at all.
+        const settingsFile = await this.settingsUpgradeFile();
+        if (settingsFile) files.push(settingsFile);
         files.push(this.markerFile());
         const res: WriteAllResult = await this.store.writeFilesAtomic(files);
         if (!res.ok) return res;

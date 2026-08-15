@@ -2,7 +2,10 @@
 // confinement, target resolution, naming, drag, and the open-click decision.
 export type { FileNode, NodeKind } from './node.js';
 export { toNodes, sortNodes, joinRel, parentRel } from './node.js';
-export { isExcluded, compileExcluder, DEFAULT_EXCLUDE_GLOBS } from './exclude.js';
+export { isExcluded, compileExcluder, hiddenPathGlobs, DEFAULT_EXCLUDE_GLOBS } from './exclude.js';
+// 033 FR-075 — the renderer's fold of one index push, pure so it can be asserted without a window.
+export { applyIndexUpdate, IDLE_FILE_INDEX_VIEW } from './file-index-view.js';
+export type { FileIndexView, FileIndexUpdateView } from './file-index-view.js';
 // 033 US1 — the project file index's pure half: the walk that seeds Quick Open, and the diff that
 // keeps it current. Depends only on the IFileSystem seam (Principle II).
 export { walkFiles, diffPaths } from './file-index.js';

@@ -104,7 +104,20 @@ export type ActionId =
    *
    * `Ctrl+Shift+T` is in neither constitutional tier (IV), so it displaces no line-editor binding.
    */
-  | 'navigate.quickOpen';
+  | 'navigate.quickOpen'
+  /*
+   * 033 US2 (#219) — jump to a line number in the focused editor.
+   *
+   * `Ctrl+G` is readline's `abort`, and a shell user presses it. This command is therefore
+   * **EDITOR_ONLY**, and that scope is the whole of its defence: the chord is never live in a
+   * terminal, so `resolveAction` returns null there, nothing is preventDefaulted, and xterm delivers
+   * `^G` to the shell exactly as it would with this feature absent (A3, SC-007).
+   *
+   * Principle IV's tier test is about what a hosted flavour's LINE EDITOR does, and it is satisfied
+   * by scope rather than by absence — which is why `Ctrl+G` needs no recorded exception while
+   * `navigate.quickOpen`, scoped EVERYWHERE, had to pick a chord no line editor wanted.
+   */
+  | 'navigate.gotoLine';
 
 export interface Keybindings {
   version: number;
@@ -164,6 +177,11 @@ export const COMMAND_SCOPES: CommandScopes = {
   // 033 US1 (#219, FR-003): Quick Open answers the same from a terminal, an editor or the tree, so
   // it is EVERYWHERE — a chord that only worked in some of them would need the user to know which.
   'navigate.quickOpen': EVERYWHERE,
+  // 033 US2 (#219, FR-025, A2): Go To Line acts inside ONE editor's document, so it is live in an
+  // editor and nowhere else. Not a preference — `Ctrl+G` is readline's `abort`, and EDITOR_ONLY is
+  // what keeps the shell's copy of it (SC-007). Deliberately NOT `navigate.*` by prefix: the two
+  // commands in this namespace have different scopes on purpose.
+  'navigate.gotoLine': EDITOR_ONLY,
   // The File Explorer's clipboard chords act on FILES, and only while the tree has focus.
   'file.rename': EXPLORER_ONLY,
   'file.cut': EXPLORER_ONLY,
@@ -270,6 +288,15 @@ const WINDOWS_BINDINGS: PlatformBindings = {
      * tier (constitution IV), so it displaces no line-editor binding and needs no exception.
      */
     'navigate.quickOpen': ['Ctrl+Shift+T'],
+    /*
+     * 033 / FR-020 — Go To Line. `Ctrl+G` is the chord this gesture carries in every editor a user
+     * is likely to arrive from, and no shipped throng binding holds it.
+     *
+     * It IS readline's `abort`, and that is not an oversight: the command is EDITOR_ONLY (above), so
+     * the chord is never resolved in a terminal scope and the shell keeps receiving `^G`. Principle
+     * IV's reserved tier bans a chord being taken from a hosted line editor; nothing is taken here.
+     */
+    'navigate.gotoLine': ['Ctrl+G'],
     'file.rename': ['F2'],
     'file.cut': ['Ctrl+X'],
     'file.copy': ['Ctrl+C'],

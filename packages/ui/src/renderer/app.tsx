@@ -9,10 +9,10 @@ import {
   type Direction,
   type LayoutNode,
 } from '@throng/core';
-import { resolveScoped, type ScopeInput } from './keybindings/scope.js';
+import { currentScope, resolveScoped, type ScopeInput } from './keybindings/scope.js';
 import { EditorChrome } from './editor/editor-chrome.js';
 import { NavigationChrome } from './navigate/navigation-chrome.js';
-import { requestQuickOpen } from './navigate/navigation-store.js';
+import { requestQuickOpen, setNavigationModal } from './navigate/navigation-store.js';
 import { SearchKeybindings } from './search/search-keybindings.js';
 import { useCapabilities } from './panel-type/use-capabilities.js';
 import { ProjectsPanel } from './sidebar/projects-panel.js';
@@ -145,6 +145,19 @@ const TABS_OPEN_PICKER: ActionId = 'tabs.openPicker';
 const QUICK_OPEN: ActionId = 'navigate.quickOpen';
 
 /**
+ * 033 FR-025 / A2 (#219) — Go To Line, EDITOR-scoped.
+ *
+ * Handled here rather than inside CodeMirror, and the difference decides correctness. A keymap entry
+ * would sit at `Prec.highest` with `preventDefault: true`, so the chord would be claimed INSIDE the
+ * view before this listener ever saw it — and the scope gate below, which is the only thing keeping
+ * `Ctrl+G` out of a terminal, would become unreachable code (A3).
+ *
+ * Adding it to the `HANDLED` allowlist is the second of the two edits data-model.md §2 records as
+ * SILENT failures. Miss it and the chord compiles, binds, resolves, and does nothing at all.
+ */
+const GOTO_LINE: ActionId = 'navigate.gotoLine';
+
+/**
  * Resolves keyboard accelerators (zoom / fullscreen / pane toggles) from the user's
  * live keybindings (FR-033) on real DOM keydown events. Zoom/fullscreen dispatch
  * over the preload bridge; the pane toggles call back into the App. Shift is ignored
@@ -236,6 +249,7 @@ function KeybindingsHandler({
       'file.redo',
       TABS_OPEN_PICKER,
       QUICK_OPEN,
+      GOTO_LINE,
     ]);
     const onKeyDown = (e: KeyboardEvent): void => {
       /*
@@ -344,6 +358,23 @@ function KeybindingsHandler({
         case QUICK_OPEN:
           requestQuickOpen();
           break;
+        /*
+         * 033 US2 (FR-025, A2, A4) — Go To Line, over the ACTIVE editor panel.
+         *
+         * The gate is stated here as well as declared in `COMMAND_SCOPES`, and the two are not
+         * redundant in the way they look. `resolveScoped` answers "is this chord live?", which is
+         * what keeps `^G` in a terminal (A3). This answers "which document does it act on?", and
+         * `null` is a legitimate answer: with no active panel, or a placeholder one, there is no
+         * view to jump inside and the chord does nothing at all (A4). `currentScope` rather than a
+         * second copy of the panel-kind lookup, so the mapping stays in one place.
+         */
+        case GOTO_LINE: {
+          const target = activePanelId();
+          if (target && currentScope(scopeInput()) === 'editor') {
+            setNavigationModal({ kind: 'gotoLine', panelId: target });
+          }
+          break;
+        }
         case 'view.toggleProjects':
           cbRef.current.onToggleProjects();
           break;
