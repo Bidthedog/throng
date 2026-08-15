@@ -16,11 +16,25 @@ export const DEFAULT_EXCLUDE_GLOBS: readonly string[] = [
 ];
 
 /**
- * True when `relPath` (root-relative, POSIX) matches any of `globs`. `dot: true`
- * so dotted names (`.git`, `.DS_Store`) match. An empty glob list excludes nothing.
+ * Compile a glob list ONCE into the predicate the tree and the file index both ask
+ * (033, contracts/file-index.md §1).
+ *
+ * Compiling is the expensive half and it depends only on the LIST, so a walk over 50,000 paths
+ * compiles once rather than 50,000 times. `dot: true` so dotted names (`.git`, `.DS_Store`) match.
+ * An empty glob list excludes nothing and compiles nothing at all.
+ */
+export function compileExcluder(globs: readonly string[]): (relPath: string) => boolean {
+  if (globs.length === 0) return () => false;
+  const isMatch = picomatch(globs as string[], { dot: true });
+  // The root itself has no relative path, and the project is never excluded from itself.
+  return (relPath: string) => relPath.length > 0 && isMatch(relPath);
+}
+
+/**
+ * True when `relPath` (root-relative, POSIX) matches any of `globs`.
+ *
+ * One call, one compile. Over a set of paths, compile once with `compileExcluder` and reuse it.
  */
 export function isExcluded(relPath: string, globs: readonly string[]): boolean {
-  if (globs.length === 0 || relPath.length === 0) return false;
-  const isMatch = picomatch(globs as string[], { dot: true });
-  return isMatch(relPath);
+  return compileExcluder(globs)(relPath);
 }
