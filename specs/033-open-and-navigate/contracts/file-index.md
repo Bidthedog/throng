@@ -126,3 +126,26 @@ export function useFileIndex(root: string | null, active: boolean): FileIndexVie
 | SC-003 (never outside the root, never an excluded file) | **unit** + **E2E** | `walkFiles` against a fake filesystem containing both; then a real fixture with an excluded folder and a second project |
 | SC-005 (a disk change reflected within 2 s) | **integration** | The service over a real temp tree and a real `NodeFileWatcher`: create, rename, delete; assert the delta arrives inside the budget |
 | FR-015 (opened before enumeration finishes) | **E2E** | Subscribe against a large fixture and assert the modal renders its "still listing" state, then its results |
+
+
+## Decided during implementation (2026-08-15)
+
+Four things the walk had to settle that this contract did not say. Recorded here so the next reader
+inherits the decision instead of re-deriving it — and so the third one is not "improved" into a bug.
+
+- **W4 covers a symlinked *directory*; it says nothing about a symlinked *file*.** Decided: a
+  symlinked file **is** indexed. It is a file inside the root and choosing it opens something. Pinned
+  by an explicit test, so flipping the intent is a one-line change with a name attached.
+- **W6 covers a directory vanishing mid-walk; the root vanishing is the same failure at depth zero.**
+  Decided: `walkFiles` resolves to `[]` rather than rejecting. **This is the weaker of the two
+  options and it is worth revisiting**: S11 lives in UI-main and may want to distinguish "an empty
+  project" from "the root is gone", and as it stands `walkFiles` gives it no signal to do so. If
+  `ProjectFileIndexService` needs that distinction, this is where it has to come from.
+- **W7 says "sorted" without saying by what — and the answer is load-bearing.** It is
+  `Array.prototype.sort()`, i.e. UTF-16 code-unit order, because `diffPaths` merges with `<` and
+  **must** use the same order. A later change to `localeCompare` would look like an improvement,
+  pass the sort test, and silently corrupt every delta. Do not make the two orders differ.
+- **K1 versus K2 across multiple terms is not adjudicated.** `matchSpans` merges overlapping or
+  abutting terms into one span, so a two-term query whose terms merge scores as one hit rather than
+  two. Deterministic and pure, so K4 still holds; it affects only relative order within a set that
+  already matches.

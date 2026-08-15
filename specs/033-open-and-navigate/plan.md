@@ -103,7 +103,7 @@ because `packages/ui/tests/unit/shard-plan.test.ts` fails the build otherwise
 | **Documentation currency** (governance) | PASS | `docs/quick-start.md` gains both chords in its shortcut table (~L311), both explorer actions, and the two new preferences; `README.md` is checked against its finite-state claim; `docs/testing.md` needs no change |
 
 **No violation committed. Two spec-internal tensions and four deferrals are recorded in Complexity
-Tracking — one of them, the cog menu, is a requirement that cannot be satisfied as written and needs a
+Tracking — one of them, the cog menu, is a requirement that could not be satisfied as written, and was corrected on 2026-08-15, and needs a
 spec amendment before US5 can be marked done. RESOLVED 2026-08-15 — the amendment landed in spec.md (FR-052 and AS-5); nothing here blocks US5.**
 
 ## Project Structure

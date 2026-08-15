@@ -66,7 +66,7 @@ questions were asked and answered; the spec grew from 57 to 65 functional requir
 - The two assumptions flagged as "worth challenging" are now decisions, not assumptions. Assumption 3
   (the target control) was answered with a shape the spec did not propose — the control sits **above**
   the input, its second option is a new editor panel **in the current tab**, and Shift+Tab reaches it
-  as the last control in the tab order (FR-010 – FR-010b). Assumption 8 (the Contextual section) was
+  as the first control in the tab order (it renders above the input, which is why Shift+Tab from the input reaches it — mechanism corrected 2026-08-15, see FR-010a) (FR-010 – FR-010b). Assumption 8 (the Contextual section) was
   confirmed, and now carries the test that decides membership.
 - Assumption 4 was **overturned**: Quick Open gains a Files & Folders toolbar button (FR-018a –
   FR-018c) rather than staying chord-only.
