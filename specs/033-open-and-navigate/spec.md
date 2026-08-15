@@ -69,6 +69,25 @@ issues.
 - Q: Where does keyboard focus land after Open In → Terminal → flavour launches a terminal? → A: **In the new terminal.** The panel is created in the active tab by the same sequence "Open In → New Editor" already uses — added, typed immediately, not opened in rename mode, made the active panel — and it additionally takes DOM focus, so the user can type a command without a further click. The action's whole purpose is a shell here, and the next act is always typing.
 - Q: Three requirements said an inapplicable control is "absent or disabled". Which is it? → A: **Two situations, two answers.** *Temporarily unavailable* — no project is open — means **shown and disabled**, keeping the explorer menu's shipped rule that an action which exists and is unavailable teaches what the menu can do while one that vanishes teaches nothing. *Structurally meaningless* — Expand/Collapse All Children on a **file**, which can never have children — means **not drawn at all**, so no file's menu carries two permanently dead rows.
 
+### Session 2026-08-15 (post-delivery feedback on US1)
+
+The user tested the delivered Quick Open by hand and raised four items. All four are **gaps rather
+than defects** — the code does what the spec said; the spec did not say enough.
+
+- Q: `Ctrl+Alt+T` then `Ctrl+Shift+T` leaves **both** modals on screen. Which survives? → A: **The most recently opened one, always, and the rule is not this feature's private business.** The plan had scoped the one-modal slot to "the two new modals only; the tab picker keeps its own state" — that decision is superseded. The tab picker holds its open state as local component state in `tab-group.tsx`, and this feature holds a separate slot, so two independent stores could each believe they were the only one. Opening **any** transient overlay now dismisses whichever was open.
+- Q: The target control ships as one icon whose alternative appears only in a hover title. What should it be? → A: **One button carrying the icon and its explanation together**, both clickable as a single control, reading "Will open in a **new editor**" or "Will open in the **active editor** (*panel name*)". Naming the destination panel is the part that makes it worth the width: "active editor" alone does not say *which*.
+- Q: Should Quick Open list files the project hides? → A: **No, and not by either mechanism.** A toggle at the top of the modal, beside the target button, switches it; the shipped default is to exclude, and that default is itself a preference. **This also closes a defect the baseline converge found independently (F1):** the index honoured `explorer.excludeGlobs` but not the per-project hidden paths of spec 004, so a file the user chose "Hide in this project" for was absent from the tree and offered by Quick Open — the two-mechanisms-two-answers outcome FR-006 exists to forbid.
+- Q: Should `node_modules` be excluded by default? → A: **Yes — `**/node_modules` joins the shipped list.** This was raised on 2026-08-15 as a decision the feature would not take on its own, because the list governs the **Files & Folders tree for every project**, not just this modal. The user has now taken it. Users who have customised `explorer.excludeGlobs` keep their own list; only those still on the default see the change.
+
+The user also asked for the baseline converge findings to be cleared in the same round. Four of
+those need a decision recorded here rather than only a code change; the rest are implementation or
+documentation work with no requirement to state.
+
+- Q: After a file opens, focus goes to the **landing editor**, but FR-065 says it returns to the invoking surface "either way". Which is right? → A: **The shipped behaviour is right and the requirement is too broad.** Escape returns you where you were, because you changed your mind; *choosing a file* is a request to go somewhere, and returning focus to the terminal you started from would make every open a two-step action. FR-065 is narrowed by FR-072 to cover dismissal. *(Derived from the code and from what the action means; not confirmed by the user.)*
+- Q: SC-002 states 100 ms, and after the flake fix nothing asserts a duration at that scale. Is the criterion still true? → A: **Restated rather than dropped.** The claim SC-002 was always making is algorithmic — a keystroke does no filesystem work and its cost does not grow with the corpus — and that is now asserted by counting work. The one duration that survives is the in-app 250 ms at E2E. A criterion nothing checks is worse than one stated in the terms it is actually checked in. *(Derived; the measurements are in plan.md's Complexity Tracking.)*
+- Q: With no project open the toolbar button's tooltip names no chord, but FR-018a says it must. → A: **FR-018a is narrowed.** The tooltip's job with no project is to explain why the button is disabled, and "Quick Open (Ctrl+Shift+T)" answers a question the user did not ask while leaving theirs unanswered. Naming the chord is required whenever the button can act. *(Derived from the shipped string; not confirmed.)*
+- Q: When the watcher fails, main pushes `{status:'building'}` with no paths and the renderer keeps the paths it already holds. → A: **The renderer must clear them and show "still listing".** Main has declared the set unmaintainable; continuing to serve it means offering files that may no longer exist while showing no sign anything is wrong. The contract states no rule for a `building` push, which is why both halves looked correct in isolation. *(Derived from contracts/file-index.md §4 and S11.)*
+
 ---
 
 ## User Scenarios & Testing *(mandatory)*
@@ -429,8 +448,10 @@ the declared sections, in the declared order, with dividers between them.
   rule, the unsaved-changes prompt, and creating a tab's editor when it has none.
 - **FR-009**: The default target MUST honour the existing **"Open files in"** preference, so Quick
   Open lands a file exactly where a tree click would.
-- **FR-010**: When Quick Open is invoked **from inside an editor panel**, the modal MUST show a
-  two-option target control **above the typeahead input**, at the top of the modal. Its options are
+- **FR-010**: *(Superseded 2026-08-15 by FR-068 — kept because FR-010a and FR-010b still build on
+  it, and because the record of what was asked for first is worth keeping.)* When Quick Open is
+  invoked **from inside an editor panel**, the modal MUST show a two-option target control
+  **above the typeahead input**, at the top of the modal. Its options are
   the **currently active editor** and **a new editor panel in the current tab**, and it MUST be
   preselected from the "Open files in" preference. Choosing the currently active editor MUST perform
   the same action as the Last-Active-Editor route, not a parallel implementation of it.
@@ -627,6 +648,74 @@ the declared sections, in the declared order, with dividers between them.
   check that separates a real guard from a sleep wearing a condition's clothes. A guard whose failure
   mode is never exercised is a claim, not a test.
 
+### Post-delivery feedback (2026-08-15)
+
+Four items from hand-testing US1. Additive: FR-068 supersedes FR-010's *presentation*, and the rest
+are new.
+
+- **FR-068**: The target control MUST be **a single button carrying both an icon and its explanatory
+  text**, the whole of which is one click target — not an icon with a separate label, and not an icon
+  whose alternative is discoverable only by hovering. Its text MUST read **"Will open in a new
+  editor"** or **"Will open in the active editor (*panel name*)"**, naming the destination panel in
+  the second case. *(Supersedes FR-010's presentation. The shipped control was a single icon showing
+  only the chosen destination, with the alternative in a hover title — which states the current value
+  but never the choice, and states neither to a user who does not hover. The baseline converge found
+  the same gap independently, as F10.)*
+- **FR-069**: Quick Open MUST offer an **exclusion toggle** at the top of the modal, beside the target
+  button and drawn as its sibling. It governs whether files the project hides are candidates.
+- **FR-069a**: That toggle MUST honour **both** of the project's hiding mechanisms, because the user
+  experiences them as one: the `explorer.excludeGlobs` list **and** the per-project hidden paths
+  recorded by "Hide in this project" (spec 004). *(This closes a real defect: as delivered, the index
+  applied the globs alone, so a hidden file was absent from the tree and offered by Quick Open. FR-006
+  forbids exactly that divergence, and the baseline converge raised it as F1 before this feedback was
+  read.)*
+- **FR-069b**: The toggle MUST default to **excluding** hidden files, and that default MUST itself be
+  a setting — `editor.navigation.quickOpenExcludeHidden`, shipping **on**, in the existing
+  `Editor · Navigation` group. The toggle changes the current modal; the setting decides where every
+  modal starts.
+- **FR-069c**: Flipping the toggle MUST NOT introduce a second ignore mechanism (FR-006). It changes
+  **which** rules apply, never **what** the rules are — the same glob list and the same hidden set the
+  tree obeys.
+- **FR-069d**: If satisfying the toggle takes measurable time on a large project, the modal MUST show
+  the same "still listing" state FR-015 already defines rather than presenting a partial list as
+  whole. A toggle that silently serves a half-built set is worse than one that visibly waits.
+- **FR-070**: `**/node_modules` MUST join the shipped `DEFAULT_EXCLUDE_GLOBS`. **This changes the
+  Files & Folders tree, not only this modal** — that is the intent, since FR-006's whole claim is that
+  there is one answer to "is this file hidden?". A user who has customised `explorer.excludeGlobs`
+  keeps their own list; only a user still on the shipped default sees the change.
+- **FR-071**: **At most one transient overlay may be open in a window at a time**, and opening one
+  MUST dismiss whichever was open — including across features. This covers Quick Open, Go To Line
+  **and the tab picker**, whose open state is held separately in `tab-group.tsx`. *(FR-066 required
+  this of the two new modals only, and the plan recorded "the tab picker keeps its own state" as a
+  deliberate decision. Hand-testing `Ctrl+Alt+T` then `Ctrl+Shift+T` showed both on screen at once,
+  which is what that decision actually bought. FR-066 is not superseded — it remains true of the two
+  new modals; FR-071 widens the rule to every overlay.)*
+- **FR-071a**: The mechanism MUST be one both features share rather than each teaching the other about
+  itself. A feature that has to import another feature's store to know whether to close is the
+  coupling this requirement exists to avoid, and the next overlay added would have to repeat it.
+
+### Baseline findings folded in (2026-08-15)
+
+- **FR-072**: Focus MUST return to the invoking surface when a navigation modal is **dismissed**, and
+  MUST move to the **destination** when it is used to go somewhere — the landing editor for Quick
+  Open, the editor for Go To Line. *(Narrows FR-065, which said "either way" and so forbade the
+  behaviour that shipped. Choosing a file is a request to go there; returning focus to the terminal
+  you invoked from would make every open a two-step action. Baseline finding F3.)*
+- **FR-073**: The candidate pipeline MUST be proved to do **no filesystem work per keystroke** and to
+  cost the same per query term whatever the corpus size — asserted by counting work, not by timing.
+  The single duration this feature asserts is the in-app one at E2E. *(Restates what SC-002 was
+  always claiming. A wall-clock assertion at the unit tier measures the machine: it failed at 102-147
+  ms against a 100 ms line while the pipeline itself ran at 45 ms unloaded. Baseline finding F5.)*
+- **FR-074**: The Quick Open toolbar button MUST name its current chord in the tooltip **whenever the
+  button can act**. When it is disabled the tooltip MUST instead say why. *(Narrows FR-018a, which
+  required the chord unqualified. A disabled control should answer "why can I not use this?", not
+  recite a shortcut that would do nothing. Baseline finding F4.)*
+- **FR-075**: When the index reports that a root is no longer maintainable, the renderer MUST
+  **discard the candidates it holds** and show the "still listing" state — never continue serving a
+  set the index has disowned. *(Neither half was wrong alone: main pushes `building` with no paths,
+  and the renderer keeps what it has, so a disowned set is served with no sign anything is wrong and
+  FR-015's state never appears. Baseline finding F2.)*
+
 ### Remembering what was typed (US1 and US2)
 
 > **FR-054, FR-055 and FR-056 do not exist, and nothing is missing.** The cross-cutting block that
@@ -748,6 +837,26 @@ the declared sections, in the declared order, with dividers between them.
   2026-08-15 from "every keyboard precondition guard in the menu tests": nothing enumerated "every",
   so the criterion asserted a sweep no task performed. It is now exactly what the static check
   discovers plus the one guard the issue names.)*
+
+- **SC-017**: Opening any transient overlay while another is open leaves **exactly one** on
+  screen, asserted for every ordered pair of Quick Open, Go To Line and the tab picker — six
+  orderings, not one.
+- **SC-018**: A file hidden by **either** mechanism — an `explorer.excludeGlobs` match or "Hide in
+  this project" — is absent from Quick Open with the toggle at its shipped default, and present with
+  the toggle flipped. Asserted for both mechanisms independently, because the delivered code honoured
+  one and not the other.
+- **SC-019**: With the shipped defaults and no configuration, a project containing `node_modules`
+  shows none of its files in the Files & Folders tree **or** in Quick Open.
+- **SC-020**: The target button states its destination in words without hovering, and names the panel
+  when the destination is the active editor.
+
+- **SC-021**: Every window-level chord that existed before this feature still resolves after the
+  Shift-handling change — asserted for the `Ctrl`+letter commands in that listener's allowlist, not
+  only for the new one. *(Baseline finding F6: the change was necessary and correct, and its own
+  comment names the failure mode as silent, which is precisely why it needs an assertion.)*
+- **SC-022**: A file hidden by "Hide in this project" is absent from Quick Open at the shipped
+  default — the half of SC-018 the delivered code did not satisfy, stated separately so it cannot be
+  passed by the glob half alone.
 
 ## Assumptions
 
