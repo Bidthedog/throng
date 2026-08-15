@@ -46,7 +46,7 @@ export function rankStable<T>(items: readonly T[], score: (item: T) => number): 
 | K5 | An empty query scores every entry equally, so the list is the seeded order in full | K6 (031) |
 | K6 | `rankStable` returns a new array and does not mutate its input | — |
 
-## 3. Renderer — the four new props
+## 3. Renderer — the five new props
 
 ```ts
 export interface PickerProps {

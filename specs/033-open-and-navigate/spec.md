@@ -18,7 +18,7 @@ until the file appears, scroll until line 412 goes past, add a terminal panel an
 you already were, click every chevron in a branch you wanted opened, and read an undifferentiated
 list of menu items to find the one you want.
 
-Three of the five put **new items into context menus**, and #160 is the rule for where those items
+Three of the six put **new items into context menus**, and #160 is the rule for where those items
 go. Shipping #88 and #185 without #160 would add three more entries to menus that already grow
 without a vocabulary — the panel header menu is eleven items with no divider anywhere in it. So
 #160 is not a cosmetic tail on this feature; it is the constraint the other menu work is written
@@ -50,7 +50,7 @@ top of one known to be vacuous.
 find bar's UX pass). Those two are about *searching text*; this feature is about *reaching a target*.
 #219's own comment thread proposes bundling all three, and that remains a reasonable next cycle —
 but #220 settles a **visual language for search controls**, which is a different decision from the
-one this feature makes, and folding it in would double the size of a cycle that is already five
+one this feature makes, and folding it in would double the size of a cycle that is already six
 issues.
 
 ---
@@ -60,7 +60,7 @@ issues.
 ### Session 2026-08-15
 
 - Q: With a 200-row cap and a picker that does not rank, seed order decides whether the wanted file is even on screen in a 50,000-file project. How should Quick Open's matches be ordered? → A: **Extend the shared control with a ranking hook.** Quick Open ranks by match quality — a hit in the file's name outranks one in the directory part, and an earlier hit outranks a later one. The tab picker passes no ranker and keeps its strip order, unchanged. Ranking MUST be stable for a given query so the list never reorders under the arrow keys.
-- Q: How is Quick Open's "this editor / new editor" target choice presented, given the shared picker is a title, an input and a list? → A: **A two-option control at the TOP of the modal, above the typeahead input.** Its options are the **currently active editor** and **a new editor panel in this tab**, preselected from the "Open files in" preference. The typeahead input holds focus on open; **Shift+Tab** moves to the control (it is last in the tab order, so a backwards step reaches it), where **Space or Enter changes the value**. Opening is always **Enter with a file highlighted in the list** — Enter on the control never opens a file.
+- Q: How is Quick Open's "this editor / new editor" target choice presented, given the shared picker is a title, an input and a list? → A: **A two-option control at the TOP of the modal, above the typeahead input.** Its options are the **currently active editor** and **a new editor panel in this tab**, preselected from the "Open files in" preference. The typeahead input holds focus on open; **Shift+Tab** moves to the control, where **Space or Enter changes the value**. Opening is always **Enter with a file highlighted in the list** — Enter on the control never opens a file. *(Mechanism corrected 2026-08-15: this said the control is "last in the tab order". It renders above the input and is therefore **first**, which is why Shift+Tab reaches it. Same keystroke, same result, opposite mechanism — see FR-010a.)*
 - Q: What happens when Go To Line is invoked while a find bar is open in the same editor? → A: **The find bar stays open and simply loses focus.** It keeps its query, match count and highlights; the Go To Line modal opens on top and takes focus, and dismissing or confirming it returns focus to the editor rather than to the find bar. **A find bar closes only when the user closes it or its editor closes** — nothing else, this feature included, may close it.
 - Q: Quick Open is chord-only and discoverable nowhere but the Key Bindings editor. Should it have a visible route? → A: **A Files & Folders toolbar button**, beside the existing Expand / Collapse all controls, tooltipped with its current chord. It sits next to the tree it searches. The cost is accepted and recorded: the pane is hideable, so with Files & Folders closed the chord is again the only route.
 - Q: Planning found three places where this spec contradicts itself or the shipped code. How are they resolved? → A: **All three in favour of FR-047 and the constitution, with the losing text marked superseded rather than deleted.** (1) FR-052's cog row demanded a divider inside a single section, which FR-050 forbids — the cog menu takes **no** divider. (2) FR-052 listed Destroy last for two menus while FR-047 fixes it third; its third column is an **inventory of sections, not an ordering**, and FR-047 remains the only statement of order. (3) SC-011 could not hold literally, because `context-menu-sections.e2e.ts:49` asserts a folder's Open In holds exactly one item and US3 adds a second by design — that one assertion is named as the sole permitted change, so any other edit to an existing menu spec is a defect rather than a licence.
@@ -317,8 +317,14 @@ the declared sections, in the declared order, with dividers between them.
    destructive item is in a section of its own.
 4. **Given** a tab's context menu, **When** it is opened, **Then** its destructive items are separated
    from the rest.
-5. **Given** the cog menu, **When** it is opened, **Then** the three preferences destinations are
-   separated from the diagnostic and About items.
+5. **Given** the cog menu, **When** it is opened, **Then** it draws as **one undivided Application
+   section** — Settings, Key Bindings, Themes, Open Logs Folder and About, with no divider anywhere
+   in it. *(Corrected 2026-08-15: this scenario previously required the preferences trio to be
+   separated from the diagnostic and About items. All five are `Application` under FR-047 and the
+   constitution, and FR-050 permits a divider only at a section boundary — so the separation it
+   asked for was forbidden by both rules it sits between. Superseded when FR-052 was corrected; the
+   scenario was missed in that pass, which left a test written from here contradicting a test
+   written from FR-052.)*
 6. **Given** a menu whose items happen to fall in a single section, **When** it is opened, **Then** it
    contains no divider — a section boundary is drawn only where a boundary exists.
 7. **Given** a menu carrying contextual items — those present only because of what the pointer is
@@ -340,8 +346,10 @@ the declared sections, in the declared order, with dividers between them.
 - **Files appearing and disappearing while the app runs.** A file created, deleted or renamed by a
   terminal, an agent or another program must be reflected in Quick Open's candidates without a
   restart (FR-016).
-- **Quick Open with no project open.** The chord must not open a picker over nothing; it either does
-  not open, or opens and says there is nothing to list.
+- **Quick Open with no project open.** The chord does not open the modal at all, and the toolbar
+  button is drawn disabled (FR-018, FR-018c). *(Corrected 2026-08-15: this was written as an
+  either/or, which is the exact untestable shape clarification Q9 was raised to remove — and FR-018
+  had already settled it.)*
 - **Quick Open in a sub-workspace window.** The window has its own root; the candidate set is that
   window's root, never the main window's (FR-017).
 - **Go To Line on an empty document.** Any number resolves to line 1, which is also the last line.
@@ -353,8 +361,12 @@ the declared sections, in the declared order, with dividers between them.
 - **A terminal launched at a folder that is deleted between the right-click and the launch.** The
   existing start-directory fallback applies — the terminal starts at the project root and says why,
   rather than failing to start (FR-034).
-- **Expand All Children on a folder with hundreds of immediate children.** One level only, by design;
-  the action must complete without the tree appearing to hang.
+- **Expand All Children on a folder with many immediate children.** One level only, by design
+  (FR-041) — which is the whole of the answer. *(Corrected 2026-08-15: this previously added "must
+  complete without the tree appearing to hang", a performance claim with no requirement, no
+  threshold and no task behind it. The one-level rule exists precisely so there is no unbounded work
+  to bound; inventing an unmeasured second promise beside it is how an untestable clause survives to
+  review.)*
 - **Collapse All Children on the project root.** The root stays open — it is the tree.
 - **A menu whose items are all in one section.** No divider is drawn (FR-050).
 
@@ -407,8 +419,12 @@ the declared sections, in the declared order, with dividers between them.
   the same action as the Last-Active-Editor route, not a parallel implementation of it.
 - **FR-010a**: Focus MUST land in the **typeahead input** when the modal opens, so a user who wants
   the default target types immediately and never meets the control. **Shift+Tab** MUST move focus to
-  the target control — it is last in the modal's tab order, so a backwards step reaches it — and
-  **Space or Enter** MUST change its value while it holds focus.
+  the target control — it renders above the input and is therefore **first** in the modal's tab
+  order, so a backwards step from the input reaches it — and **Space or Enter** MUST change its value
+  while it holds focus. *(Corrected 2026-08-15: this said "last in the tab order". The observable
+  behaviour is identical, but the mechanism is the opposite one, and an implementer following the
+  old wording would add a `tabindex` that divorces reading order from tab order — which the contract
+  forbids.)*
 - **FR-010b**: A file MUST be opened only by **Enter with a row highlighted in the list**. Enter while
   the target control holds focus changes that control's value and MUST NOT open anything, so the two
   meanings of Enter are decided by where focus is and never by inference.
@@ -416,7 +432,7 @@ the declared sections, in the declared order, with dividers between them.
   an editor panel — there is no "currently active editor" to mean. With the control absent, the
   chosen file lands per the "Open files in" preference (FR-009).
 - **FR-012**: Escape MUST close the modal, open nothing, and return focus to the surface the user came
-  from.
+  from — this feature's instance of the shared modal rule stated once in FR-065.
 - **FR-013**: The candidate set MUST be prepared **before** the user types, so no keystroke triggers a
   filesystem walk. Typing MUST stay responsive on a project of at least **50,000** files.
 - **FR-014**: The rendered result list MUST be capped at **200** rows. When matches exceed the cap,
@@ -456,7 +472,8 @@ the declared sections, in the declared order, with dividers between them.
 - **FR-023**: An empty, non-numeric or cancelled input MUST leave the caret, the selection and the
   scroll position unchanged.
 - **FR-024**: Escape MUST close the modal without moving anything, and focus MUST return to the editor
-  whether the modal was confirmed or cancelled.
+  whether the modal was confirmed or cancelled — FR-065's shared rule, with "the editor" naming the
+  surface for this modal.
 - **FR-025**: The command MUST be **editor-scoped**: with a terminal focused it MUST NOT open, and the
   terminal MUST receive the keystroke exactly as it would without this feature; with no active panel
   it MUST do nothing.
@@ -481,8 +498,13 @@ the declared sections, in the declared order, with dividers between them.
   built-in does not appear. A second copy of the flavour list MUST NOT exist.
 - **FR-031**: Choosing a flavour MUST open a **new terminal panel** whose start directory is the
   right-clicked **folder**, or, for a file, that file's **parent folder**.
-- **FR-032**: The start directory MUST be confined to the active project's root; a path resolving
-  outside it MUST be refused rather than launched.
+- **FR-032**: The start directory MUST be confined to the active project's root. A path resolving
+  outside it MUST be **refused and the project root substituted** — the terminal still launches, at
+  the root, exactly as the shipped `resolveStartDirectory` already does for a remembered directory
+  that has escaped its project. *(Corrected 2026-08-15: this read "refused rather than launched",
+  which asserts that no panel appears. That contradicts both the contract and the shipped fallback,
+  and the two readings differ in what a test looks for — a panel that exists at the root, or no panel
+  at all.)*
 - **FR-033**: The new panel MUST be created by the **same sequence a programmatically opened editor
   already uses** ("Open In → New Editor"): a new panel in the **active tab**, typed immediately with
   its flavour and start directory, **not** opened in rename mode, and made the **active panel**. This
@@ -531,6 +553,12 @@ the declared sections, in the declared order, with dividers between them.
   | 4 | **Navigate** | Takes you somewhere, or names where something is: Open In (and its Terminal submenu), Copy Path, Reveal, Expand/Collapse All Children, Go To Line, Sync to |
   | 5 | **View & state** | Toggles and per-surface state: Zoom, Word Wrap, Set Language, Reset Name, Hide in this project |
   | 6 | **Application** | Whole-application destinations: Settings, Key Bindings, Themes, Open Logs Folder, About |
+
+  This table is **additive to the constitution's** (Principle VI, v4.6.0), which is **canonical** for
+  the sections and their order. The rows here name a few extra items the constitution's examples do
+  not — "Destroy other tabs", "Expand/Collapse All Children", Open In's Terminal submenu — because
+  this feature introduces them. Where the two ever disagree about a section or its position, the
+  constitution wins and this table is the defect.
 
 - **FR-048**: Every context menu MUST place its items in those sections, in that order, with a divider
   between adjacent sections.
@@ -690,9 +718,12 @@ the declared sections, in the declared order, with dividers between them.
   sufficient evidence for either.
 - **SC-015**: A terminal launched from the tree accepts typed input with no intervening click, in
   100% of attempts across every enabled flavour.
-- **SC-016**: Every keyboard precondition guard in the menu tests is demonstrated to **fail** when its
-  precondition is removed — the property #244 showed to be absent, and the only evidence that
-  separates a guard from a delay.
+- **SC-016**: **The guard #244 names**, and every other guard sharing its vacuous shape that the
+  static check finds, is demonstrated to **fail** when its precondition is removed — the property
+  #244 showed to be absent, and the only evidence that separates a guard from a delay. *(Narrowed
+  2026-08-15 from "every keyboard precondition guard in the menu tests": nothing enumerated "every",
+  so the criterion asserted a sweep no task performed. It is now exactly what the static check
+  discovers plus the one guard the issue names.)*
 
 ## Assumptions
 
