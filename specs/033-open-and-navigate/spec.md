@@ -419,6 +419,12 @@ the declared sections, in the declared order, with dividers between them.
   user has excluded from the project's view are not offered. **It adds no ignore rules of its own** —
   one mechanism, one answer, whether the user is looking at the tree or typing a query.
 
+  > **SUPERSEDED 2026-08-15 by FR-070** — the maintainer subsequently decided `**/node_modules`
+  > *should* be excluded by default, so the final sentence below ("this feature does not change a
+  > shipped default…") no longer holds. The rest is retained because the finding that prompted the
+  > decision is worth keeping, and because it records that the behaviour was correct-as-specified
+  > before anyone chose to change it.
+  >
   > **Verified 2026-08-15, and it is not what #219 implied.** The shipped `DEFAULT_EXCLUDE_GLOBS` is
   > the VS Code `files.exclude` default — `.git`, `.svn`, `.hg`, `CVS`, `.DS_Store`, `Thumbs.db` — and
   > **`node_modules` is not in it**. #219 wrote "respect the existing ignore rules the explorer applies
@@ -680,9 +686,20 @@ are new.
   the same "still listing" state FR-015 already defines rather than presenting a partial list as
   whole. A toggle that silently serves a half-built set is worse than one that visibly waits.
 - **FR-070**: `**/node_modules` MUST join the shipped `DEFAULT_EXCLUDE_GLOBS`. **This changes the
-  Files & Folders tree, not only this modal** — that is the intent, since FR-006's whole claim is that
-  there is one answer to "is this file hidden?". A user who has customised `explorer.excludeGlobs`
-  keeps their own list; only a user still on the shipped default sees the change.
+  Files & Folders tree, not only this modal** — that is the intent, since FR-006's whole claim is
+  that there is one answer to "is this file hidden?".
+- **FR-070a**: The new glob MUST reach **existing installations**, not only fresh ones. *(Corrected
+  2026-08-15: FR-070 first said "only a user still on the shipped default sees the change", which is
+  false and was written without checking. First-run `seed()` materialises the whole settings
+  document, so every existing install holds the old six-glob array **literally** and the parser
+  honours it — changing the constant would have reached fresh installs alone, and the sentence
+  described a population no fresh-install test can observe.)* Delivery is a shipped-defaults version
+  bump plus a **one-leaf migration guarded on equality with the previous list**, so a user who has
+  customised `explorer.excludeGlobs` keeps their own and a user who has not is moved. The guard is
+  what makes it idempotent and what stops it overwriting a deliberate choice.
+- **FR-070b**: A user who has customised `explorer.excludeGlobs` MUST keep exactly the list they
+  set. The migration MUST NOT merge, append to, or reorder a customised list — a settings migration
+  that edits a value the user chose is indistinguishable from the feature losing their preference.
 - **FR-071**: **At most one transient overlay may be open in a window at a time**, and opening one
   MUST dismiss whichever was open — including across features. This covers Quick Open, Go To Line
   **and the tab picker**, whose open state is held separately in `tab-group.tsx`. *(FR-066 required
