@@ -12,13 +12,24 @@
  */
 import { ipcMain } from 'electron';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
-import type { ConfigDocId, IConfigStore, LoadedIconPack } from '@throng/core';
+import {
+  applyConfigPatch,
+  parseSettingsGuarded,
+  type ConfigChange,
+  type ConfigDocId,
+  type IConfigStore,
+  type LoadedIconPack,
+} from '@throng/core';
+import { withDocumentLock } from './config-write-lock.js';
 import type { ResetOne, RestoreResult } from './shipped-defaults-service.js';
 
-export type WriteResult = { ok: true } | { ok: false; error: string };
+export type WriteResult = { ok: true } | { ok: false; error: string; detail?: string };
 
 /** Channel the preload `config.write` bridge invokes. */
 export const CONFIG_WRITE_CHANNEL = 'throng:config:write';
+
+/** Channel the preload `config.writePatch` bridge invokes (032, FR-001). */
+export const CONFIG_WRITE_PATCH_CHANNEL = 'throng:config:writePatch';
 
 /**
  * A theme `name` must be a single, safe path segment so it can never escape the
@@ -73,17 +84,113 @@ export async function writeConfigDoc(
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return { ok: false, error: 'not-an-object' };
   }
+  /*
+   * Under the SAME lock every other writer takes (032, FR-002a / G12).
+   *
+   * This channel does not read before it writes, so on its own it cannot lose a change. It takes the
+   * lock anyway, because the writers it races DO read first: a whole-document write landing between
+   * a patch's read and its write would be silently reverted by that patch. Serialisation is only a
+   * guarantee if EVERY writer is inside it — one that opts out because it personally does not need
+   * it is exactly the hole G12 names.
+   */
   // Report what the store actually did. This used to hardcode {ok:true}, so a write that never
   // reached disk (a transiently locked target on Windows) was announced as applied: the renderer
   // published it to `onConfigWritten`, the UI showed the new value, and the edit was gone (#75).
-  return store.write(id, parsed);
+  return withDocumentLock(id, async () => store.write(id, parsed));
 }
 
-/** Wire the `config.write` handler onto `ipcMain` (called from main.ts). */
+/**
+ * Apply a KEY-SCOPED change to a configuration document (032, FR-001/FR-002, contract steps 0–8).
+ *
+ * The whole point is that the caller never assembles a document, so it can never assemble a stale
+ * one. The current content is read HERE, inside the lock, milliseconds before it is written back.
+ *
+ * The step order is the contract's, and each step is a contract test. The two that look like
+ * defensiveness and are not:
+ *
+ *   - **An unparseable base is refused** (`read-failed`), never treated as `{}`. Applying a change
+ *     on top of an empty base would replace every setting the user has with the single key being
+ *     written — a larger instance of the exact loss this feature exists to prevent (FR-006a, G10).
+ *     An ABSENT document is different and reads as `{}`: there is nothing to lose.
+ *   - **The result goes through the bounds guard** (031 FR-013a), so a patch cannot install a value
+ *     that a hand edit would have been clamped for. A correction is applied, not rejected.
+ */
+export async function writeConfigPatch(
+  store: IConfigStore,
+  id: ConfigDocId,
+  changes: readonly ConfigChange[],
+): Promise<WriteResult> {
+  // Steps 1–3 need no lock: they read nothing, so a refusal here cannot be affected by a concurrent
+  // writer, and taking the lock to reject a malformed patch would queue it behind real work.
+  if (!isConfined(store, id)) return { ok: false, error: 'path-escape' };
+  if (id.kind !== 'settings') return { ok: false, error: 'unsupported-doc' };
+  if (!Array.isArray(changes) || changes.length === 0) return { ok: false, error: 'empty-patch' };
+
+  return withDocumentLock(id, async () => {
+    const raw = await store.readRaw(id);
+    let base: unknown = {};
+    if (raw.trim().length > 0) {
+      try {
+        base = JSON.parse(raw);
+      } catch {
+        return { ok: false, error: 'read-failed' };
+      }
+    }
+
+    const patched = applyConfigPatch(base, changes);
+    if (!patched.ok) return { ok: false, error: patched.error };
+
+    /*
+     * `applyDeclaredBounds`, NOT `parseSettingsGuarded`.
+     *
+     * They differ in a way that matters enormously on a write path. The guard clamps declared bounds
+     * and leaves everything else exactly as it found it. `parseSettingsGuarded` then runs
+     * `parseAppSettings`, which REBUILDS the document from a fixed shape — so it injects every
+     * shipped default the file did not carry and DROPS every key it does not model.
+     *
+     * That is correct for a read, whose job is to hand the running app a complete object. On a write
+     * it would break G1 outright: a key absent from `changes` must survive the write, and a
+     * hand-added key would not. It would also rewrite the user's file in full on every single
+     * setting change, which is the churn 031's `corrected` flag exists to avoid.
+     */
+    /*
+     * NORMALISE THROUGH THE PARSE, exactly as the whole-document write has always done.
+     *
+     * `parseSettingsGuarded` clamps every declared bound (031 FR-013a) and then rebuilds the
+     * document from the schema — which materialises defaults the file did not carry and DROPS every
+     * key the schema does not model.
+     *
+     * An earlier revision of this used `applyDeclaredBounds` alone, to avoid both of those. The
+     * reasoning was that G1 says "a key absent from `changes` has the same value after the write as
+     * it had on disk before it", so dropping an unmodelled key looked like a violation.
+     *
+     * IT IS NOT, AND 007 FR-023 SAYS SO IN AS MANY WORDS. `preferences-settings.e2e.ts` (#95, C1)
+     * asserts that a hand-written unknown key is STRIPPED by the next ordinary write, and its own
+     * comment states the mechanism: "the key simply does not survive a parse, so the first ordinary
+     * write drops it". That is a shipped, tested decision about what a settings write means, taken
+     * before this feature existed — and G1 was never about unmodelled keys. It is about the keys
+     * ANOTHER WINDOW changed, every one of which is modelled: `newProject.lastProjectFolder` is the
+     * whole reason this feature exists, and it is in the schema.
+     *
+     * So the patch decides WHICH KEYS CHANGE, and the parse decides what a settings document looks
+     * like — which is the division of labour the application already had. Nothing about the
+     * stale-copy defect required changing the second half, and changing it broke a requirement two
+     * releases old.
+     */
+    return store.write(id, parseSettingsGuarded(patched.value).value);
+  });
+}
+
+/** Wire the `config.write` + `config.writePatch` handlers onto `ipcMain` (called from main.ts). */
 export function registerConfigWriteIpc(store: IConfigStore): void {
   ipcMain.handle(
     CONFIG_WRITE_CHANNEL,
     (_event, id: ConfigDocId, json: string): Promise<WriteResult> => writeConfigDoc(store, id, json),
+  );
+  ipcMain.handle(
+    CONFIG_WRITE_PATCH_CHANNEL,
+    (_event, id: ConfigDocId, changes: ConfigChange[]): Promise<WriteResult> =>
+      writeConfigPatch(store, id, changes),
   );
 }
 

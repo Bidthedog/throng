@@ -17,10 +17,12 @@ import {
   reservedThemeNames,
   resetBindingValue,
   resetSettingValue,
+  type ConfigDocId,
   type ShippedDefaults,
   type Theme,
 } from '@throng/core';
 import { FileConfigStore, type WriteAllResult } from './config-store.js';
+import { withDocumentLock, withDocumentsLock } from './config-write-lock.js';
 
 export type RestoreResult = { ok: true } | { ok: false; failedPath: string; error: string };
 export type UpgradeResult =
@@ -28,7 +30,16 @@ export type UpgradeResult =
   | { ok: false; failedPath: string; error: string };
 export interface ResetOne {
   ok: boolean;
-  reason?: 'no-default';
+  /**
+   * `no-default` — the path names nothing in the shipped record, so there is nothing to reset to.
+   *
+   * `unreadable` — the document exists but does not parse, so there is no base to apply the reset
+   * to (032, FR-006a). Refusing is the whole point: these methods used to read through a
+   * `DEFAULT_APP_SETTINGS` / `DEFAULT_KEYBINDINGS` fallback, so resetting ONE leaf against a corrupt
+   * file wrote the entire shipped document and silently discarded every other choice the user had
+   * made. A reset that cannot read what it is modifying has to stop, not guess.
+   */
+  reason?: 'no-default' | 'unreadable';
 }
 
 /** The applied-defaults version marker document, stored in the config root. */
@@ -74,8 +85,13 @@ export class ShippedDefaultsService {
   /** FR-008: reset every built-in theme to its shipped values, recreating any the
    *  user deleted. Custom themes (names not in the record) are never touched. */
   async restoreAllThemes(): Promise<RestoreResult> {
-    const files = reservedThemeNames(this.shipped).map((name) => this.themeFile(name));
-    return this.store.writeFilesAtomic(files);
+    const names = reservedThemeNames(this.shipped);
+    // Wholesale by definition — it writes the shipped values and reads nothing — but it still takes
+    // the locks, so it cannot land in the middle of another writer's read-modify-write cycle.
+    return withDocumentsLock(
+      names.map((name): ConfigDocId => ({ kind: 'theme', name })),
+      async () => this.store.writeFilesAtomic(names.map((name) => this.themeFile(name))),
+    );
   }
 
   /**
@@ -88,7 +104,9 @@ export class ShippedDefaultsService {
     if (!reservedThemeNames(this.shipped).includes(name)) {
       return { ok: false, failedPath: '', error: 'not-reserved' };
     }
-    return this.store.writeFilesAtomic([this.themeFile(name)]);
+    return withDocumentLock({ kind: 'theme', name }, async () =>
+      this.store.writeFilesAtomic([this.themeFile(name)]),
+    );
   }
 
   /**
@@ -100,42 +118,118 @@ export class ShippedDefaultsService {
    * "shipped default" in the first place.
    */
   async resetSettings(): Promise<RestoreResult> {
-    return this.store.writeFilesAtomic([this.settingsFile()]);
+    return withDocumentLock({ kind: 'settings' }, async () =>
+      this.store.writeFilesAtomic([this.settingsFile()]),
+    );
   }
 
   /** Feature 015, FR-011/FR-011b: the Key Bindings counterpart of {@link resetSettings}. */
   async resetKeybindings(): Promise<RestoreResult> {
-    return this.store.writeFilesAtomic([this.keybindingsFile()]);
+    return withDocumentLock({ kind: 'keybindings' }, async () =>
+      this.store.writeFilesAtomic([this.keybindingsFile()]),
+    );
   }
 
   /** FR-015: full reset — settings + keybindings + every built-in theme from the record. */
   async resetEverything(): Promise<RestoreResult> {
-    const files = [
-      this.settingsFile(),
-      this.keybindingsFile(),
-      ...reservedThemeNames(this.shipped).map((name) => this.themeFile(name)),
-    ];
-    return this.store.writeFilesAtomic(files);
+    const names = reservedThemeNames(this.shipped);
+    /*
+     * The widest operation there is, and the one that most needs the lock: it spans three document
+     * kinds, so taking a single-document lock would leave the others racing every other writer for
+     * the duration — atomic on disk and still losing edits.
+     */
+    return withDocumentsLock(
+      [
+        { kind: 'settings' },
+        { kind: 'keybindings' },
+        ...names.map((name): ConfigDocId => ({ kind: 'theme', name })),
+      ],
+      async () =>
+        this.store.writeFilesAtomic([
+          this.settingsFile(),
+          this.keybindingsFile(),
+          ...names.map((name) => this.themeFile(name)),
+        ]),
+    );
   }
 
   /** FR-009/016: reset one action's binding to its shipped value; others untouched. */
   async resetBinding(action: string): Promise<ResetOne> {
-    const current = await this.store.read({ kind: 'keybindings' }, DEFAULT_KEYBINDINGS, parseKeybindings);
-    const next = resetBindingValue(current, action, this.shipped);
-    if (next === null) return { ok: false, reason: 'no-default' };
-    const res = await this.store.writeFilesAtomic([
-      { path: this.store.pathOf({ kind: 'keybindings' }), content: FileConfigStore.serialize(next) },
-    ]);
-    return { ok: res.ok };
+    // The exact twin of resetSetting, and it had the exact same two defects: no serialisation, and a
+    // DEFAULT_KEYBINDINGS fallback that replaced every OTHER chord the user had rebound when the
+    // document could not be parsed (032, FR-001c).
+    return withDocumentLock({ kind: 'keybindings' }, async () =>
+      this.resetLeaf(
+        { kind: 'keybindings' },
+        DEFAULT_KEYBINDINGS,
+        parseKeybindings,
+        (current) => resetBindingValue(current, action, this.shipped),
+      ),
+    );
   }
 
   /** FR-010/011/016: reset one setting leaf (dotted path) to its shipped value. */
   async resetSetting(path: string): Promise<ResetOne> {
-    const current = await this.store.read({ kind: 'settings' }, DEFAULT_APP_SETTINGS, guardedSettingsValidator);
-    const next = resetSettingValue(current, path, this.shipped);
+    // 032 FR-002a — the read and the write are ONE critical section. Atomicity of the file replace
+    // says nothing about the gap between them, and that gap is where a concurrent write is lost.
+    return withDocumentLock({ kind: 'settings' }, async () =>
+      this.resetLeaf(
+        { kind: 'settings' },
+        DEFAULT_APP_SETTINGS,
+        guardedSettingsValidator,
+        (current) => resetSettingValue(current, path, this.shipped),
+      ),
+    );
+  }
+
+  /**
+   * Reset ONE leaf of a document to its shipped value (032, FR-001b/FR-001c/FR-006a).
+   *
+   * ══ WHAT THIS FIXES, AND WHAT IT DELIBERATELY DOES NOT ══
+   *
+   * It fixes the data-loss path: these methods used to read through a `DEFAULT_APP_SETTINGS` /
+   * `DEFAULT_KEYBINDINGS` fallback, so resetting ONE leaf against a document that could not be
+   * parsed wrote the entire shipped document and silently discarded every other choice the user had
+   * made. Now an unparseable base is REFUSED and nothing is written.
+   *
+   * It does NOT try to preserve keys the schema does not model, and an earlier revision that did
+   * was wrong. The pure `resetSettingValue`/`resetBindingValue` helpers take a TYPED document, so
+   * the raw file goes through the parse — which drops unmodelled keys. That looked like data loss
+   * and is in fact the shipped, tested behaviour of every write in this application: 007 FR-023 and
+   * `preferences-settings.e2e.ts` (#95, C1) require a hand-written unknown key to be stripped by the
+   * next ordinary write, and state the mechanism as "the key simply does not survive a parse".
+   *
+   * Reverting that over-correction is the point of this note. The test that appeared to find a
+   * defect — a hand-written key not surviving a reset — was asserting a requirement nobody had, and
+   * it contradicted one that shipped two releases ago.
+   */
+  private async resetLeaf<T>(
+    doc: ConfigDocId,
+    fallback: T,
+    guard: (raw: unknown) => T,
+    computeNext: (current: T) => T | null,
+  ): Promise<ResetOne> {
+    const raw = await this.store.readRaw(doc);
+
+    let current: T;
+    if (raw.trim().length === 0) {
+      // Absent → first run. Falling back to the shipped record is correct: there is nothing to
+      // preserve, and this is the one case where a defaults fallback is not the bug.
+      current = fallback;
+    } else {
+      try {
+        current = guard(JSON.parse(raw));
+      } catch {
+        // Present but unparseable — the case FR-006a exists for. Refuse; write nothing.
+        return { ok: false, reason: 'unreadable' };
+      }
+    }
+
+    const next = computeNext(current);
     if (next === null) return { ok: false, reason: 'no-default' };
+
     const res = await this.store.writeFilesAtomic([
-      { path: this.store.pathOf({ kind: 'settings' }), content: FileConfigStore.serialize(next) },
+      { path: this.store.pathOf(doc), content: FileConfigStore.serialize(next) },
     ]);
     return { ok: res.ok };
   }
@@ -154,12 +248,32 @@ export class ShippedDefaultsService {
       ...reservedThemeNames(this.shipped).map((name) => this.themeFile(name)),
       this.markerFile(),
     ];
-    const absent: Array<{ path: string; content: string }> = [];
-    for (const c of candidates) {
-      if (!(await fileExists(c.path))) absent.push(c);
-    }
-    if (absent.length === 0) return { ok: true };
-    return this.store.writeFilesAtomic(absent);
+    /*
+     * Under the lock, and the reasoning is worth recording because it looked like an exemption.
+     *
+     * `seed` runs at startup before a window exists, so it is *probably* unraceable — and "probably
+     * harmless" is precisely the reasoning that hid four writers across three rounds of this spec.
+     * It also has a genuine read-modify-write shape of its own: it tests existence and then writes
+     * on the strength of that test, so a document arriving in the gap would be clobbered. Taking the
+     * lock costs a startup path nothing, because nothing is contending for it.
+     */
+    return withDocumentsLock(this.seedDocIds(), async () => {
+      const absent: Array<{ path: string; content: string }> = [];
+      for (const c of candidates) {
+        if (!(await fileExists(c.path))) absent.push(c);
+      }
+      if (absent.length === 0) return { ok: true };
+      return this.store.writeFilesAtomic(absent);
+    });
+  }
+
+  /** Every document `seed`/`upgrade` may touch. The marker file is not a config document. */
+  private seedDocIds(): ConfigDocId[] {
+    return [
+      { kind: 'settings' },
+      { kind: 'keybindings' },
+      ...reservedThemeNames(this.shipped).map((name): ConfigDocId => ({ kind: 'theme', name })),
+    ];
   }
 
   /**
@@ -170,19 +284,36 @@ export class ShippedDefaultsService {
    * Idempotent.
    */
   async upgrade(): Promise<UpgradeResult> {
-    const present = await this.readPresentThemes();
-    const plan = planThemeUpgrade({ shipped: this.shipped, present, throngBase: this.shipped.themes.throng });
-    const files: Array<{ path: string; content: string }> = [];
-    for (const { name, theme } of plan.addThemes) {
-      files.push({ path: this.store.pathOf({ kind: 'theme', name }), content: FileConfigStore.serialize(theme) });
-    }
-    for (const { name, theme } of plan.fillThemes) {
-      files.push({ path: this.store.pathOf({ kind: 'theme', name }), content: FileConfigStore.serialize(theme) });
-    }
-    files.push(this.markerFile());
-    const res: WriteAllResult = await this.store.writeFilesAtomic(files);
-    if (!res.ok) return res;
-    return { ok: true, added: plan.addThemes.map((a) => a.name), filled: plan.fillThemes.map((f) => f.name) };
+    /*
+     * The clearest read-modify-write in the file: it reads every theme on disk, computes a plan from
+     * what it found, and writes the result. Under the lock for the same reason as `seed` — and here
+     * the shape is not even arguably exempt.
+     *
+     * The lock set spans the CUSTOM themes as well as the built-ins, because `fillThemes` writes
+     * customs too (materialising newly-added properties from the throng base). Listing happens
+     * before the lock, which is not a gap worth closing: `upgrade` runs at startup, and a theme file
+     * appearing between the list and the lock would have to be created by a window that does not
+     * exist yet.
+     */
+    const names = new Set([...reservedThemeNames(this.shipped), ...(await this.store.listThemes())]);
+    return withDocumentsLock(
+      [...names].map((name): ConfigDocId => ({ kind: 'theme', name })),
+      async () => {
+        const present = await this.readPresentThemes();
+        const plan = planThemeUpgrade({ shipped: this.shipped, present, throngBase: this.shipped.themes.throng });
+        const files: Array<{ path: string; content: string }> = [];
+        for (const { name, theme } of plan.addThemes) {
+          files.push({ path: this.store.pathOf({ kind: 'theme', name }), content: FileConfigStore.serialize(theme) });
+        }
+        for (const { name, theme } of plan.fillThemes) {
+          files.push({ path: this.store.pathOf({ kind: 'theme', name }), content: FileConfigStore.serialize(theme) });
+        }
+        files.push(this.markerFile());
+        const res: WriteAllResult = await this.store.writeFilesAtomic(files);
+        if (!res.ok) return res;
+        return { ok: true, added: plan.addThemes.map((a) => a.name), filled: plan.fillThemes.map((f) => f.name) };
+      },
+    );
   }
 
   /** Read the applied-defaults version marker (`null` if absent or unreadable). */

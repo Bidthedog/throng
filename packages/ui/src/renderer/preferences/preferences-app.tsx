@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react';
-import { revertAll, type OnEntrySnapshot } from '@throng/core';
+import { planRevertAll, type OnEntrySnapshot } from '@throng/core';
 import {
   ConfigProvider,
   useActiveTheme,
@@ -7,10 +7,13 @@ import {
   useConfigLoaded,
   useKeybindings,
   writeConfig,
+  writeConfigPatch,
 } from '../config/config-store.js';
 import { ContextMenuProvider } from '../context-menu-provider.js';
 import { useNoDropNavigation } from '../composition-root.js';
 import { ConfirmProvider, useConfirm } from '../confirm-dialog.js';
+// `useNotify` is gone from this file with the toast it raised: an invalid JSON document is reported
+// by the editor that holds it, once, and not by every caller that bounced off it (032).
 import { NotificationProvider } from '../common/notification.js';
 import { useConfigWriteFailureNotices } from '../config/config-write-notices.js';
 import { ThemeProvider } from '../theme/theme-provider.js';
@@ -24,6 +27,7 @@ import { SettingsTab } from './settings-tab.js';
 import { KeybindingsTab } from './keybindings-tab.js';
 import { ThemesTab } from './themes-tab.js';
 import { JsonTab } from './json-tab.js';
+import { JsonEditGateProvider, useJsonEditGate } from './json-edit-gate.js';
 import './preferences.css';
 
 /**
@@ -56,6 +60,24 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
   // paths no call site can hold a promise for. Subscribed once, here, inside the provider.
   useConfigWriteFailureNotices();
   const confirm = useConfirm();
+  const jsonGate = useJsonEditGate();
+
+  /**
+   * Leave the JSON editor, or refuse (032, FR-017/FR-018).
+   *
+   * Every way out funnels through here — the three tab buttons, the UI⇄JSON toggle, and main's
+   * close request. That is the point: FR-018 names three exits, and a rule enforced at two of them
+   * is a rule the user learns to distrust.
+   *
+   * Leaving is also what APPLIES the buffer (FR-017), so this is the commit point as well as the
+   * gate. The two cannot be separated without reintroducing a write the user did not ask for.
+   *
+   * **It says nothing when it refuses**, and that is the fix for a real complaint. It used to raise
+   * a toast, while the close path raised a strip of its own and the editor already showed a banner —
+   * three messages for one condition, two of them insisting the user could not leave when a Discard
+   * button was sitting a few pixels away. The gate now flashes the editor's own notice instead.
+   */
+  const leaveJson = (): boolean => jsonGate.tryLeave();
 
   // Per-tab scroll position. The three editors share ONE scrolling element (the tab panel is a
   // single DOM node whose children swap), so without this the browser carries one tab's scroll
@@ -128,6 +150,30 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
     return () => off?.();
   }, []);
 
+  /**
+   * Answer main's "may I close?" (032, FR-018/FR-018a).
+   *
+   * Registered once, with no dependency on `mode` or on any other state, and that is deliberate: it
+   * reads everything it needs through `jsonGate`, whose callbacks read refs. An effect that depended
+   * on `mode` would re-subscribe on every toggle, and one that CAPTURED it would answer with
+   * whatever was true at mount — which is the classic stale-closure bug, and here it would either
+   * lose the user's buffer or make the window unclosable.
+   *
+   * A refusal shows the same notice as a blocked tab switch, with one addition: the escape. Without
+   * it FR-018 turns a window the user typed a stray comma into a window they have to kill.
+   */
+  useEffect(() => {
+    const off = window.throng?.onPreferencesCloseRequest?.(({ requestId }) => {
+      // A refusal flashes the editor's notice — which carries *Discard and close*, so FR-018a's
+      // escape is on screen and pressable the whole time rather than appearing only once a close
+      // has already been rejected.
+      const allow = jsonGate.tryLeave();
+      window.throng?.replyPreferencesClose?.({ requestId, allow });
+    });
+    return () => off?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // The per-tab reset is HIDDEN on the Themes tab (015, FR-011): feature 014 already offers a
   // restore-to-shipped affordance on every built-in theme row, so a per-tab reset there would be
   // a second control performing an identical write.
@@ -186,7 +232,27 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
     void ask('Revert every editor to its state when this window opened?', 'Revert all').then(
       (ok) => {
         if (!ok) return;
-        for (const entry of revertAll(snapshotRef.current)) void writeConfig(entry.id, entry.json);
+        /*
+         * A MIXED write plan, deliberately (032, FR-001a).
+         *
+         * This used to be `for (const entry of revertAll(...)) writeConfig(entry.id, entry.json)` —
+         * restore all three documents wholesale. For keybindings and themes that is still exactly
+         * right, and they still go that way. For SETTINGS it was wrong, and the reason is easy to
+         * miss because it does not look like a race: `settings.json` is not only the preferences
+         * editor's document. The project list writes `newProject.lastProjectFolder` into it, from
+         * the other window, while Preferences is open. Restoring the captured file therefore threw
+         * away a folder the user chose AFTER opening Preferences — not what "revert my preference
+         * edits" means, and not something the confirmation warned about.
+         *
+         * `planRevertAll` reverts the descriptor-carrying leaves and leaves the rest of the document
+         * alone. The key set comes from `SETTINGS_METADATA`, so a setting added tomorrow is reverted
+         * because it declared a descriptor, not because anyone remembered this call site.
+         */
+        const plan = planRevertAll(snapshotRef.current);
+        if (plan.settingsChanges.length > 0) {
+          void writeConfigPatch({ kind: 'settings' }, plan.settingsChanges);
+        }
+        for (const entry of plan.documents) void writeConfig(entry.id, entry.json);
       },
     );
   };
@@ -221,7 +287,12 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
                 aria-selected={tab === t.id}
                 className={`prefs-tab${tab === t.id ? ' prefs-tab--active' : ''}`}
                 data-testid={`prefs-tab-${t.id}`}
-                onClick={() => setTab(t.id)}
+                onClick={() => {
+                  // FR-018: switching tab is one of the three exits blocked while the JSON buffer
+                  // is invalid — and, when it is valid, the moment the buffer is applied (FR-017).
+                  if (mode === 'json' && !leaveJson()) return;
+                  setTab(t.id);
+                }}
               >
                 {t.label}
               </button>
@@ -236,7 +307,12 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
               className="prefs-toolbtn prefs-toolbtn--icon"
               testId="prefs-mode-toggle"
               title={mode === 'ui' ? 'Switch to JSON editing' : 'Switch to the visual editor'}
-              onClick={() => setMode((m) => (m === 'ui' ? 'json' : 'ui'))}
+              onClick={() => {
+                // Leaving the JSON view is the other blocked exit (FR-018), and the commit trigger
+                // named first in the clarification: "closing the JSON view".
+                if (mode === 'json' && !leaveJson()) return;
+                setMode((m) => (m === 'ui' ? 'json' : 'ui'));
+              }}
             />
             {showResetCurrent ? (
               <IconButton
@@ -275,6 +351,11 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
            * providers are mounted here (FR-054). The identifiers are preserved, so the suites that
            * drive them did not have to be rewritten.
            */}
+          {/*
+            The close-blocked strip that used to live here is GONE (032). It was the third message
+            for one condition, and the JSON tab's own notice — which carries Discard and
+            "Discard and close" — is the only one now.
+          */}
           <div
             className="prefs-tabpanel"
             role="tabpanel"
@@ -346,7 +427,11 @@ export function PreferencesApp({ initialTab }: { initialTab: PreferencesTab }): 
                 `report(operation, result)` shape its callers use, and turns a failed reset into an
                 ordinary notice. It must sit inside the NotificationProvider it delegates to. */}
             <ResetNoticeProvider>
-              <PreferencesShell initialTab={initialTab} />
+              {/* 032 FR-017/FR-018 — the shell and the JSON tab have to agree about one thing:
+                  whether the buffer may be left. The gate is where they meet. */}
+              <JsonEditGateProvider>
+                <PreferencesShell initialTab={initialTab} />
+              </JsonEditGateProvider>
             </ResetNoticeProvider>
           </ContextMenuProvider>
         </ConfirmProvider>

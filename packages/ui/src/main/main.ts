@@ -30,19 +30,22 @@ import { appIcon } from './app-icon.js';
 import { isSafeExternalUrl } from './external-url.js';
 import { ShippedDefaultsService } from './shipped-defaults-service.js';
 import { broadcastToWindows, senderWebContentsId } from './broadcast.js';
-import { readConfigPayload, startConfigWatcher, type ConfigPayload } from './config-watcher.js';
+import {
+  readConfigPayload,
+  startConfigWatcher,
+  type ConfigPayload,
+  type ConfigWatchPolicy,
+} from './config-watcher.js';
 import { registerConfigWriteIpc, registerConfigManagementIpc } from './config-write-ipc.js';
 import { FileConfigStore } from './config-store.js';
 import { FontCache } from './font-cache.js';
 import { IconPackService } from './icon-pack-service.js';
 import { registerWindowControlsIpc, wireWindowMaximizeEvents } from './window-controls-ipc.js';
 import { denyRendererWindows } from './window-open-guard.js';
-import {
-  openPreferences,
-  isPreferencesOpen,
-  isPreferencesTab,
-  type PreferencesWindowDeps,
-} from './preferences-window.js';
+// `isPreferencesOpen` is deliberately no longer imported here: its only two uses in this file were
+// the app-modal `setEnabled(false)` calls that 021 FR-042 superseded (#263). The LAYERING those
+// calls were accidentally providing is now handled app-level inside `preferences-window.ts`.
+import { openPreferences, isPreferencesTab, type PreferencesWindowDeps } from './preferences-window.js';
 import { buildAppMenu } from './app-menu.js';
 import { openAbout, type AboutWindowDeps } from './about-window.js';
 import { acquireSingleInstance } from './single-instance.js';
@@ -342,9 +345,23 @@ async function createMainWindow(
     });
   }
   denyRendererWindows(window.webContents); // 024 US7: no in-app browser windows (FR-019b)
-  // If preferences is open (app-modal), a window created afterwards must also be
-  // non-interactive so the prefs window stays the only interactive surface (FR-013).
-  if (isPreferencesOpen()) window.setEnabled(false);
+  /*
+   * NOTHING IS DISABLED HERE (#263).
+   *
+   * This used to read `if (isPreferencesOpen()) window.setEnabled(false)` — 007's app-modality,
+   * applied to windows born while Preferences happened to be open. Spec 021 FR-042 reversed that:
+   * "The Preferences window MUST be non-modal: opening it MUST NOT disable any other window…
+   * (Supersedes the app-modal setEnabled(false) behaviour of 007 FR-013/FR-014.)"
+   *
+   * `preferences-window.ts` was updated and says so; these creation paths were missed. The result
+   * was an app that was non-modal for every window that already existed and app-modal for every
+   * window created afterwards — so a sub-workspace opened while Preferences was up painted and
+   * accepted nothing.
+   *
+   * There is deliberately no re-enable to pair with this. The disable was never half of an
+   * open/close pairing, which is why closing Preferences left such a window permanently dead
+   * (#263's "bug 2"). A window that is never disabled needs nothing to undo it.
+   */
   if (saved?.maximized) window.maximize();
   revealWhenPainted(window);
 
@@ -398,7 +415,13 @@ function createSubWorkspaceWindow(
   });
   wireWindowMaximizeEvents(window);
   denyRendererWindows(window.webContents); // 024 US7: no in-app browser windows (FR-019b)
-  if (isPreferencesOpen()) window.setEnabled(false); // stay app-modal (FR-013)
+  // No `setEnabled(false)` here either — same reason as the main window path above (#263).
+  // 021 FR-042 supersedes 007's app-modality, and a sub-workspace is exactly the window the old
+  // behaviour stranded.
+  //
+  // Layering is NOT wired here. It is app-level, inside `preferences-window.ts`: a per-window hook
+  // would have to be remembered for every window kind added later, which is precisely the omission
+  // that produced #263.
   revealWhenPainted(window);
   void window.loadFile(resolveFromHere('../renderer/index.html'), { query: { sw: id } });
   return window;
@@ -718,6 +741,10 @@ if (isPrimaryInstance)
     config: configSettings,
     broadcast,
     loadIconPacks: () => iconPackService.listIconPacks(),
+    // 032 FR-008: resolved from the container, not written here. A single bad read — the watcher
+    // waking mid-write — used to broadcast the shipped defaults and then nothing looked again,
+    // stranding every open window on them until something touched the file.
+    policy: container.get<ConfigWatchPolicy>(UI_TYPES.ConfigWatchPolicy),
   });
 
   // Preferences editor (007): the renderer→main config write path. A validated,

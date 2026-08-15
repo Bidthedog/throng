@@ -155,6 +155,27 @@ export {
   type CorrectionOutcome,
 } from './config/bounds-guard.js';
 export { parseSettingsGuarded, guardedSettingsValidator } from './config/settings-read.js';
+// 032 (#249/#260) — the key-scoped write. A caller says WHAT CHANGED and never assembles a
+// document, so it can never assemble a stale one.
+export { applyConfigPatch } from './config/config-patch.js';
+export type { ConfigChange, PatchError, PatchOutcome } from './config/config-patch.js';
+// 032 FR-001a — Revert All reverts the keys it CAPTURED, not the whole settings file, which also
+// carries main-window state written while Preferences was open.
+export { planRevertAll } from './config/revert-plan.js';
+export type { RevertPlan } from './config/revert-plan.js';
+// 032 FR-019/FR-019a — what is wrong with a hand-typed settings document, read from the same
+// registry the settings FORM reads, so there is no second list of allowed values to keep in step.
+export {
+  checkSettingsText,
+  describeSettingsValidity,
+  formatSettingsProblem,
+  isSettingsTextValid,
+} from './config/settings-validity.js';
+export type {
+  SettingsCheckContext,
+  SettingsProblem,
+  SettingsValidity,
+} from './config/settings-validity.js';
 // 031 US3 — pure tab-strip geometry and the picker's match predicate. Both are DOM-free so the
 // renderer holds only the measuring and the drawing.
 export { stripCounts, stepTarget, revealTarget, ease } from './workspace/tab-strip.js';

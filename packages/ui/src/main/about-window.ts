@@ -12,6 +12,7 @@ import { wireWindowMaximizeEvents } from './window-controls-ipc.js';
 import { denyRendererWindows } from './window-open-guard.js';
 import { appIcon } from './app-icon.js';
 import { revealWhenPainted } from './reveal-when-painted.js';
+import { placeOverParent } from './window-placement.js';
 
 export interface AboutWindowDeps {
   /** Absolute path to the renderer index.html (loaded with `?about=1`). */
@@ -53,11 +54,15 @@ export function openAbout(deps: AboutWindowDeps): BrowserWindow {
   const mainWindow = deps.getMainWindow?.() ?? null;
   const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
 
+  // Wide enough that the full AGPL text (authored at ≤79 columns) shows without a horizontal
+  // scrollbar (FR-003a); fixed size — an About dialog has nothing to resize for.
+  const size = { width: 720, height: 680 };
   const win = new BrowserWindow({
-    // Wide enough that the full AGPL text (authored at ≤79 columns) shows without a horizontal
-    // scrollbar (FR-003a); fixed size — an About dialog has nothing to resize for.
-    width: 720,
-    height: 680,
+    ...size,
+    // Centred on the main window rather than the primary monitor — same reasoning as Preferences.
+    // A dialog that opens on a different screen from the app that raised it is a small thing that
+    // feels broken every single time.
+    ...placeOverParent(parent, size),
     frame: false,
     parent,
     movable: true,

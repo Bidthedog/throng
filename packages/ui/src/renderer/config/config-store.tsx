@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  applyConfigPatch,
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
   guardedSettingsValidator,
@@ -18,7 +19,7 @@ import {
   type LoadedIconPack,
   type Theme,
 } from '@throng/core';
-import { onConfigWritten } from './write-config.js';
+import { onConfigPatched, onConfigWritten } from './write-config.js';
 
 /**
  * Renderer-side mirror of the user configuration (T039). On mount it pulls the
@@ -141,10 +142,32 @@ export function ConfigProvider({ children }: { children: ReactNode }): ReactElem
       });
     });
 
+    /**
+     * Adopt a KEY-SCOPED change the moment it is applied (032).
+     *
+     * Narrower than the whole-document adoption above, and deliberately so. That one is holding up a
+     * correctness property — the next edit must build on the last. A patch caller never builds a
+     * document at all, so this is only closing the visible gap between the click and the watcher's
+     * round trip: without it the control the user just changed shows its old value for as long as
+     * the broadcast takes.
+     *
+     * Applied to `prev.settings` rather than to a captured copy, so it composes with the broadcast
+     * and with the whole-document adoption in whatever order they arrive.
+     */
+    const offPatch = onConfigPatched((id, changes) => {
+      if (!active || id.kind !== 'settings') return;
+      setState((prev) => {
+        const patched = applyConfigPatch(prev.settings, changes);
+        if (!patched.ok) return prev; // main refused it too; nothing to adopt
+        return { ...prev, settings: guardedSettingsValidator(patched.value) };
+      });
+    });
+
     return () => {
       active = false;
       off?.();
       offWrite();
+      offPatch();
     };
   }, []);
 
@@ -182,4 +205,10 @@ export function useConfigLoaded(): boolean {
 // Renderer config-write plumbing (007, T010): the base helpers every preferences
 // tab's apply-client builds on — re-exported here so config consumers have one
 // import site for reading (hooks above) and writing config.
-export { writeConfig, debounce, type ConfigWriteResult, type Debounced } from './write-config.js';
+export {
+  writeConfig,
+  writeConfigPatch,
+  debounce,
+  type ConfigWriteResult,
+  type Debounced,
+} from './write-config.js';

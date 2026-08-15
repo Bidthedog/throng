@@ -36,6 +36,24 @@ export interface CorrectionOutcome<T> {
   /** True iff at least one correction was recorded. Drives write-back; its falsity prevents churn. */
   corrected: boolean;
   corrections: Correction[];
+  /**
+   * True iff there was a document but it could not be READ as one (032, FR-008).
+   *
+   * Deliberately separate from `corrected`, because the two mean opposite things to a caller.
+   * `corrected` says "this document was fine, bar a value I clamped" — the value is trustworthy and
+   * the file is owed a write-back. `unreadable` says "I could not use this document at all, so what
+   * you are holding is the shipped defaults" — the value is a fallback, and writing it back would
+   * replace the user's file with defaults.
+   *
+   * It exists because the watcher could not tell those apart. A document that failed to parse
+   * broadcast the defaults exactly as a clean one broadcasts the real settings, and nothing
+   * re-read, because re-reads are driven only by a further file change. One bad read — a write
+   * caught halfway, a scanner holding the file — stranded every open window on the defaults
+   * indefinitely.
+   *
+   * Absent (`undefined`) reads as false, so every existing consumer of this type is unaffected.
+   */
+  unreadable?: boolean;
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {

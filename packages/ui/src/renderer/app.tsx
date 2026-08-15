@@ -50,6 +50,7 @@ import { VerticalPanelStack } from './panes/vertical-panel-stack.js';
 import { FileExplorerPane } from './panes/file-explorer-pane.js';
 import { usePersistedBool } from './panes/use-persisted-bool.js';
 import { TitleBar } from './title-bar/title-bar.js';
+import { useConfigWriteFailureNotices } from './config/config-write-notices.js';
 
 /** Fixed width (px) of a collapsed side-pane rail. Sized so the 22px collapse
  *  button (pinned 5px from the outer edge) has an equal 5px margin on both sides. */
@@ -515,6 +516,20 @@ function AppLoading(): ReactElement {
 }
 
 export function App(): ReactElement {
+  /*
+   * The main window reports its own failed config writes (032, US3 / spec 030's G-09 finding).
+   *
+   * `onConfigWriteFailed`'s listener set is module-scoped and each window loads its own instance, so
+   * a subscriber mounted in the Preferences window cannot hear a failure raised here. The main
+   * window really does write settings — creating a project calls `persistLastProjectFolder` — so
+   * until now a write that failed here was published into a registry nothing was listening to, and
+   * the user was told nothing at all.
+   *
+   * Sub-workspace windows deliberately do NOT mount this: they issue no configuration write of any
+   * kind, so a subscriber there could never fire.
+   */
+  useConfigWriteFailureNotices();
+
   const { activeProject } = useProjects();
   const appReady = useAppReady();
   const { workspace } = useServices();

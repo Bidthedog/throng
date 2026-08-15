@@ -27,7 +27,7 @@ import {
   SUBWORKSPACE_PALETTE,
 } from '@throng/core';
 import { useAppSettings } from '../config/config-store.js';
-import { writeConfig } from '../config/write-config.js';
+import { writeConfigPatch } from '../config/write-config.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useProjects } from '../state/projects-store.js';
 import { useConfirm } from '../confirm-dialog.js';
@@ -202,12 +202,24 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
     setDraft({ mode: 'create', name: '', colour: pickInitialColour(), rootFolder: '' });
   };
 
-  // Persist the folder last chosen for a project so 'Last Viewed' opens there next
-  // time (011, FR-040). Writes the full settings doc through the immediate-apply path.
+  /**
+   * Persist the folder last chosen for a project so 'Last Viewed' opens there next time (011,
+   * FR-040) — as ONE KEY, never the whole document (032, FR-001).
+   *
+   * THIS IS THE OTHER HALF OF #249. It used to spread `settings` — the main window's copy, as of
+   * whenever the watcher last broadcast — into a complete document and write all of it. Change a
+   * setting in Preferences, create a project here a moment later, and this write put every other key
+   * back the way this window remembered it. The Preferences change was gone, with nothing on screen
+   * to say so, and from the user's chair it simply "didn't save".
+   *
+   * Naming the one key removes the ability to express that. The copy can be as stale as it likes; a
+   * write that mentions `newProject.lastProjectFolder` and nothing else cannot revert anything else.
+   */
   const persistLastProjectFolder = (folder: string): void => {
     if (folder.trim().length === 0) return;
-    const next = { ...settings, newProject: { ...settings.newProject, lastProjectFolder: folder } };
-    void writeConfig({ kind: 'settings' }, JSON.stringify(next));
+    void writeConfigPatch({ kind: 'settings' }, [
+      { path: ['newProject', 'lastProjectFolder'], value: folder },
+    ]);
   };
 
   const confirmDelete = async (id: string, name: string): Promise<void> => {
