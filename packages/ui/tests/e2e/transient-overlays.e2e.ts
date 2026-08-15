@@ -202,6 +202,68 @@ for (const [a, b] of PAIRS) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
+ * THREE in a row — the caret, on the third (FR-071, FR-072)
+ * ──────────────────────────────────────────────────────────────────────────────────────────────── */
+
+/*
+ * The pairs above prove the SET is right. They cannot prove the CARET is, past two overlays, and the
+ * user's report is precisely that: "CTRL+SHIFT+T, CTRL+ALT+T, then CTRL+G — the Go To Line text box
+ * is not focussed. This happens on the THIRD modal, regardless of which order I press them in."
+ *
+ * Two overlays hide it because the outgoing overlay's own focus RESTORE happens to move the caret
+ * again, which wakes the newcomer's guard and lands it in the right place by accident. On the third
+ * that restore is aimed at the FIRST overlay's input — long gone from the document — so it is
+ * skipped, and nothing re-dispatches the caret after the outgoing guard has taken it.
+ *
+ * Each triple therefore asserts the survivor's input holds the caret, AND keeps the "exactly one
+ * overlay" assertion alongside it, so a repair that simply refuses to open the third cannot pass.
+ */
+const TRIPLES: Array<[Overlay, Overlay, Overlay]> = [
+  // The reported one, in the order it was reported.
+  ['quickopen', 'tabpicker', 'gotoline'],
+  // …and two more, because the report says "regardless of which order I press them in". Between
+  // them these put each of the three overlays in the third position at least once.
+  ['gotoline', 'quickopen', 'tabpicker'],
+  ['tabpicker', 'gotoline', 'quickopen'],
+];
+
+for (const [a, b, c] of TRIPLES) {
+  test(`${NAME[a]}, then ${NAME[b]}, then ${NAME[c]} — the third holds the caret (FR-071, FR-072)`, async () => {
+    const win = shared.win;
+    await prepare();
+
+    // The first two are a PRECONDITION, not the subject: `openOverlay` waits for each to be both on
+    // screen and holding the caret, so a failure below cannot be blamed on an unsettled predecessor.
+    await openOverlay(a);
+    await expect.poll(() => overlaysOnScreen(win)).toEqual([a]);
+    await openOverlay(b);
+    await expect.poll(() => overlaysOnScreen(win)).toEqual([b]);
+
+    await win.keyboard.press(CHORD[c]);
+    await expect(win.getByTestId(c), `${NAME[c]} did not open on ${CHORD[c]}`).toBeVisible();
+
+    /*
+     * THE assertion of this block. Ordered after visibility and before the set, because it is the
+     * one that is expected to fail: the third overlay IS drawn, and the set IS exactly one — what
+     * the user lost is the keyboard, so the first thing they typed went into the document behind.
+     */
+    await expect(
+      win.getByTestId(`${c}-input`),
+      `${NAME[c]} is the third overlay and opened without the caret`,
+    ).toBeFocused();
+
+    // Still exactly one overlay, and one scrim: a "fix" that closed the third rather than focusing
+    // it would satisfy the assertion above by making it unreachable, and must not pass here.
+    await expect
+      .poll(() => overlaysOnScreen(win), {
+        message: `${NAME[c]} did not replace ${NAME[b]} — both are on screen`,
+      })
+      .toEqual([c]);
+    await expect(win.locator('.modal-overlay')).toHaveCount(1);
+  });
+}
+
+/* ────────────────────────────────────────────────────────────────────────────────────────────────
  * The fourth overlay — one directional case (D1)
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
@@ -221,4 +283,36 @@ test('opening Quick Open dismisses the editor status strip’s language picker (
   ).toHaveCount(0);
   await expect.poll(() => overlaysOnScreen(win)).toEqual(['quickopen']);
   await expect(win.getByTestId('quickopen-input')).toBeFocused();
+});
+
+/*
+ * All FOUR in one chain, and the fourth still holds the caret.
+ *
+ * The triples above already fail on the third, so this adds nothing to the diagnosis — it is here
+ * because the repair had to be a RULE ("a dialog does not fight a dialog for the caret") rather than
+ * a special case for a chain of three, and a fourth link is the cheapest way to say that the rule
+ * does not run out. It starts on the language picker because that is the one overlay opened by
+ * pointer rather than chord, so the chain also crosses that boundary.
+ */
+test('four overlays in a chain — the last one still holds the caret (FR-071, FR-072)', async () => {
+  const win = shared.win;
+  await prepare();
+
+  await win.getByTestId(`editor-language-${panelId}`).click();
+  await expect(win.getByTestId(`language-picker-${panelId}`)).toBeVisible();
+  await expect(win.getByTestId(`language-filter-${panelId}`)).toBeFocused();
+
+  await openOverlay('quickopen');
+  await openOverlay('tabpicker');
+
+  await win.keyboard.press(GOTO_LINE_CHORD);
+  await expect(win.getByTestId('gotoline')).toBeVisible();
+  await expect(
+    win.getByTestId('gotoline-input'),
+    'Go To Line is the fourth overlay and opened without the caret',
+  ).toBeFocused();
+
+  await expect.poll(() => overlaysOnScreen(win)).toEqual(['gotoline']);
+  await expect(win.getByTestId(`language-picker-${panelId}`)).toHaveCount(0);
+  await expect(win.locator('.modal-overlay')).toHaveCount(1);
 });

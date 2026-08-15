@@ -118,6 +118,37 @@ function createOversizedProject(): string {
   return root;
 }
 
+/**
+ * Press Enter on a query whose answer is exactly ONE file — after waiting for that row to exist.
+ *
+ * ══ THE BUG THIS CLOSES, MEASURED RATHER THAN GUESSED ══
+ *
+ * `Enter` is not queued: the picker answers it from the highlighted row, and while the file index is
+ * still being enumerated there is no row at all. FR-015 / S3 makes that state legitimate and visible
+ * — the modal opens before the walk finishes and says "Still listing this project's files…" — so an
+ * `Enter` that arrives inside that window is correctly ignored, and NOTHING retries it. The modal
+ * stays open, the row appears a beat later, and the test then dies on an assertion about editor
+ * panels while the actual event was a keystroke that landed on an empty list.
+ *
+ * That is exactly what AS-8 was failing on, and it took a probe to see, because by the time the
+ * assertion times out the evidence has healed. Captured at the moment of failure:
+ *
+ *     {"modal":1,"input":"README","rows":1,"editors":0,"active":"INPUT.picker__input"}
+ *
+ * — the modal still open, the query still typed, ONE row listed and no editor: an Enter pressed at a
+ * list that did not exist yet. It reproduced 2 times in 6 against a freshly launched app (the AS-8
+ * case, whose own app has a cold index) and 0 times in 3 full passes of this file, which is why it
+ * read as a phantom for two rounds of diagnosis.
+ *
+ * The rule this restores is one this suite already holds: never send a key at a control you have not
+ * asserted is there. Every other choose-by-Enter in this file states its expected row count first;
+ * these were the ones that did not.
+ */
+async function chooseTheOnlyRow(win: Page): Promise<void> {
+  await expect(quickOpenRows(win)).toHaveCount(1);
+  await win.keyboard.press('Enter');
+}
+
 /** Turn the tab's first panel into an editor and hand back its id. */
 async function newEditor(win: Page): Promise<string> {
   const pid = await firstPanelId(win);
@@ -260,7 +291,7 @@ test('from a focused terminal the chord opens a centred modal, sends the shell n
        */
       await openQuickOpen(win);
       await win.keyboard.type('deep-widget');
-      await win.keyboard.press('Enter');
+      await chooseTheOnlyRow(win);
 
       await expect(dialog).toHaveCount(0);
       await expect(editors(win)).toHaveCount(1);
@@ -424,7 +455,7 @@ test('at the shipped default a tab with no editor gets one, and the next choice 
 
       await openQuickOpen(win);
       await win.keyboard.type('README');
-      await win.keyboard.press('Enter');
+      await chooseTheOnlyRow(win);
       await expect(editors(win)).toHaveCount(1);
       await expect(editors(win).locator('.cm-content')).toContainText('// README.md', {
         timeout: 8000,
@@ -433,7 +464,7 @@ test('at the shipped default a tab with no editor gets one, and the next choice 
       // …and the second choice REPLACES the document rather than adding a panel.
       await openQuickOpen(win);
       await win.keyboard.type('guide');
-      await win.keyboard.press('Enter');
+      await chooseTheOnlyRow(win);
       await expect(editors(win)).toHaveCount(1);
       await expect(editors(win).locator('.cm-content')).toContainText('// docs/guide.md', {
         timeout: 8000,
@@ -460,12 +491,12 @@ test('with "Open files in" set to New Editor, each choice lands in a new editor 
 
         await openQuickOpen(win);
         await win.keyboard.type('README');
-        await win.keyboard.press('Enter');
+        await chooseTheOnlyRow(win);
         await expect(editors(win)).toHaveCount(1);
 
         await openQuickOpen(win);
         await win.keyboard.type('guide');
-        await win.keyboard.press('Enter');
+        await chooseTheOnlyRow(win);
         await expect(editors(win)).toHaveCount(2); // a NEW panel, not a reuse
       },
       { env: { THRONG_CONFIG_ROOT: cfg } },
@@ -520,7 +551,7 @@ test('a file already open in some editor focuses that editor rather than opening
       // Quick Open README.md — already open in A.
       await openQuickOpen(win);
       await win.keyboard.type('README');
-      await win.keyboard.press('Enter');
+      await chooseTheOnlyRow(win);
 
       // No third editor, B keeps its own document, and A is the one that ends up focused.
       await expect(editors(win)).toHaveCount(2);
@@ -554,7 +585,7 @@ test('a dirty target raises the shipped unsaved-changes prompt, and Cancel leave
 
       await openQuickOpen(win);
       await win.keyboard.type('guide');
-      await win.keyboard.press('Enter');
+      await chooseTheOnlyRow(win);
 
       // The SHIPPED prompt, by its shipped test ids — inherited, not re-implemented (Q3).
       await expect(win.getByTestId('unsaved-open-dialog')).toBeVisible({ timeout: 8000 });
@@ -766,7 +797,7 @@ test('at the shipped defaults a reopened modal is empty (AS-18, FR-057, M1)', as
       // Accept a query — the only kind of value FR-061 would ever remember.
       await openQuickOpen(win);
       await win.keyboard.type('guide');
-      await win.keyboard.press('Enter');
+      await chooseTheOnlyRow(win);
       await expect(editors(win).locator('.cm-content')).toContainText('// docs/guide.md', {
         timeout: 8000,
       });
@@ -830,7 +861,7 @@ test('a file opened by Quick Open produces the same outcome as the same file ope
       await expect(editors(win)).toHaveCount(0);
       await openQuickOpen(win);
       await win.keyboard.type('README');
-      await win.keyboard.press('Enter');
+      await chooseTheOnlyRow(win);
       await expect(editors(win).locator('.cm-content')).toContainText('// README.md', {
         timeout: 8000,
       });

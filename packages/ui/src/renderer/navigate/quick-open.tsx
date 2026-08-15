@@ -10,12 +10,16 @@
  * nothing said about it reads at review as an unmet one, and the next author's instinct on finding
  * no focus code is to add some.
  *
- * **It implements no opening of its own either.** Every choice ends in `openFileInTab` or
- * `openFileInNewEditor` — the same two functions the file tree calls (contracts/navigation-modals.md
- * §3). That is what makes SC-004 provable rather than promised: the one-buffer rule (Q2), the
- * unsaved-changes prompt (Q3) and creating a tab's first editor (Q4) are not re-implemented here, so
- * they cannot drift from the tree's version of themselves. Re-implementing any of them is precisely
- * the defect FR-008 exists to prevent.
+ * **It implements no opening of its own either.** Every choice ends in `openFileInTab` — the same
+ * function the file tree calls (contracts/navigation-modals.md §3), and the one that decides between
+ * reusing an editor and creating one. That is what makes SC-004 provable rather than promised: the
+ * one-buffer rule (Q2), the unsaved-changes prompt (Q3) and creating a tab's first editor (Q4) are
+ * not re-implemented here, so they cannot drift from the tree's version of themselves.
+ * Re-implementing any of them is precisely the defect FR-008 exists to prevent.
+ *
+ * That was stated here before it was true of the `new` target, which called `openFileInNewEditor`
+ * directly and so skipped the one-buffer gate — see the note on `choose` below. Reaching PAST the
+ * router for one branch is the same defect as re-implementing it, and it reads as neither.
  *
  * ══ TYPING COSTS NOTHING ══
  *
@@ -32,7 +36,7 @@ import {
 import { Picker, type PickerEntry } from '../common/picker.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
-import { openFileInNewEditor, openFileInTab } from '../editor/editor-open.js';
+import { openFileInTab } from '../editor/editor-open.js';
 import { getLastActiveEditor } from '../editor/last-active-editor.js';
 import { requestPanelFocus } from '../workspace/panel-focus.js';
 import type { FileIndexView } from './use-file-index.js';
@@ -109,13 +113,35 @@ export function QuickOpen({
     const absPath = `${root.replace(/[\\/]+$/, '')}/${entry.id}`;
 
     void (async () => {
-      if (invokedFrom !== null && target.current === 'new') {
-        openFileInNewEditor(ws, tabId, absPath);
-      } else {
-        // With no target control the landing panel follows `editor.openTarget` (FR-009, FR-011);
-        // with one, it follows what the control says. Both are the SAME call.
-        await openFileInTab(ws, tabId, absPath, invokedFrom === null ? openTarget : 'lastActive');
-      }
+      /*
+       * ONE call, for both target values — FR-008.
+       *
+       * With no target control the landing panel follows `editor.openTarget` (FR-009, FR-011); with
+       * one, it follows what the control says. `openFileInTab` takes the value either way and owns
+       * the routing, which is the whole of FR-008: "the same path the tree already uses, inheriting
+       * every check it makes".
+       *
+       * It used to call `openFileInNewEditor` directly for the `new` case, and that skipped the
+       * FIRST of those checks. That function is documented as a FORCE — "the caller gates on the
+       * file not already being open anywhere (app-wide one-buffer, FR-011a)" — and the tree, its
+       * only other caller, honours the contract by DISABLING the menu item when the file is open.
+       * Quick Open inherited the route without the precondition, so choosing an already-open file
+       * with the control on "a new editor panel" opened a second editor on it: two panels, two
+       * views, one file — exactly what FR-011a and AS-9 forbid, and reported from hand-testing.
+       *
+       * The gate is fixed HERE rather than inside `openFileInNewEditor` deliberately. That function
+       * means "force a new panel"; making it silently not force would change a shipped contract
+       * under a caller that has already done the check, and would turn a synchronous call into an
+       * asynchronous one for both. The defect is that Quick Open bypassed the router, so the fix is
+       * to stop bypassing it — after which `openFileInTab`'s own `openTarget === 'new'` branch calls
+       * `openFileInNewEditor`, on the far side of the one-buffer gate, exactly as it always has.
+       */
+      await openFileInTab(
+        ws,
+        tabId,
+        absPath,
+        invokedFrom === null ? openTarget : target.current,
+      );
       /*
        * Put the caret where the file went.
        *
