@@ -112,7 +112,10 @@ export {
   joinRel,
   parentRel,
   isExcluded,
+  compileExcluder,
   DEFAULT_EXCLUDE_GLOBS,
+  walkFiles,
+  diffPaths,
   isWithinRoot,
   isDropAllowed,
   isRoot,
@@ -130,6 +133,8 @@ export {
 } from './explorer/index.js';
 export type { DragModifierKey, DragModifierConfig } from './explorer/index.js';
 export type { TreeDragPayload, TreeDragInput } from './explorer/index.js';
+// 033 US1 — the project file index's pure half (contracts/file-index.md §1).
+export type { WalkOptions, FileIndexDelta } from './explorer/index.js';
 export type {
   AppSettings,
   ConfirmLevel,
@@ -180,8 +185,11 @@ export type {
 // renderer holds only the measuring and the drawing.
 export { stripCounts, stepTarget, revealTarget, ease } from './workspace/tab-strip.js';
 export type { StripMetrics, StripCounts } from './workspace/tab-strip.js';
-export { matches, matchSpans } from './picker/match.js';
-export type { MatchSpan } from './picker/match.js';
+export { matches, matchSpans, compileQuery } from './picker/match.js';
+export type { MatchSpan, CompiledQuery } from './picker/match.js';
+// 033 US1 — the picker's file-path ranking, and the cap on how many rows it draws (FR-007a,
+// FR-014). Compile the query ONCE per keystroke and hand the compiled form to both.
+export { rankFilePath, rankStable, QUICK_OPEN_MAX_ROWS } from './picker/rank.js';
 // 031 US4 — grapheme-cluster counting and truncation (FR-033a-c, FR-037a-e).
 export { countGraphemes, truncateGraphemes, wasTruncated } from './text/grapheme.js';
 // 031 FR-040 — the persistence half: names are bounded at the layout WRITE boundary, never on read.
