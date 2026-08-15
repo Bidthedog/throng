@@ -388,6 +388,10 @@ export const THRONG_THEME: Theme = {
     expandAll: '⊞',
     collapseAll: '⊟',
     newFolder: '📁',
+    // 033 US1 (#219, FR-018b) — the Files & Folders toolbar's Quick Open control. A magnifier over a
+    // document: the gesture is "find a FILE", which the bare magnifier (`search`, the find bar) does
+    // not say. Two tokens because they are two actions, not one action drawn twice.
+    quickOpen: '🔎',
     terminal: '▣',
     // Find-bar action controls (013, FR-018). Every control in the find bar is a
     // themeable icon carrying a hover title — never a text label. Closing the bar

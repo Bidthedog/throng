@@ -121,7 +121,14 @@ export function isPanelScoped(action: ActionId): boolean {
     // did nothing whatever in a terminal, whose focused element IS a textarea.
     action.startsWith('panel.') ||
     action.startsWith('focus.') ||
-    action.startsWith('view.')
+    action.startsWith('view.') ||
+    // 033 (#219) — Quick Open is a WINDOW command, like `tabs.openPicker`: it opens a modal over the
+    // window and acts on no panel's content. It must survive a focused transient surface, because
+    // the two places FR-003 is most about — a terminal, whose focused element IS a textarea, and an
+    // editor's find bar — are exactly the ones this guard would otherwise silence it in.
+    // An exact match, NOT a `navigate.` prefix: `navigate.gotoLine` (US2) acts inside one editor's
+    // document and is panel-scoped, so a prefix here would silently widen to it.
+    action === 'navigate.quickOpen'
   );
 }
 

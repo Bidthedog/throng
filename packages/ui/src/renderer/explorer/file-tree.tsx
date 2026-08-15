@@ -459,11 +459,17 @@ export function FileTree({
       onKeyDown={onKeyDown}
       onKeyDownCapture={onEnterCapture}
     >
+      {/* 033 (#219, FR-018c) — this is the toolbar's PROJECT-OPEN rendering. There is a second one
+          in `panes/file-explorer-pane.tsx`'s empty state, because Quick Open's control must be drawn
+          and DISABLED with no project open, and this component is not mounted at all in that state
+          (`file-explorer-pane.tsx` renders `FileTree` only when a project is active). */}
       <ExplorerToolbar
         onExpand={expandStep}
         onCollapseAll={collapseAll}
         onNewFolder={() => createFolder(primarySelected)}
         onDelete={() => remove(selectedRelPaths)}
+        keybindings={keybindings}
+        quickOpenEnabled
       />
       {/* 018 / FR-051 — the second of four copy-pasted error strips. Now the shared model. */}
       <div className="explorer__body" ref={ref} onContextMenu={onEmptyContextMenu}>

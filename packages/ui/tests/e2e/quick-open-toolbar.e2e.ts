@@ -183,11 +183,24 @@ test('the toolbar carries a Quick Open button beside Expand and Collapse all, dr
 
       const button = quickOpenToolbarButton(win);
 
-      // V2 — the shared `Icon` component, never a hard-coded glyph. The token's EXISTENCE is a unit
-      // gate (`icon-tokens-exist.test.ts`); what E2E can see is that the button draws an icon
-      // element and carries no text of its own.
-      await expect(button.locator('span.icon')).toHaveCount(1);
-      expect((await button.textContent())?.trim() ?? '').toBe('');
+      /*
+       * V2 — the shared `Icon` component, never a hard-coded glyph. The token's EXISTENCE is a unit
+       * gate (`icon-tokens-exist.test.ts`); what E2E can see is that the button draws an icon
+       * element and carries no LABEL of its own.
+       *
+       * "No label" is asserted as "no text OUTSIDE the icon", not as "no text at all". At the
+       * shipped defaults no icon pack is selected (`theme.iconPack` is unset), so `<Icon>` takes its
+       * glyph branch and renders the active theme's character as text — which is how EVERY icon
+       * control in the application is drawn out of the box. An empty-textContent assertion would
+       * therefore fail identically on Expand and Collapse all beside it: it would be testing that a
+       * pack was installed, which is not what V2 says.
+       */
+      const icon = button.locator('span.icon');
+      await expect(icon).toHaveCount(1);
+      const drawn = ((await icon.textContent()) ?? '').trim();
+      expect((await button.textContent())?.trim() ?? '', 'the button carries a text label').toBe(
+        drawn,
+      );
 
       // V3 / AS-16 — the hover title names the action AND the command's current chord.
       const title = (await button.getAttribute('title')) ?? '';

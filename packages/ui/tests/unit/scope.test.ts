@@ -107,6 +107,17 @@ describe('the focus guard (FR-017f)', () => {
     expect(isPanelScoped('panel.zoomIn')).toBe(false);
     expect(isPanelScoped('view.fullscreen')).toBe(false);
 
+    /*
+     * 033 US1 — Quick Open is a WINDOW command, like `zoom.*`, `view.*` and `tabs.openPicker`.
+     *
+     * It acts on the window, not on the content of whatever panel is active, so a focused transient
+     * surface must not suppress it: the chord has to work from inside a find bar and from inside a
+     * terminal's textarea alike (FR-003). Returning `true` here would leave the chord dead in
+     * exactly the two surfaces the story is about, with nothing at compile time to say so —
+     * data-model.md §2 records this as a SILENT failure.
+     */
+    expect(isPanelScoped('navigate.quickOpen')).toBe(false);
+
     expect(isPanelScoped('editor.cutLine')).toBe(true);
     expect(isPanelScoped('editor.indentLines')).toBe(true);
     expect(isPanelScoped('search.find')).toBe(true);

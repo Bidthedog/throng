@@ -8,7 +8,9 @@ import './panes.css';
 import '../explorer/explorer.css';
 import { useProjects } from '../state/projects-store.js';
 import { FileTree } from '../explorer/file-tree.js';
+import { ExplorerToolbar } from '../explorer/toolbar.js';
 import { TreeErrorBoundary } from '../explorer/error-boundary.js';
+import { useKeybindings } from '../config/config-store.js';
 import { IconButton } from '../common/icon-button.js';
 import { ProjectSettingsDialog } from '../project-settings/project-settings-dialog.js';
 import { setActivePane, useActivePane } from '../workspace/active-pane.js';
@@ -28,6 +30,7 @@ export function FileExplorerPane({
   resizing: boolean;
 }): ReactElement {
   const { activeProject, setProjectHidden } = useProjects();
+  const keybindings = useKeybindings();
   const [settingsOpen, setSettingsOpen] = useState(false);
   // The Files & Folders pane becomes the active pane on click, gating panel
   // shortcuts (Ctrl+S no-ops here) and showing a highlight (FR-015/SC-006).
@@ -93,9 +96,24 @@ export function FileExplorerPane({
               />
             </TreeErrorBoundary>
           ) : (
-            <div className="pane-explorer__empty" data-testid="file-explorer-empty">
-              <p>No files to display yet.</p>
-            </div>
+            /*
+             * 033 (#219, FR-018c / V4) — the toolbar is drawn HERE TOO, with no project open.
+             *
+             * `FileTree` owns the toolbar in the project-open state, and `FileTree` is not mounted
+             * in this branch — so before this feature there was no toolbar at all to draw a
+             * disabled Quick Open button on, and the requirement was structurally unsatisfiable
+             * rather than merely unimplemented. Every tree action is omitted, which is what
+             * disables the other four: with no project there is nothing to expand, create or
+             * delete. It is the same judgement the project-settings cog above already makes — a
+             * control that vanishes teaches the user nothing, one that is visibly unavailable
+             * explains itself in its hover title.
+             */
+            <>
+              <ExplorerToolbar keybindings={keybindings} quickOpenEnabled={false} />
+              <div className="pane-explorer__empty" data-testid="file-explorer-empty">
+                <p>No files to display yet.</p>
+              </div>
+            </>
           )}
         </div>
       </div>

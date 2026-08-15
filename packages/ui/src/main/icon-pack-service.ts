@@ -106,6 +106,10 @@ const SVG_SHAPES: Record<string, string> = {
   expandAll: '<path d="M7 7l5 5 5-5"/><path d="M7 13l5 5 5-5"/>',
   collapseAll: '<path d="M7 12l5-5 5 5"/><path d="M7 18l5-5 5 5"/>',
   newFolder: '<path d="M3 7h6l2 2h10v10H3z"/><path d="M15 13v4M13 15h4"/>',
+  // 033 (#219) — a document with a magnifier over its lower corner: a FILE being looked for, which
+  // is what separates it from `search`'s bare lens over the find bar.
+  quickOpen:
+    '<path d="M6 3h8l4 4v6"/><path d="M6 3v18h6"/><path d="M14 3v4h4"/><circle cx="16.5" cy="16.5" r="3.5"/><path d="M19 19l2.5 2.5"/>',
   terminal: '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10l3 3-3 3M13 16h4"/>',
   // 018. Without a shape here a token silently falls back to GENERIC_SHAPE — a rounded square — so
   // the icon "works" while looking like nothing in particular. That is worse than failing.
