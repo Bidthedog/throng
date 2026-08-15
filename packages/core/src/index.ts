@@ -130,6 +130,9 @@ export {
   buildTreeDragPayload,
   toAbsPath,
   nextExpandTargets,
+  // 033 US4 — Collapse/Expand All Children's pure targets (contracts/explorer-actions.md §B.1).
+  descendantOpenFolders,
+  immediateChildFolders,
 } from './explorer/index.js';
 export type { DragModifierKey, DragModifierConfig } from './explorer/index.js';
 export type { TreeDragPayload, TreeDragInput } from './explorer/index.js';
@@ -185,6 +188,10 @@ export type {
 // renderer holds only the measuring and the drawing.
 export { stripCounts, stepTarget, revealTarget, ease } from './workspace/tab-strip.js';
 export type { StripMetrics, StripCounts } from './workspace/tab-strip.js';
+// 033 US5 — the one section vocabulary every context menu groups by, and the grouping that
+// derives its dividers (FR-047 – FR-050; Constitution Principle VI is canonical for the order).
+export { MENU_SECTION_ORDER, groupBySection } from './workspace/menu-sections.js';
+export type { MenuSection } from './workspace/menu-sections.js';
 export { matches, matchSpans, compileQuery } from './picker/match.js';
 export type { MatchSpan, CompiledQuery } from './picker/match.js';
 // 033 US1 — the picker's file-path ranking, and the cap on how many rows it draws (FR-007a,
@@ -479,6 +486,8 @@ export {
   rectPaste,
   rowsOf,
   seedFromSelections,
+  // 033 US2 — Go To Line's pure half (contracts/navigation-modals.md §5).
+  resolveGotoLine,
   type PadStyle,
   type RectPasteChange,
   type RowSpan,

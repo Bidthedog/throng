@@ -21,3 +21,6 @@ export { buildTreeDragPayload, toAbsPath } from './tree-drag-payload.js';
 export type { TreeDragPayload, TreeDragInput } from './tree-drag-payload.js';
 export type { ExpandNode } from './expand.js';
 export { nextExpandTargets } from './expand.js';
+// 033 US4 — Collapse/Expand All Children's pure targets, over the same ExpandNode view
+// (contracts/explorer-actions.md §B.1).
+export { descendantOpenFolders, immediateChildFolders } from './subtree.js';

@@ -17,7 +17,12 @@ export interface ExpandNode {
   children?: ExpandNode[];
 }
 
-function findNode(node: ExpandNode, relPath: string): ExpandNode | null {
+/**
+ * The node at `relPath`, or null when the tree does not hold it. Exported for
+ * `subtree.ts`, which walks the same view (033 US4); deliberately NOT on the
+ * package barrel — it is a traversal detail, not part of core's surface.
+ */
+export function findNode(node: ExpandNode, relPath: string): ExpandNode | null {
   if (node.relPath === relPath) return node;
   for (const child of node.children ?? []) {
     const hit = findNode(child, relPath);
@@ -26,7 +31,8 @@ function findNode(node: ExpandNode, relPath: string): ExpandNode | null {
   return null;
 }
 
-function childFolders(node: ExpandNode): ExpandNode[] {
+/** The folder children of `node` (a closed folder has none loaded). Shared with `subtree.ts`. */
+export function childFolders(node: ExpandNode): ExpandNode[] {
   return (node.children ?? []).filter((c) => c.kind === 'folder');
 }
 
