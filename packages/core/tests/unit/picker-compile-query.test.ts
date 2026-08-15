@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { matches, matchSpans } from '../../src/picker/match.js';
 import { compileQuery, type CompiledQuery } from '../../src/picker/match.js';
+import { countRegExpConstructions } from './fixtures/regexp-constructions.js';
 
 // 033 (contracts/picker-extensions.md §1, C1–C3): `compileQuery` is the same matching
 // rule as `matches`/`matchSpans`, with the per-term regular expressions built ONCE for
@@ -96,31 +97,6 @@ describe('compileQuery — a compiled query is reusable and stateless', () => {
     expect(compiled.spans('src/find/file.ts')).toEqual([{ start: 4, end: 8 }]);
   });
 });
-
-/**
- * Count `new RegExp(...)` constructions while `run` executes.
- *
- * Regular-expression LITERALS use the intrinsic %RegExp% and are unaffected by swapping the
- * global, so `query.split(/\s+/u)` and the escaping `.replace()` are invisible here — which is
- * exactly what makes the count a count of the query's OWN compiled terms.
- */
-function countRegExpConstructions(run: () => void): number {
-  const Original = globalThis.RegExp;
-  let count = 0;
-  class Counting extends Original {
-    constructor(pattern: string | RegExp, flags?: string) {
-      count += 1;
-      super(pattern as string, flags);
-    }
-  }
-  (globalThis as { RegExp: unknown }).RegExp = Counting;
-  try {
-    run();
-  } finally {
-    (globalThis as { RegExp: unknown }).RegExp = Original;
-  }
-  return count;
-}
 
 describe('compileQuery — built once per term, not once per entry (C2)', () => {
   const corpus = Array.from({ length: 1000 }, (_, i) => `src/find/file-${i}.ts`);
