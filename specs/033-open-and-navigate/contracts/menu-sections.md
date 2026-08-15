@@ -34,7 +34,7 @@ the vocabulary was **derived from** — already ships Delete **before** Open In.
 item is in a section of its own") and AS-4 ("its destructive items are separated from the rest") are
 satisfied by the separation, which says nothing about position.
 
-**The cog menu's row cannot be satisfied at all**; see the plan's Complexity Tracking. All five items are
+**The cog menu's row could not be satisfied at all (**resolved 2026-08-15** — FR-052 and US5 AS-5 were both corrected; the cog menu is one undivided Application section)**; see the plan's Complexity Tracking. All five items are
 **Application** by FR-047's own table and by the constitution's, and FR-050 permits a divider only at a
 section boundary. This contract implements one Application section and **no divider**, and the
 requirement is raised for amendment before US5 is marked done.

@@ -572,7 +572,7 @@ the declared sections, in the declared order, with dividers between them.
   | Menu | Today | Sections it will contain |
   |---|---|---|
   | Files & Folders (file, folder, root) | Grouped | Unchanged, plus US3's and US4's items in **Navigate** |
-  | Terminal content menu | Contextual link group separated; rest ungrouped | Contextual, Content |
+  | Terminal content menu | Already sectioned — three separators shipped | Contextual, Content, **View & state** |
   | Editor content menu | 8 items, no dividers | Content, Navigate (Go To Line), View & state |
   | Panel header menu | 11+ items, no dividers | Content, Destroy, Navigate, View & state |
   | Tab context menu | 4 items, no dividers | Content, Destroy, Navigate |
@@ -584,6 +584,13 @@ the declared sections, in the declared order, with dividers between them.
   rows previously listed Destroy last, which contradicted both FR-047 and the constitution — and the
   Files & Folders menu, named in Assumption 7 as the vocabulary's source, has always drawn Delete
   before Open In.)*
+
+  *(Corrected 2026-08-15, second pass: the terminal row understated the menu twice. Its "Today"
+  cell read "rest ungrouped", but `terminal-panel.tsx` already pushes three separators; and its
+  required column named two sections, omitting **View & state** — which is where the failure trio
+  (Try again, Copy details, Clear panel type) belongs, as `contracts/menu-sections.md` §3.2 and
+  T063 both have it. An implementer working from this table alone would have left those three
+  items unsectioned, which is precisely the defect FR-049 exists to prevent.)*
 
   *(Corrected 2026-08-15: the cog row previously required the preferences trio to be "split from the
   diagnostic and About items". All five are **Application** under FR-047's own table and under the
