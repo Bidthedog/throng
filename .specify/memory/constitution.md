@@ -1,6 +1,35 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 4.6.0 → 4.7.0
+Bump rationale: MINOR. Principle VI gains a second additive rule — "Disabled when unavailable,
+                absent when meaningless" — settling when a control that cannot act is greyed out and
+                when it is not drawn at all (2026-08-15, settled while clarifying feature 033). No
+                principle is removed or redefined; the rule codifies the treatment the explorer menu
+                already ships and states the case it does not cover.
+
+                Why it is constitutional: half of it already existed as a comment on two menu items
+                (undo/redo, "disabled — not hidden — when the stack is empty"), which meant every
+                later control re-decided the question. Feature 033 wrote "absent or disabled" three
+                times before anyone noticed an either/or cannot be tested.
+
+                Both blanket answers were rejected. "Always disable" puts two permanently dead rows
+                on every file's context menu, because a file can never acquire children. "Always
+                hide" contradicts the shipped undo/redo treatment and hides a capability exactly when
+                the user is asking whether it exists. The discriminator is whether ANY future state
+                of the application would enable the control.
+Modified principles: VI "Simple, Modern, Discoverable UX" — one rule block added. Title and every
+                existing rule, including v4.6.0's menu section vocabulary, unchanged.
+Added sections: none. Removed sections: none.
+Templates / artifacts reviewed:
+  ✅ .specify/templates/*                 — Constitution Check is dynamic; no edit needed.
+  ✅ specs/033-open-and-navigate/spec.md  — FR-018c, FR-035 and FR-038 already state both halves for
+       this feature's controls; the amendment generalises them. No edit made (Spec Kit owns it).
+  ✅ packages/ui/src/renderer/explorer/context-menu-items.ts — the undo/redo comment this rule
+       generalises. No code change is made by this amendment.
+Deferred TODOs: none.
+
+                ---- superseded amendment (historical) ----
 Version change: 4.5.0 → 4.6.0
 Bump rationale: MINOR. Principle VI (Simple, Modern, Discoverable UX) gains one additive rule —
                 "One section vocabulary for every menu" — fixing the sections, their order, when a
@@ -1151,6 +1180,23 @@ application's, not the menu's.
   in one undivided run and MUST be closed by tracked work — owed to feature 033 and issue
   #160, not silently tolerated.
 
+**Disabled when unavailable, absent when meaningless.** "Grey it out or hide it?" is
+answered by which of two different situations the control is in, and answering it
+per-control is how one surface teaches two contradictory lessons about what a greyed
+row means.
+
+- A control whose action is **temporarily unavailable** — the target exists but cannot
+  be acted on right now, as with an empty undo stack or no open project — MUST be
+  **drawn and disabled**. An action that exists and is unavailable teaches what the
+  surface can do; one that vanishes teaches nothing, and leaves the user unsure the
+  capability exists at all.
+- A control whose action is **structurally meaningless** for the thing under the
+  pointer — "Expand All Children" on a file, which can never have children — MUST NOT
+  be drawn. A permanently dead row is not an affordance; it is noise that can never
+  become useful however the user changes the application's state.
+- The test is whether **any** future state of the application would enable it. If yes,
+  disable it now. If no, do not draw it.
+
 - The selected project's colour MUST be visually dominant so the active context
   is unambiguous at a glance.
 
@@ -1528,7 +1574,25 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 4.6.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-08-15
+**Version**: 4.7.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-08-15
+
+<!--
+  4.7.0 — MINOR. Principle VI gains "Disabled when unavailable, absent when meaningless".
+
+  Rationale: the codebase already held one half of this. The explorer's undo/redo items carry an
+  explicit comment — "Disabled, not hidden, when the stack is empty: an action that exists and is
+  unavailable teaches what the menu can do; one that vanishes teaches nothing" — but it was a note on
+  two menu items, so every later control re-decided the question from scratch. Spec 033 wrote
+  "absent or disabled" three times before anyone noticed that an either/or is not a requirement,
+  which is what prompted this.
+
+  The distinction is the useful part, and it is what a single blanket rule would have lost. Blanket
+  "always disable" puts two permanently dead rows on every file's context menu, since a file cannot
+  acquire children. Blanket "always hide" contradicts the shipped undo/redo treatment and makes a
+  capability invisible exactly when the user is wondering whether it exists. The discriminator —
+  would ANY future state of the application enable this control? — is cheap to apply and gives one
+  answer per control rather than one answer per author.
+-->
 
 <!--
   4.6.0 — MINOR. Principle VI gains "One section vocabulary for every menu".
