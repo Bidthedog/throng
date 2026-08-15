@@ -138,7 +138,14 @@ type part of a path, and confirm the file opens in an editor. Nothing from US2â€
 17. **Given** the Quick Open chord has been rebound in Preferences, **When** the user hovers that
     toolbar button, **Then** the tooltip names the **new** chord.
 18. **Given** a file has been opened via Quick Open and the remember setting is at its default,
-    **When** the user opens Quick Open again, **Then** the input is empty and no results are listed.
+    **When** the user opens Quick Open again, **Then** the input is empty. *(Corrected 2026-08-15:
+    this also said "and no results are listed", which the shared picker cannot do without being
+    forked. Its K6 rule is that an empty query matches **everything**, so an empty Quick Open lists
+    the first `QUICK_OPEN_MAX_ROWS` candidates in seeded order â€” the same way the tab picker lists
+    every tab. FR-057 only ever required an empty **input**; the clause about results was an
+    assumption about the control's behaviour, and the wrong one. Suppressing the list on an empty
+    query was rejected: it is a behavioural divergence from the control #219 exists to reuse, and
+    the feature's own instruction is seed it, do not fork it.)*
 19. **Given** `editor.navigation.rememberQuickOpenQuery` is on and a file was opened via Quick Open,
     **When** the user opens Quick Open again, **Then** the previous query is present and fully
     selected, its results are listed, and typing replaces the query outright.

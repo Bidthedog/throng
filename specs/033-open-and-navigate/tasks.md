@@ -138,6 +138,19 @@ involved.
 - [ ] T036 [US1] Add the `navigate.quickOpen` descriptor to `packages/core/src/config/keybindings-metadata.ts` in a new `Navigate` group (FR-064). **The Red is automatic and must be observed first**: after T034, run `npx vitest run --project unit packages/core/tests/unit/keybindings-metadata.test.ts packages/core/tests/unit/reset-completeness.test.ts` and record the completeness failure, then make it green. **One task owns this file** for both new commands' descriptors in this phase and the next — do not split a second descriptor into a `[P]` sibling.
 - [ ] T037 [US1] RED — add `navigate.quickOpen` cases to `packages/core/tests/unit/keybindings-scope.test.ts` (resolvable from the terminal scope) and to `packages/ui/tests/unit/scope.test.ts` (`isPanelScoped` returns **false** — it is a window command like `zoom.*`, `view.*` and `tabs.openPicker`). Run both and record the failures.
 - [ ] T038 [US1] Dispatch the command: add `navigate.quickOpen` to the `HANDLED` allowlist of the window-level capture listener in `packages/ui/src/renderer/app.tsx`, and return `false` from `isPanelScoped` for it in `packages/ui/src/renderer/keybindings/scope.ts`. **One task owns both files** — [data-model.md §2](./data-model.md) records that missing either is a silent failure, not a compile error.
+> **T039 carries an uncosted structural change, found while writing the E2E specs.** FR-018c
+> requires the Quick Open button to be **drawn and disabled** when no project is open. It cannot
+> be, where the toolbar currently lives: `ExplorerToolbar` renders inside `FileTree`, and
+> `file-explorer-pane.tsx:82` renders `FileTree` only when `activeProject` is truthy — so with no
+> project there is no toolbar at all to draw a disabled button on. T039 must therefore hoist the
+> toolbar out of that conditional, or render a toolbar in the empty state. `quick-open-toolbar.e2e.ts`
+> asserts the requirement, so it stays red until this is done — it is not a failing test to be
+> explained away.
+>
+> A second consequence, already handled in the spec: the Files & Folders pane defaults to
+> **collapsed** when no project is open (`throng.explorerVisibleNoProject`, `app.tsx:557`), so any
+> test of this case must expand the pane first.
+
 - [ ] T039 [US1] Add the Quick Open button to `packages/ui/src/renderer/explorer/toolbar.tsx` beside Expand and Collapse all — `<Icon token="quickOpen" />`, a hover title naming the action and `firstBinding(keybindings, 'navigate.quickOpen')` read live, drawn and **disabled** when no project is open (V1–V5, FR-018a–FR-018c).
 - [ ] T040 [US1] GREEN — run the four US1 specs (`npx playwright test packages/ui/tests/e2e/quick-open.e2e.ts packages/ui/tests/e2e/quick-open-target.e2e.ts packages/ui/tests/e2e/quick-open-toolbar.e2e.ts packages/ui/tests/e2e/quick-open-perf.e2e.ts`) plus `npx vitest run --project unit` and `--project integration`, and quote the passing output. Confirm `packages/ui/tests/e2e/tab-picker`-driving specs pass **unmodified** (SC-013's second half).
 

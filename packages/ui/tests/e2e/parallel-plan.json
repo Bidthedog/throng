@@ -78,6 +78,8 @@
     "preferences-themes.e2e.ts",
     "preferences-window.e2e.ts",
     "project-settings.e2e.ts",
+    "quick-open-perf.e2e.ts",
+    "quick-open-toolbar.e2e.ts",
     "removal-verbs.e2e.ts",
     "search-keybindings-editor.e2e.ts",
     "settings-write-integrity.e2e.ts",
