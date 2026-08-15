@@ -21,9 +21,8 @@
  * therefore polls its own assertion, which can only come true once the setting is live. That makes
  * the wait self-verifying instead of timed.
  */
-import { renameSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
+import { writeSettingsAtomic } from './config-write.js';
 
 /** The subset of `settings.tabs` these stories drive. */
 export interface TabSettingsPatch {
@@ -46,63 +45,24 @@ export function writeTabSettings(
   otherSections: Record<string, unknown> = {},
 ): void {
   /*
-   * ATOMIC, because the config watcher can fire mid-write.
+   * DELEGATED to the shared atomic writer (032 T032, FR-013).
    *
-   * A plain `writeFileSync` to `settings.json` truncates the file and then fills it. The watcher is
-   * debounced but not synchronised with us, so it can wake while the file is empty or half-written,
-   * read unparseable JSON, and broadcast a payload that does not contain the value just written.
-   * Nothing then re-reads: `startConfigWatcher` re-reads only when the watcher fires AGAIN, and the
-   * file is not touched again — so the renderer keeps the old limit indefinitely and
-   * `awaitFieldLimit` polls out its full 15 seconds against a value that will never arrive.
+   * This file used to carry its own temp-file-plus-rename and its own bounded EPERM retry, written
+   * for #243 after `tab-name-limit.e2e.ts` failed on CI as "the rename field never started
+   * enforcing a limit of 64" and passed on retry — the signature of losing a single watcher event
+   * rather than of a wrong assertion.
    *
-   * That is the CI flake seen on `tab-name-limit.e2e.ts` T080 and T082 ("the rename field never
-   * started enforcing a limit of 64 / of 30"): both failed once and passed on retry, which is the
-   * signature of losing a single watcher event rather than of a wrong assertion. It is rare locally
-   * because the write completes inside one filesystem tick on a fast disk, and much likelier on a
-   * loaded CI runner.
+   * That fix was right and is unchanged in substance; what was wrong was that it lived HERE. Three
+   * other specs had the same problem and none of them could reach it, so #253 was filed about the
+   * same defect in different files. One implementation, asserted by
+   * `tests/unit/config-write-helper-single.test.ts` rather than by anyone remembering, is what
+   * stops that recurring — and the retry budget now matches the product's own `renameWithRetry`
+   * exactly (1000 ms / 20 ms), so the helper and the code under test fail at the same point.
    *
-   * Writing to a sibling temp file and renaming makes a partial read impossible — `rename` within a
-   * directory is atomic, so the watcher sees either the old file or the complete new one. This is
-   * exactly what the app's own `FileConfigStore` does when it writes; the test helper was the only
-   * writer in the system that did not, which is why only tests saw it.
-   *
-   * A longer timeout would NOT have fixed this. The event is lost, not late.
+   * The reasoning for atomicity itself is in `helpers/config-write.ts`. A longer timeout would NOT
+   * have fixed any of it: the event is lost, not late.
    */
-  const target = join(cfgRoot, 'settings.json');
-  const temp = `${target}.e2e-tmp`;
-  writeFileSync(temp, JSON.stringify({ ...otherSections, tabs }, null, 2), 'utf8');
-  renameOverwriting(temp, target);
-}
-
-/**
- * `renameSync` with a bounded retry, because on Windows a replace-rename fails with
- * EPERM/EACCES/EBUSY while another process still holds the target open — and the app under test is
- * exactly such a process: its config store and its watcher both read `settings.json`.
- *
- * `FileConfigStore` hit this first and solved it the same way (`renameWithRetry`, issue #75). Doing
- * the atomic write without this retry would trade a lost-watcher-event flake for an EBUSY flake,
- * which is not a fix — so the retry is part of the change, not a hardening afterthought.
- *
- * Synchronous on purpose: every caller is synchronous, and making this async would turn a one-line
- * `writeTabSettings(...)` into an await in a dozen places for no gain in a test helper.
- */
-function renameOverwriting(from: string, to: string): void {
-  const deadline = Date.now() + 2000;
-  for (;;) {
-    try {
-      renameSync(from, to);
-      return;
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      const transient = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
-      if (!transient || Date.now() > deadline) throw err;
-      // Sync spin: this helper is called between Playwright steps, never in a hot path.
-      const until = Date.now() + 25;
-      while (Date.now() < until) {
-        /* wait for the holder to let go */
-      }
-    }
-  }
+  writeSettingsAtomic(cfgRoot, { ...otherSections, tabs });
 }
 
 /** The tab id behind a `tab-<id>` test id, as {@link import('./tabs.js').seedTabs} hands them back. */

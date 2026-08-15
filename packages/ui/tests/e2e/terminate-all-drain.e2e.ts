@@ -1,4 +1,6 @@
-import { mkdtempSync, writeFileSync, readFileSync, statSync } from 'node:fs';
+// `statSync` is gone with the mtime discriminator: FR-017 removed the JSON tab's debounce, so
+// there is no longer a rival writer whose timing had to be told apart from the drain's.
+import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page, type ElectronApplication } from '@playwright/test';
@@ -729,39 +731,35 @@ test('#86 FR-011: a layout change survives an ORDINARY close even at a 1ms drain
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// The JSON tab's apply is the LONGEST preferences debounce (300ms, `json-tab.tsx`) and the only
-// config write whose timer outlives the close that is racing it — which makes this the case that
-// MEASURES the drain rather than merely exercising it. See the note on the Themes case above for
-// why 150ms cannot.
+// The JSON tab's edit is now the config write with NO TIMER AT ALL (032, FR-017), which makes
+// this a STRICTLY STRONGER proof of the drain than the version it replaces.
 //
-// It is also the tab C21 singled out: `JsonTab` is RE-RENDERED with a new `docId` rather than
-// unmounted, so it has no unmount flush at all — nothing but the drain can save this edit.
+// ── WHAT CHANGED, AND WHY THE TEST GOT BETTER ──
 //
-// ── WHAT MAKES IT A PROOF IS THE LAST ASSERTION, NOT THE FIRST ──
+// This used to rest on the tab's 300ms debounce: type, close inside the window, and assert the
+// bytes landed sooner than the timer could have written them. The mtime was the discriminator
+// because BOTH worlds eventually wrote the file — the question was only who got there first, and
+// the previous revision of this comment recorded that the guard was six times looser than the
+// thing it protected, so on a loaded box it passed green with the drain deleted.
 //
-// This being the feature's ONLY discriminating proof of the config drain, its margin is not a
-// detail. `closeRequestedAfterMs < 300` looks like the guard and is not one: with the drain
-// deleted, the renderer dies at `armedAt + closeRequestedAfterMs + t(terminal.list) + 250ms`
-// (`main.ts` awaits a daemon round-trip, then beats 250ms so the overlay can paint), so the
-// write is lost only when `closeRequestedAfterMs + t(terminal.list)` comes in under ~50ms. A
-// guard at 300 is six times looser than the thing it purports to protect, and on a loaded box
-// this test passes green with `settleConfigWrites()` deleted — the debounce simply fires on its
-// own while the close is still asking the daemon about terminals.
+// FR-017 deleted that debounce, because applying a half-typed value that happened to parse is
+// what pulled the document out from under the user's cursor. The JSON buffer now applies when the
+// user LEAVES the editor — and closing the whole application is not one of those exits.
 //
-// So the close request's timing is kept (it is a real precondition) and the DISCRIMINATOR is
-// the one quantity that separates the two worlds: WHEN THE BYTES LANDED. The drain writes at
-// drain time, tens of milliseconds in. The timer, if it were doing the work, cannot write before
-// its own 300ms. The file's mtime tells the two apart with ~100ms of daylight either side, and
-// no arithmetic about who was scheduled when.
+// So there is no longer a timer that could write this file. `registerPendingCommit` is the only
+// thing that can, and the drain is the only thing that calls it. **The assertion is now simply
+// whether the bytes are there**, with no arithmetic about who was scheduled when and no margin to
+// tune. Delete the drain and this test fails every time, on every machine, rather than on a
+// fast one.
+//
+// It is also still the tab C21 singled out: `JsonTab` is RE-RENDERED with a new `docId` rather
+// than unmounted, so it has no unmount flush either. Nothing but the drain can save this edit.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 C19: a JSON-tab edit inside its 300ms debounce survives closing the MAIN window', async () => {
+test('#86 C19: an un-applied JSON-tab edit survives closing the MAIN window (032 FR-017)', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-jsn-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-jsn-user-'));
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-jsn-root-'));
-  // The instant the debounce was armed, read back after the app is gone: the write's own
-  // timestamp is only meaningful relative to it.
-  let armedAt = 0;
   try {
     await runApp(
       async (app, win) => {
@@ -777,43 +775,34 @@ test('#86 C19: a JSON-tab edit inside its 300ms debounce survives closing the MA
         // The baseline must NOT already be the value under test, or a pass proves nothing.
         expect(readSettingsTheme(cfgRoot)).not.toBe('Matrix');
 
-        // Prefetch the handle: `app.browserWindow()` costs more than the debounce it is racing.
         const mainHandle = await app.browserWindow(win);
 
-        // THE DECISION: a valid edit, then the user closes at once — inside the 300ms debounce.
+        // THE DECISION: a valid edit that has NOT been applied — the user has not left the editor,
+        // and under FR-017 nothing else will write it.
         const closed = app.waitForEvent('close', { timeout: 20_000 });
         await setEditorText(prefs, 'settings', '{"appearance":{"theme":"Matrix"}}');
-        // The debounce is armed by the LAST KEYSTROKE, so the race starts HERE — not before the
-        // typing. Timing it from before would measure the typing too and report a close that
-        // "missed" a window it was well inside.
-        armedAt = Date.now();
-        await mainHandle.evaluate((w) => w.close());
-        const closeRequestedAfterMs = Date.now() - armedAt;
+
+        // A deliberate pause, which the OLD version of this test could not afford: it proves the
+        // edit is genuinely un-applied rather than merely un-applied YET. Under the old debounce
+        // this wait would have let the timer write the file and the test would prove nothing.
+        await prefs.waitForTimeout(1000);
         expect(
-          closeRequestedAfterMs,
-          'the close must be REQUESTED inside the 300ms debounce, or this test proves nothing',
-        ).toBeLessThan(300);
+          readSettingsTheme(cfgRoot),
+          'FR-017: nothing may write the buffer while the user is still in the editor',
+        ).not.toBe('Matrix');
+
+        await mainHandle.evaluate((w) => w.close());
         await closed;
       },
       { dataDir, userDataDir, env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
 
+    // THE WHOLE ASSERTION. No timer exists that could have written this; the drain is the only
+    // path from that buffer to this file. Its presence IS the discriminator.
     expect(
       readSettingsTheme(cfgRoot),
-      "the JSON tab's debounced apply must have landed",
+      'the DRAIN must have committed the un-applied JSON buffer — nothing else can',
     ).toBe('Matrix');
-
-    // THE DISCRIMINATOR. The bytes are on disk — the question is who put them there. The tab's
-    // own timer cannot fire before `armedAt + 300ms`; the drain fires it the moment the close
-    // asks, which is tens of milliseconds in. Anything under 300 could only have been written by
-    // something that did not wait for the debounce, and the drain is the only such thing in the
-    // system. Asserted at 200 to leave the measurement room to breathe on a loaded box while
-    // staying a clear 100ms clear of the earliest instant the timer could have done it itself.
-    const landedAfterMs = statSync(join(cfgRoot, 'settings.json')).mtimeMs - armedAt;
-    expect(
-      landedAfterMs,
-      `the DRAIN must have written this, not the 300ms timer running out (landed ${Math.round(landedAfterMs)}ms after the edit)`,
-    ).toBeLessThan(200);
   } finally {
     cleanupTemp(dataDir);
     cleanupTemp(userDataDir);

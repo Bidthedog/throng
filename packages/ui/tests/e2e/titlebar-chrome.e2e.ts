@@ -235,11 +235,30 @@ test('cog opens the single shared preferences window on the matching tab; non-mo
     await expect(prefs.getByTestId('preferences-window')).toBeVisible();
     await expect(prefs.getByTestId('prefs-tab-settings')).toHaveAttribute('aria-selected', 'true');
 
-    // Exactly one preferences window; it is NON-MODAL (021) — the main window stays
-    // INTERACTIVE (enabled) so the app can be used while a theme is edited — yet the
-    // prefs window is PARENTED to the main window, which keeps it ABOVE the main window
-    // without being globally always-on-top (FR-013 — above throng only, not above other
-    // OS apps). It remains movable (FR-014).
+    /*
+     * Exactly one preferences window; it is NON-MODAL (021) — the main window stays INTERACTIVE
+     * (enabled) so the app can be used while a theme is edited — and it is PARENTED to the main
+     * window. It remains movable (FR-014).
+     *
+     * ══ WHY `alwaysOnTop` IS NOW TRUE WHILE THRONG HAS FOCUS (032, #263 follow-up) ══
+     *
+     * This used to assert `false` outright, reading FR-013 as "never globally on top". Parenting
+     * was doing the work: a parented child stays above its parent even when the parent is clicked.
+     *
+     * That only ever covered the MAIN window. A sub-workspace is a separate top-level window with
+     * no parent relationship to Preferences, so nothing ordered the two — and among siblings there
+     * is no defined order. The gap was invisible while sub-workspaces opened DISABLED, because a
+     * window that cannot be focused cannot be raised either; removing that (#263, so they accept
+     * input) revealed that the layering had never actually been implemented.
+     *
+     * `moveTop()` on the other window's focus event does not fix it, and not for a tuning reason:
+     * the OS raises the clicked window as part of the same interaction, AFTER the handler runs.
+     *
+     * So `alwaysOnTop` is held, SCOPED TO THRONG HAVING FOCUS. What FR-013 actually promises is
+     * "above throng's own windows, not above other applications", and that is preserved exactly —
+     * alt-tab to a browser and every throng window drops behind, Preferences included. The flag is
+     * therefore true here, where throng is focused, and false the moment it is not.
+     */
     const modal = await app.evaluate(({ BrowserWindow }) => {
       const wins = BrowserWindow.getAllWindows().sort((a, b) => a.id - b.id);
       const [main, ...rest] = wins;
@@ -255,7 +274,10 @@ test('cog opens the single shared preferences window on the matching tab; non-mo
     expect(modal.windowCount).toBe(2);
     expect(modal.mainEnabled).toBe(true); // 021: non-modal — the main window stays interactive
     expect(modal.prefsMovable).toBe(true);
-    expect(modal.prefsAlwaysOnTop).toBe(false); // FR-013: not globally on top; parenting keeps it above main
+    // Held while THRONG has focus, which it does here — that is what keeps Preferences above a
+    // sub-workspace, which parenting cannot reach. Dropped the moment throng is not focused, which
+    // is what keeps FR-013's real promise: above throng's windows, never above other applications.
+    expect(modal.prefsAlwaysOnTop).toBe(true);
     expect(modal.prefsParentIsMain).toBe(true); // FR-013: parented to the main window (floats above it)
 
     // Re-invoking focuses the SAME window and switches its tab (FR-010/011). The main
