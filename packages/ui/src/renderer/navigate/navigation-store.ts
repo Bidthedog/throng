@@ -63,6 +63,18 @@ export function useNavigationModal(): NavigationModal {
   return useSyncExternalStore(subscribe, () => modal);
 }
 
+/**
+ * What the slot holds right now, read OUTSIDE React.
+ *
+ * `useNavigationModal` is the way a component renders from this state; this is for the one thing a
+ * hook cannot answer — an unmount cleanup asking "am I going away because I was closed, or because
+ * something else took the slot?". The two need opposite behaviour and are otherwise identical from
+ * inside the component that is being removed (FR-065, FR-071).
+ */
+export function navigationModal(): NavigationModal {
+  return modal;
+}
+
 /** Open (or replace) the modal in the slot. S1 and S2 are this function being the only way in. */
 export function setNavigationModal(next: NavigationModal): void {
   if (modal === next) return;

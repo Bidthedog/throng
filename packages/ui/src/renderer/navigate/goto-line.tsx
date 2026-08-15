@@ -33,6 +33,7 @@ import { resolveGotoLine } from '@throng/core';
 import { EditorSelection } from '@codemirror/state';
 import { useFocusTrap } from '../common/focus-trap.js';
 import { getEditorView } from '../editor/editor-views.js';
+import { navigationModal } from './navigation-store.js';
 
 export function GotoLine({
   panelId,
@@ -66,6 +67,19 @@ export function GotoLine({
    */
   useEffect(() => {
     return () => {
+      /*
+       * …but ONLY when this modal is genuinely going away (FR-071).
+       *
+       * Unmounting because the slot was handed to Quick Open looks identical from in here, and the
+       * restore would then fire a frame after the new modal took the caret — leaving Quick Open on
+       * screen with the keyboard in the document behind it, so the first thing the user typed went
+       * into their file. Measured: `Ctrl+G` then `Ctrl+Shift+T` left `quickopen-input` inactive.
+       *
+       * The store is read rather than the registry, because `setNavigationModal` has already run by
+       * now (it happens in the keydown handler, long before React commits) whereas the registry's
+       * release is itself an effect cleanup racing this one.
+       */
+      if (navigationModal() !== null) return;
       getEditorView(panelId)?.focus();
     };
   }, [panelId]);
