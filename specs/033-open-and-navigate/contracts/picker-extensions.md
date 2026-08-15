@@ -121,3 +121,21 @@ Enter on the header's control to change that control and open nothing.
 | T4 | **Space or Enter** changes its value while it holds focus, and opens nothing | FR-010a, FR-010b |
 | T5 | Choosing "the currently active editor" performs the **Last-Active-Editor route** — `openFileInTab(ws, tabId, absPath, 'lastActive')` — not a parallel implementation of it | FR-010, SC-004 |
 | T6 | It is a themeable control with a hover title naming what it does; it is not a dialog decision button, so the icon rule applies | Themeable icon controls |
+
+
+## Test identifiers fixed after §5 (2026-08-15)
+
+§5 fixed `quickopen` and `quickopen-truncated`. Writing the E2E specs required three more, and they
+are recorded here rather than left to the implementation, because a spec and an implementation that
+disagree about a `data-testid` produce a test that stays red **for the wrong reason** — which looks
+identical to a feature that is not finished.
+
+| Identifier | On | Notes |
+|---|---|---|
+| `quickopen-target` | the two-option target control (FR-010) | carries `data-value="lastActive" \| "new"` |
+| `quickopen-building` | the "still listing" state (FR-015, S3) | present only while enumeration is in flight |
+
+**`data-value` deliberately reuses `editor.openTarget`'s own vocabulary** (`lastActive` / `new`)
+rather than inventing a second spelling. The preselection assertion is then a comparison against the
+setting, not a translation of it — and a translation layer between a setting and the control it
+preselects is where the two silently drift apart.
