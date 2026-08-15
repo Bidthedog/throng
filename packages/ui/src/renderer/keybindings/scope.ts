@@ -21,6 +21,7 @@ import {
   type Tab,
 } from '@throng/core';
 import { getActivePane } from '../workspace/active-pane.js';
+import { transientOverlayOpen } from '../common/transient-overlay.js';
 
 /** Panel kinds, as the workspace stores them. */
 const EDITOR_KIND = 'editor';
@@ -97,14 +98,52 @@ export function resolveScoped(
   kb: Keybindings,
   ev: Parameters<typeof resolveAction>[1],
   input: ScopeInput,
-  opts: { transientFocus?: boolean } = {},
+  opts: { transientFocus?: boolean; overlayOpen?: boolean } = {},
 ): ActionId | null {
   const scope = currentScope(input);
   const action = resolveAction(kb, ev, scope);
   if (!action) return null;
   const transient = opts.transientFocus ?? transientInputFocused();
-  if (transient && isPanelScoped(action)) return null;
-  return action;
+  if (!transient || !isPanelScoped(action)) return action;
+  /*
+   * 033 FR-071 — ONE overlay hands over to ANOTHER, and the guard must not stand in the way.
+   *
+   * The guard's premise is that a transient input surface INSIDE A PANEL owns its keys. A transient
+   * overlay is not inside a panel: it is drawn over the whole window, and while it holds the caret
+   * there is no panel content the user could be editing. So the `<input>` the guard is seeing is the
+   * overlay's own filter box, and reading it as "the find bar is busy" is a category error.
+   *
+   * Measured, not theorised: with Quick Open or the tab picker up, `Ctrl+G` and `Ctrl+Alt+T`
+   * resolved to null and did nothing at all — four of SC-017's six orderings could not be driven by
+   * hand, and the symptom was a chord that appeared to be ignored.
+   *
+   * BOTH conditions are required, and each rules out a different regression. Without
+   * `overlayOpen`, `Ctrl+G` would start firing from inside an editor's FIND BAR, which is the case
+   * FR-017f was written for. Without `opensTransientOverlay`, every panel command would come back
+   * to life while the user is typing in Quick Open — `Ctrl+X` would cut a line in the editor
+   * underneath instead of cutting the query.
+   */
+  const overlayOpen = opts.overlayOpen ?? transientOverlayOpen();
+  return overlayOpen && opensTransientOverlay(action) ? action : null;
+}
+
+/**
+ * The commands whose whole effect is to OPEN a transient overlay (033 FR-071).
+ *
+ * Named as a set rather than derived from a prefix: `navigate.gotoLine` opens one and
+ * `navigate.quickOpen` opens one, but the `navigate.` prefix is not a promise that the next command
+ * added under it will. The tab picker's command lives in a different namespace again, which is the
+ * point — this is a property of what a command DOES, not of who owns it.
+ */
+const OVERLAY_OPENERS: ReadonlySet<string> = new Set<ActionId>([
+  'navigate.quickOpen',
+  'navigate.gotoLine',
+  'tabs.openPicker',
+]);
+
+/** Does this command's dispatch put a transient overlay on screen? */
+export function opensTransientOverlay(action: ActionId): boolean {
+  return OVERLAY_OPENERS.has(action);
 }
 
 /**

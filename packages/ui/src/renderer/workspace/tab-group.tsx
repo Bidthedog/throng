@@ -28,6 +28,7 @@ import {
 } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { NameLimitField } from '../common/name-limit-field.js';
+import { useTransientOverlay } from '../common/transient-overlay.js';
 import { TabPopover } from './tab-popover.js';
 import { useTabScroll } from './tab-scroll.js';
 import { TabPicker, registerTabPicker } from './tab-picker.js';
@@ -703,6 +704,17 @@ export function TabGroup(): ReactElement {
    */
   const revealedTo = useRef<number | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  /*
+   * FR-071 — the picker takes this window's ONE transient-overlay slot while it is up, and gives it
+   * up when it closes or when this strip unmounts (a layout change remounts the strip).
+   *
+   * The flag STAYS LOCAL. Lifting it into a store so the navigation modals could read it is exactly
+   * the coupling FR-071a forbids — nothing outside this component has any business knowing whether
+   * the strip is showing a list, and the next overlay added would have to be taught about this one.
+   * All the registry is told is "I am open" and "here is how to close me".
+   */
+  useTransientOverlay(pickerOpen, () => setPickerOpen(false));
 
   const { maxNameLength, maxWidth, smoothScrollMs, closeArmingDelayMs, chevronRepeatDelayMs } =
     settings.tabs;

@@ -83,6 +83,7 @@
       "terminate-all-drain.e2e.ts",
       "theme-sweep.e2e.ts",
       "title-statusbar.e2e.ts",
+      "transient-overlays.e2e.ts",
       "tree-drop-open.e2e.ts"
     ],
     "2": [

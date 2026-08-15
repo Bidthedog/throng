@@ -29,11 +29,14 @@ type NavigationModal =
 
 | # | Guarantee | Requirement |
 |---|---|---|
-| S1 | One slot. Opening either modal while the other is open replaces it — exactly one is on screen | FR-066 |
-| S2 | Neither can be opened twice; a second request while it is open is a no-op | FR-066 |
+| S1 | One slot. Opening either modal while the other is open replaces it — exactly one is on screen. *Scope widened by FR-071: the same guarantee now holds against EVERY transient overlay, not only these two. The slot below is unchanged and still the mechanism for this pair; S6 is what extends it outward* | FR-066, FR-071 |
+| S2 | Neither can be opened twice; a second request while it is open is a no-op. *Widened by FR-071 in the same way as S1* | FR-066, FR-071 |
 | S3 | Both match the app's shipped modal presentation: `.modal-overlay` scrim, a dialog card with `role="dialog" aria-modal="true"`, `useFocusTrap`, focus in the input on open, Escape cancels, Enter confirms | FR-065 |
 | S4 | **Nothing under `navigate/` imports from `search/search-store.ts`.** A find bar closes when its user closes it or its editor closes, and by no other route | FR-026a |
 | S5 | Neither modal changes the **active panel**, which is what would make `closeFindIfNotOn` close a find bar as a side effect | FR-026, FR-026a |
+| S6 | Opening ANY transient overlay dismisses whichever held the window's slot, through `renderer/common/transient-overlay.ts`. **No overlay imports another's module** — each declares only "I am open" and "here is how to close me", and the four registered surfaces are Quick Open, Go To Line, the tab picker and the editor status strip's language picker | FR-071, FR-071a |
+| S7 | A command whose whole effect is to open a transient overlay resolves **even while another overlay holds the caret**. The FR-017f focus guard reads "an `<input>` has focus", and an overlay's filter box is one — without this, `Ctrl+G` and `Ctrl+Alt+T` were dead the moment any overlay was up. The exemption is narrow on both axes: only `opensTransientOverlay` commands, and only while an overlay is actually open, so a find bar keeps its keys and `Ctrl+X` never cuts a line from inside Quick Open | FR-071 |
+| S8 | Go To Line returns focus to its editor **only when it is genuinely dismissed**, never when the slot has been handed on. Restoring on a handover left the incoming modal on screen with the keyboard in the document behind it | FR-065, FR-071 |
 
 ## 3. Quick Open — routing a choice
 

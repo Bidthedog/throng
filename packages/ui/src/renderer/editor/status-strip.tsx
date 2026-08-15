@@ -4,6 +4,7 @@ import { usePanelLanguage } from './editor-language.js';
 import { LanguagePicker } from './language-picker.js';
 import { registerPickerOpener, unregisterPickerOpener } from './picker-request.js';
 import { useFocusTrap } from '../common/focus-trap.js';
+import { useTransientOverlay } from '../common/transient-overlay.js';
 import { useEditorState } from './editor-state.js';
 import { focusPanel } from '../workspace/panel-focus.js';
 import { useAppSettings } from '../config/config-store.js';
@@ -48,6 +49,15 @@ export function StatusStrip({
   const resolution = usePanelLanguage(panelId);
   const [pickerOpen, setPickerOpen] = useState(autoOpenPicker);
   const name = languageName(resolution?.languageId ?? 'plaintext');
+
+  /*
+   * FR-071 — the language picker is a transient overlay too, and takes the window's one slot.
+   *
+   * Registered NOW rather than when it becomes the next `Ctrl+Alt+T` / `Ctrl+Shift+T`: it is the
+   * third surface of this exact shape already in the codebase, it traps focus over the window, and
+   * every reason FR-071 exists applies to it unchanged. One line, and nothing about it moves.
+   */
+  useTransientOverlay(pickerOpen, () => setPickerOpen(false));
 
   // Tell the panel when the picker closes, so a strip that is only on screen FOR the picker can go
   // away again (024 US1 follow-up). Edge-triggered: the panel must not be told on every render, and

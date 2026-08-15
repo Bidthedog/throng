@@ -24,6 +24,7 @@ import {
   resolveAction,
   type ActionId,
 } from '@throng/core';
+import { useTransientOverlay } from '../common/transient-overlay.js';
 import { useProjects } from '../state/projects-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
@@ -50,6 +51,20 @@ export function NavigationChrome(): ReactElement | null {
   const keybindings = useKeybindings();
   const settings = useAppSettings();
   const subWin = useSubWorkspaceWindow();
+
+  /*
+   * FR-071 — this window's ONE transient-overlay slot (plan D1).
+   *
+   * ONE call covers both modals, because they already share one slot: `setNavigationModal` replaces
+   * WITHIN it (FR-066), so `modal !== null` never flickers when Quick Open gives way to Go To Line
+   * and the claim is never re-taken. Two calls, one per modal kind, would flicker on exactly that
+   * transition — a release and a re-claim in the same commit — and the re-claim would dismiss
+   * whatever the release had just let in.
+   *
+   * Nothing here imports `../workspace/`, and nothing there imports this module. That is FR-071a,
+   * and `tests/unit/overlay-feature-isolation.test.ts` is what keeps it true.
+   */
+  useTransientOverlay(modal !== null, closeNavigationModal);
 
   const tab = layout?.tabs.find((t) => t.id === layout.activeTabId);
   const activePanelId = tab ? (effectiveActivePanelId(tab) ?? null) : null;

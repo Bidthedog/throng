@@ -13,6 +13,7 @@ import {
   currentScope,
   editorChordsFor,
   isPanelScoped,
+  opensTransientOverlay,
   resolveScoped,
   scopeFromKind,
   transientInputFocused,
@@ -179,5 +180,62 @@ describe('012’s window chords outrank editor commands (FR-024b · T109)', () =
     // …and Ctrl+X (cut-line / cut-file) is emphatically not the window's to claim.
     expect(claimed.has('Ctrl+X')).toBe(false);
     expect(claimed.has('Tab')).toBe(false);
+  });
+});
+
+/**
+ * 033 Phase 11 / FR-071 — one overlay hands over to the next, through the focus guard.
+ *
+ * The guard (FR-017f) suppresses panel-scoped commands while a transient input surface has focus,
+ * and an overlay's own filter box IS an `<input>` — so with Quick Open or the tab picker up,
+ * `Ctrl+G` and `Ctrl+Alt+T` resolved to null and the chord appeared to be ignored. Four of
+ * SC-017's six orderings could not be driven by hand at all, which is a different bug wearing the
+ * same clothes as the one FR-071 is about.
+ *
+ * Both conditions of the exemption are asserted independently below, because each one alone would
+ * be a regression: without `overlayOpen` the chord fires from a find bar, and without
+ * `opensTransientOverlay` every editor command comes back to life while the user types a query.
+ */
+describe('one transient overlay may open another (033 FR-071)', () => {
+  const tabs = [tabWith('editor')];
+  const input = { tabs, activeTabId: 't1' };
+  const gotoLine = { key: 'g', ctrl: true };
+  const openPicker = { key: 't', ctrl: true, alt: true };
+  const cutLine = { key: 'x', ctrl: true };
+
+  it('names the commands whose whole effect is to open an overlay, and nothing else', () => {
+    expect(opensTransientOverlay('navigate.quickOpen')).toBe(true);
+    expect(opensTransientOverlay('navigate.gotoLine')).toBe(true);
+    expect(opensTransientOverlay('tabs.openPicker')).toBe(true);
+    expect(opensTransientOverlay('editor.cutLine')).toBe(false);
+    expect(opensTransientOverlay('search.find')).toBe(false);
+  });
+
+  it('lets an overlay chord through while another overlay holds the caret', () => {
+    const opts = { transientFocus: true, overlayOpen: true };
+    expect(resolveScoped(DEFAULT_KEYBINDINGS, gotoLine, input, opts)).toBe('navigate.gotoLine');
+    expect(resolveScoped(DEFAULT_KEYBINDINGS, openPicker, input, opts)).toBe('tabs.openPicker');
+  });
+
+  it('still suppresses it in a panel’s OWN transient surface — a find bar is not an overlay', () => {
+    const opts = { transientFocus: true, overlayOpen: false };
+    expect(resolveScoped(DEFAULT_KEYBINDINGS, gotoLine, input, opts)).toBeNull();
+    expect(resolveScoped(DEFAULT_KEYBINDINGS, openPicker, input, opts)).toBeNull();
+  });
+
+  it('never widens to a command that edits the panel underneath', () => {
+    // Ctrl+X while typing a Quick Open query must cut the QUERY, not a line of the document below.
+    expect(
+      resolveScoped(DEFAULT_KEYBINDINGS, cutLine, input, {
+        transientFocus: true,
+        overlayOpen: true,
+      }),
+    ).toBeNull();
+  });
+
+  it('changes nothing when no transient surface has focus', () => {
+    const opts = { transientFocus: false, overlayOpen: false };
+    expect(resolveScoped(DEFAULT_KEYBINDINGS, gotoLine, input, opts)).toBe('navigate.gotoLine');
+    expect(resolveScoped(DEFAULT_KEYBINDINGS, cutLine, input, opts)).toBe('editor.cutLine');
   });
 });
