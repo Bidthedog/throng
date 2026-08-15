@@ -11,6 +11,33 @@ throng has four test layers, run in order by `npm run test`:
 
 `npm run test` runs all four through `scripts/run-tests.mjs` (see *Temp files* below).
 
+## `npm run gate` — the one command that says the work is done
+
+```
+npm run gate
+```
+
+Seven stages in CI's order, **fail-fast**: **lint → typecheck → build → unit → integration →
+contract → e2e**. One line per stage, and it stops at the first failure rather than reporting a
+tidy summary of a broken branch.
+
+The order is the point. The cheap stages run first precisely so the expensive one is only ever
+reached by code that has already earned it — a full E2E run behind an unverified typecheck spends
+twenty minutes to be told something an eleven-second command already knew.
+
+It also **clears the processes a run leaves behind** — app, daemon, pty-agent, Playwright — on
+success, on failure, and on Ctrl+C. An interrupted run otherwise leaves workers holding cores, and
+the next suite inherits a machine that is already busy.
+
+Three things worth knowing:
+
+- **Fail-fast means stop, fix, re-run** — not read on. Use the individual `npm run test:*` scripts
+  while iterating; it is claiming *done* off the back of one of them that the gate exists to prevent.
+- **A green gate goes stale the moment you edit.** Quote the stage summary when you report done, and
+  re-run if anything changed after it.
+- **The E2E stage is the expensive one** (~21 minutes locally). Never skip it to make the gate finish
+  sooner — that expense is exactly why it is inside the gate rather than optional.
+
 ## Type-checking covers the renderer too
 
 `npm run typecheck` runs **two** checks: `tsc -b` for the main/preload/core reference graph, then
@@ -325,6 +352,55 @@ consuming a full E2E run — and it never silently falls back to running elevate
 because a suite that looks like it ran while verifying nothing is the failure this
 whole area exists to prevent. `THRONG_DEELEVATE_FORCE=1` exercises it from an
 ordinary shell.
+
+## Writing a running app's config root
+
+**A test that writes into the config root of an already-running app MUST use the shared atomic
+helper.** There is exactly one, `packages/ui/tests/e2e/helpers/config-write.ts`, and
+`packages/ui/tests/unit/config-write-helper-single.test.ts` fails the build if a spec writes any
+other way.
+
+```ts
+import { writeSettingsAtomic, writeConfigRawAtomic } from './helpers/config-write.js';
+
+writeSettingsAtomic(cfgRoot, { appearance: { theme: 'Matrix' } });   // a JSON value
+writeConfigRawAtomic(cfgRoot, 'settings.json', '{ deliberately broken');  // raw text, on purpose
+```
+
+### Why, precisely
+
+`writeFileSync` **truncates the target and then fills it**. Against a file nobody is watching that is
+invisible. Against a running throng it is a race the app can lose: the config watcher is debounced
+but not synchronised with the test, so it can wake while the file is empty, read unparseable JSON,
+and broadcast the shipped defaults as though they were the settings the test just wrote.
+
+The change is then **lost, not late** — which is why a longer timeout never helped, and why the
+failure reads as a product defect that does not exist. It surfaced as *"the rename field never
+started enforcing a limit of 64"* (#243) and as three more sites in #253.
+
+The helper stages a temp file **in the same directory** as the target — a rename is only atomic
+within a volume, so staging in the OS temp directory and renaming across would silently degrade to
+copy-then-delete — then replaces, retrying EPERM/EACCES/EBUSY on a **1000 ms budget at 20 ms
+intervals**. Those numbers deliberately mirror the product's own `renameWithRetry`
+(`packages/ui/src/main/config-store.ts`): a helper that gave up sooner would report failures the
+product would have survived, and one that persisted longer would hide contention the product cannot
+tolerate.
+
+### A pre-launch seed is NOT this
+
+Writing `settings.json` **before** `runApp` is fine with a plain `writeFileSync`: no app is running,
+no watcher exists, and nothing can race. Of 36 config-document writes in the E2E tree, 32 are
+pre-launch seeds. #253 named one of them as a defect and it is not one — the classification is by
+brace depth relative to the enclosing `runApp`/`openApp`, not by eye.
+
+### And do not wait on the clock afterwards
+
+A settings write is picked up asynchronously, so the honest sync point is the **condition** the test
+is about — the counter that reads the new limit, the option that appears in the dropdown, the
+accelerator that starts firing. A `waitForTimeout` guesses a duration on one machine; the poll is
+both correct and usually faster. Where the stimulus itself can be lost (a keypress delivered before a
+rebind is installed is simply discarded), repeat the **stimulus** inside the poll, not just the
+assertion.
 
 ## One app per file, not one per test
 

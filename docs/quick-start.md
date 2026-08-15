@@ -267,8 +267,12 @@ three are tabs of one preferences window that floats above throng and minimises 
 on top but **does not block the app** — keep using throng while you edit a theme and watch each
 change land live.
 
-**Changes apply immediately — there is no Save button and no restart.** Toggles and dropdowns
-apply at once; typed values apply a moment after you stop typing.
+**In the visual editors, changes apply immediately — there is no Save button and no restart.**
+Toggles and dropdowns apply at once; typed values apply a moment after you stop typing.
+
+**The JSON editor is deliberately different**, and it says so on screen: your document is applied
+when you *leave* it — switching back to the visual editor, switching tab, or closing the window.
+There is a reason, and it is a few paragraphs below.
 
 - **Settings** — typeahead search matches any word you type against a setting's name, description
   or current value.
@@ -291,6 +295,22 @@ happens whenever the file is read, including a hot-reload while throng is runnin
 already within its limits is **never** rewritten, so nothing is touched without a reason. If a
 setting comes back different from what you typed, that is why — and the limit is visible on the
 control in Settings.
+
+**A file that cannot be *parsed* is a different situation, and it is treated differently.** An
+out-of-range value is corrected; a file with a stray brace cannot be read at all, so there is nothing
+to correct. throng re-reads it a few times in case it caught you mid-save, and if it still will not
+parse it runs on the shipped defaults and says so in the diagnostics log — your file is left exactly
+as it is, for you to repair. It is not overwritten, and nothing is silently discarded. The
+difference is worth knowing before you edit by hand: *"your settings were corrected"* and *"your
+settings could not be read"* look similar from the outside and mean very different things.
+
+**In the JSON editor, your document is applied when you leave it** — closing the JSON view,
+switching tab, or closing the Preferences window — rather than as you type. That is deliberate: a
+half-typed number is often still valid JSON, so applying as you type meant throng could correct and
+rewrite the value you were halfway through entering. While the document is invalid you cannot leave
+the editor, and a notice names each offending value with its allowed options or its permitted range.
+If you would rather abandon the edit, *Discard changes and close* does exactly that, leaving the last
+valid document in effect.
 
 Changed too much? Four separate scopes undo it, all reading the same shipped-defaults record:
 
