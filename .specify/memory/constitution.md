@@ -1,6 +1,47 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 4.5.0 → 4.6.0
+Bump rationale: MINOR. Principle VI (Simple, Modern, Discoverable UX) gains one additive rule —
+                "One section vocabulary for every menu" — fixing the sections, their order, when a
+                divider may be drawn, and the requirement that every item declares its section
+                (2026-08-15, settled while specifying feature 033 / issue #160). No principle is
+                removed or redefined, and no previously-compliant design becomes non-compliant:
+                the rule is recorded as an END-STATE requirement under Incremental Delivery.
+
+                Why it is constitutional rather than 033's own business: dividers have existed in
+                the shared menu since feature 023 and the Files & Folders menu has used them ever
+                since, but nothing said HOW to group — so the practice never spread. Four menus grew
+                without a vocabulary; the panel header menu reached eleven items in one undivided
+                run. Feature 033 had to settle an order to place three new items, and an order that
+                lives in a feature spec governs that feature alone, which is precisely how the first
+                grouping failed to generalise.
+
+                Two rejected alternatives are recorded in the footer note, because both are the
+                obvious simplification and both are wrong: making contextual items take their
+                natural section (would demote the terminal's link actions, a behaviour regression
+                shipped as a grouping pass), and putting Navigate before Content (would re-order the
+                one menu already grouped correctly).
+Modified principles: VI "Simple, Modern, Discoverable UX" — one rule block added plus a rationale
+                sentence. Title and every existing rule unchanged.
+Added sections: none. Removed sections: none.
+Templates / artifacts reviewed:
+  ✅ .specify/templates/plan-template.md  — Constitution Check is dynamic; picks the rule up
+       automatically. No edit needed.
+  ✅ .specify/templates/spec-template.md  — principle-agnostic; unchanged.
+  ✅ .specify/templates/tasks-template.md — principle-agnostic; unchanged.
+  ✅ .specify/extensions.yml              — no before/after_constitution hooks registered.
+  ✅ specs/033-open-and-navigate/spec.md  — FR-047 to FR-053 already state the vocabulary, the
+       divider rule, the keyboard-skip rule and the per-menu audit this amendment enumerates. The
+       spec is the source; no edit needed, and none made (Spec Kit owns that file).
+  ✅ packages/ui/src/renderer/workspace/context-menu.tsx — `MenuItem.separator` and the
+       navigation skip already exist; the amendment adds no new mechanism, only the rule for using
+       what shipped in 023.
+  ⚠  The audit naming the four non-conforming menus is 033's (2026-08-15) and is owed to that
+       feature and issue #160. Nothing in this amendment changes code.
+Deferred TODOs: none.
+
+                ---- superseded amendment (historical) ----
 Version change: 4.3.1 → 4.4.0
 Bump rationale: MINOR. Principle IV's enumerated shadowable exceptions gain `Ctrl+F5`
                 (`terminal.redraw`), taken deliberately by feature 028 (issue #163). Additive: no
@@ -1078,6 +1119,38 @@ among several.
   replace (`search.find`/`replace`/`replaceAll`), and the editor's line commands
   (`editor.cutLine`/`indentLines`/`outdentLines`) reach no menu — MUST be closed by
   tracked work, not silently tolerated.
+**One section vocabulary for every menu.** A menu is only browsable if its items are
+grouped, and grouping is only learnable if every menu groups the same way. Each menu
+inventing its own order teaches the user nothing transferable, so the vocabulary is the
+application's, not the menu's.
+
+- Every context menu MUST place its items in these sections, in this order, with a
+  divider between adjacent sections and nowhere else:
+
+  | # | Section | What belongs in it |
+  |---|---|---|
+  | 0 | **Contextual** | Items present only because of what the pointer is over. Lead the menu when present. The test is **"would this item be absent if the pointer were elsewhere?"** — nothing else qualifies |
+  | 1 | **Content** | Acts on the item's content or its name: Rename, Cut, Copy, Paste, Select All, Undo, Redo |
+  | 2 | **Create** | Makes something new: New File, New Folder |
+  | 3 | **Destroy** | Removes something: Delete, Destroy Tab, Destroy Panel |
+  | 4 | **Navigate** | Takes you somewhere, or names where something is: Open In, Copy Path, Reveal, Go To Line, Sync to |
+  | 5 | **View & state** | Toggles and per-surface state: Zoom, Word Wrap, Set Language, Reset Name, Hide |
+  | 6 | **Application** | Whole-application destinations: Settings, Key Bindings, Themes, Open Logs Folder, About |
+
+- A divider MUST be drawn only at a real section boundary. A menu whose items fall in one
+  section carries none, and no menu may begin or end with one — a divider is the rendering
+  of a boundary, never a decoration placed by hand.
+- Dividers MUST be skipped by keyboard navigation and MUST NOT take focus.
+- Every menu item MUST declare the section it belongs to. An item with no section is a
+  defect, not a default: the vocabulary only holds if it cannot be opted out of silently.
+- This is an **end-state requirement** delivered incrementally under the Incremental
+  Delivery rule, binding on new work immediately — a feature that adds a menu item places
+  it in its section in the same increment. Pre-existing gaps, per the 2026-08-15 audit: the
+  Files & Folders menu and the terminal content menu conform; the **editor content menu**,
+  the **panel header menu**, the **tab context menu** and the **cog menu** draw their items
+  in one undivided run and MUST be closed by tracked work — owed to feature 033 and issue
+  #160, not silently tolerated.
+
 - The selected project's colour MUST be visually dominant so the active context
   is unambiguous at a glance.
 
@@ -1088,7 +1161,11 @@ Discoverability is the same requirement applied to commands: an action reachable
 only by a chord the user has not memorised, or only by a glyph on a bar they can
 hide, is an action they do not have. Making the menu the canonical index — and
 letting the status bar and the keyboard be accelerators over it — is what keeps
-"reachable without instruction" true as the number of panel actions grows.
+"reachable without instruction" true as the number of panel actions grows. The section
+vocabulary is the same requirement one level down: a menu the user must read end to end
+is not browsable, and grouping only pays if the grouping is the same everywhere, so
+where an item sits is a property of the application rather than a choice each menu makes
+for itself.
 
 ### VII. Change Review & Approval
 
@@ -1451,7 +1528,30 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 4.5.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-08-13
+**Version**: 4.6.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-08-15
+
+<!--
+  4.6.0 — MINOR. Principle VI gains "One section vocabulary for every menu".
+
+  Rationale: the shared ContextMenu has supported dividers since feature 023, and the Files & Folders
+  menu has been grouped ever since — but nothing said HOW to group, so the grouping stopped at the
+  one menu that did it. Four menus grew without a vocabulary, and the panel header menu reached
+  ELEVEN items in one undivided run with Save sitting between Zoom and Revert. Spec 033 had to settle
+  the order to place three new items, and an order settled inside a feature spec governs that feature
+  and nothing after it — which is exactly how the first grouping failed to spread.
+
+  Two decisions worth recording because both alternatives were considered and rejected. The
+  **Contextual** section leads the menu, rather than contextual items taking whichever section they
+  naturally belong to: the terminal's link actions are deliberately placed above Copy/Paste (024 US7),
+  and a "grouping pass" that demoted them would have shipped a behaviour regression under the banner
+  of consistency. And the vocabulary keeps **Content first** rather than Navigate first, which would
+  have made the terminal menu conform without an exception but re-ordered the one menu that is already
+  grouped correctly.
+
+  Like the "every panel action has a menu item" rule it sits beside, the shipped app does NOT satisfy
+  this yet, so it is recorded as an end-state requirement with its four gaps enumerated rather than
+  written as a rule the codebase quietly violates.
+-->
 
 <!--
   4.5.0 — MINOR. Adds the digit-grouping gate above.
