@@ -1,20 +1,54 @@
 import { describe, it, expect } from 'vitest';
 import { compileQuery } from '../../src/picker/match.js';
 import { rankFilePath, rankStable, QUICK_OPEN_MAX_ROWS } from '../../src/picker/rank.js';
+import { countRegExpConstructions } from './fixtures/regexp-constructions.js';
 
 // 033 SC-002, measurable half (contracts/file-index.md §5): one keystroke over a 50,000-file
-// project must complete the WHOLE pure pipeline in under 100 ms —
+// project must not stall the list. The whole pure pipeline —
 //
 //     compileQuery → filter → rankFilePath → rankStable → slice(QUICK_OPEN_MAX_ROWS)
 //
-// The number is not negotiable and neither is the statistic: this asserts the WORST of N samples,
-// not the mean. A mean hides the keystroke the user actually noticed, and the budget exists
-// because of that keystroke. If this goes red, the wrappers are re-compiling something per entry —
-// fix the pipeline, never the budget.
+// is what a keystroke costs, and this file is where that cost is held to account. If it goes red,
+// the pipeline is doing per-entry work it is supposed to do per QUERY — fix the pipeline, never
+// the budget.
+//
+// WHY THIS FILE COUNTS WORK AND DOES NOT TIME ANYTHING
+//
+// SC-002 words the criterion as a duration, and the first version of this file asserted it as one:
+// the WORST of five wall-clock samples against a hard 100 ms. That measured the machine rather
+// than the pipeline. It passed five times out of five in isolation and failed four of the eight
+// full runs it was measured across, at 102.5, 105.1, 105.3 and 147.0 ms, with no code change
+// between any of them — and it failed MORE often when neighbouring test files were EXCLUDED,
+// which is the signature of contention rather than of anything the pipeline did. The unit project runs ~160 files in parallel; a keystroke
+// that costs 38 ms alone costs 66 ms inside that, and 100 ms sits squarely in the spread.
+//
+// Raising the number would only move the coin toss, so two contention-tolerant replacements were
+// built and measured before this one was settled on:
+//
+//   - the same wall-clock assertion taking the BEST of N samples instead of the worst. Rejected:
+//     the best sample of the widest query still moved from 38 ms to 66 ms under an ordinary full
+//     run, leaving a third of the budget to absorb a bad afternoon.
+//   - a CALIBRATED ratio — the keystroke against a reference workload measured in the same
+//     process and the same run, asserted at "no more than 8 naive passes over the same corpus",
+//     with the two timed adjacently, windows matched for length, and the best per-sample ratio
+//     taken. Genuinely better: it held at 3.7–4.0 alone and under a normal full run where the
+//     absolute number drifted 70%. Still rejected, on measurement: stressed with eight CPU
+//     burners against a 20-worker run on a 20-core box, it failed three of four runs, once on the
+//     EMPTY query whose ordinary ratio is 0.2. When a worker is starved badly enough, both halves
+//     of the ratio are perturbed independently and violently, and no ceiling that still catches a
+//     regression survives it. A budget test that can be made to fail by a busy machine is the
+//     defect this file exists to have fixed, not a compromise to ship.
+//
+// So what is asserted here is the WORK a keystroke does — how many regular expressions it builds
+// and how many times it scores each candidate — over the full 50,000-path corpus. That is the
+// algorithmic content of SC-002, it is exactly what a per-entry regression destroys, and a count
+// says the same thing on a starved machine as on an idle one.
+//
+// The DURATION half of SC-002 is asserted at the E2E layer, where the app is real and contention
+// is controlled: `packages/ui/tests/e2e/quick-open-perf.e2e.ts` measures in-page keystroke-to-list
+// latency against a stated ceiling. See plan.md, "Performance goals, and where each is measured".
 
 const CORPUS_SIZE = 50_000;
-const BUDGET_MS = 100;
-const SAMPLES = 5;
 
 /** 50,000 root-relative POSIX paths of realistic depth and shape. */
 function corpus(): string[] {
@@ -41,18 +75,6 @@ function keystroke(paths: readonly string[], query: string): string[] {
   return rankedPaths.slice(0, QUICK_OPEN_MAX_ROWS);
 }
 
-/** The worst of `SAMPLES` timed runs, in milliseconds. */
-function worstOf(run: () => unknown): number {
-  run(); // warm-up, deliberately not measured
-  let worst = 0;
-  for (let sample = 0; sample < SAMPLES; sample += 1) {
-    const started = performance.now();
-    run();
-    worst = Math.max(worst, performance.now() - started);
-  }
-  return worst;
-}
-
 describe('Quick Open keystroke budget (SC-002)', () => {
   const paths = corpus();
 
@@ -60,48 +82,75 @@ describe('Quick Open keystroke budget (SC-002)', () => {
     expect(paths).toHaveLength(CORPUS_SIZE);
   });
 
-  it(`completes a two-term keystroke over ${CORPUS_SIZE} paths in under ${BUDGET_MS} ms (worst of ${SAMPLES})`, () => {
-    let rows: string[] = [];
-    const worst = worstOf(() => {
-      rows = keystroke(paths, 'handler service');
+  describe('the work one keystroke does over the whole corpus', () => {
+    it('compiles one regular expression per QUERY TERM, whatever the corpus size', () => {
+      const small = paths.slice(0, 500);
+      const overSmall = countRegExpConstructions(() => void keystroke(small, 'handler service'));
+      const overWhole = countRegExpConstructions(() => void keystroke(paths, 'handler service'));
+
+      // Two terms, two compilations — at 500 paths and at 50,000 alike. The count being the SAME
+      // for both corpora is the claim: compilation depends on the query, never on how much there
+      // is to search. A pipeline that compiles per entry reports 1,022 for the small corpus and
+      // tens of thousands for the whole one, both measured, and it reports them whether the
+      // machine is idle or on its knees.
+      expect(overSmall).toBe(2);
+      expect(overWhole).toBe(2);
     });
-    expect(rows.length).toBeGreaterThan(0);
-    expect(rows.length).toBeLessThanOrEqual(QUICK_OPEN_MAX_ROWS);
-    expect(worst).toBeLessThan(BUDGET_MS);
+
+    it('compiles one for a single-term query and none at all for an empty one', () => {
+      expect(countRegExpConstructions(() => void keystroke(paths, 'e'))).toBe(1);
+      expect(countRegExpConstructions(() => void keystroke(paths, '   '))).toBe(0);
+    });
+
+    it('compiles no more for a query that matches NOTHING — the whole corpus is still tested', () => {
+      // The widest reach of the filter: every path is examined and every one of them rejected,
+      // which is the shape most likely to tempt a per-entry compile back into the code.
+      let rows: string[] = [];
+      const constructions = countRegExpConstructions(() => {
+        rows = keystroke(paths, 'zzzznotpresentzzzz');
+      });
+      expect(rows).toEqual([]);
+      expect(constructions).toBe(1);
+    });
+
+    it('scores each surviving candidate exactly once', () => {
+      // Scoring from inside the sort comparator is the other way this pipeline loses its budget:
+      // it costs ~log n scorings per item rather than one, and every one of them re-runs the
+      // query's regular expressions over the path.
+      const compiled = compileQuery('handler');
+      const matched = paths.filter((path) => compiled.test(path));
+      let scorings = 0;
+      const ranked = rankStable(matched, (path) => {
+        scorings += 1;
+        return rankFilePath(path, compiled);
+      });
+
+      expect(matched.length).toBeGreaterThan(QUICK_OPEN_MAX_ROWS);
+      expect(ranked).toHaveLength(matched.length);
+      expect(scorings).toBe(matched.length);
+    });
   });
 
-  it(`completes a single-character keystroke — the widest match set — in under ${BUDGET_MS} ms`, () => {
-    // One character matches almost everything, so ranking and the sort do their most work here.
-    let rows: string[] = [];
-    const worst = worstOf(() => {
-      rows = keystroke(paths, 'e');
+  describe(`what a keystroke returns at ${CORPUS_SIZE} paths`, () => {
+    it('answers a two-term query with a non-empty, capped list', () => {
+      const rows = keystroke(paths, 'handler service');
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.length).toBeLessThanOrEqual(QUICK_OPEN_MAX_ROWS);
     });
-    expect(rows).toHaveLength(QUICK_OPEN_MAX_ROWS);
-    expect(worst).toBeLessThan(BUDGET_MS);
-  });
 
-  it(`completes a keystroke that matches NOTHING in under ${BUDGET_MS} ms`, () => {
-    let rows: string[] = [];
-    const worst = worstOf(() => {
-      rows = keystroke(paths, 'zzzznotpresentzzzz');
+    it('fills the cap for a single character — the widest match set', () => {
+      expect(keystroke(paths, 'e')).toHaveLength(QUICK_OPEN_MAX_ROWS);
     });
-    expect(rows).toEqual([]);
-    expect(worst).toBeLessThan(BUDGET_MS);
-  });
 
-  it(`completes an EMPTY query — every path a candidate — in under ${BUDGET_MS} ms`, () => {
-    let rows: string[] = [];
-    const worst = worstOf(() => {
-      rows = keystroke(paths, '');
+    it('fills the cap for an EMPTY query — every path a candidate (K6)', () => {
+      expect(keystroke(paths, '')).toHaveLength(QUICK_OPEN_MAX_ROWS);
     });
-    expect(rows).toHaveLength(QUICK_OPEN_MAX_ROWS);
-    expect(worst).toBeLessThan(BUDGET_MS);
-  });
 
-  it('caps the RENDERED rows without narrowing what was matched (FR-014)', () => {
-    const compiled = compileQuery('handler');
-    const matched = paths.filter((path) => compiled.test(path));
-    expect(matched.length).toBeGreaterThan(QUICK_OPEN_MAX_ROWS);
-    expect(keystroke(paths, 'handler')).toHaveLength(QUICK_OPEN_MAX_ROWS);
+    it('caps the RENDERED rows without narrowing what was matched (FR-014)', () => {
+      const compiled = compileQuery('handler');
+      const matched = paths.filter((path) => compiled.test(path));
+      expect(matched.length).toBeGreaterThan(QUICK_OPEN_MAX_ROWS);
+      expect(keystroke(paths, 'handler')).toHaveLength(QUICK_OPEN_MAX_ROWS);
+    });
   });
 });

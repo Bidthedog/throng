@@ -121,7 +121,8 @@ export function useFileIndex(root: string | null, active: boolean): FileIndexVie
 
 | Criterion | Layer | How |
 |---|---|---|
-| SC-002 (<100 ms per keystroke at 50,000 files) | **unit** (core) | `compileQuery` → filter → `rankFilePath` → `rankStable` → cap, over a synthetic 50,000-path corpus, worst sample not mean |
+| SC-002 (a keystroke at 50,000 files does not stall the list) | **unit** (core) | `compileQuery` → filter → `rankFilePath` → `rankStable` → cap, over a synthetic 50,000-path corpus, asserted as **work done**: one RegExp per query TERM and one scoring per candidate, counted at 500 paths and at 50,000 and identical for both. Not as a wall-clock figure — the unit project runs ~160 files in parallel, so a millisecond line there measures the machine, as it was measured doing. See plan.md, "Performance goals" |
+| SC-002 (the keystroke's duration, in the app) | **E2E** | The in-page keystroke-to-list latency on a realistic project, against a stated 250 ms ceiling — the tier where contention is controlled and a duration means something |
 | SC-002 (no keystroke triggers a filesystem walk) | **E2E** | Instrument the preload bridge in-page; type ten characters; assert **zero** `files.*` and `fileIndex:subscribe` calls |
 | SC-003 (never outside the root, never an excluded file) | **unit** + **E2E** | `walkFiles` against a fake filesystem containing both; then a real fixture with an excluded folder and a second project |
 | SC-005 (a disk change reflected within 2 s) | **integration** | The service over a real temp tree and a real `NodeFileWatcher`: create, rename, delete; assert the delta arrives inside the budget |
