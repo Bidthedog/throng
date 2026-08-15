@@ -103,7 +103,7 @@ E2E asserts the half a unit test cannot — that typing issues **zero** filesyst
 5. Right-click a terminal **over a link**. **Expect**: Open Link and Copy Link Address still **lead**
    the menu, above Copy and Paste.
 
-> **The cog menu is knowingly not what FR-052 asks for.** All five of its items are *Application* by the
+> **The cog menu is exactly what FR-052 asks for **as corrected on 2026-08-15**.** All five of its items are *Application* by the
 > constitution's own table, and a divider is permitted only at a section boundary — so it carries none.
 > The contradiction is recorded in [plan.md](./plan.md) and must be resolved by amendment before US5 is
 > marked done.
