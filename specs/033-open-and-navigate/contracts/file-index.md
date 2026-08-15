@@ -149,3 +149,49 @@ inherits the decision instead of re-deriving it — and so the third one is not 
   abutting terms into one span, so a two-term query whose terms merge scores as one hit rather than
   two. Deterministic and pure, so K4 still holds; it affects only relative order within a set that
   already matches.
+
+
+## Decided while building the service (2026-08-15)
+
+§2 and §3 held up, with six silences the implementation had to fill. The first is a behaviour, not a
+detail, and nothing in this contract stated it.
+
+- **A vanished root FREEZES the index; it does not empty it.** `NodeFileWatcher.waitForPath` means a
+  root that is *renamed away* produces **no** `onFailed` at all — it waits indefinitely — so the
+  trailing reconcile's walk resolves to `[]`. Taken at face value that pushes "every file you had has
+  been removed" to every subscriber, and pushes them all back when the folder returns. The service
+  therefore checks the root's existence before believing an empty walk:
+  `if (next.length === 0 && index.paths.length > 0 && !(await this.fs.exists(index.root))) return;`
+  That is the one place UI-main asks the question, it costs a single `exists` on an otherwise
+  impossible transition, and if `walkFiles` ever grows a real signal this is the single line to
+  change. **S11 itself is unaffected** — it fires from `WatchOptions.onFailed` and never consults the
+  walk.
+- **S4 and I2 disagree after an S11 recovery, and S4 wins.** S4 promises every subscriber a full
+  `{ status: 'ready', paths }` when a walk completes; I2 says a full array arrives at most once per
+  root per subscription. A watch failure re-walks and must re-send. Read as **ending the
+  subscription's epoch**: `sent` resets to `null`, subscribers get `{ status: 'building' }`, then a
+  fresh full snapshot. A strict reading of I2 forbids this; the strict reading is wrong.
+- **S5's targeted rescan is narrower than it reads.** It sees only the *direct file children* of the
+  signalled directory. Creating `a/b/c.txt` where `a/b` is itself new is not repaired by the fast
+  path at all — only by the reconcile. That is exactly why both mechanisms exist (R5), but the clause
+  sounds like the rescan is complete for the subtree.
+- **S8's per-subscriber snapshot only differs observably when a subscriber joins mid-sequence**, so
+  that is what it is tested against: with a second subscriber arriving partway through, each
+  subscriber's view — rebuilt from only what it was actually sent — must equal the real filesystem
+  set.
+- **S11 cannot be exercised by a real `NodeFileWatcher`.** It retries and waits indefinitely for a
+  merely-absent path, so `onFailed` fires only once the whole ancestor chain is gone — not arrangeable
+  on a temp drive. That one case uses an injected watcher stub; the tree stays real, and every other
+  case uses the real watcher.
+- **Two silences filled**: `subscribe` with an empty or absent root returns `{ status: 'building' }`
+  and registers nothing; and §2's signature is synchronous, so the walk is fire-and-forget behind it —
+  worth stating, because "the walk starts on the first subscribe" (S2) can be read as awaiting it.
+
+### On testing an absence
+
+S7 and S9 assert that **nothing** is sent, and an absence cannot be polled for — so those two waits
+are clock-based on purpose, at 2500 ms, longer than both ceilings configured for those tests. Every
+*other* wait in the integration file polls a condition and reports its own elapsed time, including all
+three SC-005 assertions. Watch arming is itself waited on as a condition rather than a duration: a
+throwaway probe file is written and polled for until its delta arrives, so the two-second budget
+measures the index rather than the watch coming up.

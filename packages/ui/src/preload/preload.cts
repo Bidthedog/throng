@@ -470,6 +470,38 @@ contextBridge.exposeInMainWorld('throng', {
       return () => ipcRenderer.removeListener('throng:files:watchFailed', handler);
     },
   },
+  // 033 US1 (contracts/file-index.md §3): the project file index that seeds Quick Open. NEW
+  // channels rather than additions to `files.*` — that surface carries ONE process-wide root, and
+  // this index is keyed BY root so two windows on two projects never see each other's sets (I4).
+  // `subscribe` answers `building` while the walk is in flight and `ready` with the whole set once
+  // it is done; everything after that arrives on `onUpdate` as a delta.
+  fileIndex: {
+    subscribe: (root: string) => ipcRenderer.invoke('throng:fileIndex:subscribe', { root }),
+    unsubscribe: (root: string) => ipcRenderer.send('throng:fileIndex:unsubscribe', { root }),
+    // Returns an unsubscriber, matching every other push channel's idiom (I3).
+    onUpdate: (
+      cb: (evt: {
+        root: string;
+        status: 'building' | 'ready';
+        paths?: string[];
+        added?: string[];
+        removed?: string[];
+      }) => void,
+    ) => {
+      const handler = (
+        _event: unknown,
+        evt: {
+          root: string;
+          status: 'building' | 'ready';
+          paths?: string[];
+          added?: string[];
+          removed?: string[];
+        },
+      ): void => cb(evt);
+      ipcRenderer.on('throng:fileIndex:update', handler);
+      return () => ipcRenderer.removeListener('throng:fileIndex:update', handler);
+    },
+  },
   // The OS clipboard (016, FR-013a): the sandboxed renderer cannot reach it, so it says WHAT to
   // copy and what SHAPE it is, and UI main writes it and remembers. The shape is app-global — one
   // record — which is what lets a block cut in one file paste as a block in another window.

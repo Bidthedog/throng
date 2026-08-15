@@ -250,6 +250,27 @@ declare global {
         /** 026 / #186 — live sync stopped and could not be restarted (FR-010a). */
         onWatchFailed?: (cb: (evt: { root: string; reason: string }) => void) => () => void;
       };
+      /**
+       * 033 US1 — the project file index behind Quick Open (contracts/file-index.md §3).
+       *
+       * Its only renderer-side consumer is `navigate/use-file-index.ts` (R1). `subscribe` answers
+       * `building` with no paths while the walk is in flight and `ready` with the whole set once it
+       * finishes; every later change arrives on `onUpdate` as `added`/`removed` against the set
+       * this window was last sent (I2), and `onUpdate` returns an unsubscriber (I3).
+       */
+      fileIndex?: {
+        subscribe: (root: string) => Promise<{ status: 'building' | 'ready'; paths?: string[] }>;
+        unsubscribe: (root: string) => void;
+        onUpdate: (
+          cb: (evt: {
+            root: string;
+            status: 'building' | 'ready';
+            paths?: string[];
+            added?: string[];
+            removed?: string[];
+          }) => void,
+        ) => () => void;
+      };
       // The OS clipboard (016, FR-013a) — behind the seam, in UI main.
       clipboard?: {
         write: (entry: { text: string; mode: import('@throng/core').ClipboardMode }) => Promise<void>;
