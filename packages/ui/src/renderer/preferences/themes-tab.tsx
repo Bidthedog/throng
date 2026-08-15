@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   THEME_METADATA,
-  activateTheme,
   buildShippedDefaults,
   classifyThemes,
   cloneName,
@@ -106,6 +105,15 @@ function groupNonIconDescriptors(items: readonly FieldDescriptor[]): {
    so there is no local "which dialog is open" to track. */
 
 type NameFlow = { mode: 'clone' | 'rename'; source: string } | null;
+
+/**
+ * The one settings key this tab writes (032, FR-001).
+ *
+ * Named once rather than repeated at the four activation sites, because four literals are four
+ * chances to typo a path that fails silently — a patch to `appearance.them` writes a new key and
+ * changes nothing the app reads.
+ */
+const ACTIVE_THEME_PATH = ['appearance', 'theme'] as const;
 
 export function ThemesTab(): ReactElement {
   const settings = useAppSettings();
@@ -316,9 +324,23 @@ export function ThemesTab(): ReactElement {
     scheduleWrite({ kind: 'theme', name }, () => JSON.stringify(next), 150);
   };
 
-  /** Selecting from the dropdown activates that theme (select = activate, FR-035). */
+  /**
+   * Activate a theme by writing the ONE key that says which theme is active (032, FR-001).
+   *
+   * All four activation sites went through `applySettings.applyNow(activateTheme(settings, name))`,
+   * which built a complete settings document from this window's copy and wrote all of it — so
+   * activating a theme reverted whatever the main window had changed since the last broadcast. That
+   * is exactly the #249 mechanism, in a file the spec's own audit had cleared: it enumerated
+   * `themes-tab.tsx:316` and `:441` as retained WHOLE-THEME writers, which they are, and stopped —
+   * without noticing that the same file writes SETTINGS four separate times through the apply
+   * client. Same shape as the four misses before it: a claim about a file standing in for a check of
+   * its call sites.
+   *
+   * `activateTheme` is gone from here as a result. It exists to build a settings document, and this
+   * file no longer builds one.
+   */
   const selectTheme = (name: string): void => {
-    void applySettings.applyNow(activateTheme(settings, name));
+    void applySettings.applyChange(ACTIVE_THEME_PATH, name);
   };
 
   const commitToken = (key: string, value: unknown): void => {
@@ -410,7 +432,7 @@ export function ThemesTab(): ReactElement {
     if (name === activeName) {
       // Fall back to a still-present theme (or throng) so the UI never renders unstyled.
       const remaining = themes.filter((t) => t !== name);
-      void applySettings.applyNow(activateTheme(settings, remaining[0] ?? 'throng'));
+      void applySettings.applyChange(ACTIVE_THEME_PATH, remaining[0] ?? 'throng');
     }
     refreshThemes();
   };
@@ -444,7 +466,7 @@ export function ThemesTab(): ReactElement {
       refreshThemes();
       return;
     }
-    void applySettings.applyNow(activateTheme(settings, newName));
+    void applySettings.applyChange(ACTIVE_THEME_PATH, newName);
     refreshThemes();
   };
 
@@ -455,7 +477,7 @@ export function ThemesTab(): ReactElement {
       setError(res.error === 'exists' ? 'A theme with that name already exists.' : 'Invalid name.');
       return;
     }
-    if (from === activeName) void applySettings.applyNow(activateTheme(settings, to)); // follow the rename
+    if (from === activeName) void applySettings.applyChange(ACTIVE_THEME_PATH, to); // follow the rename
     refreshThemes();
   };
 

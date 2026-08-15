@@ -260,6 +260,21 @@ contextBridge.exposeInMainWorld('throng', {
     ipcRenderer.on('throng:preferences:tab', handler);
     return () => ipcRenderer.removeListener('throng:preferences:tab', handler);
   },
+  /*
+   * The close gate (032, FR-018). Main asks before it closes the preferences window; the renderer
+   * answers `false` only while the JSON editor holds a document that is not valid, and shows the
+   * user why — with a *Discard changes and close* escape, so the window is never a trap.
+   *
+   * Gated in MAIN rather than on the close button because Alt+F4, the taskbar and every internal
+   * teardown path reach `win.close()` without passing through any React handler.
+   */
+  onPreferencesCloseRequest: (cb: (payload: { requestId: number }) => void) => {
+    const handler = (_event: unknown, payload: { requestId: number }): void => cb(payload);
+    ipcRenderer.on('throng:preferences:closeRequest', handler);
+    return () => ipcRenderer.removeListener('throng:preferences:closeRequest', handler);
+  },
+  replyPreferencesClose: (payload: { requestId: number; allow: boolean }) =>
+    ipcRenderer.send('throng:preferences:closeReply', payload),
   // About throng (020, FR-003/FR-003a): the About surface pulls the product version,
   // build id and full licence text from main (never hardcoded in the renderer), and
   // opens the licence link in the user's default browser.
@@ -317,6 +332,16 @@ contextBridge.exposeInMainWorld('throng', {
     // config document as raw JSON (validated + confined in main); the existing
     // hot-reload watcher then live-applies it (immediate-apply, FR-016/017/042).
     write: (id: unknown, json: string) => ipcRenderer.invoke('throng:config:write', id, json),
+    /*
+     * The KEY-SCOPED write (032, FR-001). A caller says what changed and never assembles a document,
+     * so it cannot assemble a stale one — which is the entire mechanism behind #249 and #260.
+     *
+     * A second channel rather than a changed one: the whole-document write has legitimate remaining
+     * callers (the JSON tab, where replacing the file IS the operation the user asked for), and
+     * overloading one channel with two meanings is how the two got confused to begin with.
+     */
+    writePatch: (id: unknown, changes: unknown) =>
+      ipcRenderer.invoke('throng:config:writePatch', id, changes),
     // Raw on-disk text of a config document, for the JSON editor (007 US5/FR-043).
     readRaw: (id: unknown): Promise<string> => ipcRenderer.invoke('throng:config:readRaw', id),
     // Theme file management + discovery for the Themes tab (handlers land with the

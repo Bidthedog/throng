@@ -13,4 +13,9 @@ export const UI_TYPES = {
   // 016: the OS clipboard seam, and the app-global mode record that rides on it.
   Clipboard: Symbol.for('throng:IClipboard'),
   ClipboardService: Symbol.for('throng:ClipboardService'),
+  // 032: how hard the config watcher retries an unreadable settings document before it believes
+  // the defaults it is holding (FR-008). Bound here rather than passed at the call site because
+  // Principle IX puts a boundary's bindings in one file — and the plan claims it is "injected at
+  // the main composition root", which would otherwise simply not be true.
+  ConfigWatchPolicy: Symbol.for('throng:ConfigWatchPolicy'),
 } as const;

@@ -10,7 +10,7 @@
  * untouched on disk so the user can fix their edit; writes are atomic (temp file
  * + rename) and best-effort (a failure is logged, never thrown).
  */
-import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { ALL_DEFAULT_THEMES, checkRename, type ConfigDocId, type ConfigReadOptions, type ConfigValidator, type IConfigStore, type ThemeRenameResult, type ValidatedConfig, type WriteOutcome } from '@throng/core';
 
@@ -209,7 +209,11 @@ export class FileConfigStore implements IConfigStore {
       // what a lost edit means. Drop the staged temp so a failed write leaves no litter behind.
       console.error(`[config-store] failed to write ${path}:`, err);
       if (tmp) await rm(tmp, { force: true }).catch(() => undefined);
-      return { ok: false, error: errorMessage(err) };
+      return {
+        ok: false,
+        error: await describeWriteFailure(err, path),
+        detail: errorMessage(err),
+      };
     }
   }
 
@@ -378,4 +382,78 @@ export class FileConfigStore implements IConfigStore {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Report a failed write against the file the USER knows, not the staging file they do not (#265).
+ *
+ * The atomic write stages to `settings.json.2.tmp` and renames it over `settings.json`. Node's
+ * rename error quotes BOTH paths, source first — and every consumer downstream takes the first
+ * quoted path as the subject, which is how a notice came to read:
+ *
+ *     Saving your settings failed. "settings.json.2.tmp" is open in another program.
+ *
+ * That temp file is throng's own scratch. The user has never seen it, cannot open it and cannot act
+ * on it, so naming it answers a question nobody asked while withholding the one fact that matters:
+ * `settings.json` could not be written.
+ *
+ * Fixed HERE rather than at the notice for two reasons. The staging file is wrong for every
+ * consumer — the notice, the diagnostics log, whatever reports a write failure next — so one fix at
+ * the source beats teaching each reader to look past it. And this is the only place that still knows
+ * which path was the destination: downstream it is two quoted paths with nothing marking which was
+ * ours.
+ *
+ * Three properties, each load-bearing and each pinned by a test:
+ *
+ *   - the **errno prefix survives**, because `kindFromMessage` classifies on `/^EPERM\b/` and
+ *     friends; losing it would turn a well-worded failure into an unclassified one;
+ *   - the **destination is quoted first**, because that is the segment a reader lifts as the subject;
+ *   - the **original message is kept**, appended, because the errno and the real staging path are
+ *     genuinely useful in a copied or logged error. They belong after the fact the user needs, not
+ *     instead of it.
+ */
+async function describeWriteFailure(err: unknown, target: string): Promise<string> {
+  const name = target.split(/[/\\]/).pop() ?? target;
+  const code = (err as NodeJS.ErrnoException | undefined)?.code;
+
+  /*
+   * LOOK, rather than infer from the errno.
+   *
+   * EPERM is the one genuinely ambiguous code on Windows — a held handle, an ACL refusal, and
+   * replacing a directory with a file all produce it. `classifyFailure` in core disambiguates using
+   * the OPERATION; the renderer's string classifier cannot, and maps `/^EPERM\b/` straight to
+   * "is open in another program". With `settings.json` replaced by a folder that was confidently,
+   * specifically wrong, which is worse than vague: a user who believes it goes hunting for a program
+   * holding their settings file, and there isn't one.
+   *
+   * Guessing better is still guessing. We are holding the path, so we check it. A specific accurate
+   * answer where one is available; an honest ambiguous one where it genuinely is not.
+   */
+  try {
+    const info = await stat(target);
+    // A CAUSE CLAUSE, not a whole sentence — the reporting surface supplies "Saving X failed." and
+    // "Nothing was changed.", so a self-contained sentence here would read as a stutter.
+    if (info.isDirectory()) return `"${name}" is a folder, not a file.`;
+  } catch {
+    // The target does not exist, which is not itself a problem — the write creates it. Fall through
+    // to the ambiguous wording rather than inventing a cause from its absence.
+  }
+
+  /*
+   * The honest ambiguous case, and it names both real possibilities rather than picking one.
+   *
+   * "may be" is doing deliberate work here: the alternative is to assert a cause we cannot
+   * distinguish, which is the defect this replaced.
+   */
+  if (code === 'EPERM' || code === 'EACCES' || code === 'EBUSY') {
+    return `"${name}" could not be written. It may be open in another program, or read-only.`;
+  }
+  if (code === 'ENOENT') {
+    return `The folder that holds "${name}" no longer exists.`;
+  }
+  if (code === 'ENOSPC') return `There is not enough disk space to save "${name}".`;
+
+  // Nothing recognised: say what we know without dressing it up (FR-011b's spirit — leave what you
+  // do not understand alone). The raw travels in `detail` regardless.
+  return `"${name}" could not be written.`;
 }

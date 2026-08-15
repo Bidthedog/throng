@@ -7,7 +7,6 @@ import {
   getAtPath,
   isSettingOverridden,
   LANGUAGES,
-  setAtPath,
   settingDiffersFromEntry,
   type FieldDescriptor,
 } from '@throng/core';
@@ -207,12 +206,35 @@ export function SettingsTab({
    * you type reports one failure, not one per keystroke.
    */
   const applyEdit = (d: FieldDescriptor, value: unknown): void => {
-    const next = setAtPath(settings, d.key, value);
-    void apply.applyNow(next).then(
-      (r) => report(`Saving ${d.label}`, r),
-      // A throw is the bridge itself failing — still a failure, still not silent.
-      () => report(`Saving ${d.label}`, undefined),
-    );
+    /*
+     * NO FAILURE REPORT HERE (032, #265). The chokepoint owns it.
+     *
+     * This used to call `report(\`Saving ${d.label}\`, r)`, and it produced two defects at once.
+     *
+     * It DOUBLED every message: `config-write-notices.ts` already subscribes to the one point every
+     * write passes through, so a failed save raised two notices. The chokepoint's docblock predicted
+     * they would collapse — "`notify` replaces a live notice carrying the same [test id]" — but 030
+     * moved de-duplication onto `causeKey`, and neither carried one.
+     *
+     * And the surviving half was WRONG. `d.label` is the setting's label, so the sentence read
+     * "Saving Remove a project failed" when the user had changed a confirmation preference and
+     * removed nothing at all.
+     *
+     * The reset path below still reports, and must: a reset goes through `config.resetSetting` in
+     * the main process and never touches `writeConfig`, so the chokepoint cannot see it.
+     */
+    /*
+     * ONE KEY, not the whole document (032, FR-001).
+     *
+     * This used to be `apply.applyNow(setAtPath(settings, d.key, value))` — build a complete
+     * settings document from the copy this window is rendering, and write all of it. `settings` here
+     * is whatever the watcher last broadcast, so it is stale by however long it has been since the
+     * main window changed something. Writing it reverted that change, silently. That is #249.
+     *
+     * `d.key` is a dotted descriptor key and splits safely: a table descriptor's key names the table
+     * (`editor.indentByLanguage`), never a path through it, so no segment here contains a dot.
+     */
+    void apply.applyChange(d.key.split('.'), value);
   };
 
   /**

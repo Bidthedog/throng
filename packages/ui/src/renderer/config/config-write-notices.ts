@@ -36,11 +36,39 @@ export function useConfigWriteFailureNotices(): void {
 
   useEffect(
     () =>
-      onConfigWriteFailed((id) => {
+      onConfigWriteFailed((id, error, detail) => {
+        /*
+         * SAY WHY, ACCURATELY (032, #265).
+         *
+         * This listener took only `id` and dropped the reason on the floor, so the notice could say
+         * that saving failed and nothing else.
+         *
+         * The first fix ran the raw errno through `speakFailure`, and that was wrong twice over.
+         * A rename error quotes the STAGING file first, so the notice named `settings.json.2.tmp` —
+         * throng's own scratch, which the user has never seen. And EPERM is the one genuinely
+         * ambiguous code on Windows: the classifier maps it to "is open in another program", which
+         * with `settings.json` replaced by a folder was confidently, specifically wrong.
+         *
+         * The store now says what is actually wrong, because it is the only layer holding the path
+         * and can simply look. So the sentence arrives already correct and is used as-is — no
+         * classification, no second guess at a cause the writer already established.
+         */
         notify({
           // An error PERSISTS until dismissed. A preference that did not save is exactly the kind of
           // thing a user must not be allowed to miss by looking away for five seconds.
           severity: 'error',
+          /*
+           * The RAW errno, for the copy button — and, because `notification.tsx` writes
+           * `detail: input.copyDetail` into the notice log record, this is also what puts the real
+           * system message and the staging path into the diagnostics log. A severity the user has
+           * silenced still logs (FR-012), so silencing errors hides a failure from the screen and
+           * never from the record.
+           *
+           * This is the half that made separating `error` from `detail` worth doing: the sentence
+           * can now be short and true while the errno, both paths and the staging file stay
+           * available to anyone debugging the write itself.
+           */
+          copyDetail: detail ?? error,
           /*
            * NO SUBJECT, deliberately (030 FR-019/FR-027).
            *
@@ -53,7 +81,12 @@ export function useConfigWriteFailureNotices(): void {
            * the message is left as it is rather than padded.
            */
           subject: { kind: 'none' },
-          message: `Saving ${describe(id)} failed. Nothing was changed.`,
+          /*
+           * Three parts, each owned by whoever actually knows it: this surface knows what was being
+           * saved, the store knows why it could not be, and "Nothing was changed" is the promise the
+           * atomic write keeps.
+           */
+          message: `Saving ${describe(id)} failed. ${error} Nothing was changed.`,
           testId: 'prefs-notice',
         });
       }),

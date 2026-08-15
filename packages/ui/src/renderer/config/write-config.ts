@@ -5,9 +5,10 @@
  * edits before applying, FR-016 immediate-apply). Kept free of React/DOM
  * module-scope so the debounce timing is unit-testable in the node env.
  */
-import type { ConfigDocId } from '@throng/core';
+import type { ConfigChange, ConfigDocId } from '@throng/core';
 
-export type ConfigWriteResult = { ok: true } | { ok: false; error: string };
+/** `error` is the sentence the user reads; `detail` is the raw errno for Copy and the log (#265). */
+export type ConfigWriteResult = { ok: true } | { ok: false; error: string; detail?: string };
 
 /** Stable key for a config document, so writes to the same document can be ordered. */
 function docKey(id: ConfigDocId): string {
@@ -24,10 +25,10 @@ function docKey(id: ConfigDocId): string {
 const writeChains = new Map<string, Promise<unknown>>();
 
 /** Tell every subscriber a write did not land. Never throws — a reporter must not break a writer. */
-function publishFailure(id: ConfigDocId, error: string): void {
+function publishFailure(id: ConfigDocId, error: string, detail?: string): void {
   for (const listener of failureListeners) {
     try {
-      listener(id, error);
+      listener(id, error, detail);
     } catch {
       // A listener that throws is its own problem; the write path is already on a failure branch and
       // must not acquire a second one.
@@ -38,7 +39,17 @@ function publishFailure(id: ConfigDocId, error: string): void {
 type WriteListener = (id: ConfigDocId, json: string) => void;
 const writeListeners = new Set<WriteListener>();
 
-type FailureListener = (id: ConfigDocId, error: string) => void;
+type PatchListener = (id: ConfigDocId, changes: readonly ConfigChange[]) => void;
+const patchListeners = new Set<PatchListener>();
+
+/**
+ * `error` is the sentence the user reads; `detail` is the raw errno for Copy and the log (#265).
+ *
+ * They used to be one string, which is how a notice came to read `"settings.json.2.tmp" is open in
+ * another program`: a single value had to be both a human sentence and a machine record, and it
+ * could only ever be one of them.
+ */
+type FailureListener = (id: ConfigDocId, error: string, detail?: string) => void;
 const failureListeners = new Set<FailureListener>();
 
 /**
@@ -101,7 +112,7 @@ export async function writeConfig(id: ConfigDocId, json: string): Promise<Config
       if (res.ok) {
         for (const listener of writeListeners) listener(id, json);
       } else {
-        publishFailure(id, res.error);
+        publishFailure(id, res.error, res.detail);
       }
       return res;
     });
@@ -111,6 +122,70 @@ export async function writeConfig(id: ConfigDocId, json: string): Promise<Config
     return await result;
   } finally {
     // Let the map drain once this write is the last one standing.
+    if (writeChains.get(key) === result) writeChains.delete(key);
+  }
+}
+
+/**
+ * Observe key-scoped changes as they are successfully applied (032).
+ *
+ * The patch counterpart of {@link onConfigWritten}, and it exists for a NARROWER reason than that
+ * one did. #50's immediate-adopt was load-bearing for correctness: every edit serialised the whole
+ * document from the renderer's copy, so a copy that lagged the last write produced a silent revert.
+ * A patch caller never assembles a document, so that failure mode is gone by construction and this
+ * subscription is not holding it up.
+ *
+ * What it still buys is RESPONSIVENESS. Without it the control the user just changed shows its old
+ * value until the watcher's broadcast completes the round trip through the filesystem — under the
+ * FR-004 bound, but visible. Adopting the change locally closes that gap, and the broadcast that
+ * follows carries the same value, so it confirms rather than corrects.
+ */
+export function onConfigPatched(listener: PatchListener): () => void {
+  patchListeners.add(listener);
+  return () => patchListeners.delete(listener);
+}
+
+/**
+ * Apply a KEY-SCOPED change to a config document (032, FR-001).
+ *
+ * The whole point of the channel: the caller says what changed and never rebuilds the document, so
+ * it cannot revert a key another window changed in the meantime. Prefer this over
+ * {@link writeConfig} for anything that is not the user hand-editing the raw file.
+ *
+ * It rides the SAME per-document chain as {@link writeConfig}, which is not incidental. A patch and
+ * a whole-document write to one file are not commutative — the document write would revert the patch
+ * — so ordering them against each other is the only way "the last edit wins" stays true when the
+ * two channels are mixed, which `revertAll` does deliberately.
+ */
+export async function writeConfigPatch(
+  id: ConfigDocId,
+  changes: readonly ConfigChange[],
+): Promise<ConfigWriteResult> {
+  const writePatch = window.throng?.config?.writePatch;
+  if (!writePatch) {
+    const unavailable = { ok: false, error: 'bridge-unavailable' } as const;
+    publishFailure(id, unavailable.error);
+    return unavailable;
+  }
+
+  const key = docKey(id);
+  const previous = writeChains.get(key) ?? Promise.resolve();
+  const result = previous
+    .catch(() => undefined) // a failed earlier write must not sink the ones after it
+    .then(() => writePatch(id, changes))
+    .then((res) => {
+      if (res.ok) {
+        for (const listener of patchListeners) listener(id, changes);
+      } else {
+        publishFailure(id, res.error, res.detail);
+      }
+      return res;
+    });
+
+  writeChains.set(key, result);
+  try {
+    return await result;
+  } finally {
     if (writeChains.get(key) === result) writeChains.delete(key);
   }
 }
@@ -168,6 +243,38 @@ export function cancelWrite(id: ConfigDocId): void {
 }
 
 /**
+ * Buffers that hold an un-applied config edit, and know how to apply it (032, FR-017).
+ *
+ * ══ WHY THIS EXISTS ══
+ *
+ * The drain below settles ARMED WRITES — writes that have been scheduled and are waiting on a
+ * timer. That covered every deferred config write in the application until FR-017 removed the JSON
+ * editor's debounce.
+ *
+ * The JSON editor now applies when the user LEAVES it: closing the JSON view, switching tab, or
+ * closing the Preferences window. Closing the whole APPLICATION with Preferences open is a fourth
+ * exit that none of those three cover, and without this the buffer would simply be lost — a
+ * silently discarded edit, which is the precise failure class this feature exists to remove.
+ *
+ * A registry rather than a call into the preferences window, for the same reason `armedWrites` is
+ * one: the drain must name no writer and no window. A registrant that has nothing to commit
+ * commits nothing, which is correct rather than a special case.
+ */
+type PendingCommit = () => void;
+const pendingCommits = new Set<PendingCommit>();
+
+/**
+ * Register a buffer whose edit is applied on leaving, so the shutdown drain can apply it too.
+ *
+ * The commit MUST be a no-op when there is nothing to apply, and must not throw — a drain that
+ * fails cannot be allowed to wedge the close.
+ */
+export function registerPendingCommit(commit: PendingCommit): () => void {
+  pendingCommits.add(commit);
+  return () => pendingCommits.delete(commit);
+}
+
+/**
  * Settle every deferred config write this window owns (019 FR-010): fire what is armed, then
  * await what is in flight.
  *
@@ -184,6 +291,20 @@ export function cancelWrite(id: ConfigDocId): void {
  * a write that cannot land must not wedge the close.
  */
 export async function settleConfigWrites(): Promise<void> {
+  /*
+   * Un-applied BUFFERS first, then armed TIMERS, then the in-flight writes.
+   *
+   * The order is load-bearing: a commit schedules a write, so committing after the armed writes had
+   * fired would leave the new one behind — settled by nothing and lost, which is exactly what this
+   * function exists to prevent.
+   */
+  for (const commit of [...pendingCommits]) {
+    try {
+      commit();
+    } catch {
+      // A buffer that cannot commit must not stop the others, and must not wedge the close.
+    }
+  }
   for (const armed of [...armedWrites.values()]) armed.fire();
   await Promise.all([...writeChains.values()].map((p) => p.catch(() => undefined)));
 }

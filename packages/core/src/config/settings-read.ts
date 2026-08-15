@@ -28,7 +28,24 @@ export function parseSettingsGuarded(raw: unknown): CorrectionOutcome<AppSetting
     value: parseAppSettings(guarded.value),
     corrected: guarded.corrected,
     corrections: guarded.corrections,
+    /*
+     * UNREADABLE, reported without changing the value (032, FR-008).
+     *
+     * A settings document is a JSON object. Anything else — an array, a string, a number, `null` —
+     * is a file that exists and cannot be used, which is a different situation from a file with a
+     * value out of range and calls for a different response: the caller may want to look again
+     * before it believes the defaults it is being handed.
+     *
+     * `undefined` is NOT unreadable. It is what an absent document looks like once the file layer
+     * has resolved it, and there is nothing wrong with a machine that has no settings yet.
+     */
+    unreadable: raw !== undefined && !isPlainObject(raw),
   };
+}
+
+/** A JSON object — the only shape a configuration document is ever allowed to be. */
+function isPlainObject(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /** The `validate` callback shape the config store expects, with the guard applied. */

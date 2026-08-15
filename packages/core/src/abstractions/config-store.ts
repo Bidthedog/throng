@@ -22,7 +22,16 @@ export type ConfigDocId =
  * a lost one — so the IPC layer reported every write as successful and a preference could
  * vanish silently while the UI showed the new value. The store still never throws; it reports.
  */
-export type WriteOutcome = { ok: true } | { ok: false; error: string };
+/**
+ * `error` is what the USER is shown; `detail` is what a bug report is reconstructed from.
+ *
+ * They were one field, and that is why a notice once read `"settings.json.2.tmp" is open in another
+ * program` (#265): a single string had to be simultaneously a sentence fit for a human and a raw
+ * errno fit for a log, and it could only ever be one of the two. Separating them lets the store say
+ * precisely what is wrong — this target is a folder, this one is read-only — while the errno and the
+ * real staging path ride along underneath for Copy and the diagnostics log.
+ */
+export type WriteOutcome = { ok: true } | { ok: false; error: string; detail?: string };
 
 export interface ConfigReadOptions {
   /**
@@ -84,6 +93,22 @@ export interface IConfigStore {
    * and mistaken for success (issue #75).
    */
   write<T>(doc: ConfigDocId, value: T): Promise<WriteOutcome>;
+
+  /**
+   * The document's RAW on-disk text, or `''` when it is absent (032, FR-006a).
+   *
+   * `read` cannot serve a read-modify-write cycle, and the reason is precise: it resolves an absent
+   * document and an unparseable one to the SAME thing — `defaults`. A patch must tell those two
+   * apart, because they call for opposite answers. Absent means there is nothing to lose, so the
+   * patch applies to `{}`. Unparseable means there is a real document that could not be read, and
+   * writing on top of `{}` would replace every setting the user has.
+   *
+   * The concrete store has always had this — the JSON editor reads through it so a malformed file
+   * shows verbatim for repair. It is on the interface now because a second caller needs the same
+   * distinction, and reaching for the concrete class to get it is how an abstraction quietly stops
+   * being one.
+   */
+  readRaw(doc: ConfigDocId): Promise<string>;
 
   /** Absolute path of a config document (diagnostics / watcher wiring). */
   pathOf(doc: ConfigDocId): string;

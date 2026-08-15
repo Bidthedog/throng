@@ -888,8 +888,128 @@
   font-size: 12px;
 }
 
-/* External on-disk change against a dirty buffer (FR-041): the user chooses. */
-.json-tab__conflict {
+/* 032 FR-019 — one line per offending value, so a document with three mistakes does not have to
+   be fixed three times over. Capped and scrollable: a document pasted from somewhere else can be
+   wrong in twenty places, and a banner that grows without limit would push the editor off screen —
+   leaving the user unable to fix what it is complaining about. */
+.json-tab__error ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.json-tab__error-heading {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* The setting's KEY, so the eye can separate "what it is called" from "where it lives in the file".
+   Monospace because it is a path the user has to find in a JSON document, not prose. */
+.json-tab__error em {
+  font-style: italic;
+  font-family: var(--throng-font-editor-family, Consolas, 'Courier New', monospace);
+}
+
+/* 032 — the actions belong ON the notice, not scattered across the window. `Discard` is what makes
+   "you cannot leave" untrue, so it sits beside the sentence that would otherwise imply it. */
+.json-tab__error-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* The same CANCEL-button token set the capture modal and the name dialog use. Not `--surface`:
+   that is the PANE token, reserved for pane bodies and dialog cards, and reaching for it here is
+   exactly the drift `surface-token-roles.test.ts` exists to catch — which it did, once. */
+.json-tab__error-actions button,
+.json-tab__external button {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  border: 1px solid var(--throng-colour-cancelButtonBorder);
+  border-radius: 4px;
+  background: var(--throng-colour-cancelButtonBg);
+  color: var(--throng-colour-cancelButtonText);
+  cursor: pointer;
+}
+
+.json-tab__error-actions button:hover,
+.json-tab__external button:hover {
+  background: var(--throng-colour-cancelButtonHoverBg);
+  border-color: var(--throng-colour-cancelButtonHoverBorder);
+  color: var(--throng-colour-cancelButtonHoverText);
+}
+
+/*
+ * 032 FR-018 — THE FLASH.
+ *
+ * A refused exit adds no information: the notice is already on screen and already says why. What it
+ * adds is the answer to "why did nothing happen when I clicked that?", and the honest answer is
+ * "because of this, here". So the notice MOVES rather than a second notice appearing — which is
+ * what used to happen, three times over, in three different wordings.
+ *
+ * Driven by remounting the element (a React `key`), because re-adding a class in the same frame it
+ * was removed does not restart a CSS animation.
+ */
+.json-tab__error--flash {
+  animation: json-invalid-flash 0.5s ease-in-out 2;
+}
+
+@keyframes json-invalid-flash {
+  0%,
+  100% {
+    background: color-mix(in srgb, var(--danger, #e14b4b) 12%, transparent);
+    border-color: var(--danger, #e14b4b);
+  }
+  50% {
+    background: color-mix(in srgb, var(--danger, #e14b4b) 34%, transparent);
+    border-color: color-mix(in srgb, var(--danger, #e14b4b) 100%, white 25%);
+  }
+}
+
+/* A user who has asked for less motion still gets the emphasis — just held rather than pulsed. */
+@media (prefers-reduced-motion: reduce) {
+  .json-tab__error--flash {
+    animation: none;
+    background: color-mix(in srgb, var(--danger, #e14b4b) 28%, transparent);
+  }
+}
+
+/*
+ * 032 — THE STANDING EXPLANATION of FR-017, in the slot the error would occupy.
+ *
+ * Shown whenever there is no error to show instead, because the least discoverable thing about this
+ * editor is that nothing is written while you type. Read as "my changes are being lost" by a user
+ * who does not know the rule — which is how the intended behaviour came to be reported as a bug.
+ *
+ * AMBER, not red. `--throng-colour-warning` is documented for exactly this distinction: "a warning
+ * is not a failure, and colouring it red would" overstate it. Nothing here has gone wrong; the user
+ * is being told how the surface works before it matters.
+ */
+.json-tab__warning {
+  flex: 0 0 auto;
+  margin-top: 8px;
+  padding: 6px 10px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--throng-colour-warning) 12%, transparent);
+  border: 1px solid var(--throng-colour-warning);
+  border-radius: 5px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/*
+ * 032 — a GENUINE external change against edits the user can see.
+ *
+ * Only ever shown when the buffer is DIRTY. A clean buffer follows the file silently, because there
+ * is nothing of the user's to protect and a notice would report an event with no consequence.
+ *
+ * Two buttons, two distinct actions, both named for what they do to the document rather than for
+ * which side wins. Overwriting the buffer loses work the user can see; overwriting the file loses
+ * work they cannot — and only they know which they meant.
+ */
+.json-tab__external {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -903,8 +1023,9 @@
   font-size: 12px;
 }
 
-.json-tab__conflict span {
+.json-tab__external p {
   flex: 1 1 auto;
+  margin: 0;
 }
 
 /* The keyed-table control (016, F5) — a settings value that is a MAP.

@@ -21,6 +21,7 @@ import { DaemonClient } from './daemon-client.js';
 import { FileConfigStore } from './config-store.js';
 import { ShippedDefaultsService } from './shipped-defaults-service.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
+import { DEFAULT_CONFIG_WATCH_POLICY, type ConfigWatchPolicy } from './config-watcher.js';
 import { numberFromEnv, readUiSettings } from './ui-settings.js';
 import { instanceConfigRoot, instancePipeName } from './instance-paths.js';
 
@@ -100,6 +101,12 @@ export function createUiContainer(): Container {
   container
     .bind<IFileWatcher>(UI_TYPES.FileWatcher)
     .toConstantValue(new NodeFileWatcher(configSettings.hotReloadDebounceMs));
+  // 032 FR-008: the watcher's bounded re-read of an unreadable settings document. A tuning
+  // constant, not an AppSettings key — no user and no machine has a reason to want a different
+  // number, and a setting nobody should change is a setting somebody eventually will.
+  container
+    .bind<ConfigWatchPolicy>(UI_TYPES.ConfigWatchPolicy)
+    .toConstantValue(DEFAULT_CONFIG_WATCH_POLICY);
   // 007: the installed-font enumeration OS seam (Windows impl for the first target).
   container
     .bind<IFontEnumeration>(UI_TYPES.FontEnumeration)

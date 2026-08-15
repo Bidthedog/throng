@@ -58,6 +58,9 @@ declare global {
       onPreferencesTab?: (
         cb: (tab: 'settings' | 'keybindings' | 'themes') => void,
       ) => () => void;
+      /** 032 FR-018 — main asks before closing Preferences; an invalid JSON buffer may refuse. */
+      onPreferencesCloseRequest?: (cb: (payload: { requestId: number }) => void) => () => void;
+      replyPreferencesClose?: (payload: { requestId: number; allow: boolean }) => void;
       // About throng (020, FR-003): version + build id + full licence for the About
       // surface, plus opening the licence link in the user's default browser.
       /** #123 — reveal the logs + crash reports folder in the OS file manager. */
@@ -136,6 +139,14 @@ declare global {
         // discovery. `write` persists raw JSON (validated + confined in main) and the
         // hot-reload watcher live-applies it (immediate-apply, FR-016/017/042).
         write?: (id: ThrongConfigDocId, json: string) => Promise<ConfigWriteResult>;
+        /**
+         * The key-scoped write (032, FR-001). `settings` only — any other document kind is refused
+         * with `unsupported-doc` rather than quietly accepted.
+         */
+        writePatch?: (
+          id: ThrongConfigDocId,
+          changes: readonly import('@throng/core').ConfigChange[],
+        ) => Promise<ConfigWriteResult>;
         readRaw?: (id: ThrongConfigDocId) => Promise<string>;
         listThemes?: () => Promise<string[]>;
         renameTheme?: (
@@ -495,7 +506,7 @@ export type ThrongConfigDocId =
   | { kind: 'theme'; name: string };
 
 /** Result of `window.throng.config.write` (FR-016/017/042). */
-export type ConfigWriteResult = { ok: true } | { ok: false; error: string };
+export type ConfigWriteResult = { ok: true } | { ok: false; error: string; detail?: string };
 
 /** An icon value: a glyph, or a pack-relative image filename (mirrors core IconValue). */
 export type IconValueDto = { glyph: string } | { image: string };
