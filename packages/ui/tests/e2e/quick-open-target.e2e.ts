@@ -45,7 +45,10 @@ import {
   runApp as runOwnApp,
   createProject as newProject,
   firstPanelId,
+  panelIds,
   focusEditor,
+  commitPanelRename,
+  commitTabRename,
   settle,
   cleanupTemp,
   type AppOptions,
@@ -104,6 +107,52 @@ async function editorWithProject(win: Page, name: string, root: string): Promise
   await expect(win.getByTestId(`editor-${pid}`)).toBeVisible();
   await focusEditor(win, pid);
   return pid;
+}
+
+/**
+ * Press Enter on a query whose answer is exactly ONE file — after waiting for that row to exist.
+ *
+ * `Enter` is answered from the highlighted row and nothing queues it, so a key pressed while the
+ * file index is still enumerating (FR-015 / S3, the "Still listing this project's files…" state) is
+ * correctly ignored and never retried: the modal stays open, the row arrives a beat later, and the
+ * test then fails on an assertion about editor panels. Measured on the sibling spec at 2 failures in
+ * 6 against a freshly launched app — see `chooseTheOnlyRow` in `quick-open.e2e.ts`, which carries
+ * the captured evidence. The same guard belongs here, where every one of these queries also has
+ * exactly one answer.
+ */
+async function chooseTheOnlyRow(win: Page): Promise<void> {
+  await expect(quickOpenRows(win)).toHaveCount(1);
+  await win.keyboard.press('Enter');
+}
+
+/**
+ * Put the control on "a new editor panel" and leave focus back in the query input.
+ *
+ * The keyboard route (E5 / T4), not a click, because a click on the header moves DOM focus out of
+ * the input and the Enter that follows would then be answered by the control rather than by the
+ * list — which is E1's whole subject and would make these tests measure the wrong key.
+ */
+async function chooseNewEditorTarget(win: Page): Promise<void> {
+  await win.keyboard.press('Shift+Tab');
+  await expect(target(win)).toBeFocused();
+  await win.keyboard.press('Space');
+  await expect(target(win)).toHaveAttribute('data-value', 'new');
+  await win.keyboard.press('Tab');
+  await expect(win.getByTestId('quickopen-input')).toBeFocused();
+}
+
+/** Add a sibling panel to `pid` and make it an editor. Returns the new panel's id. */
+async function addEditorPanel(win: Page, pid: string): Promise<string> {
+  const before = await win.locator('.panel-box').count();
+  await win.getByTestId(`panel-add-${pid}`).click();
+  await expect(win.locator('.panel-box')).toHaveCount(before + 1);
+  // A freshly added panel opens in rename mode; an open rename input eats the keys that follow.
+  await commitPanelRename(win);
+  const next = (await panelIds(win)).filter((id) => id !== pid)[0];
+  await win.getByTestId(`panel-type-select-${next}`).selectOption('editor');
+  await win.getByTestId(`panel-type-confirm-${next}`).click();
+  await expect(win.getByTestId(`editor-${next}`)).toBeVisible();
+  return next;
 }
 
 /** The `data-testid`s inside the dialog card, in DOM order — how "above the input" is checked. */
@@ -192,7 +241,7 @@ test('the control says where the file will land IN WORDS, names the panel, and i
        */
       await openQuickOpen(win);
       await win.keyboard.type('README');
-      await win.keyboard.press('Enter');
+      await chooseTheOnlyRow(win);
       await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
         '// README.md',
         { timeout: 8000 },
@@ -350,7 +399,7 @@ test('choosing "the currently active editor" performs the Last-Active-Editor rou
 
       await openQuickOpen(win);
       await win.keyboard.type('README');
-      await win.keyboard.press('Enter');
+      await chooseTheOnlyRow(win);
       await expect(content).toContainText('// README.md', { timeout: 8000 });
       await expect(editors(win)).toHaveCount(1);
 
@@ -360,7 +409,7 @@ test('choosing "the currently active editor" performs the Last-Active-Editor rou
       await openQuickOpen(win);
       await expect(target(win)).toHaveAttribute('data-value', 'lastActive');
       await win.keyboard.type('deep-widget');
-      await win.keyboard.press('Enter');
+      await chooseTheOnlyRow(win);
 
       await expect(editors(win)).toHaveCount(1);
       await expect(content).toContainText('// src/app/components/widgets/deep-widget.ts', {
@@ -381,7 +430,7 @@ test('choosing "a new editor panel in this tab" opens a new editor panel in the 
 
       await openQuickOpen(win);
       await win.keyboard.type('README');
-      await win.keyboard.press('Enter');
+      await chooseTheOnlyRow(win);
       await expect(content).toContainText('// README.md', { timeout: 8000 });
       await expect(editors(win)).toHaveCount(1);
 
@@ -393,7 +442,7 @@ test('choosing "a new editor panel in this tab" opens a new editor panel in the 
       await expect(target(win)).toHaveAttribute('data-value', 'new');
       await win.keyboard.press('Tab');
       await expect(win.getByTestId('quickopen-input')).toBeFocused();
-      await win.keyboard.press('Enter');
+      await chooseTheOnlyRow(win);
 
       /*
        * A SECOND editor panel — and in THIS tab, which is what the option promises.
@@ -407,6 +456,133 @@ test('choosing "a new editor panel in this tab" opens a new editor panel in the 
       await expect(
         editors(win).filter({ hasText: '// src/app/components/widgets/deep-widget.ts' }),
       ).toHaveCount(1);
+    });
+  } finally {
+    cleanupDeepTree(tree);
+  }
+});
+
+/* ────────────────────────────────────────────────────────────────────────────────────────────────
+ * The one-buffer rule holds on the `new` target too — FR-008, FR-011a, AS-9
+ *
+ * Reported from hand-testing: with the control on "a new editor panel", choosing a file that was
+ * ALREADY open produced a SECOND editor on the same file. FR-008 requires Quick Open to route
+ * through the shipped open-file path "inheriting every check it makes", and the one-buffer rule is
+ * the first of those checks; AS-9 states the outcome directly. The `lastActive` target was correct
+ * throughout, which is what localises the defect: only the `new` branch skipped the gate.
+ *
+ * Both tests assert a COUNT, never a presence. The defect is a second copy, and "an editor holds
+ * README" is true of the broken build as well as the fixed one.
+ * ──────────────────────────────────────────────────────────────────────────────────────────────── */
+
+test('with the control on "a new editor panel", a file already open in this tab is activated, not copied (FR-008, FR-011a, AS-9)', async () => {
+  const tree = createDeepTree('throng-qot-onebuf-');
+  try {
+    await runApp(async (_app, win) => {
+      // Editor A holds README.md.
+      const a = await editorWithProject(win, 'QOTargetOneBuffer', tree.root);
+      await openQuickOpen(win);
+      await win.keyboard.type('README');
+      await chooseTheOnlyRow(win);
+      await expect(win.getByTestId(`editor-${a}`).locator('.cm-content')).toContainText(
+        '// README.md',
+        { timeout: 8000 },
+      );
+
+      /*
+       * Editor B holds something else and is where the chord comes from.
+       *
+       * Two panels, not one: with a single editor on screen "no second copy" and "the file's editor
+       * is focused" are both satisfied by a tab that has nowhere else for focus to be, and neither
+       * assertion would then say anything. B is also what makes this the user's gesture — they were
+       * in one editor and asked for a file that lives in another.
+       */
+      const b = await addEditorPanel(win, a);
+      await focusEditor(win, b);
+      await openQuickOpen(win);
+      await win.keyboard.type('deep-widget');
+      await chooseTheOnlyRow(win);
+      await expect(win.getByTestId(`editor-${b}`).locator('.cm-content')).toContainText(
+        '// src/app/components/widgets/deep-widget.ts',
+        { timeout: 8000 },
+      );
+      await expect(editors(win)).toHaveCount(2);
+
+      // From B, ask for README.md — open in A — with the control on "a new editor panel".
+      await focusEditor(win, b);
+      await openQuickOpen(win);
+      await win.keyboard.type('README');
+      await expect(quickOpenRows(win)).toHaveCount(1);
+      await chooseNewEditorTarget(win);
+      await win.keyboard.press('Enter');
+      await expect(win.getByTestId('quickopen')).toHaveCount(0);
+
+      // No third panel, exactly one editor holds the file, B keeps its own document…
+      await expect(editors(win)).toHaveCount(2);
+      await expect(editors(win).filter({ hasText: '// README.md' })).toHaveCount(1);
+      await expect(win.getByTestId(`editor-${b}`).locator('.cm-content')).toContainText(
+        '// src/app/components/widgets/deep-widget.ts',
+      );
+      // …and A — the editor that already held it — is the one that ends up with the caret.
+      await expect(win.getByTestId(`editor-${a}`).locator('.cm-editor.cm-focused')).toBeVisible({
+        timeout: 8000,
+      });
+    });
+  } finally {
+    cleanupDeepTree(tree);
+  }
+});
+
+test('with the control on "a new editor panel", a file open in ANOTHER tab activates that tab’s editor (FR-011a)', async () => {
+  const tree = createDeepTree('throng-qot-onebuf-tab-');
+  try {
+    await runApp(async (_app, win) => {
+      // Tab 1: editor A holds README.md.
+      const a = await editorWithProject(win, 'QOTargetOneBufferTab', tree.root);
+      await openQuickOpen(win);
+      await win.keyboard.type('README');
+      await chooseTheOnlyRow(win);
+      await expect(win.getByTestId(`editor-${a}`).locator('.cm-content')).toContainText(
+        '// README.md',
+        { timeout: 8000 },
+      );
+      const tabsBefore = await win.locator('.tab-chip').count();
+
+      // Tab 2, with its own editor — `tab-add` creates AND switches, and opens the chip in rename
+      // mode, which would otherwise swallow every key below.
+      await win.getByTestId('tab-add').click();
+      await expect(win.locator('.tab-chip')).toHaveCount(tabsBefore + 1);
+      await commitTabRename(win);
+      const c = await firstPanelId(win);
+      await win.getByTestId(`panel-type-select-${c}`).selectOption('editor');
+      await win.getByTestId(`panel-type-confirm-${c}`).click();
+      await expect(win.getByTestId(`editor-${c}`)).toBeVisible();
+      await focusEditor(win, c);
+      // Only the active tab renders, so A is off screen and this tab holds exactly one editor.
+      await expect(editors(win)).toHaveCount(1);
+      await expect(win.getByTestId(`editor-${a}`)).toHaveCount(0);
+
+      // From tab 2, ask for README.md — open in tab 1 — with the control on "a new editor panel".
+      await openQuickOpen(win);
+      await win.keyboard.type('README');
+      await expect(quickOpenRows(win)).toHaveCount(1);
+      await chooseNewEditorTarget(win);
+      await win.keyboard.press('Enter');
+      await expect(win.getByTestId('quickopen')).toHaveCount(0);
+
+      /*
+       * Tab 1 comes forward and its editor is the one holding the file.
+       *
+       * `editor-A` being on screen IS the tab switch — a panel renders only in the active tab — and
+       * it is the assertion the count alone cannot make: the broken build leaves tab 2 active with a
+       * brand-new editor on README.md in it, which is also a count of one.
+       */
+      await expect(win.getByTestId(`editor-${a}`)).toBeVisible({ timeout: 8000 });
+      await expect(win.getByTestId(`editor-${a}`).locator('.cm-content')).toContainText(
+        '// README.md',
+      );
+      await expect(editors(win)).toHaveCount(1);
+      await expect(win.locator('.tab-chip')).toHaveCount(tabsBefore + 1); // …no tab was added either
     });
   } finally {
     cleanupDeepTree(tree);

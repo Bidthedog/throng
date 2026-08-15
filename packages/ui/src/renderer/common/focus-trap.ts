@@ -36,6 +36,9 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
+/** What counts as "another dialog" for the stand-aside rule in the `focusin` guard below. */
+const DIALOG_SELECTOR = '[role="dialog"],[aria-modal="true"]';
+
 export interface FocusTrap<T extends HTMLElement> {
   /** Attach to the dialog element. It needs `tabIndex={-1}` so it can hold focus as a last resort. */
   ref: MutableRefObject<T | null>;
@@ -87,6 +90,32 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(active: boolea
         lastInside.current = target;
         return;
       }
+      /*
+       * ══ NEVER ARM-WRESTLE ANOTHER DIALOG (033 FR-071/FR-072, #219) ══
+       *
+       * This guard exists to stop the APPLICATION BEHIND the dialog taking the caret — a terminal
+       * attaching, an editor mounting, a background `select()`. Another modal is not that. When one
+       * transient overlay replaces another (`common/transient-overlay.ts`), React mounts the
+       * newcomer BEFORE tearing the incumbent down, and for two overlays in different component
+       * trees the incumbent's guard is still installed when the newcomer's `autoFocus` fires. Left
+       * to fight, the outgoing dialog drags the caret back into itself — and is then removed from
+       * the document, so focus lands on `<body>` and the user's next keystroke goes nowhere.
+       *
+       * It survived two overlays only by accident: `picker.tsx` restores focus to whatever it
+       * captured on open, and that one last move woke the NEWCOMER's guard, which pulled the caret
+       * where it belonged. On the THIRD overlay the captured element is the FIRST overlay's input,
+       * by then detached, so the restore is skipped — nothing moves focus again and the accidental
+       * repair disappears. Measured: `Ctrl+Shift+T`, `Ctrl+Alt+T`, `Ctrl+G` left `document.
+       * activeElement` as `BODY`, in whichever order the three were pressed.
+       *
+       * So a dialog stands aside for a dialog. Only SIBLING dialogs are affected — a modal opened
+       * INSIDE this one is caught by the `root.contains` check above and never reaches here.
+       *
+       * `role="dialog"` as well as `aria-modal`, because the editor status strip's language picker
+       * is the one overlay of the four that does not claim modality: it is anchored to the strip
+       * rather than centred over the window, and it still takes the caret when it opens.
+       */
+      if (target?.closest(DIALOG_SELECTOR)) return;
       const items = focusables();
       (lastInside.current ?? items[items.length - 1] ?? root).focus();
     };
