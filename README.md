@@ -56,7 +56,8 @@ goal is to pull all of that into a single, simple customisable workspace.
 - **Focus and zoom** — one visible active panel per window, movable from the keyboard, with text zoom
   set independently per panel and panel names that are unique across the whole application.
 - **Preferences** — a single window with visual Settings, Key Bindings and Themes editors: typeahead
-  search, a raw-JSON toggle, immediate apply, and reset scopes from one item up to everything.
+  search, immediate apply, a raw-JSON toggle that applies when you leave it, and reset scopes from
+  one item up to everything.
 - **Themes and icon packs** — 14 bundled themes plus hot-reloading, user-editable theme, keybinding
   and icon-pack files that re-skin the whole application live, with contrast guarded automatically.
 - **Failures that name their cause** — errors say what is actually holding a locked file, raise one
