@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/032-settings-write-integrity/plan.md
+at specs/033-open-and-navigate/plan.md
 <!-- SPECKIT END -->
 
 ## Verifying done-ness
