@@ -1,8 +1,9 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { writeSettingsAtomic } from './helpers/config-write.js';
 
 // US2 (config half) / Plan Phase B (FR-010/010a/011/012): the Flavour dropdown is
 // real — machine-detected built-ins ∪ user-defined flavours from settings.json —
@@ -58,22 +59,21 @@ test('a user-defined flavour added to settings.json appears in the dropdown (hot
         // Not present until the user adds it.
         await expect(flavour.locator('option[value="my-wsl"]')).toHaveCount(0);
 
-        // Add a user flavour to settings.json → config hot-reload → it appears.
-        writeFileSync(
-          join(cfg, 'settings.json'),
-          JSON.stringify(
-            {
-              terminals: {
-                flavours: [
-                  { id: 'my-wsl', label: 'WSL: Ubuntu', file: 'wsl.exe', args: ['-d', 'Ubuntu'], defaultShellArguments: '--cd ~' },
-                ],
-              },
-            },
-            null,
-            2,
-          ),
-          'utf8',
-        );
+        /*
+         * Add a user flavour to settings.json → config hot-reload → it appears.
+         *
+         * ATOMICALLY (032 FR-013, G8): the app is running and watching this file. `writeFileSync`
+         * truncates before it fills, so the watcher can wake on the empty file, parse nothing,
+         * broadcast the shipped defaults, and never look again — the flavour is lost rather than
+         * late, and the spec fails claiming the dropdown does not honour user flavours.
+         */
+        writeSettingsAtomic(cfg, {
+          terminals: {
+            flavours: [
+              { id: 'my-wsl', label: 'WSL: Ubuntu', file: 'wsl.exe', args: ['-d', 'Ubuntu'], defaultShellArguments: '--cd ~' },
+            ],
+          },
+        });
         await expect(flavour.locator('option[value="my-wsl"]')).toHaveCount(1);
 
         // And it carries its own default Shell Arguments.
