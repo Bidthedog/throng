@@ -85,3 +85,6 @@ export {
 } from './rect-select.js';
 // What a selection seeds 013's find input with (016, FR-025i).
 export { seedFromSelections } from './seed-selection.js';
+// 033 US2 — what the Go To Line modal's raw input means: a clamped line, or null
+// for "do nothing" (contracts/navigation-modals.md §5).
+export { resolveGotoLine } from './goto-line.js';
