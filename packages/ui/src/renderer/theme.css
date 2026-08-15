@@ -2662,3 +2662,29 @@ textarea,
   opacity: 0.45;
   cursor: default;
 }
+
+/*
+ * 033 / FR-068 — the target button carries its explanation as TEXT beside its icon.
+ *
+ * A modifier on `.picker__header-button` rather than a class of its own, so the two header controls
+ * cannot drift apart on hover, focus or disabled treatment; this rule adds only what the words need.
+ * Colours are inherited from the base rule, so no theme token is read here and none is hard-coded.
+ *
+ * `min-width: 0` plus the label's `text-overflow` is what stops a very long panel name pushing past
+ * the card: `.picker` is a fixed-width `min(520px, 90vw)` surface with `overflow: hidden`, so an
+ * unbounded name would be silently cut off at the edge instead of ellipsised. Nothing sits to this
+ * button's right, and its height is fixed by the base rule, so the two sentences — which are
+ * different lengths — resize the button alone and never the modal.
+ */
+.picker__header-target {
+  gap: 6px;
+  min-width: 0;
+  padding: 0 8px;
+  justify-content: flex-start;
+}
+
+.picker__header-target-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

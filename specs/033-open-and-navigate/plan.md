@@ -146,7 +146,7 @@ specs/033-open-and-navigate/
 ├── data-model.md               # Phase 1
 ├── contracts/
 │   ├── file-index.md           # enumeration, ownership, delta protocol, IPC
-│   ├── picker-extensions.md    # the four new props and what they must not change
+│   ├── picker-extensions.md    # the five new props + one widened, and what they must not change
 │   ├── menu-sections.md        # the vocabulary, and every menu's item-by-item adjudication
 │   ├── navigation-modals.md    # Quick Open, Go To Line, the one-modal slot, remembering
 │   └── explorer-actions.md     # Open In → Terminal, and the two subtree actions

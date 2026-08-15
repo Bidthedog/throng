@@ -46,7 +46,16 @@ export function rankStable<T>(items: readonly T[], score: (item: T) => number): 
 | K5 | An empty query scores every entry equally, so the list is the seeded order in full | K6 (031) |
 | K6 | `rankStable` returns a new array and does not mutate its input | — |
 
-## 3. Renderer — the five new props
+## 3. Renderer — the five new props, and one widened
+
+*(Corrected 2026-08-15, baseline finding F8. This heading has said "four" and then "five"; the
+truthful count is **five added and one widened**, which is why neither number was ever right.)*
+
+`PickerProps` gains five optional members — `rank`, `maxRows`, `truncatedMessage`, `header`,
+`initialQuery` — and **`emptyMessage` widens from `string` to `ReactNode`**. The widening is the one
+change to an EXISTING member, and it is why "the N new props" undercounts the surface: a caller
+passing a string is unaffected, so `tab-picker.tsx` stays untouched and SC-013 holds, but the type a
+future caller may rely on is not the type this contract originally declared.
 
 ```ts
 export interface PickerProps {
