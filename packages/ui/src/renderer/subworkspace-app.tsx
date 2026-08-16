@@ -11,6 +11,7 @@ import { PanelDestroySync } from './workspace/panel-destroy-sync.js';
 import { PanelStateSync } from './workspace/panel-state-sync.js';
 import { EditorChrome } from './editor/editor-chrome.js';
 import { NavigationChrome } from './navigate/navigation-chrome.js';
+import { TransientScrim } from './common/transient-scrim.js';
 import { SearchKeybindings } from './search/search-keybindings.js';
 import { TitleBar } from './title-bar/title-bar.js';
 import { windowTitle } from './common/window-title.js';
@@ -129,7 +130,8 @@ export function SubWorkspaceApp({ subWorkspaceId }: { subWorkspaceId: string }):
           <EditorChrome isSubWorkspace />
           {/* 033 (#219) — the SECOND of the two mounts. A sub-workspace window is its own renderer
               realm, so a chord live only in the main window would be dead here (Assumption 6). */}
-          <NavigationChrome />
+          <TransientScrim />
+            <NavigationChrome />
           <SearchKeybindings />
           {/* Editor keybindings + save/discard/notice dialogs — so a sub-workspace-
               owned editor can be saved and destroyed here too (FR-077). */}

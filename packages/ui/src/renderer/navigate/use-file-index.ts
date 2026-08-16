@@ -81,6 +81,24 @@ export function useFileIndex(
 
     let live = true;
     /*
+     * True while this subscription is still showing the PREVIOUS key's paths.
+     *
+     * Keeping them in `setView` above was not enough on its own, and the reason is worth stating
+     * because it is the whole of the remaining flash. Two other paths blank the list, and both look
+     * correct in isolation:
+     *
+     *   - the `subscribe` reply below does `paths: initial.paths ?? []`, and a fresh subscription's
+     *     first reply is `{ status: 'building' }` with no paths at all;
+     *   - `applyIndexUpdate` implements FR-075 — a push carrying NEITHER a set nor a delta means
+     *     main has DISOWNED this index, so what is held is discarded.
+     *
+     * A brand-new subscription's opening message and a disown are the same shape. The difference is
+     * history: a disown can only follow a `ready` we have already been given for THIS key. So until
+     * the first `ready` arrives, a bare `building` means "still walking" and the carried-over list
+     * stays; afterwards it means what FR-075 says and the list goes.
+     */
+    let carriedOver = !rootChanged;
+    /*
      * True once a PUSH has been applied. The `subscribe` reply and the first push race — main
      * answers `{ status: 'building' }` and completes the walk moments later — and applying a stale
      * `building` reply on top of a delivered `ready` would blank a list the user is already reading.
@@ -99,6 +117,10 @@ export function useFileIndex(
        */
       if (!live || evt.root !== root || evt.includeHidden !== includeHidden) return;
       pushed = true;
+      // A bare `building` before this key has ever delivered a `ready` is the walk starting, not a
+      // disown — hold the carried-over list rather than blanking it (see `carriedOver` above).
+      if (carriedOver && evt.status === 'building' && !evt.paths && !evt.added && !evt.removed) return;
+      if (evt.status === 'ready') carriedOver = false;
       // The fold itself is pure and lives in core (FR-075) — including the rule that a push carrying
       // NEITHER a set nor a delta means main has disowned this one, so what is held is discarded.
       setView((current) => applyIndexUpdate(current, evt));
@@ -107,6 +129,10 @@ export function useFileIndex(
     void (async () => {
       const initial = await window.throng?.fileIndex?.subscribe?.(root, includeHidden);
       if (!live || !initial || pushed) return;
+      // Same rule as the push handler: an opening `building` with no paths must not blank a list
+      // carried over from the previous key, or the toggle flashes empty while main walks.
+      if (carriedOver && initial.status === 'building' && !initial.paths) return;
+      if (initial.status === 'ready') carriedOver = false;
       setView({ status: initial.status, paths: initial.paths ?? [] });
     })();
 
