@@ -379,6 +379,34 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
   });
 
   /*
+   * The root, in full — and this pin exists because the index assertion above could not have caught
+   * the drift that prompted it. US4 appended Collapse/Expand All Children to the TAIL of Navigate,
+   * which moves no boundary, so `[3, 6]` held before and after and said nothing about it. The E2E
+   * spec's root expectation was the only thing that noticed, at the most expensive layer there is.
+   *
+   * What this adds over the indices: that the root draws NO Destroy and NO View & state — you can
+   * neither delete nor hide the project root — and that the two subtree items are drawn HERE at all.
+   * The root is a folder, so it gets them by construction, and the spec's own edge case ("Collapse
+   * All Children on the project root: the root stays open — it is the tree") is only writable
+   * because it does.
+   */
+  it('the empty space (root): the whole shape — no Destroy, no Hide, subtree items closing Navigate', () => {
+    expect(shapeOf(explorerRoot())).toEqual([
+      'Paste',
+      'Undo',
+      'Redo',
+      '—',
+      'New File',
+      'New Folder',
+      '—',
+      'Open In',
+      'Copy Path',
+      'Collapse All Children',
+      'Expand All Children',
+    ]);
+  });
+
+  /*
    * The folder row, in full. It was asserted by a divider COUNT and by Delete's offset from New
    * Folder, which is a claim about two rows out of eighteen: every other label could move between
    * sections, or within one, and both assertions would still hold. Collapse/Expand All Children
