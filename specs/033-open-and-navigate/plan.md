@@ -455,6 +455,21 @@ const index    = includeHidden === defaultIncludeHidden ? standing : flipped;
 The second subscription exists only while the toggle differs from the setting, and dies with the
 modal. The common case pays nothing; the uncommon case pays a walk, once, visibly.
 
+> **CORRECTED 2026-08-16, from delivering it — the paragraph below is wrong.** FR-069d **did** need a
+> new mechanism, and the reason is that D2's own fix for the reported flash (F10) undermined the
+> claim. Once `navigation-chrome.tsx` borrows the previously-good list while the flipped subscription
+> builds, the list is no longer empty — and `picker.tsx` rendered its "still listing" line only as an
+> *alternative* to rows, never alongside them. So the state this paragraph relies on could not appear,
+> and for three commits `use-file-index.ts` carried a comment asserting a rendering that no code path
+> performed. A separate always-visible `notice` slot was added to `PickerProps` (a sixth optional
+> member — see `contracts/picker-extensions.md`), deliberately NOT by widening `emptyMessage`, which
+> would have put "No tabs match" over a populated tab list and broken SC-013.
+>
+> Worth recording as a shape, not just a fact: **the second fix invalidated the first design's
+> premise, and nothing failed** — the test that would have caught it lives in the serial tier, and two
+> gate runs died in the parallel tier before reaching it. It was found by reading the spec against the
+> code, not by running anything.
+
 **FR-069d needs no new mechanism.** A fresh subscription answers `{ status: 'building' }` with no
 paths (`file-index-ipc.ts:48`), and **FR-075**'s rule — the renderer discards what it holds on a
 non-`ready` push — turns that into FR-015's "Still listing this project's files…" state, already
@@ -676,3 +691,27 @@ the pointer is corrected rather than the claim quietly dropped.)*
 | **Context menus are transient overlays and are not registered** *(2026-08-15, D1)* | By D1's own test — a surface drawn over the window, dismissible without consequence — a context menu qualifies. It is left out because it already dismisses on any outside pointer or focus change and because FR-071 names three overlays. **Deferral**: owed to a tracked issue filed before this branch merges, so the omission is a decision on the record rather than an oversight | *Registering them now* — every menu in the app is being restructured by US5 in the same branch, and adding a dismissal path to that surface mid-restructure is how a menu ends up closing under its own submenu |
 | **Two window-level chord dispatchers, resolving differently** *(2026-08-15, F7)* | `app.tsx` and `navigation-chrome.tsx` both listen on `window` in the capture phase; the second is live only in sub-workspace windows and is **necessary**, because `subworkspace-app.tsx` mounts no `KeybindingsHandler` and Assumption 6 rejects a chord that works in one window and silently dies in the other. They agree for `Ctrl+Shift+T` and would diverge for a backtick or function-key chord — the table in D6 is the difference. **Deferral**: give the sub-workspace shell the shared dispatcher, owed to a tracked issue | *Consolidating here* — it would put a second window's entire chord surface at risk inside a feature that already touches every menu in the app, to fix a divergence no shipped chord currently reaches |
 | **`.icon-button` has no rule in the main window's stylesheet** *(2026-08-15, D5)* | `preferences.css` is imported only by the preferences window; the main window loads `theme.css` alone, which defines `.icon-button__badge` and no `.icon-button`. The delivered `QuickOpenTarget` passes `className="icon-button"` and therefore renders with nothing but user-agent styling. Found while checking which gates bind the new control — **no baseline finding names it**, because no gate can see it: every structural test reads selectors, and the defect is a selector that is never loaded | *Adding `.icon-button` to `theme.css`* as a general fix — it would restyle nothing else (every other main-window call site passes its own class) and would put a rule in the `ICON_EXCLUSION` set for one caller's benefit. The two header controls get their own class-scoped rules instead |
+
+### The deferrals above are tracked — filed 2026-08-16 (T104, T164)
+
+A cost recorded in a table nobody re-reads is a cost nobody pays. Each row above that defers real
+work now has an issue, so it survives this spec being closed:
+
+| Row | Issue | Type · milestone |
+|---|---|---|
+| A second recursive watch on the active project's root | [#272](https://github.com/Bidthedog/throng/issues/272) | Tweak · vNext |
+| `FilesService` and `ExplorerWatcher` stay single-root | [#273](https://github.com/Bidthedog/throng/issues/273) | **Bug** · vNext |
+| A THIRD recursive watch while the exclusion toggle is flipped (D2) | [#274](https://github.com/Bidthedog/throng/issues/274) | Tweak · vNext |
+| Two window-level chord dispatchers, resolving differently (F7) | [#275](https://github.com/Bidthedog/throng/issues/275) | Tweak · vNext |
+
+**#273 is filed as a Bug, not a deferral**, and the distinction matters: the other three are costs
+knowingly accepted for a working design, but a `files.*` call resolving against another project's
+root is a wrong result and a Principle I violation. Spec 033 fixed that class of problem **for Quick
+Open only**, by keying the index on root — so the two now disagree inside one window, which is the
+reason it is worth someone's attention rather than a footnote.
+
+One further issue came out of this feature without being a deferral at all:
+[#271](https://github.com/Bidthedog/throng/issues/271) (**Bug**, v1.0.0) — `parseAppSettings` handed
+callers the shipped default objects themselves. Pre-existing, unrelated to navigation, found by a
+test written for FR-058 and **fixed on this branch**. It is listed here because a defect found and
+repaired outside a feature's own scope is exactly the kind that otherwise leaves no trace.

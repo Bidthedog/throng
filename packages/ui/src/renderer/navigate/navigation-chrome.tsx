@@ -129,8 +129,19 @@ export function NavigationChrome(): ReactElement | null {
    *
    * So while the selected view is still building and holds nothing, the previously-good list is
    * shown instead. That is stale rather than false — same project, same rules, one filter narrower —
-   * and it is replaced the moment the real answer arrives. `status` stays `building` throughout, so
-   * anything keyed on "is it still listing?" is unaffected; only the paths are borrowed.
+   * and it is replaced the moment the real answer arrives.
+   *
+   * ══ THE BORROW IS ONLY LEGITIMATE BECAUSE THE STATUS TRAVELS WITH IT (FR-069d) ══
+   *
+   * `status` is taken from the SELECTED view and stays `building` while the paths come from the
+   * other one, and that pairing is the whole of the requirement. A borrowed list IS a partial list —
+   * one filter narrower than the one the user just asked for — so serving it unlabelled is exactly
+   * what FR-069d prohibits. `quick-open.tsx` turns the non-`ready` status into the picker's `notice`
+   * and `picker.tsx` draws a notice ALONGSIDE the rows, so the user reads "still listing this
+   * project's files…" over the narrower set for as long as the borrow lasts.
+   *
+   * The borrow shipped before that rendering did, and for those three commits it was the defect it
+   * was written to avoid, in the other direction: no blink, and no sign the list was provisional.
    */
   const selected = includeHidden === defaultIncludeHidden ? standing : flipped;
   const fallback = selected === standing ? flipped : standing;

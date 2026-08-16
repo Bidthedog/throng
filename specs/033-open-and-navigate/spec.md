@@ -685,6 +685,20 @@ are new.
 - **FR-069d**: If satisfying the toggle takes measurable time on a large project, the modal MUST show
   the same "still listing" state FR-015 already defines rather than presenting a partial list as
   whole. A toggle that silently serves a half-built set is worse than one that visibly waits.
+
+  > **CLARIFIED 2026-08-16, from delivering it.** "Rather than" above reads as *exclusive* — show the
+  > state **instead of** a list — and one test was written to that reading, asserting **zero rows**
+  > while the toggle settled. That is not what this requirement is for, and the exclusive reading is
+  > actively worse: emptying the list on the flip is precisely the blink a user reported (F10), and
+  > the fix for it was to keep showing the previously-good narrower list while the wider one builds.
+  >
+  > The prohibition is on presenting a partial list **as whole** — not on showing one at all. So the
+  > delivered behaviour is the still-listing state **accompanying** a provisional list, labelled as
+  > provisional, and that satisfies FR-069d: nothing is being passed off as complete. What remains
+  > forbidden is a narrower list with **no** indication it is still growing, and — the mirror image,
+  > which now also has a test — a "still listing" line left standing over a list that has settled.
+  >
+  > This cost a rendering slot the plan said would not be needed; see the correction beside D2 there.
 - **FR-070**: `**/node_modules` MUST join the shipped `DEFAULT_EXCLUDE_GLOBS`. **This changes the
   Files & Folders tree, not only this modal** — that is the intent, since FR-006's whole claim is
   that there is one answer to "is this file hidden?".

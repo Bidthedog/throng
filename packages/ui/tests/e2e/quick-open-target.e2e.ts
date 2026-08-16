@@ -793,6 +793,15 @@ test('flipping the toggle to SHOW excluded files never empties the list mid-flig
        * guard that cannot fail. Against the defect this test was written for, the count here is 0,
        * because the modal switches from the standing subscription to a second one that has never
        * held any paths, and the user sees the list blink empty before the wider set arrives.
+       *
+       * ══ THIS IS ONE HALF OF FR-069d, AND THE OTHER HALF IS NOT HERE ══
+       *
+       * Rows surviving the flip means the previous, NARROWER list is being borrowed while the wider
+       * index builds — and a narrower list served with nothing said is the very thing FR-069d
+       * forbids. What makes the borrow legitimate is the "still listing" line standing over it, and
+       * that pairing is asserted on the 12,000-file fixture in `quick-open-perf.e2e.ts`, where the
+       * walk is long enough to sample. This tree is small enough that the wider walk can finish
+       * inside a frame, so an assertion here on the line being up would be a race, not a guard.
        */
       await expect(hiddenToggle(win)).toHaveAttribute('data-value', 'include');
       const during = await quickOpenRows(win).count();
@@ -803,6 +812,10 @@ test('flipping the toggle to SHOW excluded files never empties the list mid-flig
 
       // And it still converges on the wider set, so "no flash" was not bought by never updating.
       await expect(quickOpenRows(win)).toHaveCount(before, { timeout: 10_000 });
+
+      // The borrow is TEMPORARY. A "still listing" line left standing over a settled list would be
+      // the mirror-image defect — a permanent caveat on an answer that is complete.
+      await expect(win.getByTestId('quickopen-building')).toHaveCount(0);
 
       await win.keyboard.press('Escape');
     });

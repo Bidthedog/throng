@@ -19,14 +19,15 @@
  *  - **It does not close on an empty result.** No match keeps the picker open and says so (K12), so
  *    a typo is a backspace rather than a re-open.
  *
- * ══ 033 (#219) — FIVE OPTIONAL PROPS, AND THE RULE THEY ALL OBEY ══
+ * ══ 033 (#219) — SIX OPTIONAL PROPS, AND THE RULE THEY ALL OBEY ══
  *
  * `contracts/picker-extensions.md §§3–4`. Quick Open needs ranking, a render cap, a line saying what
- * the cap hid, a control above the input and a seeded query. Every one of them is OPTIONAL and inert
- * when absent, because the governing constraint here is NEGATIVE: **a caller that passes none of
- * them must behave exactly as it does today**, and `tab-picker.tsx` passes none (SC-013). `rank`
- * above all — a picker that ranked unasked would reorder the tab strip under the user's arrow keys,
- * which is 031's K11 and the reason this file did not rank in the first place.
+ * the cap hid, a control above the input, a seeded query and a `notice` standing over the rows.
+ * Every one of them is OPTIONAL and inert when absent, because the governing constraint here is
+ * NEGATIVE: **a caller that passes none of them must behave exactly as it does today**, and
+ * `tab-picker.tsx` passes none (SC-013). `rank` above all — a picker that ranked unasked would
+ * reorder the tab strip under the user's arrow keys, which is 031's K11 and the reason this file did
+ * not rank in the first place.
  */
 import {
   useEffect,
@@ -71,11 +72,31 @@ export interface PickerProps {
   /**
    * Shown when the query matches nothing (K12).
    *
-   * A `ReactNode` rather than a `string` since 033: Quick Open's "still listing" state (FR-015, S3)
-   * belongs exactly here — in the space where results would be — and it carries a test id of its
-   * own. Widening a prop nobody passes an element to changes no existing caller.
+   * A `ReactNode` rather than a `string` since 033. Note what it is NOT: it is an either/or with the
+   * rows, so it can only ever describe a list that has nothing in it. A statement that must stand
+   * WHILE rows are on screen goes in `notice` below.
    */
   emptyMessage?: ReactNode;
+  /**
+   * A statement about the LIST ITSELF, rendered whenever it is present (033 FR-069d).
+   *
+   * Two properties, and both are the requirement rather than styling:
+   *
+   *  - **It is drawn alongside the rows, not instead of them.** `emptyMessage` cannot do this job —
+   *    it renders only at `visible.length === 0` — and that gap is exactly the hole FR-069d fell
+   *    through. Quick Open's exclusion toggle switches to a subscription that has never held a path,
+   *    so the previously-good list is BORROWED while the new one builds (`navigation-chrome.tsx`).
+   *    A borrowed list is one filter narrower than the one that was asked for, and showing it with
+   *    nothing said is precisely "presenting a partial list as though it were whole".
+   *  - **It sits OUTSIDE the scrolling list**, between the input and the rows, so arrowing down
+   *    cannot scroll the caveat off screen while the rows it qualifies stay on it.
+   *
+   * When it is present it also stands in for `emptyMessage`, because "no matches" is a claim about a
+   * finished set and this prop exists to say the set is not finished. Absent → nothing is rendered
+   * and the list behaves exactly as it did before, which is what keeps `tab-picker.tsx` untouched
+   * (SC-013).
+   */
+  notice?: ReactNode;
   /** Prefix for this instance's test ids, so two pickers on one screen stay distinguishable. */
   testId?: string;
   /**
@@ -128,6 +149,7 @@ export function Picker({
   onDismiss,
   placeholder = 'Type to filter…',
   emptyMessage = 'No matches',
+  notice,
   testId = 'picker',
   rank,
   maxRows,
@@ -218,6 +240,10 @@ export function Picker({
   }, [query]);
 
   const index = visible.length === 0 ? -1 : Math.min(highlighted, visible.length - 1);
+
+  // `null` is what a caller renders as "nothing to say", and must read the same as omitting the prop
+  // — otherwise a `null` notice would silently suppress `emptyMessage` and the picker would go blank.
+  const hasNotice = notice !== undefined && notice !== null;
 
   // Keep the highlighted row in view — arrowing past the bottom of a scrolling list must not require
   // the user to also scroll it.
@@ -325,8 +351,22 @@ export function Picker({
           }}
           onChange={(event) => setQuery(event.target.value)}
         />
+        {/*
+          FR-069d — the caveat that stands OVER the rows, outside the scroller.
+          `.picker__empty`'s padding and dim colour are the same visual role — a sentence in the
+          card rather than a choosable row — so it is reused rather than duplicated under a second
+          name. `aria-live` because the state it reports arrives after the modal has opened, and a
+          screen-reader user must not have to re-read the card to discover the list is provisional.
+        */}
+        {hasNotice ? (
+          <div className="picker__empty" data-testid={`${testId}-notice`} aria-live="polite">
+            {notice}
+          </div>
+        ) : null}
         <div className="picker__list" data-testid={`${testId}-list`} role="listbox" ref={listRef}>
-          {visible.length === 0 ? (
+          {/* `notice` outranks `emptyMessage`: "no matches" describes a FINISHED set, and the whole
+              reason a notice is up is that this one is not finished. */}
+          {visible.length === 0 && !hasNotice ? (
             <div className="picker__empty" data-testid={`${testId}-empty`}>
               {emptyMessage}
             </div>

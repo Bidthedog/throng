@@ -54,8 +54,24 @@ Corrected again 2026-08-16: Phase 8 widened a second existing member, `onChoose`
 **five added and two widened** — and the pattern of this heading being wrong is itself the argument
 for counting the widenings rather than only the additions.)*
 
-`PickerProps` gains five optional members — `rank`, `maxRows`, `truncatedMessage`, `header`,
-`initialQuery` — and **two existing members widen**: `emptyMessage` from `string` to `ReactNode`,
+> **CORRECTED AGAIN 2026-08-16 — there are now SIX added.** `notice?: ReactNode` was added while
+> delivering FR-069d, and the reason is worth more than the count. `emptyMessage` renders only when
+> the list is empty, and D2's flash fix made the list *never* empty during a toggle flip — so the
+> "still listing" line it was carrying could no longer appear at all. Widening `emptyMessage` to draw
+> alongside rows was **rejected**: it would put *"No tabs match"* over a populated tab list, breaking
+> SC-013 and the K12 meaning of that member. `notice` is a separate always-visible slot instead,
+> rendered **outside** `.picker__list` (which is `overflow-y: auto`, so a notice inside it scrolls off
+> under arrow-down while the rows it qualifies stay on screen), carrying
+> `data-testid="${testId}-notice"` and `aria-live="polite"`.
+>
+> Its one ordering rule: **`notice` outranks `emptyMessage`** when both would apply. "No files match"
+> is a claim about a finished set, and the only reason a notice is up is that the set is not finished.
+> `null` reads the same as omitting it, so a caller returning `null` for "nothing to say" cannot blank
+> the picker. With `notice` absent the list branch reduces to the exact expression it replaced, so
+> `tab-picker.tsx`'s rendered DOM is bit-for-bit unchanged.
+
+`PickerProps` gains six optional members — `rank`, `maxRows`, `truncatedMessage`, `header`,
+`initialQuery`, `notice` — and **two existing members widen**: `emptyMessage` from `string` to `ReactNode`,
 and `onChoose` from `(entry) => void` to `(entry, query) => void`. Those widenings are why "the N
 new props" undercounts the surface: a caller passing a string or ignoring a second argument is
 unaffected, so `tab-picker.tsx` stays untouched and SC-013 holds, but the type a future caller may

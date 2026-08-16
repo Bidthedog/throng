@@ -72,8 +72,11 @@ export function useFileIndex(
      * The distinction that matters is stale versus FALSE. Another project's files under this
      * project's name are false and must go. The same project's files under a slightly different
      * filter are merely stale, and holding them for the few hundred milliseconds the second walk
-     * takes is both honest and quiet — the `building` status still renders FR-069d's "still
-     * listing" line ALONGSIDE the list, so nothing claims the old answer is the new one.
+     * takes is honest ONLY BECAUSE SOMETHING SAYS SO. That something is not in this file: `status`
+     * stays `building` here, `quick-open.tsx` turns a non-`ready` status into the picker's `notice`,
+     * and `picker.tsx` renders a notice ALONGSIDE the rows rather than instead of them. All three
+     * are load-bearing — this comment previously claimed the line was rendered and no code path did
+     * it, which made a narrower list look like a complete one for as long as the walk took.
      */
     setView((current) =>
       rootChanged || current.status !== 'ready' ? BUILDING : { status: 'building', paths: current.paths },
