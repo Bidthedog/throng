@@ -760,3 +760,53 @@ test('the toggle is the target button’s sibling in the header, and is drawn ev
     cleanupDeepTree(tree);
   }
 });
+
+test('flipping the toggle to SHOW excluded files never empties the list mid-flight (FR-069d)', async () => {
+  const tree = createDeepTree('throng-qot-noflash-');
+  try {
+    await runApp(async (_app, win) => {
+      const pid = await editorWithProject(win, 'QOToggleNoFlash', tree.root);
+      await focusEditor(win, pid);
+      await openQuickOpen(win);
+
+      /*
+       * A query that matches whether or not hidden files are included, so the list has rows on BOTH
+       * sides of the flip. Without that the assertion below could not tell "blanked while the wider
+       * walk runs" from "this query legitimately matches nothing yet".
+       */
+      await win.getByTestId('quickopen-input').fill(DEEP_TREE.ranking.query);
+      await expect(hiddenToggle(win)).toHaveAttribute('data-value', 'exclude');
+      const before = await quickOpenRows(win).count();
+      expect(before, 'the query matched nothing before the flip — the fixture is wrong').toBeGreaterThan(0);
+
+      await hiddenToggle(win).click();
+
+      /*
+       * ══ WHY THIS ASSERTION IS SHAPED LIKE THIS ══
+       *
+       * Waiting for `data-value` to change is not decoration: it proves React has COMMITTED the
+       * render that the flip caused. Only then is `count()` — which does NOT retry, and so samples
+       * the DOM as it is right now — asking a meaningful question.
+       *
+       * Sampling immediately after the click instead would read the pre-flip DOM and pass against a
+       * broken build, which is the failure mode this whole feature has been repeatedly bitten by: a
+       * guard that cannot fail. Against the defect this test was written for, the count here is 0,
+       * because the modal switches from the standing subscription to a second one that has never
+       * held any paths, and the user sees the list blink empty before the wider set arrives.
+       */
+      await expect(hiddenToggle(win)).toHaveAttribute('data-value', 'include');
+      const during = await quickOpenRows(win).count();
+      expect(
+        during,
+        'the list emptied the moment the toggle flipped — that blink is the reported flash',
+      ).toBeGreaterThan(0);
+
+      // And it still converges on the wider set, so "no flash" was not bought by never updating.
+      await expect(quickOpenRows(win)).toHaveCount(before, { timeout: 10_000 });
+
+      await win.keyboard.press('Escape');
+    });
+  } finally {
+    cleanupDeepTree(tree);
+  }
+});
