@@ -230,15 +230,23 @@ export function QuickOpen({
       truncatedMessage={(shown, total) =>
         `Showing ${formatGrouped(shown)} of ${formatGrouped(total)} matches`
       }
+      emptyMessage="No files match"
       /*
-       * FR-015 / S3 — a modal opened before enumeration finishes SAYS SO, and then shows the real
-       * list. It renders where results would be, so the space is never occupied by a partial list
-       * presented as a whole one: while the walk is in flight there are no paths at all.
+       * FR-015 / S3 / FR-069d — a candidate set that is still being built SAYS SO, whether or not
+       * there are rows underneath it.
+       *
+       * It was `emptyMessage` until it had to cover both cases, and that was wrong in a way only the
+       * second case showed. Opened mid-walk there are no paths at all, so an either/or with the rows
+       * looked identical to this — but flipping the exclusion toggle borrows the previous list while
+       * the wider one builds (`navigation-chrome.tsx`), and the rows it borrows are one filter
+       * NARROWER than the ones asked for. With the line rendering only at zero rows the borrow was
+       * silent: a partial list presented as whole, which is the single thing FR-069d prohibits.
+       *
+       * `undefined` — not an empty string — once the index is ready, so the picker's own K12 "No
+       * files match" comes back for a query that genuinely matches nothing.
        */
-      emptyMessage={
-        index.status === 'ready' ? (
-          'No files match'
-        ) : (
+      notice={
+        index.status === 'ready' ? undefined : (
           <span className="picker__building" data-testid="quickopen-building">
             Still listing this project’s files…
           </span>

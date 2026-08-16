@@ -356,24 +356,37 @@ test('flipping the exclusion toggle on a large project SAYS it is still listing 
     await expect(quickOpenRows(win).first()).toBeVisible();
 
     /*
-     * FR-069d needs NO NEW MECHANISM, which is the design claim being tested (plan D2).
+     * ══ WHAT FR-069d ACTUALLY REQUIRES, AND WHAT THIS ASSERTION USED TO SAY INSTEAD ══
      *
-     * The flipped flag is a different subscription key, so it is a fresh index: main answers
-     * `{ status: 'building' }` with no paths, and FR-075's rule — a push carrying neither a set nor
-     * a delta means DISCARD — turns that into the "Still listing this project's files…" state
-     * FR-015 already built. If this assertion fails, the finding is not that the wait state is
-     * missing; it is that the flipped subscription is serving something stale.
+     * The prohibition is on presenting a PARTIAL list as though it were whole. This test used to
+     * read that as "there are no rows while it builds" and asserted `toHaveCount(0)` — which was a
+     * true description of the code on the day it was written and is not the behaviour the feature
+     * wants. Emptying the list is the reported flash (`quick-open-target.e2e.ts` owns that half), so
+     * the modal now BORROWS the previous, narrower list while the wider index builds.
+     *
+     * A borrowed list is a partial list. What makes it legitimate rather than a lie is that the
+     * "Still listing this project's files…" line stands over it the whole time — so the two things
+     * this samples are the rows AND the line, in one read, because either alone passes against a
+     * broken build: the line with no rows is the old blink, and the rows with no line are the
+     * silent partial list.
      */
     await win.getByTestId('quickopen-hidden').click();
     await expect(win.getByTestId('quickopen-hidden')).toHaveAttribute('data-value', 'include');
-    await expect(win.getByTestId('quickopen-building')).toBeVisible();
-
-    /*
-     * A PARTIAL list must never be presented as whole (S3). While the building state is up there
-     * are no rows at all — not a subset of the twelve thousand — which is the half a "shows a
-     * spinner eventually" assertion would miss.
-     */
-    await expect(quickOpenRows(win)).toHaveCount(0);
+    await expect
+      .poll(
+        async () =>
+          win.evaluate(() => ({
+            listing: document.querySelector('[data-testid="quickopen-building"]') !== null,
+            rows: document.querySelectorAll('[data-testid^="quickopen-row-"]').length > 0,
+          })),
+        {
+          timeout: 10_000,
+          message:
+            'the flipped toggle never showed rows and the "still listing" line at the same moment — ' +
+            'either the list blinked empty, or a narrower list was served with nothing saying so',
+        },
+      )
+      .toEqual({ listing: true, rows: true });
 
     await expect(win.getByTestId('quickopen-building')).toHaveCount(0, { timeout: 60_000 });
     /*
