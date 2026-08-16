@@ -119,7 +119,7 @@ async function toolbarNames(win: Page): Promise<string[]> {
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('with no project open the button is DRAWN AND DISABLED and the chord opens nothing — and both come alive once a project is opened (FR-018, FR-018c, V4, A5)', async () => {
+test('with no project open the button is DRAWN AND DISABLED, its tooltip says why and names no chord, and the chord opens nothing — and all three come alive once a project is opened (FR-018, FR-018c, FR-074, V4, A5)', async () => {
   const tree = createDeepTree('throng-qtb-noproject-');
   try {
     // Its OWN app, and this is the state that needs one: a shared app has had a project opened by
@@ -143,6 +143,32 @@ test('with no project open the button is DRAWN AND DISABLED and the chord opens 
       await expect(quickOpenToolbarButton(win)).toBeVisible();
       await expect(quickOpenToolbarButton(win)).toBeDisabled();
 
+      /*
+       * FR-074 — and the DISABLED tooltip says WHY, and names NO chord.
+       *
+       * FR-018a on its own requires the title to carry the command's current chord; FR-074 narrows
+       * that to "whenever the button can act", because a disabled control should answer "why can I
+       * not use this?" rather than recite a shortcut that would do nothing. Both halves are asserted,
+       * because either alone passes for the wrong reason: a title that merely omitted the chord could
+       * be empty, and a title that merely explained itself could still trail "(Ctrl+Shift+T)".
+       *
+       * The chord is read from `QUICK_OPEN_CHORD` in the form the tooltip renders it, so a rebind of
+       * the default cannot leave this assertion checking a string nothing produces any more.
+       */
+      const disabledTitle = (await quickOpenToolbarButton(win).getAttribute('title')) ?? '';
+      const shownChord = QUICK_OPEN_CHORD.replace('Control', 'Ctrl');
+      expect(disabledTitle, 'the disabled tooltip must still name the action').toContain(
+        'Quick Open',
+      );
+      expect(
+        disabledTitle,
+        'FR-074 — a disabled Quick Open button must say WHY it cannot be used',
+      ).toContain('no project is open');
+      expect(
+        disabledTitle,
+        'FR-074 — a disabled button must NOT recite a chord that would do nothing',
+      ).not.toContain(shownChord);
+
       // A5 — the chord opens nothing either, and never lists a previous project's files.
       await win.keyboard.press(QUICK_OPEN_CHORD);
       await expect(win.getByTestId('quickopen')).toHaveCount(0);
@@ -157,6 +183,20 @@ test('with no project open the button is DRAWN AND DISABLED and the chord opens 
        */
       await newProject(win, 'QOToolbarNoProject', tree.root);
       await expect(quickOpenToolbarButton(win)).toBeEnabled();
+
+      /*
+       * FR-074's OTHER half, on the SAME button in the SAME app: once it can act, the chord is back.
+       *
+       * Without this the disabled assertion above is indistinguishable from a tooltip that never
+       * names a chord at all — which would satisfy "a disabled button says why" while breaking
+       * FR-018a everywhere else. The pair is what makes FR-074 a narrowing rather than a removal.
+       */
+      await expect(quickOpenToolbarButton(win)).toHaveAttribute(
+        'title',
+        new RegExp(shownChord.replace(/\+/g, '\\+')),
+      );
+      await expect(quickOpenToolbarButton(win)).not.toHaveAttribute('title', /no project is open/);
+
       await openQuickOpen(win);
       await win.keyboard.press('Escape');
       await expect(win.getByTestId('quickopen')).toHaveCount(0);

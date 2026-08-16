@@ -158,7 +158,7 @@ Enter on the header's control to change that control and open nothing.
 | `rank` | `rankFilePath` |
 | `maxRows` | `QUICK_OPEN_MAX_ROWS` (200), exported from `@throng/core` |
 | `truncatedMessage` | `(shown, total) => \`Showing ${shown} of ${total} matches\`` |
-| `header` | the target control — **only** when invoked from inside an editor panel (FR-011) |
+| `header` | the target control **and** the exclusion toggle. *(Corrected 2026-08-16: this row read "the target control — **only** when invoked from inside an editor panel (FR-011)". The header is built **unconditionally** now — FR-069's toggle lives in it and is always drawn. FR-011 still governs the **target control** inside the header, which is what that clause was about; it never governed the header itself, and once the toggle arrived the two stopped being the same thing.)* |
 | `initialQuery` | the remembered query — only when its setting is on and a value is held (FR-057, FR-060) |
 | `emptyMessage` | `'No files match'` (FR-006 of 031's K12: the modal stays open and says so) |
 | `placeholder` | `'Type part of a file path…'` |

@@ -135,6 +135,25 @@ export function useFileIndex(
 | R5 | **Typing performs no IPC.** The candidate array is already in memory; a keystroke reads it and nothing else | FR-013, SC-002 |
 | R7 | A push carrying **neither `paths` nor a delta** means main has **disowned** this index (S11), and the renderer MUST **clear what it holds** — not keep it under a changed status | FR-075 |
 | R8 | A push is applied only when **both** `root` and `includeHidden` match this subscription | FR-069 |
+| R7a | **One exception to R7**, added 2026-08-16: a bare `building` push arriving **before this subscription's first `ready`** is ignored rather than clearing, when the view is carrying paths from the key it just switched away from | FR-069d |
+
+**R7a exists because R7 and the flash fix want opposite things for one frame.** `use-file-index.ts`
+tracks `carriedOver`: when the exclusion toggle changes the subscription key, the hook keeps the old
+key's paths so the list does not blink empty, and a bare `building` push in that window would clear
+exactly what the borrow is preserving. R7 is about main **disowning an index the renderer was
+trusting**; this push is about an index the renderer has not started trusting yet, so the two are not
+in conflict once the distinction is written down — which, until now, it was not.
+
+Two things keep this from weakening R7. The exception ends at the first `ready` for the new key, and
+it applies only while `carriedOver` is set, so a genuine S11 disown on an established subscription
+still clears. And the paths borrowed this way are never presented as complete: FR-069d requires the
+"still listing" notice to be drawn **alongside** them (see `picker.tsx`'s `notice` slot).
+
+**With the current two-hook wiring in `navigation-chrome.tsx` this exception is unreachable** — the
+flipped hook goes inactive→active, so `rootChanged` is already true and the paths are dropped by that
+route instead. It is documented rather than deleted because the hook is written to be usable with a
+single re-pointed subscription, which is the shape [#274](https://github.com/Bidthedog/throng/issues/274)
+proposes, and under that shape it is load-bearing.
 
 **R7 is stated because its absence was a defect (finding F2), not because it is obvious.** S11 is the
 main-side half: the watch has failed for good, so the root goes back to `building` with an empty
