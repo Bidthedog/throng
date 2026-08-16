@@ -134,7 +134,9 @@ export function GotoLine({
 
   return (
     <div
-      className="modal-overlay"
+      // `--transient`: see picker.tsx. The scrim comes from the overlay registry, not from here, so
+      // handing off to or from another overlay cannot leave a frame with no scrim at all.
+      className="modal-overlay modal-overlay--transient"
       data-testid="gotoline-overlay"
       // `mousedown`, not `click`: a press that STARTED in the field and finished on the scrim (a
       // drag-select across the input) is not a dismissal, and `click` cannot tell them apart.

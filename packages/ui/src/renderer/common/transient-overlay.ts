@@ -51,6 +51,37 @@ import { useEffect, useRef } from 'react';
 let current: { token: object; dismiss: () => void } | null = null;
 
 /**
+ * The class that paints the scrim, on `<body>` rather than on each overlay's own element.
+ *
+ * ══ WHY THE SCRIM CANNOT BELONG TO THE OVERLAY ══
+ *
+ * It used to: every overlay rendered its own `.modal-overlay`, each carrying the 50% black. That is
+ * fine for a single dialog and wrong for a HAND-OFF. Cycling between overlays that live in different
+ * component trees — the tab picker is inside `tab-group.tsx`, Quick Open and Go To Line inside the
+ * navigation chrome — lets React commit the outgoing unmount and the incoming mount in SEPARATE
+ * frames. For that one frame no scrim exists anywhere, and the whole window jumps to full brightness
+ * and back: a flash, intermittent, and only ever on a cross-tree swap, which is exactly what a user
+ * reported after living with it.
+ *
+ * The slot above is already continuous across a hand-off — the claim is written before the incumbent
+ * is dismissed — so hanging the scrim on the SLOT rather than on the overlays removes the gap by
+ * construction instead of racing it. There is exactly one scrim while any overlay is up, and it does
+ * not blink when one replaces another.
+ *
+ * `.modal-overlay` keeps its own background for the dialogs that are NOT in this registry — confirm,
+ * project settings, the app-close prompt. Those are one-at-a-time by nature and never hand off.
+ */
+const SCRIM_CLASS = 'transient-overlay-open';
+
+function syncScrim(): void {
+  // The registry is exercised by the unit tier, which runs `environment: 'node'` — there is no
+  // `document` at all there, and naming it throws before any optional chain can help. The claim
+  // logic is the part those tests are about; the scrim is a renderer-only side effect.
+  if (typeof document === 'undefined') return;
+  document.body?.classList.toggle(SCRIM_CLASS, current !== null);
+}
+
+/**
  * Claim the window's one overlay slot, dismissing whichever overlay held it.
  *
  * Returns the release to call when this overlay closes or unmounts. Calling it more than once, or
@@ -60,6 +91,7 @@ export function claimTransientOverlay(dismiss: () => void): () => void {
   const token = {};
   const incumbent = current;
   current = { token, dismiss };
+  syncScrim();
   if (incumbent) {
     try {
       incumbent.dismiss();
@@ -72,7 +104,9 @@ export function claimTransientOverlay(dismiss: () => void): () => void {
     }
   }
   return () => {
-    if (current?.token === token) current = null;
+    if (current?.token !== token) return;
+    current = null;
+    syncScrim();
   };
 }
 

@@ -48,6 +48,8 @@ const REGISTERED: Readonly<Record<string, string>> = {
   // Not anchored to anything, so there is no edge to flip away from: these are centred or corner-pinned
   // overlays that cover the window by design, and clamping is the browser's job.
   '.modal-overlay': 'a full-viewport scrim — centred, nothing to flip away from',
+  '.transient-overlay-open':
+    'common/transient-overlay.ts — the ONE scrim shared by every registry-held overlay, painted from <body> so a hand-off between two overlays in different component trees cannot leave a frame with no scrim at all; inset:0, so nothing to flip away from',
   '.notices':
     'corner-pinned toast stack — a fixed width and a max-height of the viewport clamp it, and the oldest scrolls out of the top rather than the newest being pushed off; nothing to flip away from',
   '.drag-ghost': 'follows the pointer by design — it is meant to leave the window',
