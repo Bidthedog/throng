@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { MENU_SECTION_ORDER, groupBySection, type MenuSection } from '@throng/core';
 
@@ -48,6 +50,40 @@ describe('MENU_SECTION_ORDER (033 menu-sections.ts)', () => {
     expect(at('navigate')).toBeLessThan(at('viewState'));
     expect(at('create')).toBeLessThan(at('destroy'));
     expect(at('content')).toBeLessThan(at('create'));
+  });
+
+  /*
+   * The LINKAGE, not the contents.
+   *
+   * The three assertions above pin what the array holds today, and every one of them survives the
+   * `MenuSection` union growing an eighth member — which is precisely the change that breaks the
+   * menus. `groupBySection` emits by walking `MENU_SECTION_ORDER`, so a section in the union with
+   * no place in the array has no bucket to be emitted from and every item declaring it disappears
+   * from its menu, silently: no compile error under a `readonly MenuSection[]` annotation, no
+   * runtime error, and a green suite.
+   *
+   * `menu-sections.ts` now makes that a COMPILE error (`EveryMenuSectionIsOrdered`). This asserts
+   * the same thing from the outside — reading the union out of the source rather than trusting a
+   * hand-copied list — so the guarantee survives the type check being loosened, the annotation
+   * being "simplified" back, or the two lists drifting for any other reason. A type-level guard
+   * that nothing tests is one refactor away from being decoration.
+   */
+  it('lists EVERY member of the MenuSection union — nothing may be declared and left unordered', () => {
+    const source = readFileSync(
+      fileURLToPath(new URL('../../src/workspace/menu-sections.ts', import.meta.url)),
+      'utf8',
+    );
+    const start = source.indexOf('export type MenuSection =');
+    const union = source.slice(start, source.indexOf('const ORDER =', start));
+    expect(start, 'the MenuSection union was not found where this test expects it').toBeGreaterThan(
+      -1,
+    );
+    const declared = [...union.matchAll(/\|\s*'([a-zA-Z]+)'/g)].map((m) => m[1]!);
+
+    expect(declared.length, 'no union members parsed — has the declaration moved?').toBeGreaterThan(
+      0,
+    );
+    expect([...declared].sort()).toEqual([...MENU_SECTION_ORDER].sort());
   });
 });
 

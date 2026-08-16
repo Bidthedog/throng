@@ -127,6 +127,7 @@
     "theme-sizes-and-notices.e2e.ts",
     "titlebar-chrome.e2e.ts",
     "transient-overlays.e2e.ts",
-    "ux-refinements.e2e.ts"
+    "ux-refinements.e2e.ts",
+    "window-chord-resolution.e2e.ts"
   ]
 }

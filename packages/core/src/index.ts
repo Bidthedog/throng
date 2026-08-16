@@ -565,6 +565,7 @@ export {
   captureLogLine,
   resolveStartDirectory,
   fallbackToReport,
+  requestedStartDirectory,
   MAX_CAPTURABLE_COMMAND_LENGTH,
   quoteDropPath,
   formatDroppedPaths,

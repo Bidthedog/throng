@@ -43,7 +43,7 @@ focusPanel(id)                                              → and it takes KEY
 | B3 | It takes **keyboard focus**, so the next keystroke reaches the shell with no intervening click. Focus does not remain in the tree | FR-033a, SC-015 |
 | B4 | The start directory is the right-clicked **folder**, or a right-clicked **file's parent folder** | FR-031 |
 | B5 | `startDirectory` is persisted on `TerminalPanelConfig`, so a restored panel restarts where it was created | FR-033 |
-| B6 | The cwd is resolved by the shipped `resolveStartDirectory(root, requested, dirExists)` with `requested = rememberedCwd ?? startDirectory`. **Containment is therefore inherited**: a path resolving outside the project root is refused and the root is used instead | FR-032 |
+| B6 | The cwd is resolved by the shipped `resolveStartDirectory(root, requested, dirExists)` with `requested = rememberedCwd ?? startDirectory`. **Containment is therefore inherited**: a path resolving outside the project root is refused and the root is used instead — including one that walks out with `..`, see the amendment below | FR-032 |
 | B7 | A start directory that no longer exists at launch falls back to the project root and **says what was substituted**, via the shipped `fallbackToReport` → `cwdFallback` on the attach envelope | FR-034 |
 | B8 | Nothing about the flavour catalogue or its configuration UI changes | FR-037 |
 | B9 | The terminal starts in the right-clicked folder for **every enabled flavour on the machine** | SC-008 |
@@ -65,6 +65,27 @@ existence check, the fallback, the report — is untouched, which is the point.
 > back to `requestPanelFocus(id)` — issue 144's parking mechanism, built for precisely this async
 > gap — when it returns false. A strict superset of the step, never a replacement for it.
 >
+> > **AMENDED 2026-08-16, from an adversarial review.** The fallback described above was **inert as
+> > first written**, and the paragraph claimed a mechanism that did not run. `terminal-panel.tsx`
+> > declared its `registerPanelFocus` effect *before* `useTerminal`, and effects run in declaration
+> > order — so the registration happened before `apiRef.current` existed. `registerPanelFocus` fires a
+> > parked request immediately and clears the one-shot, so the request was spent on a callback that
+> > read a null ref and did nothing. B3 still rested entirely on `focusIfActive`, which is the accident
+> > the fallback was added to remove.
+> >
+> > The fix is ordering, not a new mechanism: that effect now sits **after** `useTerminal` and is gated
+> > on `container`. Both are needed. Declaration order alone is insufficient because `container`
+> > arrives via `ref={setContainer}`, so `useTerminal`'s mount effect returns early on the first
+> > passive flush and `apiRef` is null in it regardless of order; gating means the first registration
+> > happens on the flush that actually built the terminal. **The parked request now lands on a live
+> > `apiRef`, and B3 is delivered by the step the sequence credits.** The three files carry comments
+> > saying so — moving that effect back above `useTerminal` silently re-breaks this.
+> >
+> > Also recorded rather than changed: `pendingFocusPanelId` is a **single global slot**, so a second
+> > `requestPanelFocus` discards the first. That is the right semantic — focus is singular and the
+> > later request is the more recent statement of intent — and it is now stated in
+> > `workspace/panel-focus.ts` instead of being an unremarked property of the implementation.
+>
 > **B7 is not inherited by leaving that path untouched — the *value* has to flow.** `fallbackToReport`
 > read `req.rememberedCwd` directly, so a `startDirectory` pointing at a folder deleted between the
 > right-click and the launch would have fallen back to the project root **silently**, which FR-034
@@ -72,6 +93,33 @@ existence check, the fallback, the report — is untouched, which is the point.
 > `const requestedCwd = req.rememberedCwd ?? req.startDirectory`, and passed to both calls. No logic
 > inside either function changed. "Untouched and therefore inherited" holds for the containment and
 > existence checks; it was false for the report.
+>
+> > **AMENDED 2026-08-16, from an adversarial review.** Two things this correction claimed were
+> > covered, were not.
+> >
+> > **The `..` hole in the containment B6 inherits.** `isUnderPath` (`packages/core/src/fs/path-id.ts`)
+> > was a string-prefix rule: it normalised separators and case and then asked `startsWith(folder + '/')`.
+> > `C:/project/../../Windows/System32` passed against root `C:/project`, and `statSync` in
+> > `terminal-ipc.ts` — and then the shell — resolved the `..` and started outside the project root.
+> > This never mattered before 033 because `rememberedCwd` is the daemon's read of a live OS process's
+> > working directory and cannot contain a `..`; **`startDirectory` is the first value on this path
+> > that comes from user-editable persisted config** (the workspace layout JSON). The threat model is
+> > weak — anyone editing that file can do worse — but `panel-type.ts` says "nothing here is trusted"
+> > and B6 says containment "is therefore inherited", and both were stronger than the code. A `..`
+> > **path segment** on either side is now refused before the prefix check, deliberately rather than
+> > resolved: this module has no filesystem, resolution is platform behaviour it does not have, and
+> > "refuse and fall back to the project root" is the right answer for a path it cannot evaluate. Names
+> > that merely contain dots (`..config`, `a..b`) are untouched — it is a segment rule.
+> >
+> > **FR-032 and FR-034 were untested at every layer.** Part C claimed a `startDirectory` containment
+> > case had been added to `start-directory.test.ts`; it had not, and neither that file nor
+> > `cwd-fallback-report.test.ts` was touched by 033. Reverting the hoisted `requestedCwd` above — the
+> > defect this very correction was written to record — left the whole suite green. Both files now
+> > carry the cases, `path-id.test.ts` carries the `..` cases, and **one gap is recorded rather than
+> > closed**: the precedence expression itself (`rememberedCwd ?? startDirectory`) lives in an Electron
+> > IPC handler, so the unit tests MIRROR it and cannot fail on that revert. The honest fix is to move
+> > `requestedCwd` into `packages/core/src/terminal/start-directory.ts` beside the two functions it
+> > feeds and have `terminal-ipc.ts` call it; `cwd-fallback-report.test.ts` says so at the mirror.
 >
 > **AS-6 / A3 ("no active project") is not reachable from this menu at all.**
 > `panes/file-explorer-pane.tsx` mounts `FileTree` only when a project is active, so with no project
@@ -112,7 +160,7 @@ Both actions go through `use-explorer-data.ts` and use the **same** `ensureLoade
 
 | # | Guarantee | Requirement |
 |---|---|---|
-| D1 | **Collapse All Children** closes every expanded descendant at every depth and leaves the anchor **open** | FR-039, AS-4 |
+| D1 | **Collapse All Children** closes every expanded descendant at every depth and leaves the anchor **open**. "Expanded" means expanded **and reachable through open ancestors** — see the amendment below | FR-039, AS-4 |
 | D2 | On a folder with nothing expanded beneath it, nothing changes and nothing errors | FR-040 |
 | D3 | On the project **root**, the root stays open — it is the tree | Edge Cases |
 | D4 | **Expand All Children** opens the anchor's immediate child folders only | FR-041 |
@@ -127,13 +175,35 @@ Both actions go through `use-explorer-data.ts` and use the **same** `ensureLoade
 > different from the one that exists. The requirements are unchanged; what changes is where each one
 > is actually enforced.
 >
-> **D7 names the wrong filter, and following it literally would have shipped a defect.**
-> `fetchChildren` filters by `isExcluded(relPath, globs)` **only**. The per-project hidden paths are
-> applied much later, in the `data` `useMemo` via `hiddenSet` — so `childrenMap`, which is exactly
-> what `expandChildren` reads, **still contains hidden folders**. Had the implementation trusted
-> D7's "so an excluded folder is not in the tree to expand", *Hide in this project* on a folder would
-> have been silently defeated by Expand All Children. `expandChildren` filters `hiddenSet`
-> explicitly. FR-044 holds; D7's account of why it holds did not.
+> ~~**D7 names the wrong filter, and following it literally would have shipped a defect.**~~
+> **D7 names the wrong filter.** `fetchChildren` filters by `isExcluded(relPath, globs)` **only**. The
+> per-project hidden paths are applied much later, in the `data` `useMemo` via `hiddenSet` — so
+> `childrenMap`, which is exactly what `expandChildren` reads, **still contains hidden folders**.
+> ~~Had the implementation trusted D7's "so an excluded folder is not in the tree to expand", *Hide in
+> this project* on a folder would have been silently defeated by Expand All Children.~~ `expandChildren`
+> filters `hiddenSet` explicitly. FR-044 holds; D7's account of why it holds did not.
+>
+> > **AMENDED 2026-08-16, from an adversarial review — the struck sentence above was WRONG, and it is
+> > marked rather than deleted because it is the kind of wrong that reads as obviously true.**
+> >
+> > *Hide in this project* could not have been defeated. `data`'s builder
+> > (`use-explorer-data.ts`, the `useMemo` at `build(dir)`) filters `hiddenSet` at **every level**, so a
+> > hidden folder is dropped from its parent's children whatever its open state. `api.open('branch/secret')`
+> > on a folder that is absent from `data` sets an open-map key that renders nothing, and `snapshotOpen`
+> > walks `api.root` and never sees it — so it is not even persisted. **The real cost of removing the
+> > `hiddenSet` filter is one wasted directory listing**, not a hidden folder appearing.
+> >
+> > The filter stays: issuing a `files.list` for a folder the project has hidden is work for a result
+> > nothing can display, and D7's requirement is still the requirement. What changes is the reason to
+> > keep it — cheap and correct, not load-bearing — and anyone who deletes it should expect no visible
+> > symptom, which is precisely why the true account had to replace the dramatic one.
+> >
+> > **The filter is still uncovered.** `subtree-expand-collapse.e2e.ts` exercises a glob-excluded
+> > `node_modules` and never a per-project hidden folder, so nothing in the suite touches `hiddenSet`
+> > on this path at all. That gap is real and is NOT closed here (the review that found it fenced the
+> > E2E file off to another author); the cheapest layer that reproduces it is a renderer unit test over
+> > the composition `immediateChildFolders(anchorView, relPath).filter((r) => !hiddenSet.has(r))`,
+> > alongside `packages/ui/tests/unit/explorer-subtree-menu.test.ts`.
 >
 > **D4/D5 assume a rendered view the renderer cannot produce on the tick the action runs.** The
 > chevron and `expandStep` paths compute their targets from the *rendered* tree, which is safe for
@@ -155,6 +225,34 @@ Both actions go through `use-explorer-data.ts` and use the **same** `ensureLoade
 > arrived. It is purely additive — every existing caller ignores the return and behaves identically —
 > but it is a shared function on the toolbar's path, so D9's "unchanged in code" is true of
 > `expandStep` itself and not of every line it calls.
+>
+> > **AMENDED 2026-08-16, from an adversarial review.** Two decisions, both recorded because the code
+> > alone would not explain either.
+> >
+> > **D1 — what "expanded" means, decided.** A descendant behind a **closed** ancestor is not
+> > collapsed by this action, and `persist` still records it as open. Repro: open `a`, open `a/b`,
+> > close `a`, right-click `a` → Collapse All Children — nothing happens, `a/b` stays `true` in the
+> > open map and in `localStorage`, and reopening `a` shows `b` expanded. **This is intended.**
+> > "Expanded" in FR-039 means expanded *and on screen*: the requirement is written for a folder the
+> > user can see and act on, which is why its other half is "leave the folder **itself open**" — a
+> > clause that means nothing for an anchor that was already closed. Collapsing an ancestor has
+> > already achieved everything the user can observe. The recorded state beneath it is the tree's
+> > MEMORY, which 026 / #197 deliberately preserves so reopening a folder restores its shape; pruning
+> > it would make a collapse the user aimed at one visible folder quietly rewrite state for folders
+> > they cannot see. The two halves are one mechanism — `toExpandNode` gives a closed folder
+> > `children: undefined` per `expand.ts`'s convention, and `snapshotOpen` records `isOpen` regardless
+> > of ancestry — and `collapseChildren` now carries this reasoning in full.
+> >
+> > **D9 takes a second, narrower exemption: one `.catch` on `expandStep`.** `expandStep`'s
+> > `Promise.all(...).then(...)` had no rejection handler, and neither did `expandChildren`'s
+> > `void (async () => …)()`. A `files.list` that REJECTS — rather than resolving with the `error`
+> > `fetchChildren` already reports — escapes both as an unhandled rejection: no opens, no notice, no
+> > trace, and a suite that passes straight through it. Fixing only the new copy of a shared shape
+> > would leave the defect exactly where it started, so both now log via `console.error` (a raw error
+> > string on screen is what the failure model forbids, and "the tree did not expand" is what the user
+> > actually sees). D9's "unchanged in behaviour" holds — nothing on the success path moved — but
+> > "unchanged in code" is now false of `expandStep` itself, and that is stated here rather than
+> > slipped in.
 
 ### B.3 Where the items are drawn
 
@@ -174,4 +272,19 @@ Both actions go through `use-explorer-data.ts` and use the **same** `ensureLoade
 | SC-015 (typed input with no intervening click, every flavour) | **E2E** | Immediately after launch, `keyboard.type` and assert the characters reach the shell |
 | SC-009 (zero folders open with unloaded children) | **unit + E2E** | Unit: `immediateChildFolders` / `descendantOpenFolders` over fixtures. E2E: after both actions, assert every open folder renders at least one child or is genuinely empty on disk — the desync that produced #120 |
 | FR-045 (persistence) | **E2E** | Run an action, switch project and return; then reload the window; assert the same open state both times |
-| FR-032 (containment) | **unit** | `resolveStartDirectory` already has this coverage; a case is added for a `startDirectory` outside the root |
+| FR-032 (containment) | **unit** | `resolveStartDirectory` already has this coverage; ~~a case is added for a `startDirectory` outside the root~~ — see the amendment below |
+| FR-034 (the substitution is announced) | **unit** | `cwd-fallback-report.test.ts`: no memory + a gone `startDirectory` reports the start directory; memory + a start directory reports the remembered one |
+
+> **AMENDED 2026-08-16, from an adversarial review.** The FR-032 row described work that had not been
+> done: `git diff origin/master...HEAD` touched neither `start-directory.test.ts` nor
+> `cwd-fallback-report.test.ts`, and the only occurrences of `startDirectory` anywhere in the tests
+> asserted that the string appears in persisted JSON. The cases are there now — containment for a
+> `startDirectory` outside the root, for a prefix-sibling, and for one that walks out with `..`
+> (`start-directory.test.ts`); the two FR-034 report cases and the honoured/escaped silences
+> (`cwd-fallback-report.test.ts`); the `..` segment rule itself (`path-id.test.ts`).
+>
+> One gap is left open and named rather than papered over: the precedence expression
+> `rememberedCwd ?? startDirectory` lives in `terminal-ipc.ts`, not in core, so the unit tests mirror
+> it and **cannot fail if that line is reverted**. Move `requestedCwd` into
+> `packages/core/src/terminal/start-directory.ts` and have the handler call it, and the mirror can be
+> deleted for the real thing.

@@ -17,10 +17,19 @@ import { childFolders, findNode, type ExpandNode } from './expand.js';
  * outliving its parent's collapse.
  *
  * The anchor is excluded, which is what leaves the folder itself open (C1).
- * Returns `[]` when nothing beneath it is expanded, when the anchor is closed
- * (a closed folder carries no loaded children), when it is a file, and when it
- * is not in the tree — in each case the caller changes nothing and errors on
+ * Returns `[]` when nothing beneath it is expanded, when it is a file, and when
+ * it is not in the tree — in each case the caller changes nothing and errors on
  * nothing (C3).
+ *
+ * A CLOSED anchor yields `[]` as well, and that is the CALLER's precondition
+ * rather than a check made here — this function never reads `anchor.open`. It
+ * holds because `ExpandNode.children` is loaded only for open folders (see
+ * `expand.ts`), so a closed anchor has nothing to walk; `use-explorer-data.ts`
+ * builds `children: undefined` for one, and `immediateChildFolders` below rests
+ * on the same invariant. Left as a precondition deliberately: a guard would be a
+ * second copy of something the view type already declares, and it would have to
+ * decide what a closed folder carrying loaded children means — a shape no caller
+ * in this codebase can produce, and which YAGNI says not to answer for.
  */
 export function descendantOpenFolders(root: ExpandNode, relPath: string): string[] {
   const anchor = findNode(root, relPath);

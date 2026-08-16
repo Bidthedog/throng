@@ -880,12 +880,23 @@ are new.
   | Spec | Change | Why it is required, not incidental |
   |---|---|---|
   | `context-menu-sections.e2e.ts:49` | The assertion that a folder's Open In submenu holds *exactly one* item | US3 adds Terminal to that submenu by design (FR-029) |
-  | `menu-keyboard.e2e.ts` | The vacuous focus guard is replaced, and the FR-051 divider-skip assertion is added | FR-053a requires exactly this, and it is the spec that drives menu keyboard navigation |
+  | `menu-keyboard.e2e.ts` | The vacuous focus guard is replaced | FR-053a requires exactly this, and it is the spec that drives menu keyboard navigation |
 
   *(Corrected 2026-08-15 — twice. As first written the criterion admitted no exceptions and could not
   hold; the first correction named one and missed that FR-053a mandates the second. An unachievable
   success criterion is worse than none, because it gets quietly reinterpreted at the moment it fails
   rather than challenged.)*
+
+  *(Corrected 2026-08-16 — the second permitted change was **half** taken. This row licensed two
+  edits to `menu-keyboard.e2e.ts`: the guard replacement, and the FR-051 divider-skip assertion. Only
+  the first happened there. The assertion was written instead as **AS-8 in
+  `packages/ui/tests/e2e/menu-sections.e2e.ts`**, which is the file that owns dividers — it already
+  opens the menus that have them and already holds the `menuShape`/`focusableLabels` helpers — and it
+  is a stronger test than this row asked for: it guards the guard by first requiring the menu under
+  test to contain a divider at all, and it excludes `aria-disabled` rows as well as separators, so
+  "arrow over every reachable row" means what it says. It is **not** being moved; the licence is
+  narrowed to what was actually spent. FR-051's evidence therefore lives in `menu-sections.e2e.ts`,
+  and every other assertion in `menu-keyboard.e2e.ts` still passes unmodified.)*
 - **SC-012**: Both new commands appear in Preferences → Key Bindings, can be rebound, and the rebound
   chord works while the old one stops — asserted for each.
 - **SC-013**: For a query matching a file both by name and, elsewhere, by directory only, the

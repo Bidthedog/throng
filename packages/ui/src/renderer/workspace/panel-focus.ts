@@ -18,6 +18,18 @@ const registry = new Map<string, () => void>();
  * finds no callback yet. Rather than race that mount, the request is parked here and honoured the
  * moment the panel registers (see {@link registerPanelFocus}). Panel ids are unique, so a parked
  * request can only ever be satisfied by the exact panel it named. Null when nothing is pending.
+ *
+ * ══ ONE SLOT, LAST REQUEST WINS — a decision, not an oversight ══
+ *
+ * There is exactly one pending id, so a second {@link requestPanelFocus} DISCARDS the first. That is
+ * the correct semantic rather than a limitation to grow out of: focus is singular, so two parked
+ * requests could only ever mean two panels fighting for one caret, and the later request is the more
+ * recent statement of what the user is doing. The discarded one is not "lost work" — the panel it
+ * named simply mounts without taking focus, which is what an unfocused panel does anyway.
+ *
+ * What this does NOT excuse is a registration made before the panel can act on it: `registerPanelFocus`
+ * consumes the slot whether or not the callback can deliver, so a view must register only once its
+ * input surface is live. `terminal-panel.tsx` documents what that costs to get wrong.
  */
 let pendingFocusPanelId: string | null = null;
 

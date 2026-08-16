@@ -82,8 +82,17 @@ describe('descendantOpenFolders (033 subtree.ts)', () => {
     expect(descendantOpenFolders(root, 'a')).toEqual([]);
   });
 
-  it('C3 — returns [] for a closed anchor, which has no loaded children', () => {
+  /*
+   * Named for what it actually proves. `descendantOpenFolders` never reads `anchor.open`, so the
+   * empty result here comes from the VIEW and not from a guard: `folder()` above gives a closed
+   * folder `children: undefined`, exactly as `toExpandNode` does in `use-explorer-data.ts`. That
+   * makes this an assertion that the function is CORRECT UNDER its documented precondition, which
+   * is a real thing to assert — it is not, and must not be read as, a guarantee that a closed
+   * anchor is guarded independently of the tree it was given.
+   */
+  it('C3 — returns [] for a closed anchor, whose view carries no loaded children', () => {
     const root = folder('', true, [folder('a', false)]);
+    expect(root.children?.[0].children, 'the precondition this rests on').toBeUndefined();
     expect(descendantOpenFolders(root, 'a')).toEqual([]);
   });
 

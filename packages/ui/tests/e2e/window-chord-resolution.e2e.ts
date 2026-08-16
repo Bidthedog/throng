@@ -196,6 +196,46 @@ const COVERED_ELSEWHERE: ReadonlyMap<string, { spec: string; press: string }> = 
   ['menu.open', { spec: 'menu-keyboard.e2e.ts', press: 'Shift+F10' }],
 ]);
 
+/**
+ * A file's CODE, with its comments blanked out — offsets and lines preserved.
+ *
+ * The exemption below used to be checked with `toContain(chord)`, a raw substring over the whole
+ * file. `menu-keyboard.e2e.ts` explains at length, in a block comment, why a `Shift+F10` at that row
+ * needs a real guard in front of it — and names the chord three times doing so. So the exemption was
+ * satisfied by the PROSE: delete the `keyboard.press('Shift+F10')` the exemption exists to point at
+ * and this check stays green, which makes it an assertion about documentation.
+ *
+ * Strings are tracked so a `//` inside one does not blank the rest of its line; a template literal
+ * spanning lines is the one case this does not follow, and it can only ever hide a comment, never
+ * eat code.
+ */
+function codeOnly(src: string): string {
+  const blanked = src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
+  return blanked
+    .split('\n')
+    .map((line) => {
+      let quote = '';
+      for (let i = 0; i < line.length; i += 1) {
+        const c = line[i];
+        if (quote !== '') {
+          if (c === '\\') i += 1;
+          else if (c === quote) quote = '';
+          continue;
+        }
+        if (c === '"' || c === "'" || c === '`') quote = c;
+        else if (c === '/' && line[i + 1] === '/') return line.slice(0, i);
+      }
+      return line;
+    })
+    .join('\n');
+}
+
+/** `keyboard.press('<chord>')` — the keystroke itself, not a mention of it. */
+function pressesChord(src: string, chord: string): boolean {
+  const literal = chord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(String.raw`keyboard\s*\.\s*press\(\s*['"\`]${literal}['"\`]`).test(src);
+}
+
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
  * One app and one project for the whole file
  * ══════════════════════════════════════════════════════════════════════════════════════════════ */
@@ -287,14 +327,17 @@ test('every window chord the Shift widening can reach is covered — discovered 
       `action is a command that can die without a single test going red.`,
   ).toEqual({ uncovered: [], stale: [] });
 
-  // Every exemption still points at a spec that presses the chord.
+  // Every exemption still points at a spec that PRESSES the chord — not one that mentions it.
   for (const [action, { spec, press: chord }] of COVERED_ELSEWHERE) {
     const path = fileURLToPath(new URL(spec, import.meta.url));
     expect(existsSync(path), `${action} is exempted to ${spec}, which does not exist`).toBe(true);
     expect(
-      readFileSync(path, 'utf8'),
-      `${action} is exempted to ${spec}, which no longer presses ${chord}`,
-    ).toContain(chord);
+      pressesChord(codeOnly(readFileSync(path, 'utf8')), chord),
+      `${action} is exempted to ${spec}, which no longer presses ${chord}. The chord may still be ` +
+        `NAMED there — ${spec} explains the guard it needs in prose — but prose is not coverage, so ` +
+        `what is looked for is the keystroke: keyboard.press('${chord}'), with comments stripped ` +
+        `first. Either restore the press or move ${action} back into this file.`,
+    ).toBe(true);
   }
 });
 

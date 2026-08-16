@@ -769,12 +769,19 @@ export function useExplorerData(
     const targets = nextExpandTargets(rootExpand, anchorRel);
     if (targets.length === 0) return;
 
-    void Promise.all(targets.map((t) => ensureLoaded(t))).then(() => {
-      const a = treeRef.current;
-      if (!a) return;
-      for (const t of targets) a.open(t);
-      persist(selectedId);
-    });
+    void Promise.all(targets.map((t) => ensureLoaded(t)))
+      .then(() => {
+        const a = treeRef.current;
+        if (!a) return;
+        for (const t of targets) a.open(t);
+        persist(selectedId);
+      })
+      // A `files.list` that REJECTS (the channel is gone, the handler threw) is not the failure
+      // `fetchChildren` reports — that one resolves with an `error` and is already announced. This
+      // one escapes as an unhandled rejection, which is invisible to the user and to the suite.
+      // Nothing is expanded and nothing is claimed to have been; the console keeps the trace.
+      // (See `expandChildren` for why this line touches the toolbar's path despite D9.)
+      .catch((error: unknown) => console.error('[explorer] expand step failed', error));
   }, [treeRef, selectedId, ensureLoaded, persist]);
 
   const collapseAll = useCallback(() => {
@@ -796,6 +803,24 @@ export function useExplorerData(
    *
    * Nothing expanded beneath it → an empty target list → we change nothing and error on nothing
    * (D2). The early return also keeps a no-op off localStorage.
+   *
+   * ══ "EXPANDED" MEANS EXPANDED AND ON SCREEN — decided, not defaulted (033 review, MINOR 5) ══
+   *
+   * A descendant behind a CLOSED ancestor is invisible to this action and stays that way: open `a`,
+   * open `a/b`, close `a`, then Collapse All Children on `a` — `a/b` is not closed, and `persist`
+   * still records it, so reopening `a` shows `b` expanded again. That is the intended behaviour, and
+   * the two halves are one mechanism rather than a bug and its symptom:
+   *
+   *  - `toExpandNode` gives a closed folder `children: undefined`, per `expand.ts`'s convention that
+   *    a closed folder's listing is not what is on screen — so the walk stops at a closed ancestor.
+   *  - `snapshotOpen` records `isOpen` regardless of ancestry, which is exactly what makes reopening
+   *    a folder restore the shape it had (026 / #197). Pruning it would delete the tree's memory as a
+   *    side effect of a collapse the user aimed at something they could see.
+   *
+   * FR-039 is written for a folder the user can see and act on — it requires the anchor to be left
+   * "itself open", which only means anything for an anchor that WAS open. Collapsing an ancestor has
+   * already achieved everything the user could observe; re-deciding the hidden state beneath it would
+   * be this action reaching past what it was pointed at. Recorded in contracts §B.2 (D1).
    */
   const collapseChildren = useCallback(
     (relPath: string): void => {
@@ -827,6 +852,25 @@ export function useExplorerData(
    */
   const expandChildren = useCallback(
     (relPath: string): void => {
+      /*
+       * The `.catch` is not decoration (033 review, MINOR 6).
+       *
+       * `fetchChildren` reports the failure it can SEE: `files.list` resolving with an `error`. A
+       * REJECTED invoke — the channel torn down mid-expand, the handler throwing — takes a different
+       * route out: `ensureLoaded` rejects, `Promise.all` rejects, and this `void`-ed async function
+       * rejects with nobody listening. That is an unhandled rejection: no opens, no notice, no trace,
+       * and a test that would pass through it.
+       *
+       * It logs rather than raising a notice, deliberately. The renderer has no message for "the IPC
+       * channel threw" that is not a raw error string on screen, and the app's failure model forbids
+       * that; what the user sees instead is a tree that did not expand, which is the truth. The
+       * anchor stays open — D5 opened it on a listing that DID arrive.
+       *
+       * `expandStep` above carries the same guard for the same reason. Adding it there touches the
+       * toolbar's code, which contract D9 puts off limits; the exemption is recorded in
+       * `contracts/explorer-actions.md` rather than taken quietly, because a fix applied to the new
+       * copy of a shared shape and not the old one leaves the defect where it started.
+       */
       void (async () => {
         if (!treeRef.current) return;
         // D5/FR-042 — a CLOSED anchor opens itself first, and its listing is what names the
@@ -870,7 +914,7 @@ export function useExplorerData(
         if (!a) return;
         for (const target of loaded) if (target !== null) a.open(target);
         persist(selectedId);
-      })();
+      })().catch((error: unknown) => console.error('[explorer] expand all children failed', error));
     },
     [treeRef, ensureLoaded, hiddenSet, persist, selectedId],
   );

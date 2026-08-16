@@ -18,7 +18,13 @@
  * Pure. No DOM.
  */
 
-/** The application's menu sections. See `MENU_SECTION_ORDER` for their order. */
+/**
+ * The application's menu sections. See `MENU_SECTION_ORDER` for their order.
+ *
+ * Adding a member here obliges you to place it in `ORDER` below, and the compiler says so — see
+ * `EveryMenuSectionIsOrdered`. A section with no place in the order is not a smaller menu, it is a
+ * menu missing every item that declared it.
+ */
 export type MenuSection =
   /** Present only because of what the pointer is over. Leads the menu. */
   | 'contextual'
@@ -41,7 +47,7 @@ export type MenuSection =
  * and FR-047 both have it, and as the Files & Folders menu the vocabulary was
  * derived from has always shipped.
  */
-export const MENU_SECTION_ORDER: readonly MenuSection[] = [
+const ORDER = [
   'contextual',
   'content',
   'create',
@@ -50,6 +56,43 @@ export const MENU_SECTION_ORDER: readonly MenuSection[] = [
   'viewState',
   'application',
 ] as const;
+
+/**
+ * The linkage between the union above and the array below, enforced by the COMPILER.
+ *
+ * `groupBySection` buckets items by the section each one declares, but emits them by walking
+ * `MENU_SECTION_ORDER` — so a section that exists in `MenuSection` and is missing from the array
+ * has no bucket to be emitted from, and **every item declaring it silently vanishes from the
+ * menu**. That is FR-049's exact failure mode (an item that "went somewhere"), one layer down: a
+ * `readonly MenuSection[]` annotation accepts a SHORT array quite happily, `groupBySection` drops
+ * the items without a word, and a test that pins the array's contents still passes because the
+ * array is not what changed.
+ *
+ * So the array is not merely annotated — it is CHECKED, by the `satisfies` below. `Exclude` is
+ * `never` only when `ORDER` lists every member of the union; anything left over resolves this alias
+ * to the error object instead, which `ORDER` does not satisfy, and the build fails with the missing
+ * section named in the message. The good case resolves to `readonly MenuSection[]`.
+ *
+ * `satisfies` rather than the declared type, because both this alias and `ORDER` are module-private
+ * and declaration emit (`composite: true`) cannot name a private type in an exported const's type.
+ * The published type of `MENU_SECTION_ORDER` therefore stays exactly what callers have always seen.
+ *
+ * M7 is the reason this is a compile error rather than a lint or a test: the vocabulary lives in
+ * core so that no menu can hold a different opinion, and a union the order does not cover means
+ * CORE holds two.
+ */
+type EveryMenuSectionIsOrdered<T extends readonly MenuSection[]> = [
+  Exclude<MenuSection, T[number]>,
+] extends [never]
+  ? readonly MenuSection[]
+  : {
+      ERROR: 'MENU_SECTION_ORDER must list every MenuSection — an unordered section vanishes from every menu';
+      missing: Exclude<MenuSection, T[number]>;
+    };
+
+export const MENU_SECTION_ORDER: readonly MenuSection[] = ORDER satisfies EveryMenuSectionIsOrdered<
+  typeof ORDER
+>;
 
 /**
  * Groups `items` into one array per section, in `MENU_SECTION_ORDER`, keeping

@@ -310,6 +310,18 @@ test('AS-3 — the panel header menu is sectioned and its destroy verb stands al
       const shape = await menuShape(win);
       expectWellFormed(shape, 'panel header');
 
+      /*
+       * Spot assertions HERE, and the exhaustive shape in the unit table
+       * (`packages/ui/tests/unit/menu-sections.test.ts`, "the panel header menu draws exactly the
+       * shape contracts/menu-sections.md §3.4 describes") — two rows pinned label-for-label, for an
+       * untyped panel and for an editor panel with a file.
+       *
+       * That split is deliberate rather than a gap. The labels and their sections are decided by
+       * `panelHeaderMenu`, which the unit table drives directly and far more cheaply, and where the
+       * variant with every editor conditional showing can be built without opening a file. What
+       * only THIS layer can answer is whether the derived dividers reach the screen at all — which
+       * is what the assertions below are about, and why they name positions rather than a list.
+       */
       // Content(Rename) · Destroy(Destroy Panel) · Navigate(Send to Tab, …) · View & state(…).
       const destroy = shape.findIndex((e) => e.endsWith(' Panel'));
       expect(destroy, 'the destroy verb is on the menu').toBeGreaterThan(0);
@@ -506,6 +518,16 @@ test('AS-7 — the terminal content menu: link items lead it, and the failure tr
 
 // ---------------------------------------------------------------------------
 // AS-8 — dividers are skipped by the keyboard and never take focus (FR-051).
+//
+// This is T069's assertion, and it lives HERE rather than in `menu-keyboard.e2e.ts` where T069,
+// contracts/menu-sections.md §5 and SC-011 all placed it. Recorded 2026-08-16, in all three, when
+// the divergence was found: `menu-keyboard.e2e.ts` received T068's guard replacement and nothing
+// else.
+//
+// It stayed here because this is the file that OWNS dividers — it is where the menus with dividers
+// are opened, where `menuShape` and `focusableLabels` already exist, and where a reader looking for
+// what the sections do to the keyboard would look. Moving it would have split one requirement's
+// evidence across two files and duplicated both helpers to do it.
 // ---------------------------------------------------------------------------
 
 test('AS-8 — arrowing through a menu with dividers never lands on one', async () => {

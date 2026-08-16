@@ -218,4 +218,95 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
     a.editor.autoSave = false;
     expect(b.editor.autoSave).toBe(true);
   });
+
+  /*
+   * ══ THE SECTION-LEVEL FALLBACK HANDS OUT A COPY, NOT THE SHIPPED OBJECTS ══
+   *
+   * `editorSettings` takes an early return whenever the document has no `editor` key or a
+   * non-record one — which is the commonest input in this codebase, `parseAppSettings({})`. That
+   * return used to be a SPREAD of the defaults with a single nested member re-cloned by hand, so
+   * the other three came back BY REFERENCE and every caller shared one object with
+   * `DEFAULT_APP_SETTINGS` (which is not frozen, so a mutation is silent rather than a throw).
+   *
+   * `indentByLanguage` is the sharp end: its default IS `SHIPPED_INDENT_BY_LANGUAGE`, the language
+   * registry's own derived table, so the shared reference reached past the config module entirely.
+   *
+   * These are IDENTITY assertions on purpose. Every value assertion in this file passes just as
+   * happily on a shared object as on a copy — which is why the defect survived a suite that already
+   * covers this section key by key.
+   */
+  describe('the section fallback never shares a nested object with the shipped defaults', () => {
+    // Both inputs that reach `editorSettings`'s early return: an absent section and a non-record one.
+    const fallbackInputs: [string, unknown][] = [
+      ['no editor key at all', {}],
+      ['a null editor section', { editor: null }],
+    ];
+
+    for (const [label, raw] of fallbackInputs) {
+      it(`copies all four object-valued members — ${label}`, () => {
+        const editor = parseAppSettings(raw).editor;
+        const shipped = DEFAULT_APP_SETTINGS.editor;
+
+        /*
+         * `expect.soft`, so a broken clone names EVERY member it shares rather than stopping at the
+         * first. That matters here more than it usually does: the defect this replaces was one of
+         * four members on one line being re-cloned, and a hard assertion would have reported
+         * `indent` and left the reader to discover the other two by fixing it twice.
+         */
+        expect.soft(editor.indent, 'editor.indent').not.toBe(shipped.indent);
+        expect
+          .soft(editor.indentByLanguage, 'editor.indentByLanguage')
+          .not.toBe(shipped.indentByLanguage);
+        expect
+          .soft(editor.languageByExtension, 'editor.languageByExtension')
+          .not.toBe(shipped.languageByExtension);
+        expect.soft(editor.navigation, 'editor.navigation').not.toBe(shipped.navigation);
+
+        // …and the copy still says the same thing, so this is a clone and not a reset.
+        expect(editor).toEqual(shipped);
+      });
+
+      it(`does not reach into the language registry — ${label}`, () => {
+        const map = parseAppSettings(raw).editor.indentByLanguage;
+        expect(map, 'the map itself').not.toBe(SHIPPED_INDENT_BY_LANGUAGE);
+        // Row by row too: `cloneIndentMap` is deep, so no profile is shared either.
+        expect(map.go, 'the Go profile').not.toBe(SHIPPED_INDENT_BY_LANGUAGE.go);
+        expect(map.go).toEqual(SHIPPED_INDENT_BY_LANGUAGE.go);
+      });
+
+      it(`survives a caller mutating what it was handed — ${label}`, () => {
+        const editor = parseAppSettings(raw).editor;
+        editor.indent.indentWidth = 99;
+        editor.indentByLanguage.go = { style: 'spaces', indentWidth: 99, tabWidth: 99 };
+        editor.languageByExtension['.mine'] = 'python';
+        editor.navigation.rememberQuickOpenQuery = true;
+
+        // The shipped defaults, the registry table, and the NEXT parse are all untouched.
+        expect(DEFAULT_APP_SETTINGS.editor.indent.indentWidth).toBe(2);
+        expect(SHIPPED_INDENT_BY_LANGUAGE.go).toEqual({ style: 'tabs', indentWidth: 4, tabWidth: 4 });
+        expect(DEFAULT_APP_SETTINGS.editor.languageByExtension).toEqual({});
+        expect(DEFAULT_APP_SETTINGS.editor.navigation.rememberQuickOpenQuery).toBe(false);
+        expect(parseAppSettings(raw).editor).toEqual(DEFAULT_APP_SETTINGS.editor);
+      });
+
+      /*
+       * The sweep the four named assertions above cannot do: a FIFTH object-valued member added to
+       * `EditorSettings` later compiles fine without being added to `cloneEditor`, and would be
+       * shared exactly as these three were. This test finds it without anyone remembering to.
+       */
+      it(`shares no object-valued member, named here or added later — ${label}`, () => {
+        const editor = parseAppSettings(raw).editor as unknown as Record<string, unknown>;
+        const shipped = DEFAULT_APP_SETTINGS.editor as unknown as Record<string, unknown>;
+        for (const [key, value] of Object.entries(editor)) {
+          if (typeof value !== 'object' || value === null) continue;
+          expect
+            .soft(
+              value,
+              `editor.${key} is the SAME object as the shipped default — cloneEditor must re-clone it`,
+            )
+            .not.toBe(shipped[key]);
+        }
+      });
+    }
+  });
 });

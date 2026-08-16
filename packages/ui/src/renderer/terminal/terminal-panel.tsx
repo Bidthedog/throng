@@ -669,14 +669,6 @@ export function TerminalPanel({
     });
   }, []);
 
-  // Register this terminal's focus with the panel-focus registry (012) so keyboard
-  // move-focus can route DOM focus into its input surface.
-  useEffect(() => {
-    const id = panel.id;
-    registerPanelFocus(id, () => apiRef.current?.focus());
-    return () => unregisterPanelFocus(id);
-  }, [panel.id]);
-
   useTerminal({
     panelId: panel.id,
     projectId: panel.originProjectId,
@@ -708,6 +700,37 @@ export function TerminalPanel({
     linkHoverDelayMs: terminalSettings.linkHoverDelayMs,
     isActive: () => isActivePanelRef.current,
   });
+
+  /*
+   * Register this terminal's focus with the panel-focus registry (012) so keyboard move-focus can
+   * route DOM focus into its input surface.
+   *
+   * ══ TWO THINGS HERE ARE LOAD-BEARING, AND BOTH LOOK LIKE STYLE ══
+   *
+   * This effect is declared AFTER `useTerminal` and it is gated on `container`. Neither is
+   * cosmetic, and getting either wrong makes the registration silently useless — it still
+   * registers, `focusPanel` still returns `true`, and the focus still never lands (033 FR-033a).
+   *
+   *  1. **After `useTerminal`.** Effects run in declaration order, and `apiRef.current` is assigned
+   *     inside `useTerminal`'s mount effect (`use-terminal.ts:439-451`). Declared BEFORE it, this
+   *     effect hands the registry a callback that reads a null `apiRef` and does nothing.
+   *  2. **Gated on `container`.** `container` is `null` on the first render (it arrives via
+   *     `ref={setContainer}`), so `useTerminal`'s effect returns early on the first passive flush
+   *     and `apiRef` is still null then — declaration order alone would not save it. Registering
+   *     only once the container exists means the FIRST registration happens on the flush in which
+   *     the terminal was actually built.
+   *
+   * That matters beyond tidiness because `registerPanelFocus` INVOKES a request parked by
+   * `requestPanelFocus` (issue 144) and clears it. A registration made too early spends that
+   * one-shot on a callback that cannot deliver — which is exactly how Open In → Terminal's focus
+   * fallback (`file-tree.tsx`) was inert.
+   */
+  useEffect(() => {
+    if (!container) return; // no container ⇒ no terminal ⇒ nothing to focus (see 2. above)
+    const id = panel.id;
+    registerPanelFocus(id, () => apiRef.current?.focus());
+    return () => unregisterPanelFocus(id);
+  }, [panel.id, container]);
 
   /*
    * The working directory this terminal could not be opened in (030 FR-040a).

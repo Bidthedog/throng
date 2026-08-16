@@ -349,13 +349,18 @@ export function FileTree({
       /*
        * FR-033a / SC-015 — the keystroke after the click must reach the SHELL.
        *
-       * `focusPanel` is the contract's step and is called as such, but it can only succeed for a
-       * panel that has already registered a focus callback — and this one was created microseconds
-       * ago, so its terminal view has not mounted yet and it returns false. `requestPanelFocus` parks
-       * the request until the panel registers (issue 144's mechanism), which is the same asynchronous
-       * gap. Without the fallback the focus depends entirely on the terminal's own mount-time
-       * `focusIfActive`, and "it happens to work because of something in another module" is exactly
-       * the kind of guarantee SC-015 exists to stop being accidental.
+       * `focusPanel` is the contract's step and is called as such, but it cannot succeed here: this
+       * panel was created microseconds ago, its terminal view has not mounted, nothing has registered
+       * a focus callback for it, and it returns false. The real work is done by `requestPanelFocus`,
+       * which PARKS the request until the panel registers (issue 144's mechanism) — the same
+       * asynchronous gap, already solved once.
+       *
+       * That fallback is only real because `terminal-panel.tsx` registers its focus callback AFTER
+       * `useTerminal` and only once its container exists; registered any earlier it would consume the
+       * parked request with a callback that reads a null `apiRef` and does nothing, leaving SC-015
+       * resting entirely on the terminal's own mount-time `focusIfActive` in another module. That is
+       * exactly the accident this line exists to remove, so the two must stay in step — see the
+       * comment on that effect before moving either.
        */
       if (!focusPanel(newId)) requestPanelFocus(newId);
     },

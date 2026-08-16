@@ -697,10 +697,7 @@ function cloneTerminals(t: TerminalSettings): TerminalSettings {
 /** Tolerant per-field parse of the `editor` section; bad values fall back to the
  *  default for that field (never throws — mirrors `terminalSettings`). */
 function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
-  // `navigation` is re-cloned rather than carried by the spread: a shallow copy hands every caller
-  // the SAME nested object, which for `DEFAULT_APP_SETTINGS` is the shipped one — so a single reader
-  // mutating what it was given would change the defaults for the whole process.
-  if (!isRecord(v)) return { ...fallback, navigation: { ...fallback.navigation } };
+  if (!isRecord(v)) return cloneEditor(fallback);
   const openOnClick = EDITOR_OPEN_ON_CLICK.includes(v.openOnClick as EditorOpenOnClick)
     ? (v.openOnClick as EditorOpenOnClick)
     : fallback.openOnClick;
@@ -759,6 +756,33 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     defaultWordWrap,
     showStatusBar,
     navigation: navigationSettings(v.navigation, fallback.navigation),
+  };
+}
+
+/**
+ * A defensive copy of the editor section — the counterpart of `cloneExplorer` / `cloneTerminals`,
+ * and the ONE place the section's nesting is written down.
+ *
+ * Both callers hand out `DEFAULT_APP_SETTINGS.editor`: `editorSettings` when the document has no
+ * `editor` key (the commonest input there is), and `structuredCloneSettings` when it has no settings
+ * at all. A shallow spread hands every one of those callers the SAME nested objects, and for the
+ * defaults those objects are not private to this module — `indentByLanguage` IS the language
+ * registry's derived table (see `SHIPPED_INDENT_BY_LANGUAGE` above). Nothing is frozen, so a reader
+ * mutating what it was given would silently edit the shipped defaults, and through them the
+ * registry, for the whole process.
+ *
+ * THE TRAP, since the spread below is what makes this short: it copies the scalar members and it
+ * copies the object-valued ones BY REFERENCE. Every object-valued member of `EditorSettings` must
+ * therefore be re-cloned underneath it. There are four; `editor-settings.test.ts` asserts identity
+ * over all of them AND sweeps for a fifth, because adding one and forgetting this line compiles.
+ */
+function cloneEditor(e: EditorSettings): EditorSettings {
+  return {
+    ...e,
+    indent: { ...e.indent },
+    indentByLanguage: cloneIndentMap(e.indentByLanguage),
+    languageByExtension: { ...e.languageByExtension },
+    navigation: { ...e.navigation },
   };
 }
 
@@ -935,17 +959,10 @@ function structuredCloneSettings(s: AppSettings): AppSettings {
     behaviour: { ...s.behaviour },
     explorer: cloneExplorer(s.explorer),
     terminals: cloneTerminals(s.terminals),
-    editor: {
-      ...s.editor,
-      // Deep-cloned: a shallow copy would hand every caller the SAME map object, and the shipped
-      // defaults are frozen — a mutation would either throw or silently edit everyone's settings.
-      indent: { ...s.editor.indent },
-      indentByLanguage: cloneIndentMap(s.editor.indentByLanguage),
-      languageByExtension: { ...s.editor.languageByExtension },
-      // Same reason (033): the spread above would otherwise share one navigation object between the
-      // shipped defaults and every clone taken from them.
-      navigation: { ...s.editor.navigation },
-    },
+    // Shared with the `!isRecord` path in `editorSettings` rather than spelled out twice: the two
+    // used to be separate spreads, and they disagreed about which nested members to re-clone —
+    // this one cloned all four, that one cloned `navigation` alone.
+    editor: cloneEditor(s.editor),
     tabs: { ...s.tabs },
     newProject: { ...s.newProject },
     search: { ...s.search },
