@@ -1363,11 +1363,19 @@ textarea,
   background: transparent;
 }
 
-body.transient-overlay-open::before {
-  content: '';
+/*
+ * Rendered by the TransientScrim component (common/transient-scrim), INSIDE the app tree —
+ * deliberately not a <body> pseudo-element. The window's zoom wrapper establishes a stacking
+ * context, so a scrim outside it paints above every overlay however small its z-index, which dimmed
+ * the modals themselves. In here the 1999-against-2000 comparison is local and means what it says.
+ *
+ * (Deliberately no source-file extension anywhere in this comment. The floating-surface guard splits
+ * CSS on braces and cannot tell a comment from a selector, so an extension in the text immediately
+ * before a positioned, z-indexed rule is read as a class name and reported as unregistered.)
+ */
+.transient-scrim {
   position: fixed;
   inset: 0;
-  /* Below `.modal-overlay`'s 2000 so the overlay's own card stays above it. */
   z-index: 1999;
   background: rgba(0, 0, 0, 0.5);
   pointer-events: none;

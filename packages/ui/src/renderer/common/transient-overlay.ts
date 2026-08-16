@@ -71,14 +71,33 @@ let current: { token: object; dismiss: () => void } | null = null;
  * `.modal-overlay` keeps its own background for the dialogs that are NOT in this registry — confirm,
  * project settings, the app-close prompt. Those are one-at-a-time by nature and never hand off.
  */
-const SCRIM_CLASS = 'transient-overlay-open';
+const listeners = new Set<() => void>();
 
 function syncScrim(): void {
-  // The registry is exercised by the unit tier, which runs `environment: 'node'` — there is no
-  // `document` at all there, and naming it throws before any optional chain can help. The claim
-  // logic is the part those tests are about; the scrim is a renderer-only side effect.
-  if (typeof document === 'undefined') return;
-  document.body?.classList.toggle(SCRIM_CLASS, current !== null);
+  for (const listen of listeners) listen();
+}
+
+/**
+ * Subscribe to "is an overlay holding the slot", for the one component that paints the scrim.
+ *
+ * ══ WHY THIS IS NOT A CLASS ON <body> ══
+ *
+ * It was, for about ten minutes, and it dimmed the modals as well as the app. A `<body>` pseudo-
+ * element sits in the ROOT stacking context, and the overlays do not: the window's zoom wrapper
+ * establishes a stacking context of its own, so every overlay inside it — z-index 2000 and all — is
+ * composited as part of that one subtree. A scrim outside it therefore paints above the lot,
+ * however large its z-index looks next to theirs. Comparing the two numbers is meaningless when
+ * they are not in the same context, which is exactly the trap that makes this bug look impossible
+ * on paper.
+ *
+ * Painting the scrim from INSIDE the app tree puts it back in the same stacking context as the
+ * overlays, where 1999 versus 2000 means what it appears to mean.
+ */
+export function subscribeTransientOverlay(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 /**

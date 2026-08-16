@@ -12,6 +12,7 @@ import {
 import { currentScope, resolveScoped, type ScopeInput } from './keybindings/scope.js';
 import { EditorChrome } from './editor/editor-chrome.js';
 import { NavigationChrome } from './navigate/navigation-chrome.js';
+import { TransientScrim } from './common/transient-scrim.js';
 import { requestQuickOpen, setNavigationModal } from './navigate/navigation-store.js';
 import { SearchKeybindings } from './search/search-keybindings.js';
 import { useCapabilities } from './panel-type/use-capabilities.js';
@@ -824,6 +825,7 @@ export function App(): ReactElement {
             <EditorChrome />
             {/* 033 (#219) — the navigation modals. Mounted in BOTH window shells; the
                 sub-workspace's copy is in `subworkspace-app.tsx` (Assumption 6). */}
+            <TransientScrim />
             <NavigationChrome />
             <SearchKeybindings />
             <KeybindingsHandler onToggleProjects={toggleLeft} onToggleExplorer={toggleRight} />
