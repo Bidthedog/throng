@@ -77,12 +77,37 @@ async function sendChord(
 /**
  * The text of the `.cm-gutterElement` beside the caret — SC-006's measurement, reused here so that
  * "the new chord works" means the command DID something rather than merely that a dialog appeared.
+ *
+ * ══ THE DRAWN CARET LAGS THE FOCUS BY A TIMER INSIDE CODEMIRROR ══
+ *
+ * The same hazard `caretReadout` documents at length in `goto-line.e2e.ts`, and the wait sits inside
+ * this helper for the same reason: the lag belongs to the editor library rather than to whatever the
+ * caller last did, so no call site can be trusted to remember it.
+ *
+ * `@codemirror/view` styles `.cm-cursor` as `display: none` and un-hides it only under
+ * `&.cm-focused > .cm-scroller > .cm-cursorLayer .cm-cursor` — and it applies `cm-focused` from
+ * `updateForFocusChange`, which is a `setTimeout(…, 10)` on the focus event. So for at least ten
+ * milliseconds after focus has GENUINELY returned (measured: `document.activeElement` is already
+ * `.cm-content` while the class is still absent) the caret is undrawn and its rect is all zeros.
+ *
+ * That mattered more here than anywhere else, because this helper had no zero-height guard at all.
+ * An all-zero rect makes `mid` zero, no gutter element contains y=0, and the throw named the GUTTER —
+ * sending the next reader to the gutter code for a defect that was entirely about focus. The guard
+ * below now names the real cause, and the wait above means it should never have to.
  */
 async function gutterAtCaret(win: Page, panelId: string): Promise<string> {
-  return win.getByTestId(`editor-${panelId}`).evaluate((root) => {
+  const editor = win.getByTestId(`editor-${panelId}`);
+  await expect(
+    editor.locator('.cm-editor.cm-focused .cm-cursor-primary'),
+    'the editor never drew a caret — focus did not come back to the view',
+  ).toBeVisible();
+  return editor.evaluate((root) => {
     const caret = root.querySelector('.cm-cursor-primary') as HTMLElement | null;
     if (!caret) throw new Error('no caret is drawn — is the editor focused?');
     const cr = caret.getBoundingClientRect();
+    // A blurred view draws the caret with `display: none`, whose rect is all zeros. Caught HERE, or
+    // else `mid` is 0 and the failure below blames the gutter for a focus problem.
+    if (cr.height === 0) throw new Error('the caret is drawn with zero height — the view is blurred');
     const mid = cr.top + cr.height / 2;
     const hit = Array.from(root.querySelectorAll('.cm-gutters .cm-gutterElement'))
       .map((el) => ({

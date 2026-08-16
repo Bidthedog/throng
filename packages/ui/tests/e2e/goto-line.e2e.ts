@@ -150,9 +150,36 @@ interface CaretReadout {
  *
  * The gutter's SPACER is excluded by its computed visibility: `@codemirror/view` renders one hidden
  * `.cm-gutterElement` carrying the widest line number, and it would otherwise match every caret.
+ *
+ * ══ THE DRAWN CARET LAGS THE FOCUS BY A TIMER INSIDE CODEMIRROR ══
+ *
+ * Every measurement below is anchored on the caret's rectangle, and CodeMirror draws no caret at all
+ * unless the view is focused: its default theme is `.cm-cursor { display: none }` with a single
+ * override under `&.cm-focused > .cm-scroller > .cm-cursorLayer .cm-cursor`. A `display: none`
+ * element reports an all-zero rect, which is why the guard below exists — a zero-height caret would
+ * otherwise be read as sitting at y=0 and returned as line 1, a wrong answer that looks plausible.
+ *
+ * The wait is here rather than at the call sites because the lag is NOT throng's. Measured with the
+ * dialog already gone from the DOM: `document.activeElement` was already `.cm-content` — the modal's
+ * unmount cleanup calls `view.focus()`, which is `contentDOM.focus()` and synchronous — while
+ * `.cm-focused` was still absent and the caret still `display: none`. `@codemirror/view` applies that
+ * class from `updateForFocusChange`, which is a `setTimeout(…, 10)` on the focus event. So the caret
+ * is undrawn for at least ten milliseconds after focus has genuinely returned, on every machine, and
+ * a readout taken in the round trip after "the dialog is gone" beats it more often than not. That is
+ * a fact about the editor library, not about how fast the runner is, so no caller can be trusted to
+ * remember it: the condition belongs to the reading, which is what this function is.
+ *
+ * The in-page guard STAYS as well, and the two are not redundant. This wait is the synchronisation;
+ * the guard is the assertion that the synchronisation held — a view genuinely blurred (or blurred
+ * again between the wait and the evaluate) still fails loudly instead of returning a plausible lie.
  */
 async function caretReadout(win: Page, panelId: string): Promise<CaretReadout> {
-  return win.getByTestId(`editor-${panelId}`).evaluate((root) => {
+  const editor = win.getByTestId(`editor-${panelId}`);
+  await expect(
+    editor.locator('.cm-editor.cm-focused .cm-cursor-primary'),
+    'the editor never drew a caret — focus did not come back to the view',
+  ).toBeVisible();
+  return editor.evaluate((root) => {
     const caret = root.querySelector('.cm-cursor-primary') as HTMLElement | null;
     if (!caret) throw new Error('no caret is drawn — is the editor focused?');
     const cr = caret.getBoundingClientRect();
