@@ -26,7 +26,7 @@
  * The candidate array is already in memory (`useFileIndex`, R5). A keystroke filters and ranks it and
  * touches no IPC at all — `quick-open-perf.e2e.ts` counts the messages to prove it.
  */
-import { useMemo, useRef, type ReactElement } from 'react';
+import { useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   QUICK_OPEN_MAX_ROWS,
   formatGrouped,
@@ -39,6 +39,7 @@ import { useWorkspace } from '../state/workspace-store.js';
 import { openFileInTab } from '../editor/editor-open.js';
 import { getLastActiveEditor } from '../editor/last-active-editor.js';
 import { requestPanelFocus } from '../workspace/panel-focus.js';
+import { rememberQuickOpenQuery, rememberedInput } from './navigation-store.js';
 import type { FileIndexView } from './use-file-index.js';
 import { QuickOpenTarget } from './quick-open-target.js';
 import { QuickOpenHidden } from './quick-open-hidden.js';
@@ -79,7 +80,10 @@ export function QuickOpen({
   onDismiss: () => void;
 }): ReactElement {
   const ws = useWorkspace();
-  const openTarget = useAppSettings().editor.openTarget;
+  const settings = useAppSettings();
+  const openTarget = settings.editor.openTarget;
+  // FR-058 — read LIVE, so a toggle takes effect at the next invocation with nothing to notify.
+  const remember = settings.editor.navigation.rememberQuickOpenQuery;
 
   /*
    * The target control's value, in a REF rather than in state.
@@ -101,13 +105,44 @@ export function QuickOpen({
     [index.paths],
   );
 
-  const choose = (entry: PickerEntry): void => {
+  /*
+   * FR-057 / FR-060 — the seeded query, read ONCE at mount.
+   *
+   * `useState`'s initialiser rather than a plain read, so a re-render (a keystroke, an index delta,
+   * the toggle moving) cannot re-seed the picker from under a query the user is halfway through
+   * typing. The settings are read live, which is what makes FR-063's "takes effect at the next
+   * invocation" true without anything having to be notified: this component mounts per invocation.
+   *
+   * When the setting is off this is `''`, and `Picker` treats an empty seed as no seed at all — so
+   * the shipped default (FR-057) costs no branch here.
+   */
+  const [initialQuery] = useState(() =>
+    remember ? (rememberedInput().quickOpenQuery ?? '') : '',
+  );
+
+  const choose = (entry: PickerEntry, query: string): void => {
     const tabId = ws.layout?.activeTabId;
     // Q5 — the modal's job ends with the choice, and it closes BEFORE the open is routed: a dirty
     // target raises the shipped unsaved-changes prompt (Q3), and two focus traps on screen at once
     // is a fight neither wins.
     onDismiss();
     if (!tabId) return;
+
+    /*
+     * FR-061 — the query is ACCEPTED here, and nowhere else.
+     *
+     * "Accepted" is the moment a row was chosen and there is a tab to open it into; everything below
+     * this line is the open being routed. A dismissal — Escape, the scrim, the slot being taken by
+     * Go To Line — never runs this function, so an abandoned query cannot be recorded by any path,
+     * rather than being filtered out by one.
+     *
+     * Gated on the SETTING as well, so that at the shipped defaults this store holds nothing at all
+     * rather than holding something it declines to show. The consequence is deliberate: switching
+     * the setting on mid-session starts remembering from the next accepted query, and never
+     * resurfaces one from before the switch — which is the same promise FR-063 makes in the other
+     * direction, and the one a user who has just changed their mind about this would expect.
+     */
+    if (remember) rememberQuickOpenQuery(query, root);
 
     // Q1 — the absolute path is this window's own root plus the relative path, and nothing else.
     const absPath = `${root.replace(/[\\/]+$/, '')}/${entry.id}`;
@@ -166,6 +201,16 @@ export function QuickOpen({
        */
       testId="quickopen"
       placeholder="Type part of a file path…"
+      /*
+       * FR-060 — the restored query is seeded into the CONTROL, not merely into the input.
+       *
+       * That is the whole point of using `initialQuery` rather than setting the field's text: the
+       * picker filters, ranks and marks from its own query state, so the modal opens showing that
+       * query's RESULTS (P5/P6) instead of a full list with stale text above it. The selection is
+       * the picker's too — it selects a seeded query on first focus, so the first keystroke replaces
+       * it outright and no keystroke is spent clearing it.
+       */
+      initialQuery={initialQuery}
       entries={entries}
       rank={rankFilePath}
       maxRows={QUICK_OPEN_MAX_ROWS}

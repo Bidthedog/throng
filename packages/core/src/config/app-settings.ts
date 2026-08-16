@@ -124,6 +124,24 @@ export interface EditorNavigationSettings {
    * project hides, and a toggle that wrote itself back to the setting would conflate the two.
    */
   quickOpenExcludeHidden: boolean;
+  /**
+   * FR-058 — Quick Open reopens with the last query that actually **opened a file**.
+   *
+   * Ships **off**, and that is a requirement rather than taste (FR-057): the second invocation must
+   * look exactly like the first unless the user has asked otherwise, so the first keystroke always
+   * means what it appears to mean. What is remembered lives in memory, per window, for the running
+   * application only (FR-062) — this setting is the only part of it that reaches disk.
+   */
+  rememberQuickOpenQuery: boolean;
+  /**
+   * FR-058 — Go To Line reopens with the last number that was actually **gone to**.
+   *
+   * A separate setting from {@link rememberQuickOpenQuery} rather than one "remember what I typed"
+   * switch, because the two values are worth remembering for opposite reasons: a query names a file
+   * you may want again, a line number names a place in one document. Wanting one is no evidence at
+   * all about wanting the other.
+   */
+  rememberGotoLineNumber: boolean;
 }
 
 /** Editor panel preferences (006, contracts/config-additions.md). */
@@ -417,7 +435,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     showStatusBar: true,
     // FR-069b — Quick Open starts by excluding what the project hides. The shipped answer to "is
     // this file hidden?" has to be the same one the tree gives, and the tree hides it.
-    navigation: { quickOpenExcludeHidden: true },
+    // FR-058 — both remember settings ship OFF. FR-057 is the shipped behaviour: both modals open
+    // empty every time until the user asks for otherwise.
+    navigation: {
+      quickOpenExcludeHidden: true,
+      rememberQuickOpenQuery: false,
+      rememberGotoLineNumber: false,
+    },
   },
   tabs: {
     smoothScrollMs: 300,
@@ -673,7 +697,10 @@ function cloneTerminals(t: TerminalSettings): TerminalSettings {
 /** Tolerant per-field parse of the `editor` section; bad values fall back to the
  *  default for that field (never throws — mirrors `terminalSettings`). */
 function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
-  if (!isRecord(v)) return { ...fallback };
+  // `navigation` is re-cloned rather than carried by the spread: a shallow copy hands every caller
+  // the SAME nested object, which for `DEFAULT_APP_SETTINGS` is the shipped one — so a single reader
+  // mutating what it was given would change the defaults for the whole process.
+  if (!isRecord(v)) return { ...fallback, navigation: { ...fallback.navigation } };
   const openOnClick = EDITOR_OPEN_ON_CLICK.includes(v.openOnClick as EditorOpenOnClick)
     ? (v.openOnClick as EditorOpenOnClick)
     : fallback.openOnClick;
@@ -746,6 +773,14 @@ function navigationSettings(
       typeof v.quickOpenExcludeHidden === 'boolean'
         ? v.quickOpenExcludeHidden
         : fallback.quickOpenExcludeHidden,
+    rememberQuickOpenQuery:
+      typeof v.rememberQuickOpenQuery === 'boolean'
+        ? v.rememberQuickOpenQuery
+        : fallback.rememberQuickOpenQuery,
+    rememberGotoLineNumber:
+      typeof v.rememberGotoLineNumber === 'boolean'
+        ? v.rememberGotoLineNumber
+        : fallback.rememberGotoLineNumber,
   };
 }
 
@@ -907,6 +942,9 @@ function structuredCloneSettings(s: AppSettings): AppSettings {
       indent: { ...s.editor.indent },
       indentByLanguage: cloneIndentMap(s.editor.indentByLanguage),
       languageByExtension: { ...s.editor.languageByExtension },
+      // Same reason (033): the spread above would otherwise share one navigation object between the
+      // shipped defaults and every clone taken from them.
+      navigation: { ...s.editor.navigation },
     },
     tabs: { ...s.tabs },
     newProject: { ...s.newProject },

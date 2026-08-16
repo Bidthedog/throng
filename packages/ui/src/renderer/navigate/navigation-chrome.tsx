@@ -32,7 +32,9 @@ import { getActivePane } from '../workspace/active-pane.js';
 import { scopeFromKind } from '../keybindings/scope.js';
 import { useSubWorkspaceWindow } from '../workspace/subworkspace-window-context.js';
 import {
+  applyRememberSettings,
   closeNavigationModal,
+  noteActiveProjectRoot,
   registerQuickOpen,
   setNavigationModal,
   useNavigationModal,
@@ -148,6 +150,36 @@ export function NavigationChrome(): ReactElement | null {
   useEffect(() => {
     if (quickOpenIsOpen) setIncludeHidden(defaultIncludeHidden);
   }, [quickOpenIsOpen, defaultIncludeHidden]);
+
+  /*
+   * FR-063 — turning a remember setting OFF discards what it holds, here rather than at the modal.
+   *
+   * The modal is the wrong place for it: it only exists while it is open, so a setting switched off
+   * between two invocations would be observed by nothing, and the value would still be sitting in the
+   * store when the user switched it back on. This component is mounted for the window's lifetime, so
+   * it sees every settings change — including one made in the preferences window and hot-reloaded
+   * into this one, which is how a user actually turns these off.
+   *
+   * The effect runs on the SETTINGS, not on the modal opening, so the discard has happened long
+   * before anything could read the value.
+   */
+  const rememberQuery = settings.editor.navigation.rememberQuickOpenQuery;
+  const rememberLine = settings.editor.navigation.rememberGotoLineNumber;
+  useEffect(() => {
+    applyRememberSettings({ quickOpenQuery: rememberQuery, gotoLineNumber: rememberLine });
+  }, [rememberQuery, rememberLine]);
+
+  /*
+   * FR-062 — Quick Open's remembered query is discarded when the active project changes.
+   *
+   * Keyed on the ROOT this window resolved (R6/FR-017) rather than on `activeProject` as such,
+   * because the root IS the candidate set: in a sub-workspace holding panels from several projects,
+   * moving between them changes which files Quick Open offers without the window's active project
+   * moving at all, and a query carried across that boundary describes nothing just the same.
+   */
+  useEffect(() => {
+    noteActiveProjectRoot(root);
+  }, [root]);
 
   /*
    * FR-011 — was the chord pressed from inside an EDITOR panel? That, and only that, decides whether

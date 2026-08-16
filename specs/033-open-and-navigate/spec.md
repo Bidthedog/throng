@@ -774,6 +774,23 @@ are new.
 - **FR-065**: Both new modals MUST match the app's existing modal presentation and focus behaviour:
   focus lands in the input on open, Escape cancels, Enter confirms, and focus returns to the invoking
   surface either way.
+
+  > **NARROWED 2026-08-15 by FR-072** — the final clause, *"either way"*, no longer holds and the
+  > rest of the requirement is untouched. Focus returns to the invoking surface on **dismissal**
+  > only; on **confirmation** it moves to the destination (the landing editor for Quick Open, the
+  > editor for Go To Line). Kept in place, not edited, because what this sentence got wrong is
+  > worth reading: it generalised one modal rule across two outcomes that mean opposite things.
+  >
+  > **This is an implementation decision adopted after the fact, and it is recorded as one.** The
+  > delivered `quick-open.tsx` (~L106–117) focuses the landing editor after an open, via
+  > `getLastActiveEditor` + `requestPanelFocus`. No requirement asked for that, and FR-065 as
+  > written forbade it — so the shipped code was non-compliant from the day it landed and nobody
+  > noticed, which is exactly what baseline finding F3 raised. The amendment is made because the
+  > behaviour is right, not because it shipped: *dismissing* is a change of mind and belongs back
+  > where you started, while *choosing a file* is a request to go somewhere, and returning focus to
+  > the terminal you invoked from would make every open a two-step gesture. Had the reasoning gone
+  > the other way, the code would have changed instead. *(Derived from the code and from what the
+  > action means; not confirmed by the user.)*
 - **FR-066**: Neither new modal may be opened twice, nor both at once; opening one while the other is
   open MUST leave exactly one modal on screen.
 - **FR-067**: The user documentation MUST describe both new commands and their default chords, the two
@@ -804,6 +821,38 @@ are new.
   actions or fewer** — chord, type, Enter — from any focus context in the app.
 - **SC-002**: In a project of **50,000 files**, each keystroke in the Quick Open input updates the
   list in **under 100 ms**, measured, with no keystroke triggering a filesystem walk.
+
+  > **RESTATED 2026-08-15 by FR-073** — the text above is kept because it records what was asked
+  > for, and because the *claim* it was making survives intact; only the terms it is checked in
+  > have changed. Baseline finding F5 was that **nothing asserts the 100 ms**, so as written this
+  > criterion is unfalsifiable, and an unfalsifiable criterion gets reinterpreted at the moment it
+  > fails rather than challenged.
+  >
+  > **Why 100 ms is not asserted, measured rather than assumed.** The pure pipeline
+  > (`compileQuery` → filter → `rankFilePath` → `rankStable` → cap) runs the 50,000-path corpus in
+  > **45 ms** in isolation. A hard 100 ms line at the unit tier reported **102.5, 105.1, 105.3 and
+  > 147.0 ms** across four full-suite runs with no code change between them — and failed *more*
+  > often when neighbouring files were excluded, which is contention's signature and not the
+  > pipeline's. A single keystroke costing 38 ms alone costs 66 ms inside a ~160-file parallel run.
+  > Two contention-tolerant replacements were built and measured before being rejected: best-of-N
+  > sampling (the widest query's *best* sample still moved 38 → 66 ms) and a calibrated ratio
+  > against a reference workload timed in the same process (stable at 3.7–4.0, but failed three
+  > runs of four under eight CPU burners on a 20-worker/20-core box, once on the empty query whose
+  > ordinary ratio is 0.2). All of it is recorded in
+  > [plan.md § Complexity Tracking](./plan.md), row *"SC-002's 50,000-file budget is proved at the
+  > unit layer, but not as a wall-clock number"*.
+  >
+  > **What is asserted instead**, per FR-073: the *work* a keystroke does — one `RegExp` per query
+  > term and one scoring per surviving candidate, **identical at 5,000 candidates and at 50,000**
+  > (`packages/core/tests/unit/quick-open-budget.test.ts`); that typing issues **no**
+  > `throng:files:*` call, so no keystroke reaches the filesystem (the half of this criterion that
+  > actually bites, and the half a timer would never catch); and **one** surviving duration, the
+  > in-app keystroke-to-list latency at **250 ms** in
+  > `packages/ui/tests/e2e/quick-open-perf.e2e.ts` — deliberately looser than 100 ms because it
+  > additionally pays for Electron IPC, React render and paint.
+  >
+  > A count says the same thing on a starved machine as on an idle one, which is the property
+  > SC-002 needed and a duration cannot have here.
 - **SC-003**: Quick Open never lists a file outside the current project's root, and never lists a file
   the project's exclusion rules exclude — asserted against a fixture containing both.
 - **SC-004**: Every route by which a file can be opened from Quick Open produces the same outcome as

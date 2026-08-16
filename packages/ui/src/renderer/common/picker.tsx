@@ -56,7 +56,16 @@ export interface PickerProps {
   /** Names what is being chosen — the one piece of text a caller must supply. */
   title: string;
   entries: readonly PickerEntry[];
-  onChoose: (entry: PickerEntry) => void;
+  /**
+   * The chosen entry, and the QUERY that was standing when it was chosen.
+   *
+   * The second argument is additive (033 FR-061) and every existing caller ignores it. Quick Open
+   * needs it because "the query that opened a file" is a fact only this component holds: the query
+   * lives in `useState` here, and a caller that wanted it would otherwise have to keep a second copy
+   * in step with every keystroke — a duplicate of the control's own state, which is exactly the
+   * forking `contracts/picker-extensions.md` forbids.
+   */
+  onChoose: (entry: PickerEntry, query: string) => void;
   onDismiss: () => void;
   placeholder?: string;
   /**
@@ -227,7 +236,7 @@ export function Picker({
 
   const choose = (entry: PickerEntry | undefined): void => {
     if (!entry) return;
-    onChoose(entry);
+    onChoose(entry, query);
   };
 
   const onKeyDown = (event: ReactKeyboardEvent): void => {

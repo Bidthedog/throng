@@ -8,9 +8,10 @@ import {
   type ReactElement,
   type Ref,
 } from 'react';
-import { eventToToken, normalizeToken } from '@throng/core';
+import { eventToToken, normalizeToken, type MenuSection } from '@throng/core';
 import { Icon } from '../common/icon.js';
 import { clampToViewport } from '../common/clamp-to-viewport.js';
+import { withDividers } from './menu-dividers.js';
 
 /** Match a keydown against an item's advertised shortcut (e.g. "Ctrl+C"), for in-menu shortcuts. */
 function chordMatchesShortcut(e: React.KeyboardEvent, shortcut: string): boolean {
@@ -18,8 +19,17 @@ function chordMatchesShortcut(e: React.KeyboardEvent, shortcut: string): boolean
   return token !== null && normalizeToken(token) === normalizeToken(shortcut);
 }
 
-export interface MenuItem {
-  /** The row's text. Required for a real action item; omitted for a `separator`. */
+/**
+ * One row a user can act on (033 US5, FR-049).
+ *
+ * `section` is REQUIRED, and that is the whole mechanism: an item added by this or any later feature
+ * that declares no section is a compile error rather than an item that silently lands wherever it
+ * was pushed. There is no default, because a default is exactly the "it went somewhere" outcome the
+ * requirement exists to prevent — the vocabulary lives in `@throng/core` so no menu can hold a
+ * different opinion (M1, M7).
+ */
+export interface MenuAction {
+  /** The row's text. */
   label?: string;
   onClick?: () => void;
   disabled?: boolean;
@@ -31,13 +41,18 @@ export interface MenuItem {
    * `firstBinding`; absent when the command is unbound (no brackets, no layout shift).
    */
   shortcut?: string;
-  /** A nested submenu, shown as a flyout after a hover dwell. Nests to any depth. */
-  submenu?: MenuItem[];
   /**
-   * A non-interactive section divider (FR-018a) rather than an action. When set, the item renders
-   * as a horizontal rule and carries no label/icon/shortcut/action; keyboard navigation skips it.
+   * Which section this item belongs to (FR-047). Its position in the drawn menu follows from this
+   * and from `MENU_SECTION_ORDER` — never from where the builder happened to push it.
    */
-  separator?: boolean;
+  section: MenuSection;
+  /**
+   * A nested submenu, shown as a flyout after a hover dwell. Nests to any depth.
+   *
+   * `MenuAction[]`, not `MenuItem[]`: a nested level derives its own dividers exactly as the root
+   * does, so it must not be able to smuggle one in by hand either (M2, M3).
+   */
+  submenu?: MenuAction[];
   /**
    * Override the item's test identifier (default `menu-item-<label>`).
    *
@@ -49,6 +64,22 @@ export interface MenuItem {
   testId?: string;
 }
 
+/**
+ * A non-interactive section divider (FR-018a) rather than an action. Renders as a horizontal rule
+ * and carries no label/icon/shortcut/action; keyboard navigation skips it (FR-051).
+ *
+ * DERIVED, never authored: it is produced by {@link withDividers} from the boundaries between two
+ * sections, which is why no builder's return type admits one (M2).
+ */
+export interface MenuSeparator {
+  separator: true;
+}
+
+/** What a menu LEVEL renders once its sections have been joined. */
+export type MenuItem = MenuAction | MenuSeparator;
+
+const isSeparator = (item: MenuItem): item is MenuSeparator => 'separator' in item;
+
 const DEFAULT_SUBMENU_DELAY_MS = 100;
 
 /**
@@ -58,7 +89,7 @@ const DEFAULT_SUBMENU_DELAY_MS = 100;
  * Each level tracks which of its own items is open.
  */
 function MenuLevel({
-  items,
+  actions,
   onClose,
   submenuDelayMs,
   testId,
@@ -68,7 +99,7 @@ function MenuLevel({
   onExitToParent,
   autoFocusFirst = false,
 }: {
-  items: MenuItem[];
+  actions: MenuAction[];
   onClose: () => void;
   submenuDelayMs: number;
   testId: string;
@@ -89,6 +120,18 @@ function MenuLevel({
   rootRef?: Ref<HTMLUListElement>;
   style?: CSSProperties;
 }): ReactElement {
+  /*
+   * FR-048 — the dividers are derived HERE, per level, from the sections the items declare. Every
+   * level does it for itself, which is what makes "including inside every submenu" true by
+   * construction rather than by each nested call site remembering.
+   */
+  const items: MenuItem[] = withDividers(actions);
+  /** The action at `index`, or undefined when that row is a derived divider. */
+  const actionAt = (index: number): MenuAction | undefined => {
+    const item = items[index];
+    return item && !isSeparator(item) ? item : undefined;
+  };
+
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [openLabel, setOpenLabel] = useState<string | null>(null);
   // Whether the currently-open sub-menu was opened by keyboard (→ / Enter) — if so it takes focus of
@@ -108,7 +151,9 @@ function MenuLevel({
    */
   const itemRefs = useRef<(HTMLLIElement | null)[]>([]);
   // Separators (FR-018a) and disabled items are not keyboard-navigable.
-  const enabled = items.map((it, i) => (it.disabled || it.separator ? -1 : i)).filter((i) => i >= 0);
+  const enabled = items
+    .map((it, i) => (isSeparator(it) || it.disabled ? -1 : i))
+    .filter((i) => i >= 0);
   /**
    * NOTHING is active until the user says so.
    *
@@ -148,9 +193,11 @@ function MenuLevel({
     // Ctrl+C copies, Ctrl+X cuts, then the user pastes elsewhere. Only chords with a modifier are
     // considered (a bare letter is never a menu shortcut), so this never eats plain-key navigation.
     if (e.ctrlKey || e.altKey || e.metaKey) {
-      const hit = items.find(
-        (it) => !it.separator && !it.disabled && it.onClick && it.shortcut && chordMatchesShortcut(e, it.shortcut),
-      );
+      const hit = items
+        .filter((it): it is MenuAction => !isSeparator(it))
+        .find(
+          (it) => !it.disabled && it.onClick && it.shortcut && chordMatchesShortcut(e, it.shortcut),
+        );
       if (hit) {
         e.preventDefault();
         e.stopPropagation();
@@ -179,7 +226,7 @@ function MenuLevel({
         if (enabled.at(-1) !== undefined) focusItem(enabled.at(-1)!);
         break;
       case 'ArrowRight': {
-        const item = items[active];
+        const item = actionAt(active);
         if (item?.submenu?.length) {
           e.preventDefault();
           e.stopPropagation();
@@ -218,7 +265,7 @@ function MenuLevel({
         break;
       case 'Enter':
       case ' ': {
-        const item = items[active];
+        const item = actionAt(active);
         if (!item || item.disabled) return;
         e.preventDefault();
         e.stopPropagation();
@@ -297,7 +344,7 @@ function MenuLevel({
     >
       {items.map((item, index) => {
         // FR-018a — a section divider: non-interactive, no role="menuitem", skipped by navigation.
-        if (item.separator) {
+        if (isSeparator(item)) {
           return <li key={`sep-${index}`} className="context-menu__separator" role="separator" aria-hidden />;
         }
         const hasSub = !!item.submenu && item.submenu.length > 0;
@@ -361,7 +408,7 @@ function MenuLevel({
             ) : null}
             {hasSub && openLabel === item.label ? (
               <MenuLevel
-                items={item.submenu!}
+                actions={item.submenu!}
                 onClose={onClose}
                 submenuDelayMs={submenuDelayMs}
                 testId={`submenu-${item.label}`}
@@ -396,7 +443,8 @@ export function ContextMenu({
 }: {
   x: number;
   y: number;
-  items: MenuItem[];
+  /** The menu's ACTIONS. Dividers are derived per level from their sections — see `withDividers`. */
+  items: MenuAction[];
   onClose: () => void;
   submenuDelayMs?: number;
   /** Root test id. A menu folded into this one keeps its own (e.g. `cog-menu`) — see FR-053. */
@@ -487,7 +535,7 @@ export function ContextMenu({
 
   return (
     <MenuLevel
-      items={items}
+      actions={items}
       // Actions (leaf click / Enter, and an in-menu shortcut) close via this, restoring focus to the
       // opener. Outside-click and blur close via the window listeners above with plain onClose.
       onClose={closeAndRestore}

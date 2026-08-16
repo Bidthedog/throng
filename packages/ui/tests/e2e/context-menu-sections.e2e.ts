@@ -42,12 +42,22 @@ test('"Open in OS Explorer" leads the "Open In" submenu; the menu has section se
       const fileSub = win.getByTestId('submenu-Open In');
       await expect(fileSub.locator('.context-menu__item').first()).toContainText('OS File Explorer');
 
-      // A FOLDER: its "Open In" holds ONLY the OS reveal (no editor targets).
+      /*
+       * A FOLDER: its "Open In" holds the OS reveal and 033 US3's Terminal submenu — and no editor
+       * targets, which is what this assertion has always been about.
+       *
+       * The count moved from one to two on purpose, and this is SC-011's sole named exception (spec
+       * 033, FR-029): US3 nests Terminal inside this very submenu for folders and files alike. Any
+       * OTHER menu spec that needs editing for that feature is a defect in the builder, not a test
+       * that had gone stale. The leading item is still the OS reveal, which is the ordering #158
+       * fixed.
+       */
       await tree.getByText('src', { exact: true }).click({ button: 'right' });
       await win.getByTestId('menu-item-Open In').click();
       const folderSub = win.getByTestId('submenu-Open In');
-      await expect(folderSub.locator('.context-menu__item')).toHaveCount(1);
+      await expect(folderSub.locator('.context-menu__item')).toHaveCount(2);
       await expect(folderSub.locator('.context-menu__item').first()).toContainText('OS File Explorer');
+      await expect(folderSub.locator('.context-menu__item').nth(1)).toContainText('Terminal');
     });
   } finally {
     cleanupTemp(root);

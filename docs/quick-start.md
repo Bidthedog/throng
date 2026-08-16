@@ -246,6 +246,47 @@ other's edit. In-progress edits and their undo history survive a crash.
 
 **F3** / **Shift+F3** jump between matches; **Escape** closes the bar.
 
+### Open a file without walking to it
+
+**Ctrl+Shift+T** opens **Quick Open** from anywhere. Type any part of a name or a path and press
+**Enter**. Words are matched independently and anywhere in the path, so `menu tsx` finds
+`renderer/workspace/context-menu.tsx` without you typing the folders in between. Matches are ranked,
+and the full path is shown so two files with the same name stay distinguishable.
+
+- **Where it opens** is stated on a button in the header, in words: *"Will open in a new editor"* or
+  *"Will open in the active editor (*panel name*)"*. Click it, or press **Space** while it has
+  focus, to switch. It appears only when you opened Quick Open from inside an editor; otherwise your
+  `Editor · Open target` preference decides.
+- **Hidden and excluded files are left out** by default — the same `explorer.excludeGlobs` list the
+  file tree uses, *and* anything you marked **Hide in this project**. The button at the top of the
+  list toggles them in for this one search — it shows the tree's own *hide* icon while it is leaving
+  them out, and an eye while it is showing them, and its tooltip says both what is true now and what
+  pressing it will do. To change where **every** search starts, use
+  `Editor · Navigation · Quick open excludes hidden` in Preferences.
+- **A file already open stays where it is.** Choosing "new editor" for a file that is open elsewhere
+  in the project moves you to it rather than opening a second copy — one file, one editor.
+
+**Ctrl+G** opens **Go To Line** in an editor. Type a line number and press **Enter**; a number past
+the end of the file goes to the last line rather than refusing. A focused terminal still receives its
+own **^G** — throng only claims the chord where an editor is active.
+
+Both remember nothing between uses unless you ask them to: **`Editor · Navigation`** in Preferences
+has a toggle for each, and when on, the modal reopens with the last value you actually *used* — a
+query that opened a file, a line you actually went to — fully selected so typing replaces it. The
+values live in memory for the running app only; they are never written to disk, and Quick Open's is
+discarded when you switch project.
+
+### Two things the file tree's menu can do for you
+
+Right-click a **folder** and you get, alongside Copy Path:
+
+- **Open In → Terminal**, listing every terminal flavour you have configured. It opens a new terminal
+  panel in the current tab, starting in that folder — or, for a right-clicked *file*, in its parent
+  folder — with the keyboard already in it, so you can type immediately.
+- **Collapse All Children** closes everything beneath the folder at every depth while leaving the
+  folder itself open, and **Expand All Children** opens its immediate child folders, one level. A
+  file's menu shows neither, because a file can never acquire children.
+
 ## 6. Tear off a sub-workspace
 
 A **sub-workspace** is a separate OS window showing panels that stay **in sync** with the project —
@@ -330,6 +371,8 @@ also the full list.
 |---|---|
 | **Ctrl+Alt+B** / **Ctrl+Alt+N** | Show/hide the Projects pane / the Files & Folders pane |
 | **Ctrl+Alt+T** | Open the tab picker — type to filter, **Up/Down** to move, **Enter** to choose |
+| **Ctrl+Shift+T** | **Quick Open** — type part of a file's name or path, **Enter** to open it |
+| **Ctrl+G** | **Go To Line** — in an editor. A terminal still gets its own `^G` |
 | **F11** | Full screen |
 | **Ctrl+`** / **Ctrl+Shift+`** | Cycle the active panel forward / back |
 | **Ctrl+Alt+Arrow** | Move focus to the panel left / right / up / down |

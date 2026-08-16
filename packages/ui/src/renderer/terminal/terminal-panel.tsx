@@ -53,7 +53,7 @@ import {
   type TreeDropDetail,
 } from '../explorer/tree-drag-store.js';
 import { useContextMenu } from '../context-menu-provider.js';
-import type { MenuItem } from '../workspace/context-menu.js';
+import { terminalContentMenu } from './terminal-content-menu.js';
 import { Icon } from '../common/icon.js';
 import { PanelFailureBanner, retryPanelFailure } from '../common/panel-failure-banner.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
@@ -262,108 +262,32 @@ export function TerminalPanel({
       // "Copy Link Address" above Copy/Paste. An active selection takes priority — then the menu is
       // the ordinary Copy menu, whatever the pointer is over.
       const link = terminalLinkTarget(selection, apiRef.current?.getHoveredLink() ?? null);
-      const linkItems: MenuItem[] = link
-        ? [
-            {
-              // No icon: there is no link/open token, and 023's rule is "an icon only where a token
-              // exists". "Copy Link Address" is a copy action, so it carries the shared copy glyph.
-              label: 'Open Link',
-              testId: 'menu-item-Open Link',
-              onClick: () => window.throng?.openExternal?.(link),
+      // 033 US5 (T063) — the items live in `terminal-content-menu.ts`, which declares their sections;
+      // `ContextMenu` derives the dividers from those. Nothing here decides where a divider goes.
+      openMenu(
+        e.clientX,
+        e.clientY,
+        terminalContentMenu({
+          link,
+          selection,
+          redrawChord: firstBinding(keybindings, 'terminal.redraw'),
+          startFailure: startFailureRef.current !== null,
+          actions: {
+            openLink: (url) => window.throng?.openExternal?.(url),
+            copyLinkAddress: (url) => void window.throng?.terminal?.writeClipboard?.(url),
+            copySelection: () => {
+              void window.throng?.terminal?.writeClipboard?.(selection);
             },
-            {
-              label: 'Copy Link Address',
-              icon: 'copy',
-              testId: 'menu-item-Copy Link Address',
-              onClick: () => void window.throng?.terminal?.writeClipboard?.(link),
+            paste: () => apiRef.current?.paste(),
+            redraw: () => requestRedraw(panel.id, 'manual'),
+            tryAgain: () => {
+              retryPanelFailure(panel.id);
             },
-            { separator: true },
-          ]
-        : [];
-      openMenu(e.clientX, e.clientY, [
-        ...linkItems,
-        {
-          label: 'Copy',
-          icon: 'copy',
-          disabled: selection.length === 0,
-          onClick: () => {
-            void window.throng?.terminal?.writeClipboard?.(selection);
+            copyDetails: () => copyFailureRef.current(),
+            clearPanelType: () => clearWithMemoryRef.current(),
           },
-        },
-        {
-          label: 'Paste',
-          icon: 'paste',
-          // The paste chord is FIXED (Ctrl+V / Shift+Insert, #142) and lives in the terminal key
-          // handler, not the rebindable keybindings — so the shortcut shown is the literal native
-          // chord, matching what the user presses. Copy has no chord of its own (Ctrl+C is the
-          // shell's interrupt), so it carries no shortcut.
-          shortcut: 'Ctrl+V',
-          // The SAME paste route as Ctrl+V / Shift+Insert (#142): one implementation reads the
-          // clipboard and writes it to the shell exactly once, so no gesture can double-paste and
-          // the menu can never drift from the keyboard path.
-          onClick: () => apiRef.current?.paste(),
-        },
-        { separator: true },
-        {
-          // 028 (issue 163) — the deliberate version of the divider nudge users discovered by
-          // accident. It asks the running program to redraw: no content, scrollback, selection,
-          // cursor, focus or layout changes, and nothing is typed at the shell.
-          label: 'Refresh / redraw terminal',
-          testId: 'menu-item-Refresh / redraw terminal',
-          shortcut: firstBinding(keybindings, 'terminal.redraw'),
-          onClick: () => requestRedraw(panel.id, 'manual'),
-        },
-        /*
-         * 029 FR-004d — Retry and Clear as MENU ITEMS, not only as icons on the failure badge.
-         *
-         * The Constitution binds a feature that adds a panel action to add its menu item in the same
-         * increment, and FR-004a makes clearing a panel user-invoked for the first time: until now
-         * `clearPanelType` only ever ran automatically, as a side effect of a terminal ending. An
-         * action reachable solely by an icon on a transient badge is exactly the invisibility that
-         * rule exists to prevent.
-         *
-         * Shown only while a start failure is live, because that is the only state in which either
-         * is meaningful — offering "Try again" to a healthy terminal would be noise. The menu itself
-         * IS reachable in that state: its `onContextMenu` sits on a div rendered unconditionally, and
-         * the failure badge is a sibling of that div rather than a cover.
-         */
-        ...(startFailureRef.current
-          ? ([
-              { separator: true },
-              {
-                label: 'Try again',
-                testId: 'menu-item-Try again',
-                /*
-                 * The SAME retry the banner's control runs (030 FR-042c) — and it now goes THROUGH
-                 * the banner rather than calling `retryStart()` beside it.
-                 *
-                 * Calling `retryStart()` directly re-ran the attach correctly and never touched the
-                 * banner's retry state, so a menu retry that failed left the banner standing and
-                 * silent. That is exactly the "did my click do anything?" failure this design exists
-                 * to prevent (see `retryStart` below), so FR-045 held on the icon and nowhere else.
-                 * `retryPanelFailure` runs the mounted banner's own retry — its in-flight guard, its
-                 * disabling and its failure sentence included.
-                 */
-                onClick: () => {
-                  retryPanelFailure(panel.id);
-                },
-              },
-              {
-                // 030 FR-042c — the banner's THIRD command, in the menu beside the other two. Same
-                // text, same assembly (`failureCopy` below), read through a ref so the menu copies
-                // the failure as it stands when it OPENS.
-                label: 'Copy details',
-                testId: 'menu-item-Copy details',
-                onClick: () => copyFailureRef.current(),
-              },
-              {
-                label: 'Clear panel type',
-                testId: 'menu-item-Clear panel type',
-                onClick: clearWithMemoryRef.current,
-              },
-            ] as MenuItem[])
-          : []),
-      ]);
+        }),
+      );
     },
     [openMenu, panel.id, keybindings],
   );
@@ -764,6 +688,9 @@ export function TerminalPanel({
     startupCommand: terminalConfig.startupCommand,
     // 025 FR-028: reopen where this panel was last working, not always at the project root.
     rememberedCwd: terminalConfig.rememberDirectory ? panel.terminalMemory?.lastCwd : undefined,
+    // 033 FR-033: the folder this panel was opened from in the tree, persisted on the config so a
+    // RESTORED panel restarts there rather than silently sliding back to the project root (B5).
+    startDirectory: config.startDirectory,
     container,
     theme: xtermTheme,
     fontFamily: font.family,

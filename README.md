@@ -53,6 +53,9 @@ goal is to pull all of that into a single, simple customisable workspace.
   per-project hiding, all undoable with Ctrl+Z and persisted across restarts.
 - **In-panel search** — one find bar that adapts to the active panel: find and replace in an editor,
   and a read-only scrollback search in a terminal that never types at the shell.
+- **Getting there without walking** — Quick Open ranks every file in the project by name or path from
+  one chord and says in words where it will open it; Go To Line jumps by number; and the tree's own
+  menu opens a terminal in any folder or tidies one branch of the subtree.
 - **Focus and zoom** — one visible active panel per window, movable from the keyboard, with text zoom
   set independently per panel and panel names that are unique across the whole application.
 - **Preferences** — a single window with visual Settings, Key Bindings and Themes editors: typeahead

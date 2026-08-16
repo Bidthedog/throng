@@ -79,19 +79,37 @@ test('Shift+F10 and the ContextMenu key open the focused item’s menu (FR-018c)
       await createProject(win, 'MenuOpen', root);
       const tree = win.getByTestId('file-explorer-tree');
       /*
-       * Wait for the row to actually HOLD focus before pressing a key at it.
+       * Wait for the two things a Shift+F10 at this row actually depends on (FR-053a, #244).
        *
-       * A click selects the row and moves focus, but the focus call lands asynchronously — so a
-       * keystroke sent in the same beat can arrive while the document body is still the active
-       * element, and Shift+F10 then opens nothing. Measured as this test failing and flaking under
-       * load. Polling `document.activeElement` waits for the state the key press depends on.
+       * A click selects the row and moves focus, but both land asynchronously — a keystroke sent in
+       * the same beat can arrive while the body is still the active element, and Shift+F10 then
+       * opens nothing. Measured as this test failing and flaking under load.
+       *
+       * What this guard used to poll was `(document.activeElement?.textContent ?? '')
+       * .includes('thing.txt')`, and that could not fail. `textContent` is an element's text plus
+       * every descendant's, so the predicate holds for any ancestor of the row — including the tree
+       * container, which is where react-arborist's roving focus actually parks `activeElement`
+       * (`tree-node.tsx`), and including `document.body` before focus has landed at all. It returned
+       * true on its first sample whether the click landed, missed, or was deleted. #244 is that
+       * guard; `notice-stacking.e2e.ts` writes the reasoning out at length, and it was copied here
+       * as precedent precisely because it read like a real guard.
+       *
+       * So ask the two questions separately, each of which can be false:
+       *   - is the ACTIVE ELEMENT inside the tree — `closest`, not text; and
+       *   - has the selection reached THIS row, which is what `tree-row--selected` is.
        */
       const row = tree.getByText('thing.txt', { exact: true });
-      const rowFocused = async (): Promise<boolean> =>
-        win.evaluate(() => (document.activeElement?.textContent ?? '').includes('thing.txt'));
+      const rowReady = async (): Promise<boolean> =>
+        win.evaluate(
+          () =>
+            document.activeElement?.closest('[data-testid="file-explorer-tree"]') != null &&
+            document
+              .querySelector('.tree-row[data-rel-path="thing.txt"]')
+              ?.classList.contains('tree-row--selected') === true,
+        );
 
       await row.click();
-      await expect.poll(rowFocused, { timeout: 10_000 }).toBe(true);
+      await expect.poll(rowReady, { timeout: 10_000 }).toBe(true);
       await win.keyboard.press('Shift+F10');
       await expect(win.getByTestId('context-menu')).toBeVisible();
       await win.keyboard.press('Escape');
@@ -99,7 +117,7 @@ test('Shift+F10 and the ContextMenu key open the focused item’s menu (FR-018c)
 
       // The dedicated ContextMenu (Menu) key does the same.
       await row.click();
-      await expect.poll(rowFocused, { timeout: 10_000 }).toBe(true);
+      await expect.poll(rowReady, { timeout: 10_000 }).toBe(true);
       await win.keyboard.press('ContextMenu');
       await expect(win.getByTestId('context-menu')).toBeVisible();
     });

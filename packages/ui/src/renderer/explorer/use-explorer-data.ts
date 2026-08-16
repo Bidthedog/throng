@@ -19,7 +19,9 @@ import type { NodeApi, TreeApi } from 'react-arborist';
 type OpenMap = { [id: string]: boolean };
 import {
   deletePaths,
+  descendantOpenFolders,
   emptyStack,
+  immediateChildFolders,
   isExcluded,
   nextExpandTargets,
   parentRel,
@@ -101,6 +103,16 @@ export interface ExplorerApi {
   expandStep: () => void;
   collapseAll: () => void;
   /**
+   * 033 US4 (FR-041/FR-042/FR-043) — open `relPath`'s IMMEDIATE child folders, one level, each with
+   * its children loaded. A closed anchor opens itself first.
+   */
+  expandChildren: (relPath: string) => void;
+  /**
+   * 033 US4 (FR-039/FR-040) — close every expanded descendant of `relPath` at every depth, leaving
+   * the anchor itself open. A folder with nothing expanded beneath it is a silent no-op.
+   */
+  collapseChildren: (relPath: string) => void;
+  /**
    * US6 (#137): reveal a file in this tree by its root-relative path (expand ancestors + select).
    *
    * `focus` decides whether the tree also takes the keyboard. It defaults to true because the only
@@ -163,6 +175,28 @@ function sameEntries(a: TreeNodeData[] | undefined, b: TreeNodeData[]): boolean 
     }
   }
   return true;
+}
+
+/**
+ * The rendered tree as the pure core's `ExpandNode` view (033 US4, contract C5).
+ *
+ * react-arborist is the single source of truth for open-state, so the view is read from IT and not
+ * from anything we keep alongside — which is what stops the two disagreeing (#120). A closed folder
+ * carries no `children`, matching the convention `expand.ts` documents: a closed folder's listing is
+ * not what is on screen, so it is not part of this view of it.
+ *
+ * `expandStep` builds the same shape inline. It is deliberately left alone rather than folded into
+ * this helper: FR-046 / contract D9 require the toolbar's Expand and Collapse all to be UNCHANGED,
+ * in code as well as in behaviour, and US4's independent-test promise rests on that.
+ */
+function toExpandNode(node: NodeApi<TreeNodeData>): ExpandNode {
+  const isRoot = node.data.relPath === '';
+  return {
+    relPath: node.data.relPath,
+    kind: node.data.kind,
+    open: isRoot ? true : node.isOpen,
+    children: isRoot || node.isOpen ? (node.children ?? []).map(toExpandNode) : undefined,
+  };
 }
 
 function savePersisted(projectId: string, expanded: string[], selectedId: string | null): void {
@@ -579,12 +613,26 @@ export function useExplorerData(
     };
   }, [rootFolder, reloadDirs]);
 
-  // Ensure a folder's children are loaded (lazy, on first open).
+  /**
+   * Ensure a folder's children are loaded (lazy, on first open).
+   *
+   * 033 US4 — it now HANDS BACK that listing, which is purely additive: every existing caller
+   * ignores the value and behaves exactly as before (FR-046/D9 — the toolbar's Expand is one of
+   * them and is untouched). `expandChildren` needs it because `data` is rebuilt by a React render
+   * that has not happened yet on the tick a folder is first loaded in, so a folder opened a moment
+   * ago still renders as childless — reading the listing itself is the only way to name the
+   * children of a folder that was CLOSED when the user asked for this (FR-042).
+   *
+   * `undefined` means the listing FAILED (the folder is gone, or unreadable). That is the signal
+   * `expandChildren` refuses to open on, which is what keeps FR-043/SC-009 true rather than hopeful.
+   */
   const ensureLoaded = useCallback(
-    async (rel: string): Promise<void> => {
-      if (childrenMap.has(rel)) return;
+    async (rel: string): Promise<TreeNodeData[] | undefined> => {
+      const cached = childrenMap.get(rel);
+      if (cached !== undefined) return cached;
       const kids = await fetchRef.current(rel);
       if (kids) setChildrenMap((p) => new Map(p).set(rel, kids));
+      return kids ?? undefined;
     },
     [childrenMap],
   );
@@ -736,6 +784,96 @@ export function useExplorerData(
     api.open(ROOT_ID); // the root stays open
     persist(selectedId);
   }, [treeRef, selectedId, persist]);
+
+  /*
+   * 033 US4 — COLLAPSE ALL CHILDREN (FR-039/FR-040, contract D1–D3).
+   *
+   * Which folders to close is decided by the pure core over the same `ExpandNode` view the
+   * toolbar's Expand reads, deepest-first — so they close in ONE pass and no child outlives its
+   * parent's collapse (C2). The anchor is excluded by construction, which is what leaves the folder
+   * itself open (C1/D1), and makes the project root a case that needs no special handling: the root
+   * is the tree, and it is never a descendant of itself (D3).
+   *
+   * Nothing expanded beneath it → an empty target list → we change nothing and error on nothing
+   * (D2). The early return also keeps a no-op off localStorage.
+   */
+  const collapseChildren = useCallback(
+    (relPath: string): void => {
+      const api = treeRef.current;
+      const rootNode = api?.root.children?.[0];
+      if (!api || !rootNode) return;
+      const targets = descendantOpenFolders(toExpandNode(rootNode), relPath);
+      if (targets.length === 0) return;
+      for (const target of targets) api.close(target);
+      // D8 — persist exactly as a manual collapse does: same key, same shape, so the result
+      // survives a project switch and a reload (FR-045).
+      persist(selectedId);
+    },
+    [treeRef, persist, selectedId],
+  );
+
+  /*
+   * 033 US4 — EXPAND ALL CHILDREN (FR-041 to FR-043, contract D4–D7, D10).
+   *
+   * ONE LEVEL, and every folder it opens has its children loaded first — the `ensureLoaded` →
+   * `open` → `persist` path a chevron click and `expandStep` already take, which is the whole of
+   * FR-043 and SC-009. The failure it must not reproduce is #120: a folder marked open whose
+   * children were never loaded renders as an empty folder that never fills, because `build(dir)`
+   * cannot tell "not loaded" from "genuinely empty".
+   *
+   * So a folder is opened ONLY once its own listing has come back. A listing that fails — the
+   * folder was deleted between the right-click and the click — leaves that folder closed rather
+   * than open-and-lying, and `fetchChildren` has already reported the failure.
+   */
+  const expandChildren = useCallback(
+    (relPath: string): void => {
+      void (async () => {
+        if (!treeRef.current) return;
+        // D5/FR-042 — a CLOSED anchor opens itself first, and its listing is what names the
+        // children to open. Loaded before the open, for the same reason every other folder is.
+        const anchorKids = await ensureLoaded(relPath);
+        const api = treeRef.current;
+        if (!api || anchorKids === undefined) return;
+        // The root is always open and is keyed by ROOT_ID, not by its (empty) relPath.
+        if (relPath !== '') api.open(relPath);
+
+        /*
+         * The immediate child folders, decided by the pure core (C4) over the listing just
+         * guaranteed above rather than over the rendered rows: `data` is rebuilt by a React render
+         * that has not happened yet on this tick, so a folder opened a moment ago still renders as
+         * childless and would expand into nothing at all.
+         *
+         * D7 — the project's hidden paths are applied here because they are applied to `data` and
+         * not to the listing; the global exclude globs were already applied by `fetchChildren`. An
+         * excluded folder is not in the tree, so it is not something to expand into.
+         */
+        const anchorView: ExpandNode = {
+          relPath,
+          kind: 'folder',
+          open: true,
+          children: anchorKids.map((kid) => ({
+            relPath: kid.relPath,
+            kind: kid.kind,
+            open: false,
+          })),
+        };
+        const targets = immediateChildFolders(anchorView, relPath).filter((r) => !hiddenSet.has(r));
+        if (targets.length === 0) return;
+
+        // D10 — the loads are issued TOGETHER and the opens applied in ONE pass, exactly as
+        // `expandStep` does, so a folder with hundreds of children does not appear to hang.
+        // Each target reports whether its own listing arrived; only those are opened (D6).
+        const loaded = await Promise.all(
+          targets.map(async (target) => ((await ensureLoaded(target)) === undefined ? null : target)),
+        );
+        const a = treeRef.current;
+        if (!a) return;
+        for (const target of loaded) if (target !== null) a.open(target);
+        persist(selectedId);
+      })();
+    },
+    [treeRef, ensureLoaded, hiddenSet, persist, selectedId],
+  );
 
   // US6 (#137) — reveal a file IN THIS TREE: lazily load and open each ancestor (shallow → deep so
   // each level's children exist before the next opens), then select and scroll to the file.
@@ -1273,6 +1411,8 @@ export function useExplorerData(
     onRename,
     expandStep,
     collapseAll,
+    expandChildren,
+    collapseChildren,
     revealInTree,
     selectedRelPaths,
     primarySelected,

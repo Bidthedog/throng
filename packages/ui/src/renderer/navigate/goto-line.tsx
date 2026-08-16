@@ -32,8 +32,13 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import { resolveGotoLine } from '@throng/core';
 import { EditorSelection } from '@codemirror/state';
 import { useFocusTrap } from '../common/focus-trap.js';
+import { useAppSettings } from '../config/config-store.js';
 import { getEditorView } from '../editor/editor-views.js';
-import { navigationModal } from './navigation-store.js';
+import {
+  navigationModal,
+  rememberGotoLineNumber,
+  rememberedInput,
+} from './navigation-store.js';
 
 export function GotoLine({
   panelId,
@@ -43,7 +48,40 @@ export function GotoLine({
   panelId: string;
   onDismiss: () => void;
 }): ReactElement {
-  const [value, setValue] = useState('');
+  // FR-058 — read LIVE, so a toggle takes effect at the next invocation. This component mounts once
+  // per invocation, so there is nothing to notify and nothing that can go stale.
+  const remember = useAppSettings().editor.navigation.rememberGotoLineNumber;
+
+  /*
+   * FR-057 / FR-060 — the seeded value, read ONCE at mount.
+   *
+   * `useState`'s initialiser rather than a plain read: this is the field's starting text, and a
+   * re-render must never push it back over what the user has since typed.
+   */
+  const [value, setValue] = useState(() => {
+    const held = rememberedInput().gotoLineNumber;
+    /*
+     * `String`, and deliberately NOT `formatGrouped`.
+     *
+     * Constitution 4.5.0 groups DISPLAYED numbers; this is an editable value that goes straight back
+     * into `resolveGotoLine`, whose `WHOLE_NUMBER` accepts digits and nothing else. A grouped seed
+     * would make the field's own starting value invalid — Enter on an untouched `1,024` would move
+     * nothing at all — which is exactly the separator-crossing-a-boundary defect that rule guards
+     * against, arriving from the formatting side rather than the storage side.
+     */
+    return remember && held !== null ? String(held) : '';
+  });
+
+  /*
+   * FR-060 — a seeded value arrives FULLY SELECTED, so typing replaces it outright.
+   *
+   * A once-only latch on `onFocus`, matching `picker.tsx`'s seeded query exactly: `autoFocus` has
+   * already fired by the time an effect would run, and selecting from an effect would fight the
+   * browser's own caret placement. Re-selecting on a LATER focus would be wrong — by then the user
+   * has clicked back into a field they were editing, and wiping their caret position is not what
+   * clicking into a text field means.
+   */
+  const selected = useRef(false);
 
   /*
    * Declared FIRST, exactly as `picker.tsx` declares it first, and for the same mechanical reason.
@@ -100,6 +138,18 @@ export function GotoLine({
       // `null` is "the input names no line" (empty, whitespace, non-numeric). Nothing moves, and no
       // notice is raised — G4. Out-of-range input never reaches this branch: core clamps it.
       if (line !== null) {
+        /*
+         * FR-061 — the number is ACCEPTED here: `line` is non-null, so the caret is about to move.
+         *
+         * A dismissal never reaches this branch, and neither does a confirm on text that names no
+         * line (empty, whitespace, non-numeric — G4's "nothing moves"). What is recorded is the
+         * RESOLVED line rather than what was typed, because `resolveGotoLine` has already clamped
+         * it: 99999 in a 300-line file went to 300, and 300 is where the user went.
+         *
+         * Gated on the setting for the same reason Quick Open's is — at the shipped defaults this
+         * store holds nothing rather than holding something it declines to show.
+         */
+        if (remember) rememberGotoLineNumber(line);
         const target = view.state.doc.line(line);
         view.dispatch({
           // FR-021 — the caret at the line's FIRST COLUMN, not at the column it happened to be in.
@@ -172,6 +222,11 @@ export function GotoLine({
           value={value}
           placeholder="Line number…"
           aria-label="Go To Line"
+          onFocus={(event) => {
+            if (value === '' || selected.current) return;
+            selected.current = true;
+            event.target.select();
+          }}
           onChange={(event) => setValue(event.target.value)}
         />
       </div>

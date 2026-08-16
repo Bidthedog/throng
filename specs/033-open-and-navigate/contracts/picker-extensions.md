@@ -46,20 +46,49 @@ export function rankStable<T>(items: readonly T[], score: (item: T) => number): 
 | K5 | An empty query scores every entry equally, so the list is the seeded order in full | K6 (031) |
 | K6 | `rankStable` returns a new array and does not mutate its input | — |
 
-## 3. Renderer — the five new props, and one widened
+## 3. Renderer — the five new props, and two widened
 
 *(Corrected 2026-08-15, baseline finding F8. This heading has said "four" and then "five"; the
-truthful count is **five added and one widened**, which is why neither number was ever right.)*
+truthful count is **five added and one widened**, which is why neither number was ever right.
+Corrected again 2026-08-16: Phase 8 widened a second existing member, `onChoose`, so it is now
+**five added and two widened** — and the pattern of this heading being wrong is itself the argument
+for counting the widenings rather than only the additions.)*
 
 `PickerProps` gains five optional members — `rank`, `maxRows`, `truncatedMessage`, `header`,
-`initialQuery` — and **`emptyMessage` widens from `string` to `ReactNode`**. The widening is the one
-change to an EXISTING member, and it is why "the N new props" undercounts the surface: a caller
-passing a string is unaffected, so `tab-picker.tsx` stays untouched and SC-013 holds, but the type a
-future caller may rely on is not the type this contract originally declared.
+`initialQuery` — and **two existing members widen**: `emptyMessage` from `string` to `ReactNode`,
+and `onChoose` from `(entry) => void` to `(entry, query) => void`. Those widenings are why "the N
+new props" undercounts the surface: a caller passing a string or ignoring a second argument is
+unaffected, so `tab-picker.tsx` stays untouched and SC-013 holds, but the type a future caller may
+rely on is not the type this contract originally declared.
 
 ```ts
 export interface PickerProps {
-  // …existing: title, entries, onChoose, onDismiss, placeholder, emptyMessage, testId
+  // …existing: title, entries, onDismiss, placeholder, testId
+  /**
+   * WIDENED (2026-08-16, Phase 8): was `onChoose: (entry: PickerEntry) => void`.
+   *
+   * FR-058 remembers the query that OPENED A FILE, and only that one — so the accepted query has to
+   * reach the caller at the moment of acceptance. The picker owns the query text; the caller owns
+   * the decision. Passing it back on choose is what lets Quick Open record an ACCEPTED value
+   * without either side reaching into the other, and it is why dismissal cannot record anything:
+   * there is no path to this callback that is not an acceptance. INERT for every existing caller —
+   * an extra argument to a function that declares one parameter is ignored by both TypeScript and
+   * JavaScript, so `tab-picker.tsx` is untouched and SC-013 holds. Recorded for the same reason as
+   * `emptyMessage` below: it is a change to an EXISTING member of a published type.
+   */
+  onChoose: (entry: PickerEntry, query: string) => void;
+  /**
+   * WIDENED (2026-08-15, F8): was `emptyMessage?: string`.
+   *
+   * Quick Open's FR-015 "still listing this project's files…" state is drawn through this slot and
+   * has to carry `data-testid="quickopen-building"`, which a bare string cannot. INERT for every
+   * caller passing a string — a `string` IS a `ReactNode`, so no existing call site changes shape,
+   * no runtime behaviour changes, and `tab-picker.tsx` (which passes one) is untouched: that is why
+   * SC-013 still holds. It is recorded all the same because it is a change to an EXISTING member
+   * of a published type — the surface a future caller may rely on is no longer the surface this
+   * contract originally declared, and "inert today" is not "unchanged".
+   */
+  emptyMessage?: ReactNode;
   /** Ranks the FILTERED entries. Absent → seeded order, unchanged (K11). */
   rank?: (text: string, query: CompiledQuery) => number;
   /** Most rows to RENDER. Absent → no cap. */
@@ -131,18 +160,41 @@ Enter on the header's control to change that control and open nothing.
 | T5 | Choosing "the currently active editor" performs the **Last-Active-Editor route** — `openFileInTab(ws, tabId, absPath, 'lastActive')` — not a parallel implementation of it | FR-010, SC-004 |
 | T6 | It is a themeable control with a hover title naming what it does; it is not a dialog decision button, so the icon rule applies | Themeable icon controls |
 
+> **SUPERSEDED 2026-08-15 by FR-068 (plan D5); recorded 2026-08-16.** The table above describes the
+> control as first shipped — an icon-only toggle whose alternative was named in the hover title and
+> nowhere else. Hand-testing found that a user could not see where a file would land without hovering,
+> and FR-068 replaced it with a **single icon-plus-text button** reading *"Will open in a **new
+> editor**"* or *"Will open in the **active editor** (*panel name*)"*, icon and text one target.
+>
+> What that changes here: **T6's "hover title naming what it does" is no longer the mechanism** — the
+> title remains, but the destination is now stated in visible text, which is what SC-020 asserts.
+> **T1's "two options"** describes a control that shows both; the shipped one names its current
+> destination and switches. That difference was itself a converge finding (T112), settled in
+> `spec.md` by marking FR-010 superseded by FR-068 rather than by changing the code.
+> **T2, T3, T4 and T5 are unaffected** — the preselection, the invoked-from-an-editor condition, the
+> Space/Enter behaviour and the Last-Active-Editor route all survived the rewrite unchanged, which is
+> why this is a supersession of the presentation only.
+
 
 ## Test identifiers fixed after §5 (2026-08-15)
 
-§5 fixed `quickopen` and `quickopen-truncated`. Writing the E2E specs required three more, and they
-are recorded here rather than left to the implementation, because a spec and an implementation that
-disagree about a `data-testid` produce a test that stays red **for the wrong reason** — which looks
-identical to a feature that is not finished.
+§5 fixed `quickopen`. Writing the E2E specs required three more, and they are recorded here rather
+than left to the implementation, because a spec and an implementation that disagree about a
+`data-testid` produce a test that stays red **for the wrong reason** — which looks identical to a
+feature that is not finished.
+
+*(Corrected 2026-08-15, closing baseline finding F8's second half. This paragraph said "§5 fixed
+`quickopen` and `quickopen-truncated`" and then promised **three more** above a table of **two** —
+so the count was wrong and the attribution was wrong in the same sentence. `quickopen-truncated` was
+never fixed by §5: it is derived by **P4**, from `testId` plus the `-truncated` suffix, which is why
+it appeared in neither list and went uncounted. It is the third row below, and the table now matches
+the number in front of it.)*
 
 | Identifier | On | Notes |
 |---|---|---|
 | `quickopen-target` | the two-option target control (FR-010) | carries `data-value="lastActive" \| "new"` |
-| `quickopen-building` | the "still listing" state (FR-015, S3) | present only while enumeration is in flight |
+| `quickopen-building` | the "still listing" state (FR-015, S3) | rendered through the widened `emptyMessage` (§3) — the reason that member is a `ReactNode`. Present only while enumeration is in flight |
+| `quickopen-truncated` | the truncation notice (FR-014) | **derived, not literal** — P4 renders `<testId>-truncated`, so it follows from `testId` being `quickopen` and is not spelled anywhere in §5 |
 
 **`data-value` deliberately reuses `editor.openTarget`'s own vocabulary** (`lastActive` / `new`)
 rather than inventing a second spelling. The preselection assertion is then a comparison against the
