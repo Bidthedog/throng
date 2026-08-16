@@ -263,6 +263,19 @@ and the full path is shown so two files with the same name stay distinguishable.
   them out, and an eye while it is showing them, and its tooltip says both what is true now and what
   pressing it will do. To change where **every** search starts, use
   `Editor · Navigation · Quick open excludes hidden` in Preferences.
+
+> **`node_modules` is now hidden by default, in the tree as well as here.** It joined the shipped
+> `explorer.excludeGlobs` list, so a fresh install no longer shows it in **Files & Folders** and
+> Quick Open does not offer files inside it. That is a change to what the file tree draws, not only
+> to this modal.
+>
+> **To get it back**, remove `**/node_modules` from `explorer.excludeGlobs` in Preferences →
+> *Files & Folders*. To see inside it for one search only, press the toggle described above rather
+> than editing the setting.
+>
+> If you already had throng installed, the entry is added for you on upgrade — but **only if you had
+> not edited that list yourself**. A list you have customised is left exactly as you left it, on the
+> principle that a shipped default may not overwrite a decision you made.
 - **A file already open stays where it is.** Choosing "new editor" for a file that is open elsewhere
   in the project moves you to it rather than opening a second copy — one file, one editor.
 

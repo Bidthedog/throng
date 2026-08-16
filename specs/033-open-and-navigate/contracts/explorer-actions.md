@@ -283,8 +283,20 @@ Both actions go through `use-explorer-data.ts` and use the **same** `ensureLoade
 > (`start-directory.test.ts`); the two FR-034 report cases and the honoured/escaped silences
 > (`cwd-fallback-report.test.ts`); the `..` segment rule itself (`path-id.test.ts`).
 >
-> One gap is left open and named rather than papered over: the precedence expression
+> ~~One gap is left open and named rather than papered over: the precedence expression
 > `rememberedCwd ?? startDirectory` lives in `terminal-ipc.ts`, not in core, so the unit tests mirror
 > it and **cannot fail if that line is reverted**. Move `requestedCwd` into
 > `packages/core/src/terminal/start-directory.ts` and have the handler call it, and the mirror can be
-> deleted for the real thing.
+> deleted for the real thing.~~
+>
+> > **CLOSED 2026-08-16 — the gap named above was fixed the way it said.**
+> > `requestedStartDirectory(rememberedCwd, startDirectory)` now lives in
+> > `packages/core/src/terminal/start-directory.ts` beside `resolveStartDirectory`, is exported from
+> > both barrels, and is called by `terminal-ipc.ts`. `cwd-fallback-report.test.ts` imports the real
+> > function; the mirror is deleted. **Reverting the call site now fails a test instead of shipping.**
+> >
+> > Worth keeping the reasoning, because a two-line `??` earning a name looks like over-engineering
+> > from the outside: it is not that the expression was hard, it is that **an expression cannot be
+> > shared with the test that guards it**. The value has to reach both `resolveStartDirectory` and
+> > `fallbackToReport` or FR-034's notice names the wrong directory — and that was already a real
+> > defect on this branch once.

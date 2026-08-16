@@ -22,7 +22,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test, expect, type Locator, type Page } from '@playwright/test';
+import { test, expect, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 import { DEFAULT_EXCLUDE_GLOBS, compileExcluder } from '@throng/core';
 import { runApp, createProject, reloadWindow, cleanupTemp } from './harness.js';
 
@@ -204,6 +204,47 @@ async function chooseOnRow(win: Page, relPath: string, label: string): Promise<v
 async function chevron(win: Page, relPath: string): Promise<void> {
   await tree(win).getByTestId(`tree-twisty-${relPath}`).click();
   await expect(rowFor(win, relPath).locator('.tree-twisty')).toHaveAttribute('aria-expanded', 'true');
+}
+
+/**
+ * ══ RECORDING EVERY DIRECTORY LISTING THE APP ISSUES ══
+ *
+ * D7's hidden-folder half has NO visible consequence, and the test must not pretend otherwise. The
+ * per-project hidden set is applied in the `data` memo, not in `fetchChildren`, so a hidden folder is
+ * absent from every rendered tree at every level whether `expandChildren` filters it or not:
+ * `api.open` on a path with no node does nothing, and `snapshotOpen` walks nodes, so nothing is
+ * persisted either. Deleting the filter costs exactly one wasted `files.list` — so that is what is
+ * asserted, at the only place it can be seen.
+ *
+ * The listing channel is instrumented in the MAIN process rather than the renderer: the preload
+ * bridge's objects are frozen proxies, and a renderer-side wrapper would be testing contextBridge's
+ * mutability rather than the explorer. The handler is swapped for one that records and delegates, and
+ * the swap FAILS LOUDLY if Electron's invoke table is not where it has always been — an instrument
+ * that silently recorded nothing would turn a `not.toContain` into a green bar for any behaviour at
+ * all, which is the exact vacuity this assertion exists to avoid. The positive half (`toContain` on
+ * the folders that WERE expanded into) is the other guard on the same hazard.
+ */
+async function recordListings(app: ElectronApplication): Promise<() => Promise<string[]>> {
+  await app.evaluate(({ ipcMain }) => {
+    const CHANNEL = 'throng:files:list';
+    type Handler = (...args: unknown[]) => unknown;
+    const table = (ipcMain as unknown as { _invokeHandlers?: Map<string, Handler> })._invokeHandlers;
+    const original = table?.get(CHANNEL);
+    if (!table || typeof original !== 'function') {
+      throw new Error(
+        `cannot instrument "${CHANNEL}": Electron's ipcMain invoke table is not where this helper ` +
+          'expects it, so no listing could be recorded (and a silent zero would pass vacuously)',
+      );
+    }
+    const store = globalThis as unknown as { __listedDirs?: string[] };
+    store.__listedDirs = [];
+    table.set(CHANNEL, (...args: unknown[]) => {
+      store.__listedDirs?.push(String(args[1] ?? ''));
+      return original(...args);
+    });
+  });
+  return () =>
+    app.evaluate(() => (globalThis as unknown as { __listedDirs?: string[] }).__listedDirs ?? []);
 }
 
 /** Renderer errors, minus the CSP noise react-dnd's empty drag image produces harmlessly. */
@@ -480,6 +521,76 @@ test('AS-6/AS-7/AS-8/AS-9 — Expand All Children opens one level, loaded, and n
        * The honest-empty branch, where `empty` is genuinely open and genuinely empty, is proved in
        * AS-10 below, which is the only place in this file where the loop body runs.
        */
+      await expectNoOpenFolderLies(win, projectRoot);
+      expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
+    });
+  } finally {
+    cleanupTemp(projectRoot);
+  }
+});
+
+/**
+ * D7's SECOND half — FR-044 for a folder hidden by **"Hide in this project"**, not by a glob.
+ *
+ * The test above covers the glob half, and its mechanism is that `fetchChildren` filters the listing,
+ * so an excluded folder is never a target for anything. The per-project hidden set works the other
+ * way round: it is applied in the `data` memo, LONG after `fetchChildren`, so `childrenMap` — which is
+ * exactly what `expandChildren` reads — still holds the hidden folder. The explicit
+ * `.filter((r) => !hiddenSet.has(r))` in `use-explorer-data.ts` is the only thing keeping it out of
+ * the targets, and until now nothing in the suite went anywhere near it.
+ *
+ * WHAT THIS ASSERTS, AND WHAT IT DELIBERATELY DOES NOT. Removing that filter would not leak the
+ * folder into the tree — `data` drops it at every level, `api.open` on an absent node renders
+ * nothing, and `snapshotOpen` never sees it. Its whole cost is one directory listing issued for a
+ * folder the user has said they do not want to see. So the tree assertions below are the guard
+ * (nothing leaked), and the LISTING assertion is the test: the mutation this file exists to catch is
+ * deleting that filter, and it is caught by `not.toContain('branch/veiled')` and by nothing else.
+ *
+ * The anchor is opened by hand FIRST so `branch` is already in `childrenMap` complete with `veiled`,
+ * which is the state the filter is written for — hidden AFTER the listing that named it.
+ */
+test('D7/FR-044 — a folder HIDDEN in this project is not expanded into, and is never even listed', async () => {
+  const projectRoot = makeProject('throng-subtree-hidden-');
+  // Only this test's fixture carries it: every other test asserts `branch`'s exact expanded shape.
+  mkdirSync(join(projectRoot, 'branch', 'veiled', 'inner'), { recursive: true });
+  writeFileSync(join(projectRoot, 'branch', 'veiled', 'veiled.txt'), 'veiled\n');
+  try {
+    await runApp(async (app, win) => {
+      const errors = watchErrors(win);
+      await createProject(win, 'Subtree', projectRoot);
+      await expect(tree(win)).toBeVisible();
+
+      await chevron(win, 'branch');
+      await expect(rowFor(win, 'branch/veiled')).toBeVisible();
+
+      // Hidden through the route the user has — the tree's own context menu (004). The row going
+      // away is the acknowledgement that the write landed, so nothing below races the round trip.
+      await rowFor(win, 'branch/veiled').click({ button: 'right' });
+      await win.locator('.context-menu__item', { hasText: 'Hide in this project' }).click();
+      await expect(rowFor(win, 'branch/veiled')).toHaveCount(0);
+
+      // Instrumented only now, so the listings that built the tree are not in the recording and the
+      // positive assertions below can only be satisfied by `expandChildren` itself.
+      const listedDirs = await recordListings(app);
+
+      await chooseOnRow(win, 'branch', EXPAND);
+
+      // Settled first: "the hidden folder was not opened" is a negative, true at t=0 either way.
+      expect(await settledOpenFolders(win)).toEqual(['', 'branch', 'branch/l1a', 'branch/l1b']);
+      await expect(rowFor(win, 'branch/veiled')).toHaveCount(0);
+      await expect(rowFor(win, 'branch/veiled/inner')).toHaveCount(0);
+      await expect(tree(win).getByText('veiled.txt', { exact: true })).toHaveCount(0);
+
+      const listed = await listedDirs();
+      // The recorder is LIVE — proved by the two folders the action really did expand into. Without
+      // this, an instrument that recorded nothing would satisfy the assertion that follows.
+      expect(listed, 'the listing recorder saw nothing at all').toContain('branch/l1a');
+      expect(listed).toContain('branch/l1b');
+      expect(
+        listed,
+        'FR-044 — Expand All Children listed a folder the user hid in this project',
+      ).not.toContain('branch/veiled');
+
       await expectNoOpenFolderLies(win, projectRoot);
       expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
     });

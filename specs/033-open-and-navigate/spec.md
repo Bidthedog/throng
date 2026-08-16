@@ -494,6 +494,12 @@ the declared sections, in the declared order, with dividers between them.
 - **FR-018a**: The Files & Folders toolbar MUST carry a **Quick Open** button, beside its existing
   Expand and Collapse all controls, opening the same modal the chord opens. Its tooltip MUST name the
   command's **current** chord, so a rebound chord is reflected there.
+  > **NARROWED 2026-08-15 by FR-074; marked here 2026-08-16.** "MUST name the current chord" is
+  > unqualified above, and that is not what the feature ships: with no project open the button is
+  > **disabled**, and its tooltip says why instead of naming a chord that would do nothing. FR-074
+  > holds the narrowed rule — the chord is required whenever the button **can act**. Marked in place
+  > because FR-065 and FR-006 both announce their narrowing inside their own text and this one did
+  > not, which left the spec stating two rules with nothing connecting them.
 - **FR-018b**: That button MUST draw its icon from a **theme icon token**, adding one to the icon
   registry if no existing token fits. A hard-coded glyph is prohibited by the themeable-icon-control
   rule.

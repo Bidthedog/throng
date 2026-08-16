@@ -1,14 +1,21 @@
 # Contract: the two navigation modals
 
-**Modules**: `packages/ui/src/renderer/navigate/{navigation-chrome.tsx, navigation-store.ts, quick-open.tsx, quick-open-target.tsx, goto-line.tsx, use-file-index.ts}` (all new) · `packages/core/src/editor/goto-line.ts` (new, pure) · `packages/ui/src/renderer/app.tsx` · `packages/ui/src/renderer/composition-root.tsx`
+**Modules**: `packages/ui/src/renderer/navigate/{navigation-chrome.tsx, navigation-store.ts, quick-open.tsx, quick-open-target.tsx, goto-line.tsx, use-file-index.ts}` (all new) · `packages/core/src/editor/goto-line.ts` (new, pure) · `packages/ui/src/renderer/app.tsx` · `packages/ui/src/renderer/subworkspace-app.tsx`
 
 **Requirements**: FR-001–FR-003, FR-008–FR-012, FR-018–FR-028, FR-057–FR-067 · SC-001, SC-004, SC-006, SC-007, SC-012, SC-014
 
 ## 1. Mounting and scope
 
-`NavigationChrome` is mounted by **both** composition roots — `CompositionRoot()` and
-`SubWorkspaceCompositionRoot({ id })` — beside `EditorChrome`. A chord that worked in one window and did
-nothing in the other is the failure Assumption 6 rejects.
+`NavigationChrome` is mounted in **both window shells** — `app.tsx` and `subworkspace-app.tsx` —
+beside `EditorChrome`. A chord that worked in one window and did nothing in the other is the failure
+Assumption 6 rejects.
+
+> **CORRECTED 2026-08-16.** This said *"mounted by both composition roots — `CompositionRoot()` and
+> `SubWorkspaceCompositionRoot({ id })`"*, and the **Modules** line above named
+> `packages/ui/src/renderer/composition-root.tsx`. No such component or file is involved: the mounts
+> are in `app.tsx` and `subworkspace-app.tsx`. The guarantee — both windows, or the chord is dead in
+> one of them — is unchanged and is what matters; only the names were wrong, and a contract that
+> sends the next reader to a file that does not exist is worse than one that says nothing.
 
 | # | Guarantee | Requirement |
 |---|---|---|
@@ -47,7 +54,16 @@ promised.
 |---|---|---|
 | No target control (invoked outside an editor) | `openFileInTab(ws, activeTabId, absPath, settings.editor.openTarget)` | FR-009, FR-011 |
 | Target control on "the currently active editor" | `openFileInTab(ws, activeTabId, absPath, 'lastActive')` | FR-010, T5 |
-| Target control on "a new editor panel in this tab" | `openFileInNewEditor(ws, activeTabId, absPath)` | FR-010 |
+| Target control on "a new editor panel in this tab" | `openFileInTab(ws, activeTabId, absPath, 'new')` | FR-010 |
+
+> **CORRECTED 2026-08-16.** That row named `openFileInNewEditor(ws, activeTabId, absPath)` — which is
+> **precisely the call the one-buffer defect fix removed**. `openFileInNewEditor` is documented as a
+> *force*: it requires its caller to have already applied the one-file-one-editor rule, which the tree
+> does by disabling its menu item. Quick Open inherited the route and not the precondition, so
+> choosing "new editor" for a file already open elsewhere in the project opened a **second copy** of
+> it. Routing through `openFileInTab` with the `'new'` target applies the rule rather than assuming
+> the caller has. Leaving the old call named here is how the defect would be reintroduced by someone
+> following the contract.
 
 | # | Guarantee | Requirement |
 |---|---|---|

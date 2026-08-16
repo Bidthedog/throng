@@ -138,7 +138,9 @@ listed; every other verdict above stands unchanged.
 
 ```text
 specs/033-open-and-navigate/
-├── spec.md                     # 75 FRs, 16 SCs, 9 clarifications in one session
+├── spec.md                     # 90 FRs, 22 SCs, 9 clarifications + 2 feedback rounds
+│                               #   (was "75 FRs, 16 SCs" — the counts were never updated as the
+│                               #   post-delivery rounds added FR-068..FR-075 and SC-017..SC-022)
 ├── checklists/
 │   └── requirements.md         # 16/16
 ├── plan.md                     # this file
