@@ -75,4 +75,33 @@ describe('isUnderPath', () => {
     expect(isUnderPath('C:/a/other/one.txt', 'C:/a/pack')).toBe(false);
     expect(isUnderPath('C:/a', 'C:/a/pack')).toBe(false);
   });
+
+  /**
+   * A `..` SEGMENT IS REFUSED (033 FR-032).
+   *
+   * This predicate compares strings and never touches a disk, so it cannot resolve `..` — but every
+   * consumer that acts on its answer can and does. `C:/project/../../Windows/System32` is a clean
+   * prefix match against `C:/project`, and `statSync` (and then the shell) resolve it to somewhere
+   * else entirely. The two disagreed about what one string meant, and this is the side that makes
+   * the containment decision, so it refuses what it cannot evaluate.
+   */
+  describe('a `..` segment', () => {
+    it('does NOT escape the folder by looking like a descendant', () => {
+      expect(isUnderPath('C:/project/../../Windows/System32', 'C:/project')).toBe(false);
+      expect(isUnderPath('C:\\project\\..\\other', 'C:/project')).toBe(false);
+    });
+
+    it('is refused wherever it appears — deep, trailing, or on the FOLDER side', () => {
+      expect(isUnderPath('C:/project/src/../../escape', 'C:/project')).toBe(false);
+      expect(isUnderPath('C:/project/..', 'C:/project')).toBe(false);
+      expect(isUnderPath('C:/project/src', 'C:/project/sub/..')).toBe(false);
+    });
+
+    it('is a SEGMENT rule — a name that merely contains dots is untouched', () => {
+      // The regression this guards: a blanket `includes('..')` would refuse real files.
+      expect(isUnderPath('C:/project/..hidden', 'C:/project')).toBe(true);
+      expect(isUnderPath('C:/project/a..b/one.txt', 'C:/project')).toBe(true);
+      expect(isUnderPath('C:/project/notes...txt', 'C:/project')).toBe(true);
+    });
+  });
 });

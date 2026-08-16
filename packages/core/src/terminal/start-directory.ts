@@ -7,6 +7,35 @@
 import { isUnderPath, samePath } from '../fs/path-id.js';
 
 /**
+ * Which of a terminal's two candidate directories is the one to ASK for (033 FR-033, B6/B7).
+ *
+ * There are two sources and they are not equals. `rememberedCwd` is where this panel's shell was
+ * last observed to be, so it is the more recent statement of where the user is working;
+ * `startDirectory` is where the panel was CREATED from — the folder right-clicked in the tree — and
+ * is what a panel restored from a persisted layout has instead of a memory.
+ *
+ * ══ WHY THIS IS A FUNCTION IN CORE RATHER THAN AN EXPRESSION AT THE CALL SITE ══
+ *
+ * It was an inline `req.rememberedCwd ?? req.startDirectory` in the IPC handler, and it has to feed
+ * BOTH `resolveStartDirectory` and `fallbackToReport` — because FR-034 requires the fallback notice
+ * to name the directory that was actually asked for. Passing it to one and not the other is exactly
+ * the defect this feature shipped and then fixed: the resolver honoured `startDirectory` while the
+ * report still described `rememberedCwd`, so a start directory deleted between the right-click and
+ * the launch fell back to the project root **silently**.
+ *
+ * Left as an expression it was also untestable. The handler lives in `packages/ui/src/main`, the
+ * tests live here, and a test that re-implements the precedence is asserting its own copy — the
+ * expression could be reverted at the call site with the suite still green, which an adversarial
+ * review demonstrated. Naming it puts the rule in one place that both callers and the tests share.
+ */
+export function requestedStartDirectory(
+  rememberedCwd: string | undefined,
+  startDirectory: string | undefined,
+): string | undefined {
+  return rememberedCwd ?? startDirectory;
+}
+
+/**
  * Resolve the start directory for a terminal.
  *
  * Precedence: the Panel's remembered directory, when it is still usable, otherwise the project

@@ -78,7 +78,21 @@ export interface MenuSeparator {
 /** What a menu LEVEL renders once its sections have been joined. */
 export type MenuItem = MenuAction | MenuSeparator;
 
-const isSeparator = (item: MenuItem): item is MenuSeparator => 'separator' in item;
+/**
+ * The discriminant is the ABSENCE of a section, not the presence of `separator`.
+ *
+ * `'separator' in item` is structural, and structural is not the invariant. TypeScript's
+ * excess-property check rejects a literal `{ section: 'content', separator: true }` at a builder,
+ * but it does not reject the same object arriving by SPREAD from a wider one — and such an item
+ * would then render as a horizontal rule, be excluded from `enabled`, and have its `onClick`
+ * silently unreachable. Nobody would see a defect; they would see an item that is not there.
+ *
+ * What actually separates the two is that an ACTION declares a section (FR-049 makes `section`
+ * required) and a derived divider carries nothing else at all. Testing for that means a stray
+ * `separator` flag on a real action leaves it a real action, which is the safe direction to fail
+ * in: a visible, clickable row rather than a missing one.
+ */
+const isSeparator = (item: MenuItem): item is MenuSeparator => !('section' in item);
 
 const DEFAULT_SUBMENU_DELAY_MS = 100;
 

@@ -234,7 +234,7 @@ The next seven tasks each own one builder and touch no file another touches:
 
 - [ ] T067 [US5] RED — write `packages/ui/tests/unit/focus-guards.test.ts` scanning every file under `packages/ui/tests/e2e/` for the vacuous shape `document.activeElement?.textContent … includes(` and failing with the offending file and line. It is **red on the shipped tree**, because `packages/ui/tests/e2e/menu-keyboard.e2e.ts` still carries it around line 91. Run it and record that failure — the Red here is the defect itself. First check `packages/ui/tests/unit/guards-are-live.test.ts`: it scans **unit** sources for `.skip`/`.only`, so it is the wrong home rather than creating a second scanner (DRY, Principle VIII).
 - [ ] T068 [US5] Replace the `rowFocused` predicate in `packages/ui/tests/e2e/menu-keyboard.e2e.ts` (both of its uses in the first test) with the corrected form already used later in the same file and, with its reasoning written out, in `packages/ui/tests/e2e/notice-stacking.e2e.ts`: assert `document.activeElement?.closest('[data-testid="file-explorer-tree"]') != null` **and** that the specific row carries `tree-row--selected`. Re-run `focus-guards.test.ts` and the spec; both green.
-- [ ] T069 [US5] Add the FR-051 assertion to `packages/ui/tests/e2e/menu-keyboard.e2e.ts`: arrow through a menu that now contains dividers and assert **no divider ever takes focus** and that arrowing steps over them. Same file as T068, so it is sequential by construction, not `[P]`.
+- [ ] T069 [US5] Add the FR-051 assertion: arrow through a menu that now contains dividers and assert **no divider ever takes focus** and that arrowing steps over them. *(Amended 2026-08-16 — this task said `packages/ui/tests/e2e/menu-keyboard.e2e.ts`, and so did contracts/menu-sections.md §5 and SC-011's permitted-change table. It was written instead as **AS-8 in `packages/ui/tests/e2e/menu-sections.e2e.ts`**, and it stays there rather than being moved: that file owns dividers — it opens the menus that have them and already holds the `menuShape` / `focusableLabels` helpers — and the assertion as written is **stronger** than this task asked for, first requiring the menu under test to contain a divider at all (guarding the guard, SC-016) and excluding `aria-disabled` rows as well as separators. `menu-keyboard.e2e.ts` therefore received T068's guard replacement and **nothing else**, which is half of what SC-011 licensed; the licence is narrowed to match rather than the test relocated to fit it. Consequence: T069 is no longer sequential with T068, since they no longer share a file.)*
 - [ ] T070 [US5] FR-053b — perform the recorded mutation from [quickstart.md §Scenario 6](./quickstart.md) by hand: run `menu-keyboard.e2e.ts` green, delete the `await row.click()` before the first guarded keystroke, run it again and confirm it **fails in the guard** rather than three assertions later, then restore the click and confirm green. Paste the red output into the PR body and record the run in the PR description. This is a manual proof stated as a manual proof — a test that asserts another test fails cannot live in the suite.
 
 ### Governance and regression sweep for US5
@@ -389,7 +389,7 @@ file. Each is stated here so no one re-parallelises them by eye:
 | `packages/ui/src/renderer/navigate/navigation-chrome.tsx` | T033, T048 | Mounts both modals. |
 | `packages/ui/src/renderer/navigate/quick-open.tsx` | T032, T099 | Created in US1, seeded in Phase 8. |
 | `packages/ui/src/renderer/app.tsx` + `keybindings/scope.ts` | T038, T052 | One command each, same two files. Both are single tasks owning both files because missing one is a silent failure. |
-| `packages/ui/tests/e2e/menu-keyboard.e2e.ts` | T068, T069 | The guard replacement and the divider assertion touch one file. |
+| `packages/ui/tests/e2e/menu-keyboard.e2e.ts` | T068 | *(Amended 2026-08-16 — T069 was listed here too, on the assumption both touched this file. Its divider assertion landed as AS-8 in `menu-sections.e2e.ts` instead and stays there; see T069. This file carries the guard replacement alone, so the pair is no longer sequential by shared file.)* |
 | `packages/ui/tests/unit/scope.test.ts` | T037, T051 | One command each. |
 
 ### Within each story
@@ -512,7 +512,9 @@ the constitution's Development Workflow.
 - Two known spec tensions are carried in [plan.md § Complexity Tracking](./plan.md) and must be
   closed before the branch merges: the cog-menu contradiction (T071, now a consistency check — the amendment landed 2026-08-15) and SC-011's
   literal impossibility (T072, T083 — plus `menu-keyboard.e2e.ts`, which FR-053a itself requires
-  changing and which SC-011's exemption table now names explicitly, as row 2).
+  changing and which SC-011's exemption table now names explicitly, as row 2. *Amended 2026-08-16 —
+  that row licensed two edits to it and only the guard replacement was spent there; FR-051's
+  assertion is AS-8 in `menu-sections.e2e.ts`. See T069.*).
 
 ---
 

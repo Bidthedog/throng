@@ -13,9 +13,18 @@
  * rather than an omission.
  */
 import type { MenuAction } from '../workspace/context-menu.js';
-
-/** The preferences window's tabs, in the order the cog offers them. */
-export type PreferencesTab = 'settings' | 'keybindings' | 'themes';
+/*
+ * IMPORTED, not re-declared (Principle VIII). The extraction from `cog-menu.tsx` first wrote
+ * `'settings' | 'keybindings' | 'themes'` out again here, which made three copies of one union in
+ * the renderer alone — this one, `preferences/preferences-app.tsx`'s, and the inline pair in
+ * `renderer/global.d.ts`. A fourth lives in `main/preferences-window.ts`, on the far side of the
+ * process boundary and out of this module's reach.
+ *
+ * The preferences app OWNS the set: it is what renders the tabs and what `isPreferencesTab` guards.
+ * A type-only import is erased at build time, so nothing of that module reaches the title bar's
+ * bundle — only the obligation that a fourth tab is added in one place, not two.
+ */
+import type { PreferencesTab } from '../preferences/preferences-app.js';
 
 const PREFERENCES_ITEMS: readonly { tab: PreferencesTab; label: string; icon: string }[] = [
   { tab: 'settings', label: 'Settings', icon: 'settings' },

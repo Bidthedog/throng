@@ -529,11 +529,30 @@ test('AS-8 — arrow keys open each level and Enter on a flavour launches the te
       // walk from there to Terminal.
       await focusItemByArrows(win, 'menu-item-Terminal');
       await win.keyboard.press('ArrowRight');
-      await expect(win.getByTestId('submenu-Terminal')).toBeVisible();
-      expect(
-        await win.locator('[data-testid="submenu-Terminal"] .context-menu__item:focus').count(),
-        'ArrowRight focused the first flavour',
-      ).toBe(1);
+      const flavourLevel = win.getByTestId('submenu-Terminal');
+      await expect(flavourLevel).toBeVisible();
+
+      /*
+       * WHICH item holds focus, not how many — and asked with a retrying matcher.
+       *
+       * This counted focused items instead, one non-retrying `.count()` taken the instant the level
+       * became visible. Two things were wrong with it. A count of one is satisfied by ANY flavour
+       * holding focus, so ArrowRight landing on the last row — or on a row a later reordering moved
+       * — read as success; and the Enter below then launches whatever that was, so the identity is
+       * load-bearing rather than decorative. And a bare `.count()` is a single sample: focus arrives
+       * a beat after the level renders, so the assertion raced the very thing it was asserting.
+       *
+       * `toBeFocused` on the FIRST row is both halves at once — the right item, polled until it is.
+       */
+      const firstFlavour = flavourLevel.locator('.context-menu__item').first();
+      const names = await labelsOf(flavourLevel);
+      await expect(
+        firstFlavour,
+        `ArrowRight must focus the FIRST flavour (${names[0] ?? '(none)'}), which is the one Enter ` +
+          `is about to launch`,
+      ).toBeFocused();
+      // …and nothing else in the level is focused alongside it.
+      await expect(flavourLevel.locator('.context-menu__item:focus')).toHaveCount(1);
 
       // Enter on a flavour launches it, and the whole menu closes.
       const before = await panelIds(win);

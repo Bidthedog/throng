@@ -110,11 +110,18 @@ export function rememberedInput(): RememberedInput {
 /**
  * Record the query Quick Open ACCEPTED, with the root it was accepted against (FR-061, FR-062).
  *
- * "Accepted" is concrete: the user chose a row and the file was routed to the opener. A query that
- * was typed and then abandoned with Escape never reaches here, because dismissal has no path to
- * this function at all — which is a stronger guarantee than a flag saying it was a dismissal.
+ * "Accepted" is concrete: the user chose a row and a file OPENED. A query that was typed and then
+ * abandoned with Escape never reaches here, because dismissal has no path to this function at all —
+ * which is a stronger guarantee than a flag saying it was a dismissal.
+ *
+ * `root` is a plain `string`, and the narrowing is the point rather than tidiness. It used to accept
+ * `string | null`, and a `null` stored a query with NO scope — which `noteActiveProjectRoot` then
+ * reads as "the same project", so the next project to become active adopts the query instead of
+ * discarding it (FR-062). A query belongs to exactly one candidate set and a candidate set belongs
+ * to exactly one root, so a scopeless one is a state that should not be expressible; the caller
+ * already has a non-empty root (A5 refuses to open Quick Open without one) and now has to prove it.
  */
-export function rememberQuickOpenQuery(query: string, root: string | null): void {
+export function rememberQuickOpenQuery(query: string, root: string): void {
   remembered = { ...remembered, quickOpenQuery: query };
   quickOpenRoot = root;
 }

@@ -59,32 +59,52 @@ async function openFileIntoEditor(ws: Ws, absPath: string, openTarget: EditorOpe
  * existing editor if the file is already open anywhere (one buffer, FR-011a), else
  * routes into the tab's last active editor (creating its dedicated editor if none,
  * FR-010), prompting on a dirty target (US9).
+ *
+ * ══ THE RETURN VALUE: DID A FILE ACTUALLY GET OPENED? ══
+ *
+ * `true` when the file was routed somewhere the user can see it — a new editor, the last active
+ * one, or the existing editor that already held it. `false` for every branch that ends with
+ * NOTHING opened: no layout, no such tab, Cancel at the unsaved-changes prompt, or a Save that
+ * chose to open and then failed.
+ *
+ * It exists because "the file opened" and "the call returned" are not the same event, and a caller
+ * that treats them as one gets it wrong in exactly the case the user notices: 033 FR-061 remembers
+ * the Quick Open query that OPENED a file, and recording it before this call meant a user who chose
+ * a row, was asked about unsaved changes and said Cancel had their query remembered for a file that
+ * never opened. The settings editor promises them "the last query that actually opened a file", so
+ * the signal has to come from here — this is the only code that knows.
+ *
+ * NOT a report on whether the document loaded. `EditorActions.openFile` returns `void`; a file that
+ * is missing or too large is reported by the editor itself, and by then the open HAS happened —
+ * the user is looking at that editor and at that message.
  */
 export async function openFileInTab(
   ws: Ws,
   tabId: string,
   absPath: string,
   openTarget: EditorOpenTarget = 'lastActive',
-): Promise<void> {
+): Promise<boolean> {
   // 1) Already open anywhere → focus that one editor (no second buffer, FR-011a / one-doc-one-state
   //    #68). This holds regardless of the open-target preference (US7 / FR-027).
+  //    Counts as opened: the file the caller asked for is what the user is now looking at, whether
+  //    this window raised it or UI-main raised the window holding it.
   const decision = await window.throng?.editor?.openInto({ absPath });
   if (decision?.action === 'focus') {
     focusPanelIfLocal(ws, decision.panelId);
-    return;
+    return true;
   }
 
   const layout = ws.layout;
-  if (!layout) return;
+  if (!layout) return false;
   const tab = layout.tabs.find((t) => t.id === tabId);
-  if (!tab) return;
+  if (!tab) return false;
   if (layout.activeTabId !== tabId) ws.setActiveTab(tabId);
 
   // US7 (#141): with "New Editor", a not-yet-open file lands in a NEW editor panel each time,
   // rather than reusing the tab's last active editor.
   if (openTarget === 'new') {
     openFileInNewEditor(ws, tabId, absPath);
-    return;
+    return true;
   }
 
   // 2) Resolve the target editor: the tab's last active editor, else any editor in
@@ -95,35 +115,36 @@ export async function openFileInTab(
 
   if (!targetId) {
     createDedicatedEditor(ws, tabId, absPath);
-    return;
+    return true;
   }
 
   const actions = getEditorActions(targetId);
   if (!actions) {
     createDedicatedEditor(ws, tabId, absPath);
-    return;
+    return true;
   }
 
   // 3) Dirty target → the four-choice prompt (US9).
   if (actions.isDirty()) {
     const editorName = getEditorState(targetId)?.displayName ?? 'This editor';
     const choice = await promptUnsavedOpen(basename(absPath), editorName);
-    if (choice === 'cancel') return;
+    if (choice === 'cancel') return false;
     if (choice === 'new') {
       createDedicatedEditor(ws, tabId, absPath);
-      return;
+      return true;
     }
     if (choice === 'save') {
       const ok = await actions.save();
-      if (!ok) return; // save failed/cancelled → don't lose the buffer
+      if (!ok) return false; // save failed/cancelled → don't lose the buffer
     }
     // 'discard' or a successful 'save' → replace the document.
     await actions.openFile(absPath);
-    return;
+    return true;
   }
 
   await actions.openFile(absPath);
   void targetId;
+  return true;
 }
 
 /**

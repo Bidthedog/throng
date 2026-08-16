@@ -51,15 +51,39 @@ export function samePath(a: string, b: string): boolean {
   return normaliseForCompare(a) === normaliseForCompare(b);
 }
 
+/** A `..` PATH SEGMENT — not a file whose name merely contains two dots (`..hidden`, `a..b`). */
+const PARENT_SEGMENT = /(^|\/)\.\.(\/|$)/;
+
 /**
  * Is `file` `folder` itself, or somewhere beneath it?
  *
  * The boundary is a SEGMENT boundary, never a character one: `C:/a/package-lock.json` is not
  * under `C:/a/pack`, however much its first four characters suggest otherwise. That is the
  * predicate `markDeleted` has always used (`editor-coordinator.ts:270-276`).
+ *
+ * ══ A `..` SEGMENT IS REFUSED, NOT RESOLVED (033 FR-032) ══
+ *
+ * This is a rule about STRINGS — it has no filesystem and cannot resolve anything, which is the
+ * whole reason it lives in core (see the header). So `C:/project/../../Windows/System32` is a
+ * prefix match against `C:/project` and used to answer TRUE, while every consumer that then goes
+ * to the disk — `statSync` in `terminal-ipc.ts`, the shell it launches — resolves the `..` happily
+ * and lands outside the folder that was supposed to contain it. The predicate and the OS disagreed
+ * about what the same string meant, and the predicate was the one making the safety decision.
+ *
+ * Refusing is right where resolving would be wrong. Resolving needs `path.resolve`, which is
+ * platform behaviour this module deliberately does not have, and it would answer a question nobody
+ * asks: no producer in this codebase emits a `..` segment. The tree builds paths by joining names,
+ * the daemon reports a real OS working directory, and `node:path.join` has already collapsed them.
+ * A `..` arriving here therefore means the path came from somewhere it should not have — the
+ * user-editable workspace layout JSON is the one such source (033's `startDirectory`) — and the
+ * safe answer to "is this contained?" for a path we cannot evaluate is NO. The caller's fallback is
+ * the project root, which is exactly where an uninterpretable start directory belongs.
  */
 export function isUnderPath(file: string, folder: string): boolean {
   const f = normaliseForCompare(file);
   const g = normaliseForCompare(folder);
+  // Either side: a `..` in the FOLDER makes the containment question just as unanswerable as one in
+  // the file, and a root that needs traversing to name is not a root this app ever produced.
+  if (PARENT_SEGMENT.test(f) || PARENT_SEGMENT.test(g)) return false;
   return f === g || f.startsWith(g + '/');
 }

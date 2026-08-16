@@ -5,6 +5,7 @@ import {
   resolveLaunchSpec,
   resolveStartDirectory,
   fallbackToReport,
+  requestedStartDirectory,
   isTransportFailure,
   type IClipboard,
   type FailureCause,
@@ -179,7 +180,7 @@ export function registerTerminalIpc(deps: {
        * remembered directory, so a start directory inherits all four by being handed to the same
        * resolver rather than by a second implementation agreeing with the first.
        */
-      const requestedCwd = req.rememberedCwd ?? req.startDirectory;
+      const requestedCwd = requestedStartDirectory(req.rememberedCwd, req.startDirectory);
       const cwd = resolveStartDirectory(root, requestedCwd, dirExists);
       /*
        * 029 FR-005b — the fallback is no longer SILENT.

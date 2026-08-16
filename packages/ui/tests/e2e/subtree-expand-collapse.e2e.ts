@@ -13,11 +13,17 @@
  * never fills. Every mutating test below ends by walking every open folder and demanding that it
  * either renders a child or is empty ON DISK. Counting rows would not catch it; only the comparison
  * against the filesystem can.
+ *
+ * It short-circuits at the first clause almost everywhere — an open folder that renders a child is
+ * acquitted without touching the disk — so AS-10 is written to put `branch/l1b/empty` in the one
+ * state that reaches the second clause, and asserts that it did. Otherwise "the assertion that
+ * matters most" would be ten calls whose loop body never executed in a green run.
  */
 import { mkdtempSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Locator, type Page } from '@playwright/test';
+import { DEFAULT_EXCLUDE_GLOBS, compileExcluder } from '@throng/core';
 import { runApp, createProject, reloadWindow, cleanupTemp } from './harness.js';
 
 /**
@@ -56,8 +62,17 @@ function makeProject(prefix: string): string {
   return root;
 }
 
-/** The shipped default excludes that apply to this fixture — the tree is right to omit them. */
-const EXCLUDED = new Set(['node_modules', '.git']);
+/**
+ * The shipped exclusion rule itself, compiled — never a second copy of it.
+ *
+ * This was `new Set(['node_modules', '.git'])`, which is the answer written out by hand. Two names of
+ * seven, in a different form, in a different file: add an eighth glob (or drop `**\/node_modules`, as
+ * FR-070 nearly did the other way round) and the tree would legitimately change while the check went
+ * on comparing against the old list — reporting a #120 desync for a folder the tree was right to
+ * leave empty, or missing a real one. `compileExcluder` is the same predicate `fetchChildren` asks,
+ * so the two cannot drift.
+ */
+const isExcluded = compileExcluder(DEFAULT_EXCLUDE_GLOBS);
 
 const COLLAPSE = 'Collapse All Children';
 const EXPAND = 'Expand All Children';
@@ -101,28 +116,80 @@ const parentOf = (rel: string): string =>
   rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
 
 /**
+ * The open folders, read once the tree has STOPPED MOVING — required before every negative assertion.
+ *
+ * `expandChildren` is a fire-and-forget `void (async () => {…})()`: it returns to its caller
+ * immediately and then does two more rounds of IPC, so the rows it is about to add appear a beat
+ * after the click. `chooseOnRow` waits only for the menu item to detach, which happens sooner still.
+ *
+ * That is harmless for a POSITIVE assertion — `toBeVisible` retries until the row arrives. It is
+ * fatal for a NEGATIVE one. "This grandchild stayed closed" and "asking a second time changed
+ * nothing" are both TRUE at t=0 and only become false later, so a retrying matcher is satisfied by
+ * its FIRST poll and the test has measured the gap rather than the behaviour. A recursive-descent
+ * regression in `expandChildren` — every level opening instead of one — passes every one of them.
+ *
+ * So poll until two consecutive reads AGREE, and assert on the settled value. "Nothing more
+ * happened" then means nothing more happened after the tree came to rest, which is the only reading
+ * of it that can fail.
+ */
+async function settledOpenFolders(win: Page): Promise<string[]> {
+  let previous: string | null = null;
+  let latest: string[] = [];
+  await expect
+    .poll(
+      async () => {
+        latest = await openFolders(win);
+        const now = JSON.stringify(latest);
+        const stable = previous !== null && previous === now;
+        previous = now;
+        return stable;
+      },
+      {
+        timeout: 20_000,
+        intervals: [300, 300, 300, 300, 500],
+        message: 'the tree never stopped changing shape',
+      },
+    )
+    .toBe(true);
+  return latest;
+}
+
+/**
  * SC-009 / AS-8 / D6 — **zero folders may end up marked open with unloaded children.**
  *
  * For every folder the tree draws as open, either it renders at least one child row, or the folder
  * really is empty on disk. The filesystem is consulted deliberately: an unloaded folder and an empty
  * one render identically, so the tree alone cannot tell the two apart — which is exactly how #120
  * survived. A failure names the folder and what is actually inside it.
+ *
+ * Returns the folders that actually REACHED the filesystem — the ones drawn open with no child row,
+ * which had to be acquitted by a `readdirSync`. At almost every call site every open folder renders
+ * a child, so the loop short-circuits and the return is `[]`: the check runs, finds nothing to
+ * verify, and passes. That is a green bar for a body that never executed, which is why AS-10 below
+ * asserts on this list rather than merely calling the function — one call site proves the honest
+ * empty folder is acquitted and the desync branch is reachable, instead of ten call sites proving
+ * neither.
  */
-async function expectNoOpenFolderLies(win: Page, projectRoot: string): Promise<void> {
+async function expectNoOpenFolderLies(win: Page, projectRoot: string): Promise<string[]> {
   const all = await rows(win);
   const rendered = new Set(all.map((r) => r.relPath));
+  const verifiedOnDisk: string[] = [];
   for (const folder of all.filter((r) => r.kind === 'folder' && r.open)) {
     const rendersAChild = [...rendered].some(
       (rel) => rel !== folder.relPath && parentOf(rel) === folder.relPath,
     );
     if (rendersAChild) continue;
     const abs = folder.relPath === '' ? projectRoot : join(projectRoot, folder.relPath);
-    const onDisk = readdirSync(abs).filter((n) => !EXCLUDED.has(n));
+    const onDisk = readdirSync(abs).filter(
+      (n) => !isExcluded(folder.relPath === '' ? n : `${folder.relPath}/${n}`),
+    );
     expect(
       onDisk,
       `folder "${folder.relPath || '<root>'}" is drawn OPEN but renders no children — #120 desync`,
     ).toEqual([]);
+    verifiedOnDisk.push(folder.relPath);
   }
+  return verifiedOnDisk;
 }
 
 /** Right-click a row and choose one of the two new items. */
@@ -373,8 +440,15 @@ test('AS-6/AS-7/AS-8/AS-9 — Expand All Children opens one level, loaded, and n
       );
       await expect(tree(win).getByText('branch.txt', { exact: true })).toBeVisible();
 
-      // AS-6 / C4 — and NO GRANDCHILD is open. `l2a` and `empty` are drawn (their parents opened)
-      // but closed, so nothing inside them is on screen.
+      /*
+       * AS-6 / C4 — and NO GRANDCHILD is open. `l2a` and `empty` are drawn (their parents opened)
+       * but closed, so nothing inside them is on screen.
+       *
+       * Everything from here down is a NEGATIVE, and a negative is true before the work finishes, so
+       * the tree is allowed to come to rest FIRST. Without this, a recursive descent that eventually
+       * opened `l2a` would still be asserted closed on the first poll after the click.
+       */
+      const settled = await settledOpenFolders(win);
       await expect(rowFor(win, 'branch/l1a/l2a')).toBeVisible();
       await expect(rowFor(win, 'branch/l1a/l2a').locator('.tree-twisty')).toHaveAttribute(
         'aria-expanded',
@@ -386,7 +460,7 @@ test('AS-6/AS-7/AS-8/AS-9 — Expand All Children opens one level, loaded, and n
       );
       await expect(rowFor(win, 'branch/l1a/l2a/l3a')).toHaveCount(0);
       await expect(tree(win).getByText('l2a.txt', { exact: true })).toHaveCount(0);
-      expect(await openFolders(win)).toEqual(['', 'branch', 'branch/l1a', 'branch/l1b']);
+      expect(settled).toEqual(['', 'branch', 'branch/l1a', 'branch/l1b']);
 
       /*
        * AS-9 / D7 — an EXCLUDED folder is not expanded into, and the mechanism is that it is not in
@@ -398,8 +472,14 @@ test('AS-6/AS-7/AS-8/AS-9 — Expand All Children opens one level, loaded, and n
       await expect(tree(win).getByText('node_modules', { exact: true })).toHaveCount(0);
       await expect(tree(win).getByText('index.js', { exact: true })).toHaveCount(0);
 
-      // AS-8 / SC-009 — the #120 assertion. `branch/l1b/empty` is the honest empty folder this
-      // check must NOT flag, and any folder opened over an unloaded listing is the one it must.
+      /*
+       * AS-8 / SC-009 — the #120 assertion. Here it passes by SHORT-CIRCUIT: `empty` is drawn but
+       * closed (asserted above), so every folder the tree draws as open renders a child and nothing
+       * reaches the filesystem. That is the check doing its job — the desync it hunts is a folder
+       * open over an unloaded listing, and there is none — but it is not the check being exercised.
+       * The honest-empty branch, where `empty` is genuinely open and genuinely empty, is proved in
+       * AS-10 below, which is the only place in this file where the loop body runs.
+       */
       await expectNoOpenFolderLies(win, projectRoot);
       expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
     });
@@ -415,18 +495,34 @@ test('D4 — on an ALREADY-OPEN folder it still opens exactly one level, and no 
       await createProject(win, 'Subtree', projectRoot);
       await expect(tree(win)).toBeVisible();
 
+      /*
+       * Every assertion in this test is a NEGATIVE dressed as an equality — "one level, and NO
+       * more". Each therefore reads the tree only once it has settled: `expandChildren` returns
+       * before its second round of IPC lands, so an extra level opening a beat later is invisible to
+       * a read taken the moment the menu item detaches.
+       */
       await chevron(win, 'branch');
       await chooseOnRow(win, 'branch', EXPAND);
-      expect(await openFolders(win)).toEqual(['', 'branch', 'branch/l1a', 'branch/l1b']);
+      expect(await settledOpenFolders(win)).toEqual([
+        '',
+        'branch',
+        'branch/l1a',
+        'branch/l1b',
+      ]);
 
       // Running it AGAIN on the same anchor changes nothing: one level is one level, however many
       // times it is asked for. (Expanding further is what the chevron and the toolbar are for.)
       await chooseOnRow(win, 'branch', EXPAND);
-      expect(await openFolders(win)).toEqual(['', 'branch', 'branch/l1a', 'branch/l1b']);
+      expect(await settledOpenFolders(win)).toEqual([
+        '',
+        'branch',
+        'branch/l1a',
+        'branch/l1b',
+      ]);
 
       // Choosing it on a child then opens THAT child's level — never a level it was not asked for.
       await chooseOnRow(win, 'branch/l1a', EXPAND);
-      expect(await openFolders(win)).toEqual([
+      expect(await settledOpenFolders(win)).toEqual([
         '',
         'branch',
         'branch/l1a',
@@ -454,7 +550,9 @@ test('D4/D3 — Expand All Children on the project ROOT opens its first level on
 
       await chooseOnRow(win, '', EXPAND);
 
-      expect(await openFolders(win)).toEqual(['', 'branch', 'other']);
+      // Settled first, for the same reason as D4 above: "the first level ONLY" is a negative, and a
+      // second level arriving late would slip under an assertion taken too early.
+      expect(await settledOpenFolders(win)).toEqual(['', 'branch', 'other']);
       await expect(tree(win).getByText('other.txt', { exact: true })).toBeVisible();
       await expect(rowFor(win, 'branch/l1a').locator('.tree-twisty')).toHaveAttribute(
         'aria-expanded',
@@ -490,7 +588,26 @@ test('AS-10/D8 — the resulting open state survives a project switch and a wind
       await chooseOnRow(win, 'branch', EXPAND);
       await chooseOnRow(win, 'branch/l1a', EXPAND);
       await chooseOnRow(win, 'branch/l1b', EXPAND); // opens branch/l1b/empty…
-      expect(await openFolders(win)).toContain('branch/l1b/empty');
+      expect(await settledOpenFolders(win)).toContain('branch/l1b/empty');
+
+      /*
+       * ══ THE ONE MOMENT `expectNoOpenFolderLies` ACTUALLY REACHES THE FILESYSTEM ══
+       *
+       * `branch/l1b/empty` is open right here, renders no child row, and is empty on disk — the
+       * honest-empty case #120 hides behind. At every OTHER call site in this file each open folder
+       * renders a child, so the check short-circuits before `readdirSync` and its body never runs at
+       * all: ten green calls proving that nine loops did nothing. This is the call that exercises
+       * both branches, and the returned list is asserted so that it stays that way — a change that
+       * left `empty` closed here would quietly retire the check's only real exercise, and this
+       * assertion is what would say so.
+       */
+      const acquitted = await expectNoOpenFolderLies(win, projectRoot);
+      expect(
+        acquitted,
+        'the honest-empty folder must be the one that reached the filesystem — otherwise ' +
+          'expectNoOpenFolderLies has never once run its body in a green run',
+      ).toEqual(['branch/l1b/empty']);
+
       await chooseOnRow(win, 'branch/l1b', COLLAPSE); // …which this closes again
       const expected = await openFolders(win);
       expect(expected).toEqual(['', 'branch', 'branch/l1a', 'branch/l1a/l2a', 'branch/l1b']);
@@ -557,7 +674,7 @@ test('AS-11/D9 — the toolbar’s Expand and Collapse all behave exactly as bef
        * trip over.
        */
       await chooseOnRow(win, 'branch', EXPAND);
-      expect(await openFolders(win)).toEqual(['', 'branch', 'branch/l1a', 'branch/l1b']);
+      expect(await settledOpenFolders(win)).toEqual(['', 'branch', 'branch/l1a', 'branch/l1b']);
       /*
        * The right-click SELECTED `branch`, so Expand anchors there and opens the shallowest
        * still-collapsed level inside it — `l2a` and `empty`. That is the level-by-level answer it

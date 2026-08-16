@@ -168,5 +168,24 @@ SC-010 requires "one check that enumerates the menus rather than a per-menu eyeb
 | **unit** — `packages/core/tests/unit/menu-sections.test.ts` | `groupBySection` drops empty groups, preserves intra-group order, and returns one group for a single-section menu |
 | **unit** — `packages/ui/tests/unit/menu-sections.test.ts` | Every extracted builder (`buildContextMenuItems`, `editorContentMenu`, `panelHeaderMenu`, `terminalContentMenu`, the tab and cog builders) is invoked over a table of fixtures; for each, assert every item declares a section, that sections appear in `MENU_SECTION_ORDER`, and that the derived divider positions are exactly the boundaries |
 | **E2E** — `packages/ui/tests/e2e/menu-sections.e2e.ts` | Open each menu in the running app in turn; read the rendered `<li>` order and assert `.context-menu__separator` appears at every section boundary and nowhere else. This is the check that enumerates the menus |
-| **E2E** — `menu-keyboard.e2e.ts` | Arrow through a menu containing dividers and assert no divider ever takes focus (FR-051) |
-| **compile** | `tsc` — an item with no section does not build (FR-049) |
+| **E2E** — `menu-sections.e2e.ts` (AS-8) | Arrow through a menu containing dividers and assert no divider ever takes focus, and that arrowing steps over them (FR-051) |
+| **compile** | `tsc` — an item with no section does not build (FR-049), and a section declared in `MenuSection` but left out of `MENU_SECTION_ORDER` does not build either |
+
+*(Corrected 2026-08-16 — two rows.*
+
+*The FR-051 row named `menu-keyboard.e2e.ts`, as did tasks T069 and SC-011's permitted-change table.
+The assertion was written as **AS-8 in `menu-sections.e2e.ts`** instead, and stays there: that file
+owns dividers, already opens the menus that have them, and already holds the `menuShape` /
+`focusableLabels` helpers the assertion needs. It is also stronger than T069 asked for — it first
+requires the menu under test to contain a divider at all (guarding the guard, per SC-016) and it
+excludes `aria-disabled` rows as well as separators. `menu-keyboard.e2e.ts` received T068's guard
+replacement and nothing else.*
+
+*The compile row was true only of items. `MENU_SECTION_ORDER` was annotated `readonly MenuSection[]`,
+which accepts a SHORT array, so a section added to the union and not to the order was no compile
+error, no runtime error and no test failure — `groupBySection` emits by walking the order, so every
+item declaring the unordered section would simply vanish from its menu. That is FR-049's own failure
+mode one layer down, and M7's "no menu can hold a different opinion" fails at the source if core can
+hold two. The order is now checked rather than annotated, and the union-to-order linkage is asserted
+in `packages/core/tests/unit/menu-sections.test.ts` as well, so the guarantee does not rest on a type
+alias nothing tests.)*

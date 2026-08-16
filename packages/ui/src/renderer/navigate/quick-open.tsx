@@ -128,22 +128,6 @@ export function QuickOpen({
     onDismiss();
     if (!tabId) return;
 
-    /*
-     * FR-061 — the query is ACCEPTED here, and nowhere else.
-     *
-     * "Accepted" is the moment a row was chosen and there is a tab to open it into; everything below
-     * this line is the open being routed. A dismissal — Escape, the scrim, the slot being taken by
-     * Go To Line — never runs this function, so an abandoned query cannot be recorded by any path,
-     * rather than being filtered out by one.
-     *
-     * Gated on the SETTING as well, so that at the shipped defaults this store holds nothing at all
-     * rather than holding something it declines to show. The consequence is deliberate: switching
-     * the setting on mid-session starts remembering from the next accepted query, and never
-     * resurfaces one from before the switch — which is the same promise FR-063 makes in the other
-     * direction, and the one a user who has just changed their mind about this would expect.
-     */
-    if (remember) rememberQuickOpenQuery(query, root);
-
     // Q1 — the absolute path is this window's own root plus the relative path, and nothing else.
     const absPath = `${root.replace(/[\\/]+$/, '')}/${entry.id}`;
 
@@ -171,12 +155,37 @@ export function QuickOpen({
        * to stop bypassing it — after which `openFileInTab`'s own `openTarget === 'new'` branch calls
        * `openFileInNewEditor`, on the far side of the one-buffer gate, exactly as it always has.
        */
-      await openFileInTab(
+      const opened = await openFileInTab(
         ws,
         tabId,
         absPath,
         invokedFrom === null ? openTarget : target.current,
       );
+
+      /*
+       * FR-061 — the query is ACCEPTED here, and nowhere else.
+       *
+       * "Accepted" is a file having OPENED, which is why this sits after the await and reads the
+       * router's answer rather than running before it. Choosing a row is not enough: the route asks
+       * about unsaved changes (Q3), and a user who says Cancel — or chooses Save and watches the
+       * save fail — has opened nothing. Recording above the await remembered the query for a file
+       * that never appeared, which contradicts FR-061 and, more visibly, the sentence the user reads
+       * in the settings editor: "the last query that actually opened a file".
+       *
+       * The property that made the original placement good is kept intact: a DISMISSAL still has no
+       * code path to `rememberQuickOpenQuery` at all. `choose` is reachable only from Enter-on-input
+       * and a row `mousedown`; Escape, the scrim and the slot being taken by Go To Line never enter
+       * this function. Nothing here filters a dismissal out — there is nothing to filter.
+       *
+       * Gated on the SETTING as well, so that at the shipped defaults this store holds nothing at all
+       * rather than holding something it declines to show. The consequence is deliberate: switching
+       * the setting on mid-session starts remembering from the next accepted query, and never
+       * resurfaces one from before the switch — which is the same promise FR-063 makes in the other
+       * direction, and the one a user who has just changed their mind about this would expect.
+       */
+      if (!opened) return;
+      if (remember) rememberQuickOpenQuery(query, root);
+
       /*
        * Put the caret where the file went.
        *
@@ -185,6 +194,10 @@ export function QuickOpen({
        * caret behind in the terminal the user has just navigated away from would make every Quick
        * Open a two-step gesture. The landing panel is read from the tab's last-active-editor
        * registry, which every branch of the open route above has just updated, rather than guessed.
+       *
+       * Behind the `!opened` return above, so it too is a consequence of a file having opened. A
+       * cancelled open leaves the caret where the picker put it back, which is the same place a
+       * dismissal leaves it — nothing opened, so nothing moves.
        */
       const landed = getLastActiveEditor(tabId);
       if (landed) requestPanelFocus(landed);

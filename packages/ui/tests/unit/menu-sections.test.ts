@@ -19,6 +19,7 @@ import {
   DEFAULT_KEYBINDINGS,
   MENU_SECTION_ORDER,
   groupBySection,
+  type FlavourOption,
   type MenuSection,
   type Panel,
 } from '@throng/core';
@@ -32,14 +33,26 @@ import { tabContextMenu } from '../../src/renderer/workspace/tab-menu.js';
 import { terminalContentMenu } from '../../src/renderer/terminal/terminal-content-menu.js';
 import { cogMenuItems } from '../../src/renderer/title-bar/cog-menu-items.js';
 
-const isSeparator = (item: MenuItem): item is { separator: true } => 'separator' in item;
-const isAction = (item: MenuItem): item is MenuAction => !('separator' in item);
+/*
+ * Split on the ABSENCE of a section, exactly as `context-menu.tsx` now does. `'separator' in item`
+ * is structural and a spread can carry that key onto a real action; declaring a section is what an
+ * action actually does and a derived divider never will.
+ */
+const isSeparator = (item: MenuItem): item is { separator: true } => !('section' in item);
+const isAction = (item: MenuItem): item is MenuAction => 'section' in item;
 
 /** Where the dividers actually land once the renderer has joined the groups. */
 function separatorIndices(actions: MenuAction[]): number[] {
   return withDividers(actions)
     .map((item, index) => (isSeparator(item) ? index : -1))
     .filter((index) => index >= 0);
+}
+
+/** The menu as DRAWN — one entry per row, a label or `'—'` for a derived divider. */
+function shapeOf(actions: MenuAction[]): string[] {
+  return withDividers(actions).map((item) =>
+    isSeparator(item) ? '—' : (item.label ?? '(no label)'),
+  );
 }
 
 /**
@@ -88,10 +101,24 @@ function assertSectioned(actions: MenuAction[], where: string): void {
     [...seen].sort((a, b) => MENU_SECTION_ORDER.indexOf(a) - MENU_SECTION_ORDER.indexOf(b)),
   );
 
-  // N4 — nothing is reordered WITHIN a section by the grouping.
-  for (const group of groups) {
-    const asBuilt = actions.filter((a) => a.section === group[0]!.section);
-    expect(group, `${where}: intra-section order`).toEqual(asBuilt);
+  /*
+   * N4 — nothing is reordered WITHIN a section, asked of what the renderer will actually DRAW.
+   *
+   * This used to compare `groupBySection(actions)` against `actions`, which is a claim about
+   * `groupBySection` and says nothing whatever about `withDividers` — the subject of every other
+   * assertion in this function. Reverse the items inside each group as `withDividers` joins them and
+   * every menu in the app renders backwards, while the divider count, every boundary index and the
+   * section order stay exactly as they were: all seventeen table rows pass, and only the three
+   * hand-written label tables at the foot of this file go red. So the rendered rows are what is read
+   * back, section by section, against the order the builder emitted them in.
+   */
+  const drawn = rendered.filter(isAction);
+  expect(drawn.length, `${where}: withDividers dropped or duplicated an item`).toBe(actions.length);
+  for (const section of [...new Set(actions.map((a) => a.section))]) {
+    expect(
+      drawn.filter((a) => a.section === section),
+      `${where}: intra-section order — ${section}`,
+    ).toEqual(actions.filter((a) => a.section === section));
   }
 
   for (const action of actions) {
@@ -149,6 +176,37 @@ const explorerFolder = (): MenuAction[] =>
     keybindings: DEFAULT_KEYBINDINGS,
     projectRoot: 'D:/project',
     undoState: { canUndo: false, canRedo: false },
+  });
+
+/**
+ * The flavour catalogue, as `useFlavours()` would hand it over (033 US3, FR-030).
+ *
+ * Without it — and without `openInTerminal` — `buildContextMenuItems` draws the Terminal parent
+ * DISABLED and with no submenu (FR-035), which was the only variant this table ever walked. The
+ * enabled one nests three levels deep, and `assertSectioned` recurses into submenus but only into
+ * ones that exist, so the deepest level in the whole application was never put through the shared
+ * invariants here.
+ *
+ * What the rows themselves declare is NOT re-asserted below: `explorer-terminal-menu.test.ts`
+ * already pins the catalogue's order, the launch call, the disabled variant and every row's
+ * `section: 'navigate'` (contract A1–A6). This fixture exists so the enabled shape also meets the
+ * generic checks, not to state those guarantees a second time.
+ */
+const TERMINAL_FLAVOURS: readonly FlavourOption[] = [
+  { value: 'windows-powershell', label: 'Windows PowerShell', defaultShellArguments: '' },
+  { value: 'cmd', label: 'Command Prompt', defaultShellArguments: '' },
+];
+
+const explorerFolderWithTerminal = (): MenuAction[] =>
+  buildContextMenuItems({
+    node: { relPath: 'src', kind: 'folder' },
+    selectedRelPaths: [],
+    clipboard: null,
+    ops: { ...explorerOps, openInTerminal: noop },
+    keybindings: DEFAULT_KEYBINDINGS,
+    projectRoot: 'D:/project',
+    undoState: { canUndo: false, canRedo: false },
+    flavours: TERMINAL_FLAVOURS,
   });
 
 const explorerRoot = (): MenuAction[] =>
@@ -262,6 +320,7 @@ const cogMenu = (): MenuAction[] =>
 const TABLE: { name: string; build: () => MenuAction[] }[] = [
   { name: 'Files & Folders — file row', build: explorerFile },
   { name: 'Files & Folders — folder row', build: explorerFolder },
+  { name: 'Files & Folders — folder row, Terminal enabled', build: explorerFolderWithTerminal },
   { name: 'Files & Folders — empty space (root)', build: explorerRoot },
   { name: 'Editor content menu', build: () => editorMenu('TypeScript') },
   { name: 'Editor content menu — language undetected', build: () => editorMenu(undefined) },
@@ -317,6 +376,91 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
 
   it('the empty space (root): two dividers, at 3 and 6 — no Destroy, no Hide, no leading divider', () => {
     expect(separatorIndices(explorerRoot())).toEqual([3, 6]);
+  });
+
+  /*
+   * The folder row, in full. It was asserted by a divider COUNT and by Delete's offset from New
+   * Folder, which is a claim about two rows out of eighteen: every other label could move between
+   * sections, or within one, and both assertions would still hold. Collapse/Expand All Children
+   * are the reason it is worth pinning — US4 appended them to the tail of Navigate, and "appended
+   * to the tail of the right group" is exactly the property a count cannot tell from "inserted in
+   * the middle of the wrong one".
+   */
+  it('a folder row: the whole eighteen-row shape, Collapse/Expand closing Navigate', () => {
+    expect(shapeOf(explorerFolder())).toEqual([
+      'Rename',
+      'Cut',
+      'Copy',
+      'Paste',
+      'Undo',
+      'Redo',
+      '—',
+      'New File',
+      'New Folder',
+      '—',
+      'Delete',
+      '—',
+      'Open In',
+      'Copy Path',
+      'Collapse All Children',
+      'Expand All Children',
+      '—',
+      'Hide in this project',
+    ]);
+  });
+});
+
+/*
+ * The panel header menu — the biggest restructure in the feature (contracts §3.4), and until now
+ * the one menu whose SHAPE nothing pinned.
+ *
+ * `assertSectioned` above checks that the sections are valid, ordered, and that the dividers land
+ * at the boundaries; it never compares a label. So every one of these passed the whole suite green:
+ * `Reload from disk` re-declared `viewState`, `Send to Tab` re-declared `content`, `Save As…` moved
+ * within the Content group (N4/FR-053), `Zoom` becoming `content`. Each is a well-formed menu — and
+ * a different one from the one the contract describes.
+ *
+ * Two rows of the table, therefore, are pinned exhaustively: the simplest panel and the one that
+ * draws every conditional the editor adds.
+ */
+describe('the panel header menu draws exactly the shape contracts/menu-sections.md §3.4 describes', () => {
+  it('an untyped panel: Rename · Destroy Panel · Send to Tab · Reset Name, Zoom', () => {
+    expect(shapeOf(panelHeader({ panel: panel({}) }))).toEqual([
+      'Rename',
+      '—',
+      'Destroy Panel',
+      '—',
+      'Send to Tab',
+      '—',
+      'Reset Name',
+      'Zoom',
+    ]);
+  });
+
+  it('an editor panel backed by a file: Destroy moves to the middle, Reset Name leaves Rename’s side', () => {
+    const shape = shapeOf(
+      panelHeader({ panel: panel({ kind: 'editor' }), editor: { dirty: false, hasFilePath: true } }),
+    );
+    expect(shape).toEqual([
+      // Content — Save As… sits between Save and Revert, and Reload from disk closes the group.
+      'Rename',
+      'Save',
+      'Save As…',
+      'Revert',
+      'Reload from disk',
+      '—',
+      // Destroy, alone, third — the same shape the Files & Folders menu has always had.
+      'Destroy Panel',
+      '—',
+      // Navigate — the two reveal items exist only for a panel with a file behind it.
+      'Reveal File in Files & Folders',
+      'Open in OS Explorer',
+      'Send to Tab',
+      '—',
+      // View & state — Reset Name has left Rename's side, where the constitution names it.
+      'Reset Name',
+      'Zoom',
+    ]);
   });
 });
 

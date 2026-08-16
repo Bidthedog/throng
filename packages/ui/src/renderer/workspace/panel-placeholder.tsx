@@ -488,7 +488,15 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
               otherTabs: others,
               editor:
                 panel.kind === 'editor'
-                  ? { dirty: editorUi?.dirty ?? false, hasFilePath: editorUi?.filePath != null }
+                  ? // Truthiness, NOT `!= null`. The inline menu this was extracted from wrote
+                    // `disabled: !editorUi?.filePath` and gated the two reveal items on the same
+                    // test, so an empty string disabled Reload from disk and drew neither reveal
+                    // item. `EditorUiState.filePath` is typed `string | null` and nothing narrows
+                    // it further, so `''` is a value the type admits even though no path in the
+                    // app produces one today — and under `!= null` it would enable Reload and draw
+                    // two reveal items for a panel with no file. N6: the extraction alters no
+                    // condition.
+                    { dirty: editorUi?.dirty ?? false, hasFilePath: !!editorUi?.filePath }
                   : null,
               editorFailure: editorFailure !== null,
               detach: detach
