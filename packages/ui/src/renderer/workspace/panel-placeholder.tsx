@@ -11,11 +11,11 @@ import {
   panelZoomLevel,
   findPanelLocations,
   planConfirmations,
-  firstBinding,
   type Edge,
   type Panel,
 } from '@throng/core';
 import { PanelBody } from './panel-body.js';
+import { panelHeaderMenu } from './panel-header-menu.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useProjects } from '../state/projects-store.js';
 import { useServices } from '../composition-root.js';
@@ -474,292 +474,126 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         onContextMenu={(e) => {
           e.preventDefault();
           const others = (ws.layout?.tabs ?? []).filter((t) => t.id !== tabId);
-          openMenu(e.clientX, e.clientY, [
-            {
-              label: 'Rename',
-              icon: 'rename',
-              // The chord is SHOWN, not merely bound. A menu that offers an action without naming
-              // its key teaches nobody the key, and this menu is the panel's canonical index of
-              // what it can do (constitution v4.3.0).
-              shortcut: firstBinding(keybindings, 'panel.rename'),
-              onClick: () => setRenaming(true),
-            },
-            // Undo a rename back to the panel's default name (a terminal then shows its live title
-            // again). Disabled when there is nothing to reset.
-            {
-              label: 'Reset Name',
-              icon: 'resetName',
-              disabled: !(panel.titleIsCustom ?? false),
-              onClick: () => ws.resetPanelName(panel.id),
-            },
-            // Per-panel zoom (012) — zoom THIS panel's text independently of others.
-            {
-              label: 'Zoom',
-              icon: 'zoomIn',
-              submenu: [
-                {
-                  label: 'Zoom In',
-                  icon: 'zoomIn',
-                  shortcut: firstBinding(keybindings, 'panel.zoomIn'),
-                  onClick: () => ws.bumpZoom(panel.id, 1),
+          // 033 US5 (T062) — the items live in `panel-header-menu.ts`, which declares their
+          // sections; `ContextMenu` derives the dividers from those. This handler supplies the
+          // panel's state and the action bodies that need the confirm dialog, the clipboard and the
+          // workspace store, and decides nothing about order or grouping.
+          openMenu(
+            e.clientX,
+            e.clientY,
+            panelHeaderMenu({
+              panel,
+              panelVerb,
+              keybindings,
+              otherTabs: others,
+              editor:
+                panel.kind === 'editor'
+                  ? { dirty: editorUi?.dirty ?? false, hasFilePath: editorUi?.filePath != null }
+                  : null,
+              editorFailure: editorFailure !== null,
+              detach: detach
+                ? {
+                    subWorkspaces: detach.subWorkspaces.map((s) => ({
+                      id: s.id,
+                      name: s.name,
+                      alreadyHasPanel: s.tabs.some((t) =>
+                        collectPanels(t.root).some((p) => p.id === panel.id),
+                      ),
+                      tabs: s.tabs.map((t) => ({ id: t.id, title: t.title })),
+                    })),
+                    detachToNew: () => detach.detachToNew('panel', panel.id),
+                    syncToExisting: (subWorkspaceId, targetTabId) =>
+                      detach.syncToExisting('panel', panel.id, subWorkspaceId, targetTabId),
+                  }
+                : null,
+              actions: {
+                beginRename: () => setRenaming(true),
+                resetName: () => ws.resetPanelName(panel.id),
+                zoomIn: () => ws.bumpZoom(panel.id, 1),
+                zoomOut: () => ws.bumpZoom(panel.id, -1),
+                resetZoom: () => ws.resetZoom(panel.id),
+                save: () => {
+                  void getEditorActions(panel.id)?.save();
                 },
-                {
-                  label: 'Zoom Out',
-                  icon: 'zoomOut',
-                  shortcut: firstBinding(keybindings, 'panel.zoomOut'),
-                  onClick: () => ws.bumpZoom(panel.id, -1),
+                saveAs: () => {
+                  void getEditorActions(panel.id)?.saveAs();
                 },
-                {
-                  label: 'Reset Zoom',
-                  icon: 'zoomReset',
-                  shortcut: firstBinding(keybindings, 'panel.zoomReset'),
-                  onClick: () => ws.resetZoom(panel.id),
+                revert: () => {
+                  void (async () => {
+                    const ok = await confirm({
+                      title: 'Revert changes',
+                      message: `Discard all unsaved changes to “${editorUi?.displayName ?? panel.title}”? This cannot be undone.`,
+                      confirmLabel: 'Revert',
+                      cancelLabel: 'Cancel',
+                      danger: true,
+                    });
+                    if (ok) getEditorActions(panel.id)?.revert();
+                  })();
                 },
-              ],
-            },
-            // Editor Panels: Save (== Ctrl+S, FR-076) and Revert-all-changes with a
-            // confirmation (FR-075). Revert is disabled when there is nothing to undo.
-            ...(panel.kind === 'editor'
-              ? [
-                  {
-                    label: 'Save',
-                    icon: 'send' as const,
-                    shortcut: firstBinding(keybindings, 'editor.save'),
-                    onClick: () => {
-                      void getEditorActions(panel.id)?.save();
-                    },
-                  },
-                  {
-                    label: 'Save As…',
-                    icon: 'send' as const,
-                    shortcut: firstBinding(keybindings, 'editor.saveAs'),
-                    onClick: () => {
-                      void getEditorActions(panel.id)?.saveAs();
-                    },
-                  },
-                  {
-                    label: 'Revert',
-                    icon: 'rename' as const,
-                    disabled: !editorUi?.dirty,
-                    onClick: () => {
-                      void (async () => {
-                        const ok = await confirm({
-                          title: 'Revert changes',
-                          message: `Discard all unsaved changes to “${editorUi?.displayName ?? panel.title}”? This cannot be undone.`,
-                          confirmLabel: 'Revert',
-                          cancelLabel: 'Cancel',
-                          danger: true,
-                        });
-                        if (ok) getEditorActions(panel.id)?.revert();
-                      })();
-                    },
-                  },
-                  /**
-                   * Reload from disk (027 / #161, FR-013) — a NEW action ALONGSIDE Revert, not a
-                   * rename of it. They read different sources of truth: Revert restores throng's
-                   * cached copy of what the file last held and refuses when the file is gone;
-                   * this re-READS the path, which is the only thing that rescues a stranded
-                   * editor. Enabled even with no unsaved changes: "the file changed underneath
-                   * me, show me what it says now" is a legitimate ask.
-                   *
-                   * Menu-only, with no ActionId. Minting one would oblige a default chord, a
-                   * COMMAND_SCOPES entry and a KEYBINDINGS_METADATA descriptor (the completeness
-                   * gate asserts every ActionId is described) for a recovery action always reached
-                   * from a panel already under the pointer.
-                   */
-                  {
-                    label: 'Reload from disk',
-                    icon: 'retry' as const,
-                    disabled: !editorUi?.filePath,
-                    onClick: () => {
-                      void (async () => {
-                        // Unsaved edits are the only copy — a reload discards them, so it asks
-                        // first. A clean document has nothing to lose and is not interrupted.
-                        if (editorUi?.dirty) {
-                          const ok = await confirm({
-                            title: 'Reload from disk',
-                            message: `Discard unsaved changes to “${editorUi?.displayName ?? panel.title}” and load what is on disk now? This cannot be undone.`,
-                            confirmLabel: 'Reload',
-                            cancelLabel: 'Cancel',
-                            danger: true,
-                          });
-                          if (!ok) return;
-                        }
-                        await getEditorActions(panel.id)?.reloadFromDisk();
-                      })();
-                    },
-                  },
-                  // US6 (#137) — for a panel backed by an on-disk file: reveal it in throng's own
-                  // Files & Folders tree, and open its folder in the OS file manager (via the seam).
-                  ...(editorUi?.filePath
-                    ? [
-                        {
-                          label: 'Reveal File in Files & Folders',
-                          onClick: () => {
-                            window.dispatchEvent(
-                              new CustomEvent('throng:reveal-in-tree', {
-                                detail: { absPath: editorUi.filePath },
-                              }),
-                            );
-                          },
-                        },
-                        {
-                          label: 'Open in OS Explorer',
-                          onClick: () => {
-                            const abs = (editorUi.filePath ?? '').replace(/\\/g, '/');
-                            const root = (editorUi.ownerRoot ?? '').replace(/\\/g, '/').replace(/\/+$/, '');
-                            const rel =
-                              root && abs.toLowerCase().startsWith(`${root.toLowerCase()}/`)
-                                ? abs.slice(root.length + 1)
-                                : null;
-                            if (rel !== null) void window.throng?.files?.reveal?.(rel);
-                          },
-                        },
-                      ]
-                    : []),
-                  /*
-                   * 030 FR-042c — the failure banner's OWN two commands, in the panel's own menu.
-                   *
-                   * The Constitution binds a feature that adds a panel action to add its menu item
-                   * in the same increment: an action reachable only as an icon on a banner is
-                   * unreachable from where users look for panel commands, and undiscoverable by
-                   * anyone who does not recognise the glyph. 029 set the precedent on the terminal's
-                   * side (`terminal-panel.tsx`), and both of these are new work on the editor's.
-                   *
-                   * Shown only while the banner is, because that is the only state in which either
-                   * is meaningful — and the LABELS are the banner's, unchanged (FR-042d), which is
-                   * what makes them the same command rather than a second one that looks like it.
-                   * *Try again* therefore sits beside *Reload from disk* while a file is unreadable:
-                   * they run the same re-read, and the duplication is the price of each surface
-                   * naming its own command consistently.
-                   */
-                  ...(editorFailure
-                    ? [
-                        {
-                          label: 'Try again',
-                          icon: 'retry' as const,
-                          /*
-                           * The BANNER'S retry, not a second call to the same operation.
-                           *
-                           * This used to run `reloadFromDisk()` directly, which is the same re-read
-                           * and therefore looked equivalent — but it bypassed the banner's retry
-                           * state entirely, so FR-045 ("a failed retry remains and says so") held on
-                           * the button and nowhere else. Retrying from the menu left the banner
-                           * standing in silence: the "did my click do anything?" failure the design
-                           * exists to prevent, reintroduced by the surface added to satisfy FR-042c.
-                           * Same command now means the same call.
-                           */
-                          onClick: () => {
-                            retryPanelFailure(panel.id);
-                          },
-                        },
-                        {
-                          /*
-                           * 030 FR-042c — Copy is not an exception for being "just a copy button".
-                           * It is a discrete command acting on a Panel, and a copy control reachable
-                           * only as a glyph on a banner is unreachable to anyone who does not
-                           * recognise the glyph. The text is the BANNER'S, assembled once.
-                           */
-                          label: 'Copy details',
-                          icon: 'copy' as const,
-                          onClick: () => {
-                            copyToClipboard(panelFailureText(editorFailure), editorFailure.subject);
-                          },
-                        },
-                        {
-                          label: 'Clear panel type',
-                          icon: 'dismiss' as const,
-                          onClick: () => {
-                            void clearEditorPanelType(panel.id, {
-                              dirty: editorUi?.dirty ?? false,
-                              name: editorUi?.displayName ?? panel.title,
-                              confirm,
-                              clearPanelType: ws.clearPanelType,
-                            });
-                          },
-                        },
-                      ]
-                    : []),
-                ]
-              : []),
-            /*
-             * 028 (issue 163) — Terminal Panels: the deliberate version of the divider nudge users
-             * discovered by accident. Present on BOTH the panel header menu (here) and the
-             * terminal's own right-click menu, under the same name, because a user hunting for it
-             * will open whichever menu is nearest.
-             *
-             * It asks the running program to redraw. Nothing about the terminal's content,
-             * scrollback, selection, cursor, focus or the layout changes, and nothing is typed at
-             * the shell.
-             */
-            ...(panel.kind === 'terminal'
-              ? [
-                  {
-                    label: 'Refresh / redraw terminal',
-                    icon: 'retry' as const,
-                    shortcut: firstBinding(keybindings, 'terminal.redraw'),
-                    onClick: () => requestRedraw(panel.id, 'manual'),
-                  },
-                ]
-              : []),
-            {
-              label: 'Send to Tab',
-              icon: 'send',
-              submenu: [
-                // New Tab == dragging the Panel onto the tab-strip `+` (005 FR-027).
-                { label: 'New Tab', icon: 'add', onClick: () => ws.addTabFromPanel(panel.id) },
-                ...others.map((t) => ({
-                  label: t.title,
-                  icon: 'tab',
-                  onClick: () => ws.movePanelToTab(panel.id, t.id),
-                })),
-              ],
-            },
-            // Sync (clone) this Panel into a sub-workspace (US7). Hidden in
-            // sub-workspace windows (no detach context). "New Window" creates a new
-            // sub-workspace; an existing one → choose a Tab within it ("New" makes
-            // a fresh Tab). Cloning leaves the Panel in the main project.
-            ...(detach
-              ? [
-                  {
-                    label: 'Sync to',
-                    icon: 'send',
-                    submenu: [
-                      {
-                        label: 'New Sub-workspace',
-                        icon: 'detach',
-                        onClick: () => detach.detachToNew('panel', panel.id),
-                      },
-                      // A Panel can live in a given sub-workspace only ONCE: if it's
-                      // already there, the entry is greyed out (no submenu).
-                      ...detach.subWorkspaces.map((s) => {
-                        const already = s.tabs.some((t) =>
-                          collectPanels(t.root).some((p) => p.id === panel.id),
-                        );
-                        if (already) return { label: s.name, icon: 'tab', disabled: true };
-                        return {
-                          label: s.name,
-                          icon: 'tab',
-                          submenu: [
-                            {
-                              label: 'New Tab',
-                              icon: 'add',
-                              onClick: () => detach.syncToExisting('panel', panel.id, s.id),
-                            },
-                            ...s.tabs.map((t) => ({
-                              label: t.title,
-                              icon: 'tab',
-                              onClick: () => detach.syncToExisting('panel', panel.id, s.id, t.id),
-                            })),
-                          ],
-                        };
-                      }),
-                    ],
-                  },
-                ]
-              : []),
-            { label: `${panelVerb} Panel`, icon: 'destroy', onClick: () => void destroyPanel() },
-          ]);
+                reloadFromDisk: () => {
+                  void (async () => {
+                    // Unsaved edits are the only copy — a reload discards them, so it asks
+                    // first. A clean document has nothing to lose and is not interrupted.
+                    if (editorUi?.dirty) {
+                      const ok = await confirm({
+                        title: 'Reload from disk',
+                        message: `Discard unsaved changes to “${editorUi?.displayName ?? panel.title}” and load what is on disk now? This cannot be undone.`,
+                        confirmLabel: 'Reload',
+                        cancelLabel: 'Cancel',
+                        danger: true,
+                      });
+                      if (!ok) return;
+                    }
+                    await getEditorActions(panel.id)?.reloadFromDisk();
+                  })();
+                },
+                revealInTree: () => {
+                  window.dispatchEvent(
+                    new CustomEvent('throng:reveal-in-tree', {
+                      detail: { absPath: editorUi?.filePath },
+                    }),
+                  );
+                },
+                openInOsExplorer: () => {
+                  const abs = (editorUi?.filePath ?? '').replace(/\\/g, '/');
+                  const root = (editorUi?.ownerRoot ?? '').replace(/\\/g, '/').replace(/\/+$/, '');
+                  const rel =
+                    root && abs.toLowerCase().startsWith(`${root.toLowerCase()}/`)
+                      ? abs.slice(root.length + 1)
+                      : null;
+                  if (rel !== null) void window.throng?.files?.reveal?.(rel);
+                },
+                /*
+                 * The BANNER'S retry, not a second call to the same operation.
+                 *
+                 * This used to run `reloadFromDisk()` directly, which is the same re-read and
+                 * therefore looked equivalent — but it bypassed the banner's retry state entirely,
+                 * so FR-045 ("a failed retry remains and says so") held on the button and nowhere
+                 * else. Retrying from the menu left the banner standing in silence.
+                 */
+                tryAgain: () => {
+                  retryPanelFailure(panel.id);
+                },
+                copyDetails: () => {
+                  if (editorFailure) {
+                    copyToClipboard(panelFailureText(editorFailure), editorFailure.subject);
+                  }
+                },
+                clearPanelType: () => {
+                  void clearEditorPanelType(panel.id, {
+                    dirty: editorUi?.dirty ?? false,
+                    name: editorUi?.displayName ?? panel.title,
+                    confirm,
+                    clearPanelType: ws.clearPanelType,
+                  });
+                },
+                redraw: () => requestRedraw(panel.id, 'manual'),
+                sendToNewTab: () => ws.addTabFromPanel(panel.id),
+                sendToTab: (targetTabId) => ws.movePanelToTab(panel.id, targetTabId),
+                destroy: () => void destroyPanel(),
+              },
+            }),
+          );
         }}
         {...(renaming ? {} : listeners)}
         {...attributes}

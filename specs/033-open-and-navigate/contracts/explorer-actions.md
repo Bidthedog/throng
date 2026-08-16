@@ -52,6 +52,34 @@ focusPanel(id)                                              → and it takes KEY
 `resolveStartDirectory` as `requested`. Everything else on that path — the containment check, the
 existence check, the fallback, the report — is untouched, which is the point.
 
+> **CORRECTED 2026-08-16, from implementing it.** Two of the statements above were not true of the
+> code as it actually is. Both are recorded rather than quietly worked around, because the next
+> person to read this contract would have made the same two mistakes.
+>
+> **`focusPanel(id)` cannot succeed at the point the sequence places it.** It returns `false` unless
+> the panel has already called `registerPanelFocus`, and the panel it is handed was created
+> microseconds earlier — its terminal view has not mounted. The focus that actually lands today
+> comes from `use-terminal.ts`'s `focusIfActive(term)` on mount, which works *only because
+> `setActivePanel` runs immediately before*. So the sequence delivers B3, but not by the step the
+> sequence credits. The shipped code keeps the `focusPanel(id)` call exactly as written and falls
+> back to `requestPanelFocus(id)` — issue 144's parking mechanism, built for precisely this async
+> gap — when it returns false. A strict superset of the step, never a replacement for it.
+>
+> **B7 is not inherited by leaving that path untouched — the *value* has to flow.** `fallbackToReport`
+> read `req.rememberedCwd` directly, so a `startDirectory` pointing at a folder deleted between the
+> right-click and the launch would have fallen back to the project root **silently**, which FR-034
+> forbids in the same breath that B7 claims to inherit it. One local is hoisted,
+> `const requestedCwd = req.rememberedCwd ?? req.startDirectory`, and passed to both calls. No logic
+> inside either function changed. "Untouched and therefore inherited" holds for the containment and
+> existence checks; it was false for the report.
+>
+> **AS-6 / A3 ("no active project") is not reachable from this menu at all.**
+> `panes/file-explorer-pane.tsx` mounts `FileTree` only when a project is active, so with no project
+> there is no row to right-click and no menu to inspect — which is why AS-6 is worded *"when a
+> context menu is available at all"*. The E2E proves the same rule through the route that **is**
+> reachable: every built-in disabled and no user flavours, so the catalogue is empty and the Terminal
+> parent must still be drawn `aria-disabled="true"` and open nothing.
+
 ---
 
 ## Part B — Expand / Collapse All Children (US4)
@@ -90,10 +118,43 @@ Both actions go through `use-explorer-data.ts` and use the **same** `ensureLoade
 | D4 | **Expand All Children** opens the anchor's immediate child folders only | FR-041 |
 | D5 | On a **closed** folder it opens the folder first, then its immediate children | FR-042 |
 | D6 | Every folder opened by either action has its children **loaded** — `await ensureLoaded(rel)` precedes `api.open(rel)`, exactly as `expandStep` does. **Zero folders end up marked open with unloaded children** | FR-043, SC-009 |
-| D7 | Neither action expands into a folder the exclusion rules exclude. `fetchChildren` filters by `isExcluded` and the per-project `hiddenPaths`, so an excluded folder is not in the tree to expand | FR-044 |
+| D7 | Neither action expands into a folder the exclusion rules exclude. ~~`fetchChildren` filters by `isExcluded` **and the per-project `hiddenPaths`**, so an excluded folder is not in the tree to expand~~ — **see the correction below; the requirement holds, this account of why did not** | FR-044 |
 | D8 | Both call `persist(selectedId)` on completion, so the resulting open state survives a project switch and a restart exactly as a manual expand or collapse does — the same `localStorage` key, the same shape | FR-045, AS-10 |
 | D9 | The toolbar's Expand and Collapse all are **unchanged**, in code and in behaviour | FR-046, AS-11 |
 | D10 | Expand All Children on a folder with hundreds of immediate children completes without the tree appearing to hang: loads are issued together (`Promise.all`) and the opens applied in one pass, as `expandStep` does | Edge Cases |
+
+> **CORRECTED 2026-08-16, from implementing it.** Three statements above describe a codebase slightly
+> different from the one that exists. The requirements are unchanged; what changes is where each one
+> is actually enforced.
+>
+> **D7 names the wrong filter, and following it literally would have shipped a defect.**
+> `fetchChildren` filters by `isExcluded(relPath, globs)` **only**. The per-project hidden paths are
+> applied much later, in the `data` `useMemo` via `hiddenSet` — so `childrenMap`, which is exactly
+> what `expandChildren` reads, **still contains hidden folders**. Had the implementation trusted
+> D7's "so an excluded folder is not in the tree to expand", *Hide in this project* on a folder would
+> have been silently defeated by Expand All Children. `expandChildren` filters `hiddenSet`
+> explicitly. FR-044 holds; D7's account of why it holds did not.
+>
+> **D4/D5 assume a rendered view the renderer cannot produce on the tick the action runs.** The
+> chevron and `expandStep` paths compute their targets from the *rendered* tree, which is safe for
+> them because they only ever open folders whose parents are already rendered. `expandChildren`
+> cannot: D5 requires a **closed** anchor to be opened first, and the rendered view of a closed
+> folder carries no children by `expand.ts`'s own documented convention — and even after opening it,
+> `data` is rebuilt by a React render that has not happened yet. So `expandChildren` names the
+> anchor's children from **the listing `ensureLoaded` just returned**, wrapped in a one-level
+> `ExpandNode` and handed to the same `immediateChildFolders`. Same pure function, same type, same
+> decision; a different source for the one view the renderer cannot supply in time.
+>
+> **D9 is honoured in code, at the cost of one duplicated mapper.** `expandStep` builds its
+> `ExpandNode` view with an inline mapper and `collapseChildren` needs the same mapping, but folding
+> them together would edit the toolbar's path, which D9 forbids *in code* and not merely in
+> behaviour. There is now a module-level `toExpandNode` beside `expandStep`'s inline copy, each
+> commented to say why the duplication is deliberate. One genuinely shared change was unavoidable:
+> **`ensureLoaded` now returns the listing** (`Promise<TreeNodeData[] | undefined>`), so a failed
+> load is distinguishable from an empty folder and no folder can be opened on a listing that never
+> arrived. It is purely additive — every existing caller ignores the return and behaves identically —
+> but it is a shared function on the toolbar's path, so D9's "unchanged in code" is true of
+> `expandStep` itself and not of every line it calls.
 
 ### B.3 Where the items are drawn
 

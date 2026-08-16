@@ -40,6 +40,9 @@ interface AttachRequest {
   startupCommand?: string;
   /** 025 FR-028: the directory this panel last worked in, if any. */
   rememberedCwd?: string;
+  /** 033 FR-033: where this panel was CREATED to start — the folder right-clicked in the tree.
+   *  Used only when nothing has been remembered yet, and resolved by the same rules. */
+  startDirectory?: string;
   cols: number;
   rows: number;
   /** Display labels for the app-close warning (flavourLabel is filled in here). */
@@ -164,7 +167,20 @@ export function registerTerminalIpc(deps: {
           return false;
         }
       };
-      const cwd = resolveStartDirectory(root, req.rememberedCwd, dirExists);
+      /*
+       * 033 FR-032/FR-034 (T078) — ONE value changes here: which directory is REQUESTED.
+       *
+       * A panel opened from the tree (Open In → Terminal) carries a `startDirectory`; a panel that
+       * has been running carries a `rememberedCwd`. Memory wins when both exist, because by then the
+       * user has moved the shell themselves and the folder they right-clicked days ago is history.
+       *
+       * Everything downstream is deliberately UNTOUCHED, and that is the point: the containment
+       * check, the existence check, the fallback to the root and the report below already hold for a
+       * remembered directory, so a start directory inherits all four by being handed to the same
+       * resolver rather than by a second implementation agreeing with the first.
+       */
+      const requestedCwd = req.rememberedCwd ?? req.startDirectory;
+      const cwd = resolveStartDirectory(root, requestedCwd, dirExists);
       /*
        * 029 FR-005b — the fallback is no longer SILENT.
        *
@@ -179,7 +195,7 @@ export function registerTerminalIpc(deps: {
        * escaped its project also falls back, but that is a boundary throng enforces on purpose and
        * announcing it would be noise.
        */
-      const cwdFallback = fallbackToReport(req.rememberedCwd, cwd, dirExists);
+      const cwdFallback = fallbackToReport(requestedCwd, cwd, dirExists);
       // 025 FR-010: the flavour decides HOW a Startup Command is handed to it — `cmd` keeps its
       // session with /K, PowerShell with -NoExit, bash by re-execing itself. A flavour with no
       // recipe falls back to writing the command into the PTY once it is ready (FR-012), which is

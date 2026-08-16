@@ -26,7 +26,14 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       showStatusBar: true,
       // 033 FR-069b — the navigation block. Shipped ON: Quick Open starts by excluding what the
       // project hides, so the modal and the tree give one answer.
-      navigation: { quickOpenExcludeHidden: true },
+      // 033 FR-058 — and the two remember toggles, both shipped OFF. Their own key-by-key parsing
+      // is asserted in `editor-navigation-settings.test.ts`; they appear here because this
+      // assertion is exhaustive, which is what makes a silently-added key impossible.
+      navigation: {
+        quickOpenExcludeHidden: true,
+        rememberQuickOpenQuery: false,
+        rememberGotoLineNumber: false,
+      },
     });
   });
 
@@ -95,7 +102,14 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       showStatusBar: true,
       // 033 FR-069b — the navigation block. Shipped ON: Quick Open starts by excluding what the
       // project hides, so the modal and the tree give one answer.
-      navigation: { quickOpenExcludeHidden: true },
+      // 033 FR-058 — and the two remember toggles, both shipped OFF. Their own key-by-key parsing
+      // is asserted in `editor-navigation-settings.test.ts`; they appear here because this
+      // assertion is exhaustive, which is what makes a silently-added key impossible.
+      navigation: {
+        quickOpenExcludeHidden: true,
+        rememberQuickOpenQuery: false,
+        rememberGotoLineNumber: false,
+      },
     });
   });
 

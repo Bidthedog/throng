@@ -116,6 +116,9 @@ export interface UseTerminalOptions {
   startupCommand: string;
   /** 025 FR-028: the directory this panel last worked in, if it remembered one. */
   rememberedCwd?: string;
+  /** 033 FR-033: where this panel was CREATED to start — set when it was opened from the tree.
+   *  Only consulted when nothing has been remembered; main resolves both by the same rules. */
+  startDirectory?: string;
   /** The DOM node to mount xterm into. */
   container: HTMLElement | null;
   /** xterm theme built from the active throng theme tokens. */
@@ -218,6 +221,9 @@ export function useTerminal(opts: UseTerminalOptions): void {
    * shortcut here: it is the correct lifetime for the value.
    */
   const rememberedCwdRef = useRef(opts.rememberedCwd);
+  // 033 FR-033: read at LAUNCH only, exactly like the remembered directory above — a ref, so it can
+  // never become an attach dependency and tear a running terminal down.
+  const startDirectoryRef = useRef(opts.startDirectory);
   // Search collaborators are read through refs too (013): the key-reservation predicate
   // changes when the user rebinds a chord or opens/closes find, and the highlight colours
   // change when the theme does — the mount effect must not freeze yesterday's copies.
@@ -232,6 +238,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
   themeRef.current = opts.theme;
   metaRef.current = opts.meta;
   rememberedCwdRef.current = opts.rememberedCwd;
+  startDirectoryRef.current = opts.startDirectory;
   reserveKeyRef.current = opts.reserveKey;
   decorationsRef.current = opts.searchDecorations;
   onSearchCountRef.current = opts.onSearchCount;
@@ -996,6 +1003,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
         shellArguments,
         startupCommand,
         rememberedCwd: rememberedCwdRef.current,
+        startDirectory: startDirectoryRef.current,
         cols: term.cols,
         rows: term.rows,
         meta: metaRef.current,

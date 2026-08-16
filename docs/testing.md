@@ -172,6 +172,20 @@ Measured on this suite (214 spec files, 658 tests):
 lands around 21 minutes rather than something dramatic. Menu and preferences specs
 are test-dense, and they are exactly the ones that cannot share a desktop.
 
+> **The table above is a MEASUREMENT, not a live count** — it is what this suite did on the day it
+> was measured, and the file counts in it are the composition at that moment. As of **2026-08-16**
+> the suite holds **247 spec files, 127 of them serial**, against the 214/99 measured here. The
+> numbers are deliberately left as they were rather than being edited to match: the times beside them
+> were measured against *that* composition, and a table mixing today's file counts with a year-ago
+> stopwatch would read as current while being true of nothing. Re-measure and replace the whole row
+> when the balance matters; do not patch one column.
+>
+> The **shape** of the finding is unaffected and is what the table is for — the serial tier still
+> holds fewer files and more tests, for the same reason, and spec 033 added four more menu- and
+> preferences-driving specs to it (`menu-sections`, `navigation-remember`, `open-in-terminal`,
+> `subtree-expand-collapse`) against one to the parallel tier (`window-chord-resolution`, which
+> drives no context menu and opens no preferences window). That is the mechanism working, not drift.
+
 ### What puts a spec in the serial tier
 
 Three different mechanisms, all in `parallel-plan.json`:

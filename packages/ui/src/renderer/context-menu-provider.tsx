@@ -7,7 +7,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
-import { ContextMenu, type MenuItem } from './workspace/context-menu.js';
+import { ContextMenu, type MenuAction } from './workspace/context-menu.js';
 import { useAppSettings } from './config/config-store.js';
 
 /** Options for a menu that is folding a bespoke implementation into this one (018 / FR-013). */
@@ -26,15 +26,23 @@ export interface OpenMenuOptions {
 interface MenuState {
   x: number;
   y: number;
-  items: MenuItem[];
+  items: MenuAction[];
   testId?: string;
   /** The element focused when the menu opened, so keyboard/action close can return focus to it. */
   opener?: HTMLElement | null;
 }
 
 interface ContextMenuController {
-  /** Open a context menu at a screen position, replacing any menu already open. */
-  openMenu(x: number, y: number, items: MenuItem[], options?: OpenMenuOptions): void;
+  /**
+   * Open a context menu at a screen position, replacing any menu already open.
+   *
+   * `MenuAction[]`, not `MenuItem[]` — this is where FR-049's compile-time guarantee is CLOSED
+   * (033 US5). While this took `MenuItem[]`, which admits `{ separator: true }`, any caller could
+   * still hand-push a divider and compile, so the guarantee held only for the builders that
+   * happened to be extracted while spec, plan and contract all claimed it covered every menu.
+   * Dividers are derived from `section` inside `ContextMenu`, per level.
+   */
+  openMenu(x: number, y: number, items: MenuAction[], options?: OpenMenuOptions): void;
   closeMenu(): void;
   /**
    * Is a menu on screen right now?
@@ -59,7 +67,7 @@ export function ContextMenuProvider({ children }: { children: ReactNode }): Reac
   const settings = useAppSettings();
   const [menu, setMenu] = useState<MenuState | null>(null);
   const openMenu = useCallback(
-    (x: number, y: number, items: MenuItem[], options?: OpenMenuOptions) => {
+    (x: number, y: number, items: MenuAction[], options?: OpenMenuOptions) => {
       // Capture the surface that had focus (e.g. the Files & Folders tree) BEFORE the menu grabs it,
       // so a keyboard/action close can hand focus back with its highlighted item intact (#157 follow-up).
       const opener = document.activeElement as HTMLElement | null;

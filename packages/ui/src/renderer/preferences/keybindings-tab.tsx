@@ -141,6 +141,10 @@ export function KeybindingsTab({
         {
           label: `Remove “${token}”`,
           icon: 'destroy',
+          // 033 US5 (FR-052, T066): exempt from GROUPING while it holds one item — one section has
+          // no boundary, so there is nothing to draw — but not exempt from FR-049. The section is
+          // declared here so a second item added later lands somewhere deliberate.
+          section: 'destroy',
           testId: 'binding-context-remove',
           onClick: () => removeChord(action, token),
         },

@@ -38,8 +38,14 @@ import {
   normaliseFolder,
   relPathUnderRoot,
   resolveDragEffect,
+  resolveTarget,
+  type FlavourOption,
+  type TargetNode,
+  type TerminalPanelConfig,
 } from '@throng/core';
-import type { MenuItem } from '../workspace/context-menu.js';
+import { useFlavours } from '../panel-type/use-flavours.js';
+import { focusPanel, requestPanelFocus } from '../workspace/panel-focus.js';
+import type { MenuAction } from '../workspace/context-menu.js';
 
 const ROW_HEIGHT = 24;
 
@@ -94,6 +100,8 @@ export function FileTree({
     onRename,
     expandStep,
     collapseAll,
+    expandChildren,
+    collapseChildren,
     selectedRelPaths,
     primarySelected,
     clipboard,
@@ -298,12 +306,68 @@ export function FileTree({
     redoFileOp,
   });
 
+  /*
+   * 033 US3 (T080, FR-030) — the ONE flavour catalogue.
+   *
+   * The very same hook the panel type-picker reads (`window.throng.terminal.listFlavours()` →
+   * detected built-ins minus disabled, ∪ the user's own). No list is declared here, and none is
+   * filtered: a flavour the picker offers is a flavour this menu offers, by construction rather
+   * than by two lists being kept in step.
+   */
+  const flavours = useFlavours();
+
+  /*
+   * 033 US3 (T081, FR-031/FR-033/FR-033a) — the launch, in the order contract §A.2 states it.
+   *
+   * It is `createDedicatedEditor`'s sequence with a terminal config, and every step is load-bearing:
+   * `clearLastAddedPanel` is what stops the new panel opening in RENAME mode (only a user-added panel
+   * renames on add), `notifyTyped` mirrors the typing to other windows, and `setActivePanel` before
+   * focus is what lets the terminal's own mount-time focus fire — see the note on `focusPanel` below.
+   */
+  const openInTerminal = useCallback(
+    (node: TargetNode, flavour: FlavourOption) => {
+      const activeTabId = ws.layout?.activeTabId;
+      if (!activeTabId) return;
+      // B4 — the right-clicked FOLDER, or a right-clicked FILE's parent folder. `resolveTarget` is
+      // the shipped answer to that exact question (New File / New Folder / paste all ask it).
+      const relDir = resolveTarget(node);
+      // A REQUEST, not a decision: main hands it to `resolveStartDirectory`, so a path outside the
+      // root is refused there and the root substituted (FR-032). Built the same way the tree already
+      // builds an absolute path for the editor, forward slash and all — `path-id` normalises.
+      const startDirectory = relDir === '' ? rootFolder : `${rootFolder}/${relDir}`;
+      const config: TerminalPanelConfig = {
+        flavourId: flavour.value,
+        flavourLabel: flavour.label,
+        shellArguments: flavour.defaultShellArguments,
+        startDirectory,
+      };
+      const newId = ws.addPanel(activeTabId);
+      ws.clearLastAddedPanel();
+      ws.setPanelType(newId, 'terminal', config);
+      window.throng?.panel?.notifyTyped?.(newId, 'terminal', config);
+      ws.setActivePanel(activeTabId, newId);
+      /*
+       * FR-033a / SC-015 — the keystroke after the click must reach the SHELL.
+       *
+       * `focusPanel` is the contract's step and is called as such, but it can only succeed for a
+       * panel that has already registered a focus callback — and this one was created microseconds
+       * ago, so its terminal view has not mounted yet and it returns false. `requestPanelFocus` parks
+       * the request until the panel registers (issue 144's mechanism), which is the same asynchronous
+       * gap. Without the fallback the focus depends entirely on the terminal's own mount-time
+       * `focusIfActive`, and "it happens to work because of something in another module" is exactly
+       * the kind of guarantee SC-015 exists to stop being accidental.
+       */
+      if (!focusPanel(newId)) requestPanelFocus(newId);
+    },
+    [ws, rootFolder],
+  );
+
   const onContextMenu = useCallback(
     async (node: NodeApi<TreeNodeData>, event: React.MouseEvent) => {
       node.select();
       // Build the "Open In" editor targets for a file (current-project tabs only),
       // disabling any target when the file is already open in an editor (FR-011a).
-      let openIn: MenuItem[] | undefined;
+      let openIn: MenuAction[] | undefined;
       if (node.data.kind === 'file' && node.data.relPath !== '') {
         const absPath = `${rootFolder}/${node.data.relPath}`;
         const alreadyOpen = (await window.throng?.editor?.isOpen?.(absPath)) ?? false;
@@ -329,6 +393,9 @@ export function FileTree({
             // when that editor already holds the file.
             label: targetPanel ? `Last Active Editor (${targetPanel.title})` : 'Last Active Editor',
             icon: 'add',
+            // Every Open In target takes you somewhere — the submenu is single-section and
+            // therefore divider-free (033 US5, contracts §3.8).
+            section: 'navigate',
             disabled: !activeTabId || openInTargetAlready,
             onClick: () => {
               if (activeTabId) void openFileInTab(ws, activeTabId, absPath);
@@ -339,6 +406,7 @@ export function FileTree({
             // already open anywhere (app-wide one buffer, FR-011a/FR-072).
             label: 'New Editor',
             icon: 'add',
+            section: 'navigate',
             disabled: alreadyOpen || !activeTabId,
             onClick: () => {
               if (activeTabId) openFileInNewEditor(ws, activeTabId, absPath);
@@ -349,9 +417,11 @@ export function FileTree({
           openIn.push({
             label: 'Other Tab',
             icon: 'tab',
+            section: 'navigate',
             submenu: otherTabs.map((t) => ({
               label: t.title,
               icon: 'tab',
+              section: 'navigate' as const,
               disabled: alreadyOpen,
               onClick: () => void openFileInTab(ws, t.id, absPath),
             })),
@@ -362,15 +432,18 @@ export function FileTree({
         node: node.data,
         selectedRelPaths,
         clipboard,
-        ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp },
+        // 033 US4 (T091) — both act on the RIGHT-CLICKED node's relative path, which
+        // `buildContextMenuItems` closes over from `node`, never on the selection.
+        ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp, openInTerminal, expandChildren, collapseChildren },
         undoState: { canUndo: canUndoFileOp, canRedo: canRedoFileOp },
         openIn,
         keybindings,
         projectRoot: rootFolder,
+        flavours,
       });
       openMenu(event.clientX, event.clientY, items);
     },
-    [selectedRelPaths, clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, openMenu, ws, rootFolder, createFolder, createFile, keybindings, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp],
+    [selectedRelPaths, clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, openMenu, ws, rootFolder, createFolder, createFile, keybindings, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp, flavours, openInTerminal, expandChildren, collapseChildren],
   );
 
   // Right-clicking empty space (below the rows) opens a menu targeting the ROOT —
@@ -384,14 +457,15 @@ export function FileTree({
         node: { relPath: '', kind: 'folder' },
         selectedRelPaths: [],
         clipboard,
-        ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp },
+        ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp, openInTerminal, expandChildren, collapseChildren },
         undoState: { canUndo: canUndoFileOp, canRedo: canRedoFileOp },
         keybindings,
         projectRoot: rootFolder,
+        flavours,
       });
       openMenu(event.clientX, event.clientY, items);
     },
-    [clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, createFolder, createFile, openMenu, keybindings, rootFolder, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp],
+    [clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, createFolder, createFile, openMenu, keybindings, rootFolder, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp, flavours, openInTerminal, expandChildren, collapseChildren],
   );
   const cutPaths = useMemo(
     () => new Set(clipboard?.mode === 'cut' ? clipboard.relPaths : []),

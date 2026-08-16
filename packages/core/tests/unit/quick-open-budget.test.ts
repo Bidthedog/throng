@@ -131,6 +131,85 @@ describe('Quick Open keystroke budget (SC-002)', () => {
     });
   });
 
+  // 033 FR-073, second half — CORPUS INDEPENDENCE.
+  //
+  // FR-073 restates SC-002 in two clauses. The first ("no filesystem work per keystroke") is
+  // asserted at E2E, because it is about IPC. The second is this one: the work a keystroke does
+  // PER QUERY TERM does not grow with the corpus. That is the claim SC-002 was really making — a
+  // duration was only ever its proxy — and it is the half the block above does not assert, because
+  // that block fixes the corpus and varies nothing.
+  //
+  // Two counters, one order of magnitude apart. Measured before the assertion was written
+  // (T159 Red step, captured 2026-08-16); the assertion encodes exactly what was observed:
+  //
+  //   size   query               regexps  matched  scorings  perCandidate
+  //   5,000  "handler service"         2      342       342             1
+  //   5,000  "handler"                 1    1,282     1,282             1
+  //   5,000  "e"                       1    5,000     5,000             1
+  //   5,000  ""                        0    5,000     5,000             1
+  //  50,000  "handler service"         2    3,222     3,222             1
+  //  50,000  "handler"                 1   12,520    12,520             1
+  //  50,000  "e"                       1   50,000    50,000             1
+  //  50,000  ""                        0   50,000    50,000             1
+  //
+  // `matched` grows with the corpus and MUST — ten times the files, roughly ten times the hits.
+  // What does not move is the pair either side of it: the compilations are a function of the
+  // QUERY, and the scorings are exactly one per surviving candidate. A pipeline that compiled per
+  // entry would report 5,001 against 50,001 here; one that scored from inside the sort comparator
+  // would report ~log n per candidate rather than 1. Both regressions are invisible to a wall-clock
+  // assertion on a contended machine and unmissable to these two numbers.
+  describe('the work per query term does not grow with the corpus (FR-073)', () => {
+    /** Every tenth path — a 5,000-entry sample of the same SHAPE, not a skewed prefix. */
+    const sample = paths.filter((_, i) => i % 10 === 0);
+
+    it('samples 5,000 paths, one order of magnitude below the whole corpus', () => {
+      expect(sample).toHaveLength(CORPUS_SIZE / 10);
+    });
+
+    it.each([
+      { query: 'handler service', regexps: 2 },
+      { query: 'handler', regexps: 1 },
+      { query: 'e', regexps: 1 },
+      { query: '', regexps: 0 },
+    ])(
+      'builds $regexps regular expression(s) for $query at BOTH 5,000 and 50,000 candidates',
+      ({ query, regexps }) => {
+        expect(countRegExpConstructions(() => void keystroke(sample, query))).toBe(regexps);
+        expect(countRegExpConstructions(() => void keystroke(paths, query))).toBe(regexps);
+      },
+    );
+
+    it.each(['handler service', 'handler', 'e', ''])(
+      'scores each surviving candidate exactly once for %j at BOTH corpus sizes',
+      (query) => {
+        const scoringsPerCandidate = (corpusOf: readonly string[]): number => {
+          const compiled = compileQuery(query);
+          const matched = corpusOf.filter((path) => compiled.test(path));
+          let scorings = 0;
+          rankStable(matched, (path) => {
+            scorings += 1;
+            return rankFilePath(path, compiled);
+          });
+          expect(matched.length).toBeGreaterThan(0);
+          return scorings / matched.length;
+        };
+
+        expect(scoringsPerCandidate(sample)).toBe(1);
+        expect(scoringsPerCandidate(paths)).toBe(1);
+      },
+    );
+
+    it('finds MORE matches in the bigger corpus — so the sample is not the corpus in disguise', () => {
+      // Guard the guard. If the sample somehow matched as much as the whole corpus, the two
+      // assertions above would be comparing a set against itself and proving nothing.
+      const compiled = compileQuery('handler');
+      const inSample = sample.filter((path) => compiled.test(path)).length;
+      const inWhole = paths.filter((path) => compiled.test(path)).length;
+      expect(inSample).toBeGreaterThan(0);
+      expect(inWhole).toBeGreaterThan(inSample * 5);
+    });
+  });
+
   describe(`what a keystroke returns at ${CORPUS_SIZE} paths`, () => {
     it('answers a two-term query with a non-empty, capped list', () => {
       const rows = keystroke(paths, 'handler service');

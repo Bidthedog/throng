@@ -527,6 +527,33 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Editor · Navigation',
     control: 'toggle',
   },
+  /*
+   * 033 FR-058 — the two remember toggles, ADJACENT and in the same group as the exclusion setting.
+   *
+   * Adjacency is not cosmetic: `settings-tab.tsx` renders sections in first-appearance order and
+   * items in registry order, so these three are the whole of what a user sees under
+   * `Editor · Navigation`, and splitting them would scatter one group across the form.
+   *
+   * Both ship OFF (FR-058), and each says out loud that what it remembers is the value the modal
+   * ACCEPTED — the description is where a user learns that an abandoned query is not kept (FR-061)
+   * and that nothing is written to disk (FR-062).
+   */
+  {
+    key: 'editor.navigation.rememberQuickOpenQuery',
+    label: 'Remember the last Quick Open query',
+    description:
+      'Reopen Quick Open with the last query that actually opened a file, selected so typing replaces it. A query you abandoned with Escape is not kept, nor is one from another project. Held for this session only — never written to disk.',
+    group: 'Editor · Navigation',
+    control: 'toggle',
+  },
+  {
+    key: 'editor.navigation.rememberGotoLineNumber',
+    label: 'Remember the last Go To Line number',
+    description:
+      'Reopen Go To Line with the last line number you actually went to, selected so typing replaces it. Held for this session only — never written to disk.',
+    group: 'Editor · Navigation',
+    control: 'toggle',
+  },
   {
     key: 'terminals.showStatusBar',
     label: 'Show terminal status bar',

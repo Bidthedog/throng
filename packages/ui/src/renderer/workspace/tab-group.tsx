@@ -42,7 +42,8 @@ import { useSubWorkspaceWindow } from './subworkspace-window-context.js';
 import { destroySubWorkspace } from './destroy-sub-workspace.js';
 import { SplitTree } from './split-tree.js';
 import { panelHasLiveTerminal, runningSubprocessCount } from './subprocess.js';
-import { type MenuItem } from './context-menu.js';
+import { type MenuAction } from './context-menu.js';
+import { tabContextMenu } from './tab-menu.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { useAppSettings } from '../config/config-store.js';
 import { setActivePane } from './active-pane.js';
@@ -1320,46 +1321,26 @@ export function TabGroup(): ReactElement {
   /** P10 / FR-046 — the close affordance is unavailable exactly where Destroy Tab is. */
   const destroyTabDisabled = layout.tabs.length <= 1 && subWin === null;
 
-  const menuItems = (tabId: string): MenuItem[] => [
-    { label: 'Rename', icon: 'rename', onClick: () => setRenamingTabId(tabId) },
-    // Sync (clone) this Tab into a sub-workspace (US7). Hidden in a sub-workspace
-    // window (no detach context). "New Window" creates a new sub-workspace; an
-    // existing one gets the Tab added. Cloning leaves the Tab in place.
-    ...(detach
-      ? [
-          {
-            label: 'Sync to',
-            icon: 'send',
-            submenu: [
-              {
-                label: 'New Sub-workspace',
-                icon: 'detach',
-                onClick: () => detach.detachToNew('tab', tabId),
-              },
-              ...detach.subWorkspaces.map((s) => ({
-                label: s.name,
-                icon: 'tab',
-                onClick: () => detach.syncToExisting('tab', tabId, s.id),
-              })),
-            ],
-          },
-        ]
-      : []),
-    {
-      label: 'Destroy Tab',
-      icon: 'destroy',
-      onClick: () => void confirmCloseTab(tabId),
-      // In a sub-workspace the last Tab IS closeable — it closes the whole
-      // sub-workspace (FR-029). In the main window a project keeps its last Tab.
-      disabled: destroyTabDisabled,
-    },
-    {
-      label: 'Destroy other tabs',
-      icon: 'destroy',
-      onClick: () => void confirmCloseOthers(tabId),
-      disabled: layout.tabs.length <= 1,
-    },
-  ];
+  // 033 US5 (T062a) — the items live in `tab-menu.ts`, which declares their sections; the dividers
+  // are derived from those by `ContextMenu`. This closure only supplies the state and the actions.
+  const menuItems = (tabId: string): MenuAction[] =>
+    tabContextMenu({
+      tabId,
+      destroyTabDisabled,
+      destroyOthersDisabled: layout.tabs.length <= 1,
+      detach: detach
+        ? {
+            subWorkspaces: detach.subWorkspaces,
+            detachToNew: (id) => detach.detachToNew('tab', id),
+            syncToExisting: (id, subId) => detach.syncToExisting('tab', id, subId),
+          }
+        : null,
+      actions: {
+        rename: (id) => setRenamingTabId(id),
+        destroyTab: (id) => void confirmCloseTab(id),
+        destroyOthers: (id) => void confirmCloseOthers(id),
+      },
+    });
 
   return (
     <DndContext

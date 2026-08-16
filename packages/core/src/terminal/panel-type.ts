@@ -41,6 +41,20 @@ export type TerminalPanelConfig = {
   rememberDirectory?: boolean;
   /** Run this terminal elevated ("as administrator") — one flag per Panel (FR-025). */
   runAsAdmin?: boolean;
+  /**
+   * Where this terminal was asked to START, absolute (033 FR-033, B5). Set only when the Panel was
+   * created from a tree node — Open In → Terminal on a folder, or on a file's parent folder — and
+   * absent for every Panel typed through the picker, which starts at the project root as before.
+   *
+   * Persisted rather than used once and forgotten so a RESTORED panel restarts where it was
+   * created: without it, reopening the app silently moves the shell back to the root, and the
+   * directory the user chose survives only as long as the process does.
+   *
+   * It is a REQUEST, not a decision. `terminal-ipc.ts` hands it to the shipped
+   * `resolveStartDirectory`, so containment in the project root and the existence check apply to it
+   * exactly as they do to a remembered directory (FR-032, FR-034) — nothing here is trusted.
+   */
+  startDirectory?: string;
 };
 
 /**

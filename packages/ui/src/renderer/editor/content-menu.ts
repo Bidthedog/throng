@@ -1,7 +1,7 @@
 import { EditorSelection } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import type { LineEndingId } from '@throng/core';
-import type { MenuItem } from '../workspace/context-menu.js';
+import type { MenuAction } from '../workspace/context-menu.js';
 import { isKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { applyPaste, clipboardEntry, cutThrough, ENDINGS } from './commands.js';
 import { requestLanguagePicker } from './picker-request.js';
@@ -72,7 +72,7 @@ function copyOrCut(args: ContentMenuArgs, remove: boolean): void {
     .catch((error: unknown) => console.error('[editor] copy failed', error));
 }
 
-export function editorContentMenu(args: ContentMenuArgs): MenuItem[] {
+export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
   const { view, panelId, viewId } = args;
 
   // Cut/Copy/Paste/Select All/Undo/Redo keep FIXED native chords and are deliberately NOT on the
@@ -86,18 +86,21 @@ export function editorContentMenu(args: ContentMenuArgs): MenuItem[] {
     {
       label: 'Cut',
       icon: 'cut',
+      section: 'content',
       shortcut: 'Ctrl+X',
       onClick: () => copyOrCut(args, true),
     },
     {
       label: 'Copy',
       icon: 'copy',
+      section: 'content',
       shortcut: 'Ctrl+C',
       onClick: () => copyOrCut(args, false),
     },
     {
       label: 'Paste',
       icon: 'paste',
+      section: 'content',
       shortcut: 'Ctrl+V',
       onClick: () => {
         void (async () => {
@@ -115,6 +118,7 @@ export function editorContentMenu(args: ContentMenuArgs): MenuItem[] {
     {
       label: 'Select All',
       icon: 'selectAll',
+      section: 'content',
       shortcut: 'Ctrl+A',
       onClick: () => {
         view.dispatch({ selection: EditorSelection.single(0, view.state.doc.length) });
@@ -124,12 +128,14 @@ export function editorContentMenu(args: ContentMenuArgs): MenuItem[] {
     {
       label: 'Undo',
       icon: 'undo',
+      section: 'content',
       shortcut: 'Ctrl+Z',
       onClick: () => win()?.editor?.undo({ panelId, viewId }),
     },
     {
       label: 'Redo',
       icon: 'redo',
+      section: 'content',
       shortcut: 'Ctrl+Y',
       onClick: () => win()?.editor?.redo({ panelId, viewId }),
     },
@@ -138,8 +144,9 @@ export function editorContentMenu(args: ContentMenuArgs): MenuItem[] {
       //
       // It sits between the editing items and the view items because it is neither: it changes
       // nothing in the document and nothing about how the document is drawn, it moves you. That is
-      // the Navigate section US5's vocabulary gives it, and this is the position it will occupy.
+      // the Navigate section US5's vocabulary gives it, and this is the position it occupies.
       label: 'Go To Line…',
+      section: 'navigate',
       testId: 'menu-item-Go To Line…',
       shortcut: args.gotoLine.chord,
       onClick: () => args.gotoLine.open(),
@@ -155,6 +162,7 @@ export function editorContentMenu(args: ContentMenuArgs): MenuItem[] {
       label: args.languageName ? `Set Language… (${args.languageName})` : 'Set Language…',
       testId: 'menu-item-Set Language…',
       icon: 'language',
+      section: 'viewState',
       onClick: () => requestLanguagePicker(panelId),
     },
     {
@@ -162,6 +170,7 @@ export function editorContentMenu(args: ContentMenuArgs): MenuItem[] {
       // status bar — so it survives a hidden status bar. The leading ✓ renders the current state.
       label: args.wordWrap.on ? 'Word Wrap ✓' : 'Word Wrap',
       testId: 'menu-item-Word Wrap',
+      section: 'viewState',
       shortcut: args.wordWrap.chord,
       onClick: () => args.wordWrap.toggle(),
     },

@@ -199,6 +199,15 @@ packages/ui/src/preload/
 └── preload.cts                 # + the fileIndex bridge (subscribe / unsubscribe / onUpdate)
 
 packages/ui/src/renderer/
+├── app.tsx                     # 2026-08-15 (F6): the window-level keydown dispatcher's `keepShift`
+│                               #   widens from {backtick, F-keys} to {backtick, F-keys, LETTERS}, so
+│                               #   Ctrl+Shift+T reaches resolveScoped at all (FR-002). Listed here
+│                               #   because the map named no touch-point for it: it changes chord
+│                               #   resolution for EVERY member of that listener's HANDLED set, not
+│                               #   only the new one, and a regression fails SILENTLY (resolves to
+│                               #   null, dispatches nothing, logs nothing). Covered by SC-021,
+│                               #   asserted by tests/e2e/window-chord-resolution.e2e.ts. Argued in
+│                               #   full at app.tsx:256-275
 ├── navigate/                   # NEW folder, mirroring search/ — the Navigate namespace
 │   ├── navigation-chrome.tsx   #   mounts both modals; added to BOTH composition roots
 │   │                           #   2026-08-15: claims the overlay slot (D1); owns the standing +
@@ -644,7 +653,12 @@ open: §5's post-hoc registry says "three more test identifiers" and then lists 
 above.
 
 **F6 — `keepShift`** is a code change with a plan entry owed to it and a missing assertion, not a
-design decision; it is recorded in Complexity Tracking and covered by SC-021.
+design decision; it is recorded in the **Source-code map** above, against `renderer/app.tsx`, and
+covered by SC-021. *(Corrected 2026-08-15 while closing T157: this sentence said "recorded in
+Complexity Tracking", and no such row was ever written. Complexity Tracking is for a cost knowingly
+accepted with an alternative rejected; the widening is neither — it is the only way the chord
+resolves at all, and what it was owed was a touch-point naming the file. The entry now exists and
+the pointer is corrected rather than the claim quietly dropped.)*
 
 ## Complexity Tracking
 

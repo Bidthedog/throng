@@ -190,6 +190,8 @@ declare global {
           shellArguments: string;
           startupCommand?: string;
           rememberedCwd?: string;
+          /** 033 FR-033: the folder this panel was created from (Open In → Terminal). */
+          startDirectory?: string;
           cols: number;
           rows: number;
           /**
