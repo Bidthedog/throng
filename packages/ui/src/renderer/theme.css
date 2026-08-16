@@ -1346,6 +1346,33 @@ textarea,
   background: rgba(0, 0, 0, 0.5);
 }
 
+/*
+ * A transient overlay (Quick Open, Go To Line, the tab picker, the language picker) draws NO scrim
+ * of its own — one shared scrim is painted from `<body>` instead, for as long as the overlay
+ * registry holds a claim.
+ *
+ * The reason is a hand-off, not tidiness. Those overlays replace one another, and the ones that live
+ * in different component trees can have their unmount and mount committed in separate frames — one
+ * frame with no scrim, the whole window flashing to full brightness and back. The registry's slot is
+ * continuous across a hand-off, so a scrim keyed on it simply has no gap to expose.
+ *
+ * Every other `.modal-overlay` keeps its own background: confirm, project settings and the app-close
+ * prompt never hand off to anything.
+ */
+.modal-overlay--transient {
+  background: transparent;
+}
+
+body.transient-overlay-open::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  /* Below `.modal-overlay`'s 2000 so the overlay's own card stays above it. */
+  z-index: 1999;
+  background: rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
 .modal {
   width: min(420px, 90vw);
   padding: 18px 20px;

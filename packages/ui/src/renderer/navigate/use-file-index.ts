@@ -15,7 +15,7 @@
  * that array and does nothing else — no IPC, no walk, no `files.*` call. `quick-open-perf.e2e.ts`
  * asserts exactly that by counting the messages the renderer sends while ten characters are typed.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { IDLE_FILE_INDEX_VIEW, applyIndexUpdate, type FileIndexView } from '@throng/core';
 
 export type { FileIndexView };
@@ -40,22 +40,44 @@ export function useFileIndex(
   includeHidden = false,
 ): FileIndexView {
   const [view, setView] = useState<FileIndexView>(IDLE);
+  /** The root the effect last subscribed to, so a re-run can tell WHICH dependency moved. */
+  const subscribedRoot = useRef<string | null>(null);
 
   useEffect(() => {
     if (root === null || root === '' || !active) {
       setView(IDLE);
+      subscribedRoot.current = null;
       return;
     }
 
+    const rootChanged = subscribedRoot.current !== root;
+    subscribedRoot.current = root;
+
     /*
-     * R4 — a root change clears `paths` BEFORE the new root's arrive.
+     * R4 — a ROOT change clears `paths` BEFORE the new root's arrive.
      *
      * React runs the previous effect's cleanup before this body, so the old root is already
      * unsubscribed by the time we get here. Resetting to `building` is the other half: without it a
      * window would render the OLD project's files under the NEW project's name for as long as the
      * walk takes, which is FR-005's failure wearing a timing disguise.
+     *
+     * ══ BUT A FLAG CHANGE IS NOT A ROOT CHANGE ══
+     *
+     * Flipping `includeHidden` re-runs this effect too, and blanking there was WRONG in a way the
+     * user could see: switching the exclusion toggle OFF is a subscription key main has to walk
+     * fresh, so the emptied list stayed empty long enough to read as a flash — while switching it
+     * back ON hit an index main already held and returned too fast to notice. One toggle, two
+     * behaviours, for no reason the user could infer.
+     *
+     * The distinction that matters is stale versus FALSE. Another project's files under this
+     * project's name are false and must go. The same project's files under a slightly different
+     * filter are merely stale, and holding them for the few hundred milliseconds the second walk
+     * takes is both honest and quiet — the `building` status still renders FR-069d's "still
+     * listing" line ALONGSIDE the list, so nothing claims the old answer is the new one.
      */
-    setView(BUILDING);
+    setView((current) =>
+      rootChanged || current.status !== 'ready' ? BUILDING : { status: 'building', paths: current.paths },
+    );
 
     let live = true;
     /*

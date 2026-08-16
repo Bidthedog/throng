@@ -273,7 +273,9 @@ export function Picker({
 
   return (
     <div
-      className="modal-overlay"
+      // `--transient`: no scrim of its own. The shared one is painted from <body> by the overlay
+      // registry, because a picker replacing another picker must not blink the scrim between them.
+      className="modal-overlay modal-overlay--transient"
       data-testid={`${testId}-overlay`}
       // `mousedown`, not `click`: a click that STARTED inside the card and finished on the scrim (a
       // drag-select across the query field) is not a dismissal, and `click` cannot tell them apart.
