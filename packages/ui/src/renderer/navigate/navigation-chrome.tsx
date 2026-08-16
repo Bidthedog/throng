@@ -112,7 +112,30 @@ export function NavigationChrome(): ReactElement | null {
     root !== null && includeHidden !== defaultIncludeHidden,
     !defaultIncludeHidden,
   );
-  const index = includeHidden === defaultIncludeHidden ? standing : flipped;
+  /*
+   * ══ WHY THIS IS NOT SIMPLY `flipped` ══
+   *
+   * The two subscriptions are the right shape — main walks each key once and the common case never
+   * re-walks — but naively reading whichever one the toggle selects makes the list BLINK EMPTY at
+   * the moment of the flip, which is what a user reported as a flash.
+   *
+   * The reason is that `flipped` is inactive until the toggle disagrees with the setting, so at the
+   * instant it starts mattering it has never held a single path. Switching to it swaps a populated
+   * view for an empty one, and the wider set lands a beat later. Nothing inside `useFileIndex` can
+   * repair that: the emptiness is not a race within one subscription, it is the honest initial state
+   * of the OTHER one.
+   *
+   * So while the selected view is still building and holds nothing, the previously-good list is
+   * shown instead. That is stale rather than false — same project, same rules, one filter narrower —
+   * and it is replaced the moment the real answer arrives. `status` stays `building` throughout, so
+   * anything keyed on "is it still listing?" is unaffected; only the paths are borrowed.
+   */
+  const selected = includeHidden === defaultIncludeHidden ? standing : flipped;
+  const fallback = selected === standing ? flipped : standing;
+  const index =
+    selected.status === 'ready' || selected.paths.length > 0
+      ? selected
+      : { status: selected.status, paths: fallback.paths };
 
   /*
    * FR-069b — "the toggle changes the current modal; the setting decides where every modal starts."
