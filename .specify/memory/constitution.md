@@ -1,6 +1,145 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 5.1.0 → 5.2.0
+Bump rationale: MINOR. Principle V’s enumerated E2E reserve gains a SEVENTH entry — real keyboard
+                and input dispatch. Additive: nothing is removed or redefined, and no previously-
+                compliant test becomes non-compliant. As with the last amendment, it makes legal a
+                category of test the enumeration had accidentally outlawed.
+
+                Found the same way, one item along, at the end of spec 034’s sweep of the whole
+                suite. Five `window-chord-resolution.e2e.ts` tests are legitimately end-to-end and
+                classify under NONE of the seven: what `e.key` a real engine reports for a chord,
+                and whether a real keystroke reaches the real dispatcher, is not window lifecycle,
+                focus, a native menu, an OS drop, PTY fidelity, process-tree hygiene or layout.
+
+                They cannot go down a layer either, and the reason is sharper than "jsdom is
+                limited": a synthesised KeyboardEvent asserts the shape the TEST chose. Only a real
+                keystroke asserts what the browser decides — which is exactly where modifier
+                handling, dead keys and layout-dependent chords go wrong. A component test here
+                would assert its own premise.
+
+                The reasoning is the same as 5.1.0’s and is worth stating twice: an enumeration
+                that reads as exhaustive is worse than a vague one, because a reader holding a
+                legitimate case with no matching entry concludes the case is illegitimate — and
+                either writes a component test that asserts its own premise, or leaves the
+                behaviour untested. Two amendments in two days say the enumeration should be read
+                as a growing list of worked examples rather than a closed set.
+
+Templates requiring updates: none — `docs/testing.md` restates the reserve and is updated in the
+                same commit.
+Follow-up TODOs: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
+Version change: 5.0.0 → 5.1.0
+Bump rationale: MINOR. Principle V's enumerated E2E reserve gains a sixth entry — real layout and
+                text rendering. Additive: nothing is removed or redefined, and no previously-
+                compliant test becomes non-compliant. It makes legal a category of test that 5.0.0
+                had accidentally outlawed.
+
+                Found by applying 5.0.0 to somebody else's feature. Spec 033 shipped two Go To Line
+                tests that assert the caret lands beside a gutter element reading the right number,
+                in view, in a WRAPPED document. Classifying them under 5.0.0 put them nowhere: they
+                are not windows, focus, native menus, drag-and-drop, PTY fidelity or the process
+                tree — and they are not component tests either, because the component layer renders
+                into a document with no layout engine. It can say what the markup is; it cannot say
+                where it ended up.
+
+                An incomplete enumeration is worse than a vague rule, because it reads as
+                exhaustive. A developer applying 5.0.0 faithfully to those two tests would have
+                concluded they must be deleted or forced into a layer that cannot hold them, and
+                the honest answer — "a real layout engine is the only thing that can see this" —
+                had no name in the list.
+
+                The wording is deliberately about the QUESTION rather than the API: "anything whose
+                truth depends on how the engine actually laid the text out". Naming
+                getBoundingClientRect would invite the next person to route around it.
+Modified principles: V "Test-First Quality Discipline (NON-NEGOTIABLE)" — one clause added to the
+                E2E reservation. Every other rule, including the budget and the tag vocabulary,
+                unchanged.
+Added sections: none. Removed sections: none.
+Templates / artifacts reviewed:
+  ✅ .specify/templates/*                 — Constitution Check is dynamic; no edit needed.
+  ✅ specs/034-e2e-harness-integrity/spec.md — FR-048/FR-049 already carry the reservation and the
+       compositing caveat; this generalises the same idea to layout. Recorded there.
+  ✅ packages/ui/tests/e2e/goto-line.e2e.ts — the two tests this legalises. No change made.
+Deferred TODOs: none.
+
+                ---- superseded amendment (historical) ----
+Version change: 4.7.0 → 5.0.0
+Bump rationale: MAJOR. Principle V's "Every user-facing UI change MUST ship with E2E test coverage"
+                rule is REMOVED and replaced by a proportionality rule. That is a backward-
+                incompatible redefinition on the strict reading the versioning policy asks for:
+                work that was compliant yesterday — a UI change carrying an E2E for something a
+                unit or component test could assert — is non-compliant today, and the removed
+                backfill clause means a deferral that was mandatory is now forbidden. The bar for
+                MAJOR is "removal or backward-incompatible redefinition", and this is both.
+
+                Why the rule is being removed rather than tuned. It was added in good faith to stop
+                UI shipping unproven, and it worked — but it is a ONE-WAY RATCHET with no ceiling.
+                It mandated an E2E per UI change, required uncovered UI to be backfilled, and was
+                enforced at /speckit-tasks time, so every feature added tests to the most expensive
+                layer and none could ever be removed. Measured outcome: 235 E2E spec files and ~791
+                tests taking 46.9 minutes locally (specs/034-e2e-harness-integrity/baseline.md),
+                against 250 unit, 85 integration and 19 contract files — an inverted pyramid, paid
+                for on every push by every contributor. A sample of 47 spec files found ~40% of
+                those E2E tests asserting things a unit or component test could assert, and ~33%
+                asserting persistence or configuration an integration test could assert.
+
+                The replacement keeps the guarantee and drops the layer mandate: a change still
+                MUST ship with observed passing coverage, and still MUST NOT be marked done without
+                it — but at the LOWEST layer that can prove it. E2E is reserved for what genuinely
+                needs the running application, and is enumerated so the reservation is checkable
+                rather than arguable.
+
+                Two new enforcement rules exist because the old rule's failure was structural, not
+                cultural: a declared E2E budget the build enforces as a downward-only ratchet, and a
+                mandatory significance tag per E2E test so continuous integration can gate on the
+                critical journeys while the remainder runs at release. Without the budget the suite
+                regrows to the same place within a dozen features.
+
+                What is deliberately NOT weakened: test-first Red-Green-Refactor, run-once-in-full
+                capture discipline, flaky-is-a-bug, the infrastructure-fault carve-out, contract
+                tests for abstractions, the process-lifecycle E2E requirement (Principles III and V
+                both keep it — no lower layer can see an orphaned conhost), temp-file cleanup, and
+                the @admin elevation-gating rule. Deleting an E2E is now permitted, but only after
+                its replacement has been written and observed FAILING against a broken
+                implementation. Coverage is never dropped, only relocated.
+Modified principles: V "Test-First Quality Discipline (NON-NEGOTIABLE)" — a fourth layer
+                (component) added to the layered strategy; the every-UI-change E2E mandate and its
+                backfill clause replaced by lowest-layer-that-can-prove-it plus an enumerated E2E
+                reservation; three new rules (budget ratchet, significance and category tags, and
+                reproduce-a-defect-at-the-lowest-layer); the rationale paragraph extended to say why
+                affordability is part of the discipline.
+
+                The reproduce-before-fix rule is NEW to this constitution, not a relocation. It had
+                been enforced only by a personal instruction file and a tool hook outside the
+                repository, so a contributor working without those had no statement of it at all —
+                and the version of it that existed elsewhere named E2E as the layer, which is the
+                habit this amendment exists to end.
+                XII "Engineering Standards" — the CI clause names the component layer and states
+                that E2E gates pull requests at @core and runs in full at release; the code-review
+                gate now checks layer choice rather than the presence of all three layers.
+Added sections: none. Removed sections: none (the superseded rule's text does not survive in the
+                principle, by the constitution's own convention that principles state current law;
+                its history is in this report and in git).
+Templates / artifacts reviewed:
+  ✅ .specify/templates/*                 — Constitution Check is dynamic; no edit needed.
+  ⚠ specs/034-e2e-harness-integrity/spec.md — this amendment's origin; its FR-044+ carry the rules
+       into the feature, and FR-028, FR-036, FR-042 and SC-013 are superseded there.
+  ⚠ docs/testing.md, CLAUDE.md, .claude/agents/*, .claude/skills/throng-testing — carry the removed
+       mandate in prose and are rewritten under spec 034.
+
+                Rebased onto 4.7.0. This amendment was authored against 4.5.0 while master
+                advanced to 4.7.0 with two additive Principle VI rules (menu section vocabulary,
+                disabled-versus-absent). Those are untouched by this one — it redefines Principle
+                V and the workflow gates only — so the two stack rather than conflict, and the
+                MAJOR bump is taken from 4.7.0 rather than from the 4.5.0 it was written against.
+Deferred TODOs: none.
+
+                ---- superseded amendment (historical) ----
 Version change: 4.6.0 → 4.7.0
 Bump rationale: MINOR. Principle VI gains a second additive rule — "Disabled when unavailable,
                 absent when meaningless" — settling when a control that cannot act is greyed out and
@@ -1029,20 +1168,60 @@ Red-Green-Refactor cycle.
 - A layered automated test strategy MUST be maintained:
   - **Unit tests** — fast, isolated tests for individual units of logic, with
     collaborators substituted via injected test doubles (see Principle IX).
+  - **Component tests** — render a renderer component into a DOM environment and
+    assert what it produces: markup, computed style, focus movement within the
+    component, keyboard handling, and accessibility attributes. They run without an
+    application, a window, a daemon or a shell.
   - **Integration tests** — verify cross-component behaviour, abstraction
     contracts, IPC, and persistence against real (or realistic) implementations.
   - **End-to-end (E2E) tests** — exercise critical user journeys through the
     running application using an appropriate automated E2E tool for the platform
     (the specific tool is pinned in feature plans, not here).
-- **Every user-facing UI change MUST ship with E2E test coverage.** Any change that
-  adds or alters renderer/UI behaviour — new or changed controls, menus, dialogs,
-  drag-and-drop interactions, layout, panes, status indicators, theming, and the
-  like — MUST include new or updated automated E2E tests that exercise the changed
-  behaviour through the running application, and those tests MUST be observed passing
-  before the change is considered complete. A UI change MUST NOT be marked done on
-  the strength of build, type-check, or unit/integration evidence alone. Pre-existing
-  UI shipped without E2E coverage MUST have that coverage backfilled as a tracked
-  deferral under the Incremental Delivery rule rather than left permanently uncovered.
+- **A change MUST ship with automated coverage at the LOWEST layer that can prove
+  it.** The layer is chosen by what the assertion needs, not by where the change
+  happens to live: a pure decision belongs in a unit test, a rendered output or a
+  focus movement inside one component belongs in a component test, and persistence,
+  IPC, configuration and process behaviour belong in an integration test. A change
+  MUST NOT be marked done without observed passing output from whichever layer
+  proves it.
+- **E2E coverage is RESERVED for behaviour that no lower layer can observe**, and a
+  change MUST NOT add an E2E test for anything a lower layer could assert. What
+  qualifies is what genuinely needs the running application: real window lifecycle
+  and multi-window behaviour, focus and z-order across windows, native menus and
+  dialogs, OS drag-and-drop, PTY/ConPTY keyboard and rendering fidelity,
+  process-tree hygiene, and **real layout and text rendering** — anything whose truth
+  depends on how the engine actually laid the text out: a caret's position against a
+  drawn gutter, what is scrolled into view, the height of a wrapped line, a measured
+  rectangle. The component layer renders into a document with no layout engine, so it
+  can say what the markup is and not where it ended up. Also **real keyboard and input
+  dispatch** — what a real engine reports for a chord and whether a real keystroke
+  reaches the real handler. A synthesised event asserts the shape the test chose; only
+  a real one asserts what the browser decides, and the difference is where modifier
+  handling, dead keys and layout-dependent chords actually go wrong. An existing E2E test whose
+  assertion a lower layer can make
+  MUST be moved down — the replacement written and observed failing against a broken
+  implementation FIRST, then the E2E deleted. Coverage is never dropped without a
+  named replacement.
+- **The E2E suite MUST carry a declared budget, and the build MUST fail when it is
+  exceeded.** The budget is a ratchet: it may fall and MUST NOT rise. Without an
+  enforced ceiling the suite grows by one test per feature forever, and the cost is
+  paid by every contributor on every push rather than by the feature that caused it.
+- **Every E2E test MUST carry exactly one significance tag and at least one category
+  tag**, and the build MUST fail on a test that carries neither. Significance is
+  `@core` — a critical journey, which gates continuous integration — or `@extended`,
+  which runs at release. Category names the area the test covers so a targeted run
+  is possible without reading the suite.
+- **A reported defect MUST begin with a test that reproduces it**, observed failing
+  for the reason that was reported, before any production code changes — and that
+  test MUST be written at the **lowest layer that reproduces the defect**, preferring
+  unit, then component, then integration or contract, then E2E. It stays in the suite
+  at that layer once the fix lands; it MUST NOT be re-created at a higher layer
+  afterwards for reassurance. A cheaper test that passes while the defect is real
+  means the layer was wrong, not that the defect was — step up one and try again.
+  Rationale: every reported defect adds a permanent test, so the layer it lands at is
+  a decision about what every future contributor pays to run. Reproducing a clamp, a
+  validation rule or a path normalisation through a running application spends
+  minutes to observe something a millisecond could have shown.
 - **A test run MUST be executed once, in full, and its complete output captured.**
   Test suites here are expensive — the E2E suite alone runs for minutes — and a run
   whose output is filtered away is a run that must be paid for twice.
@@ -1102,8 +1281,12 @@ Red-Green-Refactor cycle.
 
 Rationale: The hardest, riskiest parts of throng — detached process lifecycle,
 cross-platform abstractions, and persisted edit state — are exactly where
-regressions hide. Test-first discipline across the unit/integration/E2E layers
-keeps the abstraction boundary honest and the persistence guarantees trustworthy.
+regressions hide. Test-first discipline across the unit, component, integration and
+E2E layers keeps the abstraction boundary honest and the persistence guarantees
+trustworthy. Choosing the lowest layer that can prove a change is what keeps that
+discipline affordable: a suite nobody can afford to run is a suite that stops being
+run, and an answer that arrives in seconds is worth more than the same answer forty
+minutes later.
 
 ### VI. Simple, Modern, Discoverable UX
 
@@ -1472,9 +1655,12 @@ let it acquire many conflicting truths.
   (with the reason evident from the config), but MUST NOT be disabled ad hoc to mask a
   real defect; a line-level suppression MUST carry a justification. These gates MUST be
   enforced automatically: the linter, the type-check, and the layered test suites of
-  Principle V (unit, integration, contract, and E2E) MUST run in **continuous
-  integration on every pull request**, so that a red gate blocks merge without relying
-  on local discipline.
+  Principle V (unit, component, integration, contract, and E2E) MUST run in
+  **continuous integration on every pull request**, so that a red gate blocks merge
+  without relying on local discipline. The E2E layer runs its `@core` significance tier
+  on every pull request and its full extent on a release; a lane that gates merge is
+  worth only what it costs every contributor to wait for, so the expensive remainder is
+  paid once, at the point a release is actually cut.
 - Changes that touch the OS abstraction boundary, the daemon/terminal process
   lifecycle, persisted edit/layout state, or **the state of a document presented in more
   than one Panel** MUST be reviewed with particular scrutiny against Principles II, III,
@@ -1546,8 +1732,9 @@ let it acquire many conflicting truths.
   colours from anywhere but the theme.
 - Code review MUST verify the engineering gates: that lint (ESLint) and type-check
   (`tsc`) both pass with **zero errors** and the CI gate is green (Static analysis &
-  linting rule above), Red-Green-Refactor with the
-  unit/integration/E2E layers present (V), SOLID/DRY/YAGNI adherence (VIII),
+  linting rule above), Red-Green-Refactor with each change covered at the lowest
+  layer that can prove it and no E2E added for what a lower layer could assert (V),
+  SOLID/DRY/YAGNI adherence (VIII),
   constructor DI wired only through each boundary's single composition-root
   container (IX), configuration sourced from injected settings rather than
   hardcoded (X), that the project documentation (README, CONTRIBUTING, the
@@ -1574,7 +1761,18 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 4.7.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-08-15
+**Version**: 5.2.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-08-18
+
+<!--
+  5.0.0 — MAJOR. Principle V no longer mandates an E2E per user-facing UI change. Full rationale is
+  in the Sync Impact Report at the top of this file; the short version is that the rule was a
+  one-way ratchet with no ceiling, and it produced an inverted pyramid — 235 E2E spec files and 46.9
+  measured minutes against 250 unit files — that every contributor paid for on every push.
+
+  The guarantee is unchanged: a change still ships with observed passing coverage. What changed is
+  which layer owes it. Coverage now goes to the lowest layer that can prove the behaviour, E2E is
+  reserved for what only a running application can show, and an existing E2E may be deleted only
+  once its replacement has been observed FAILING against a broken implementation.
 
 <!--
   4.7.0 — MINOR. Principle VI gains "Disabled when unavailable, absent when meaningless".
