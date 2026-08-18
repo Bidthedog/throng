@@ -197,10 +197,10 @@ whole-operation atomic: if a theme file cannot be written, nothing is changed.
 
 ## Testing
 
-Four Vitest/Playwright layers — **unit, integration, contract, E2E** — run via the commands
-above; every user-facing change ships passing E2E, and the elevation-gated `@admin` terminal
-suite runs via `npm run test:e2e:admin`. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full
-testing bar.
+Five Vitest/Playwright layers — **unit, component, integration, contract, E2E** — run via the
+commands above. Every change ships coverage at the lowest layer that can prove it, and E2E is
+reserved for what no lower layer can observe. The elevation-gated `@admin` terminal suite runs via
+`npm run test:e2e:admin`. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full testing bar.
 
 ## Contributing & licence
 
