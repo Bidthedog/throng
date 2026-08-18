@@ -10,8 +10,12 @@ at specs/033-open-and-navigate/plan.md
 passing spec, not "the tests I changed pass" — those are progress, and reporting one as done-ness is
 the specific mistake this rule exists to stop.
 
-It runs the seven gating stages in CI's order, fail-fast: **lint → typecheck → build → unit →
-integration → contract → e2e**. It prints one line per stage, stops at the first failure, and clears
+It runs the eight gating stages in CI's order, fail-fast: **lint → typecheck → build → unit →
+component → integration → contract → e2e**. Component sits fifth, immediately after unit and
+before the OS-heavy layers, on purpose — it is the
+second-cheapest layer (jsdom, no app, no daemon, no shell) and it now carries assertions that used to
+cost an Electron launch each, so running it after the OS-heavy layers would spend minutes to learn
+something available in seconds. It prints one line per stage, stops at the first failure, and clears
 the app/daemon/pty-agent/Playwright processes a run leaves behind — on success, on failure, and on
 Ctrl+C.
 
@@ -25,8 +29,9 @@ Three rules about using it:
   Fix that failure before anything else, using the **running-tests** skill to re-run only what failed
   and **throng-testing** when the failure is an E2E flake rather than a defect. Do not queue up more
   work on top of a red gate.
-- **Never bypass the E2E stage to make the gate finish sooner.** E2E is ~21 minutes locally and ~36
-  runner-minutes on CI, and that expense is exactly why it is inside the gate rather than optional:
+- **Never bypass the E2E stage to make the gate finish sooner.** E2E is ~21 minutes locally (measured
+  2026-08-18 at 229 spec files / 641 declarations; see `docs/testing.md`), and that expense is
+  exactly why it is inside the gate rather than optional:
   the cheap stages run first precisely so the expensive one is only ever reached by code that has
   already earned it. Running the individual `npm run test:*` scripts while iterating is fine and
   expected — it is claiming *done* off the back of them that is not.
@@ -39,11 +44,24 @@ Three rules about using it:
 describes that behaviour — in `specs/*/spec.md` and in the tests — before it is written down.**
 
 Not a general plea for care. Spec 032 added a rule that a settings write preserves keys the schema
-does not model, reasoned from its own guarantee, and wrote a test asserting it. **007 FR-023 required
-the exact opposite**, had shipped two releases earlier, and `preferences-settings.e2e.ts` asserted it
-with the mechanism spelled out in its own comment. The contradiction surfaced a full serial-tier E2E
-run later, and the fix was to revert the new rule, the production change behind it, and four tests
-written to match.
+does not model, reasoned from its own guarantee, and wrote a test asserting it. **019 FR-023 required
+the opposite for a RETIRED key**, had shipped two releases earlier, and
+`preferences-settings.e2e.ts:299` asserts it with the mechanism spelled out in its own comment. The
+contradiction surfaced a full serial-tier E2E run later, and the fix was to revert the new rule, the
+production change behind it, and four tests written to match.
+
+Two details in that account were wrong for a year, and both are the mistake this section is about.
+**It is 019, not 007** — 007 FR-023 is the "Reset to Defaults" control, and 007 states no rule about
+unmodelled keys at all. And **019 FR-023 is narrow**: a persisted `explorer.openMode` is dropped
+rather than migrated, because the key was retired and never had any effect, so dropping preserves the
+behaviour the user has today while migrating would change it. It does not govern hand-added keys in
+general, and `packages/core/tests/unit/settings-validity.test.ts:57` says the opposite of those in as
+many words — *"A hand-added key is legitimate — the write path preserves it."*
+
+So the two rules never contradicted each other in general; they collided on one retired key. Which
+makes the lesson sharper rather than weaker: a citation is part of the claim, and one that is off by
+a spec number sends the next reader to a requirement that says something else entirely — which is
+exactly how the wrong rule got written in the first place.
 
 The search is cheap and the failure is not:
 
@@ -95,10 +113,18 @@ routing table and how they defer to skills.
 
 ## E2E on CI
 
-**Run it locally before you push it.** The full E2E suite takes about 10 minutes locally
-(`npx playwright test`) against roughly 12 minutes per shard on CI, three shards in parallel. Pushing
-to find out whether something works spends other people's runner minutes to learn what one local
-command would have told you — and CI is slower to answer, not faster.
+**Run it locally before you push it.** The full local suite is about **21 minutes**
+(`npm run test:e2e`; measured 2026-08-18 at 229 spec files / 641 declarations, after 034's cut —
+parallel tier 2.7 min, serial tier 18.5 min). Against the pre-034 baseline of 46.9 minutes that is a
+**55% cut**, and nearly all of it came out of the parallel tier: the serial tier is now **87% of the
+runtime** and is menus, preferences windows and real shells, which is the work that cannot move down
+a layer. Every timing here names its measurement; see `docs/testing.md`. Pushing to find out whether
+something works spends other people's runner minutes to learn what one local command would have told
+you — and CI is slower to answer, not faster.
+
+CI does not run the full suite on a push. It runs the **`@core` lane** — capped at 50 tests, one
+job, one worker. The rest runs in the release lane before an installer is built. See *Two lanes* in
+`docs/testing.md`.
 
 There is exactly one thing local runs cannot tell you, and it is worth knowing precisely: **a
 developer machine is normally NOT elevated, and GitHub's runners always are.** So anything whose
@@ -108,43 +134,49 @@ else must be green locally first.
 
 ### Testing something that only CI can answer
 
-Put **`[ci-admin-only]`** anywhere in the commit message. The three E2E shards and the merged report
-are skipped; lint, the unit layers and `E2E (@admin, elevated)` still run. That turns a ~36
-runner-minute round trip into about 4.
+Put **`[ci-admin-only]`** anywhere in the commit message. The `E2E (@core)` job is skipped; lint,
+the unit layers and `E2E (@admin, elevated)` still run.
 
 ```
 git commit -m "fix(025): de-elevated agent keeps the panel's cwd [ci-admin-only]"
 ```
 
 Skipping is opt-IN on purpose. Forgetting the marker costs runner minutes; forgetting to ask for the
-full suite would let a branch merge unverified, which is the more expensive mistake.
+gating lane would let a branch merge unverified, which is the more expensive mistake.
 
-**Run the full suite before merging** — drop the marker (or push any commit without it) so all three
-shards run, and let them go green before the PR comes out of draft.
+**Drop the marker before merging** — push any commit without it so `E2E (@core)` runs, and let it go
+green before the PR comes out of draft.
 
-### Shards are planned, not sorted
+### Every E2E test carries two tags
 
-CI does not use Playwright's `--shard`. That splits by test COUNT in file order, so the alphabet
-chose the split and every `terminal-*` spec landed in one third — measured at 3.7, 8.3 and 36
-minutes, the last killed by a job timeout. `packages/ui/tests/e2e/shard-plan.json` assigns files to
-groups from measured durations instead (9.2 minutes each).
-
-**Adding a spec file means adding it to that plan.** `packages/ui/tests/unit/shard-plan.test.ts`
-fails if a spec is missing, duplicated or stale, because a spec in no group runs nowhere and does so
+A significance tag — **`@core`** (gates every push, capped at **50**) or **`@extended`** (the release
+lane) — and a category tag: `@boot @terminal @editor @explorer @prefs @window @persistence
+@failure`. `packages/ui/tests/unit/e2e-tags.test.ts` fails the build for a test carrying neither,
+because selection is by `--grep` composed with `grepInvert`: an untagged test runs in NEITHER lane,
 silently.
 
-### Two tiers locally, three shards on CI
+`packages/ui/tests/e2e/e2e-budget.json` is a ratchet and fails **both** ways — over budget, and under
+it without the budget being re-seeded. Re-seed it in the same commit that removes a test.
+
+**Sharding is gone (spec 034).** CI used to split the suite across three runners from a measured
+plan; three shards means paying the fixed `npm ci` + build toll three times, which only pays when the
+work being split is large. A lane capped at 50 tests is not. `shard-plan.json` and its guard are
+deleted; `tier-plan.test.ts` is what survived, and it guards the local tiers.
+
+### Two tiers locally, one job on CI
 
 `npm run test:e2e` runs the parallel tier at several workers, then the serial tier
-at one — about 21 minutes, against ~35 for the old single-worker arrangement.
+at one. The serial tier is roughly two-thirds of the wall-clock and is the reliable
+half; see the Budgets section of `docs/testing.md` before assuming a red at six
+workers is a defect.
 
 **Adding a spec that opens the preferences window or drives a context menu means
-adding it to `packages/ui/tests/e2e/parallel-plan.json`.** `shard-plan.test.ts`
+adding it to `packages/ui/tests/e2e/parallel-plan.json`.** `tier-plan.test.ts`
 fails the build if you don't: such a spec steals focus, and throng closes menus on
 blur, so it would make some *unrelated* test flake. The same applies to a spec that
 drives a long-running real shell, which starves at high worker counts.
 
-CI is deliberately different — one worker per shard, no tiers. See `docs/testing.md`.
+CI is deliberately different — one worker, one job, no tiers. See `docs/testing.md`.
 
 ### A shared app per file, where the tests allow it
 

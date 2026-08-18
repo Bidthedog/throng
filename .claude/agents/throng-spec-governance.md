@@ -65,7 +65,9 @@ Delivery**, enumerate the known violations in the principle itself, and file tra
 - Number FRs and keep them stable; later clarifications append (`FR-023B`, `FR-049a–d`) rather than
   renumbering.
 - Record clarification sessions in the spec with their date and the question answered.
-- A UI story carries an E2E task (Principle V); a feature adding configuration carries the
+- A UI story carries a test task at the lowest layer that can prove it (Principle V) — a component
+  task for rendered output and in-component behaviour, an E2E task only where a real window is what
+  is under test. Never generate an E2E task by default; a feature adding configuration carries the
   editor-descriptor and completeness-test tasks; a feature adding a panel action carries its menu
   item; a migration carries an idempotent-re-run assertion.
 - Deferrals live in the owning plan's Complexity Tracking **and** as an open labelled issue. There is

@@ -42,8 +42,12 @@ stores: `renderer/state/` (`workspace-store.tsx`, `projects-store.tsx`, `subwork
   never `toLocaleString` at a call site, never a hand-rolled comma, and never a separator in a value
   that gets stored or crosses IPC. The two are exact inverses *for the active locale*, which is the
   point: a locale that groups with `.` turns `1.024` into a corrupted or rejected number otherwise.
-- **Every UI change ships with passing E2E coverage.** Build/unit evidence alone does not make a UI
-  change complete (Principle V).
+- **Every UI change ships with passing coverage at the lowest layer that can prove it** (Principle
+  V). For most renderer work that is a **component test** (`vitest --project component`, jsdom):
+  what the component renders, its computed style, focus movement inside it, its keyboard handling,
+  its aria attributes. Reach for E2E only when the assertion needs a real window — focus across
+  windows, a native menu, OS drag-and-drop, z-order, a sub-workspace. Build or type-check evidence
+  alone still does not make a UI change complete.
 - Configuration added here must be exposed in the preferences editors — see
   `throng-config-preferences`.
 
@@ -65,8 +69,10 @@ stores: `renderer/state/` (`workspace-store.tsx`, `projects-store.tsx`, `subwork
 ## Verifying
 
 `npm run typecheck` covers the renderer through the separate `tsconfig.renderer.json` pass — the
-project-references build alone does not. Then the relevant E2E spec. Never claim a UI change works on
-a unit test.
+project-references build alone does not. Then the test at the layer that owes the assertion — a
+component test for what the component renders and does, an E2E only where a real window is what is
+under test. Never claim a UI change works on a type-check alone, and never reach past a component
+test to an E2E for something the component test can see.
 
 ## Not yours
 

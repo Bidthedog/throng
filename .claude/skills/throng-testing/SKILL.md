@@ -42,17 +42,39 @@ design. That is why teardown checking matters more here than in an ordinary web 
 
 ## Choosing the layer
 
-Reach for the cheapest layer that can actually answer the question:
+**The lowest layer that can prove the behaviour owes the assertion. This is a rule, not a
+preference** — Constitution Principle V, and the build enforces the consequences.
 
 | Question | Layer | Why |
 |---|---|---|
-| Does this pure decision hold? | `vitest --project unit` (seconds) | No app, no daemon, no cleanup |
-| Do two components agree? | `--project integration` / `--project contract` | Still no app |
-| Does the user-visible behaviour hold? | Playwright E2E | Real app, real daemon, real cost |
+| Does this pure decision hold? | `vitest --project unit` (milliseconds) | No app, no daemon, no cleanup |
+| What does this component render, focus or announce? | `--project component` (jsdom) | A DOM, no window, no app |
+| Do two components agree? Does it persist, reload, survive a restart? | `--project integration` / `--project contract` | Real files, real daemon, no window |
+| Can ONLY a running application show it? | Playwright E2E | Real app, real daemon, **real cost** |
 | Does it work with a REAL program (claude, vim)? | E2E driving that program | The only layer that can answer it |
 
+**What qualifies for E2E**, and nothing else does: real window lifecycle and multiple windows, focus
+and z-order, native menus and dialogs, OS drag-and-drop, PTY/ConPTY keyboard and rendering fidelity,
+and process-tree hygiene. If your assertion is not in that list, it belongs lower down.
+
+**Before you write an E2E, answer this in one sentence: what would a unit, component or integration
+test be unable to see?** If you cannot answer it, you are writing the test at the wrong layer. Two
+tells that you already are: the test drives the UI only to reach a value it then asserts on disk
+(that is integration), and the test asserts a computed style, a class, an aria attribute or a focus
+move inside one component (that is component).
+
+**Every E2E test carries exactly one significance tag — `@core` or `@extended` — and at least one
+category tag.** `@core` gates CI and is capped; `@extended` runs at release. The build fails on a
+test that carries neither, and on a suite that exceeds its declared budget. Adding an E2E therefore
+means deciding, out loud, whether breaking it would make the product unusable.
+
+**Deleting an E2E is allowed, and it has one rule:** write the replacement at the lower layer, watch
+it FAIL against a deliberately broken implementation, then delete. A replacement observed only
+passing is not evidence, and a replacement covering part of what the E2E asserted is not a
+replacement.
+
 ```bash
-npx vitest run --project unit --project integration --project contract
+npx vitest run --project unit --project component --project integration --project contract
 npx playwright test packages/ui/tests/e2e/<spec>.e2e.ts --workers=1
 ```
 
@@ -129,7 +151,30 @@ failed.
 
 ## Known-failing specs
 
-Check a failure against `master` before assuming you caused it. These fail there too:
-`editor-feedback3`, `editor-move-repoint` (AC6), `editor-undo-recovery`, `error-dismiss`,
-`terminal-persistence`, `terminal-reattach`, `titlebar-chrome`. A green CI is also not proof for
-`@admin` specs, which only verify when elevated.
+**There are none. Do not add any.**
+
+This list used to name seven: `editor-feedback3`, `editor-move-repoint` (AC6),
+`editor-undo-recovery`, `error-dismiss`, `terminal-persistence`, `terminal-reattach` and
+`titlebar-chrome`. Spec 034 measured the suite and all seven pass; the two that had an issue (#251)
+were failing to resource starvation, and the other five had no issue at all — they existed only
+here, in a file a developer was expected to consult before believing a red.
+
+That is why the list is gone rather than merely corrected. **A register of reds you are supposed to
+ignore is not documentation, it is a habit**, and the cost is not the seven specs — it is that a
+real failure lands inside a bar people have learned to look past. The 034 baseline found 18 false
+results in one run, so the register had never been the true list anyway.
+
+**When a spec fails, it is a defect until measured otherwise.** The measurement is cheap and the
+question is nearly always the same one: *does it fail because the machine is busy?*
+
+```bash
+# Fails at six workers, passes at one → contention, not a defect.
+THRONG_E2E_RETRIES=0 npx playwright test <spec> --workers=1
+THRONG_E2E_RETRIES=0 npx playwright test <spec> --workers=6
+```
+
+A pass rate that falls as workers rise is starvation; a defect fails the *same* test every time. If
+it is starvation, the answer is a budget or a tier — **not** an entry here. See *Budgets* in
+`docs/testing.md`, which records the five that were undersized and what each is derived from.
+
+A green CI is still not proof for `@admin` specs, which only verify when elevated.

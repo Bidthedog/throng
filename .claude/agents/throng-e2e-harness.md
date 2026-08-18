@@ -26,16 +26,20 @@ The constitution distinguishes a **test flake** from an **infrastructure fault**
 teardown crash, a wedged app blowing the teardown budget — zero failed, zero flaky, non-zero exit).
 Only the infra class has a bounded, evidenced retry path in CI; the test gate never loosens.
 
-## Adding a spec file — three registrations, all enforced
+## Adding a spec file — two registrations, both enforced
 
-1. `packages/ui/tests/e2e/shard-plan.json` — CI splits by measured duration, not by `--shard`. A spec
-   in no group runs nowhere, silently.
+1. **Tag every test in it.** Exactly one significance tag (`@core`, which gates CI and is capped at
+   50, or `@extended`, which runs at release) and at least one category tag. A test with neither
+   runs in no lane and would disappear silently — the property the deleted shard plan used to guard,
+   now checked per test rather than per file.
 2. `packages/ui/tests/e2e/parallel-plan.json` — required if the spec **opens the preferences window,
    drives a context menu, or runs a long-lived real shell**. throng closes menus on blur, so a
    focus-stealing spec makes some *unrelated* test flake; a real-shell spec starves at high worker
    counts.
-3. `packages/ui/tests/unit/shard-plan.test.ts` fails the build if a spec is missing, duplicated or
-   stale in either plan.
+
+`packages/ui/tests/unit/tier-plan.test.ts` (formerly `shard-plan.test.ts`) fails the build on a stale
+or duplicated tier entry, and on a focus-stealing spec left in the parallel tier. There is no shard
+plan to register in: 034 FR-057 removed it, and the tier filter now reads the spec universe from disk.
 
 ## Writing a spec that does not flake
 
@@ -85,10 +89,27 @@ orphaned artifacts. `cleanupTemp` and `scripts/residue-scan.mjs` exist for this.
 
 ## Choosing a layer
 
-E2E is the most expensive answer to any question. Unit for pure logic, integration for real processes
-and files (the ~40 `*.integration.test.ts` are the right home for daemon and editor semantics),
-contract for "does this implementation satisfy the interface", E2E for what the user sees — and it is
-**mandatory** for any user-facing UI change (Principle V).
+**The lowest layer that can prove the behaviour owes the assertion (Principle V).** Unit for pure
+logic; component (jsdom) for what one component renders, focuses or announces; integration for real
+processes and files (the `*.integration.test.ts` are the right home for daemon and editor
+semantics); contract for "does this implementation satisfy the interface".
+
+**E2E is reserved for what NO lower layer can observe** — real window lifecycle and multiple
+windows, focus and z-order, native menus and dialogs, OS drag-and-drop, PTY/ConPTY keyboard and
+rendering fidelity, and process-tree hygiene. It is not the layer for "what the user sees" in
+general: a rendered output, a class, an aria attribute or a focus move inside one component is a
+component test, and a value that ends up on disk is an integration test.
+
+There is no longer any rule requiring an E2E for a UI change. The old one — *"mandatory for any
+user-facing UI change"* — was removed at constitution v5.0.0, because it was a one-way ratchet that
+produced 235 spec files and 46.9 measured minutes. Before adding an E2E, answer in one sentence what
+a lower layer would be unable to see.
+
+Every E2E test carries exactly one significance tag (`@core`, which gates CI and is capped, or
+`@extended`, which runs at release) and at least one category tag; the build fails otherwise, and
+fails again if the suite exceeds its declared budget. Deleting an E2E is allowed and has one rule:
+the lower-layer replacement is written and observed **failing** against a broken implementation
+first.
 
 ## Not yours
 

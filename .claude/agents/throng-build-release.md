@@ -44,19 +44,24 @@ deliberate, documented choice, not an omission to fix.
 
 ## CI (`.github/workflows/ci.yml`)
 
-Jobs: **Plan E2E** → **Lint & type-check** → **Unit / integration / contract** (builds first, for the
-daemon-spawning layers' `BUILD_ID`) → **E2E ×3 shards** → merged report, plus **E2E (@admin,
-elevated)**. Windows runners, one worker per shard, 1920×1080 forced, an alias-free temp dir, blob
-reports uploaded per shard (`THRONG_E2E_BLOB_OUT`, and see `blob-report-naming.test.ts` for the
-collision fix in #216).
+Jobs: **Plan E2E** → **Lint & type-check** → **Unit / component / integration / contract** (builds
+first, for the daemon-spawning layers' `BUILD_ID`) → **E2E (@core)**, plus **E2E (@admin,
+elevated)**. Windows runners, one worker, 1920×1080 forced, an alias-free temp dir.
 
-Shards come from `packages/ui/tests/e2e/shard-plan.json`, **not** Playwright `--shard`: splitting by
-test count in file order once produced 3.7 / 8.3 / 36-minute thirds and a job timeout. Rebalance the
-plan from measured durations when it drifts.
+**There is one E2E job, not three shards** (034 FR-057). Sharding bought ~12 minutes down to ~4-5 at
+THREE TIMES the runner-minutes, plus a ~3-4 minute `npm ci` + build toll per shard before any test
+ran (#103) — a trade that does not pay for a ≤50-test critical lane. `shard-plan.json`,
+`THRONG_E2E_SHARDS`, `THRONG_E2E_GROUP`, the blob reporter, `THRONG_E2E_BLOB_OUT`, the `merge-e2e`
+job and `blob-report-naming.test.ts` are all gone with it; the last four existed only because three
+shards wrote one filename (#216).
 
-`scripts/ci-e2e-shard.ps1` implements the constitution's infrastructure-fault rule: retry a shard once
+CI runs `--grep @core`. The rest of the suite runs in full at **release** (`release.yml`), where
+wall-clock is on nobody's critical path. Do not reintroduce a matrix without re-measuring the trade.
+
+`scripts/ci-e2e-run.ps1` implements the constitution's infrastructure-fault rule: retry the lane once
 **only** when its report shows 0 unexpected and 0 flaky, comment the retry on issue #75, stay red
-otherwise.
+otherwise. That rule is Principle V and has nothing to do with sharding — it merely used to live in
+the shard script.
 
 ## Spending runner minutes well
 
