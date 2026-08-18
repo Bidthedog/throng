@@ -1,15 +1,102 @@
 # Testing
 
-throng has four test layers, run in order by `npm run test`:
+throng has five test layers, run in order by `npm run test`:
 
 | Script | Layer | Runner | Parallelism |
 | --- | --- | --- | --- |
 | `npm run test:unit` | unit | Vitest (`--project unit`) | parallel (Vitest default) |
+| `npm run test:component` | component | Vitest (`--project component`, jsdom) | parallel (Vitest default) |
 | `npm run test:integration` | integration | Vitest (`--project integration`) | **serial** (`fileParallelism: false`) |
 | `npm run test:contract` | contract | Vitest (`--project contract`) | **serial** (`fileParallelism: false`) |
 | `npm run test:e2e` | E2E | Playwright-Electron | configurable (see below) |
 
-`npm run test` runs all four through `scripts/run-tests.mjs` (see *Temp files* below).
+`npm run test` runs all five through `scripts/run-tests.mjs` (see *Temp files* below).
+
+## Which layer a test belongs at
+
+**The lowest one that can actually show the behaviour.** Constitution Principle V
+(v5.0.0) makes that the rule rather than a preference, and spec 034 is where the
+suite was brought back into line with it — the previous wording mandated an E2E test
+for every user-visible change, which is how a suite ends up with more end-to-end
+tests than a person can run.
+
+Step down as far as the behaviour allows and no further:
+
+| Layer | What it is for | The give-away |
+| --- | --- | --- |
+| unit | pure functions, reducers, validation, formatting, path handling | it takes values and returns values |
+| component | a React component's rendered markup and its keyboard/pointer behaviour | it takes props and draws something |
+| integration | two real subsystems meeting — the daemon, the database, the config store | it needs a real process or a real file |
+| contract | a message shape crossing a boundary | it is about an interface, not a behaviour |
+| E2E | what only a real window can show | see the reserve below |
+
+### The E2E reserve
+
+E2E is where you land when nothing cheaper can show it. The constitution enumerates
+what qualifies (v5.2.0): **window lifecycle; focus and z-order; native menus; OS
+drag-and-drop; PTY fidelity and process-tree hygiene; real keyboard and input
+dispatch; and real layout and text rendering**.
+
+Two of those are recent, and both were added because a real test had nowhere to go:
+
+- **Real layout and text rendering** — anything whose truth depends on how the engine
+  actually laid the text out: a caret’s position against a drawn gutter, what is
+  scrolled into view, the height of a wrapped line, a measured rectangle.
+- **Real keyboard and input dispatch** — what a real engine reports for a chord, and
+  whether a real keystroke reaches the real handler. A synthesised `KeyboardEvent`
+  asserts the shape the TEST chose; only a real one asserts what the browser decides,
+  and that difference is where modifier handling and layout-dependent chords go wrong.
+
+Read the list as a growing set of worked examples, not a closed set. Twice now a
+legitimate test has classified under none of the entries, and each time the honest
+move was to amend the enumeration rather than force the test down a layer where it
+would assert its own premise.
+
+Two traps worth naming, because both have happened here:
+
+- **A cheap test that passes while the bug is real means the layer was wrong, not
+  that the bug was.** Step down further, or find the seam you have not modelled.
+- **A test that drives a real app to read an attribute is at the wrong layer**, even
+  when the attribute is genuinely important. If the claim is about markup, the
+  component layer makes it — and usually makes it better, because the questions stop
+  costing an app launch each and the branches a single running window could never
+  show at once become reachable.
+
+### Replacing an E2E test rather than deleting it
+
+FR-046: write the replacement FIRST, prove it goes red when the behaviour breaks,
+and only then remove the E2E. The Red proof is not optional and it has a failure mode
+of its own — **assert that the mutation actually applied before believing the
+result.** A mutation that silently edited a comment, or that a resync effect
+immediately overwrote, reports "not coupled" and proves nothing; that has happened
+four times in this repo's own migration work.
+
+FR-047: a partial replacement is not a replacement. If the component test covers four
+of a test's five claims, the test is NARROWED to the fifth — it is not deleted.
+
+## Two lanes: `@core` and `@extended`
+
+Every E2E test carries a significance tag and a category tag, and
+`packages/ui/tests/unit/e2e-tags.test.ts` fails the build for one that carries
+neither.
+
+| Tag | Where it runs | Cap |
+| --- | --- | --- |
+| `@core` | every CI push, and locally | **50** — a hard ceiling, guarded |
+| `@extended` | the release lane, before an installer is built | none |
+
+Category tags — `@boot @terminal @editor @explorer @prefs @window @persistence
+@failure` — say what a test is about, so a failure names an area before anyone opens
+the file. `@admin` and `@quarantine` are environment tags and are orthogonal to both.
+
+Selection is by `--grep`, composed with `grepInvert` in `playwright.config.ts`, so a
+test that somehow carries no significance tag runs in NEITHER lane — which is why the
+guard exists rather than being a nicety.
+
+`packages/ui/tests/e2e/e2e-budget.json` is a ratchet: it fails when the suite grows
+past the budget **and** when it drops below it without the budget being re-seeded. The
+second half is the one that does the work — it is what stops a migration quietly
+banking a reduction and then spending it again.
 
 ## `npm run gate` — the one command that says the work is done
 
@@ -17,13 +104,19 @@ throng has four test layers, run in order by `npm run test`:
 npm run gate
 ```
 
-Seven stages in CI's order, **fail-fast**: **lint → typecheck → build → unit → integration →
-contract → e2e**. One line per stage, and it stops at the first failure rather than reporting a
-tidy summary of a broken branch.
+Eight stages in CI's order, **fail-fast**: **lint → typecheck → build → unit → component →
+integration → contract → e2e**. One line per stage, and it stops at the first failure rather than
+reporting a tidy summary of a broken branch.
 
 The order is the point. The cheap stages run first precisely so the expensive one is only ever
 reached by code that has already earned it — a full E2E run behind an unverified typecheck spends
-twenty minutes to be told something an eleven-second command already knew.
+half an hour to be told something an eleven-second command already knew.
+
+**Component sits fourth, not last among the cheap stages**, and its position is a decision rather
+than an accident: it is the second-cheapest layer in the repo — jsdom, no app, no daemon, no shell —
+and after spec 034 it carries assertions that each used to cost an Electron launch. Putting it after
+the OS-heavy layers would spend minutes to learn something available in seconds, which is the same
+argument the whole ordering rests on.
 
 It also **clears the processes a run leaves behind** — app, daemon, pty-agent, Playwright — on
 success, on failure, and on Ctrl+C. An interrupted run otherwise leaves workers holding cores, and
@@ -35,8 +128,10 @@ Three things worth knowing:
   while iterating; it is claiming *done* off the back of one of them that the gate exists to prevent.
 - **A green gate goes stale the moment you edit.** Quote the stage summary when you report done, and
   re-run if anything changed after it.
-- **The E2E stage is the expensive one** (~21 minutes locally). Never skip it to make the gate finish
-  sooner — that expense is exactly why it is inside the gate rather than optional.
+- **The E2E stage is the expensive one** (~21 minutes locally — measured 2026-08-18 at 229 spec
+  files / 641 declarations, after spec 034's cut; the figures and their provenance are below). Never
+  skip it to make the gate finish sooner — that expense is exactly why it is inside the gate rather
+  than optional.
 
 ## Type-checking covers the renderer too
 
@@ -87,11 +182,14 @@ the other 75% hidden?* — so here are the reasons that actually carry the weigh
 - **The drag ghost is a real OS window.** `drag-ghost.e2e.ts` asserts `w.isVisible()` on it and reads
   its painted style, and `ghost-window.ts` positions it off the **real cursor** via
   `screen.getCursorScreenPoint()` — which Playwright's synthetic mouse never moves.
-- **The cost is launch, not paint.** A run performs roughly 424 Electron launches against a ~5s
-  launch budget (`performance.e2e.ts`), the worker benchmark below concludes the constraint is
-  per-worker Electron + daemon **processes**, and CI's floor is a ~3–4 min `npm ci` + build toll *per
-  shard, before a test runs* (#103). **Nothing in this repo measures compositing cost at all** — so
-  hiding windows targets a cost that has never been shown to exist.
+- **The cost is launch, not paint.** A run performs **382 Electron launches** — measured 2026-08-18
+  at 229 spec files / 640 declarations by `node scripts/count-e2e-launches.mjs`, down from 592 on
+  the pre-034 baseline `d55054b` — against a ~5s launch budget (001 SC-001, asserted by
+  `performance.e2e.ts`); the worker benchmark below concludes the constraint is
+  per-worker Electron + daemon **processes**, and CI's floor is a ~3–4 min `npm ci` + build toll
+  *before a test runs* (#103 — paid three times, once per shard, until spec 034 deleted sharding and
+  made it one). **Nothing in this repo measures compositing cost at all** — so hiding windows targets
+  a cost that has never been shown to exist.
 
 The trade being refused is therefore: **maintain a second harness, plus a production `show: false`
 branch that only test runs take, to speed up a minority slice of a suite whose cost is process
@@ -160,17 +258,90 @@ tick cannot be mistaken for a soak that silently did nothing.
 workers, then the serial tier at one. `THRONG_E2E_TIER=parallel|serial` selects a
 tier by itself, and composes with `THRONG_E2E_GROUP`.
 
-Measured on this suite (214 spec files, 658 tests):
+**Every figure below names the measurement it came from and the suite size it was taken
+at.** That is not ceremony. The numbers this section used to publish were taken at 214
+spec files and never re-taken; by the time anyone checked, the suite was 235 files and
+the real cost was nearly double what this page claimed. A timing figure with no
+provenance goes stale silently, and a stale one is worse than none — people plan
+around it.
+
+**Measured 2026-08-15** on `origin/master` `d55054b`, 235 spec files / 782 tests, on a
+10-core / 20-thread machine, non-elevated, with the developer's own tools running
+(`specs/034-e2e-harness-integrity/baseline.md`):
 
 | | files | tests | time |
 | --- | --- | --- | --- |
-| parallel tier, 6 workers | 115 | 296 | **4.7 min** |
-| serial tier, 1 worker | 99 | 362 | 20.0 min |
-| whole suite, 1 worker (previous arrangement) | 214 | 658 | ~35 min |
+| parallel tier, 6 workers | 115 | 311 | **14.9 min** |
+| serial tier, 1 worker | 117 | 480 | 31.9 min |
+| whole suite | 232 | 791 | **46.9 min** |
 
-**The serial tier holds more tests than the parallel one**, which is why the total
-lands around 21 minutes rather than something dramatic. Menu and preferences specs
-are test-dense, and they are exactly the ones that cannot share a desktop.
+That table is the **pre-fix baseline**, taken on `origin/master` `d55054b` before spec 034 changed
+anything.
+
+**Measured 2026-08-18** on `feature/S034-I251-e2e-harness-integrity` `53ff359`, after the whole
+suite had been examined — **229 spec files / 641 declarations**, same machine, non-elevated:
+
+| | tests run | time |
+| --- | --- | --- |
+| parallel tier, 6 workers | 257 | **2.7 min** |
+| serial tier, 1 worker | 432 | 18.5 min |
+| whole suite | 689 | **21.2 min** |
+
+`tests run` exceeds `declarations` because four spec files declare tests inside a module-level loop
+over shell flavours, so one declaration becomes several executed tests. Both are given because they
+answer different questions: declarations bound what people WRITE (the budget ratchet counts those),
+executed tests bound what the machine DOES.
+
+**Superseded, and kept so the drift is visible** — measured 2026-08-17 at `a7c3d6c`, 246 spec files
+/ 804 declarations: parallel tier 302 tests / 3.8 min, serial 500 / 24.6 min, whole suite 802 /
+~28.4 min.
+
+**The `@core` lane, measured separately on 2026-08-17** at `f9534c7`, one worker, invoked the way
+`scripts/ci-e2e-run.ps1` invokes it (`npm run test:e2e:raw -- --grep @core`) — which is what gates
+every push:
+
+| pass | tests | time | failed | flaky |
+| --- | --- | --- | --- | --- |
+| 1 | 35 | **2.1 min** | 0 | 0 |
+| 2 | 35 | **2.1 min** | 0 | 0 |
+
+Run TWICE deliberately: a lane that gates every push has to be trusted, and one green run cannot
+distinguish a stable suite from a lucky one. Two passes 1 second apart in wall-clock, both clean.
+
+That is the figure to compare against the ~36 runner-minutes the three-shard arrangement used to
+spend on a push. The lane is measured locally on a 10-core machine and CI runners are slower, so
+treat 2.1 minutes as a floor rather than a prediction — but the headroom against the ten-minute
+ceiling is large enough that the conclusion survives the difference.
+
+Two honest caveats on that run, because a figure without them is the kind this section exists to
+stop. The serial tier excluded ONE test — `editor-missing-aggregate.e2e.ts:155`, which
+`origin/master` is also red on (CI run 31956697834, 2026-08-16), so it is not 034's and its ~36
+seconds × 3 retries are not in the total. And 802 of 804 declarations ran; the remainder are
+elevation-guarded skips.
+
+**Against the pre-fix baseline that is 46.9 → 21.2 minutes, a 55% cut** — 28.4 at the previous
+measurement, so a further 25% came out of the final pass alone. The parallel tier fell
+furthest (14.9 → 3.8) because that is where the markup-only tests lived, and they are the ones the
+component layer absorbed. The serial tier barely moved (31.9 → 24.6) and is now **87% of the
+runtime** — it is menus, preferences windows and real shells, which is exactly the work that cannot
+move down a layer. Further cuts have to come from there or not at all.
+
+**Superseded, and kept so the drift is visible** — an intermediate figure of ~40 minutes was quoted
+in this file and in `CLAUDE.md` at 235 spec files, measured 2026-08-16 between the baseline above
+and 034's cut.
+
+**Superseded, and kept so the drift is visible** — measured at 214 files / 658 tests:
+parallel 4.7 min, serial 20.0 min, whole suite at one worker ~35 min.
+
+**The serial tier holds more tests than the parallel one** and was ~68% of the runtime
+at the 2026-08-15 baseline — **87% as of 2026-08-17**, because 034's cut came almost
+entirely out of the parallel tier. Menu and preferences specs are test-dense, and they
+are exactly the ones that cannot share a desktop.
+
+**The two tiers do not fail alike.** In that same measurement the parallel tier
+returned 10 failed and 8 flaky, and the serial tier returned 480 of 480 on the first
+attempt. Same code, same build, minutes apart. If a red appears only at six workers,
+suspect a budget before you suspect the product — see *Budgets* below.
 
 > **The table above is a MEASUREMENT, not a live count** — it is what this suite did on the day it
 > was measured, and the file counts in it are the composition at that moment. As of **2026-08-16**
@@ -212,21 +383,30 @@ measured), so three green runs cannot prove a menu-driving spec is safe. Drawing
 the line from failures alone would have said 37 files serial; the mechanism says
 94. The extra 57 are the price of not encoding luck.
 
-`shard-plan.test.ts` guards the boundary, and the guard that matters fails the
+`tier-plan.test.ts` guards the boundary, and the guard that matters fails the
 build when a spec in the **parallel** tier grows a context menu or a preferences
 window. Without it the boundary rots silently, and the symptom is some unrelated
 test flaking because its menu closed.
 
+> It was `shard-plan.test.ts` until spec 034 deleted sharding; the shard assertions
+> went with it and the tier assertions stayed, which is the whole of the rename.
+
 ### Why CI is arranged differently
 
-CI keeps **one worker per shard** and does not use tiers. Focus contention is
-per-desktop, so workers are the lever within a machine and shards are the lever
-across machines — and CI already has three machines. Raising workers there was
-measured reintroducing RPC-budget timeouts, launch-SLA misses and EPERM teardown
-races on a 4-vCPU runner (see `ci.yml`), which is the CPU mechanism above, not the
-focus one. Tiers only help if you run more than one worker, so they buy CI nothing
-that would not cost it that. The CI lever is the fixed per-shard `npm ci` + build
-toll instead — issue #103.
+CI runs **one worker, one job, no tiers and no shards** — see *Two lanes* at the top
+of this file for what that job actually runs. Focus contention is per-desktop, so workers are the
+lever within a machine; raising them on a runner was measured reintroducing
+RPC-budget timeouts, launch-SLA misses and EPERM teardown races on a 4-vCPU runner
+(see `ci.yml`), which is the CPU mechanism above, not the focus one. Tiers only help
+if you run more than one worker, so they buy CI nothing that would not cost it that.
+
+**Sharding is gone (spec 034).** CI used to split the suite across three runners by
+a measured plan in `shard-plan.json`, because the whole suite ran on every push.
+Three shards means paying the fixed `npm ci` + build toll three times — the thing
+issue #103 was about — and that only pays when the work being split is large. It no
+longer is: the gating lane is capped at 50 tests, and splitting a lane that size
+across three machines costs three tolls to save nothing. The plan file, the matrix,
+the blob reporter and the merge-report job were deleted together.
 
 ## `THRONG_E2E_WORKERS` — parallel workers
 
@@ -299,12 +479,14 @@ run them here; a runner sets `THRONG_E2E_INCLUDE_ADMIN` to opt back in.
 `THRONG_E2E_INCLUDE_ADMIN=1` and calls `npx playwright test` directly — never
 `npm run test:e2e:admin`, which exists to hop UAC from a non-elevated shell and is
 both pointless and interactive where the process is already elevated. It is a job
-rather than a step inside `e2e` because the shards split the suite by file: an
-`@admin` step there would run three times, or — if no `@admin` file landed on that
-shard — not at all. One job, one run, one signal. Until that job
-existed, `@admin` specs were excluded from the *only* runner capable of running
-them, and the gap read as covered because a comment claimed a dedicated runner that
-did not exist.
+rather than a step inside `e2e` because it needs an elevated runner and the `e2e`
+job is not one — the two cannot share a process, whatever the suite is split into.
+(The original reason was sharding: an `@admin` step inside a three-way split would
+have run three times, or — if no `@admin` file landed on that shard — not at all.
+That reason retired with the shards; the elevation one is why the job survives them.)
+One job, one run, one signal. Until it existed, `@admin` specs were excluded from
+the *only* runner capable of running them, and the gap read as covered because a
+comment claimed a dedicated runner that did not exist.
 
 ## Run the suite non-elevated
 
@@ -341,8 +523,8 @@ remains are the specs whose subject *is* the process tree: conhost reaping, comm
 reading, run-as-admin, and reattach.
 
 The hatch only ever makes MORE tests run, never fewer, so it cannot be used to turn a red suite
-green. Every E2E shard prints the remaining count on each run, so the number stays visible instead
-of being rediscovered.
+green. Every E2E run prints the remaining count, so the number stays visible instead of being
+rediscovered.
 
 ### Why CI cannot simply drop privileges
 
@@ -519,6 +701,90 @@ That failure is a lie — the caret never moved, the *text* did — and it sends
 code for as long as you believe it. Hence the helpers above: they are not shorthand for the raw
 call, they are the difference between a key that lands where you meant it and one that quietly edits
 your fixture.
+
+## Budgets — the five clocks, and why each is where it is
+
+A test suite that runs six Electron apps at once creates its own load, and every
+timeout in it is really a claim about how slow things are allowed to get under that
+load. Spec 034 found **five** such budgets, each sized when the suite was smaller and
+quieter, and each only visible once the one above it was fixed.
+
+| Budget | Was | Is | Derived from |
+| --- | ---: | ---: | --- |
+| test timeout (`playwright.config.ts`) | 30 s | **60 s** | longest legitimate journey observed at six workers ~38 s |
+| assertion timeout (`expect.timeout`) | 10 s | **15 s** | the failures that remained after the test timeout moved were 10.0 s exactly |
+| app close (`APP_CLOSE_TIMEOUT_MS`) | 10–20 s | **30 s** | `shutdownApp`'s own allowance: 15 s graceful + 10 s `taskkill` = ~25 s, plus margin |
+| daemon ready (`DAEMON_READY_TIMEOUT_MS`) | 10 s | **30 s** | a cold Node start + pipe bind + SQLite open on a saturated box |
+| terminal output (`TERMINAL_OUTPUT_TIMEOUT_MS`) | 20 s | **30 s** | a 200-iteration `cmd` loop painting through a ConPTY under contention |
+
+Two rules keep this from becoming a habit of enlarging numbers:
+
+- **A timeout here is a HANG DETECTOR, not a performance assertion.** If a test means
+  to measure how fast something is, it says so and names the requirement it defends —
+  that is what `performance.e2e.ts` is for. A test that fails because the machine was
+  busy was never measuring the product.
+- **If a spec needs more than these, it is doing too much work for a parallel worker,
+  and the tier mechanism applies to it.** Raise the tier, not the number. That is
+  exactly how `terminal-find` and `terminal-scrollback-nav` ended up in the serial
+  tier: they still failed at a 30 s terminal-output budget, so they stopped running at
+  six workers instead of earning a fourth increase.
+
+**The measured effect**, on the sixteen files that were failing, at six workers with
+retries off: **20 passed / 14 failed** before, **38 / 0** after.
+
+### Mechanism identifies candidates; measurement decides which need the tier
+
+Worth stating because the obvious inference from the above is wrong and was tried.
+Classifying every spec by mechanism gives 88 parallel / 49 real-shell / 98 focus, and
+moving all 49 real-shell specs to a two-worker tier was **modelled at ~45.4 minutes
+against ~40.3** for the current arrangement — slower, because 28 of the 41 real-shell
+specs in the parallel tier run perfectly well at six workers. Only 13 ever failed, and
+right-sizing the budgets fixed 11 of those.
+
+This is the other half of the rule already stated above about not drawing the line
+from observed failures alone. The mechanism tells you which specs *could* need the
+tier. Only measurement tells you which ones *do*.
+
+### Getting the measurement: per-file durations
+
+Every claim on this page about what a spec file costs comes from one command, and it is the same
+command whether you are re-drawing the tier boundary, deciding whether a file is worth sharing an
+app, or checking that a published figure is still true:
+
+```sh
+THRONG_E2E_JSON_OUT=e2e-report.json npm run test:e2e
+node scripts/e2e-durations.mjs e2e-report.json
+```
+
+The first line is the run you were doing anyway — `THRONG_E2E_JSON_OUT` only asks Playwright to
+write its JSON report alongside the usual live log, so the measurement costs nothing extra. The
+second prints one row per spec file, most expensive first, with a running share of the total. The
+shape, with the numbers left out deliberately — they are whatever your run measured, and quoting
+someone else's here is how the figures on this page drifted to half the truth in the first place:
+
+```
+<n> spec files, <n> tests, <n> retried
+<n> minutes of test time (retries included)
+
+    mins   tests  share  file
+    ....       ..    ..%  packages/ui/tests/e2e/<the dearest file>.e2e.ts
+    ....       ..    ..%  packages/ui/tests/e2e/<the next one>.e2e.ts
+    …
+```
+
+Three things about the numbers, because each has misled someone:
+
+- **Retries are included.** A file that passes on its second attempt cost the suite both attempts.
+  Reporting only the winning attempt would make the flakiest files look like the cheapest, which is
+  exactly backwards for a number used to decide tier assignment.
+- **The share column is cumulative**, so it answers "how few files do I have to fix to matter?"
+  directly. In this suite the answer has consistently been "about fifteen".
+- **It measures test time, not wall-clock.** At six workers the wall-clock is far lower than the
+  total; the two tiers run at different worker counts, so only a whole-run stopwatch gives the
+  figure quoted at the top of this page.
+
+It works on a partial run too — `npx playwright test some-spec.e2e.ts` with the same env var — which
+is the cheap way to check whether one file got faster without paying for the suite.
 
 ## Quarantine
 

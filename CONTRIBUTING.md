@@ -25,7 +25,7 @@ A PR **cannot merge** unless all of these hold:
 - [ ] A **GitHub issue exists and a maintainer has explicitly agreed it in a comment** on that issue, before the PR was opened. Agreement is a written "agreed" from a maintainer — there is no label for it.
 - [ ] The issue is **labelled** — exactly one type (`bug` / `enhancement` / `tweak` / `documentation`) and at least one `area:*`. See [Labelling](#labelling).
 - [ ] **Authoring** — either produced with the recommended AI toolchain, driven by **Claude Opus 4.8 or a more capable model**, *or* hand-written without AI. Either way every gate below applies.
-- [ ] **Tested at every layer** — unit, integration and E2E observed green (not merely built/type-checked); every user-facing UI change ships passing E2E (constitution V). Hand-written work is tested **at least as thoroughly as the AI workflow produces**.
+- [ ] **Tested at the layer that can prove it** — unit, component, integration and E2E observed green (not merely built/type-checked); every change ships coverage at the **lowest layer that can prove it**, and E2E is reserved for what no lower layer can observe (constitution V). Hand-written work is tested **at least as thoroughly as the AI workflow produces**.
 - [ ] **For AI / spec-driven changes** — a **fully specified spec** under `specs/<NNN-slug>/` with no `[NEEDS CLARIFICATION]` left, `/speckit-analyze` clean of critical/high findings, and `/speckit-converge` run so code and spec agree.
 - [ ] The PR states **intent and outcomes in plain, human terms**.
 - [ ] The change complies with the **[constitution](.specify/memory/constitution.md)**.
@@ -112,7 +112,13 @@ Layered and test-first — the runner commands are in the [README](README.md#com
 
 - **Test-first** (Red → Green → Refactor): tests written and seen failing before the code.
 - **Same bar regardless of authoring** — hand-written changes ship coverage at least as thorough as the AI workflow would produce.
-- **Every user-facing UI change ships passing E2E** (new/changed controls, menus, dialogs, drag-and-drop, layout, panes, theming).
+- **Every change ships passing coverage at the lowest layer that can prove it.** A pure decision is a
+  unit test; what a component renders, focuses or announces is a **component** test; persistence, IPC
+  and configuration are integration. **E2E is reserved** for what no lower layer can observe — real
+  window lifecycle and multiple windows, focus and z-order, native menus and dialogs, OS
+  drag-and-drop, terminal keyboard and rendering fidelity, and process-tree hygiene. Every E2E test
+  carries one significance tag (`@core`, which gates CI, or `@extended`, which runs at release) and
+  at least one category tag, and the suite has a build-enforced budget.
 - **New OS-abstraction seams** (`IShellDetection`, `IPtyHost`, `IDirectoryLock`, …) need contract tests.
 - **Process-lifecycle** behaviour (spawn, detach, persist, idle-close, reattach, no-orphans) needs automated tests, including process-level E2E where the constitution requires it (III).
 - **`@admin` tests are elevation-gated** — skipped unless elevated, and excluded from the normal suite unless `THRONG_E2E_INCLUDE_ADMIN` is set. Run them locally with `npm run test:e2e:admin`; a green non-elevated bar never implies admin coverage. **CI now runs the `@admin` subset** in a dedicated job (`E2E (@admin, elevated)`), because GitHub's Windows runners are elevated and are the only runner that can honour it.
