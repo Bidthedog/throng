@@ -33,7 +33,7 @@ async function openFileEditor(win: Page, fileName: string, panelName: string): P
   return pid;
 }
 
-test('the file-changed warning names the tab, panel and full path', async () => {
+test('the file-changed warning names the tab, panel and full path', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-extnamed-'));
   const file = join(root, 'watched.txt');
   writeFileSync(file, 'original\n');

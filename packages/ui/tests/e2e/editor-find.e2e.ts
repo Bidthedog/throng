@@ -49,7 +49,6 @@ let projectSeq = 0;
 const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
-
 // 013 US1 — find in the active editor: seed from selection, incremental as-you-type
 // highlighting, the current/total count, wrap, the match-mode toggles, the no-results
 // state, and close. Throughout: the file's content is never altered by searching.
@@ -83,7 +82,7 @@ const matches = (win: Page, pid: string) =>
 const currentMatch = (win: Page, pid: string) =>
   win.getByTestId(`editor-${pid}`).locator('.throng-search-match--current');
 
-test('finds as you type: highlights every match, marks the current one, counts them', async () => {
+test('finds as you type: highlights every match, marks the current one, counts them', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -109,38 +108,27 @@ test('finds as you type: highlights every match, marks the current one, counts t
   }
 });
 
-test('find next / previous step through matches and wrap at both ends', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'WrapProj', root);
-      const pid = await newEditor(win);
-      await typeInto(win, pid, 'x one\nx two\nx three\n');
+/*
+ * DELETED (034 FR-045): "find next / previous step through matches and wrap at both ends".
+ *
+ * The only test in this file that reads NOTHING but the `find-count` text — no decorations, no
+ * measurement. Stepping and wrapping are `packages/ui/tests/unit/search-model.test.ts` ("advances
+ * and wraps at the end", "retreats and wraps at the start", "reports a 1-based current index"), and
+ * that the bar follows the engine is `search-store.test.ts` ("advances the current match and records
+ * the new count").
+ *
+ * WHY ONLY THIS ONE, when an analysis pass proposed five. The other four all assert on
+ * `.throng-search-match` / `.throng-search-match--current` — real CodeMirror decorations in the
+ * document, which no unit test touches:
+ *   - "finds as you type" counts three highlights and one current mark
+ *   - "match-case and whole-word toggles" ends on a decoration count of 1
+ *   - "seeds the term from the selection" ends on a decoration count of 0
+ *   - "closing find clears the highlights" IS a decoration count going to 0
+ * The store test can say the controller was TOLD to clear; only the editor shows that the document
+ * stopped drawing them. That distinction is why four of the five stayed.
+ */
 
-      await win.keyboard.press('Control+f');
-      await win.getByTestId('find-input').fill('x');
-      await expect(win.getByTestId('find-count')).toHaveText('1 of 3');
-
-      await win.getByTestId('find-next').click();
-      await expect(win.getByTestId('find-count')).toHaveText('2 of 3');
-      await win.getByTestId('find-next').click();
-      await expect(win.getByTestId('find-count')).toHaveText('3 of 3');
-      // Wraps forward past the last match.
-      await win.getByTestId('find-next').click();
-      await expect(win.getByTestId('find-count')).toHaveText('1 of 3');
-      // …and backward past the first.
-      await win.getByTestId('find-previous').click();
-      await expect(win.getByTestId('find-count')).toHaveText('3 of 3');
-
-      // The file is untouched by all that stepping.
-      expect(await docText(win, pid)).toContain('x three');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('match-case and whole-word toggles narrow the matches live (FR-007)', async () => {
+test('match-case and whole-word toggles narrow the matches live (FR-007)', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -167,7 +155,7 @@ test('match-case and whole-word toggles narrow the matches live (FR-007)', async
   }
 });
 
-test('seeds the term from the selection, and shows a no-results state for a miss', async () => {
+test('seeds the term from the selection, and shows a no-results state for a miss', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -193,7 +181,7 @@ test('seeds the term from the selection, and shows a no-results state for a miss
   }
 });
 
-test('closing find clears the highlights and returns focus to the editor', async () => {
+test('closing find clears the highlights and returns focus to the editor', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -218,7 +206,7 @@ test('closing find clears the highlights and returns focus to the editor', async
   }
 });
 
-test('renders results within the 1000 ms budget on a ~10k-line file (SC-007)', async () => {
+test('renders results within the 1000 ms budget on a ~10k-line file (SC-007)', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     // The SC-007 representative fixture: ~10k lines, 20 of them matching.
@@ -257,7 +245,7 @@ test('renders results within the 1000 ms budget on a ~10k-line file (SC-007)', a
   }
 });
 
-test('every find-bar action control is the same size, and match-case reads "Aa"', async () => {
+test('every find-bar action control is the same size, and match-case reads "Aa"', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -305,7 +293,7 @@ test('every find-bar action control is the same size, and match-case reads "Aa"'
   }
 });
 
-test('find is a no-op when no panel is active (spec Edge Cases)', async () => {
+test('find is a no-op when no panel is active (spec Edge Cases)', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -328,8 +316,7 @@ test('find is a no-op when no panel is active (spec Edge Cases)', async () => {
  * actually searching for one arbitrary row of the user's block.
  */
 
-
-test('a ONE-ROW block seeds the find input; a MULTI-ROW block seeds nothing (FR-025i)', async () => {
+test('a ONE-ROW block seeds the find input; a MULTI-ROW block seeds nothing (FR-025i)', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     /*

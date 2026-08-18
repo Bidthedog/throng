@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp, FILE_OP_TIMEOUT_MS } from './harness.js';
 
 // Delivery A (US1/US3/US4/US5/US8-pills): a usable editor — create → type →
 // Ctrl+S (confined) → new-doc LF default → Ctrl+Shift+S scope → Files-pane active
@@ -31,7 +31,7 @@ async function typeInto(win: Page, pid: string, text: string): Promise<void> {
   await win.keyboard.type(text);
 }
 
-test('creates an editor, types, saves within the tree, and shows type + file pills', async () => {
+test('creates an editor, types, saves within the tree, and shows type + file pills', { tag: ['@core', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-ed-'));
   const savePath = join(root, 'note.txt');
   try {
@@ -52,7 +52,7 @@ test('creates an editor, types, saves within the tree, and shows type + file pil
       await win.keyboard.press('Control+s');
 
       await expect
-        .poll(() => (existsSync(savePath) ? readFileSync(savePath, 'utf8') : ''), { timeout: 8000 })
+        .poll(() => (existsSync(savePath) ? readFileSync(savePath, 'utf8') : ''), { timeout: FILE_OP_TIMEOUT_MS })
         .toBe('hello\nworld\n');
       // New-doc default line ending is LF (no CRLF on disk).
       expect(readFileSync(savePath).includes(0x0d)).toBe(false);
@@ -65,7 +65,7 @@ test('creates an editor, types, saves within the tree, and shows type + file pil
   }
 });
 
-test('refuses an out-of-tree save and leaves the buffer unsaved', async () => {
+test('refuses an out-of-tree save and leaves the buffer unsaved', { tag: ['@core', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-ed-'));
   const outside = mkdtempSync(join(tmpdir(), 'throng-out-'));
   const escapePath = join(outside, 'escape.txt');
@@ -78,8 +78,10 @@ test('refuses an out-of-tree save and leaves the buffer unsaved', async () => {
       await stubSaveDialog(app, escapePath);
       await win.keyboard.press('Control+s');
 
+      // The confinement rejection is a visible message box, never a silent no-op (FR-078) — wait
+      // for it rather than guessing how long the save round-trip takes.
+      await expect(win.getByTestId('editor-notice-dialog')).toBeVisible({ timeout: 8000 });
       // Nothing is written outside the project tree; the buffer stays unsaved.
-      await win.waitForTimeout(500);
       expect(existsSync(escapePath)).toBe(false);
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible();
     });
@@ -89,7 +91,7 @@ test('refuses an out-of-tree save and leaves the buffer unsaved', async () => {
   }
 });
 
-test('the Files & Folders pane gates Ctrl+S (no-op) and highlights when active', async () => {
+test('the Files & Folders pane gates Ctrl+S (no-op) and highlights when active', { tag: ['@core', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-ed-'));
   const savePath = join(root, 'gated.txt');
   try {
@@ -114,6 +116,9 @@ test('the Files & Folders pane gates Ctrl+S (no-op) and highlights when active',
       // Ctrl+S is now a no-op — no save dialog runs, nothing is written.
       await stubSaveDialog(app, savePath);
       await win.keyboard.press('Control+s');
+      // sleep-justified: gated at the keybinding-scope layer, before it ever reaches the editor's
+      // sleep-justified: save handler — so there is no event, notice or file write to observe. The
+      // sleep-justified: absence itself is the claim, and only outrunning the clock can show it.
       await win.waitForTimeout(400);
       expect(existsSync(savePath)).toBe(false);
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible();
@@ -123,7 +128,7 @@ test('the Files & Folders pane gates Ctrl+S (no-op) and highlights when active',
   }
 });
 
-test('warns (does not lock) when a dirty saved file changes on disk; Save-All writes the scope', async () => {
+test('warns (does not lock) when a dirty saved file changes on disk; Save-All writes the scope', { tag: ['@core', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-ed-'));
   const savePath = join(root, 'watched.txt');
   try {
@@ -136,7 +141,7 @@ test('warns (does not lock) when a dirty saved file changes on disk; Save-All wr
       await stubSaveDialog(app, savePath);
       await win.keyboard.press('Control+s');
       await expect
-        .poll(() => (existsSync(savePath) ? readFileSync(savePath, 'utf8') : ''), { timeout: 8000 })
+        .poll(() => (existsSync(savePath) ? readFileSync(savePath, 'utf8') : ''), { timeout: FILE_OP_TIMEOUT_MS })
         .toBe('v1');
 
       // Edit again → dirty. There is NO lock now: an external write SUCCEEDS…
@@ -167,7 +172,7 @@ test('warns (does not lock) when a dirty saved file changes on disk; Save-All wr
       await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
       await win.keyboard.press('Control+Shift+S');
       await expect
-        .poll(() => readFileSync(savePath, 'utf8'), { timeout: 8000 })
+        .poll(() => readFileSync(savePath, 'utf8'), { timeout: FILE_OP_TIMEOUT_MS })
         .toContain('more');
     });
   } finally {

@@ -15,7 +15,14 @@ import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { runApp, setSlider, cleanupTemp } from './harness.js';
+import { openApp, settle, setSlider, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import {
+  configRootSeeded,
+  settleConfigRoot,
+  snapshotConfigRoot,
+  type ConfigRootSnapshot,
+} from './helpers/config-snapshot.js';
+import { closePrefsWindow } from './helpers/prefs-window.js';
 
 const cfgRoots: string[] = [];
 function freshCfgRoot(): string {
@@ -23,9 +30,69 @@ function freshCfgRoot(): string {
   cfgRoots.push(dir);
   return dir;
 }
-test.afterAll(() => {
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-010).
+ *
+ * None of the four tests seeded anything; each drives the preferences window and reads settings.json
+ * or keybindings.json back. This file is the clearest case FOR the restore rather than against it:
+ * the first test asserts the whole `tabs` block equals the SHIPPED defaults, and the third asserts
+ * `maxNameLength` is still 64 after refusing an out-of-range edit — which the second test's drag to
+ * 30 would otherwise have destroyed. Without `restoreConfigRoot` these three could not share an app;
+ * with it, each opens on a pristine root exactly as it did with its own launch.
+ *
+ * The shim below REFUSES launch options rather than ignoring them: a swallowed config root does not
+ * fail, it makes a test pass for the wrong reason.
+ *
+ * Serial mode is not optional. These tests share a window, a config root and the ONE preferences
+ * window throng allows, so they must not interleave — and when one fails the rest are SKIPPED rather
+ * than run against whatever state the failure left behind (see `openApp` in harness.ts).
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let cfgRoot: string;
+let baseline: ConfigRootSnapshot;
+
+test.beforeAll(async () => {
+  cfgRoot = freshCfgRoot();
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
+  await settle(shared.win);
+  // Photograph the root only once first-run seeding has finished — settings, key bindings and every
+  // shipped theme. A partial snapshot would have every later restore DELETE whatever arrived late.
+  await expect.poll(() => configRootSeeded(cfgRoot), { timeout: 30_000 }).toBe(true);
+  baseline = snapshotConfigRoot(cfgRoot);
+});
+
+/*
+ * Put the config root back between tests — with the preferences window CLOSED FIRST.
+ *
+ * The order is load-bearing twice over. A dirty JSON buffer raises `json-external-change` when the
+ * file changes underneath it, so restoring against an open window would hand the next test a notice
+ * it never asked for. And the on-entry snapshot that Revert and Revert All compare against is
+ * captured when the preferences window MOUNTS (`preferences-app.tsx`), so carrying one window across
+ * tests would carry the first test's baseline into the last one.
+ */
+test.afterEach(async () => {
+  await closePrefsWindow(shared.app);
+  await settleConfigRoot(baseline);
+});
+
+test.afterAll(async () => {
+  await shared?.close();
   for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
 
 function readSettings(cfgRoot: string): { tabs?: Record<string, number> } | undefined {
   const file = join(cfgRoot, 'settings.json');
@@ -91,8 +158,7 @@ const TAB_SETTINGS = [
   { key: 'behaviour.tabHoverActivateMs', min: '0', max: '5000', step: '50', value: '600' },
 ] as const;
 
-test('T057 — the Tabs section exposes every setting, with their ranges and defaults', async () => {
-  const cfgRoot = freshCfgRoot();
+test('T057 — the Tabs section exposes every setting, with their ranges and defaults', { tag: ['@extended', '@window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPreferences(app, win, 'settings');
@@ -139,12 +205,10 @@ test('T057 — the Tabs section exposes every setting, with their ranges and def
         popoverDelayMs: 500,
       });
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('T057 — each tab setting is editable by slider and by field, and persists', async () => {
-  const cfgRoot = freshCfgRoot();
+test('T057 — each tab setting is editable by slider and by field, and persists', { tag: ['@extended', '@window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPreferences(app, win, 'settings');
@@ -174,12 +238,10 @@ test('T057 — each tab setting is editable by slider and by field, and persists
       await setSlider(prefs.getByTestId('control-tabs.maxNameLength-slider'), '30');
       await expect.poll(() => readSettings(cfgRoot)?.tabs?.maxNameLength).toBe(30);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('T057 — a value outside a declared range is refused, and the last valid one stands', async () => {
-  const cfgRoot = freshCfgRoot();
+test('T057 — a value outside a declared range is refused, and the last valid one stands', { tag: ['@extended', '@window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPreferences(app, win, 'settings');
@@ -204,12 +266,10 @@ test('T057 — a value outside a declared range is refused, and the last valid o
       await expect(prefs.getByTestId('control-tabs.maxNameLength-invalid')).toBeVisible();
       expect(readSettings(cfgRoot)?.tabs?.maxNameLength, 'the shipped default stands').toBe(64);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('T057 — tabs.openPicker appears in the Key Bindings editor and is rebindable (T6)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('T057 — tabs.openPicker appears in the Key Bindings editor and is rebindable (T6)', { tag: ['@extended', '@window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPreferences(app, win, 'keybindings');
@@ -237,6 +297,5 @@ test('T057 — tabs.openPicker appears in the Key Bindings editor and is rebinda
       // …and the new chord is what the editor now shows.
       await expect(prefs.getByTestId('binding-tabs.openPicker-chord')).toContainText('F9');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });

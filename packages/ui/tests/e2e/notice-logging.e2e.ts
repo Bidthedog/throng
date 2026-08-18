@@ -17,10 +17,8 @@
  * holds 103 entries; serialising a spec that does not need it costs the whole suite time. Its
  * sibling `notification-prefs.e2e.ts` drives the same settings through Preferences and IS serial.
  *
- * The one real shell here is a `cmd` that is started and immediately killed — short-lived, so it
- * does not starve at high worker counts the way `ping`/`findstr` loops do. The three US3 cases at
- * the foot of the file configure `cmd` terminals that never start AT ALL (their working directory
- * does not exist), so they cost a refused attach and no process.
+ * Nothing here starts a shell any more: the three cases that configured terminals moved to the
+ * component layer with the rest of US1 (see the note below).
  *
  * ══ WHAT EXISTS AND WHAT DOES NOT ══
  *
@@ -32,10 +30,10 @@
  * What does not exist is T025–T025c: `NotificationProvider` does not log anything at all.
  */
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { test, expect, type Page } from '@playwright/test';
-import { addPanels, cleanupTemp, createProject, panelIds, runApp, settle } from './harness.js';
+import { cleanupTemp, createProject, runApp, settle } from './harness.js';
 
 const cfgRoots: string[] = [];
 
@@ -93,17 +91,6 @@ async function ghostProject(win: Page, name: string): Promise<void> {
   await createProject(win, name, `C:/throng-e2e-missing/${name.toLowerCase()}`);
 }
 
-/** Rename a panel through its header, WITHOUT a context menu — this spec must stay parallel. */
-async function renamePanel(win: Page, panelId: string, to: string): Promise<void> {
-  await win.getByTestId(`panel-handle-${panelId}`).dblclick();
-  const input = win.getByTestId(`panel-rename-input-${panelId}`);
-  await expect(input).toBeVisible();
-  await input.fill(to);
-  // Asserted present above: a blind Enter goes wherever focus happens to be.
-  await input.press('Enter');
-  await expect(input).toHaveCount(0);
-}
-
 /**
  * ANCHOR — the main-side channel, driven directly.
  *
@@ -112,42 +99,29 @@ async function renamePanel(win: Page, panelId: string, to: string): Promise<void
  * different names. It also pins the line layout `log-channel.md` specifies, which is the only part
  * of the format the renderer cannot get wrong on its own.
  */
-test('the notice log channel writes one line per record, with severity, subject and cause', async () => {
-  await runApp(async (_app, win, ctx) => {
-    await settle(win);
-    await win.evaluate(() =>
-      window.throng?.notices?.log({
-        level: 'warn',
-        severity: 'warning',
-        message: 'Anchor: the channel is wired.',
-        subject: 'Anchor Project — Tab 1 — one.txt',
-        causeKey: 'path-missing:test 1',
-        affectedCount: 3,
-        detail: "ENOENT: no such file or directory, realpath 'D:\\anchor'",
-      }),
-    );
-
-    const [head] = await recordsMatching(ctx.userDataDir, /Anchor: the channel is wired\./);
-    // The LEVEL comes from the record, and the severity is a field of its own — `info` and
-    // `success` are two severities and one level, so the level alone cannot carry FR-007.
-    expect(head).toMatch(/\bWARN\b/);
-    expect(head).toContain('severity=warning');
-    expect(head).toContain('subject="Anchor Project — Tab 1 — one.txt"');
-    expect(head).toContain('cause="path-missing:test 1"');
-    expect(head).toContain('affected=3');
-    // Prose after the pipe, so a message may contain anything at all.
-    expect(head).toMatch(/\| Anchor: the channel is wired\.$/);
-
-    // The raw system error is its own LINE, not an embedded newline: a log line is a line.
-    const [detail] = await recordsMatching(ctx.userDataDir, /detail \| ENOENT/);
-    expect(detail).toContain("realpath 'D:\\anchor'");
-  });
-});
+/*
+ * DELETED (034 FR-045): "the notice log channel writes one line per record, with severity, subject
+ * and cause".
+ *
+ * It launched Electron to call `window.throng.notices.log(...)` with a HAND-WRITTEN payload — no
+ * notice, no failure, nothing the application did — and then asserted eight fields of the line that
+ * came out. Every one of those fields is asserted directly on `noticeLogLines` in
+ * `packages/ui/tests/unit/notice-log.test.ts`: the severity the level cannot carry, the quoted
+ * subject, the quoted cause, the message after the bar, the affected count, omitted fields written
+ * as nothing rather than as empties, the raw system error on its own line, an escaped quote inside a
+ * quoted field, and a Windows path left exactly as the user would paste it. The channel itself has
+ * seven more in the same file, including that it is the channel the preload actually sends on.
+ *
+ * What it uniquely reached was the real log FILE at the end of the bridge — and the test below it
+ * reaches the same file from a REAL notice the user was shown, which is a strictly stronger witness
+ * of the same path. A synthetic payload proves the pipe; a real failure proves the pipe and what is
+ * put into it.
+ */
 
 /**
  * T015 — every accepted notice reaches the log, at the level its severity maps to.
  */
-test('a displayed error notice writes a record at ERROR carrying its severity and message', async () => {
+test('a displayed error notice writes a record at ERROR carrying its severity and message', { tag: ['@extended', '@failure'] }, async () => {
   const cfgRoot = seededCfgRoot({});
   await runApp(
     async (_app, win, ctx) => {
@@ -173,27 +147,59 @@ test('a displayed error notice writes a record at ERROR carrying its severity an
  * This is the case the whole feature turns on. `error` is *Never display* here, seeded through the
  * config root, so there is nothing on screen at all — and the record has to be there anyway.
  */
-test('a NEVER-DISPLAY error notice writes its record even though nothing is shown (FR-005/FR-006)', async () => {
-  const cfgRoot = seededCfgRoot({
-    notifications: { error: { mode: 'never', timeoutMs: 30000 } },
-  });
-  await runApp(
-    async (_app, win, ctx) => {
-      await settle(win);
-      await ghostProject(win, 'SilentOne');
-      // The project really did open, so the failure really was raised — the empty notice list below
-      // is a decision and not an unrendered DOM.
-      await expect(win.locator('.project-item[data-active="true"]')).toContainText('SilentOne');
-      await win.waitForTimeout(2000);
-      await expect(win.getByTestId('explorer-error')).toHaveCount(0);
-
-      const [record] = await recordsMatching(ctx.userDataDir, /severity=error/);
-      expect(record).toMatch(/\bERROR\b/);
-      expect(record).toContain('could not be found');
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
+/*
+ * MIGRATED (034 FR-045/FR-046) — EIGHT of this file’s nine tests, and eight of its nine Electron
+ * launches. This was the heaviest file in batch 6 and it was heavy for one reason: it asked nine
+ * separate applications what a text file contained.
+ *
+ * WHERE THEY WENT
+ *
+ *   packages/ui/tests/component/notice-log-emission.test.ts   (9 tests) — everything the RENDERER
+ *     decides: that an accepted notice files exactly one record, that a silenced one files it
+ *     anyway while rendering nothing, that a repeat files none, that a growth files a further
+ *     record naming what joined and leaves the first unaltered, and that the raw system error
+ *     rides in `detail` and never in the prose. `NotificationProvider.notify` reasoning about its
+ *     own state — no window, no daemon, no shell, no disk.
+ *
+ *   packages/ui/tests/integration/notice-log-file.integration.test.ts   (4 tests) — the FR-006b
+ *     case, which was the single most expensive test here: two panel renames past a debounced
+ *     layout write plus a real `cmd` shell, to ask whether `diagnostics.logLevel: error` eats an
+ *     `info` record. It now assembles main’s half exactly as `main.ts` does — `startUiDiagnostics`
+ *     → `createFileLog` → `registerNoticeLogIpc` → a real `logs/main.log` — at a threshold of
+ *     `error`, with an ordinary sub-threshold write beside it as the control.
+ *
+ * WHAT THE REPLACEMENTS ASSERT MORE STRONGLY THAN THIS FILE DID
+ *
+ *   • EXACTLY ONE RECORD, not "at least one". `recordsMatching` polled until a match appeared and
+ *     then read `[0]`, so a provider filing a record twice — the StrictMode double-invoke this
+ *     model was restructured to prevent — passed every test in this file. The component tests
+ *     count the calls.
+ *   • THE MESSAGE IS THE ONE THE USER READ, compared against the notice’s own rendered
+ *     `.notice__message` node rather than against a substring the test chose.
+ *   • THE GROWTH DOES NOT RE-ANNOUNCE. This file asserted the growth record matched /Terminal|Panel/;
+ *     the replacement asserts it names `Tab 1 — Docs` and does NOT name the panel already reported.
+ *   • THE PER-PANEL LINES ARE COMPARED WHOLE — panel name and errno, in order — rather than
+ *     counted by a `Set` of extracted ids.
+ *   • THE THRESHOLD IS PROVEN IN FORCE by an ordinary sub-threshold write that must be ABSENT from
+ *     the same file. This file had no such control, so a run in which the level had silently
+ *     defaulted to `debug` would have passed identically.
+ *
+ * WHAT DID NOT MOVE, AND WHY THE SURVIVOR IS NOT A LEFTOVER
+ *
+ * The test below is the only END-TO-END witness that the renderer’s record reaches the file at
+ * all: preload `contextBridge` → `ipcRenderer.send` → main’s registration → `logs/main.log`. The
+ * layers above cover both ENDS of that bridge and neither covers the bridge — the preload’s
+ * channel name is a source grep (`tests/unit/notice-log.test.ts`), not a wiring proof. Deleting it
+ * would be a coverage loss dressed as a migration, and it is the cheapest launch this file had: a
+ * project on a folder that never existed, no shell, no restore, no second launch.
+ *
+ * It cannot share an app with anything (034 SC-010): it is now the only test in the file.
+ *
+ * ANTI-VACUITY CONTROL for the replacements: remove the `NotificationProvider` element from
+ * `mount()` in the component file — `useNotify` throws rather than defaulting, and all 9 fail.
+ * Neither "nothing was rendered" assertion stands alone; each sits beside a positive assertion
+ * that the record was filed regardless, so an empty DOM cannot satisfy either.
+ */
 
 /**
  * T015 (subject half) — ENABLED BY US2 (T031/T033a), and live.
@@ -203,18 +209,6 @@ test('a NEVER-DISPLAY error notice writes its record even though nothing is show
  * real failure rather than the absence of a field. The fixme is removed as the task that enabled it
  * (T029) predicted.
  */
-test('the record names the subject the notice is about (FR-007)', async () => {
-  const cfgRoot = seededCfgRoot({ notifications: { error: { mode: 'never', timeoutMs: 30000 } } });
-  await runApp(
-    async (_app, win, ctx) => {
-      await settle(win);
-      await ghostProject(win, 'SubjectOne');
-      const [record] = await recordsMatching(ctx.userDataDir, /severity=error/);
-      expect(record).toMatch(/subject="[^"]*subjectone[^"]*"/i);
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
 
 /**
  * T015b — the log LEVEL THRESHOLD must not eat a notice record.
@@ -227,60 +221,6 @@ test('the record names the subject the notice is about (FR-007)', async () => {
  * Both notices are left VISIBLE here on purpose. The screen assertions prove the producers fired,
  * so a failure below is unambiguously about the log and never about a warning that never happened.
  */
-test('info and warning records survive diagnostics.logLevel: error (FR-006b)', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-notice-log-thresh-'));
-  const cfgRoot = seededCfgRoot({
-    diagnostics: { logLevel: 'error' },
-    notifications: {
-      warning: { mode: 'dismiss', timeoutMs: 30000 },
-      info: { mode: 'timed', timeoutMs: 30000 },
-    },
-  });
-  try {
-    await runApp(
-      async (_app, win, ctx) => {
-        await settle(win);
-        await createProject(win, 'ThreshProj', root);
-        await addPanels(win, 2);
-        const ids = await panelIds(win);
-        expect(ids.length).toBeGreaterThanOrEqual(3);
-
-        // ── A WARNING: two panels, one name. The daemon adjusts the second and says so once.
-        await renamePanel(win, ids[0]!, 'Build');
-        await win.waitForTimeout(1500); // the layout write is debounced; the claim reads what is saved
-        await renamePanel(win, ids[1]!, 'Build');
-        const warned = win.getByTestId('panel-name-adjusted');
-        await expect(warned).toBeVisible({ timeout: 15_000 });
-
-        // ── An INFO: a terminal the USER ended. `unexpected` is false because the kill was asked
-        // for, and `noticeSeverityForExit` maps that to `info` — the only `info` notice this
-        // application raises anywhere (see the report on this spec).
-        const term = ids[2]!;
-        await win.getByTestId(`panel-type-select-${term}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
-        await win.getByTestId(`panel-type-confirm-${term}`).click();
-        await expect(win.getByTestId(`terminal-${term}`)).toContainText(basename(root), {
-          timeout: 20_000,
-        });
-        await win.evaluate((id) => window.throng?.terminal?.kill?.(id), term);
-        const exited = win.getByTestId(`panel-exit-${term}`);
-        await expect(exited).toBeVisible({ timeout: 20_000 });
-        await expect(exited).toHaveClass(/notice--info/);
-
-        // Both are on screen. Both must be in the file, under a threshold that admits neither.
-        const [warning] = await recordsMatching(ctx.userDataDir, /severity=warning/);
-        expect(warning).toMatch(/\bWARN\b/);
-        expect(warning).toContain('Build (2)');
-
-        const [info] = await recordsMatching(ctx.userDataDir, /severity=info/);
-        expect(info).toMatch(/\bINFO\b/);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-    );
-  } finally {
-    cleanupTemp(root);
-  }
-});
 
 /**
  * T015c — a silenced notice is de-duplicated exactly as a displayed one is (SC-003, FR-005b).
@@ -294,47 +234,6 @@ test('info and warning records survive diagnostics.logLevel: error (FR-006b)', a
  * the taken set, so asking for "Build" twice from the same panel is granted "Build (2)" both times
  * and the two notices are character-identical.
  */
-test('the same event raised twice under Never display writes ONE record, not two (SC-003)', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-notice-log-dedupe-'));
-  const cfgRoot = seededCfgRoot({
-    notifications: { warning: { mode: 'never', timeoutMs: 30000 } },
-  });
-  try {
-    await runApp(
-      async (_app, win, ctx) => {
-        await settle(win);
-        await createProject(win, 'DedupeProj', root);
-        await addPanels(win, 1);
-        const ids = await panelIds(win);
-        expect(ids.length).toBeGreaterThanOrEqual(2);
-
-        await renamePanel(win, ids[0]!, 'Build');
-        await win.waitForTimeout(1500);
-        await renamePanel(win, ids[1]!, 'Build');
-        await expect(win.getByTestId(`panel-title-${ids[1]!}`)).toHaveText('Build (2)');
-        // That the notice is not SHOWN under this mode is the subject of the never-display test
-        // above, and is deliberately not re-asserted here: `toHaveCount(0)` taken immediately after
-        // a rename is satisfied by a DOM that has not mounted the notice yet, which is a wait
-        // dressed as an assertion. What this test is about is what reaches the FILE.
-
-        // The SAME event again: the same panel asking for the same taken name, granted the same
-        // adjustment, producing the same sentence.
-        await win.waitForTimeout(1500);
-        await renamePanel(win, ids[1]!, 'Build');
-        await expect(win.getByTestId(`panel-title-${ids[1]!}`)).toHaveText('Build (2)');
-
-        const records = await recordsMatching(ctx.userDataDir, /severity=warning/);
-        expect(
-          records,
-          'two raises of one unchanged event must leave one record, as they do when displayed',
-        ).toHaveLength(1);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-    );
-  } finally {
-    cleanupTemp(root);
-  }
-});
 
 /**
  * T015e — the raw system error reaches the log (FR-034).
@@ -344,49 +243,6 @@ test('the same event raised twice under Never display writes ONE record, not two
  * what happened. It is written on its own line, `detail | …`, so one notice never has to be
  * reassembled from a wrapped fragment.
  */
-test('the record carries the raw system error on its own line (FR-034)', async () => {
-  const cfgRoot = seededCfgRoot({
-    notifications: { error: { mode: 'never', timeoutMs: 30000 } },
-  });
-  await runApp(
-    async (_app, win, ctx) => {
-      await settle(win);
-      await ghostProject(win, 'DetailOne');
-      await expect(win.locator('.project-item[data-active="true"]')).toContainText('DetailOne');
-
-      const [detail] = await recordsMatching(ctx.userDataDir, /detail \| /);
-      // The errno, verbatim — the part a user cannot accurately retype and the part the spoken
-      // message deliberately drops.
-      expect(detail).toMatch(/ENOENT|Cannot lock/);
-      expect(detail.toLowerCase()).toContain('detailone');
-      // …and it is NOT smuggled into the head line's prose, which the user reads.
-      const [head] = await recordsMatching(ctx.userDataDir, /severity=error/);
-      expect(head).not.toContain('ENOENT');
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-/* ════════════════════════════════════════════════════════════════════════════════════════════════
- * ENABLED BY T038 — the three cases US1 could not construct.
- *
- * All three needed `affected` on the notice model, which US3 (T044) added, and a real raise that
- * populates it (T050). They are driven here through the cheapest production path that produces a
- * PANEL casualty: a project whose root folder does not exist, with terminals configured into it.
- * The daemon cannot lock the missing working directory, refuses the attach with a classified
- * `path-missing` cause, and the panel reports itself as a casualty — no tabs to visit, no second
- * app launch, and a `cmd` that never actually starts, so this file stays light and stays parallel.
- * ════════════════════════════════════════════════════════════════════════════════════════════════ */
-
-/** Configure `panelId` as a `cmd` terminal and wait for the start it cannot complete. */
-async function failingTerminal(win: Page, panelId: string): Promise<void> {
-  await win.getByTestId(`panel-type-select-${panelId}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
-  await win.getByTestId(`panel-type-confirm-${panelId}`).click();
-  // 030 US4 / T060b — the terminal's own failure strip is now the shared banner (FR-039), so the
-  // state this waits for is spelled `panel-failure-{panelId}`. Same state, same wait, one id.
-  await expect(win.getByTestId(`panel-failure-${panelId}`)).toBeVisible({ timeout: 60_000 });
-}
 
 /**
  * T015a — a notice that GROWS is a further event, and the log says so (FR-006a).
@@ -396,38 +252,6 @@ async function failingTerminal(win: Page, panelId: string): Promise<void> {
  * of casualties in the log and every later one nowhere — which is most of the story missing from the
  * only record there is.
  */
-test('a growing notice writes a further record naming the panels that joined (FR-006a)', async () => {
-  // Two refused terminal attaches, each waiting on the daemon — more than the 30s default budget.
-  test.setTimeout(120_000);
-  const cfgRoot = seededCfgRoot({});
-  await runApp(
-    async (_app, win, ctx) => {
-      await settle(win);
-      await ghostProject(win, 'GrowLog');
-      const [first] = await panelIds(win);
-      await failingTerminal(win, first!);
-
-      // The first casualty: one record, one panel.
-      const opening = await recordsMatching(ctx.userDataDir, /affected=1/);
-      expect(opening).toHaveLength(1);
-
-      // A second panel defeated by the SAME absent folder joins the live notice rather than raising
-      // its own — and that join is an event.
-      await addPanels(win, 1);
-      const ids = await panelIds(win);
-      await failingTerminal(win, ids.find((id) => id !== first)!);
-
-      const growth = await recordsMatching(ctx.userDataDir, /affected=2/);
-      expect(growth).toHaveLength(1);
-      // It NAMES what joined, rather than merely counting: a record that said "now 2" would leave a
-      // reader unable to tell which panel the second one was.
-      expect(growth[0]!).toMatch(/Terminal|Panel/i);
-      // …and the first record is still there, unaltered. Growth appends; it does not rewrite.
-      expect(noticeRecords(ctx.userDataDir).filter((l) => l.includes('affected=1'))).toHaveLength(1);
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
 
 /**
  * T015d — and the same is true when the user cannot see any of it (FR-005c).
@@ -443,57 +267,6 @@ test('a growing notice writes a further record naming the panels that joined (FR
  * sentence — "matching the displayed growth record in content as well as in count" — and it is what
  * makes SC-003 true in the log rather than only in the count of lines.
  */
-test('a silenced notice reporting a newly discovered panel writes the growth record (FR-005c)', async () => {
-  const cfgRoot = seededCfgRoot({
-    notifications: { error: { mode: 'never', timeoutMs: 30000 } },
-  });
-  await runApp(
-    async (_app, win, ctx) => {
-      await settle(win);
-      await ghostProject(win, 'SilentGrow');
-      const [first] = await panelIds(win);
-      await failingTerminal(win, first!);
-      // Nothing is on screen — the panel's own badge is not a notice, and the notice list is empty.
-      await expect(win.getByTestId('panel-failure-notice')).toHaveCount(0);
-
-      expect(await recordsMatching(ctx.userDataDir, /affected=1/)).toHaveLength(1);
-
-      await addPanels(win, 1);
-      const ids = await panelIds(win);
-      await failingTerminal(win, ids.find((id) => id !== first)!);
-
-      /*
-       * TWO records — and the second is the GROWTH record, character for character the shape the
-       * displayed path writes (FR-005c: "matching the displayed growth record in content as well as
-       * in count").
-       *
-       * This test used to assert `affected=1` twice and explain the asymmetry as a consequence of
-       * there being no live notice to grow. It is not: the shadow already remembers which panels the
-       * key has reported, so both questions a reader asks of a growing notice — what is new, how big
-       * is it now — are answerable without one. And the divergence cost the reading that matters
-       * most, because two records each saying `affected=1` are what TWO UNRELATED failures look
-       * like. Silencing a severity may cost the user the screen; it may not cost them the record.
-       */
-      await expect
-        .poll(
-          () => noticeRecords(ctx.userDataDir).filter((l) => /affected=2/.test(l)).length,
-          { timeout: 15_000, message: 'the second silenced casualty left no growth record' },
-        )
-        .toBe(1);
-      // The first record stands unaltered beside it. Growth appends; it does not rewrite.
-      expect(noticeRecords(ctx.userDataDir).filter((l) => /affected=1/.test(l))).toHaveLength(1);
-      // It NAMES what joined (FR-006a), rather than merely counting to two.
-      const [grown] = noticeRecords(ctx.userDataDir).filter((l) => /affected=2/.test(l));
-      expect(grown!).toMatch(/Also affecting:/);
-
-      // …and each record still carries its own panel's raw error (FR-048a) — the growth record names
-      // only the panel that joined, so between them the two records name both.
-      const details = noticeRecords(ctx.userDataDir).filter((l) => /panel=".*" detail \| /.test(l));
-      expect(new Set(details.map((l) => /panel="([^"]+)"/.exec(l)?.[1])).size).toBe(2);
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
 
 /**
  * T015f — one further line per panel, each carrying that panel's OWN error (FR-048a).
@@ -503,26 +276,3 @@ test('a silenced notice reporting a newly discovered panel writes the growth rec
  * counted its panels without carrying their errors would leave the machine text reachable nowhere
  * for a severity the user has silenced.
  */
-test('a notice with per-panel errors writes one further line per panel (FR-048a)', async () => {
-  const cfgRoot = seededCfgRoot({});
-  await runApp(
-    async (_app, win, ctx) => {
-      await settle(win);
-      await ghostProject(win, 'PerPanel');
-      const [first] = await panelIds(win);
-      await failingTerminal(win, first!);
-
-      const [line] = await recordsMatching(ctx.userDataDir, /^.*panel=".*" detail \| /m);
-      // The panel is named in the workspace's own terms — the log line has no group heading above it
-      // to lean on, so it carries the tab too.
-      expect(line).toMatch(/panel="[^"]+"/);
-      // …and the raw error the notice refused to render.
-      expect(line).toMatch(/Cannot lock|ENOENT|Internal error/i);
-
-      // The head line, meanwhile, is still clean of it (FR-034 both ways).
-      const [head] = await recordsMatching(ctx.userDataDir, /affected=1/);
-      expect(head).not.toMatch(/Cannot lock|ENOENT/i);
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});

@@ -27,19 +27,31 @@
  * A guard shaped like the three chords someone happened to notice passes while a fourth is dead. So
  * the covered set is not written down here: `HANDLED` is read out of `app.tsx`, each action's chords
  * come from `@throng/core`'s shipped bindings, and the same three `keepShift` predicates decide which
- * of them the widening can reach. The first test then fails if that discovered set and this file's
- * coverage table disagree IN EITHER DIRECTION — a new window chord on a letter key, or a default
- * moved off one, both stop the suite until someone decides what covers it.
+ * of them the widening can reach. The chords the tests PRESS are derived that way too, so a changed
+ * default is exercised as changed rather than asserted against a stale literal.
  *
- * The chords the tests PRESS are derived the same way, so a changed default is exercised as changed
- * rather than asserted against a stale literal.
+ * ══ WHERE THE COVERAGE CHECK WENT (034 FR-045) ══
+ *
+ * The comparison itself — discovered set against covered set, failing in EITHER direction — used to
+ * be the first test in this file, and it pressed nothing. It reads `app.tsx`, reads the shipped
+ * bindings, and compares two arrays of strings, and it was doing that inside a Playwright worker
+ * behind a `beforeAll` that launched Electron and built a project on disk.
+ *
+ * It now lives in `packages/ui/tests/unit/window-chord-manifest.test.ts`, importing the same
+ * discovery from `packages/ui/tests/shared/window-chords.ts` that this file imports — one definition,
+ * so the guard and the tests cannot drift apart while each stays green. That is also where the
+ * exemption check lives: `menu.open` is covered in `menu-keyboard.e2e.ts`, and the guard reads that
+ * file with its comments stripped to confirm the chord is still PRESSED there rather than merely
+ * discussed.
+ *
+ * Moving it forward matters more than the seconds it saves. It is the test that fails when someone
+ * adds a window chord on a letter key and covers it nowhere, and that answer is worth having in the
+ * unit tier rather than most of an E2E run later.
  */
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
-import { shippedBindingsFor } from '@throng/core';
 import {
   openApp,
   createProject,
@@ -49,81 +61,11 @@ import {
   cleanupTemp,
   type OpenApp,
 } from './harness.js';
+import { discoverKeepShiftChords, keyOf } from '../shared/window-chords.js';
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
  * Discovery — the allowlist, the chords, and the branch that carries them
  * ══════════════════════════════════════════════════════════════════════════════════════════════ */
-
-const APP_TSX = fileURLToPath(new URL('../../src/renderer/app.tsx', import.meta.url));
-
-/**
- * The action ids in `app.tsx`'s `HANDLED` set.
- *
- * Half the entries are string literals and half are module constants (`TABS_OPEN_PICKER`,
- * `QUICK_OPEN`, `GOTO_LINE`), so the identifiers are resolved against their declarations in the same
- * file. Every failure mode here THROWS rather than returning a short list: a scanner that quietly
- * finds nothing reports a clean bill of health for an allowlist it never read, which is the same
- * defect as the vacuous guard that FR-053a is about.
- */
-function handledActions(): string[] {
-  const src = readFileSync(APP_TSX, 'utf8');
-  const block = /const HANDLED:[^=]*=\s*new Set\(\[([\s\S]*?)\]\)/.exec(src);
-  if (!block) {
-    throw new Error(
-      `could not find the HANDLED set in ${APP_TSX} — the dispatcher was restructured, and this ` +
-        `spec is no longer reading the allowlist it claims to cover`,
-    );
-  }
-  const entries = (block[1] ?? '')
-    .split('\n')
-    .map((line) => line.replace(/\/\/.*$/, '').trim().replace(/,$/, ''))
-    .filter((line) => line.length > 0);
-  const actions = entries.map((entry) => {
-    const literal = /^'([^']+)'$/.exec(entry) ?? /^"([^"]+)"$/.exec(entry);
-    if (literal) return literal[1] as string;
-    const decl = new RegExp(String.raw`const ${entry}\s*:[^=]*=\s*'([^']+)'`).exec(src);
-    if (!decl) {
-      throw new Error(`HANDLED entry \`${entry}\` is neither a literal nor a resolvable constant`);
-    }
-    return decl[1] as string;
-  });
-  if (actions.length === 0) throw new Error('the HANDLED set parsed as empty');
-  return actions;
-}
-
-/** The key segment of a binding token — everything after the modifiers. `Ctrl++` → `+`. */
-function keyOf(token: string): string {
-  let rest = token;
-  for (;;) {
-    const mod = /^(Ctrl|Control|Shift|Alt|Meta)\+(?=.)/.exec(rest);
-    if (!mod) return rest;
-    rest = rest.slice(mod[0].length);
-  }
-}
-
-/**
- * The dispatcher's three `keepShift` branches, restated against a BINDING token.
- *
- * `app.tsx` asks the live event; this asks the chord the event would have to be. The two agree by
- * construction: `chordKey` normalises the physical Backquote to `` ` `` whatever it produced, a
- * function key's `e.key` is its own name, and a letter chord's `e.key` is that letter with case
- * folded away by `normalizeToken`. Restated rather than imported because it is not exported — and
- * `handledActions()` above would catch the dispatcher being restructured underneath it.
- */
-function keepsShift(key: string): boolean {
-  return key === '`' || /^F\d{1,2}$/.test(key) || /^[a-z]$/i.test(key);
-}
-
-/** Every HANDLED action whose shipped chord goes through one of those branches, with those chords. */
-function discoverKeepShiftChords(): Map<string, string[]> {
-  const bindings = shippedBindingsFor().bindings;
-  const found = new Map<string, string[]>();
-  for (const action of handledActions()) {
-    const chords = (bindings[action] ?? []).filter((token) => keepsShift(keyOf(token)));
-    if (chords.length > 0) found.set(action, chords);
-  }
-  return found;
-}
 
 const KEEP_SHIFT = discoverKeepShiftChords();
 
@@ -158,82 +100,6 @@ function chordFor(action: string): string {
     throw new Error(`${action} carries no Shift-keeping chord — the coverage table is stale`);
   }
   return press(chords[0]);
-}
-
-/**
- * The actions this file presses, each against the test that presses it.
- *
- * The value is documentation for whoever reads a failure of the manifest test below; the KEY is the
- * part that is checked.
- */
-const COVERED: ReadonlyMap<string, string> = new Map([
-  ['view.toggleProjects', 'the two pane toggles'],
-  ['view.toggleExplorer', 'the two pane toggles'],
-  ['tabs.openPicker', 'the tab picker'],
-  ['navigate.quickOpen', 'Quick Open — the chord the widening was made for'],
-  ['navigate.gotoLine', 'Go To Line over the active editor'],
-  ['panel.rename', 'the active panel’s rename box'],
-  ['file.undo', 'undo and redo a file operation'],
-  ['file.redo', 'undo and redo a file operation'],
-  ['focus.cycle', 'cycling panel focus both ways'],
-  ['focus.cycleBack', 'cycling panel focus both ways'],
-  ['view.fullscreen', 'fullscreen'],
-]);
-
-/**
- * The one action covered ELSEWHERE, named with the file that covers it and checked to still be true.
- *
- * `menu.open` is `Shift+F10`, which takes the function-key branch — so it belongs in this file's
- * subject and is deliberately not in it. Asserting it means opening a context menu, and throng closes
- * menus when its window loses focus, which would move this spec into `parallel-plan.json`'s serial
- * list and cost a worker slot for an assertion that already exists a file away.
- *
- * An exemption that names a file is only worth anything while the file still does what it is named
- * for, so the manifest test below reads it and checks the chord is still pressed there. An exemption
- * nobody verifies is how coverage evaporates without anyone deleting a test.
- */
-const COVERED_ELSEWHERE: ReadonlyMap<string, { spec: string; press: string }> = new Map([
-  ['menu.open', { spec: 'menu-keyboard.e2e.ts', press: 'Shift+F10' }],
-]);
-
-/**
- * A file's CODE, with its comments blanked out — offsets and lines preserved.
- *
- * The exemption below used to be checked with `toContain(chord)`, a raw substring over the whole
- * file. `menu-keyboard.e2e.ts` explains at length, in a block comment, why a `Shift+F10` at that row
- * needs a real guard in front of it — and names the chord three times doing so. So the exemption was
- * satisfied by the PROSE: delete the `keyboard.press('Shift+F10')` the exemption exists to point at
- * and this check stays green, which makes it an assertion about documentation.
- *
- * Strings are tracked so a `//` inside one does not blank the rest of its line; a template literal
- * spanning lines is the one case this does not follow, and it can only ever hide a comment, never
- * eat code.
- */
-function codeOnly(src: string): string {
-  const blanked = src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
-  return blanked
-    .split('\n')
-    .map((line) => {
-      let quote = '';
-      for (let i = 0; i < line.length; i += 1) {
-        const c = line[i];
-        if (quote !== '') {
-          if (c === '\\') i += 1;
-          else if (c === quote) quote = '';
-          continue;
-        }
-        if (c === '"' || c === "'" || c === '`') quote = c;
-        else if (c === '/' && line[i + 1] === '/') return line.slice(0, i);
-      }
-      return line;
-    })
-    .join('\n');
-}
-
-/** `keyboard.press('<chord>')` — the keystroke itself, not a mention of it. */
-function pressesChord(src: string, chord: string): boolean {
-  const literal = chord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(String.raw`keyboard\s*\.\s*press\(\s*['"\`]${literal}['"\`]`).test(src);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -303,49 +169,10 @@ async function focusEditorPanel(win: Page): Promise<void> {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
- * The manifest — what must be covered, discovered rather than declared
- * ══════════════════════════════════════════════════════════════════════════════════════════════ */
-
-test('every window chord the Shift widening can reach is covered — discovered from HANDLED, not listed (SC-021)', () => {
-  // The parse found a real allowlist. A silently empty one would make every claim below vacuous.
-  expect(handledActions().length, 'HANDLED parsed as suspiciously small').toBeGreaterThan(10);
-
-  const discovered = [...KEEP_SHIFT.keys()].sort();
-  const claimed = [...COVERED.keys(), ...COVERED_ELSEWHERE.keys()].sort();
-  const uncovered = discovered.filter((a) => !claimed.includes(a));
-  const stale = claimed.filter((a) => !discovered.includes(a));
-
-  expect(
-    { uncovered, stale },
-    `SC-021: this file's coverage and app.tsx's HANDLED allowlist disagree.\n` +
-      `  uncovered — a window chord on a backtick, function or letter key that the keepShift branch ` +
-      `builds the event for, and that nothing here presses: ${uncovered.join(', ') || '(none)'}\n` +
-      `  stale — covered here but no longer reachable that way, usually a default chord moved to ` +
-      `another key: ${stale.join(', ') || '(none)'}\n` +
-      `Add a test (or an entry in COVERED_ELSEWHERE naming the spec that has one). A regression in ` +
-      `this listener is silent — the chord resolves to null and nothing happens — so an uncovered ` +
-      `action is a command that can die without a single test going red.`,
-  ).toEqual({ uncovered: [], stale: [] });
-
-  // Every exemption still points at a spec that PRESSES the chord — not one that mentions it.
-  for (const [action, { spec, press: chord }] of COVERED_ELSEWHERE) {
-    const path = fileURLToPath(new URL(spec, import.meta.url));
-    expect(existsSync(path), `${action} is exempted to ${spec}, which does not exist`).toBe(true);
-    expect(
-      pressesChord(codeOnly(readFileSync(path, 'utf8')), chord),
-      `${action} is exempted to ${spec}, which no longer presses ${chord}. The chord may still be ` +
-        `NAMED there — ${spec} explains the guard it needs in prose — but prose is not coverage, so ` +
-        `what is looked for is the keystroke: keyboard.press('${chord}'), with comments stripped ` +
-        `first. Either restore the press or move ${action} back into this file.`,
-    ).toBe(true);
-  }
-});
-
-/* ══════════════════════════════════════════════════════════════════════════════════════════════
  * The chords themselves. Each test restores whatever it changed.
  * ══════════════════════════════════════════════════════════════════════════════════════════════ */
 
-test('the pane toggles still resolve — Ctrl+Alt+B and Ctrl+Alt+N', async () => {
+test('the pane toggles still resolve — Ctrl+Alt+B and Ctrl+Alt+N', { tag: ['@extended', '@window'] }, async () => {
   const win = shared.win;
   await win.locator('body').click();
 
@@ -364,7 +191,7 @@ test('the pane toggles still resolve — Ctrl+Alt+B and Ctrl+Alt+N', async () =>
   await expect(win.getByTestId('pane-hide-right')).toBeVisible();
 });
 
-test('the tab picker still resolves — Ctrl+Alt+T', async () => {
+test('the tab picker still resolves — Ctrl+Alt+T', { tag: ['@extended', '@window'] }, async () => {
   const win = shared.win;
   await win.locator('body').click();
   await win.keyboard.press(chordFor('tabs.openPicker'));
@@ -373,7 +200,7 @@ test('the tab picker still resolves — Ctrl+Alt+T', async () => {
   await expect(win.getByTestId('tabpicker')).toHaveCount(0);
 });
 
-test('Quick Open still resolves — Ctrl+Shift+T, the chord the widening was made for', async () => {
+test('Quick Open still resolves — Ctrl+Shift+T, the chord the widening was made for', { tag: ['@core', '@window'] }, async () => {
   const win = shared.win;
   await focusEditorPanel(win);
   await win.keyboard.press(chordFor('navigate.quickOpen'));
@@ -385,7 +212,7 @@ test('Quick Open still resolves — Ctrl+Shift+T, the chord the widening was mad
   await expect(win.getByTestId('quickopen')).toHaveCount(0);
 });
 
-test('Go To Line still resolves over the active editor — Ctrl+G', async () => {
+test('Go To Line still resolves over the active editor — Ctrl+G', { tag: ['@extended', '@window'] }, async () => {
   const win = shared.win;
   await focusEditorPanel(win);
   await win.keyboard.press(chordFor('navigate.gotoLine'));
@@ -395,7 +222,7 @@ test('Go To Line still resolves over the active editor — Ctrl+G', async () => 
   await expect(win.getByTestId('gotoline')).toHaveCount(0);
 });
 
-test('the panel rename box still resolves — F2', async () => {
+test('the panel rename box still resolves — F2', { tag: ['@extended', '@window'] }, async () => {
   const win = shared.win;
   await focusEditorPanel(win);
   await win.keyboard.press(chordFor('panel.rename'));
@@ -406,7 +233,7 @@ test('the panel rename box still resolves — F2', async () => {
   await expect(input).toHaveCount(0);
 });
 
-test('file undo and redo still resolve with the tree active — Ctrl+Z and Ctrl+Y', async () => {
+test('file undo and redo still resolve with the tree active — Ctrl+Z and Ctrl+Y', { tag: ['@extended', '@window'] }, async () => {
   const win = shared.win;
   const tree = win.getByTestId('file-explorer-tree');
 
@@ -441,7 +268,7 @@ test('file undo and redo still resolve with the tree active — Ctrl+Z and Ctrl+
   await expect(tree.getByText(RENAME_FROM, { exact: true })).toBeVisible({ timeout: 8000 });
 });
 
-test('focus cycling still resolves in both directions — Ctrl+` and Ctrl+Shift+`', async () => {
+test('focus cycling still resolves in both directions — Ctrl+` and Ctrl+Shift+`', { tag: ['@extended', '@window'] }, async () => {
   const win = shared.win;
 
   /*
@@ -465,7 +292,7 @@ test('focus cycling still resolves in both directions — Ctrl+` and Ctrl+Shift+
   await expect(win.locator('.panel-box--active')).toHaveCount(1);
 });
 
-test('fullscreen still resolves — F11', async () => {
+test('fullscreen still resolves — F11', { tag: ['@extended', '@window'] }, async () => {
   const { app, win } = shared;
   const isFullScreen = (): Promise<boolean> =>
     app.evaluate(

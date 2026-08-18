@@ -130,7 +130,7 @@ async function openTheFile(win: Page, pid: string): Promise<void> {
   );
 }
 
-test('an editor recovers when its folder is renamed away and back WHILE throng is running', async () => {
+test('an editor recovers when its folder is renamed away and back WHILE throng is running', { tag: ['@extended', '@editor'] }, async () => {
   // Two full watcher/restore cycles plus a deliberate negative assertion — past the 30s default.
   test.setTimeout(120_000);
   const root = makeProject('throng-strand-live-');
@@ -144,7 +144,25 @@ test('an editor recovers when its folder is renamed away and back WHILE throng i
       // what makes this test non-vacuous: if the assertion were merely "the original text is still
       // shown", a throng that never noticed anything would pass it while being exactly as broken.
       renameSync(join(root, 'src'), join(root, 'src-moved'));
-      await win.waitForTimeout(1000); // past the watcher debounce, so the break is seen if it ever is
+      /*
+       * A FENCE WAS TRIED HERE AND THE PREMISE WAS WRONG. Recorded, because it is a reasonable
+       * inference that happens to be false.
+       *
+       * The attempt asserted the shared panel-failure banner appears here —
+       * `expect(getByTestId('panel-failure-<pid>')).toBeVisible()` — reasoning that the folder watch
+       * sets `unloadable` and 027/#161's banner renders it, which would make "the break is seen" an
+       * observable rather than a duration. It failed every attempt at 15s each.
+       *
+       * The banner IS the right observable further down, after the panel is REOPENED (see the
+       * `restoredPid` assertions below, which pass). It does not appear for a live rename-away of an
+       * already-open editor, so the state the fence assumed simply is not reached at this point.
+       *
+       * sleep-justified: the folder watch has a debounce and raises nothing observable when it
+       * sleep-justified: notices a live rename-away — the panel keeps rendering its buffer, which is
+       * sleep-justified: precisely the defect this test exists to catch, so there is no signal to
+       * sleep-justified: wait on that is not also the thing under test.
+       */
+      await win.waitForTimeout(1000);
       writeFileSync(join(root, 'src-moved', 'code.txt'), 'CHANGED-WHILE-AWAY\n');
 
       // Rectify the cause — exactly what the user does, and the point at which the issue says
@@ -164,7 +182,7 @@ test('an editor recovers when its folder is renamed away and back WHILE throng i
   }
 });
 
-test('an editor stranded across a restart recovers when the path is repaired', async () => {
+test('an editor stranded across a restart recovers when the path is repaired', { tag: ['@extended', '@editor'] }, async () => {
   test.setTimeout(120_000);
   const root = makeProject('throng-strand-restart-');
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-strand-data-'));
@@ -240,7 +258,7 @@ test('an editor stranded across a restart recovers when the path is repaired', a
   }
 });
 
-test('a "Reload from disk" action exists and re-reads the path on demand', async () => {
+test('a "Reload from disk" action exists and re-reads the path on demand', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject('throng-strand-reload-');
   try {
     await runApp(async (_app, win) => {

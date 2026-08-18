@@ -10,6 +10,20 @@
  * application does not yet do; the note at the foot of this file says what was measured and why no
  * test here claims it.
  *
+ *
+ * ══ AND WHAT NO LONGER IS (034 FR-045) ══
+ *
+ * The BOX itself — the cap on the way in, the counter appearing at ten remaining, the grapheme
+ * cut, the paste, the at-limit marking, no invalid marking, and a limit lowered under an open
+ * box — is `packages/ui/tests/component/name-limit-field.test.ts`, which asserts every one of
+ * them TWICE: once per call site, because the tab chip and the panel header render the same
+ * `NameLimitField`. That there are exactly two such call sites, both taking
+ * `settings.tabs.maxNameLength`, is `packages/ui/tests/unit/name-limit-call-sites.test.ts`.
+ *
+ * What is left here is what only a running application can say: a COMPUTED colour and weight
+ * either side of the limit against a real cascade (FR-049), a settings write reaching a box that
+ * is already on screen, that no notice is raised, and everything the STORE does with a name.
+
  * ══ HOW THE LIMIT IS CHANGED, AND WHY THE WAITS ARE HONEST ══
  *
  * The limit is a setting, so these tests write `settings.json` in the run's own config root and let
@@ -39,7 +53,6 @@ import {
   createProject as newProject,
   seedDatabase,
   cleanupTemp,
-  firstPanelId,
   settle,
   commitTabRename,
   type OpenApp,
@@ -50,7 +63,6 @@ import {
   tabIdOf,
   startTabRename,
   tabRenameCounter,
-  panelRenameCounter,
   counterText,
   awaitFieldLimit,
   counterStyle,
@@ -131,8 +143,6 @@ const name = (n: number): string =>
  * composition is the thing under test. A pasted character would be re-normalised or silently eaten
  * by the next editor to touch this file, and the test would then quietly measure something else.
  */
-const ZWJ = String.fromCodePoint(0x200d);
-const FAMILY = [0x1f468, 0x1f469, 0x1f467].map((cp) => String.fromCodePoint(cp)).join(ZWJ);
 
 /** The stored layout for a project, read WITHOUT disturbing the daemon that owns the file. */
 function storedLayout(projectName: string): string | null {
@@ -167,7 +177,7 @@ async function expectStored(projectName: string, needle: string, why: string): P
 
 // ── C1–C3, C6: the counter ────────────────────────────────────────────────────────────────────
 
-test('T078 — the field stops at the limit; the counter shows within ten of it and is not an error', async () => {
+test('T078 — the field stops at the limit; the counter shows within ten of it and is not an error', { tag: ['@extended', '@window'] }, async () => {
   const win = shared.win;
   await project('Counter');
   const tab = await onlyTabId(win);
@@ -177,21 +187,14 @@ test('T078 — the field stops at the limit; the counter shows within ten of it 
   const counter = tabRenameCounter(win, tab);
   await awaitFieldLimit(input, counter, 30);
 
-  // C1 — hidden while the name is more than ten from the limit. Nineteen is eleven away.
-  await input.fill(name(19));
-  await expect(counter, 'C1: eleven characters from the limit, so no counter').toHaveCount(0);
-
   // C2 — from ten remaining onwards, used against total.
   await input.fill(name(20));
   await expect(counter, 'C2: the counter appears at ten remaining').toHaveText('20/30');
-  await expect(counter).toHaveAttribute('data-at-limit', 'false');
   const approaching = await counterStyle(counter);
 
   // The field STOPS at the limit: forty characters offered, thirty accepted, cut where the limit is.
   await input.fill(name(40));
-  expect(await input.inputValue(), 'the field caps what it accepts').toBe(name(30));
   await expect(counter, 'C2: at-limit reads used === total').toHaveText('30/30');
-  await expect(counter).toHaveAttribute('data-at-limit', 'true');
 
   /*
    * C3 — NOT an error state.
@@ -205,7 +208,6 @@ test('T078 — the field stops at the limit; the counter shows within ten of it 
     approaching.color,
   );
   expect(atLimit.fontWeight, 'C3: nor re-weight it').toBe(approaching.fontWeight);
-  await expect(input, 'C3: the field is not marked invalid').not.toHaveAttribute('aria-invalid', /.*/);
   /*
    * Counted as CHILDREN OF THE NOTICE LIST, not by a `notice-` test-id prefix.
    *
@@ -220,117 +222,47 @@ test('T078 — the field stops at the limit; the counter shows within ten of it 
     'C3: no notice is raised',
   ).toHaveCount(0);
 
-  // C3 — and the commit is not blocked.
+  // Closes the box, and reads the title as the sync point for it having closed. The CLAIM that
+  // a commit at the limit is not blocked is name-limit-field.test.ts:182 (`onCommit` fires with
+  // the cut value); the rendered round trip through the store is T081, below, on this widget.
   await input.press('Enter');
   await expect(win.getByTestId(`tab-title-${tab}`)).toHaveText(name(30));
 });
 
-test('T078b — at a limit of ten the counter shows from the first character, and ten emoji fit', async () => {
-  const win = shared.win;
-  await project('Ten');
-  const tab = await onlyTabId(win);
-  writeTabSettings(cfgRoot, { maxNameLength: 10 });
+/*
+ * MOVED to `packages/ui/tests/component/name-limit-field.test.ts` and
+ * `packages/ui/tests/unit/name-limit-call-sites.test.ts` (034 FR-045) — three tests.
+ *
+ *   T078b — the counter from the first character at a limit of ten, and ten ZWJ families fitting
+ *   T079  — FR-036, a paste longer than the room left inserts as much as fits
+ *   T080  — a panel rename behaves identically to a tab rename
+ *
+ * T080 IS THE INTERESTING ONE. It was a second journey through a second surface to assert that two
+ * boxes behave the same. They are the SAME COMPONENT — `NameLimitField`, behind both `tab-group.tsx`
+ * and `panel-placeholder.tsx` — so the component test runs its whole behavioural table twice under
+ * `describe.each`, once with each call site’s real prop set, and then compares the two readings to
+ * each other directly. Parity stops being a journey and becomes structural. The source guard adds
+ * the half no render can see: exactly two call sites exist, and both pass
+ * `settings.tabs.maxNameLength`.
+ *
+ * The grapheme arithmetic underneath was already proved in `packages/core/tests/unit/grapheme.test.ts`
+ * down to the ZWJ-family example, including "never reports a count the field would refuse".
+ *
+ * Red-proved. The discriminating mutation is worth naming because it is the whole point of the
+ * feature: replacing the grapheme truncation with `.slice(0, limit)` — counting CODE UNITS instead
+ * of clusters — reddens 2, while every ASCII assertion in the file still passes. That is the
+ * difference the emoji case exists to catch. It had to be anchored on the whole `onChange={…}`
+ * attribute: `truncateGraphemes(` appears THREE times in that file, and a bare find/replace mutates
+ * the mount initialiser and reports a false "not coupled".
+ *
+ * WHAT STAYS: T078 and T082 keep their launches, because each holds a claim jsdom structurally
+ * cannot make — T078 compares the counter’s colour and font-weight against a sibling (a real,
+ * inherited cascade, 034 FR-049), and T082 polls a live `writeTabSettings` through to the open box,
+ * which is the setting reaching a field that is ALREADY on screen. And the four persistence tests
+ * below, which relaunch or write a layout, stay untouched.
+ */
 
-  const input = await startTabRename(win, tab);
-  const counter = tabRenameCounter(win, tab);
-  await awaitFieldLimit(input, counter, 10);
-
-  /*
-   * C6 — at a limit of 10 every character is within ten of the end, so the counter is visible from
-   * the first one. Correct, not a bug: the approach threshold is itself ten.
-   */
-  await input.fill('x');
-  await expect(
-    counter,
-    'C6: at a limit of ten the counter is visible from the first character',
-  ).toHaveText('1/10');
-
-  /*
-   * N1/N2 in the APP, which is the only place they can go wrong for the user.
-   *
-   * Twelve ZWJ families are offered at a limit of ten. If the cap counted UTF-16 code units the
-   * field would hold one family and a fragment of a second; if it cut mid-cluster the value would
-   * end in a lone joiner or half a person. Exactly ten whole families is the only value that is
-   * both within the limit and unbroken — and the counter must agree with the field (C4).
-   */
-  await input.fill(FAMILY.repeat(12));
-  expect(await input.inputValue(), 'ten whole families — cut on a cluster boundary').toBe(
-    FAMILY.repeat(10),
-  );
-  expect(FAMILY.length, 'a ZWJ family is eight code units, so this is not counting characters').toBe(8);
-  await expect(counter, 'C4: the counter counts what the field permits').toHaveText('10/10');
-  await expect(counter).toHaveAttribute('data-at-limit', 'true');
-
-  await input.press('Enter');
-  await expect(win.getByTestId(`tab-title-${tab}`)).toHaveText(FAMILY.repeat(10));
-});
-
-test('T079 — a paste longer than the room left inserts as much as fits (FR-036, FR-036a)', async () => {
-  const win = shared.win;
-  await project('Paste');
-  const tab = await onlyTabId(win);
-  writeTabSettings(cfgRoot, { maxNameLength: 16 });
-
-  const input = await startTabRename(win, tab);
-  const counter = tabRenameCounter(win, tab);
-
-  await awaitFieldLimit(input, counter, 16);
-
-  // Eight of the sixteen used, so eight remain — inside the counter's ten-remaining threshold, and
-  // far short of what the paste below offers.
-  await input.fill(name(8));
-  await expect(counter, 'eight used, eight to go').toHaveText('8/16');
-
-  /*
-   * `insertText`, not Ctrl+V.
-   *
-   * Electron's clipboard does not work under this harness — text written to it reads back empty
-   * (harness.ts, THRONG_E2E_CLIPBOARD) — so a real paste would insert nothing and this test would
-   * pass by asserting that nothing arrived. `insertText` produces the same single bulk insertion at
-   * the caret, with the same `input` event, which is precisely what the field's cap sees.
-   */
-  await input.click();
-  await win.keyboard.press('End');
-  await win.keyboard.insertText(name(60));
-
-  expect(
-    await input.inputValue(),
-    'FR-036: as much as fits is inserted, rather than the paste being refused',
-  ).toBe((name(8) + name(60)).slice(0, 16));
-  await expect(counter, 'FR-036a: the counter reads at-limit, so the user can see it was cut').toHaveText(
-    '16/16',
-  );
-  await expect(counter).toHaveAttribute('data-at-limit', 'true');
-});
-
-test('T080 — a panel rename behaves identically: one setting, one counter, one behaviour (FR-035g)', async () => {
-  const win = shared.win;
-  await project('PanelCap');
-  const panelId = await firstPanelId(win);
-  writeTabSettings(cfgRoot, { maxNameLength: 30 });
-
-  await win.getByTestId(`panel-handle-${panelId}`).dblclick();
-  const input = win.getByTestId(`panel-rename-input-${panelId}`);
-  await expect(input).toBeVisible();
-  const counter = panelRenameCounter(win, panelId);
-  await awaitFieldLimit(input, counter, 30);
-
-  await input.fill(name(19));
-  await expect(counter, 'C1 on a panel: eleven from the limit, so nothing shown').toHaveCount(0);
-
-  await input.fill(name(40));
-  await expect(
-    counter,
-    'the panel counter reads the SAME limit the tab counter does',
-  ).toHaveText('30/30');
-  await expect(counter).toHaveAttribute('data-at-limit', 'true');
-  expect(await input.inputValue(), 'the panel field caps at the same limit').toBe(name(30));
-
-  await input.press('Enter');
-  await expect(win.getByTestId(`panel-title-${panelId}`)).toHaveText(name(30));
-});
-
-test('T081 — committing a rename applies the limit, so an over-long name cannot be reintroduced (FR-035f)', async () => {
+test('T081 — committing a rename applies the limit, so an over-long name cannot be reintroduced (FR-035f)', { tag: ['@extended', '@window'] }, async () => {
   const win = shared.win;
   const projectName = await project('Reintro');
   const tab = await onlyTabId(win);
@@ -394,7 +326,7 @@ test('T081 — committing a rename applies the limit, so an over-long name canno
   ).toBe(false);
 });
 
-test('T082 — lowering the limit mid-rename updates the counter immediately (C5)', async () => {
+test('T082 — lowering the limit mid-rename updates the counter immediately (C5)', { tag: ['@extended', '@window'] }, async () => {
   const win = shared.win;
   await project('Live');
   const tab = await onlyTabId(win);
@@ -416,15 +348,11 @@ test('T082 — lowering the limit mid-rename updates the counter immediately (C5
       message: 'C5: the counter tracks the limit changing while the field is open',
     })
     .toBe('30/30');
-  expect(
-    await input.inputValue(),
-    'C5: what is already typed is brought within the new limit, or the commit would silently cut it',
-  ).toBe(name(30));
 });
 
 // ── NP1–NP4: what the limit does, and does not, do to what is stored ──────────────────────────
 
-test('T083 — a persisted layout holding a 300-character name loads, shortened and marked (NP4)', async () => {
+test('T083 — a persisted layout holding a 300-character name loads, shortened and marked (NP4)', { tag: ['@extended', '@window'] }, async () => {
   /*
    * Its OWN app, because the state that matters is seeded BEFORE launch. A 300-character name
    * cannot be produced through the interface at all — the limit's own ceiling is 128 — so the only
@@ -516,7 +444,7 @@ test('T083 — a persisted layout holding a 300-character name loads, shortened 
   }
 });
 
-test('T084a — lower then raise the limit with nothing else changed, and the full names return (NP1, NP3)', async () => {
+test('T084a — lower then raise the limit with nothing else changed, and the full names return (NP1, NP3)', { tag: ['@extended', '@window'] }, async () => {
   const win = shared.win;
   const projectName = await project('Reversible');
   const tab = await onlyTabId(win);
@@ -578,7 +506,7 @@ test('T084a — lower then raise the limit with nothing else changed, and the fu
  * into both save paths in `workspace-store.tsx`), so the guarantee is real and testable — and the
  * test below is the one the old comment said could not be written yet.
  */
-test('T084b — an ordinary layout save at the lower limit makes the shortening permanent (NP2)', async () => {
+test('T084b — an ordinary layout save at the lower limit makes the shortening permanent (NP2)', { tag: ['@extended', '@window'] }, async () => {
   const win = shared.win;
   const projectName = await project('Persists');
   const tab = await onlyTabId(win);
@@ -626,5 +554,3 @@ test('T084b — an ordinary layout save at the lower limit makes the shortening 
     'NP2: the shortening survived the raise, because a save had already made it the stored name',
   ).toHaveText(name(16));
 });
-
-

@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
-import { runApp, createProject } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp } from './harness.js';
 
 // FR-040: the OS window title shows the active project name + the active Tab · Panel
 // context (the same `activeContextLabel` the status bar uses), NO path and NO
@@ -11,28 +10,23 @@ import { skipIfElevated } from './admin.js';
 const title = (app: ElectronApplication): Promise<string> =>
   app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle());
 
-test('window title shows active project · Tab · Panel (no path, no totals); status bar keeps the path', async () => {
-  skipIfElevated(); // asserts no [ADMIN] marker; on an elevated runner the marker correctly appears
-  await runApp(async (app, win) => {
-    await createProject(win, 'Titler', 'C:/code/titler');
+/*
+ * DELETED (034 FR-045): "window title shows active project · Tab · Panel (no path, no totals);
+ * status bar keeps the path".
+ *
+ * A strict subset of `status-bar-deduped.e2e.ts` — "the status bar keeps only the project root
+ * path; the title bar keeps the identity". That test polls the same OS title for the same exact
+ * string, reads the same `status-project-path`, and makes the same `not.toContainText(project)`
+ * assertion on the status bar. The three negative assertions here — no path, no totals, no
+ * [ADMIN] — are all implied by the exact-equality on the title that both tests already make.
+ *
+ * The elevated test below is NOT a duplicate, and the difference is worth stating because it
+ * nearly went with it: it asserts the OS/taskbar title carries [ADMIN], which is `TitleManager`
+ * in main. `status-bar-deduped.e2e.ts` asserts the IN-APP title bar carries it. Two surfaces, one
+ * marker, and only one of them is what a user sees in the taskbar.
+ */
 
-    // Title bar (021 suffix form, FR-033): "Titler · Tab 1 · Panel 1 — throng" — no path, no totals,
-    // no admin, brand LAST.
-    await expect.poll(() => title(app), { timeout: 5000 }).toBe('Titler · Tab 1 · Panel 1 — throng');
-    const t = await title(app);
-    expect(t).not.toContain('(C:/code/titler)'); // path removed
-    expect(t).not.toMatch(/\d+ (projects|tabs|panels)/); // totals removed
-    expect(t).not.toContain('[ADMIN]'); // not elevated here
-
-    // Status bar still shows the project path in brackets — and, since 026 / #166, nothing else.
-    // The project NAME assertion that used to sit here was removed with the duplicated identity
-    // text; the title bar above is now its only home, which the assertions above already prove.
-    await expect(win.getByTestId('status-project-path')).toHaveText('(C:/code/titler)');
-    await expect(win.getByTestId('status-bar')).not.toContainText('Titler');
-  });
-});
-
-test('window title gains a [ADMIN] marker when elevated', async () => {
+test('window title gains a [ADMIN] marker when elevated', { tag: ['@extended', '@window'] }, async () => {
   await runApp(
     async (app) => {
       await expect.poll(() => title(app), { timeout: 5000 }).toContain('[ADMIN]');

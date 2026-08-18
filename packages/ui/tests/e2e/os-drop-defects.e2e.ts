@@ -2,7 +2,15 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { addPanels, createProject, runApp, cleanupTemp} from './harness.js';
+import {
+  addPanels,
+  createProject,
+  openApp,
+  cleanupTemp,
+  stayedAbsent,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
 
 /**
  * 018 follow-up — the drop defects found by actually dragging files at the application.
@@ -52,11 +60,58 @@ async function domDrop(win: Page, selector: string, name: string, content: strin
   );
 }
 
-test('a dropped file is NEVER pasted into the editor as text (the content-injection bug)', async () => {
-  const projectRoot = makeProjectFolder();
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-027) — 2 launches -> 1.
+ *
+ * Nothing is seeded before launch. Two temp roots, and the two projects are now named APART
+ * (both were "Demo") so an accumulating sidebar cannot make `.project-item` ambiguous — the row
+ * renders its ROOT PATH beside the name and Playwright's hasText is a substring match.
+ *
+ * The leftover state, named: test 1 ends with a.txt open in an editor whose content it has just
+ * asserted is unchanged, and test 2 makes its own project. `editorPanelId` reads
+ * `[data-testid^="editor-"]` WINDOW-WIDE and still sees only test 2's panels, because an
+ * inactive project's workspace is not rendered at all. The two a.txt paths differ, so the
+ * one-buffer registry (keyed on the ABSOLUTE path) cannot collide either.
+ *
+ * The roots are deleted in `afterAll`, NOT per test.
+ */
+const ownedRoots: string[] = [];
+/** Register a project root for removal in `afterAll`, once the shared app has closed. */
+function own(dir: string): string {
+  ownedRoots.push(dir);
+  return dir;
+}
+
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+
+test.afterAll(async () => {
+  await shared?.close();
+  for (const dir of ownedRoots.splice(0)) cleanupTemp(dir);
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
+
+test('a dropped file is NEVER pasted into the editor as text (the content-injection bug)', { tag: ['@extended', '@explorer'] }, async () => {
+  const projectRoot = own(makeProjectFolder());
   try {
     await runApp(async (_app, win) => {
-      await createProject(win, 'Demo', projectRoot);
+      await createProject(win, 'DropInject', projectRoot);
       const tree = win.getByTestId('file-explorer-tree');
       await expect(tree).toBeVisible();
       await tree.getByText('a.txt', { exact: true }).click();
@@ -70,20 +125,34 @@ test('a dropped file is NEVER pasted into the editor as text (the content-inject
       // notice appeared, correctly, on top of the damage it had failed to prevent.
       await domDrop(win, `[data-testid="editor-${panelId}"] .cm-content`, 'evil.txt', 'CONTENT-INJECTED');
 
-      await win.waitForTimeout(600);
-      await expect(win.getByTestId(`editor-${panelId}`)).not.toContainText('CONTENT-INJECTED');
+      // The fence: `evil.txt` is a synthetic in-memory File with no real OS path, so once
+      // CodeMirror's own handler above hands the (still-bubbling) event off, `PanelDropTarget`
+      // resolves zero paths and raises its own "no file on disk" refusal — the proof that the
+      // whole drop has finished being decided, one way or the other.
+      await stayedAbsent(
+        () => expect(win.getByTestId('os-drop-error-no-path')).toBeVisible(),
+        async () =>
+          ((await win.getByTestId(`editor-${panelId}`).textContent()) ?? '').includes(
+            'CONTENT-INJECTED',
+          )
+            ? 1
+            : 0,
+        "CONTENT-INJECTED text landing in the editor via CodeMirror's own drop handler",
+      );
       await expect(win.getByTestId(`editor-${panelId}`)).toContainText('alpha');
     });
   } finally {
-    cleanupTemp(projectRoot);
+    // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would
+    // remove a folder the explorer is still watching — the class dcdcb46 reverted three
+    // conversions for.
   }
 });
 
-test('a drop opens the file in the panel UNDER THE CURSOR, not the active one', async () => {
-  const projectRoot = makeProjectFolder();
+test('a drop opens the file in the panel UNDER THE CURSOR, not the active one', { tag: ['@extended', '@explorer'] }, async () => {
+  const projectRoot = own(makeProjectFolder());
   try {
     await runApp(async (_app, win) => {
-      await createProject(win, 'Demo', projectRoot);
+      await createProject(win, 'DropRouting', projectRoot);
       const tree = win.getByTestId('file-explorer-tree');
       await expect(tree).toBeVisible();
 
@@ -133,6 +202,8 @@ test('a drop opens the file in the panel UNDER THE CURSOR, not the active one', 
       await expect(win.getByTestId(`editor-${first}`)).not.toContainText('beta');
     });
   } finally {
-    cleanupTemp(projectRoot);
+    // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would
+    // remove a folder the explorer is still watching — the class dcdcb46 reverted three
+    // conversions for.
   }
 });

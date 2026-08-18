@@ -19,7 +19,7 @@ function treeDrop(win: Page, panelId: string, paths: string[]): Promise<void> {
   );
 }
 
-test('dropping tree paths onto a terminal inserts them at the prompt, quoted and space-joined (#155)', async () => {
+test('dropping tree paths onto a terminal inserts them at the prompt, quoted and space-joined (#155)', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-tdrop-'));
   try {
     await runApp(async (_app, win) => {

@@ -50,9 +50,15 @@ describe('every icon in the preferences window is themeable', () => {
   it('the toolbar reset affordances use the restore tokens feature 014 already ships', () => {
     // `retry` = restore ONE thing; `restoreAll` = restore everything. Reusing 014's distinction
     // keeps the two toolbar reset controls tellable apart at a glance.
-    const shell = read('preferences-app.tsx');
-    expect(shell).toContain('token="restoreAll"');
-    expect(shell).toContain('token="retry"');
+    //
+    // Reads `preferences-toolbar.tsx`, which 034 extracted from the shell and which now draws these
+    // two controls. It briefly read the whole DIRECTORY instead, on the reasoning that a guard
+    // should not break when markup moves between sibling files — and that made it VACUOUS, because
+    // `restoreAll` and `retry` both appear on theme rows elsewhere in this folder. The toolbar could
+    // have lost the token entirely with the guard still green. Naming the file is the point of it.
+    const toolbar = read('preferences-toolbar.tsx');
+    expect(toolbar).toContain('token="restoreAll"');
+    expect(toolbar).toContain('token="retry"');
   });
 
   it('the three row actions use three DISTINCT tokens', () => {
@@ -89,7 +95,8 @@ describe('every icon in the preferences window is themeable', () => {
   });
 
   it('the UI⇄JSON mode toggle renders theme tokens, not the text "{ }" / "UI"', () => {
-    const src = read('preferences-app.tsx');
+    // Also `preferences-toolbar.tsx` since 034 — the toggle moved there with the rest of the bar.
+    const src = read('preferences-toolbar.tsx');
     expect(src).toContain("'editJson'");
     expect(src).toContain("'editVisual'");
     expect(src).not.toContain("{mode === 'ui' ? '{ }' : 'UI'}");

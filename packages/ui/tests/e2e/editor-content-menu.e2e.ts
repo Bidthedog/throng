@@ -56,7 +56,6 @@ let projectSeq = 0;
 const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
-
 /**
  * US2 — the editor CONTENT context menu (016, FR-012/FR-012a/FR-012b · T060).
  *
@@ -95,7 +94,7 @@ const docText = (win: Page, pid: string): Promise<string> =>
 const line = (win: Page, pid: string, text: string) =>
   win.getByTestId(`editor-${pid}`).locator('.cm-line').filter({ hasText: text }).first();
 
-test('mouse-only cut and paste — no selection cuts the whole line (FR-012b)', async () => {
+test('mouse-only cut and paste — no selection cuts the whole line (FR-012b)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -121,7 +120,7 @@ test('mouse-only cut and paste — no selection cuts the whole line (FR-012b)', 
   }
 });
 
-test('right-clicking INSIDE a selection preserves it; outside collapses it (FR-012a)', async () => {
+test('right-clicking INSIDE a selection preserves it; outside collapses it (FR-012a)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -152,7 +151,7 @@ test('right-clicking INSIDE a selection preserves it; outside collapses it (FR-0
   }
 });
 
-test('right-clicking OUTSIDE a selection moves the caret there (FR-012a)', async () => {
+test('right-clicking OUTSIDE a selection moves the caret there (FR-012a)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -177,7 +176,7 @@ test('right-clicking OUTSIDE a selection moves the caret there (FR-012a)', async
   }
 });
 
-test('Undo from the content menu reaches the document authority (FR-026b)', async () => {
+test('Undo from the content menu reaches the document authority (FR-026b)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -201,7 +200,7 @@ test('Undo from the content menu reaches the document authority (FR-026b)', asyn
   }
 });
 
-test('the CONTENT menu is distinct from the panel-HEADER menu (FR-014)', async () => {
+test('the CONTENT menu is distinct from the panel-HEADER menu (FR-014)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -225,7 +224,7 @@ test('the CONTENT menu is distinct from the panel-HEADER menu (FR-014)', async (
   }
 });
 
-test('a KEYBOARD-opened menu keeps the selection — Cut takes the selected word, not the line', async () => {
+test('a KEYBOARD-opened menu keeps the selection — Cut takes the selected word, not the line', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -252,7 +251,7 @@ test('a KEYBOARD-opened menu keeps the selection — Cut takes the selected word
   }
 });
 
-test('the Set Language item names the current language, and picking one returns focus to the editor', async () => {
+test('the Set Language item names the current language, and picking one returns focus to the editor', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -289,19 +288,16 @@ test('the Set Language item names the current language, and picking one returns 
   }
 });
 
-test('“Set Language…” opens the SAME picker the status strip does (FR-010/FR-012)', async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Menu', root);
-      const pid = await openEditorWithFile(win);
-
-      await line(win, pid, 'alpha').click({ button: 'right' });
-      await win.getByTestId('menu-item-Set Language…').click();
-
-      await expect(win.getByTestId(`language-picker-${pid}`)).toBeVisible({ timeout: 5000 });
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * DELETED (034 FR-045): "“Set Language…” opens the SAME picker the status strip does".
+ *
+ * A strict subset of the test directly above it, IN THIS FILE. Both open the same project, open the
+ * same editor on the same file, right-click the same line, click the same `menu-item-Set Language…`
+ * and assert the same `language-picker-${pid}` is visible. The one above then goes on to check the
+ * item names the CURRENT language, that choosing returns the caret to the document, and that the
+ * item afterwards names the language that was chosen.
+ *
+ * So the deleted test asserted nothing its neighbour did not already assert on the way past — and
+ * cost a whole Electron launch to do it. Its title claims a comparison with the status strip that
+ * it never actually made: it never opened the status strip.
+ */

@@ -9,7 +9,7 @@ import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 // Consolas monospace). This E2E confirms the terminal font applies (rather than
 // silently assuming terminals cannot be styled).
 
-test('a terminal renders in the themeable monospace font (terminals are stylable)', async () => {
+test('a terminal renders in the themeable monospace font (terminals are stylable)', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-tf-'));
   try {
     await runApp(async (_app, win) => {

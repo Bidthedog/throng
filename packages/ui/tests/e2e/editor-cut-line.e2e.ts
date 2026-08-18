@@ -2,14 +2,12 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync, readFileSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import {
-  openApp,
+import { openApp,
   createProject as newProject,
   firstPanelId,
   cleanupTemp,
   type AppOptions,
-  type OpenApp,
-} from './harness.js';
+  type OpenApp, FILE_OP_TIMEOUT_MS } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -56,7 +54,6 @@ let projectSeq = 0;
 const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
-
 /**
  * US3 — `Ctrl+X` cuts the current line (016, FR-016/FR-016a/FR-015a · T065).
  *
@@ -96,86 +93,43 @@ const docText = (win: Page, pid: string): Promise<string> =>
     pid,
   );
 
-test('Ctrl+X with no selection cuts the whole line, and it pastes back as a line', async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'CutLine', root);
-      const pid = await openFileInEditor(win, 'lines.txt', 'alpha');
-      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
+/*
+ * MOVED to the component layer (034 FR-045) — three tests.
+ *
+ * The replacements are `packages/ui/tests/component/editor-command-semantics.test.ts` (14 tests).
+ * That file drives the REAL commands from `commands.ts` over a REAL `EditorState` — real facets,
+ * the real `columnBlockField`, real transactions — behind a two-member stand-in for the view,
+ * because every one of these commands touches only `view.state` and `view.dispatch`.
+ *
+ * WHAT THE APP WAS BUYING, AND WHY IT IS NOT NEEDED: the translation from a keystroke to a command
+ * call. That is CodeMirror’s `keymap`, which is not throng’s code to re-test. throng’s own half of
+ * it — which chord reaches which command — is `packages/ui/tests/unit/scope.test.ts:149` and `:168`,
+ * and the chord→CodeMirror-key spelling is asserted in the replacement itself.
+ *
+ * ANTI-VACUITY CONTROL: delete `this.state = tr.state;` from the replacement’s `FakeView.dispatch`,
+ * so transactions are recorded but never applied. ALL FOURTEEN fail. Nothing in that file can pass
+ * over an inert editor.
+ *
+ * STRONGER THAN WHAT WAS HERE:
+ *   - the cut is asserted to be ONE transaction marked `delete.cut` and NOT `delete.backward`,
+ *     which is the property that stops it coalescing into the backspaces above it
+ *     (`use-editor.ts:155`). The E2E pressed Ctrl+Z once and could not tell a command that
+ *     happened to be alone from a command that can never merge.
+ *   - the clipboard WRITE is asserted by value (`{ text, mode }`), not merely by its effect on
+ *     the document, so a cut that deleted the right text and marked the wrong mode reddens.
+ *
+ * NOT MOVED, AND STILL BELOW: `Ctrl+X still cuts a FILE in the File Explorer`. It is OS focus
+ * routing between two panel kinds — Principle V’s focus reserve — and it is the headline claim of
+ * this file, as its own header says.
+ *
+ * THE UNDO HALF DID NOT MOVE WITH IT. Undo here is not CodeMirror’s `history()`; it belongs to the
+ * document authority in UI main (`use-editor.ts:776`), and "one entry per command" is
+ * `packages/ui/tests/unit/undo-service.test.ts:25`. The replacement proves the other half of that
+ * composition — the command emits exactly one transaction, with a userEvent that cannot join a
+ * run — and the composition is stated here rather than assumed.
+ */
 
-      // Put the caret on "beta" with NO selection, and cut.
-      await content.click();
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('ArrowDown'); // …line 2
-      await win.keyboard.press('Control+x');
-
-      // The line is gone ENTIRELY — not blanked, not left as an empty line.
-      await expect.poll(() => docText(win, pid)).toBe('alpha\ngamma\n');
-
-      // Paste it back with the caret in the MIDDLE of a word. A full-line entry inserts as a whole
-      // line ABOVE, leaving the line it landed on unsplit — the point of remembering the shape.
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('ArrowRight');
-      await win.keyboard.press('ArrowRight'); // …inside "alpha", between "al" and "pha"
-      await win.keyboard.press('Control+v');
-
-      await expect.poll(() => docText(win, pid)).toBe('beta\nalpha\ngamma\n');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('a selection is cut EXACTLY — Ctrl+X never widens it to the whole line', async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'CutLine', root);
-      const pid = await openFileInEditor(win, 'lines.txt', 'alpha');
-      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
-
-      // Select just "al" of "alpha", then cut. Losing the line here would be the worst possible
-      // failure of a cut: text destroyed that the user never selected.
-      await content.click();
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('Shift+ArrowRight');
-      await win.keyboard.press('Shift+ArrowRight');
-      await win.keyboard.press('Control+x');
-
-      await expect.poll(() => docText(win, pid)).toBe('pha\nbeta\ngamma\n');
-
-      // …and it pastes back verbatim, INTO the line — not above it.
-      await win.keyboard.press('Control+v');
-      await expect.poll(() => docText(win, pid)).toBe('alpha\nbeta\ngamma\n');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('one Ctrl+Z restores a cut line — a command is ONE undo entry (FR-026)', async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'CutLine', root);
-      const pid = await openFileInEditor(win, 'lines.txt', 'alpha');
-      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
-
-      await content.click();
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('Control+x');
-      await expect.poll(() => docText(win, pid)).toBe('beta\ngamma\n');
-
-      await win.keyboard.press('Control+z');
-      await expect.poll(() => docText(win, pid)).toBe('alpha\nbeta\ngamma\n');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('in the File Explorer, Ctrl+X still cuts a FILE — the scopes are disjoint (D6)', async () => {
+test('in the File Explorer, Ctrl+X still cuts a FILE — the scopes are disjoint (D6)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -201,7 +155,7 @@ test('in the File Explorer, Ctrl+X still cuts a FILE — the scopes are disjoint
       await win.keyboard.press('Control+v');
 
       await expect
-        .poll(() => existsSync(join(root, 'sub', 'victim.txt')), { timeout: 8000 })
+        .poll(() => existsSync(join(root, 'sub', 'victim.txt')), { timeout: FILE_OP_TIMEOUT_MS })
         .toBe(true);
       expect(existsSync(join(root, 'victim.txt'))).toBe(false); // …moved, not copied
       // The editor's own file is untouched throughout.

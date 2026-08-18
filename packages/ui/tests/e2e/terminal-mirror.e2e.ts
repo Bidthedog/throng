@@ -11,7 +11,7 @@ import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 // both. (panel-sync.e2e proves both windows show the terminal; this proves the shared
 // session — that keystrokes in one view surface in the other.)
 
-test('a synced Terminal Panel mirrors one session: input in one view appears in both', async () => {
+test('a synced Terminal Panel mirrors one session: input in one view appears in both', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-mirror-'));
   try {
     await runApp(async (app, win) => {
@@ -49,8 +49,14 @@ test('a synced Terminal Panel mirrors one session: input in one view appears in 
       await expect(childTerm).toContainText('MIRROR_FROM_CHILD_99', { timeout: 15000 });
       await expect(mainTerm).toContainText('MIRROR_FROM_CHILD_99', { timeout: 15000 });
 
+      /*
+       * Terminate the session before teardown so the app-close warning can't block it. The kill IPC
+       * resolving only means the daemon accepted the request — the Panel reverting to its
+       * type-select form (the same observable `terminal-revert.e2e.ts` and friends assert on) is the
+       * renderer's own confirmation that the session is actually gone.
+       */
       await win.evaluate((id) => window.throng?.terminal?.kill?.(id), a);
-      await win.waitForTimeout(1200);
+      await expect(win.getByTestId(`panel-type-form-${a}`)).toBeVisible({ timeout: 15000 });
     });
   } finally {
     cleanupTemp(root);

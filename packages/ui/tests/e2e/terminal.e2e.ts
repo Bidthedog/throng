@@ -9,7 +9,7 @@ import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 // starts a live shell hosted by the daemon, attached inline (xterm.js), rooted at
 // the project. The terminal echoes input and reports the project root as its cwd.
 
-test('confirms Terminal → a live inline shell echoes input and starts at the project root', async () => {
+test('confirms Terminal → a live inline shell echoes input and starts at the project root', { tag: ['@core', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-term-live-'));
   try {
     await runApp(async (_app, win) => {

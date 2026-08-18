@@ -3,7 +3,7 @@ import { mkdtempSync, renameSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import Database from 'better-sqlite3';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp } from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp, stayedAbsent } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /**
@@ -122,7 +122,7 @@ async function renameWhenReleased(from: string, to: string): Promise<void> {
   expect(existsSync(to)).toBe(true);
 }
 
-test('a terminal that fails to launch keeps its configuration and comes back once the root returns', async () => {
+test('a terminal that fails to launch keeps its configuration and comes back once the root returns', { tag: ['@extended', '@terminal'] }, async () => {
   // An elevated daemon routes terminals through the de-elevated agent — a different process tree
   // from the one these assertions describe. Same guard as `terminal-persistence.e2e.ts:39`.
   skipIfElevated();
@@ -165,17 +165,6 @@ test('a terminal that fails to launch keeps its configuration and comes back onc
         await enterProject(win, 'LaunchFail');
         const pid = await firstPanelId(win);
 
-        /*
-         * A fixed wait, with a reason: the assertion below is a NEGATIVE.
-         *
-         * "The type-selection form did not appear" is true before the attach has even been tried, so
-         * checking it early would pass against a panel that was about to revert. The attach failure
-         * fans out through the daemon, the RPC and the panel, and none of those emits an event
-         * meaning "and it has finished failing" — which is when a wait with a stated reason beats a
-         * locator that cannot tell "not yet" from "never".
-         */
-        await win.waitForTimeout(8000);
-
         /**
          * RED #1 — the panel must not revert to the type-selection form.
          *
@@ -183,8 +172,19 @@ test('a terminal that fails to launch keeps its configuration and comes back onc
          * launch never started a shell, so there is no "the terminal finished" to report; what the
          * reversion actually communicates is "your panel configuration has been deleted because a
          * folder was briefly unavailable".
+         *
+         * FENCED rather than slept: the attach failure fans out through the daemon, the RPC and the
+         * panel, and none of those alone emits an event meaning "and it has finished failing" — but
+         * RED #2's banner appearing IS that event. The two are mutually exclusive outcomes of the
+         * SAME attach-failure decision (revert to the form, or show the failure banner), so once the
+         * banner is visible the revert path did not fire and the form's absence means something.
          */
-        await expect(win.getByTestId(`panel-type-form-${pid}`)).toHaveCount(0, { timeout: 5000 });
+        const banner = win.getByTestId(`panel-failure-${pid}`);
+        await stayedAbsent(
+          () => expect(banner).toBeVisible({ timeout: 20_000 }),
+          () => win.getByTestId(`panel-type-form-${pid}`).count(),
+          'the panel-type-selection form reappearing after a launch failure',
+        );
 
         /**
          * RED #2 — the failure is shown WHERE THE TERMINAL IS, with a way to try again.
@@ -201,8 +201,6 @@ test('a terminal that fails to launch keeps its configuration and comes back onc
          * would go on passing here while addressing a different state of a different kind — the
          * failure would look fixed and would not be.
          */
-        const banner = win.getByTestId(`panel-failure-${pid}`);
-        await expect(banner).toBeVisible({ timeout: 5000 });
         await expect(banner.getByRole('button', { name: 'Try again', exact: true })).toBeVisible();
       },
       { dataDir, userDataDir },
@@ -243,7 +241,20 @@ test('a terminal that fails to launch keeps its configuration and comes back onc
         // Kill any live session so the app-close warning does not stall teardown. Guarded, because
         // on master there is no session here at all — the panel came back as an empty form.
         await win.evaluate((id) => window.throng?.terminal?.kill?.(id), pid);
-        await win.waitForTimeout(1200);
+        // Poll the daemon's own session list for the kill to have actually landed, rather than
+        // guessing how long it takes — an unfinished kill is exactly what leaves a live session
+        // for the app-close warning to catch, stalling teardown.
+        await expect
+          .poll(
+            async () => {
+              const res = (await win.evaluate(() => window.throng?.terminal?.list?.())) as
+                | { sessions?: { panelId: string; status: string }[] }
+                | undefined;
+              return res?.sessions?.some((s) => s.panelId === pid && s.status === 'running') ?? false;
+            },
+            { timeout: 10_000, message: `terminal session for ${pid} never reported stopped after kill()` },
+          )
+          .toBe(false);
       },
       { dataDir, userDataDir },
     );

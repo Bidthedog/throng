@@ -149,7 +149,7 @@ async function focusContent(win: Page, panelId: string): Promise<void> {
   await expect(editor.locator('.cm-editor.cm-focused')).toBeVisible({ timeout: 10_000 });
 }
 
-test('Go To Line is listed in Preferences → Key Bindings, is rebindable, and after the rebind the NEW chord works while the OLD one stops (AS-10, SC-012, P1)', async () => {
+test('Go To Line is listed in Preferences → Key Bindings, is rebindable, and after the rebind the NEW chord works while the OLD one stops (AS-10, SC-012, P1)', { tag: ['@extended', '@editor'] }, async () => {
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-cfg-gotokb-'));
   const root = makeProject();
   try {

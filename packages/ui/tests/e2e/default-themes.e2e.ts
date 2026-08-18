@@ -3,7 +3,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, cleanupTemp, createProject, firstPanelId, settle } from './harness.js';
+import {
+  openApp,
+  cleanupTemp,
+  createProject,
+  firstPanelId,
+  settle,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+import { configRootSeeded, settleConfigRoot, snapshotConfigRoot, type ConfigRootSnapshot } from './helpers/config-snapshot.js';
+import { closePrefsWindow } from './helpers/prefs-window.js';
 
 /**
  * US7 (007 Phase E data, SC-007): a fresh install ships all 14 default themes plus
@@ -21,9 +31,68 @@ function freshCfgRoot(): string {
   cfgRoots.push(dir);
   return dir;
 }
-test.afterAll(() => {
+
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-010).
+ *
+ * Neither test seeds anything before launch — both called `freshCfgRoot()` with no arguments, so the
+ * isolated root was write ISOLATION between two tests, never pre-launch state. What they actually
+ * need is a config root that LOOKS untouched at the start of each test, and that is what
+ * `settleConfigRoot` gives without paying for a second Electron launch.
+ *
+ * ══ THE ORDER IS LOAD-BEARING ══
+ *
+ * The first test asserts the list a FRESH INSTALL ships — fifteen options, none deleted, none
+ * renamed. The second sweeps every one of those fifteen and leaves the last one active. So the fresh
+ * install test runs first, and the `afterEach` restore is what makes that still true if this file
+ * ever grows a third test between them.
+ *
+ * ══ AND THE PREFERENCES WINDOW MUST BE CLOSED BETWEEN THEM ══
+ *
+ * `openThemes` waits on `app.waitForEvent('window')`. throng allows exactly ONE preferences window,
+ * so clicking the cog while the first test's is still standing REUSES it and fires no event at all —
+ * the second test would then wait out its whole budget for something that cannot happen. Closing it
+ * also re-captures the on-entry snapshot Revert compares against (`helpers/prefs-window.ts`).
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let cfgRoot: string;
+let baseline: ConfigRootSnapshot;
+
+test.beforeAll(async () => {
+  cfgRoot = freshCfgRoot();
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
+  await settle(shared.win);
+  // Photograph the root only once first-run seeding has finished — settings, key bindings and every
+  // shipped theme. A partial snapshot would have every later restore DELETE whatever arrived late.
+  await expect.poll(() => configRootSeeded(cfgRoot), { timeout: 30_000 }).toBe(true);
+  baseline = snapshotConfigRoot(cfgRoot);
+});
+
+test.afterEach(async () => {
+  await closePrefsWindow(shared.app);
+  await settleConfigRoot(baseline);
+});
+
+test.afterAll(async () => {
+  await shared?.close();
   for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
+
+/**
+ * The shared app, in the shape `runApp` had. It REFUSES launch options rather than ignoring them: a
+ * swallowed config root does not fail, it makes a test pass for the wrong reason.
+ */
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error('this file shares one app; a test needing launch options must open its own');
+  }
+  return fn(shared.app, shared.win);
+};
 
 async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
   await win.getByTestId('title-bar-cog').click();
@@ -36,8 +105,7 @@ async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
   return prefs;
 }
 
-test('a fresh install lists all 14 default themes plus throng (15) and restores after delete', async () => {
-  const cfgRoot = freshCfgRoot();
+test('a fresh install lists all 14 default themes plus throng (15) and restores after delete', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -61,7 +129,6 @@ test('a fresh install lists all 14 default themes plus throng (15) and restores 
       await prefs.getByTestId('theme-confirm-yes').click();
       await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Matrix.json'))).toBe(true);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
@@ -138,9 +205,8 @@ async function bannerColours(win: Page, panelId: string): Promise<BannerColours>
   });
 }
 
-test('the shared failure banner takes its colours from every shipped theme, and carries none of its own', async () => {
+test('the shared failure banner takes its colours from every shipped theme, and carries none of its own', { tag: ['@extended', '@prefs'] }, async () => {
   test.setTimeout(300_000);
-  const cfgRoot = freshCfgRoot();
   const root = mkdtempSync(join(tmpdir(), 'throng-theme-banner-'));
   mkdirSync(join(root, 'src'));
   writeFileSync(join(root, 'src', 'code.txt'), 'ORIGINAL-CONTENT\n');
@@ -283,7 +349,6 @@ test('the shared failure banner takes its colours from every shipped theme, and 
           'the banner rendered identically under every theme — it is carrying its own colours',
         ).toBeGreaterThanOrEqual(3);
       },
-      { env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
   } finally {
     cleanupTemp(root);

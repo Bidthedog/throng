@@ -4,7 +4,14 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { runApp, cleanupTemp} from './harness.js';
+import { openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import {
+  configRootSeeded,
+  settleConfigRoot,
+  snapshotConfigRoot,
+  type ConfigRootSnapshot,
+} from './helpers/config-snapshot.js';
+import { closePrefsWindow } from './helpers/prefs-window.js';
 
 /**
  * 018 / US4 — the themed colour picker (FR-020 … FR-026).
@@ -20,10 +27,70 @@ function freshCfgRoot(): string {
   cfgRoots.push(dir);
   return dir;
 }
-test.afterAll(() => {
-  for (const dir of cfgRoots.splice(0))
-    cleanupTemp(dir);
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-010).
+ *
+ * All five tests seeded nothing: each launched an app purely to open the Themes tab and drive the
+ * colour control on it. Three only LOOK; two edit `colours.accent`, which is a change to the
+ * contents of a config root and is what `restoreConfigRoot` undoes — and the second of the two
+ * reads the shipped accent as its baseline before editing, so the restore is what keeps it honest.
+ *
+ * The two viewport tests leave a picker OPEN. That costs nothing here: the preferences window is
+ * destroyed on close, so no popup survives into the next test.
+ *
+ * The shim below REFUSES launch options rather than ignoring them: a swallowed config root does not
+ * fail, it makes a test pass for the wrong reason.
+ *
+ * Serial mode is not optional. These tests share a window, a config root and the ONE preferences
+ * window throng allows, so they must not interleave — and when one fails the rest are SKIPPED rather
+ * than run against whatever state the failure left behind (see `openApp` in harness.ts).
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let cfgRoot: string;
+let baseline: ConfigRootSnapshot;
+
+test.beforeAll(async () => {
+  cfgRoot = freshCfgRoot();
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
+  await settle(shared.win);
+  // Photograph the root only once first-run seeding has finished — settings, key bindings and every
+  // shipped theme. A partial snapshot would have every later restore DELETE whatever arrived late.
+  await expect.poll(() => configRootSeeded(cfgRoot), { timeout: 30_000 }).toBe(true);
+  baseline = snapshotConfigRoot(cfgRoot);
 });
+
+/*
+ * Put the config root back between tests — with the preferences window CLOSED FIRST.
+ *
+ * The order is load-bearing twice over. A dirty JSON buffer raises `json-external-change` when the
+ * file changes underneath it, so restoring against an open window would hand the next test a notice
+ * it never asked for. And the on-entry snapshot that Revert and Revert All compare against is
+ * captured when the preferences window MOUNTS (`preferences-app.tsx`), so carrying one window across
+ * tests would carry the first test's baseline into the last one.
+ */
+test.afterEach(async () => {
+  await closePrefsWindow(shared.app);
+  await settleConfigRoot(baseline);
+});
+
+test.afterAll(async () => {
+  await shared?.close();
+  for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
 
 async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
   await win.getByTestId('title-bar-cog').click();
@@ -42,69 +109,66 @@ function readTheme(cfgRoot: string, name = 'throng'): Record<string, string> | u
   return doc.colours;
 }
 
-test('the picker is drawn from theme tokens — NO operating-system dialog (FR-020)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('the picker card takes its surface from the THEME, not a system colour (FR-020)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
 
       // The swatch is a real button now, not an <input type="color"> whose popup we cannot reach.
+      /*
+       * That the swatch is a BUTTON, that clicking it draws a picker with a saturation-value area
+       * and a hue strip, and that no native `<input type="color">` exists in either state — all of
+       * that is asserted at the component layer now (034 FR-045), in
+       * `tests/component/colour-field.test.ts`, where it costs no window.
+       *
+       * What is left is the half jsdom structurally cannot have: the picker's card takes its surface
+       * from the THEME, read back through `getComputedStyle`. That is an inherited, cascaded value,
+       * and jsdom applies no real cascade — asserting it there would be asserting about jsdom
+       * (034 FR-049).
+       */
       const swatch = prefs.getByTestId('control-colours.accent');
       await expect(swatch).toBeVisible();
-      await expect
-        .poll(() => swatch.evaluate((el) => el.tagName.toLowerCase()))
-        .toBe('button');
-
       await swatch.click();
-
-      // The picker is OURS: real DOM, themed, and Playwright can see it. An OS dialog could not be
-      // located at all — which is exactly why the old control was untestable as well as un-themeable.
       const picker = prefs.getByTestId('control-colours.accent-picker');
       await expect(picker).toBeVisible();
-      await expect(prefs.getByTestId('control-colours.accent-sv')).toBeVisible();
-      await expect(prefs.getByTestId('control-colours.accent-hue')).toBeVisible();
 
       // Its card takes the dialog surface from the theme, not a system colour.
       await expect
         .poll(() => picker.evaluate((el) => getComputedStyle(el).backgroundColor))
         .toMatch(/rgb/);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('an INVALID colour is rejected, the last valid one stands, and the row says so (FR-026)', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-
-      const hex = prefs.getByTestId('control-colours.accent-hex');
-      await hex.fill('#ff8800');
-      await hex.press('Enter');
-      await expect.poll(() => readTheme(cfgRoot)?.accent).toBe('#ff8800');
-
-      // BEFORE 018 this wrote the string `zzz` into the theme file on disk and the token stopped
-      // rendering. There was no validation of any kind: every keystroke was committed raw.
-      await hex.fill('zzz');
-      await hex.press('Enter');
-
-      // The RED BORDER is the message, and it is the WHOLE message. A sentence underneath used to
-      // appear and push every row below it down the page — while you were still typing, because
-      // emptying the box to type a new colour is itself "invalid". The complaint moved the thing you
-      // were aiming at. It says the same thing now, in place, and the layout does not budge.
-      await expect(prefs.getByTestId('control-colours.accent-hex')).toHaveAttribute('aria-invalid', 'true');
-      await expect(prefs.getByTestId('control-colours.accent-invalid')).toHaveCount(0);
-
-      // The last valid colour stands — on disk, which is the part that matters.
-      await expect.poll(() => readTheme(cfgRoot)?.accent).toBe('#ff8800');
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('the picker is fully keyboard-operable, with a visible focus indicator (FR-024)', async () => {
-  const cfgRoot = freshCfgRoot();
+/*
+ * MOVED to `packages/ui/tests/component/colour-field.test.ts` (034 FR-045):
+ * "an INVALID colour is rejected, the last valid one stands, and the row says so (FR-026)", plus the
+ * markup half of the FR-020 test above.
+ *
+ * `ColourField` and `ColourPicker` are exported and take props only — `value`, `onCommit`,
+ * `testId`, `clearable` — with `Icon` (ConfigContext defaults, no provider) and the pure
+ * `clampToViewport` beneath them. So opening a SECOND WINDOW to click a swatch bought nothing that
+ * a render does not.
+ *
+ * Nine component tests replace them, including two the E2E did not make: that no native
+ * `<input type="color">` exists with the picker OPEN as well as closed, and that the invalid mark
+ * CLEARS when the value is corrected.
+ *
+ * Red-proved, and two of the mutations were wrong before they were right, which is worth recording:
+ *   - `setInvalid(true)` has TWO call sites and a non-global replace hit only the one my test does
+ *     not exercise, reporting "not coupled". Global: 2 failed.
+ *   - prepending `type="color"` to the first `<input` proved nothing, because JSX prop order lets
+ *     the element's own `type` win. Aimed at the real attributes: hex field 4 failed, hue strip 1.
+ *     That second one only reddens because the test was strengthened to check the OPEN picker too.
+ *
+ * WHAT STAYS: the two viewport tests, which read `boundingBox()` and require the picker to land
+ * fully on screen at the right and bottom edges. `clamp-to-viewport.test.ts` proves the FUNCTION
+ * clamps; only a real window proves the RENDERED picker, at its real measured size against a real
+ * viewport, actually fits — the v5.1.0 real-layout reserve. This migration was nearly over-claimed on
+ * exactly that point. Also staying: the live-apply-and-persist test, including that rapid edits
+ * compound into ONE write.
+ */
+test('the picker is fully keyboard-operable, with a visible focus indicator (FR-024)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -130,7 +194,6 @@ test('the picker is fully keyboard-operable, with a visible focus indicator (FR-
       await prefs.keyboard.press('Escape');
       await expect(prefs.getByTestId('control-colours.accent-picker')).toBeHidden();
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
@@ -144,8 +207,7 @@ async function expectWithinViewport(page: Page, box: { x: number; y: number; wid
   expect(box!.y + box!.height).toBeLessThanOrEqual(vp.height + 0.5);
 }
 
-test('the picker opens fully on-screen near the RIGHT edge (021/FR-036)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('the picker opens fully on-screen near the RIGHT edge (021/FR-036)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -160,12 +222,10 @@ test('the picker opens fully on-screen near the RIGHT edge (021/FR-036)', async 
       await expect(picker).toBeVisible();
       await expectWithinViewport(prefs, await picker.boundingBox());
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('the picker opens fully on-screen near the BOTTOM edge (021/FR-036)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('the picker opens fully on-screen near the BOTTOM edge (021/FR-036)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -183,12 +243,10 @@ test('the picker opens fully on-screen near the BOTTOM edge (021/FR-036)', async
       await expect(picker).toBeVisible();
       await expectWithinViewport(prefs, await picker.boundingBox());
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('the colour applies LIVE and persists — and rapid edits compound into one write (FR-022, FR-023)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('the colour applies LIVE and persists — and rapid edits compound into one write (FR-022, FR-023)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -216,6 +274,5 @@ test('the colour applies LIVE and persists — and rapid edits compound into one
         )
         .toBe('#abcdef');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });

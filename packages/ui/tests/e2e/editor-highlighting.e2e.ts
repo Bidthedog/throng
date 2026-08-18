@@ -110,7 +110,7 @@ const tokenColours = (win: Page, pid: string): Promise<string[]> =>
     return [...colours];
   }, pid);
 
-test('opens a TypeScript file highlighted, and keeps highlighting as you type', async () => {
+test('opens a TypeScript file highlighted, and keeps highlighting as you type', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -144,7 +144,7 @@ test('opens a TypeScript file highlighted, and keeps highlighting as you type', 
   }
 });
 
-test('highlights Python and JSON from their extensions alone', async () => {
+test('highlights Python and JSON from their extensions alone', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -168,7 +168,7 @@ test('highlights Python and JSON from their extensions alone', async () => {
   }
 });
 
-test('an unknown extension is plain text — no highlighting, no error, and a shebang changes nothing', async () => {
+test('an unknown extension is plain text — no highlighting, no error, and a shebang changes nothing', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -183,10 +183,13 @@ test('an unknown extension is plain text — no highlighting, no error, and a sh
       expect(colours.length).toBeLessThanOrEqual(1);
 
       // Typing a shebang must not re-detect: content is never inspected (FR-002).
-      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
+      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
+      await content.click();
       await win.keyboard.press('Control+Home');
       await win.keyboard.type('#!/usr/bin/env node\n');
-      await win.waitForTimeout(500);
+      // The edit has landed — the positive fence a re-detect (if it existed) would already have
+      // had its chance to run against, since it would fire off the very same keystroke.
+      await expect(content).toContainText('#!/usr/bin/env node');
       expect((await tokenColours(win, pid)).length).toBeLessThanOrEqual(1);
       expect(errors, `an unknown extension must not raise an error: ${errors.join('; ')}`).toEqual([]);
     });
@@ -195,7 +198,7 @@ test('an unknown extension is plain text — no highlighting, no error, and a sh
   }
 });
 
-test('a >10,000-character line renders unhighlighted but editable, while the rest of the file highlights (FR-008a)', async () => {
+test('a >10,000-character line renders unhighlighted but editable, while the rest of the file highlights (FR-008a)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -230,7 +233,7 @@ test('a >10,000-character line renders unhighlighted but editable, while the res
   }
 });
 
-test('switching theme repaints code LIVE — no reopen, no view rebuild', async () => {
+test('switching theme repaints code LIVE — no reopen, no view rebuild', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
   try {
@@ -281,7 +284,7 @@ test('switching theme repaints code LIVE — no reopen, no view rebuild', async 
   }
 });
 
-test('embedded regions highlight in a Vue SFC and in HTML — or, at worst, raise no error (SHOULD)', async () => {
+test('embedded regions highlight in a Vue SFC and in HTML — or, at worst, raise no error (SHOULD)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

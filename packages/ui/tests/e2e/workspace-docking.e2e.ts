@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { cleanupTemp, commitPanelRename, commitTabRename, shutdownApp } from './harness.js';
+import { cleanupTemp, commitPanelRename, commitTabRename, shutdownApp, DAEMON_READY_TIMEOUT_MS } from './harness.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -25,7 +25,7 @@ function startDaemon(pipeName: string, dataDir: string): Promise<ChildProcess> {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('daemon not ready')), 10_000);
+    const timer = setTimeout(() => reject(new Error('daemon not ready')), DAEMON_READY_TIMEOUT_MS);
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', (c: string) => {
       if (c.includes('listening')) {
@@ -95,7 +95,7 @@ async function dragPanelToEdge(win: Page, sourceId: string, targetId: string, ed
   await win.mouse.up();
 }
 
-test('adds Tabs and Panels, never showing a typed Panel', async () => {
+test('adds Tabs and Panels, never showing a typed Panel', { tag: ['@extended', '@window'] }, async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
   try {
@@ -124,7 +124,7 @@ test('adds Tabs and Panels, never showing a typed Panel', async () => {
   }
 });
 
-test('splits a Panel by dragging another onto its edge (no Panel lost)', async () => {
+test('splits a Panel by dragging another onto its edge (no Panel lost)', { tag: ['@extended', '@window'] }, async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
   try {
@@ -151,7 +151,7 @@ test('splits a Panel by dragging another onto its edge (no Panel lost)', async (
   }
 });
 
-test('collapses a split when a Panel is closed and never empties the workspace', async () => {
+test('collapses a split when a Panel is closed and never empties the workspace', { tag: ['@extended', '@window'] }, async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
   try {
@@ -182,7 +182,7 @@ test('collapses a split when a Panel is closed and never empties the workspace',
   }
 });
 
-test('reorders Tabs by dragging', async () => {
+test('reorders Tabs by dragging', { tag: ['@extended', '@window'] }, async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
   try {

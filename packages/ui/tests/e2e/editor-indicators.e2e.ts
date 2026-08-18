@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp, FILE_OP_TIMEOUT_MS } from './harness.js';
 
 // US8/US7 (Delivery C): the shared red unsaved dot aggregates on Panel/Tab/project
 // and clears on save; debounced auto-save writes without Ctrl+S.
@@ -21,7 +21,7 @@ async function newEditor(win: Page): Promise<string> {
   return pid;
 }
 
-test('the unsaved dot lights on panel + tab + project and clears on save', async () => {
+test('the unsaved dot lights on panel + tab + project and clears on save', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-ind-'));
   const savePath = join(root, 'doc.txt');
   try {
@@ -53,7 +53,7 @@ test('the unsaved dot lights on panel + tab + project and clears on save', async
   }
 });
 
-test('auto-save writes edits within the debounce without Ctrl+S', async () => {
+test('auto-save writes edits within the debounce without Ctrl+S', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-auto-'));
   const file = join(root, 'auto.txt');
   writeFileSync(file, 'seed\n');
@@ -77,7 +77,7 @@ test('auto-save writes edits within the debounce without Ctrl+S', async () => {
         await win.keyboard.type('AUTO ');
 
         await expect
-          .poll(() => (existsSync(file) ? readFileSync(file, 'utf8') : ''), { timeout: 8000 })
+          .poll(() => (existsSync(file) ? readFileSync(file, 'utf8') : ''), { timeout: FILE_OP_TIMEOUT_MS })
           .toContain('AUTO');
         // Auto-save cleared the dirty state.
         await expect(win.getByTestId(`panel-unsaved-${pid}`)).toHaveCount(0, { timeout: 8000 });

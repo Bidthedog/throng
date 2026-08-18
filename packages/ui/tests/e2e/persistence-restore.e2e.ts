@@ -9,7 +9,7 @@ import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
-import { cleanupTemp, shutdownApp } from './harness.js';
+import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS } from './harness.js';
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
@@ -30,7 +30,7 @@ function startDaemon(pipeName: string, dataDir: string): Promise<ChildProcess> {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('daemon not ready')), 10_000);
+    const timer = setTimeout(() => reject(new Error('daemon not ready')), DAEMON_READY_TIMEOUT_MS);
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', (c: string) => {
       if (c.includes('listening')) {
@@ -135,7 +135,7 @@ const savedPanels = (json: string): number => (json.match(/"type":"panel"/g) ?? 
 const savedTabs = (json: string): number =>
   ((JSON.parse(json) as { tabs?: unknown[] }).tabs ?? []).length;
 
-test('restores each project’s own layout after a restart (SC-006)', async () => {
+test('restores each project’s own layout after a restart (SC-006)', { tag: ['@core', '@window'] }, async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
   try {
@@ -185,7 +185,7 @@ test('restores each project’s own layout after a restart (SC-006)', async () =
   }
 });
 
-test('falls back to the default workspace and notifies on a corrupt layout (SC-011)', async () => {
+test('falls back to the default workspace and notifies on a corrupt layout (SC-011)', { tag: ['@core', '@window'] }, async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
   try {

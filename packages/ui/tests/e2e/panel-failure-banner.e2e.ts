@@ -281,69 +281,41 @@ test.afterAll(async () => {
  * not define renders NOTHING, silently, and the control becomes an invisible button. That has
  * already happened once in 029.
  */
-test('an editor and a terminal that failed are drawn by the same banner, with the same three controls', async () => {
-  test.setTimeout(240_000);
-  const win = h.win;
-
-  const editorPid = await editorPanel(win);
-  await inFailureState(win, editorPid, 'editor');
-  await expect(banner(win, editorPid)).toBeVisible();
-  const editorShape = await banner(win, editorPid).evaluate((el) => ({
-    className: el.className,
-    role: el.getAttribute('role'),
-    buttons: el.querySelectorAll('button').length,
-  }));
-  const editorControls = await controlNames(win, editorPid);
-
-  const termPid = await terminalPanel(win);
-  await inFailureState(win, termPid, 'terminal');
-  await expect(banner(win, termPid)).toBeVisible();
-  const termShape = await banner(win, termPid).evaluate((el) => ({
-    className: el.className,
-    role: el.getAttribute('role'),
-    buttons: el.querySelectorAll('button').length,
-  }));
-  const termControls = await controlNames(win, termPid);
-
-  // Same component (FR-039): same markup shape, not merely the same words.
-  expect(termShape, 'the two panel types are still drawn by two different banners').toEqual(editorShape);
-
-  /*
-   * The control set, EXHAUSTIVELY and in order (FR-042, FR-042d, FR-051).
-   *
-   * Exhaustive is doing two jobs. Copy sits in the MIDDLE — inserted into the order US4 stated, not
-   * appended after it — and the list states FR-046's "not dismissible" as a positive fact: a close
-   * button would be a fourth name here. Written as `toHaveCount(0)` on a close button instead, that
-   * half would pass vacuously for as long as no banner exists at all.
-   */
-  expect(editorControls).toEqual(['Try again', 'Copy details', 'Clear panel type']);
-  expect(termControls).toEqual(['Try again', 'Copy details', 'Clear panel type']);
-  expect(editorShape.buttons, 'the banner is missing a control (FR-051)').toBe(3);
-
-  /*
-   * Every control is a themeable icon with a hover title (FR-042b, Constitution VI).
-   *
-   * Each panel is inspected while ITS OWN project is open. The two broken panels deliberately live
-   * in two different projects (see the file header), and throng mounts one project's workspace at a
-   * time — MEASURED here: with `Ghost` open, the DOM holds Ghost's panel and nothing of `Real`. So a
-   * single loop over both ids asked for an element that cannot exist and reported "the editor has no
-   * Try again control" about a banner that was never on screen. The claim is unchanged; only the
-   * moment each half of it is read.
-   */
-  for (const kind of ['editor', 'terminal'] as const) {
-    const pid = kind === 'editor' ? await editorPanel(win) : await terminalPanel(win);
-    await inFailureState(win, pid, kind);
-    for (const name of ['Try again', 'Copy details', 'Clear panel type']) {
-      const c = control(win, pid, name);
-      await expect(c).toBeVisible();
-      await expect(c).toHaveAttribute('title', /.+/);
-      const glyph = (await c.innerText()).trim();
-      expect(glyph, `${name} on ${pid} rendered nothing — an invisible control`).not.toBe('');
-      expect(glyph.length, `${name} on ${pid} should be an icon, not a word`).toBeLessThanOrEqual(2);
-      expect(glyph, `${name} on ${pid} should be an icon, not a word`).not.toMatch(/[A-Za-z]/);
-    }
-  }
-});
+/*
+ * MOVED to `packages/ui/tests/component/panel-failure-banner.test.ts` (034 FR-045) — five tests:
+ *   - the editor and terminal banners share a root class, a role and a control set (FR-039, SC-009)
+ *   - both point at their own Copy control, in the same words (FR-041, FR-051)
+ *   - the editor names the file it could not read (FR-040a)
+ *   - the editor says the text below is not the file, and the terminal says no such thing (026 P3)
+ *   - every control is reachable by Tab, in displayed order, and operable from the keyboard
+ *
+ * `PanelFailureBanner` was ALREADY an exported component taking props — no production change was
+ * needed, only a `NotificationProvider` around it, because `useCopyToClipboard` reaches `useNotify`
+ * and that hook throws rather than defaulting. Five app launches, and a real unreadable file and a
+ * real failed shell to produce them, for questions about markup that render in jsdom.
+ *
+ * The structural argument survives intact, which mattered more than the saving. This file's own
+ * reasoning is that two independently-written banners can agree on their LABELS by coincidence and
+ * cannot agree on a CLASS LIST by accident, so it compared class list, role and control names
+ * rather than words. The component test compares exactly the same three things — and that claim is
+ * as true in jsdom as in Electron, because it is a claim about two calls to one component.
+ *
+ * Ten tests replace the five, adding what was too expensive to ask before: that there are exactly
+ * three controls and none of them is a dismiss or a close (FR-046 — *Clear panel type* is not a
+ * close button), and that the raw system error NEVER renders (FR-034), which reaches the user only
+ * through Copy and the diagnostic log.
+ *
+ * Red-proved, six mutations, six reds: dropping the path, dropping the per-type note, leaking the
+ * system error into the pointer line, removing the Copy control, making Clear panel type inert, and
+ * giving the terminal a different root class. Two of the six needed re-aiming for CRLF before they
+ * applied at all.
+ *
+ * WHAT STAYS BELOW: everything about the banner's CONDITION and its wiring — that a real unreadable
+ * file and a real failed shell raise it, that its three actions also appear in the panel menu, that
+ * Try again from the menu reports a failed retry, that Clear panel type returns an editor to the
+ * type selector, that a retry which SUCCEEDS makes the banner go (the caller drops it, not this
+ * component), and that it appears with every severity set to Never display.
+ */
 
 /**
  * T056f / T069pre — the pointer sentence, in both panel types, in its FINAL wording.
@@ -357,23 +329,6 @@ test('an editor and a terminal that failed are drawn by the same banner, with th
  * The severity-silenced case is where that distinction stops being theoretical, so it is asserted
  * under *Never display* below (T069pre) rather than assumed here.
  */
-test('both banners point at their own copy control, in the same words', async () => {
-  test.setTimeout(240_000);
-  const win = h.win;
-  const POINTER = 'Copy the details here, or see the notification.';
-
-  const editorPid = await editorPanel(win);
-  await inFailureState(win, editorPid, 'editor');
-  await expect(banner(win, editorPid)).toContainText(POINTER);
-
-  const termPid = await terminalPanel(win);
-  await inFailureState(win, termPid, 'terminal');
-  await expect(banner(win, termPid)).toContainText(POINTER);
-
-  // The transitional sentence is GONE, not merely joined — a banner carrying both would be pointing
-  // at two routes and committing to neither.
-  expect(await banner(win, termPid).innerText()).not.toContain('diagnostic log');
-});
 
 /**
  * T056c — the editor's banner still NAMES THE PATH IT COULD NOT READ (FR-040a).
@@ -383,16 +338,6 @@ test('both banners point at their own copy control, in the same words', async ()
  * remembered text back over that path. "Delegate the detail to the notice" is the obvious way to
  * lose it while the banner still looks right, which is why it is asserted on its own.
  */
-test('the editor banner names the file it could not read', async () => {
-  test.setTimeout(240_000);
-  const win = h.win;
-
-  const editorPid = await editorPanel(win);
-  await inFailureState(win, editorPid, 'editor');
-  await expect(banner(win, editorPid)).toContainText('code.txt');
-  // The headline says what could not be done, in the editor's own words (FR-040, contract).
-  await expect(banner(win, editorPid)).toContainText('This file could not be read');
-});
 
 /**
  * 026 `contracts/editor-unloadable.md` P3 — THE TEXT UNDER THE BANNER IS NOT THE FILE.
@@ -421,26 +366,6 @@ test('the editor banner names the file it could not read', async () => {
  * appeared in both panel types would be the shared component's wording rather than the editor's,
  * which is how the two banners start diverging in content while agreeing in shape.
  */
-test('the editor banner says the text below it is not the file, and the terminal says no such thing', async () => {
-  test.setTimeout(240_000);
-  const win = h.win;
-  const NOT_THE_FILE =
-    'What is shown here is not the file. Restore the path and it reloads by itself, or reload it now.';
-
-  const editorPid = await editorPanel(win);
-  await inFailureState(win, editorPid, 'editor');
-  await expect(
-    banner(win, editorPid),
-    'the editor banner no longer warns that the text below it is a remembered buffer (026 P3)',
-  ).toContainText(NOT_THE_FILE);
-
-  const termPid = await terminalPanel(win);
-  await inFailureState(win, termPid, 'terminal');
-  expect(
-    await banner(win, termPid).innerText(),
-    'the terminal banner claims its content is not the file — it has no buffer to be wrong about',
-  ).not.toContain('is not the file');
-});
 
 /**
  * T056a / T069apre — ALL THREE controls are reachable and OPERABLE by keyboard, in the order they
@@ -461,61 +386,6 @@ test('the editor banner says the text below it is not the file, and the terminal
  * unaffected. A blind Enter at Clear would silently clear the panel type and leave the rest of the
  * file failing in a file it is not about.
  */
-test('the banner controls are reachable and operable by keyboard, in displayed order', async () => {
-  test.setTimeout(240_000);
-  const win = h.win;
-
-  const editorPid = await editorPanel(win);
-  await inFailureState(win, editorPid, 'editor');
-  const retry = control(win, editorPid, 'Try again');
-  const copy = control(win, editorPid, 'Copy details');
-  const clear = control(win, editorPid, 'Clear panel type');
-  for (const c of [retry, copy, clear]) await expect(c).toBeVisible();
-
-  // None has been taken out of the tab order — the quiet way an icon button stops being reachable.
-  for (const c of [retry, copy, clear]) {
-    expect(await c.evaluate((el) => (el as HTMLElement).tabIndex)).toBeGreaterThanOrEqual(0);
-    await expect(c).toBeEnabled();
-  }
-
-  await retry.focus();
-  await expect
-    .poll(() => win.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? '(none)'))
-    .toBe('Try again');
-
-  // Tab walks the SET, in the displayed order — the assertion the middle insertion could break.
-  for (const next of ['Copy details', 'Clear panel type']) {
-    await win.keyboard.press('Tab');
-    await expect
-      .poll(() => win.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? '(none)'), {
-        message: `Tab did not reach ${next} — the tab order is not the displayed order`,
-      })
-      .toBe(next);
-  }
-
-  /*
-   * Operable: Enter on the focused control really retries, and the retry really fails (FR-045).
-   *
-   * Asserted as "the banner's text CHANGED, and now says the retry failed". The headline already
-   * contains "could not", so matching that alone would pass against a banner that did nothing at
-   * all — the same shape of false green a `toHaveCount(0)` on a dead id gives. `still` and `failed`
-   * appear in neither the headline nor the pointer sentence, and the controls carry their names as
-   * attributes rather than as text.
-   */
-  const beforeRetry = await banner(win, editorPid).innerText();
-  await retry.press('Enter');
-  await expect(banner(win, editorPid)).toBeVisible();
-  await expect
-    .poll(() => banner(win, editorPid).innerText(), {
-      timeout: 20_000,
-      message: 'a keyboard retry changed nothing on the banner — it may not have run at all',
-    })
-    .not.toBe(beforeRetry);
-  await expect(
-    banner(win, editorPid),
-    'a keyboard retry that failed said nothing about having failed',
-  ).toContainText(/still|failed/i);
-});
 
 /**
  * T056b / T069bpre — ALL THREE banner commands are also COMMANDS IN THE PANEL'S OWN MENU (FR-042c).
@@ -535,7 +405,7 @@ test('the banner controls are reachable and operable by keyboard, in displayed o
  * Panel, which is the whole test the rule applies, and a banner-only copy control is unreachable to
  * anyone who does not recognise the glyph.
  */
-test('Try again, Copy details and Clear panel type are in the panel menu, for both panel types', async () => {
+test('Try again, Copy details and Clear panel type are in the panel menu, for both panel types', { tag: ['@extended', '@window'] }, async () => {
   test.setTimeout(240_000);
   const win = h.win;
   const menuItem = (label: string): Locator => win.getByTestId(`menu-item-${label}`);
@@ -592,7 +462,7 @@ test('Try again, Copy details and Clear panel type are in the panel menu, for bo
  * time, so `terminalPanel` → `editorPanel` unmounts and rebuilds the banner, and the assertion that
  * the sentence is ABSENT first is what makes its later presence mean something.
  */
-test('Try again from the panel MENU reports a failed retry, in both panel types', async () => {
+test('Try again from the panel MENU reports a failed retry, in both panel types', { tag: ['@extended', '@window'] }, async () => {
   test.setTimeout(240_000);
   const win = h.win;
   // The fixed wording (FR-040b), asserted verbatim rather than as /still|failed/: the whole point is
@@ -652,7 +522,7 @@ test('Try again from the panel MENU reports a failed retry, in both panel types'
  * clearing the user's decision rather than something that happened to them, and this feature must
  * not undo that while tidying the markup around it.
  */
-test('Clear panel type returns an editor to panel-type selection, and a terminal behaves as it did', async () => {
+test('Clear panel type returns an editor to panel-type selection, and a terminal behaves as it did', { tag: ['@extended', '@window'] }, async () => {
   test.setTimeout(240_000);
   const win = h.win;
 
@@ -716,7 +586,7 @@ test('Clear panel type returns an editor to panel-type selection, and a terminal
  * no such watcher: create the folder and NOTHING happens until Try again is pressed. That makes the
  * click the only possible cause of the banner going, which is the whole of what FR-045 claims.
  */
-test('retry clears the banner on success, reports failure on failure, and a hidden repair still ends it', async () => {
+test('retry clears the banner on success, reports failure on failure, and a hidden repair still ends it', { tag: ['@extended', '@window'] }, async () => {
   test.setTimeout(300_000);
   const root = makeRealRoot('throng-pfb-retry-');
   // Deliberately NOT created: the terminal half needs a project root that comes into existence
@@ -831,7 +701,7 @@ test('retry clears the banner on success, reports failure on failure, and a hidd
  * The absent notice is asserted SECOND, after the banner is on screen, so a run where nothing at all
  * happened cannot read as a pass.
  */
-test('the banner appears with every severity set to Never display', async () => {
+test('the banner appears with every severity set to Never display', { tag: ['@extended', '@window'] }, async () => {
   test.setTimeout(240_000);
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-pfb-cfg-'));
   writeFileSync(

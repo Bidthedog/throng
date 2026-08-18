@@ -38,7 +38,7 @@ async function diagnosticsFor(win: Page, panelId: string): Promise<Diagnostics |
   ) as Promise<Diagnostics | undefined>;
 }
 
-test('a key pressed in the same beat as the click reaches the shell', async () => {
+test('a key pressed in the same beat as the click reaches the shell', { tag: ['@extended', '@terminal'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-input-idle-'));
   try {
@@ -68,7 +68,10 @@ test('a key pressed in the same beat as the click reaches the shell', async () =
        * is every panel they come back to.
        */
       await win.getByTestId('project-list').click();
-      await win.waitForTimeout(2500);
+      // "Idle" only requires that focus has genuinely left the terminal before the race below
+      // begins — waiting on the blur itself (rather than guessing a duration) is the actual
+      // precondition the comment above describes.
+      await expect(term.locator('.xterm-helper-textarea')).not.toBeFocused();
 
       /*
        * Click and type with NO wait between them. Playwright dispatches these back to back, which is
@@ -103,7 +106,8 @@ test('a key pressed in the same beat as the click reaches the shell', async () =
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         const marker = `IDLEOK${attempt}`;
         await win.getByTestId('project-list').click();
-        await win.waitForTimeout(1200);
+        // Same precondition as above: re-idle by waiting for the actual blur, not a guessed pause.
+        await expect(term.locator('.xterm-helper-textarea')).not.toBeFocused();
         await win.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
         await win.keyboard.type(`echo ${marker}`, { delay: 0 });
         await win.keyboard.press('Enter');
@@ -148,7 +152,7 @@ test('a key pressed in the same beat as the click reaches the shell', async () =
   }
 });
 
-test('the terminal keeps every character when a tab switch rebuilds it first', async () => {
+test('the terminal keeps every character when a tab switch rebuilds it first', { tag: ['@extended', '@terminal'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-input-rebuild-'));
   try {
@@ -159,12 +163,15 @@ test('the terminal keeps every character when a tab switch rebuilds it first', a
 
       // A tab switch UNMOUNTS the panel, so coming back is a rebuild — the terminal is new, its
       // attach is in flight, and the user is already typing. The worst case for a late focus.
-      await win.getByTestId('tab-add').click();
-      await win.waitForTimeout(1500);
-      await win.getByTestId('tab-strip').locator('.tab-chip').first().click();
-      await win.waitForTimeout(1200);
-
       const term = win.getByTestId(`terminal-${pid}`);
+      await win.getByTestId('tab-add').click();
+      // Wait for the actual unmount, not a guessed pause — the panel must genuinely be gone
+      // before switching back can exercise a rebuild rather than the same live view.
+      await expect(term).not.toBeVisible();
+      await win.getByTestId('tab-strip').locator('.tab-chip').first().click();
+      // Click the instant the rebuilt panel exists — this IS the worst case for a late focus
+      // the comment above describes; padding it with extra time would understate the race.
+      await expect(term).toBeVisible();
       const box = await term.boundingBox();
       if (!box) throw new Error('terminal has no box');
       await win.mouse.click(box.x + box.width / 2, box.y + box.height / 2);

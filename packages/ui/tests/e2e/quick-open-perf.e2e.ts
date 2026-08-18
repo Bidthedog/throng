@@ -231,7 +231,7 @@ async function quietThenReset(app: OpenApp['app']): Promise<void> {
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('typing performs no IPC at all — no files.* call and no fileIndex subscription on the keystroke path (SC-002, FR-013, R5)', async () => {
+test('typing performs no IPC at all — no files.* call and no fileIndex subscription on the keystroke path (SC-002, FR-013, R5)', { tag: ['@extended', '@editor'] }, async () => {
   // 12,000 files to write, a project to open and a walk to complete before the measurement starts.
   test.setTimeout(180_000);
   await runApp(async (app, win) => {
@@ -279,61 +279,28 @@ test('typing performs no IPC at all — no files.* call and no fileIndex subscri
   });
 });
 
-test('keystroke-to-list stays inside its stated ceiling on a realistic project (SC-002 as felt through Electron)', async () => {
-  test.setTimeout(180_000);
-  await runApp(async (_app, win) => {
-    await settle(win);
-    // The SAME project the test above opened — a second one on this root is refused (FR-029).
-    await useBigProject(win);
-
-    await openQuickOpen(win);
-    await expect(quickOpenRows(win).first()).toBeVisible();
-
-    /*
-     * Measured INSIDE the page, around the keystroke.
-     *
-     * A Playwright round trip is the same order as the budget itself, so a measurement taken from
-     * the test process would mostly be measuring the test process. `insertText` is CodeMirror's and
-     * React's real input path — the same technique `editor-highlight-perf.e2e.ts` uses.
-     *
-     * Each sample waits for the LIST to change, not for a fixed period: the number recorded is
-     * keystroke → rendered result. A keystroke that never changes the list resolves to Infinity and
-     * fails the assertion loudly rather than hanging the test.
-     */
-    const samples: number[] = await win.evaluate(async () => {
-      const input = document.querySelector<HTMLInputElement>('[data-testid="quickopen-input"]');
-      const list = document.querySelector('[data-testid="quickopen-list"]');
-      if (!input || !list) return [Number.POSITIVE_INFINITY];
-      const out: number[] = [];
-      for (const ch of 'components/widget-01') {
-        const start = performance.now();
-        const changed = new Promise<number>((resolve) => {
-          const observer = new MutationObserver(() => {
-            observer.disconnect();
-            resolve(performance.now());
-          });
-          observer.observe(list, { childList: true, subtree: true, characterData: true });
-          setTimeout(() => {
-            observer.disconnect();
-            resolve(Number.POSITIVE_INFINITY);
-          }, 5000);
-        });
-        input.focus();
-        document.execCommand('insertText', false, ch);
-        out.push((await changed) - start);
-        await new Promise((r) => requestAnimationFrame(() => r(null)));
-      }
-      return out;
-    });
-
-    // The WORST keystroke, not the average: an average of 40 ms with one 900 ms spike is a modal
-    // that visibly stalls, and the average is exactly what would hide it.
-    expect(Math.max(...samples)).toBeLessThanOrEqual(250);
-
-    await win.keyboard.press('Escape');
-    await expect(win.getByTestId('quickopen')).toHaveCount(0);
-  });
-});
+/*
+ * REMOVED 2026-08-18 (034 FR-018, SC-007): "keystroke-to-list stays inside its stated ceiling".
+ *
+ * It asserted `Math.max(...samples) <= 250` for a keystroke measured inside the page, and the 250
+ * was a locally invented allowance — 033 SC-002 states 100 ms over the pure pipeline, and the extra
+ * 150 was described in the deleted comment as room for "IPC, a React render and a paint". No reading
+ * of the requirement produces the number, which is exactly what FR-018 forbids.
+ *
+ * The stronger reason is that 033 had already established the number could not work HERE. Its own
+ * SC-002 was RESTATED by FR-073 after a hard 100 ms line at the UNIT tier reported 102.5, 105.1,
+ * 105.3 and 147.0 ms across four runs with no code change between them — contention, not the
+ * pipeline. A wall-clock line that is unfalsifiable at the cheapest, quietest layer cannot become
+ * falsifiable by being moved to the most contended one; it can only become slower to disprove.
+ *
+ * What the claim rests on now, all of it stricter than a stopwatch:
+ *   - `core/tests/unit/quick-open-budget.test.ts` — the pipeline over 50,000 paths, in the terms
+ *     FR-073 restated SC-002 into.
+ *   - The test ABOVE — a keystroke performs no IPC at all (FR-013). That is the property the
+ *     latency ceiling was standing in for, and it is falsifiable on any machine at any load.
+ *
+ * Nothing measured here is left unasserted; only the stopwatch is gone.
+ */
 
 /*
  * PLACED HERE, and the position is load-bearing in two directions.
@@ -343,7 +310,7 @@ test('keystroke-to-list stays inside its stated ceiling on a realistic project (
  * depends on that one having switched away — leaving the big root's index disposed, so that
  * switching back re-walks. Sitting between them satisfies both.
  */
-test('flipping the exclusion toggle on a large project SAYS it is still listing before it widens the list (FR-069d)', async () => {
+test('flipping the exclusion toggle on a large project SAYS it is still listing before it widens the list (FR-069d)', { tag: ['@extended', '@editor'] }, async () => {
   test.setTimeout(180_000);
   await runApp(async (_app, win) => {
     await settle(win);
@@ -411,7 +378,7 @@ test('flipping the exclusion toggle on a large project SAYS it is still listing 
   });
 });
 
-test('a file created and then deleted OUTSIDE throng becomes, and stops being, choosable within two seconds (FR-016, SC-005)', async () => {
+test('a file created and then deleted OUTSIDE throng becomes, and stops being, choosable within two seconds (FR-016, SC-005)', { tag: ['@extended', '@editor'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-qop-live-'));
   writeFileSync(join(root, 'anchor.txt'), '// anchor.txt\n');
@@ -472,7 +439,7 @@ test('a file created and then deleted OUTSIDE throng becomes, and stops being, c
  * That is the same enumeration a first open performs, reached without a second fixture — and it is
  * why this test sits at the end of the file rather than beside the other two big-project tests.
  */
-test('a modal opened before enumeration finishes says it is still listing, then shows results (FR-015, S3)', async () => {
+test('a modal opened before enumeration finishes says it is still listing, then shows results (FR-015, S3)', { tag: ['@extended', '@editor'] }, async () => {
   test.setTimeout(180_000);
   await runApp(async (_app, win) => {
     await settle(win);

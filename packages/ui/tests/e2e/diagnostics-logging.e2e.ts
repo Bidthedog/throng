@@ -6,21 +6,77 @@
  * behind — not even in the machine's event log, because Electron's own crash handling suppresses
  * that. This drives the real application and proves the record now exists, in the per-user data
  * directory, before anyone has to ask the user for it.
+ *
+ * ══ ONE APP FOR TWO OF THE THREE (034 FR-045) ══
+ *
+ * Every `runApp()` is an Electron launch and a daemon — around two seconds apiece. Two of the tests
+ * here only READ what the running app already wrote into the user-data directory it was given, and
+ * that directory is WRITE ISOLATION, not pre-launch state: nothing is seeded before the app starts,
+ * so they share one app.
+ *
+ * The daemon test is the exception and keeps its own, because `skipDaemon: true` is a claim ABOUT
+ * THE STARTUP PATH — the app must spawn its own daemon through `ensureDaemon`, which is the only
+ * path that tells the daemon where to write. A pre-spawned daemon was never told, so sharing would
+ * not merely be slower to fail, it would prove nothing.
+ *
+ * Serial mode is required: shared window, shared log file, and `openedPaths` is a per-app recorder
+ * that accumulates across the tests that share it (which is why the last test reads its TAIL rather
+ * than demanding the whole array).
  */
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, openedPaths } from './harness.js';
+import {
+  openApp,
+  runApp as runOwnApp,
+  openedPaths,
+  FILE_OP_TIMEOUT_MS,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
 
 /** The harness gives every run its own `--user-data-dir`; logs live beside the rest of that state. */
 const logsIn = (userData: string): string => join(userData, 'logs');
 
-test('the main process writes a durable log into the per-user data directory', async () => {
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+/**
+ * Run a body against the shared window. It REFUSES options rather than ignoring them: a dropped
+ * `skipDaemon` would not fail, it would pass for the wrong reason.
+ */
+const runApp = (
+  fn: (
+    app: OpenApp['app'],
+    win: OpenApp['win'],
+    ctx: { pipeName: string; userDataDir: string },
+  ) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win, {
+    pipeName: shared.pipeName,
+    userDataDir: shared.userDataDir,
+  });
+};
+
+test('the main process writes a durable log into the per-user data directory', { tag: ['@extended', '@failure'] }, async () => {
   await runApp(async (_app, win, ctx) => {
     await expect(win.getByTestId('title-bar-cog')).toBeVisible({ timeout: 15000 });
 
     const dir = logsIn(ctx.userDataDir);
-    await expect.poll(() => existsSync(join(dir, 'main.log')), { timeout: 10000 }).toBe(true);
+    await expect.poll(() => existsSync(join(dir, 'main.log')), { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
 
     const text = readFileSync(join(dir, 'main.log'), 'utf8');
     // The startup record: what a "it won't start" report needs to begin with.
@@ -39,17 +95,18 @@ test('the main process writes a durable log into the per-user data directory', a
   });
 });
 
-test('the daemon writes its own durable log beside the UI’s', async () => {
+test('the daemon writes its own durable log beside the UI’s', { tag: ['@extended', '@failure'] }, async () => {
   // `skipDaemon` so the APP spawns its own daemon through `ensureDaemon` — which is the path that
   // gives it a log directory at all. A daemon the harness pre-spawned was never told where to write.
-  await runApp(async (_app, win, ctx) => {
+  // This is the one test in the file that seeds the LAUNCH, so it keeps its own app.
+  await runOwnApp(async (_app, win, ctx) => {
     await expect(win.getByTestId('title-bar-cog')).toBeVisible({ timeout: 15000 });
     const dir = logsIn(ctx.userDataDir);
 
     // The daemon is spawned detached with no console; its diagnostics used to go to `stdio: 'ignore'`.
     await expect
       .poll(() => existsSync(join(dir, 'daemon.log')) || existsSync(join(dir, 'daemon-startup.log')), {
-        timeout: 15000,
+        timeout: FILE_OP_TIMEOUT_MS,
       })
       .toBe(true);
 
@@ -63,7 +120,7 @@ test('the daemon writes its own durable log beside the UI’s', async () => {
   }, { skipDaemon: true });
 });
 
-test('a user can reach the logs folder without knowing its path', async () => {
+test('a user can reach the logs folder without knowing its path', { tag: ['@extended', '@failure'] }, async () => {
   await runApp(async (app, win, ctx) => {
     await win.getByTestId('title-bar-cog').click();
     // The affordance is discoverable where About is — both are things you go looking for when
@@ -81,13 +138,20 @@ test('a user can reach the logs folder without knowing its path', async () => {
      *
      * `runApp` now stubs `shell.openPath` for every app and records what was asked for, so the
      * request is asserted — which is the actual claim — without launching anything.
+     *
+     * The recorder belongs to the APP, not to the test, and this app is shared. So what is asserted
+     * is that the MOST RECENT thing the handler asked the OS to open is this run's logs directory —
+     * exactly the original claim, and it does not silently become weaker if a test is added above.
      */
     const result = await win.evaluate(() => window.throng?.diagnostics?.openLogs?.());
     expect(result?.ok).toBe(true);
     expect((result as { path: string }).path).toBe(logsIn(ctx.userDataDir));
     expect(
-      await openedPaths(app),
+      (await openedPaths(app)).at(-1),
       'the handler should have asked the OS to open the logs directory',
-    ).toEqual([logsIn(ctx.userDataDir)]);
+    ).toBe(logsIn(ctx.userDataDir));
+
+    // Leave no menu open on a window the next test may inherit.
+    await win.keyboard.press('Escape');
   });
 });

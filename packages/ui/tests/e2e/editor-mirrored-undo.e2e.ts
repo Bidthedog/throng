@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, reloadWindow, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, reloadWindow, cleanupTemp, geom, quiesced } from './harness.js';
 
 /**
  * SC-013 — constitution XI, proven to a USER (016, FR-026c/FR-028f · T127).
@@ -31,7 +31,7 @@ async function newEditor(win: Page): Promise<string> {
   return pid;
 }
 
-test('Undo in a mirrored view reverts an edit made in the OTHER view (SC-013)', async () => {
+test('Undo in a mirrored view reverts an edit made in the OTHER view (SC-013)', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-mirundo-'));
   try {
     await runApp(async (app, win) => {
@@ -46,7 +46,7 @@ test('Undo in a mirrored view reverts an edit made in the OTHER view (SC-013)', 
       // against, and the dirty state we assert later is a real one.
       await mainEditor.click();
       await win.keyboard.type('ALPHA');
-      await win.waitForTimeout(300);
+      await quiesced(mainEditor, { what: 'main editor after typing ALPHA' });
 
       // Open the sub-workspace window and mirror the panel into it: ONE document, TWO views.
       const [child] = await Promise.all([
@@ -63,7 +63,8 @@ test('Undo in a mirrored view reverts an edit made in the OTHER view (SC-013)', 
       const childEditor = child.getByTestId(`editor-${pid}`).locator('.cm-content');
       await expect(child.getByTestId(`editor-${pid}`)).toBeVisible({ timeout: 10000 });
       await expect(childEditor).toContainText('ALPHA', { timeout: 10000 });
-      await child.waitForTimeout(500); // let the child's initial load settle
+      // the freshly-opened sub-workspace window's layout settling before we interact with it
+      await geom(child.getByTestId(`editor-${pid}`));
 
       // ── View A makes an edit. View B sees it. ────────────────────────────────────────────────
       await win.bringToFront();
@@ -100,7 +101,7 @@ test('Undo in a mirrored view reverts an edit made in the OTHER view (SC-013)', 
   }
 });
 
-test('a mirrored view keeps its OWN cursor and scroll — view state is per view (FR-028c)', async () => {
+test('a mirrored view keeps its OWN cursor and scroll — view state is per view (FR-028c)', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-mircur-'));
   try {
     await runApp(async (app, win) => {
@@ -112,7 +113,7 @@ test('a mirrored view keeps its OWN cursor and scroll — view state is per view
       const mainEditor = win.getByTestId(`editor-${pid}`).locator('.cm-content');
       await mainEditor.click();
       await win.keyboard.type('one\ntwo\nthree');
-      await win.waitForTimeout(300);
+      await quiesced(mainEditor, { what: 'main editor after typing one/two/three' });
 
       const [child] = await Promise.all([
         app.waitForEvent('window'),
@@ -126,7 +127,8 @@ test('a mirrored view keeps its OWN cursor and scroll — view state is per view
 
       const childEditor = child.getByTestId(`editor-${pid}`).locator('.cm-content');
       await expect(childEditor).toContainText('three', { timeout: 10000 });
-      await child.waitForTimeout(500);
+      // the freshly-opened sub-workspace window's layout settling before we interact with it
+      await geom(child.getByTestId(`editor-${pid}`));
 
       // The line each window's caret is on, as the user actually SEES it — the active-line
       // highlight, not a reach into CodeMirror's internals.

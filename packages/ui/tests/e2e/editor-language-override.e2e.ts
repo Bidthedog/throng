@@ -1,6 +1,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import Database from 'better-sqlite3';
 import { test, expect, type Page } from '@playwright/test';
 import {
   openApp,
@@ -59,7 +60,6 @@ let projectSeq = 0;
 const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
-
 // 016 US5 (FR-010/FR-011/FR-005a/FR-005b) — see the language, and correct it.
 //
 // The status strip is the ONLY way a user can observe what US1 decided, and the picker is the only
@@ -86,6 +86,38 @@ async function openEditorOn(win: Page, file: string, contains: string): Promise<
   return pid;
 }
 
+/** Wait until PROJECT's layout in the daemon's SQLite store satisfies `predicate`. */
+async function expectLayoutSaved(
+  dataDir: string,
+  projectName: string,
+  predicate: (layoutJson: string) => boolean,
+): Promise<void> {
+  await expect
+    .poll(
+      () => {
+        let db: InstanceType<typeof Database> | undefined;
+        try {
+          db = new Database(join(dataDir, 'throng.db'), { readonly: true });
+          const row = db
+            .prepare(
+              `SELECT w.layout_json AS json
+                 FROM workspace_layout w
+                 JOIN projects p ON p.id = w.project_id
+                WHERE p.name = ?`,
+            )
+            .get(projectName) as { json?: string } | undefined;
+          return row?.json !== undefined && predicate(row.json);
+        } catch {
+          return false; // not written yet, or a transient read of a mid-write DB
+        } finally {
+          db?.close();
+        }
+      },
+      { timeout: 15_000, message: `the layout for "${projectName}" was never persisted` },
+    )
+    .toBe(true);
+}
+
 const tokenColours = (win: Page, pid: string): Promise<number> =>
   win.evaluate((id) => {
     const spans = document.querySelectorAll(`[data-testid="editor-${id}"] .cm-line span`);
@@ -94,7 +126,7 @@ const tokenColours = (win: Page, pid: string): Promise<number> =>
     return colours.size;
   }, pid);
 
-test('the strip shows the detected language, and an extension-less file reads Plain Text', async () => {
+test('the strip shows the detected language, and an extension-less file reads Plain Text', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -114,7 +146,7 @@ test('the strip shows the detected language, and an extension-less file reads Pl
   }
 });
 
-test('the language indicator is a themed control with a hover title (constitution — NON-NEGOTIABLE)', async () => {
+test('the language indicator is a themed control with a hover title (constitution — NON-NEGOTIABLE)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -147,7 +179,7 @@ test('the language indicator is a themed control with a hover title (constitutio
   }
 });
 
-test('two clicks reach and change the language, it re-highlights at once, and it SURVIVES A RESTART (SC-004a)', async () => {
+test('two clicks reach and change the language, it re-highlights at once, and it SURVIVES A RESTART (SC-004a)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-lang-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-lang-user-'));
@@ -155,6 +187,9 @@ test('two clicks reach and change the language, it re-highlights at once, and it
     // Session 1: correct the language by hand.
     await runOwnApp(
       async (_app, win) => {
+        // Captured BEFORE the call: the shared counter is incremented inside createProject, so
+        // this is the exact suffixed name the project ends up with — needed to poll its own row.
+        const projectName = `LangProj-${projectSeq + 1}`;
         await createProject(win, 'LangProj', root);
         const pid = await openEditorOn(win, 'scriptfile', 'echo');
         await expect(win.getByTestId(`editor-language-${pid}`)).toHaveText('Plain Text');
@@ -176,7 +211,7 @@ test('two clicks reach and change the language, it re-highlights at once, and it
 
         // Let the debounced workspace-layout write reach the store, so session 2 restores the
         // panel rather than opening on an empty workspace.
-        await win.waitForTimeout(1200);
+        await expectLayoutSaved(dataDir, projectName, (json) => json.includes('editor'));
       },
       { dataDir, userDataDir },
     );
@@ -207,7 +242,7 @@ test('two clicks reach and change the language, it re-highlights at once, and it
   }
 });
 
-test('the strip truncates in a narrow panel and never collapses the text area (FR-010c)', async () => {
+test('the strip truncates in a narrow panel and never collapses the text area (FR-010c)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -242,7 +277,7 @@ test('the strip truncates in a narrow panel and never collapses the text area (F
   }
 });
 
-test('the strip DIMS with its panel — it does not stay lit while every other indicator dims (FR-010g)', async () => {
+test('the strip DIMS with its panel — it does not stay lit while every other indicator dims (FR-010g)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -288,12 +323,22 @@ test('the strip DIMS with its panel — it does not stay lit while every other i
   }
 });
 
-test('a persisted language this build no longer knows opens as plain text, WITHOUT error, and is preserved (FR-005b)', async () => {
+test('a persisted language this build no longer knows opens as plain text, WITHOUT error, and is preserved (FR-005b)', { tag: ['@extended', '@editor'] }, async () => {
+  /*
+   * JOINED THE SHARED APP (SC-027) — 4 launches -> 3.
+   *
+   * This kept its own app for a `{ dataDir, userDataDir }` pair that were both freshly
+   * mkdtemp'd and EMPTY. That is write isolation, not pre-launch state: every fact this test
+   * needs is written THROUGH the running app by `document.setState` below, and a shared
+   * database holding other projects' rows cannot answer for this one.
+   *
+   * The one thing that did depend on isolation was `projects.list` -> `projects[0].id`, which
+   * picks the FIRST project rather than this test's once the app has several. It now reads the
+   * ACTIVE row, which `createProject` guarantees is the project it just made.
+   */
   const root = makeProject();
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-stale-data-'));
-  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-stale-user-'));
   try {
-    await runOwnApp(
+    await runApp(
       async (_app, win) => {
         const errors: string[] = [];
         win.on('pageerror', (e) => errors.push(e.message));
@@ -301,12 +346,10 @@ test('a persisted language this build no longer knows opens as plain text, WITHO
 
         // Store an override naming a language this build does not have — what a user would have
         // if a later build removed a language, or an older build has not yet gained one.
-        const projectId = await win.evaluate(async () => {
-          const env = (await window.throng?.invoke?.('projects.list', {})) as {
-            result: { projects: { id: string }[] };
-          };
-          return env.result.projects[0].id;
-        });
+        const projectId = await win
+          .locator('.project-item[data-active="true"]')
+          .evaluate((el) => (el.getAttribute('data-testid') ?? '').replace('project-item-', ''));
+        expect(projectId, 'no active project row to take an id from').not.toBe('');
         await win.evaluate(
           ({ id }) =>
             window.throng?.invoke?.('document.setState', {
@@ -337,45 +380,42 @@ test('a persisted language this build no longer knows opens as plain text, WITHO
         );
         expect(stored).toBe('elvish');
       },
-      { dataDir, userDataDir },
     );
   } finally {
-    cleanupTemp(dataDir);
-    cleanupTemp(userDataDir);
     cleanupTemp(root);
   }
 });
 
-test('the language picker closes when you click anywhere off it', async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'OverrideProj', root);
-      const pid = await openEditorOn(win, 'main.rs', 'fn main');
-
-      // It closed on Escape, and on choosing a language — and on nothing else. A menu you can only
-      // dismiss by guessing the keyboard shortcut is a menu that follows you around the app.
-      await win.getByTestId(`editor-language-${pid}`).click();
-      await expect(win.getByTestId(`language-picker-${pid}`)).toBeVisible();
-
-      // Click into the document — somewhere plainly "not the menu".
-      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-      await expect(win.getByTestId(`language-picker-${pid}`)).toHaveCount(0);
-
-      // …and clicking the strip button itself still TOGGLES it, rather than the outside-click
-      // handler closing it a moment before the button reopens it (the classic way this is broken).
-      await win.getByTestId(`editor-language-${pid}`).click();
-      await expect(win.getByTestId(`language-picker-${pid}`)).toBeVisible();
-      await win.getByTestId(`editor-language-${pid}`).click();
-      await expect(win.getByTestId(`language-picker-${pid}`)).toHaveCount(0);
-
-      // Clicking INSIDE the picker must not dismiss it — you have to be able to use the filter.
-      await win.getByTestId(`editor-language-${pid}`).click();
-      await win.getByTestId(`language-filter-${pid}`).click();
-      await win.getByTestId(`language-filter-${pid}`).fill('rus');
-      await expect(win.getByTestId(`language-picker-${pid}`)).toBeVisible();
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * MOVED to `packages/ui/tests/component/status-strip-picker-dismissal.test.ts` (034 FR-045)
+ * — one test, four component tests in its place.
+ *
+ * It launched Electron, started a daemon, made a real temp project and opened a real CodeMirror
+ * document in order to assert three facts about `useState` and one `document.addEventListener`.
+ * The subject is `status-strip.tsx:117-125`: a `mousedown` listener, in capture, asking whether
+ * the event landed inside the STRIP. No layout is measured and no OS focus moves between panels.
+ * `.cm-content` was only ever "somewhere plainly not the menu"; a sibling <div> is the same click.
+ *
+ * VERIFIED NOT ALREADY COVERED (FR-046a): `packages/ui/tests/component/picker.test.ts:168` is a
+ * different component (`common/picker.tsx`, the Quick Open typeahead) and a different gesture
+ * (Escape). The language picker has its own Escape handler at `language-picker.tsx:151`, and
+ * nothing below E2E touched the outside-click at all.
+ *
+ * THE REPLACEMENTS ASSERT MORE THAN THIS TEST DID:
+ *   - the toggle claim is stated as its own failure — a listener watching only the MENU closes
+ *     on the button’s `mousedown` and lets the button’s `click` reopen it, so the control looks
+ *     inert. "The second click leaves it closed" is what separates the two.
+ *   - the click INSIDE the picker is asserted as part of the same mechanism rather than after a
+ *     re-open, and the filter is proved to still filter — so "still open" cannot be true of a
+ *     picker that had stopped responding.
+ *
+ * WHAT STAYS, AND WHY: the other six tests in this file. Five assert a computed colour, a
+ * computed background, or truncation at a real width — Principle V’s real-layout-and-text-
+ * rendering reserve, and FR-049 forbids `getComputedStyle` at the component layer outright. The
+ * sixth survives a real restart.
+ *
+ * ANTI-VACUITY CONTROL for the replacement file: drop the `ServicesProvider` wrapper from its
+ * `mount()`. `LanguagePicker` calls `useServices()` on its first render and every test opens the
+ * picker, so ALL FOUR fail. Each test also asserts the picker PRESENT before asserting anything
+ * about it going away, so an empty document satisfies none of them.
+ */

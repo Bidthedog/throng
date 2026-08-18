@@ -25,7 +25,7 @@ async function newEditor(win: Page): Promise<string> {
 
 const item = (win: Page, label: string) => win.getByTestId(`menu-item-${label}`);
 
-test('Open In submenu holds editor targets; a top-level OS reveal; disables an open file', async () => {
+test('Open In submenu holds editor targets; a top-level OS reveal; disables an open file', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -61,22 +61,41 @@ test('Open In submenu holds editor targets; a top-level OS reveal; disables an o
   }
 });
 
-test('Send to Tab offers New Tab on the panel menu', async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'MenuProj', root);
-      const pid = await newEditor(win);
-      await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-      await item(win, 'Send to Tab').click();
-      await expect(item(win, 'New Tab')).toBeVisible();
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * MOVED (034 FR-045): "Send to Tab offers New Tab on the panel menu".
+ *
+ * It launched Electron, a daemon and a window, created a project against a real temp folder and
+ * typed an editor panel into existence — to right-click a panel handle and read one label out of
+ * a flyout. Split in two, and both halves were already at the layer that owns them:
+ *
+ *   DATA → `packages/ui/tests/unit/menu-sections.test.ts`, new describe
+ *          "Send to Tab offers New Tab first, then every other Tab (005 FR-027)".
+ *   RENDERING → `packages/ui/tests/component/context-menu-lifecycle.test.ts:150`, which already
+ *          clicks `menu-item-Send to Tab` open and asserts `submenu-Send to Tab` is visible with
+ *          its children reachable — this exact row, in a real DOM.
+ *
+ * WHY THE GAP EXISTED AT ALL. `menu-sections.test.ts` has pinned `Send to Tab` as a ROW since 033,
+ * but `shapeOf` walks `withDividers(actions)`, which is ONE level: it sees the parent and stops.
+ * What the submenu actually offers was asserted nowhere below E2E.
+ *
+ * THE REPLACEMENT SAYS MORE THAN THIS TEST DID. The E2E read a label. The unit tests also fire the
+ * rows and assert WHICH action each one calls — so `New Tab` wired to `sendToTab(otherTabs[0])`,
+ * which draws an identical menu and silently drops the Panel into Tab 2, now reddens. They also
+ * cover the empty-`otherTabs` case this test never reached, where a submenu built as a plain map
+ * over the other Tabs would come out empty and the row would be dead.
+ *
+ * ANTI-VACUITY CONTROL: deleting the `New Tab` entry from the `submenu` array in
+ * `panel-header-menu.ts` fails ALL THREE of the new tests (`red-editor-find.mjs --m1`). A second
+ * mutation, `--m2`, keeps the label and rewires the action, and reddens exactly the one test the
+ * E2E could never have caught.
+ *
+ * WHAT DID NOT MOVE, from this file: "Open In submenu holds editor targets" also opens the file
+ * into a real editor and asserts on `.cm-content`, and the dirty-destroy prompt needs its own
+ * config root and removes a real Panel. Both are FR-047 partials — the menu halves would move and
+ * the rest would not, so the tests stay whole.
+ */
 
-test('destroying a dirty editor prompts save/discard/cancel; cancel is a no-op', async () => {
+test('destroying a dirty editor prompts save/discard/cancel; cancel is a no-op', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-cfg-menu-'));
   // No destroy-confirmation noise — isolate the dirty-close prompt.

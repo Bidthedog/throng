@@ -112,7 +112,7 @@ async function editorOn(win: Page, panelId: string, file: string): Promise<void>
   );
 }
 
-test('a growing notice announces only the panels that joined, and its list takes focus without trapping it', async () => {
+test('a growing notice announces only the panels that joined, and its list takes focus without trapping it', { tag: ['@extended', '@failure'] }, async () => {
   test.setTimeout(420_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-a11y-root-'));
   const moved = `${root}-renamed`;

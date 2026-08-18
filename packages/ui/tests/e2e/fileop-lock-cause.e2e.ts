@@ -108,7 +108,7 @@ async function renameInTree(win: Page, name: string, to: string): Promise<void> 
   await input.press('Enter');
 }
 
-test('a rename blocked by ANOTHER program says so, instead of reporting a raw EPERM', async () => {
+test('a rename blocked by ANOTHER program says so, instead of reporting a raw EPERM', { tag: ['@extended', '@explorer'] }, async () => {
   skipIfElevated(); // an elevated run can rename past holds a normal user cannot
   test.setTimeout(120_000);
 
@@ -206,12 +206,16 @@ test('a rename blocked by ANOTHER program says so, instead of reporting a raw EP
   }
 });
 
-test("a rename blocked by THRONG'S OWN lock names throng, not an anonymous program", async () => {
+test("a rename blocked by THRONG'S OWN lock names throng, not an anonymous program", { tag: ['@extended', '@explorer'] }, async () => {
   skipIfElevated();
   test.setTimeout(150_000);
 
   const root = mkdtempSync(join(tmpdir(), 'throng-196-own-root-'));
   const inner = join(root, 'Inner');
+  // There is deliberately no `renamedPath` here. One was added with the comment "where `inner`
+  // lands after the tree rename below", and it never lands there — the whole subject of this test
+  // is that the rename is BLOCKED. A probe written against that path could only ever fail, and it
+  // did, for fifteen seconds at a time.
   mkdirSync(inner);
   writeFileSync(join(inner, 'inside.txt'), 'content\n');
 
@@ -303,12 +307,51 @@ test("a rename blocked by THRONG'S OWN lock names throng, not an anonymous progr
       expect(prose, 'the raw errno is still the headline')
         .not.toMatch(/EBUSY|EPERM|resource busy or locked|operation not permitted/);
 
-      // Release the lock so teardown is not fighting a live shell.
+      /*
+       * Release the lock so teardown is not fighting a live shell.
+       *
+       * TWO THINGS WERE WRONG WITH THE FIRST ATTEMPT AT THIS, and both are worth keeping.
+       *
+       * It probed `renamedPath` — but this test exists BECAUSE that rename is blocked, so the
+       * folder never lands there and the path never comes into existence. `renameSync` threw
+       * ENOENT on every poll, so the condition could only ever be false: a 15-second timeout,
+       * three times over with retries, dressed as "the shell never released its hold".
+       *
+       * And it was a hard assertion. The original was a fixed pause with no expectation attached,
+       * because whether Windows drops a dead process's directory handle inside fifteen seconds is
+       * not what this test is about — the assertions above have already passed by the time we get
+       * here. Turning cleanup into a claim invents a requirement the feature never made.
+       *
+       * So: wait on the real condition (the handle on `inner`, the folder actually held), and treat
+       * "still held" as acceptable. `cleanupTemp` already copes with a directory Windows will not
+       * release — it says so in its own message — and the run directory is swept afterwards.
+       */
       await win.evaluate((id) => window.throng?.terminal?.kill?.(id), pid);
-      await win.waitForTimeout(1200);
+      const released = await Promise.race([
+        (async () => {
+          for (;;) {
+            try {
+              renameSync(inner, `${inner}-released-probe`);
+              renameSync(`${inner}-released-probe`, inner);
+              return true;
+            } catch {
+              await win.evaluate(() => new Promise((r) => setTimeout(r, 100)));
+            }
+          }
+        })(),
+        win.evaluate(() => new Promise((r) => setTimeout(() => r(false), 15_000))),
+      ]);
+      if (!released) {
+        // Information, not a failure: teardown handles it, and knowing it happened is worth a line
+        // if this folder ever starts showing up in the temp sweep.
+        console.log('[fileop-lock-cause] the killed shell still held Inner after 15s; teardown will sweep it');
+      }
     });
   } finally {
     cleanupTemp(`${inner}-probe`);
+    // The release probe renames `inner`, not `renamedPath` — see the comment at the probe. Cleaning
+    // up a path that can never exist is harmless, and that is exactly why it hid the defect.
+    cleanupTemp(`${inner}-released-probe`);
     cleanupTemp(root);
   }
 });

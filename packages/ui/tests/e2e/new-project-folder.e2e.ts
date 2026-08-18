@@ -33,7 +33,7 @@ function withSettings(newProject: Record<string, unknown>): { cfgRoot: string; e
   return { cfgRoot, env: { THRONG_CONFIG_ROOT: cfgRoot } };
 }
 
-test('lastViewed opens the picker at the last chosen folder', async () => {
+test('lastViewed opens the picker at the last chosen folder', { tag: ['@extended', '@explorer'] }, async () => {
   const lastFolder = mkdtempSync(join(tmpdir(), 'throng-lastviewed-'));
   const { cfgRoot, env } = withSettings({ startingFolder: 'lastViewed', lastProjectFolder: lastFolder });
   try {
@@ -52,7 +52,7 @@ test('lastViewed opens the picker at the last chosen folder', async () => {
   }
 });
 
-test('profile opens the picker at the home folder', async () => {
+test('profile opens the picker at the home folder', { tag: ['@extended', '@explorer'] }, async () => {
   const picked = mkdtempSync(join(tmpdir(), 'throng-profile-'));
   const { cfgRoot, env } = withSettings({ startingFolder: 'profile' });
   try {
@@ -72,7 +72,7 @@ test('profile opens the picker at the home folder', async () => {
   }
 });
 
-test('an unresolvable override cascades to the last-viewed folder before home', async () => {
+test('an unresolvable override cascades to the last-viewed folder before home', { tag: ['@extended', '@explorer'] }, async () => {
   const lastFolder = mkdtempSync(join(tmpdir(), 'throng-cascade-last-'));
   const picked = mkdtempSync(join(tmpdir(), 'throng-cascade-pick-'));
   const { cfgRoot, env } = withSettings({
@@ -99,7 +99,7 @@ test('an unresolvable override cascades to the last-viewed folder before home', 
   }
 });
 
-test('an unresolvable override with no last-viewed folder falls back to home', async () => {
+test('an unresolvable override with no last-viewed folder falls back to home', { tag: ['@extended', '@explorer'] }, async () => {
   const picked = mkdtempSync(join(tmpdir(), 'throng-ovr-'));
   const { cfgRoot, env } = withSettings({
     startingFolder: 'override',

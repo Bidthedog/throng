@@ -68,11 +68,13 @@ const styleOf = (el: Locator): Promise<Style> =>
   });
 
 /** Read a button's rest style, then its style while hovered. */
-async function restAndHover(page: Page, el: Locator): Promise<{ rest: Style; hover: Style }> {
+async function restAndHover(_page: Page, el: Locator): Promise<{ rest: Style; hover: Style }> {
   const rest = await styleOf(el);
   await el.hover();
-  // Let the :hover repaint settle before reading.
-  await page.waitForTimeout(60);
+  // Every call site's theme gives hover a DIFFERENT background from rest (that difference is what
+  // each one goes on to assert), so "the background has actually changed" is a real, generic
+  // condition for "the :hover repaint has landed" — poll it instead of guessing how long one takes.
+  await expect.poll(async () => (await styleOf(el)).bg, { timeout: 5000 }).not.toBe(rest.bg);
   const hover = await styleOf(el);
   return { rest, hover };
 }
@@ -85,7 +87,7 @@ async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
   return prefs;
 }
 
-test('each button type paints only its own six tokens; an IconButton uses none', async () => {
+test('each button type paints only its own six tokens; an IconButton uses none', { tag: ['@extended', '@prefs'] }, async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(
     async (app, win) => {
@@ -98,8 +100,10 @@ test('each button type paints only its own six tokens; an IconButton uses none',
       const buttonBgs = [V.confirmButtonBg, V.cancelButtonBg, V.destroyButtonBg, V.confirmButtonHoverBg, V.cancelButtonHoverBg, V.destroyButtonHoverBg].map(rgb);
       expect(buttonBgs).not.toContain(iconRest.bg); // rest is transparent, not any button surface
       await iconBtn.hover();
-      await prefs.waitForTimeout(60);
-      expect(await iconBtn.evaluate((n) => getComputedStyle(n).backgroundColor)).toBe(rgb(V.hoverSurface));
+      // Poll for the actual hover background rather than guessing how long the repaint takes.
+      await expect
+        .poll(() => iconBtn.evaluate((n) => getComputedStyle(n).backgroundColor), { timeout: 5000 })
+        .toBe(rgb(V.hoverSurface));
 
       // --- Confirm + Cancel: the name dialog's primary and dismiss buttons. ---
       await prefs.getByTestId('theme-clone').click();

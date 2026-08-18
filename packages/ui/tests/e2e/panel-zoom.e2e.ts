@@ -85,7 +85,7 @@ async function newEditor(win: Page, pid: string): Promise<void> {
   await expect(win.getByTestId(`editor-${pid}`)).toBeVisible();
 }
 
-test('zooming one editor scales only that editor — its sibling editor and a terminal are untouched; content preserved (FR-013)', async () => {
+test('zooming one editor scales only that editor — its sibling editor and a terminal are untouched; content preserved (FR-013)', { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-pz-ed-'));
   try {
     await runApp(async (app, win) => {
@@ -129,8 +129,9 @@ test('zooming one editor scales only that editor — its sibling editor and a te
       expect(await editorFontPx(win, p2)).toBeCloseTo(baseP2, 1);
       expect(await panelZoom(win, p2)).toBe(0);
 
-      // The terminal (a third panel) got zero resizes — it was not the zoom target.
-      await win.waitForTimeout(300);
+      // The terminal (a third panel) got zero resizes — it was not the zoom target. The poll just
+      // above already waited for p1's zoom to fully land (a render triggered by the same state
+      // update as any stray resize would be), so no extra settle time is needed here.
       expect(await probe.count()).toBe(0);
 
       // Content is unchanged — zoom never touches the buffer (FR-013).
@@ -146,7 +147,7 @@ test('zooming one editor scales only that editor — its sibling editor and a te
   }
 });
 
-test('a panel keeps its own zoom across a reload (SC-003)', async () => {
+test('a panel keeps its own zoom across a reload (SC-003)', { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-pz-persist-'));
   try {
     await runApp(async (_app, win) => {
@@ -162,6 +163,10 @@ test('a panel keeps its own zoom across a reload (SC-003)', async () => {
 
       // Let the debounced save flush, drop all in-memory state, then re-open the
       // project → its layout (with this panel's zoom) is re-read from the store.
+      //
+      // sleep-justified: the reload below reads whatever is on disk AT THAT MOMENT, once, and
+      // nothing after can correct a reload that ran ahead of the debounced save — the write
+      // itself raises no event this window can observe.
       await win.waitForTimeout(700);
       await reloadWindow(win);
       await win.locator('.project-item', { hasText: 'ZoomPersist' }).click();
@@ -173,7 +178,7 @@ test('a panel keeps its own zoom across a reload (SC-003)', async () => {
   }
 });
 
-test('the panel right-click menu zooms that panel in and out', async () => {
+test('the panel right-click menu zooms that panel in and out', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'MenuZoom', 'C:/c/mz');
     const pid = await firstPanelId(win);
@@ -204,7 +209,7 @@ test('the panel right-click menu zooms that panel in and out', async () => {
   });
 });
 
-test('zooming a terminal recomputes its grid (SC-005)', async () => {
+test('zooming a terminal recomputes its grid (SC-005)', { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-pz-term-'));
   try {
     await runApp(async (app, win) => {
@@ -214,7 +219,11 @@ test('zooming a terminal recomputes its grid (SC-005)', async () => {
       await win.getByTestId('terminal-flavour').selectOption('cmd');
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: 15000 });
-      await win.waitForTimeout(500); // let the initial fit settle
+      // sleep-justified: the terminal's own initial fit fires a resize the probe below must not
+      // count, and it has no observable completion marker — the probe only starts counting once
+      // installed, so any of this noise arriving late (after install) would be misread as the
+      // zoom's own resize.
+      await win.waitForTimeout(500);
 
       const probe = await installResizeProbe(app);
       await probe.reset();

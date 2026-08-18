@@ -26,7 +26,7 @@ async function terminateAllClose(app: ElectronApplication, win: Page): Promise<v
   await closed;
 }
 
-test('a file with unsaved editor changes is marked in the tree, and unmarked when saved', async () => {
+test('a file with unsaved editor changes is marked in the tree, and unmarked when saved', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-treedot-'));
   writeFileSync(join(root, 'edited.txt'), 'original\n');
   writeFileSync(join(root, 'untouched.txt'), 'other\n');

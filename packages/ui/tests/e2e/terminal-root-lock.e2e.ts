@@ -11,7 +11,7 @@ import { runApp, createProject, firstPanelId, daemonRpc, cleanupTemp} from './ha
 // again. We exercise the real directory lock (OS refuses to remove the cwd of a live
 // shell) and the FR-022 root-path-edit guard (projects.update is rejected).
 
-test('an open terminal locks the project root against deletion and root-path edits', async () => {
+test('an open terminal locks the project root against deletion and root-path edits', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-rootlock-'));
   const elsewhere = mkdtempSync(join(tmpdir(), 'throng-rootlock-new-'));
   try {
@@ -43,14 +43,26 @@ test('an open terminal locks the project root against deletion and root-path edi
       // Close the terminal → the lock is released.
       await win.evaluate((id) => window.throng?.terminal?.kill?.(id), pid);
       await expect(win.getByTestId(`panel-type-form-${pid}`)).toBeVisible({ timeout: 15000 });
-      // Give the daemon a moment to release the lock on the exit event.
-      await win.waitForTimeout(600);
 
-      // 3) With no open terminals, the root path can be edited again.
-      const allowed = (await daemonRpc(pipeName, 'projects.update', {
-        id: projectId,
-        rootFolder: elsewhere,
-      })) as { project?: { rootFolder: string } } | null;
+      /*
+       * 3) With no open terminals, the root path can be edited again. The daemon releases the
+       * directory lock asynchronously on the terminal's exit event — the Panel reverting to the
+       * form above proves only the RENDERER's side of that, not the daemon's — so poll the very
+       * RPC this step is asserting on rather than guessing how long the release takes.
+       */
+      let allowed: { project?: { rootFolder: string } } | null = null;
+      await expect
+        .poll(
+          async () => {
+            allowed = (await daemonRpc(pipeName, 'projects.update', {
+              id: projectId,
+              rootFolder: elsewhere,
+            })) as { project?: { rootFolder: string } } | null;
+            return allowed !== null;
+          },
+          { timeout: 10_000, message: 'the project root lock was never released' },
+        )
+        .toBe(true);
       expect(allowed?.project?.rootFolder).toBe(elsewhere);
     });
   } finally {

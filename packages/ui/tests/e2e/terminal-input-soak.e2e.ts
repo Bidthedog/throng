@@ -45,7 +45,7 @@ test.describe('terminal input soak (opt-in: THRONG_INPUT_SOAK=1)', () => {
   test.skip(!SOAK, 'long-running: set THRONG_INPUT_SOAK=1 to run it');
 
   for (const flavour of FLAVOURS) {
-    test(`no keystroke is lost over ${REPS} click-and-type rounds (${flavour})`, async () => {
+    test(`no keystroke is lost over ${REPS} click-and-type rounds (${flavour})`, { tag: ['@extended', '@terminal'] }, async () => {
       test.setTimeout(REPS * 8_000 + 120_000);
       const root = mkdtempSync(join(tmpdir(), `throng-soak-${flavour}-`));
       console.log(`[soak] ${flavour}: ${REPS} repetitions`);
@@ -63,8 +63,18 @@ test.describe('terminal input soak (opt-in: THRONG_INPUT_SOAK=1)', () => {
           const lost: number[] = [];
           for (let i = 1; i <= REPS; i += 1) {
             // Idle the panel first — the defect needs a terminal that does not already hold focus.
+            // Poll for focus having actually LEFT the terminal (not merely for the click having been
+            // dispatched) — xterm's hidden textarea holds keyboard focus, so `document.activeElement`
+            // no longer being inside the terminal element is the real condition.
             await win.getByTestId('project-list').click();
-            await win.waitForTimeout(120);
+            await expect
+              .poll(() =>
+                win.evaluate((id) => {
+                  const termEl = document.querySelector(`[data-testid="terminal-${id}"]`);
+                  return !termEl?.contains(document.activeElement);
+                }, pid),
+              )
+              .toBe(true);
 
             const box = await term.boundingBox();
             if (!box) throw new Error('terminal has no box');

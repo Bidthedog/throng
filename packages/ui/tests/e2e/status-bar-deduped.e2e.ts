@@ -33,7 +33,7 @@ const osTitle = (app: ElectronApplication): Promise<string> =>
 const barHeight = (win: Page): Promise<number> =>
   win.getByTestId('status-bar').evaluate((el) => el.getBoundingClientRect().height);
 
-test('the status bar keeps only the project root path; the title bar keeps the identity', async () => {
+test('the status bar keeps only the project root path; the title bar keeps the identity', { tag: ['@extended', '@window'] }, async () => {
   skipIfElevated(); // this case asserts NO admin pill; the elevated case is the test below
   const root = mkdtempSync(join(tmpdir(), 'throng-statusdedupe-'));
   try {
@@ -67,7 +67,7 @@ test('the status bar keeps only the project root path; the title bar keeps the i
   }
 });
 
-test('when elevated, [ADMIN] is on the title bar only — the status bar has no pill', async () => {
+test('when elevated, [ADMIN] is on the title bar only — the status bar has no pill', { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-statusdedupe-admin-'));
   try {
     await runApp(

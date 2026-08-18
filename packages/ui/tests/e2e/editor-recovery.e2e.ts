@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
@@ -8,6 +8,22 @@ import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 // warning; reopening restores the in-progress content from the recovery temp. The
 // same dataDir (persisted layout) + userDataDir (recovery temps) span both sessions.
 
+/**
+ * The dirty-buffer recovery snapshot's persisted text for a panel, or null while it has not (yet)
+ * been written — `EditorRecovery.write` (packages/ui/src/main/editor-recovery.ts), on a 400ms
+ * debounce, to `<userDataDir>/recovery/<encoded panelId>`. Same idiom as
+ * `editor-cross-project-restore.e2e.ts`'s `recoveredText`.
+ */
+function recoveredText(userDataDir: string, panelId: string): string | null {
+  try {
+    const raw = readFileSync(join(userDataDir, 'recovery', encodeURIComponent(panelId)), 'utf8');
+    const parsed = JSON.parse(raw) as { text?: string };
+    return typeof parsed.text === 'string' ? parsed.text : null;
+  } catch {
+    return null; // not written yet, or a transient read of a mid-write file
+  }
+}
+
 async function newEditor(win: Page): Promise<string> {
   const pid = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('editor');
@@ -16,7 +32,7 @@ async function newEditor(win: Page): Promise<string> {
   return pid;
 }
 
-test('restores unsaved editor content after an app restart (no close warning)', async () => {
+test('restores unsaved editor content after an app restart (no close warning)', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-recroot-'));
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-recdata-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-recud-'));
@@ -31,7 +47,12 @@ test('restores unsaved editor content after an app restart (no close warning)', 
         await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
         await win.keyboard.type(marker);
         await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible();
-        await win.waitForTimeout(800); // > recovery debounce (400ms) so the temp is written
+        await expect
+          .poll(() => (recoveredText(userDataDir, pid) ?? '').includes(marker), {
+            timeout: 15_000,
+            message: `the recovery snapshot for panel "${pid}" was never written to disk`,
+          })
+          .toBe(true);
       },
       { dataDir, userDataDir },
     );

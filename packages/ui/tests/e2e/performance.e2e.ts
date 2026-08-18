@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { cleanupTemp, commitPanelRename, shutdownApp } from './harness.js';
+import { cleanupTemp, commitPanelRename, shutdownApp, DAEMON_READY_TIMEOUT_MS } from './harness.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -26,7 +26,7 @@ function startDaemon(pipeName: string, dataDir: string): Promise<ChildProcess> {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('daemon not ready')), 10_000);
+    const timer = setTimeout(() => reject(new Error('daemon not ready')), DAEMON_READY_TIMEOUT_MS);
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', (c: string) => {
       if (c.includes('listening')) {
@@ -110,7 +110,7 @@ async function expectProjectSaved(dataDir: string, projectName: string): Promise
     .toBe(true);
 }
 
-test('restores a project workspace within the launch budget (NFR-002)', async () => {
+test('restores a project workspace within the launch budget (NFR-002)', { tag: ['@extended', '@window'] }, async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
   try {
@@ -130,6 +130,16 @@ test('restores a project workspace within the launch budget (NFR-002)', async ()
     await win.locator('.project-item', { hasText: 'Perf' }).locator('[data-testid^="project-switch-"]').click();
     await win.getByTestId('tab-strip').waitFor({ state: 'visible' });
     await win.locator('.panel-box').first().waitFor({ state: 'visible' });
+    /*
+     * The five seconds is 001 SC-001 — "launching the application opens the landing page in under
+     * 5 seconds on a typical modern Windows machine" — and 001 NFR-001 behind it. It is quoted here
+     * because 034 FR-018 forbids a wall-clock ceiling that defends nothing: a bare number is
+     * indistinguishable from a locally invented allowance, and the invented ones are what turn a
+     * contended run into a fake regression nobody can adjudicate.
+     *
+     * This is measured further than 001 SC-001 asks — through the project switch to a restored,
+     * painted panel — so it is a STRICTER reading of the requirement, not a looser one.
+     */
     expect(Date.now() - start).toBeLessThan(5000);
   } finally {
     if (app) await shutdownApp(app);
@@ -138,7 +148,7 @@ test('restores a project workspace within the launch budget (NFR-002)', async ()
   }
 });
 
-test('shows drop-target feedback promptly once a Panel drag starts (NFR-001/SC-012)', async () => {
+test('shows drop-target feedback promptly once a Panel drag starts (NFR-001/SC-012)', { tag: ['@extended', '@window'] }, async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
   try {

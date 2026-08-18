@@ -1,9 +1,17 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, cleanupTemp} from './harness.js';
+import { openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import {
+  configRootSeeded,
+  settleConfigRoot,
+  snapshotConfigRoot,
+  type ConfigRootSnapshot,
+} from './helpers/config-snapshot.js';
+import { closePrefsWindow } from './helpers/prefs-window.js';
+import { writeConfigAtomic } from './helpers/config-write.js';
 
 /**
  * The Themes tab — feature 007's base editor (activate, token edits apply + persist,
@@ -19,19 +27,91 @@ import { runApp, cleanupTemp} from './harness.js';
  * set apart (it acts on every built-in). Actions announce failures only — no success banner.
  */
 const cfgRoots: string[] = [];
-function freshCfgRoot(seedThemes: Record<string, unknown> = {}): string {
+function freshCfgRoot(): string {
   const dir = mkdtempSync(join(tmpdir(), 'throng-cfg-themes-'));
   cfgRoots.push(dir);
-  const themesDir = join(dir, 'themes');
-  mkdirSync(themesDir, { recursive: true });
-  for (const [name, theme] of Object.entries(seedThemes)) {
-    writeFileSync(join(themesDir, `${name}.json`), JSON.stringify(theme, null, 2), 'utf8');
-  }
+  mkdirSync(join(dir, 'themes'), { recursive: true });
   return dir;
 }
-test.afterAll(() => {
+
+/**
+ * Put a custom theme into the RUNNING app's themes directory.
+ *
+ * `listThemes` and `readRaw` are read straight off disk on every call, and the preferences window
+ * asks for both when it MOUNTS — so a theme written before the window opens is indistinguishable
+ * from one seeded before the process started, which is all these three tests ever needed.
+ * `restoreConfigRoot` removes it again in `afterEach`, which is what keeps the theme LIST (asserted
+ * at exactly the shipped count by `waitForSeededList`) correct for the tests that follow.
+ */
+function seedTheme(name: string, theme: unknown): void {
+  writeConfigAtomic(join(cfgRoot, 'themes', `${name}.json`), `${JSON.stringify(theme, null, 2)}\n`);
+}
+
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-010).
+ *
+ * Eight of the eleven tests seeded nothing. The other three seeded ONE custom theme file, and a theme
+ * file is read per call — `listThemes` and `readRaw` both go to disk every time, and the preferences
+ * window asks on mount — so writing it into the running root before the window opens proves the same
+ * thing a pre-launch seed did.
+ *
+ * The destructive ones are the reason `restoreConfigRoot` exists rather than a tidy-up per test: these
+ * tests DELETE built-in theme files, clone new ones, rename them and edit tokens in place. The restore
+ * puts every deleted built-in back, removes every clone, and rewrites every edited token.
+ *
+ * The shim below REFUSES launch options rather than ignoring them: a swallowed config root does not
+ * fail, it makes a test pass for the wrong reason.
+ *
+ * Serial mode is not optional. These tests share a window, a config root and the ONE preferences
+ * window throng allows, so they must not interleave — and when one fails the rest are SKIPPED rather
+ * than run against whatever state the failure left behind (see `openApp` in harness.ts).
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let cfgRoot: string;
+let baseline: ConfigRootSnapshot;
+
+test.beforeAll(async () => {
+  cfgRoot = freshCfgRoot();
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
+  await settle(shared.win);
+  // Photograph the root only once first-run seeding has finished — settings, key bindings and every
+  // shipped theme. A partial snapshot would have every later restore DELETE whatever arrived late.
+  await expect.poll(() => configRootSeeded(cfgRoot), { timeout: 30_000 }).toBe(true);
+  baseline = snapshotConfigRoot(cfgRoot);
+});
+
+/*
+ * Put the config root back between tests — with the preferences window CLOSED FIRST.
+ *
+ * The order is load-bearing twice over. A dirty JSON buffer raises `json-external-change` when the
+ * file changes underneath it, so restoring against an open window would hand the next test a notice
+ * it never asked for. And the on-entry snapshot that Revert and Revert All compare against is
+ * captured when the preferences window MOUNTS (`preferences-app.tsx`), so carrying one window across
+ * tests would carry the first test's baseline into the last one.
+ */
+test.afterEach(async () => {
+  await closePrefsWindow(shared.app);
+  await settleConfigRoot(baseline);
+});
+
+test.afterAll(async () => {
+  await shared?.close();
   for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
 
 function readTheme(cfgRoot: string, name: string): any {
   try {
@@ -78,8 +158,7 @@ async function pickTheme(prefs: Page, name: string): Promise<void> {
   await expect(prefs.getByTestId('theme-select')).toHaveValue(name);
 }
 
-test('editing a colour token applies to the active theme file and reflects live', async () => {
-  const cfgRoot = freshCfgRoot();
+test('editing a colour token applies to the active theme file and reflects live', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -94,53 +173,60 @@ test('editing a colour token applies to the active theme file and reflects live'
         )
         .toBe('#123456');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('selecting a theme in the dropdown activates it (select = activate)', async () => {
-  const cfgRoot = freshCfgRoot({
-    CustomOne: { name: 'CustomOne', colours: { accent: '#00ff41' }, fonts: { family: 'Consolas', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} },
-  });
+test('selecting a theme in the dropdown activates it (select = activate)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
+      seedTheme('CustomOne', { name: 'CustomOne', colours: { accent: '#00ff41' }, fonts: { family: 'Consolas', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} });
       const prefs = await openThemes(app, win);
       await pickTheme(prefs, 'CustomOne');
       await expect.poll(() => readActiveTheme(cfgRoot)).toBe('CustomOne');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('the rename dialog refuses a reserved built-in name and writes nothing', async () => {
-  const cfgRoot = freshCfgRoot({
-    CustomOne: { name: 'CustomOne', colours: {}, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} },
-  });
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-      // `CustomOne` is a CUSTOM theme (its name does not collide with any built-in, even
-      // case-insensitively), so it carries the rename control.
-      await pickTheme(prefs, 'CustomOne');
-      await prefs.getByTestId('theme-rename').click();
-      await expect(prefs.getByTestId('theme-name-dialog')).toBeVisible();
-      await prefs.getByTestId('theme-name-input').fill('throng');
-      await expect(prefs.getByTestId('theme-name-error')).toBeVisible();
-      await expect(prefs.getByTestId('theme-name-confirm')).toBeDisabled();
-      // Nothing written: both files still as they were.
-      expect(existsSync(join(cfgRoot, 'themes', 'throng.json'))).toBe(true);
-      expect(existsSync(join(cfgRoot, 'themes', 'CustomOne.json'))).toBe(true);
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
+/*
+ * MOVED to `packages/ui/tests/component/preferences-name-dialog.test.ts` (034 FR-045):
+ *   “the rename dialog refuses a reserved built-in name and writes nothing”.
+ *
+ * It launched Electron, seeded a custom theme into the running config root, opened the
+ * preferences window and selected a theme — in order to make three assertions about a modal
+ * (the dialog is visible, the error is visible, confirm is disabled) and two `existsSync` calls
+ * standing in for “nothing was written”. `NameDialog` takes `reserved`, `existing`,
+ * `renamingFrom`, `onConfirm` and `onCancel` as props and reaches nothing else — no context, no
+ * bridge, no store.
+ *
+ * TEN TESTS REPLACE IT, and three of them assert something this one could not:
+ *   - “nothing was written” was two files that were already there, which a dialog writing a
+ *     THIRD file satisfies perfectly. `onConfirm` is the dialog’s only output, so asserting it
+ *     was never called covers the whole surface rather than two paths of it.
+ *   - **Enter** submits too, and a disabled button does not disable a keyboard handler. That is
+ *     how this guard would realistically be lost, and no test at any layer asked before.
+ *   - The three refusal REASONS now read differently — reserved, duplicate, empty — where the
+ *     E2E only asked whether the error element existed at all.
+ *
+ * WHAT DID NOT MOVE, and is still witnessed below: that clicking `theme-rename` OPENS the
+ * dialog, and that confirming a valid name renames the FILE — both are in “US3: Clone is the
+ * sole creation path”, which stays (FR-047). And that the reserved set comes from
+ * `reservedThemeNames()` rather than from the themes on disk is `themes-tab.tsx` WIRING, which a
+ * component handed the list cannot see — “US3: a DELETED built-in name is still reserved” stays
+ * for exactly that reason.
+ *
+ * Red-proved, three mutations: confirm never disabled (5 red), `submit()` dropping its validation
+ * guard so Enter confirms an invalid name (1 red — only the Enter test, which is the point), and
+ * the reserved sentence collapsing to “Invalid name.” (3 red, with duplicate and empty staying
+ * green).
+ *
+ * ANTI-VACUITY CONTROL: rename the field’s `data-testid="theme-name-input"` in `name-dialog.tsx`.
+ * Every one of the ten reaches the input through `getByTestId`, which throws — all 10 fail.
+ */
 
-test('deleting a theme requires a single confirm and removes the file', async () => {
-  const cfgRoot = freshCfgRoot({
-    CustomOne: { name: 'CustomOne', colours: {}, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} },
-  });
+test('deleting a theme requires a single confirm and removes the file', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
+      seedTheme('CustomOne', { name: 'CustomOne', colours: {}, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} });
       const prefs = await openThemes(app, win);
       await pickTheme(prefs, 'CustomOne');
       await prefs.getByTestId('theme-delete').click();
@@ -148,12 +234,10 @@ test('deleting a theme requires a single confirm and removes the file', async ()
       await prefs.getByTestId('theme-confirm-yes').click();
       await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'CustomOne.json'))).toBe(false);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('the font control is a pill editor saving a comma stack; a non-family role exposes it (H4)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('the font control is a pill editor saving a comma stack; a non-family role exposes it (H4)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -163,54 +247,47 @@ test('the font control is a pill editor saving a comma stack; a non-family role 
       const control = prefs.getByTestId(`control-${key}`);
       await expect(control).toBeVisible();
 
-      // Click opens a dropdown; type to filter, then pick two families → two pills.
+      /*
+       * The PILLS are asserted at the component layer now (034 FR-045) — ordering, appending rather
+       * than replacing, filtering the typeahead, and re-serialising after a removal, in
+       * `tests/component/preferences-font-pills.test.ts`. What is left here is the claim that layer
+       * cannot make: the stack the control commits reaches <theme>.json, which is the file the
+       * live-reload path reads.
+       */
       await control.click();
       await control.fill('Arial');
       await prefs.getByTestId(`control-${key}-option-Arial`).click();
-      await expect(prefs.getByTestId(`control-${key}-pill-0`)).toContainText('Arial');
       await control.fill('Georgia');
       await prefs.getByTestId(`control-${key}-option-Georgia`).click();
-      await expect(prefs.getByTestId(`control-${key}-pill-1`)).toContainText('Georgia');
 
       // Saved to the theme file as a comma-separated stack.
       await expect
         .poll(() => readTheme(cfgRoot, 'throng')?.typography?.paneTitle?.family)
         .toBe('Arial, Georgia');
-
-      // Deleting the first pill updates the saved stack.
-      await prefs.getByTestId(`control-${key}-remove-0`).click();
-      await expect
-        .poll(() => readTheme(cfgRoot, 'throng')?.typography?.paneTitle?.family)
-        .toBe('Georgia');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('an existing comma stack loads back as ordered pills (H4, FR-038b)', async () => {
-  const cfgRoot = freshCfgRoot({
-    stacky: {
-      name: 'stacky',
-      colours: {},
-      fonts: { family: "'Segoe UI', system-ui, sans-serif", baseSizePx: 13, weights: { normal: 400, bold: 600 } },
-      icons: {},
-    },
-  });
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-      await pickTheme(prefs, 'stacky');
-      const key = 'fonts.family';
-      await expect(prefs.getByTestId(`control-${key}-pill-0`)).toContainText('Segoe UI');
-      await expect(prefs.getByTestId(`control-${key}-pill-1`)).toContainText('system-ui');
-      await expect(prefs.getByTestId(`control-${key}-pill-2`)).toContainText('sans-serif');
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('the three-type button tokens appear in the editor and apply live (021, US7, FR-027)', async () => {
-  const cfgRoot = freshCfgRoot();
+/*
+ * MOVED to `packages/ui/tests/component/preferences-font-pills.test.ts` (034 FR-045):
+ * "an existing comma stack loads back as ordered pills (H4, FR-038b)".
+ *
+ * It seeded a theme with `'Segoe UI', system-ui, sans-serif`, launched Electron, opened the
+ * preferences window, switched theme, and asserted three pills read the three families in order.
+ * `ThemeTokenControl` is exported and takes `descriptor`, `value`, `fonts` and `onCommit` — no
+ * context at all — so the same claim is a render and three assertions.
+ *
+ * Eight tests replace it, covering what the one could not afford to: the ordering (a font stack IS a
+ * fallback chain, so the right families in the wrong order look correct and mean something else),
+ * the quote stripping, a role that pins NO family and must still draw the control, appending rather
+ * than replacing, the typeahead's filtering, and re-serialising after a removal — including the last
+ * family going, which commits an empty stack.
+ *
+ * Red-proved: reversing the parse at BOTH sites (the initial state and the resync effect — mutating
+ * only the first proved nothing, because the effect immediately overwrote it), making a pick replace
+ * the stack, removing the wrong index, and dropping the typeahead filter. Four mutations, four reds.
+ */
+test('the three-type button tokens appear in the editor and apply live (021, US7, FR-027)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -235,7 +312,6 @@ test('the three-type button tokens appear in the editor and apply live (021, US7
         )
         .toBe('#123456');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
@@ -243,8 +319,7 @@ test('the three-type button tokens appear in the editor and apply live (021, US7
  * Feature 014 — restore & create controls
  * ------------------------------------------------------------------------- */
 
-test('US1: Restore All resets edited built-ins, recreates a deleted built-in, and leaves customs untouched', async () => {
-  const cfgRoot = freshCfgRoot();
+test('US1: Restore All resets edited built-ins, recreates a deleted built-in, and leaves customs untouched', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -281,12 +356,10 @@ test('US1: Restore All resets edited built-ins, recreates a deleted built-in, an
       expect(readFileSync(join(cfgRoot, 'themes', 'MyCustom.json'), 'utf8')).toBe(customBefore);
 
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('US2: per-theme restore reverts only that built-in (confirmed); a deleted built-in leaves the list and only Restore All brings it back', async () => {
-  const cfgRoot = freshCfgRoot();
+test('US2: per-theme restore reverts only that built-in (confirmed); a deleted built-in leaves the list and only Restore All brings it back', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -328,12 +401,10 @@ test('US2: per-theme restore reverts only that built-in (confirmed); a deleted b
         .poll(() => prefs.getByTestId('theme-select').locator('option').allTextContents())
         .toContain('Debian');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('US3: Clone is the sole creation path — prefilled "<source> - Clone" with "Clone" pre-selected; rename uses the same dialog', async () => {
-  const cfgRoot = freshCfgRoot();
+test('US3: Clone is the sole creation path — prefilled "<source> - Clone" with "Clone" pre-selected; rename uses the same dialog', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -380,12 +451,10 @@ test('US3: Clone is the sole creation path — prefilled "<source> - Clone" with
       await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Renamed.json'))).toBe(true);
       await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'MyTheme.json'))).toBe(false);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('the mode-toggle glyph stays on ONE line in every monospace-font theme (regression: two-line wrap)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('the mode-toggle glyph stays on ONE line in every monospace-font theme (regression: two-line wrap)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -420,12 +489,10 @@ test('the mode-toggle glyph stays on ONE line in every monospace-font theme (reg
         expect(lineBoxes, `mode-toggle glyph occupied ${lineBoxes} line boxes in the "${theme}" theme`).toBe(1);
       }
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('US3: a DELETED built-in name is still reserved for a new theme (FR-007)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('US3: a DELETED built-in name is still reserved for a new theme (FR-007)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -446,6 +513,5 @@ test('US3: a DELETED built-in name is still reserved for a new theme (FR-007)', 
       // Nothing was created.
       expect(existsSync(join(cfgRoot, 'themes', 'Debian.json'))).toBe(false);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });

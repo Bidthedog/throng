@@ -89,7 +89,7 @@ const seedSub = `(() => window.throng.invoke('workspace.persistSubWorkspaces', {
     tabs: [{ id: 't', title: 'T', root: { type: 'panel', id: 'p', originProjectId: 'x', title: 'P' } }] },
 ] }))()`;
 
-test('every window kind follows the saved LIGHT theme — no dark canvas flash (issue 132)', async () => {
+test('every window kind follows the saved LIGHT theme — no dark canvas flash (issue 132)', { tag: ['@extended', '@prefs'] }, async () => {
   const cfg = mkdtempSync(join(tmpdir(), 'throng-flash-cfg-'));
   try {
     await runApp(
@@ -153,7 +153,7 @@ test('every window kind follows the saved LIGHT theme — no dark canvas flash (
   }
 });
 
-test('the default (dark) throng theme keeps color-scheme dark — the fix does not over-correct (issue 132)', async () => {
+test('the default (dark) throng theme keeps color-scheme dark — the fix does not over-correct (issue 132)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(async (_app, win) => {
     await win.waitForSelector('.throng-shell', { timeout: 8000 });
     await expect.poll(() => win.evaluate(() => document.documentElement.dataset.theme)).toBe('throng');

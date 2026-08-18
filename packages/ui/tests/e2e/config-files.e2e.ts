@@ -8,7 +8,7 @@ import { runApp, cleanupTemp} from './harness.js';
 // config documents under the config root with documented defaults. The root is
 // overridden to a temp dir via THRONG_CONFIG_ROOT so the real profile is untouched.
 
-test('creates default settings/keybindings/theme files on first run', async () => {
+test('creates default settings/keybindings/theme files on first run', { tag: ['@core', '@prefs'] }, async () => {
   const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
   try {
     await runApp(

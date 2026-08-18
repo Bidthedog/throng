@@ -9,6 +9,7 @@ import {
   cleanupTemp,
   type AppOptions,
   type OpenApp,
+  TERMINAL_OUTPUT_TIMEOUT_MS,
 } from './harness.js';
 
 /*
@@ -73,7 +74,7 @@ async function newTerminal(win: Page, root: string): Promise<string> {
   await confirm.click();
   const term = win.getByTestId(`terminal-${pid}`);
   await expect(term).toBeVisible();
-  await expect(term).toContainText(basename(root), { timeout: 20000 });
+  await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
   return pid;
 }
 
@@ -81,10 +82,12 @@ async function run(win: Page, pid: string, cmd: string, marker: string): Promise
   await win.getByTestId(`terminal-${pid}`).click();
   await win.keyboard.type(cmd, { delay: 15 });
   await win.keyboard.press('Enter');
-  await expect(win.getByTestId(`terminal-${pid}`)).toContainText(marker, { timeout: 20000 });
+  await expect(win.getByTestId(`terminal-${pid}`)).toContainText(marker, {
+    timeout: TERMINAL_OUTPUT_TIMEOUT_MS,
+  });
 }
 
-test('page / line / top / bottom move the viewport — and never reach the program', async () => {
+test('page / line / top / bottom move the viewport — and never reach the program', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-nav-'));
   try {
     await runApp(async (_app, win) => {
@@ -132,7 +135,7 @@ test('page / line / top / bottom move the viewport — and never reach the progr
   }
 });
 
-test('at the live bottom, ordinary typing still reaches the program (FR-016)', async () => {
+test('at the live bottom, ordinary typing still reaches the program (FR-016)', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-nav-'));
   try {
     await runApp(async (_app, win) => {
@@ -154,7 +157,7 @@ test('at the live bottom, ordinary typing still reaches the program (FR-016)', a
   }
 });
 
-test('with find open, next/previous jump the viewport between matches (FR-015)', async () => {
+test('with find open, next/previous jump the viewport between matches (FR-015)', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-nav-'));
   try {
     await runApp(async (_app, win) => {

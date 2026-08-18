@@ -44,6 +44,29 @@ import { runApp, createProject, firstPanelId, panelIds, reloadWindow, cleanupTem
  * The failing tests here are therefore the ordinary-close ones. The terminate-all tests pass, and
  * are kept deliberately — they are what pins the asymmetry down, and they are what would catch a
  * "fix" that drains one exit and not the other.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * 034 EXAMINATION: ALL TWELVE STAY, AND ALL NINETEEN LAUNCHES ARE EARNED
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * This is the heaviest file in the suite, so it is the first place anyone hunting launches will
+ * look. It was examined under spec 034 (FR-045) and nothing moved. The reason is structural
+ * rather than a matter of effort: every test here is of the form "X, set immediately before a
+ * close, survives the next launch". The subject IS the shutdown path, so each one needs a real
+ * app started, driven, closed, and started AGAIN to read the result back. Two lifecycles, by
+ * construction — which is exactly the 19 launches across 12 tests.
+ *
+ * Nor can they share an app: a shared app is one that has not closed, and the close is the thing
+ * under test. See `launch-sharing.md`, where this file is recorded as UNSAFE-RESOURCE for that
+ * reason.
+ *
+ * ONE THING THAT LOOKS PINNABLE LOWER AND IS NOT. The header above describes the defect as
+ * arithmetic — a 400ms debounce against a 250ms close timer — and a unit test asserting one
+ * exceeds the other would be cheap. It would also be WRONG: the fix does not widen the timer.
+ * `main.ts` now waits on the drain ACK rather than a clock, and FR-011 refuses the timer-widening
+ * approach in as many words, because correctness must not depend on how long a dialog detains
+ * someone. A unit test over those two constants would pin an invariant the spec deliberately
+ * rejected, and would go green on a change that reintroduced the bug.
  */
 
 function makeProject(): string {
@@ -267,7 +290,7 @@ async function zoomInTwice(win: Page, pid: string): Promise<void> {
 // PASSES. The reported symptom does not reproduce; kept as the guard that says so.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 AC1/AC4: a language override set immediately before TERMINATE ALL survives the next launch', async () => {
+test('#86 AC1/AC4: a language override set immediately before TERMINATE ALL survives the next launch', { tag: ['@extended', '@terminal'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-ta-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-ta-user-'));
@@ -284,8 +307,13 @@ test('#86 AC1/AC4: a language override set immediately before TERMINATE ALL surv
 
         // Let the LAYOUT settle before the decision under test, deliberately: this test is about the
         // OVERRIDE, and a layout write lost in the same shutdown could otherwise explain a failure
-        // all by itself (the panel simply not reopening on the file). Blame stays isolated.
-        await win.waitForTimeout(1500);
+        // all by itself (the panel simply not reopening on the file). Blame stays isolated. Poll the
+        // store for both panels (editor + terminal) rather than guess at the debounce's timing.
+        await expect
+          .poll(() => storedPanels(win, projectId), {
+            message: 'baseline layout (editor + terminal panels) must be stored before the language decision',
+          })
+          .toHaveLength(2);
 
         await expect(win.getByTestId(`editor-language-${editorPid}`)).toHaveText('Plain Text');
 
@@ -343,7 +371,7 @@ test('#86 AC1/AC4: a language override set immediately before TERMINATE ALL surv
 // Both tests below FAIL, and they fail on the ORDINARY close — the exit the issue treats as safe.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 AC3: a layout change made immediately before an ORDINARY close survives the next launch', async () => {
+test('#86 AC3: a layout change made immediately before an ORDINARY close survives the next launch', { tag: ['@extended', '@terminal'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-oc-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-oc-user-'));
@@ -357,9 +385,11 @@ test('#86 AC3: a layout change made immediately before an ORDINARY close survive
         const editorPid = await firstPanelId(win);
         await openEditorOn(win, editorPid, 'scriptfile', 'echo');
 
-        // Baseline (ONE panel) is safely stored, so a failure below can only be the NEW write.
-        await win.waitForTimeout(1500);
-        expect(await storedPanels(win, projectId), 'baseline must be stored first').toHaveLength(1);
+        // Baseline (ONE panel) is safely stored, so a failure below can only be the NEW write. Poll
+        // the store directly rather than sleeping then checking once — the condition IS the wait.
+        await expect
+          .poll(() => storedPanels(win, projectId), { message: 'baseline must be stored first' })
+          .toHaveLength(1);
 
         // THE DECISION: add a panel — an ordinary, visible structural edit the user watches happen.
         await addPanel(win, editorPid);
@@ -394,7 +424,7 @@ test('#86 AC3: a layout change made immediately before an ORDINARY close survive
   }
 });
 
-test('#86 AC3: a per-panel zoom set immediately before an ORDINARY close survives the next launch', async () => {
+test('#86 AC3: a per-panel zoom set immediately before an ORDINARY close survives the next launch', { tag: ['@extended', '@terminal'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-ocz-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-ocz-user-'));
@@ -408,7 +438,10 @@ test('#86 AC3: a per-panel zoom set immediately before an ORDINARY close survive
 
         editorPid = await firstPanelId(win);
         await openEditorOn(win, editorPid, 'scriptfile', 'echo');
-        await win.waitForTimeout(1500); // baseline layout safely stored
+        // baseline layout safely stored — poll rather than guess at the debounce's timing
+        await expect
+          .poll(() => storedPanels(win, projectId), { message: 'baseline layout must be stored first' })
+          .toHaveLength(1);
 
         // THE DECISION: zoom the panel in, via the real keyboard chord.
         await zoomInTwice(win, editorPid);
@@ -479,7 +512,16 @@ async function storedSubPanels(win: Page): Promise<string[]> {
   });
 }
 
-test('#86 C6: a SUB-WORKSPACE rearrangement survives closing the MAIN window', async () => {
+/**
+ * The autosave debounce C6 pins its app to, so no renderer in it can self-save (#245).
+ *
+ * Ten minutes: far beyond any teardown this suite will ever see, and finite so a genuine hang still
+ * looks like a hang rather than a disabled feature. Every write in that app is therefore pending
+ * when the close begins, which is precisely the state the drain exists to handle.
+ */
+const PINNED_AUTOSAVE_MS = 600_000;
+
+test('#86 C6: a SUB-WORKSPACE rearrangement survives closing the MAIN window', { tag: ['@extended', '@terminal'] }, async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-sw-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-sw-user-'));
   // Written by MAIN when the child's renderer dies; read once the app is gone.
@@ -503,7 +545,11 @@ test('#86 C6: a SUB-WORKSPACE rearrangement survives closing the MAIN window', a
         await child.waitForLoadState('domcontentloaded');
         await expect(child.getByTestId('subworkspace-window')).toBeVisible({ timeout: 10_000 });
         await expect(child.locator('.panel-box')).toHaveCount(1);
-        await child.waitForTimeout(1500); // baseline safely stored, so a failure is the NEW write
+        // baseline safely stored, so a failure is the NEW write — poll the persisted sub-workspace
+        // rather than guess at the debounce's timing
+        await expect
+          .poll(() => storedSubPanels(win), { message: 'baseline sub-workspace layout must be stored first' })
+          .toHaveLength(1);
 
         // Everything the close needs, resolved BEFORE the decision arms the debounce (see
         // `armMainWindowClose`). Without this the harness's own CDP round-trip outlasts the
@@ -541,21 +587,42 @@ test('#86 C6: a SUB-WORKSPACE rearrangement survives closing the MAIN window', a
         // (`WindowManager.closeChildren`). The child never gets a close of its own to react to.
         await closeMain();
       },
-      { dataDir, userDataDir },
+      // Pin the autosave debounce so no renderer in this app can self-save (see THE PREMISE below).
+      { dataDir, userDataDir, env: { THRONG_AUTOSAVE_DEBOUNCE_MS: String(PINNED_AUTOSAVE_MS) } },
     );
 
-    // THE PREMISE, MEASURED. C6 is the claim that the cascade drains the CHILD's layout, and
-    // only a child that dies inside its own 400ms debounce can prove it: one that outlives the
-    // timer saved the write by itself, and the assertion below then passes with the drain
-    // switched off — which is exactly the trap the Themes case above fell into, and why that
-    // case is labelled a guard rather than dressed up as a proof. Asserted here instead of
-    // assumed: if this box is ever slow enough to make the test vacuous, it says so out loud
-    // rather than reporting a pass it did not earn.
+    /*
+     * THE PREMISE — now STRUCTURAL, not measured (#245).
+     *
+     * C6 claims the cascade drains the CHILD's PENDING layout write. That is only a claim about the
+     * drain if the child has not already saved the write itself: a child that outlives its own
+     * debounce saves it anyway, and the assertion below then passes with the drain switched off.
+     * That is the exact trap the Themes case above fell into, which is why this premise exists at
+     * all — the guard is right, and only its instrument was wrong.
+     *
+     * It used to read `childLivedMs < 400`: infer "the child's timer did not fire" from "the child
+     * lived under 400 wall-clock milliseconds". Under load that measured 948ms and then 543ms, so
+     * the guard fired on runs where the drain had very likely worked — a wall-clock ceiling cannot
+     * tell a busy machine from a broken drain (FR-010, FR-018).
+     *
+     * So the race is removed rather than timed. `THRONG_AUTOSAVE_DEBOUNCE_MS` below sets the
+     * renderer's autosave debounce to ten minutes, which no teardown will ever outlive, making it
+     * IMPOSSIBLE for the child to have saved by itself. The premise stops being something this box
+     * has to be fast enough to satisfy and becomes something the arrangement guarantees.
+     *
+     * That also makes the test strictly stronger than it was. With nothing able to self-save, the
+     * drain is the ONLY thing that can produce the write — so the assertion below now fails
+     * whenever the drain is broken, on every machine, instead of only on a fast one.
+     *
+     * `childDiedStamp` is still written and still read, but as evidence for the reader rather than
+     * as an assertion: it says how long the child actually lived, which is the number that used to
+     * decide the outcome and is now merely interesting.
+     */
     const childLivedMs = Number(readFileSync(childDiedStamp, 'utf8')) - armedAt;
-    expect(
-      childLivedMs,
-      `the sub-workspace window must die INSIDE its own 400ms debounce, or its own timer saved this write and the test proves nothing about the drain (it lived ${childLivedMs}ms)`,
-    ).toBeLessThan(400);
+    console.log(
+      `[C6] the sub-workspace window lived ${childLivedMs}ms; its own autosave was pinned at ` +
+        `${PINNED_AUTOSAVE_MS}ms, so it cannot have saved this write itself`,
+    );
 
     await runApp(
       async (_app, win) => {
@@ -600,7 +667,7 @@ test('#86 C6: a SUB-WORKSPACE rearrangement survives closing the MAIN window', a
 // one that actually outlives the close.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 C19: a THEME COLOUR edit inside its 150ms debounce survives closing the MAIN window', async () => {
+test('#86 C19: a THEME COLOUR edit inside its 150ms debounce survives closing the MAIN window', { tag: ['@extended', '@terminal'] }, async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-thm-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-thm-user-'));
   // One config root: the theme file the edit under test lands in.
@@ -640,6 +707,11 @@ test('#86 C19: a THEME COLOUR edit inside its 150ms debounce survives closing th
         const armedAt = Date.now();
         await mainHandle.evaluate((w) => w.close());
         const closeRequestedAfterMs = Date.now() - armedAt;
+        // validity-bound: 150 is the settings-write debounce, a production constant, and this is
+        // not a performance claim. The test is about what happens when a close races an armed
+        // debounce; if the close were requested AFTER the debounce fired there would be no race
+        // left to observe and the test would pass while proving nothing. The bound is what makes
+        // the scenario the scenario, which is why the message says so.
         expect(
           closeRequestedAfterMs,
           'the close must be REQUESTED inside the 150ms debounce, or this test proves nothing',
@@ -681,7 +753,7 @@ test('#86 C19: a THEME COLOUR edit inside its 150ms debounce survives closing th
 // write.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 FR-011: a layout change survives an ORDINARY close even at a 1ms drain budget', async () => {
+test('#86 FR-011: a layout change survives an ORDINARY close even at a 1ms drain budget', { tag: ['@extended', '@terminal'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-bud-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-bud-user-'));
@@ -698,8 +770,10 @@ test('#86 FR-011: a layout change survives an ORDINARY close even at a 1ms drain
         const editorPid = await firstPanelId(win);
         await openEditorOn(win, editorPid, 'scriptfile', 'echo');
 
-        await win.waitForTimeout(1500);
-        expect(await storedPanels(win, projectId), 'baseline must be stored first').toHaveLength(1);
+        // Poll the store directly rather than sleeping then checking once — the condition IS the wait.
+        await expect
+          .poll(() => storedPanels(win, projectId), { message: 'baseline must be stored first' })
+          .toHaveLength(1);
 
         await addPanel(win, editorPid);
 
@@ -756,7 +830,7 @@ test('#86 FR-011: a layout change survives an ORDINARY close even at a 1ms drain
 // than unmounted, so it has no unmount flush either. Nothing but the drain can save this edit.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 C19: an un-applied JSON-tab edit survives closing the MAIN window (032 FR-017)', async () => {
+test('#86 C19: an un-applied JSON-tab edit survives closing the MAIN window (032 FR-017)', { tag: ['@extended', '@terminal'] }, async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-jsn-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-jsn-user-'));
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-jsn-root-'));
@@ -785,6 +859,7 @@ test('#86 C19: an un-applied JSON-tab edit survives closing the MAIN window (032
         // A deliberate pause, which the OLD version of this test could not afford: it proves the
         // edit is genuinely un-applied rather than merely un-applied YET. Under the old debounce
         // this wait would have let the timer write the file and the test would prove nothing.
+        // sleep-justified: FR-017 removed the debounce, so no timer or event marks "enough time has passed for a write to have happened" — absence here has no fence to poll.
         await prefs.waitForTimeout(1000);
         expect(
           readSettingsTheme(cfgRoot),
@@ -851,7 +926,7 @@ async function dragPanelOnce(app: ElectronApplication, win: Page, pid: string): 
   await win.mouse.up();
 }
 
-test('#86 FR-011: an ORDINARY close after a DRAG still closes promptly — the ghost cannot ack', async () => {
+test('#86 FR-011: an ORDINARY close after a DRAG still closes promptly — the ghost cannot ack', { tag: ['@extended', '@terminal'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-gst-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-gst-user-'));
@@ -872,6 +947,7 @@ test('#86 FR-011: an ORDINARY close after a DRAG still closes promptly — the g
 
         // Let the drag's own layout write settle: this test measures THE CLOSE, and a write
         // riding the same shutdown must not be able to explain the number below.
+        // sleep-justified: storedPanels() flattens the split tree and drops position/order, so a drag-triggered reorder is invisible to it — no exposed read changes value only once this write lands.
         await win.waitForTimeout(1500);
 
         // Prefetch the handle — `app.browserWindow()` is a CDP round-trip and must not be
@@ -894,6 +970,12 @@ test('#86 FR-011: an ORDINARY close after a DRAG still closes promptly — the g
         // force here deliberately) on a window that was never going to answer is 5s of
         // "Closing throng…" after every session containing a drag — the budget is a BACKSTOP
         // for a wedged renderer, not a toll the ordinary user pays.
+        // validity-bound: derived from the production constant `shutdownDrainTimeoutMs` (5000ms,
+        // deliberately in force here). It separates two outcomes rather than asserting a speed —
+        // under 2s means the drain was ACKED, over 5s means it was waited out — and the gap between
+        // them is wide enough that contention cannot move a run from one side to the other. What it
+        // defends is stated in the comment above: the budget is a backstop for a wedged renderer,
+        // not a toll every ordinary close pays.
         expect(
           closeTookMs,
           `an ordinary close must not wait out the drain budget (took ${closeTookMs}ms)`,
@@ -916,7 +998,7 @@ test('#86 FR-011: an ORDINARY close after a DRAG still closes promptly — the g
 // after a drag, an ORDINARY close must let the process exit on its own.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#110: after a DRAG, an ordinary close lets the PROCESS exit — the hidden ghost must not keep it alive', async () => {
+test('#110: after a DRAG, an ordinary close lets the PROCESS exit — the hidden ghost must not keep it alive', { tag: ['@extended', '@terminal'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-gex-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-gex-user-'));
@@ -935,6 +1017,7 @@ test('#110: after a DRAG, an ordinary close lets the PROCESS exit — the hidden
 
         // Let the drag's own layout write settle so a write riding the shutdown cannot be what
         // holds (or releases) the process — this test is about the ghost, not about a pending write.
+        // sleep-justified: storedPanels() flattens the split tree and drops position/order, so a drag-triggered reorder is invisible to it — no exposed read changes value only once this write lands.
         await win.waitForTimeout(1500);
 
         // Watch the ELECTRON PROCESS, not a window. #110 is precisely that the process survives
@@ -971,7 +1054,7 @@ test('#110: after a DRAG, an ordinary close lets the PROCESS exit — the hidden
 // says it cannot fail. If it is ever RED, #86 is wider than it was reproduced to be.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 AC4: a language override set immediately before an ORDINARY close survives the next launch', async () => {
+test('#86 AC4: a language override set immediately before an ORDINARY close survives the next launch', { tag: ['@extended', '@terminal'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-ocl-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-ocl-user-'));
@@ -990,8 +1073,11 @@ test('#86 AC4: a language override set immediately before an ORDINARY close surv
         // layout write riding the same shutdown would otherwise explain a failure all by
         // itself — the panel simply not reopening on the file, so the strip has nothing to
         // read. Measured: with the drain removed, this test fails ONLY on the strip, while
-        // the override sits correctly in the store. Blame stays isolated.
-        await win.waitForTimeout(1500);
+        // the override sits correctly in the store. Blame stays isolated. Poll the store directly
+        // rather than guess at the debounce's timing.
+        await expect
+          .poll(() => storedPanels(win, projectId), { message: 'baseline layout must be stored first' })
+          .toHaveLength(1);
 
         await expect(win.getByTestId(`editor-language-${editorPid}`)).toHaveText('Plain Text');
 
@@ -1054,7 +1140,7 @@ test('#86 AC4: a language override set immediately before an ORDINARY close surv
 // load-bearing for that reason, not for this one.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 C23: the WORKSPACE window\'s own config write survives an immediate ORDINARY close', async () => {
+test('#86 C23: the WORKSPACE window\'s own config write survives an immediate ORDINARY close', { tag: ['@extended', '@terminal'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-cfg-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-cfg-user-'));
@@ -1095,7 +1181,7 @@ test('#86 C23: the WORKSPACE window\'s own config write survives an immediate OR
 // not the other cannot pass unnoticed.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 AC3/AC4: layout and per-panel zoom set immediately before TERMINATE ALL survive the next launch', async () => {
+test('#86 AC3/AC4: layout and per-panel zoom set immediately before TERMINATE ALL survive the next launch', { tag: ['@extended', '@terminal'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-tal-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-tal-user-'));
@@ -1111,7 +1197,10 @@ test('#86 AC3/AC4: layout and per-panel zoom set immediately before TERMINATE AL
         await openEditorOn(win, editorPid, 'scriptfile', 'echo');
         await addTerminalPanel(win, editorPid, root);
 
-        await win.waitForTimeout(1500); // baseline (2 panels, no zoom) safely stored
+        // baseline (2 panels, no zoom) safely stored — poll rather than guess at the debounce
+        await expect
+          .poll(() => storedPanels(win, projectId), { message: 'baseline layout must be stored first' })
+          .toHaveLength(2);
 
         // THE DECISIONS: a structural edit AND a zoom, both riding the same deferred write.
         await addPanel(win, editorPid);

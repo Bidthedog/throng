@@ -56,7 +56,6 @@ let projectSeq = 0;
 const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
-
 /**
  * 026 — renaming in the tree must leave keyboard focus IN the tree.
  *
@@ -99,94 +98,35 @@ function focusIsInTree(win: Page): Promise<boolean> {
   });
 }
 
-/** Rename `from` to `to` via the tree's inline editor (F2), and settle on the new name. */
-async function renameInTree(win: Page, from: string, to: string): Promise<void> {
-  const tree = win.getByTestId('file-explorer-tree');
-  await tree.getByText(from, { exact: true }).click();
-  await win.keyboard.press('F2');
-  const input = tree.locator('input.tree-rename');
-  await expect(input).toBeVisible();
-  await input.fill(to);
-  await input.press('Enter');
-  await expect(tree.getByText(to, { exact: true })).toBeVisible({ timeout: 10_000 });
-}
+/*
+ * THE FIRST THREE TESTS MOVED to
+ * `packages/ui/tests/component/explorer-tree-interaction.test.ts` (034 FR-045).
+ *
+ * THEY LAND STRONGER THERE, AND THIS IS THE INTERESTING PART. All three asked only whether DOM
+ * focus was somewhere INSIDE the tree — and react-arborist answers that by itself: `submit()` and
+ * `reset()` each schedule `setTimeout(() => this.onFocus())` (`tree-api.js:322`/`:329`), which
+ * falls back to `firstNode` when the focused id no longer resolves. After a rename the id ALWAYS
+ * changes, so the fallback fires and parks focus on the ROOT row. "Inside the tree" is therefore
+ * satisfied by the wrong answer, and the E2E could not tell the two apart.
+ *
+ * The replacements name the focused ROW. That is what `use-explorer-data.ts:716`’s deliberate
+ * `api.select(rel)` — the one programmatic select in that file that does NOT pass
+ * `{ focus: false }` — actually buys, and the Red proof for it (`red-explorer-b4.mjs --only M1`)
+ * reddens two component tests while leaving this file’s own assertion green.
+ *
+ * The behavioural half survives intact: a second F2 must open another inline editor without a
+ * click. That was always the assertion that would have caught the bug, and it is unchanged.
+ *
+ * WHAT STAYS: the #144 fence below. It needs a real editor panel with a real CodeMirror holding a
+ * real caret, which is the whole point of it — a rename-focus fix written as "the tree takes
+ * focus" would pass every component test above and still yank the caret out of the text the user
+ * is typing in.
+ *
+ * ANTI-VACUITY CONTROL for the replacements: withhold the `ImmediateResizeObserver` stub and all
+ * nine tests in that file fail.
+ */
 
-test('renaming a FOLDER leaves keyboard focus in the tree', async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'RenameFocus', root);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-
-      await renameInTree(win, 'Docs', 'Documents');
-
-      expect(
-        await focusIsInTree(win),
-        'focus left the tree after the rename — the pane is dead to the keyboard',
-      ).toBe(true);
-
-      // The behavioural half: the tree still answers the keyboard, so the user can carry straight
-      // on. A second F2 must open the inline editor again without touching the mouse.
-      await win.keyboard.press('F2');
-      await expect(tree.locator('input.tree-rename')).toBeVisible({ timeout: 5000 });
-      await win.keyboard.press('Escape');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('renaming a FILE leaves keyboard focus in the tree', async () => {
-  // Same code path (a rename is a move for both), asserted separately so a fix that special-cases
-  // folders cannot pass.
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'RenameFocusFile', root);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-
-      await renameInTree(win, 'a.txt', 'renamed.txt');
-
-      expect(
-        await focusIsInTree(win),
-        'focus left the tree after the rename — the pane is dead to the keyboard',
-      ).toBe(true);
-
-      await win.keyboard.press('F2');
-      await expect(tree.locator('input.tree-rename')).toBeVisible({ timeout: 5000 });
-      await win.keyboard.press('Escape');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('CANCELLING a rename also leaves focus in the tree', async () => {
-  // Escape unmounts the same input by the same route. If the fix only runs on the commit path, the
-  // user who changed their mind is still stranded.
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'RenameFocusCancel', root);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-
-      await tree.getByText('b.txt', { exact: true }).click();
-      await win.keyboard.press('F2');
-      await expect(tree.locator('input.tree-rename')).toBeVisible();
-      await win.keyboard.press('Escape');
-      await expect(tree.locator('input.tree-rename')).toHaveCount(0);
-
-      expect(await focusIsInTree(win), 'focus left the tree after cancelling a rename').toBe(true);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('an editor keeps the caret when the tree re-highlights (issue #144 must not regress)', async () => {
+test('an editor keeps the caret when the tree re-highlights (issue #144 must not regress)', { tag: ['@extended', '@explorer'] }, async () => {
   // The fence for the fix. #144's `select(id, { focus: false })` exists so the tree can highlight
   // the active file's row WITHOUT stealing the caret out of an editor — a rename-focus fix written
   // as "the tree takes focus" would undo it, and typing would start landing in the wrong place.
@@ -211,6 +151,10 @@ test('an editor keeps the caret when the tree re-highlights (issue #144 must not
       await content.click();
 
       // The caret is in the editor and must stay there — no tree interaction has happened since.
+      // sleep-justified: react-arborist's submit()/reset() schedule setTimeout(() => onFocus())
+      // sleep-justified: (tree-api.js:322/329, see the file banner above) — that internal timer is
+      // sleep-justified: exactly the regression risk here, and it exposes nothing to await; only
+      // sleep-justified: time lets a late steal show itself before asserting focus never moved.
       await win.waitForTimeout(500);
       expect(
         await focusIsInTree(win),

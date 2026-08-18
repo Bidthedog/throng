@@ -55,7 +55,7 @@ async function allNoticeText(win: import('@playwright/test').Page): Promise<stri
   return parts.join(' | ');
 }
 
-test('a daemon that dies is reported to the user, not turned into a raw RPC error', async () => {
+test('a daemon that dies is reported to the user, not turned into a raw RPC error', { tag: ['@extended', '@failure'] }, async () => {
   // An elevated daemon lives in a different process tree (the de-elevated agent), which
   // `forceKillProcessTree` on the health.ping pid does not describe.
   skipIfElevated();
@@ -129,6 +129,7 @@ test('a daemon that dies is reported to the user, not turned into a raw RPC erro
          * without being a guess about a slower machine — and the re-arm below is what makes this
          * meaningful rather than merely quiet.
          */
+        // sleep-justified: switchProject's RPC may not even fire on an already-active project (see below), so no completion event is guaranteed to happen for this poll to catch
         await win.waitForTimeout(3000);
         expect(await projectError.count(), 'a second notice for one dead daemon').toBe(0);
         await expect(daemonError).toHaveCount(1);

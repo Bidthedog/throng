@@ -144,7 +144,7 @@ const colourOfWord = (win: Page, pid: string, word: string): Promise<string | nu
     { id: pid, w: word },
   );
 
-test('a .sql opened AFTER another file gets the SQL grammar — not the previous file’s', async () => {
+test('a .sql opened AFTER another file gets the SQL grammar — not the previous file’s', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -170,7 +170,7 @@ test('a .sql opened AFTER another file gets the SQL grammar — not the previous
   }
 });
 
-test('…and it does not matter which file was open before it', async () => {
+test('…and it does not matter which file was open before it', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -200,7 +200,7 @@ test('…and it does not matter which file was open before it', async () => {
   }
 });
 
-test('a PLAIN-TEXT file opened after a highlighted one is left plain', async () => {
+test('a PLAIN-TEXT file opened after a highlighted one is left plain', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   writeFileSync(join(root, 'notes'), 'SELECT this is not code\nfunction neither is this\n');
   try {
@@ -224,7 +224,7 @@ test('a PLAIN-TEXT file opened after a highlighted one is left plain', async () 
   }
 });
 
-test('the FILE’s indentation wins when it is the SECOND file opened into the panel (FR-018a)', async () => {
+test('the FILE’s indentation wins when it is the SECOND file opened into the panel (FR-018a)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -250,7 +250,7 @@ test('the FILE’s indentation wins when it is the SECOND file opened into the p
   }
 });
 
-test('…and the reverse: a SPACE-indented file opened after a tab-indented one indents with spaces', async () => {
+test('…and the reverse: a SPACE-indented file opened after a tab-indented one indents with spaces', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -274,7 +274,7 @@ test('…and the reverse: a SPACE-indented file opened after a tab-indented one 
   }
 });
 
-test('MARKDOWN is highlighted — headings, emphasis, links and inline code (FR-006)', async () => {
+test('MARKDOWN is highlighted — headings, emphasis, links and inline code (FR-006)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   writeFileSync(
     join(root, 'f-notes.md'),

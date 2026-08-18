@@ -32,9 +32,8 @@
  * ══ TIER: SERIAL (T067) ══
  *
  * Registered in `parallel-plan.json`'s serial list: the second test drives a REAL editor panel for
- * the paste round trip, and the first drives four terminal attaches. Registered in
- * `shard-plan.json` group 3, beside `panel-failure-banner.e2e.ts`, which it shares its setup idiom
- * with.
+ * the paste round trip, and the first drives four terminal attaches. (It was also registered in a
+ * shard plan, which spec 034 removed — there is one E2E job now, so a file needs no CI placement.)
  */
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -131,7 +130,7 @@ async function renamePanel(win: Page, panelId: string, to: string): Promise<void
  * rebuilding a four-casualty workspace three times would spend three launches to observe three
  * facets of one clipboard.
  */
-test('a copied notice carries everything it renders, plus the system error it must not render', async () => {
+test('a copied notice carries everything it renders, plus the system error it must not render', { tag: ['@extended', '@failure'] }, async () => {
   test.setTimeout(300_000);
   const real = mkdtempSync(join(tmpdir(), 'throng-copy-real-'));
   writeFileSync(join(real, 'notes.txt'), 'SEED\n');
@@ -257,7 +256,7 @@ test('a copied notice carries everything it renders, plus the system error it mu
  * full `Project — Tab — Panel` form, the path, and the system error (FR-052). "Copy works" is true
  * of a control that copies the wrong four things.
  */
-test('the banner copies its message, subject, path and system error with no notice on screen', async () => {
+test('the banner copies its message, subject, path and system error with no notice on screen', { tag: ['@extended', '@failure'] }, async () => {
   test.setTimeout(240_000);
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-copy-cfg-'));
   mkdirSync(cfgRoot, { recursive: true });

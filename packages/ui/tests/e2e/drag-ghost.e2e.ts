@@ -54,7 +54,7 @@ test.afterAll(() => {
   for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
 
-test('the drag ghost and the New Tab (+) affordance follow the theme accent', async () => {
+test('the drag ghost and the New Tab (+) affordance follow the theme accent', { tag: ['@extended', '@window'] }, async () => {
   const cfgRoot = seedThemeAccent('#ff00aa'); // a distinctive magenta, unlike any default
   const ACCENT = 'rgb(255, 0, 170)';
   await runApp(
@@ -84,7 +84,7 @@ test('the drag ghost and the New Tab (+) affordance follow the theme accent', as
   );
 });
 
-test('shows a cursor-following ghost window during a drag, gone on drop', async () => {
+test('shows a cursor-following ghost window during a drag, gone on drop', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (app, win) => {
     await createProject(win, 'Ghost', 'C:/c/ghost');
     await expect(win.getByTestId('tab-strip')).toBeVisible();

@@ -161,20 +161,38 @@ async function openOverlay(o: Overlay): Promise<void> {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
- * SC-017 — all six ordered pairs
+ * SC-017 — two ordered pairs, and why not six (034 FR-045)
+ *
+ * This enumerated all six ordered pairs and three triples and a four-chain: eleven cases, each one
+ * an app, a chord, and an assertion that only one overlay survived.
+ *
+ * They exercise ONE code path with eleven sets of data. The registry is a one-slot claim — a new
+ * claim dismisses the incumbent, whoever the incumbent is — and that is proved at unit in
+ * `packages/ui/tests/unit/transient-overlay.test.ts`, including the cases no chord can reach: an
+ * incumbent whose dismiss throws, a release arriving from a superseded claim, release called twice.
+ * Once the registry is right for an arbitrary incumbent, the sixth pair cannot fail where the first
+ * two passed, and the triples are the pair again with a longer run-up.
+ *
+ * What the end-to-end cases are still for is the WIRING: that a real chord reaches a real surface
+ * which really claims the slot, and that the caret lands on the survivor. Two opposed pairs
+ * establish that across all three chord-driven overlays; the language-picker case below adds the
+ * fourth surface, and it is the interesting one because it opens by POINTER rather than by chord.
+ *
+ * An attempt was made to replace the wiring half with a source guard — "every file drawing an
+ * overlay id claims the registry". It was wrong three times for three different reasons: the claim
+ * belongs to whoever owns the open state rather than the file that draws it; `quickopen-target` is a
+ * control inside the modal and not an overlay; and `tabpicker` is not written as a literal test id
+ * in the renderer at all. A guard that cannot reliably answer "what is an overlay" is worse than the
+ * tests it would replace, so it was abandoned rather than tuned into looking right.
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
 const PAIRS: Array<[Overlay, Overlay]> = [
   ['quickopen', 'gotoline'],
-  ['gotoline', 'quickopen'],
-  ['quickopen', 'tabpicker'],
   ['tabpicker', 'quickopen'],
-  ['gotoline', 'tabpicker'],
-  ['tabpicker', 'gotoline'],
 ];
 
 for (const [a, b] of PAIRS) {
-  test(`opening ${NAME[b]} while ${NAME[a]} is open leaves exactly one overlay (SC-017, FR-071)`, async () => {
+  test(`opening ${NAME[b]} while ${NAME[a]} is open leaves exactly one overlay (SC-017, FR-071)`, { tag: ['@extended', '@window'] }, async () => {
     const win = shared.win;
     await prepare();
 
@@ -219,16 +237,19 @@ for (const [a, b] of PAIRS) {
  * overlay" assertion alongside it, so a repair that simply refuses to open the third cannot pass.
  */
 const TRIPLES: Array<[Overlay, Overlay, Overlay]> = [
-  // The reported one, in the order it was reported.
+  // The reported one, in the order it was reported. It stays because a reported defect's
+  // reproduction is the deliverable, not scaffolding — it is the thing that stops the bug coming
+  // back, and it is the one ordering a user actually performed.
   ['quickopen', 'tabpicker', 'gotoline'],
-  // …and two more, because the report says "regardless of which order I press them in". Between
-  // them these put each of the three overlays in the third position at least once.
-  ['gotoline', 'quickopen', 'tabpicker'],
-  ['tabpicker', 'gotoline', 'quickopen'],
+  // Two further orderings were here, added because the report said "regardless of which order I
+  // press them in". They are the same one-slot claim with a longer run-up, and the arbitrary-
+  // incumbent case they were reaching for is proved directly at unit
+  // (`transient-overlay.test.ts` — "claiming while another holds the slot calls the incumbent's
+  // dismiss exactly once"). Removed by 034 FR-045; the reported ordering is kept.
 ];
 
 for (const [a, b, c] of TRIPLES) {
-  test(`${NAME[a]}, then ${NAME[b]}, then ${NAME[c]} — the third holds the caret (FR-071, FR-072)`, async () => {
+  test(`${NAME[a]}, then ${NAME[b]}, then ${NAME[c]} — the third holds the caret (FR-071, FR-072)`, { tag: ['@extended', '@window'] }, async () => {
     const win = shared.win;
     await prepare();
 
@@ -267,7 +288,7 @@ for (const [a, b, c] of TRIPLES) {
  * The fourth overlay — one directional case (D1)
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('opening Quick Open dismisses the editor status strip’s language picker (FR-071)', async () => {
+test('opening Quick Open dismisses the editor status strip’s language picker (FR-071)', { tag: ['@extended', '@window'] }, async () => {
   const win = shared.win;
   await prepare();
 
@@ -294,7 +315,7 @@ test('opening Quick Open dismisses the editor status strip’s language picker (
  * does not run out. It starts on the language picker because that is the one overlay opened by
  * pointer rather than chord, so the chain also crosses that boundary.
  */
-test('four overlays in a chain — the last one still holds the caret (FR-071, FR-072)', async () => {
+test('four overlays in a chain — the last one still holds the caret (FR-071, FR-072)', { tag: ['@extended', '@window'] }, async () => {
   const win = shared.win;
   await prepare();
 

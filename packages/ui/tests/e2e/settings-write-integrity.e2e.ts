@@ -111,7 +111,7 @@ async function openSettings(app: ElectronApplication, win: Page): Promise<Page> 
   return prefs;
 }
 
-test('a Preferences change survives a project created in the main window (FR-001, #249)', async () => {
+test('a Preferences change survives a project created in the main window (FR-001, #249)', { tag: ['@extended', '@prefs'] }, async () => {
   const cfgRoot = freshDir('throng-cfg-write-integrity-');
   const projectRoot = freshDir('throng-proj-write-integrity-');
 
@@ -187,7 +187,7 @@ test('a Preferences change survives a project created in the main window (FR-001
  * doubt: #260's complaint is that a change "is lost and never arrives", and a user who restarts to
  * check is the commonest way that gets noticed.
  */
-test('a changed setting is what loads after a restart (FR-006)', async () => {
+test('a changed setting is what loads after a restart (FR-006)', { tag: ['@extended', '@prefs'] }, async () => {
   const cfgRoot = freshDir('throng-cfg-write-restart-');
 
   await runApp(

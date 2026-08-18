@@ -120,7 +120,7 @@ async function closeApp(app: ElectronApplication): Promise<void> {
   await shutdownApp(app);
 }
 
-test('opens the two-Pane shell within 5 seconds (NFR-002)', async () => {
+test('opens the two-Pane shell within 5 seconds (NFR-002)', { tag: ['@core', '@window'] }, async () => {
   const start = Date.now();
   const app = await launchApp();
   try {
@@ -149,7 +149,7 @@ test('opens the two-Pane shell within 5 seconds (NFR-002)', async () => {
   }
 });
 
-test('opens a resizable main window', async () => {
+test('opens a resizable main window', { tag: ['@core', '@window'] }, async () => {
   const app = await launchApp();
   try {
     await app.firstWindow();
@@ -163,7 +163,7 @@ test('opens a resizable main window', async () => {
   }
 });
 
-test('exposes only placeholder workspace content (no real product features)', async () => {
+test('exposes only placeholder workspace content (no real product features)', { tag: ['@core', '@window'] }, async () => {
   const app = await launchApp();
   try {
     const window = await app.firstWindow();
@@ -176,7 +176,7 @@ test('exposes only placeholder workspace content (no real product features)', as
   }
 });
 
-test('closes cleanly', async () => {
+test('closes cleanly', { tag: ['@core', '@window'] }, async () => {
   const app = await launchApp();
   await app.firstWindow();
 
@@ -197,7 +197,10 @@ test('closes cleanly', async () => {
   await closeApp(app);
   const took = Date.now() - began;
 
-  // Comfortably inside SHUTDOWN_GRACE_MS (15s). A shutdown that needed the force-kill fallback
-  // cannot come in under this, so the bound is what distinguishes "closed" from "was killed".
+  // validity-bound: derived from the production constant SHUTDOWN_GRACE_MS (15s), and it is not a
+  // performance claim — a shutdown that needed the force-kill fallback cannot come in under ten
+  // seconds, so this number is the only thing distinguishing "closed itself" from "was killed".
+  // Remove it and the test passes when the app had to be killed, which is the opposite of what it
+  // says it checks. 034 SC-007's ceiling-needs-a-requirement rule is answered by the constant.
   expect(took, `shutdown took ${took}ms — it needed the force-kill fallback`).toBeLessThan(10_000);
 });

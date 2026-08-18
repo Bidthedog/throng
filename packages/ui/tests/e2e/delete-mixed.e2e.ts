@@ -2,7 +2,14 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, cleanupTemp} from './harness.js';
+import {
+  openApp,
+  runApp as runOwnApp,
+  createProject,
+  cleanupTemp,
+  FILE_OP_TIMEOUT_MS,
+  type OpenApp,
+} from './harness.js';
 
 // Reported bug: Ctrl-selecting a MIX of files and folders then Delete removes only
 // the folders. Expected: ALL selected items are deleted after confirmation.
@@ -16,18 +23,59 @@ function makeProject(): string {
   return root;
 }
 
-test('Ctrl-selecting files + folders and deleting removes ALL of them', async () => {
-  const root = makeProject();
-  // permanent delete so we assert directly on disk (no Recycle Bin).
-  const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-cfg-del-'));
-  writeFileSync(
-    join(cfgRoot, 'settings.json'),
-    JSON.stringify({ version: 1, explorer: { deleteMode: 'permanent' }, confirmations: {} }),
-  );
+/*
+ * ONE seeded app for the two PERMANENT-delete tests (034 FR-045, SC-027) — 3 launches -> 2.
+ *
+ * `explorer.deleteMode = permanent` genuinely has to be in settings.json before the app starts,
+ * so neither of those tests can run against a default app. But they seeded the SAME document
+ * into two temp roots and launched twice, and one seeded app answers for both. (Test 1's
+ * document carried an extra empty `confirmations: {}`, which is the defaults written out.)
+ *
+ * The recycle test keeps `runOwnApp`: its subject is the SHIPPED default, which is the one
+ * thing a seeded app cannot show.
+ *
+ * The two projects were both called "DelMix" and are named apart. Their roots move to
+ * `afterAll`: each test empties its own tree and then deleted the watched root itself.
+ *
+ * Opened lazily, so a `--grep` that selects only the recycle test never launches it.
+ */
+test.describe.configure({ mode: 'serial' });
+
+const ownedRoots: string[] = [];
+/** Register a temp directory for removal in `afterAll`, once the shared app has closed. */
+function own(dir: string): string {
+  ownedRoots.push(dir);
+  return dir;
+}
+
+let seeded: OpenApp | undefined;
+
+const runSeeded = async (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+): Promise<void> => {
+  if (!seeded) {
+    const cfgRoot = own(mkdtempSync(join(tmpdir(), 'throng-cfg-del-')));
+    writeFileSync(
+      join(cfgRoot, 'settings.json'),
+      JSON.stringify({ version: 1, explorer: { deleteMode: 'permanent' }, confirmations: {} }),
+    );
+    seeded = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
+  }
+  return fn(seeded.app, seeded.win);
+};
+
+test.afterAll(async () => {
+  await seeded?.close();
+  seeded = undefined;
+  for (const dir of ownedRoots.splice(0)) cleanupTemp(dir);
+});
+
+test('Ctrl-selecting files + folders and deleting removes ALL of them', { tag: ['@extended', '@explorer'] }, async () => {
+  const root = own(makeProject());
   try {
-    await runApp(
+    await runSeeded(
       async (_app, win) => {
-        await createProject(win, 'DelMix', root);
+        await createProject(win, 'DelMixMenu', root);
         const tree = win.getByTestId('file-explorer-tree');
         await expect(tree).toBeVisible();
 
@@ -51,22 +99,21 @@ test('Ctrl-selecting files + folders and deleting removes ALL of them', async ()
           .poll(
             () =>
               ['file1.txt', 'file2.txt', 'dir1', 'dir2'].filter((n) => existsSync(join(root, n))),
-            { timeout: 8000 },
+            { timeout: FILE_OP_TIMEOUT_MS },
           )
           .toEqual([]);
       },
-      { env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
   } finally {
-    cleanupTemp(root);
-    cleanupTemp(cfgRoot);
+    // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would
+    // remove a folder the explorer is still watching.
   }
 });
 
-test('recycle mode (default): mixed files + folders all get recycled via the real shell', async () => {
+test('recycle mode (default): mixed files + folders all get recycled via the real shell', { tag: ['@extended', '@explorer'] }, async () => {
   const root = makeProject();
   try {
-    await runApp(async (_app, win) => {
+    await runOwnApp(async (_app, win) => {
       await createProject(win, 'DelMix', root);
       const tree = win.getByTestId('file-explorer-tree');
       await expect(tree).toBeVisible();
@@ -87,7 +134,7 @@ test('recycle mode (default): mixed files + folders all get recycled via the rea
       await expect
         .poll(
           () => ['file1.txt', 'file2.txt', 'dir1', 'dir2'].filter((n) => existsSync(join(root, n))),
-          { timeout: 10000 },
+          { timeout: FILE_OP_TIMEOUT_MS },
         )
         .toEqual([]);
     });
@@ -96,17 +143,12 @@ test('recycle mode (default): mixed files + folders all get recycled via the rea
   }
 });
 
-test('file-first selection (opens an editor) then Delete key removes ALL selected', async () => {
-  const root = makeProject();
-  const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-cfg-del2-'));
-  writeFileSync(
-    join(cfgRoot, 'settings.json'),
-    JSON.stringify({ version: 1, explorer: { deleteMode: 'permanent' } }),
-  );
+test('file-first selection (opens an editor) then Delete key removes ALL selected', { tag: ['@extended', '@explorer'] }, async () => {
+  const root = own(makeProject());
   try {
-    await runApp(
+    await runSeeded(
       async (_app, win) => {
-        await createProject(win, 'DelMix', root);
+        await createProject(win, 'DelMixKey', root);
         const tree = win.getByTestId('file-explorer-tree');
         await expect(tree).toBeVisible();
 
@@ -127,14 +169,13 @@ test('file-first selection (opens an editor) then Delete key removes ALL selecte
           .poll(
             () =>
               ['file1.txt', 'file2.txt', 'dir1', 'dir2'].filter((n) => existsSync(join(root, n))),
-            { timeout: 8000 },
+            { timeout: FILE_OP_TIMEOUT_MS },
           )
           .toEqual([]);
       },
-      { env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
   } finally {
-    cleanupTemp(root);
-    cleanupTemp(cfgRoot);
+    // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would
+    // remove a folder the explorer is still watching.
   }
 });

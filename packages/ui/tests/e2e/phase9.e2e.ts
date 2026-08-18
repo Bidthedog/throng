@@ -8,7 +8,7 @@ import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
-import { cleanupTemp, shutdownApp } from './harness.js';
+import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS } from './harness.js';
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
@@ -25,7 +25,7 @@ function startDaemon(pipeName: string, dataDir: string): Promise<ChildProcess> {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('daemon not ready')), 10_000);
+    const timer = setTimeout(() => reject(new Error('daemon not ready')), DAEMON_READY_TIMEOUT_MS);
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', (c: string) => {
       if (c.includes('listening')) {
@@ -87,7 +87,7 @@ async function run(fn: (win: Page, app: ElectronApplication, h: Harness) => Prom
   }
 }
 
-test('confirms before deleting a project (FR-042)', async () => {
+test('confirms before deleting a project (FR-042)', { tag: ['@extended', '@window'] }, async () => {
   await run(async (win) => {
     await createProject(win, 'Doomed');
 
@@ -105,7 +105,7 @@ test('confirms before deleting a project (FR-042)', async () => {
   });
 });
 
-test('shows the panel count on a Tab and confirms tab close (FR-045/043)', async () => {
+test('shows the panel count on a Tab and confirms tab close (FR-045/043)', { tag: ['@extended', '@window'] }, async () => {
   await run(async (win) => {
     await createProject(win, 'Counter');
     // One panel → a pill reading 1. The square-bracket form went with FR-042 (031 US5).
@@ -146,7 +146,7 @@ test('shows the panel count on a Tab and confirms tab close (FR-045/043)', async
   });
 });
 
-test('reorders projects by dragging the grip (FR-046)', async () => {
+test('reorders projects by dragging the grip (FR-046)', { tag: ['@extended', '@window'] }, async () => {
   await run(async (win) => {
     await createProject(win, 'Alpha');
     await createProject(win, 'Beta');
@@ -173,7 +173,7 @@ test('reorders projects by dragging the grip (FR-046)', async () => {
   });
 });
 
-test('enforces a 600x560 minimum window size (FR-048)', async () => {
+test('enforces a 600x560 minimum window size (FR-048)', { tag: ['@extended', '@window'] }, async () => {
   await run(async (_win, app) => {
     const min = await app.evaluate(async ({ BrowserWindow }) =>
       BrowserWindow.getAllWindows()[0].getMinimumSize(),
@@ -185,7 +185,7 @@ test('enforces a 600x560 minimum window size (FR-048)', async () => {
   });
 });
 
-test('restores window size and position across restarts (FR-047)', async () => {
+test('restores window size and position across restarts (FR-047)', { tag: ['@extended', '@window'] }, async () => {
   const h = await startHarness();
   const userData = tmpDir('throng-ud-shared-');
   let app: ElectronApplication | undefined;

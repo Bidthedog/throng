@@ -73,7 +73,7 @@ async function openPicker(via: 'chord' | 'control'): Promise<void> {
   await expect(shared.win.getByTestId('tabpicker-input')).toBeFocused();
 }
 
-test('T054 — every tab, in strip order, with its panel count, and the active one marked (K1, K9, K11)', async () => {
+test('T054 — every tab, in strip order, with its panel count, and the active one marked (K1, K9, K11)', { tag: ['@extended', '@window'] }, async () => {
   await freshProject();
   await seedOverflowingTabs(shared.win, 'picker-list');
   await setScrollLeft(shared.win, 0);
@@ -106,128 +106,37 @@ test('T054 — every tab, in strip order, with its panel count, and the active o
   await expect(shared.win.getByTestId('tabpicker')).toHaveCount(0);
 });
 
-test('T054 — typing narrows, arrows move, Enter chooses, Escape dismisses (K3)', async () => {
-  await freshProject();
-  const ids = await seedTabs(shared.win, ['alpha report', 'beta report', 'gamma notes']);
-  await openPicker('chord');
+/*
+ * MOVED (034 FR-045) — four tests, to two layers that were already most of the way there.
+ *
+ * `packages/ui/tests/component/picker.test.ts` — the tab picker and Quick Open are the SAME
+ * component, `common/picker.tsx`, which takes no context. So the list, the highlight, the marks and
+ * the empty state are one set of claims about one component, not two sets about two screens:
+ *   - typing narrows, ArrowDown/ArrowUp walk the highlight (asserted as `data-highlighted`, so a
+ *     picker that highlighted the right row while Enter chose another is distinguishable)
+ *   - Enter chooses the highlighted row; Escape dismisses without choosing
+ *   - every term of a multi-word query is marked, and an empty query marks nothing
+ *   - a no-match query says so and stays OPEN, Enter on it chooses nothing, and correcting the
+ *     query brings the rows back — a typo is a backspace, not a re-open
+ *
+ * `packages/core/tests/unit/picker-match.test.ts` — "every term must match, in ANY order, across
+ * separators" is `compileQuery`, and that file already carries the spec’s three worked examples
+ * verbatim, including this test's own `'file find.txt'` against `'find file'`, plus
+ * order-independence, case-insensitivity in text and query, contiguity, regex punctuation treated
+ * as literal, and a whitespace-only query matching everything. Nothing was left for an app to add.
+ *
+ * Red-proved on the component: disabling ArrowUp, marking only the first span, and making Enter on
+ * an empty list dismiss. The mark mutation had to be re-aimed — the first attempt renamed
+ * `matchSpans` where it appears in a COMMENT, and passed while proving nothing.
+ *
+ * WHAT STAYS BELOW, and why none of it is the same claim: the rows are built from the real tab
+ * strip in strip order with real panel counts and the real active tab marked; choosing scrolls the
+ * strip and changes which tab is active; the chord opens it at any tab count; the chord and the
+ * control open the same picker; and dismissing returns focus where it was. Every one of those is
+ * about the strip, the window or the keyboard — none of them is about a list.
+ */
 
-  const all = await rowIds();
-  expect(all.length, 'the picker lists the seeded tabs and the project default').toBeGreaterThan(3);
-
-  // TYPING NARROWS — and to the right rows, in strip order.
-  await shared.win.getByTestId('tabpicker-input').fill('report');
-  await expect
-    .poll(rowIds, { message: 'typing never narrowed the list' })
-    .toEqual([ids[0]!.replace('tab-', ''), ids[1]!.replace('tab-', '')]);
-
-  // ARROWS MOVE the highlight; the first row starts highlighted.
-  const alpha = shared.win.getByTestId(`tabpicker-row-${ids[0]!.replace('tab-', '')}`);
-  const beta = shared.win.getByTestId(`tabpicker-row-${ids[1]!.replace('tab-', '')}`);
-  await expect(alpha).toHaveAttribute('data-highlighted', 'true');
-  await shared.win.keyboard.press('ArrowDown');
-  await expect(beta).toHaveAttribute('data-highlighted', 'true');
-  await expect(alpha).toHaveAttribute('data-highlighted', 'false');
-  await shared.win.keyboard.press('ArrowUp');
-  await expect(alpha).toHaveAttribute('data-highlighted', 'true');
-
-  // ENTER CHOOSES the highlighted row.
-  await shared.win.keyboard.press('ArrowDown');
-  await shared.win.keyboard.press('Enter');
-  await expect(shared.win.getByTestId('tabpicker')).toHaveCount(0);
-  await expect
-    .poll(async () => (await stripState(shared.win)).chips.find((c) => c.active)?.testId)
-    .toBe(ids[1]);
-
-  // ESCAPE DISMISSES, choosing nothing: the active tab is the one Enter just chose.
-  await openPicker('chord');
-  await shared.win.getByTestId('tabpicker-input').fill('gamma');
-  await expect.poll(rowIds).toEqual([ids[2]!.replace('tab-', '')]);
-  await shared.win.keyboard.press('Escape');
-  await expect(shared.win.getByTestId('tabpicker')).toHaveCount(0);
-  expect((await stripState(shared.win)).chips.find((c) => c.active)?.testId).toBe(ids[1]);
-});
-
-test('T054 — every term must match, in ANY order, across separators (K4, K5, K7)', async () => {
-  await freshProject();
-  // The name is deliberately the terms REVERSED, and split by a separator: `find file` must find
-  // `file find.txt`, and `src/find/file.ts` too. A picker that matched the query as one substring
-  // finds neither, and would pass a test that only ever typed the words in the order they appear.
-  const ids = await seedTabs(shared.win, [
-    'file find.txt',
-    'src/find/file.ts',
-    'unrelated scratch',
-  ]);
-  const [reversed, pathish, unrelated] = ids.map((id) => id.replace('tab-', ''));
-
-  await openPicker('chord');
-  await shared.win.getByTestId('tabpicker-input').fill('find file');
-  await expect
-    .poll(rowIds, { message: 'order-independent matching did not find the reversed name' })
-    .toEqual([reversed, pathish]);
-  expect(await rowIds()).not.toContain(unrelated);
-
-  // K5 — case-insensitive, same two rows.
-  await shared.win.getByTestId('tabpicker-input').fill('FIND FILE');
-  await expect.poll(rowIds).toEqual([reversed, pathish]);
-
-  // K6 — a whitespace-only query matches everything again.
-  await shared.win.getByTestId('tabpicker-input').fill('   ');
-  await expect.poll(async () => (await rowIds()).length).toBeGreaterThan(3);
-
-  await shared.win.keyboard.press('Escape');
-  await expect(shared.win.getByTestId('tabpicker')).toHaveCount(0);
-});
-
-test('T057b — matched terms are visibly marked in each row (K10)', async () => {
-  await freshProject();
-  const ids = await seedTabs(shared.win, ['marker alpha one', 'marker beta two']);
-  await openPicker('chord');
-
-  await shared.win.getByTestId('tabpicker-input').fill('beta marker');
-  const row = shared.win.getByTestId(`tabpicker-row-${ids[1]!.replace('tab-', '')}`);
-  await expect(row).toBeVisible();
-
-  // BOTH terms are marked, and only the terms. A row that matched but showed no marks leaves the
-  // user re-reading the whole name to find out why it is there.
-  const marks = row.locator('mark.picker__mark');
-  await expect(marks).toHaveCount(2);
-  expect((await marks.allInnerTexts()).map((t) => t.toLowerCase()).sort()).toEqual([
-    'beta',
-    'marker',
-  ]);
-
-  // An empty query marks nothing — everything matches, so marking everything says nothing.
-  await shared.win.getByTestId('tabpicker-input').fill('');
-  await expect(shared.win.locator('mark.picker__mark')).toHaveCount(0);
-
-  await shared.win.keyboard.press('Escape');
-  await expect(shared.win.getByTestId('tabpicker')).toHaveCount(0);
-});
-
-test('T054 — no match keeps the picker open and says so (K12)', async () => {
-  await freshProject();
-  await seedTabs(shared.win, ['findable one']);
-  await openPicker('chord');
-
-  await shared.win.getByTestId('tabpicker-input').fill('zzz-no-such-tab-anywhere');
-  await expect(shared.win.getByTestId('tabpicker-empty')).toBeVisible();
-  await expect(shared.win.getByTestId('tabpicker-empty')).toHaveText(/no tabs match/i);
-  // OPEN — a typo is a backspace, not a re-open.
-  await expect(shared.win.getByTestId('tabpicker')).toBeVisible();
-  await expect(shared.win.locator('[data-testid^="tabpicker-row-"]')).toHaveCount(0);
-  // Enter on nothing chooses nothing and does not close it.
-  await shared.win.keyboard.press('Enter');
-  await expect(shared.win.getByTestId('tabpicker')).toBeVisible();
-
-  // Backspacing to something that matches brings the rows back.
-  await shared.win.getByTestId('tabpicker-input').fill('findable');
-  await expect.poll(async () => (await rowIds()).length).toBe(1);
-
-  await shared.win.keyboard.press('Escape');
-  await expect(shared.win.getByTestId('tabpicker')).toHaveCount(0);
-});
-
-test('T055 — choosing an entry scrolls the strip to that tab AND makes it active (K2)', async () => {
+test('T055 — choosing an entry scrolls the strip to that tab AND makes it active (K2)', { tag: ['@extended', '@window'] }, async () => {
   await freshProject();
   await seedOverflowingTabs(shared.win, 'picker-choose');
 
@@ -257,7 +166,7 @@ test('T055 — choosing an entry scrolls the strip to that tab AND makes it acti
     .toBe(true);
 });
 
-test('T056 — Ctrl+Alt+T opens the picker at ANY tab count, including with nothing hidden (T5)', async () => {
+test('T056 — Ctrl+Alt+T opens the picker at ANY tab count, including with nothing hidden (T5)', { tag: ['@extended', '@window'] }, async () => {
   await freshProject();
   // Deliberately NOT overflowing: the picker is a navigation aid, not an overflow affordance, and a
   // user who knows the name of the tab they want should not first have to make the strip too small.
@@ -276,7 +185,7 @@ test('T056 — Ctrl+Alt+T opens the picker at ANY tab count, including with noth
   await expect(shared.win.getByTestId('tabpicker')).toHaveCount(0);
 });
 
-test('T056 — the chord and the control open the SAME picker, with the same behaviour (T7)', async () => {
+test('T056 — the chord and the control open the SAME picker, with the same behaviour (T7)', { tag: ['@extended', '@window'] }, async () => {
   await freshProject();
   await seedOverflowingTabs(shared.win, 'picker-same');
   await setScrollLeft(shared.win, 0);
@@ -303,7 +212,7 @@ test('T056 — the chord and the control open the SAME picker, with the same beh
   await expect(shared.win.getByTestId('tabpicker')).toHaveCount(0);
 });
 
-test('T056 — dismissing returns focus to where it was (T8)', async () => {
+test('T056 — dismissing returns focus to where it was (T8)', { tag: ['@extended', '@window'] }, async () => {
   await freshProject();
   await seedTabs(shared.win, ['focus-return']);
 

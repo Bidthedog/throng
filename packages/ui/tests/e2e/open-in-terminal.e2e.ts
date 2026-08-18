@@ -131,24 +131,11 @@ async function expectLayout(
     .toBe(true);
 }
 
-/** Arrow-Down through the focused menu level until `testId` holds focus (bounded). */
-async function focusItemByArrows(win: Page, testId: string): Promise<void> {
-  for (let i = 0; i < 20; i += 1) {
-    const focused = await win
-      .locator(':focus')
-      .getAttribute('data-testid')
-      .catch(() => null);
-    if (focused === testId) return;
-    await win.keyboard.press('ArrowDown');
-  }
-  throw new Error(`could not focus ${testId} by arrows`);
-}
-
 // ---------------------------------------------------------------------------
 // AS-1 / A1 / A2 / A6 — the submenu, and that it IS the type-picker's catalogue.
 // ---------------------------------------------------------------------------
 
-test('AS-1 — Open In holds a Terminal submenu whose flavours match the panel type-picker exactly', async () => {
+test('AS-1 — Open In holds a Terminal submenu whose flavours match the panel type-picker exactly', { tag: ['@extended', '@terminal'] }, async () => {
   const root = makeProjectFolder('throng-oit-menu-');
   try {
     await runApp(async (_app, win) => {
@@ -191,7 +178,7 @@ test('AS-1 — Open In holds a Terminal submenu whose flavours match the panel t
 // AS-2 / AS-2a / B1–B4 / B9 / SC-008 / SC-015 — every enabled flavour on the machine.
 // ---------------------------------------------------------------------------
 
-test('AS-2/AS-2a — every enabled flavour opens an active, focused terminal in the right-clicked folder', async () => {
+test('AS-2/AS-2a — every enabled flavour opens an active, focused terminal in the right-clicked folder', { tag: ['@core', '@terminal'] }, async () => {
   /*
    * Measured for `terminal-directory-memory.e2e.ts` on CI run 30943045917 and the same reasoning
    * applies verbatim: an elevated daemon routes terminals through the de-elevated agent, a different
@@ -275,7 +262,7 @@ test('AS-2/AS-2a — every enabled flavour opens an active, focused terminal in 
 // AS-3 / B4 — a FILE starts its terminal in the file's parent folder.
 // ---------------------------------------------------------------------------
 
-test('AS-3 — a right-clicked file opens its terminal in the file’s parent folder', async () => {
+test('AS-3 — a right-clicked file opens its terminal in the file’s parent folder', { tag: ['@extended', '@terminal'] }, async () => {
   skipIfElevated();
   test.setTimeout(180_000);
   const root = makeProjectFolder('throng-oit-file-');
@@ -306,7 +293,7 @@ test('AS-3 — a right-clicked file opens its terminal in the file’s parent fo
 // B5 — the start directory is persisted, so a restored panel restarts where it was created.
 // ---------------------------------------------------------------------------
 
-test('B5 — the start directory is persisted, and the reopened project restarts the terminal there', async () => {
+test('B5 — the start directory is persisted, and the reopened project restarts the terminal there', { tag: ['@extended', '@terminal'] }, async () => {
   skipIfElevated();
   test.setTimeout(180_000);
   const root = makeProjectFolder('throng-oit-restore-');
@@ -375,7 +362,7 @@ test('B5 — the start directory is persisted, and the reopened project restarts
 // AS-4 / A2 / B8 / FR-030 / FR-037 — the catalogue, not a copy of it.
 // ---------------------------------------------------------------------------
 
-test('AS-4 — a user-defined flavour appears with no further configuration; a disabled built-in does not', async () => {
+test('AS-4 — a user-defined flavour appears with no further configuration; a disabled built-in does not', { tag: ['@extended', '@terminal'] }, async () => {
   const root = makeProjectFolder('throng-oit-custom-');
   const cfg = mkdtempSync(join(tmpdir(), 'throng-oit-custom-cfg-'));
   try {
@@ -419,60 +406,45 @@ test('AS-4 — a user-defined flavour appears with no further configuration; a d
 // AS-6 / A3 / FR-035 — shown and DISABLED when there is nothing to launch.
 // ---------------------------------------------------------------------------
 
-test('AS-6 — with nothing launchable the Terminal parent is drawn and disabled, never hidden', async () => {
-  const root = makeProjectFolder('throng-oit-disabled-');
-  const cfg = mkdtempSync(join(tmpdir(), 'throng-oit-disabled-cfg-'));
-  try {
-    /*
-     * "No active project" is not reachable from THIS menu, and pretending otherwise would be a test
-     * that passes for the wrong reason: `panes/file-explorer-pane.tsx` mounts the tree only when a
-     * project is active, so with no project there is no Files & Folders row to right-click and no
-     * menu to inspect — which is why AS-6 is worded "when a context menu is available at all".
-     *
-     * The state the requirement is really about — the Terminal parent drawn but unusable — IS
-     * reachable, by leaving the catalogue empty. Every built-in is disabled and no user flavour is
-     * defined, so there is nothing to launch and the row must still be there saying so. The builder
-     * unit test covers the same rule for the no-catalogue argument directly.
-     */
-    writeSettingsAtomic(cfg, {
-      terminals: {
-        // Every built-in `WindowsShellDetection` can report, so the merged catalogue is empty.
-        disabledBuiltins: ['cmd', 'windows-powershell', 'pwsh', 'git-bash'],
-        flavours: [],
-      },
-    });
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'NoFlavours', root);
-        const tree = win.getByTestId('file-explorer-tree');
-        await tree.getByText('deep', { exact: true }).click({ button: 'right' });
-        await win.getByTestId('menu-item-Open In').click();
-        const terminal = win.getByTestId('menu-item-Terminal');
-        // Shown…
-        await expect(terminal).toBeVisible();
-        // …and unusable, rather than absent (FR-035, and the constitution's disabled-when-unavailable
-        // rule: an item that vanishes teaches the user nothing about what the menu can do).
-        await expect(terminal).toHaveAttribute('aria-disabled', 'true');
-        await expect(terminal).toHaveClass(/context-menu__item--disabled/);
-        // A disabled parent opens nothing.
-        await terminal.click({ force: true });
-        await expect(win.getByTestId('submenu-Terminal')).toHaveCount(0);
-        await closeMenu(win);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfg } },
-    );
-  } finally {
-    for (const d of [root, cfg]) {
-      cleanupTemp(d);
-    }
-  }
-});
+/*
+ * MOVED to `packages/ui/tests/component/menu-disabled-parent.test.ts` (034 FR-045): AS-6 / A3 /
+ * FR-035 — "with nothing launchable the Terminal parent is drawn and disabled, never hidden".
+ *
+ * It seeded a THRONG_CONFIG_ROOT with every built-in shell disabled and no user flavour, launched
+ * Electron, created a project, right-clicked a tree row and opened "Open In" — all in order to look
+ * at three attributes of one <li>: `aria-disabled`, the `--disabled` class, and that a click opened
+ * no flyout. The seeded config root was the way of ARRANGING for `disabled: true`; it was never the
+ * subject. The DECISION half is already asserted at the builder,
+ * `packages/ui/tests/unit/explorer-terminal-menu.test.ts:113` ("A3/FR-035 — with an empty catalogue
+ * the parent is DRAWN and DISABLED, never hidden"), for `undefined` AND `[]`.
+ *
+ * THE REPLACEMENT IS STRICTLY STRONGER, in three ways the E2E could not manage:
+ *   - it drives the REAL builder, so the rows are the shipped rows rather than a fixture;
+ *   - it asserts `onClose` was NOT called, which the E2E never checked — a disabled row falling
+ *     through to the leaf branch would dismiss the menu having done nothing, and read to the user
+ *     as a control that silently failed rather than one that is unavailable;
+ *   - it renders the ENABLED case in the same file. Without that, "no flyout opened" is satisfied
+ *     by a menu that can never open a flyout at all, which is the vacuity this branch keeps finding.
+ *
+ * WHAT DID NOT MOVE, and why: the six tests that remain here are a real shell reporting a real cwd
+ * with the keyboard already in it (AS-2), the submenu list compared against the panel type-picker’s
+ * LIVE list on this machine (AS-1), a file resolving to its parent folder through a real PTY (AS-3),
+ * a start directory surviving a cold restart (B5), a user-defined flavour written into settings.json
+ * reaching the menu (AS-4), and three flyout levels standing open at once under a real mouse dwell
+ * (AS-7). `context-menu-lifecycle.test.ts:150` covers the CLICK case of that last one, not the
+ * hover-dwell case, so it is not a substitute.
+ *
+ * Anti-vacuity control: making the replacement’s `build()` return `[]` fails ALL FOUR of its tests
+ * at `getByTestId('menu-item-Open In')`. Red-proved: hiding the Terminal row when the catalogue is
+ * empty (the exact regression AS-6 existed to catch) reddens 3 of 4; dropping `aria-disabled`,
+ * dropping the disabled class, and removing the click guard redden 1 each.
+ */
 
 // ---------------------------------------------------------------------------
 // AS-7 / A4 — three levels, by mouse, with no intermediate flyout collapsing.
 // ---------------------------------------------------------------------------
 
-test('AS-7 — the three-level path traverses by mouse without an intermediate submenu collapsing', async () => {
+test('AS-7 — the three-level path traverses by mouse without an intermediate submenu collapsing', { tag: ['@extended', '@terminal'] }, async () => {
   skipIfElevated();
   test.setTimeout(180_000);
   const root = makeProjectFolder('throng-oit-mouse-');
@@ -509,60 +481,17 @@ test('AS-7 — the three-level path traverses by mouse without an intermediate s
 // AS-8 / A5 — the same path by arrow keys, with Enter launching.
 // ---------------------------------------------------------------------------
 
-test('AS-8 — arrow keys open each level and Enter on a flavour launches the terminal', async () => {
-  skipIfElevated();
-  test.setTimeout(180_000);
-  const root = makeProjectFolder('throng-oit-keys-');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'KeyTraverse', root);
-      const tree = win.getByTestId('file-explorer-tree');
-      await tree.getByText('deep', { exact: true }).click({ button: 'right' });
-      await expect(win.getByTestId('context-menu')).toBeVisible();
-
-      // Level 1 → 2.
-      await focusItemByArrows(win, 'menu-item-Open In');
-      await win.keyboard.press('ArrowRight');
-      await expect(win.getByTestId('submenu-Open In')).toBeVisible();
-
-      // Level 2 → 3. ArrowRight on a keyboard-opened level focuses its first child, so the arrows
-      // walk from there to Terminal.
-      await focusItemByArrows(win, 'menu-item-Terminal');
-      await win.keyboard.press('ArrowRight');
-      const flavourLevel = win.getByTestId('submenu-Terminal');
-      await expect(flavourLevel).toBeVisible();
-
-      /*
-       * WHICH item holds focus, not how many — and asked with a retrying matcher.
-       *
-       * This counted focused items instead, one non-retrying `.count()` taken the instant the level
-       * became visible. Two things were wrong with it. A count of one is satisfied by ANY flavour
-       * holding focus, so ArrowRight landing on the last row — or on a row a later reordering moved
-       * — read as success; and the Enter below then launches whatever that was, so the identity is
-       * load-bearing rather than decorative. And a bare `.count()` is a single sample: focus arrives
-       * a beat after the level renders, so the assertion raced the very thing it was asserting.
-       *
-       * `toBeFocused` on the FIRST row is both halves at once — the right item, polled until it is.
-       */
-      const firstFlavour = flavourLevel.locator('.context-menu__item').first();
-      const names = await labelsOf(flavourLevel);
-      await expect(
-        firstFlavour,
-        `ArrowRight must focus the FIRST flavour (${names[0] ?? '(none)'}), which is the one Enter ` +
-          `is about to launch`,
-      ).toBeFocused();
-      // …and nothing else in the level is focused alongside it.
-      await expect(flavourLevel.locator('.context-menu__item:focus')).toHaveCount(1);
-
-      // Enter on a flavour launches it, and the whole menu closes.
-      const before = await panelIds(win);
-      await win.keyboard.press('Enter');
-      await expect(win.getByTestId('context-menu')).toHaveCount(0);
-      const pid = await newPanelId(win, before);
-      await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible({ timeout: 30_000 });
-      await expect(win.getByTestId(`panel-cwd-${pid}`)).toContainText('deep', { timeout: 40_000 });
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * MOVED to `packages/ui/tests/component/menu-keyboard.test.ts` (034 FR-045): AS-8 keyboard half —
+ * ArrowRight opens each of the three levels landing on the first child, ArrowLeft walks back out,
+ * and Enter on the deepest leaf fires its action and closes the menu.
+ *
+ * That test grew a three-level fixture for it rather than arguing from the two-level one: "the
+ * recursion is the same code at every depth" is true, and is the reasoning that would hide a
+ * special case at one level — this component has had exactly that bug (`isRoot` inferred from a
+ * test id, broken by a folded-in menu keeping its own).
+ *
+ * What the deleted test also asserted, and what keeps its coverage: that Enter on a flavour LAUNCHES
+ * A REAL SHELL. That is AS-2 above, which drives every detected flavour against a real PTY. No DOM
+ * can tell you a shell started.
+ */

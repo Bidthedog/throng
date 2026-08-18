@@ -65,13 +65,19 @@ async function readIntegrity(win: Page, term: Locator, flavour: string): Promise
   await term.click();
   await win.keyboard.type(PROBE[flavour]);
   await win.keyboard.press('Enter');
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) {
-    const verdict = classify(flavour, await term.innerText());
-    if (verdict) return verdict;
-    await win.waitForTimeout(250);
-  }
-  throw new Error(`terminal produced no THRONG_IL token (did ${flavour} launch?)`);
+  // A hand-rolled poll loop with a fixed interval is what `expect.poll` already is, with its own
+  // backoff — use that rather than reimplementing it.
+  let verdict: 'admin' | 'user' | null = null;
+  await expect
+    .poll(
+      async () => {
+        verdict = classify(flavour, await term.innerText());
+        return verdict !== null;
+      },
+      { timeout: 15_000, message: `terminal produced no THRONG_IL token (did ${flavour} launch?)` },
+    )
+    .toBe(true);
+  return verdict!;
 }
 
 /**

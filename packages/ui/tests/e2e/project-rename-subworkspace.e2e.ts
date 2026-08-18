@@ -15,7 +15,7 @@ async function projectId(win: Page): Promise<string> {
   return (tid ?? '').replace('project-switch-', '');
 }
 
-test('renaming a project updates its name on sub-workspace panels live', async () => {
+test('renaming a project updates its name on sub-workspace panels live', { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-rensub-'));
   try {
     await runApp(async (app, win) => {

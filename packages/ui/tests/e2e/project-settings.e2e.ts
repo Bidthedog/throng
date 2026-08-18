@@ -1,13 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { createProject, runApp, cleanupTemp} from './harness.js';
 
-/** The projects list row for `name` — the sidebar has no per-project test id, only a class + text. */
-function projectItem(win: import('@playwright/test').Page, name: string) {
-  return win.locator('.project-item', { hasText: name });
-}
 
 /**
  * 018 / US8 — hidden files can be seen and un-hidden (FR-041 … FR-047a).
@@ -40,7 +36,7 @@ async function openSettings(win: import('@playwright/test').Page): Promise<void>
   await expect(win.getByTestId('project-settings-dialog')).toBeVisible();
 }
 
-test('lists every hidden path; removing one brings the file back with no restart (US8, FR-043)', async () => {
+test('lists every hidden path; removing one brings the file back with no restart (US8, FR-043)', { tag: ['@extended', '@window'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -73,191 +69,58 @@ test('lists every hidden path; removing one brings the file back with no restart
   }
 });
 
-test('the dialog NAMES the project it edits, and follows a project switch (US8, FR-042)', async () => {
-  const first = makeProjectFolder();
-  const second = makeProjectFolder();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'First', first);
-      await expect(win.getByTestId('file-explorer-tree')).toBeVisible();
-      await hide(win, 'a.txt');
+/*
+ * MOVED to `packages/ui/tests/component/project-settings-dialog.test.ts` and
+ * `packages/ui/tests/component/file-explorer-pane.test.ts` (034 FR-045) — five tests, five launches.
+ *
+ *   the dialog names the project it edits, and follows a switch (FR-042)
+ *   with no project active the options icon is DISABLED and says why (FR-041)
+ *   deleting the edited project closes the dialog rather than editing a ghost (FR-046)
+ *   a path that is ALSO glob-excluded is marked (FR-047a)
+ *   a hidden path whose file was DELETED still lists and still removes
+ *
+ * What each was paying for is worth stating, because it is the shape of this whole migration: two
+ * projects and two temp folders to read a heading; a whole config root and a `settings.json` write
+ * to manufacture a glob overlap; an `rmSync` to prove the list renders from the project RECORD and
+ * never stats the file. Every one of those is a property of one component and its props.
+ *
+ * ══ HOW THE STORE WAS FAKED, because the obvious route does not work ══
+ *
+ * `ProjectsProvider` takes a `client: ProjectsClient`, which is a CLASS with a private field — so a
+ * structural stub is not assignable and a plain fake needs a cast. The drafts instead build a REAL
+ * `ProjectsClient` over a fake `ThrongBridge`, which is an exported one-method interface. No cast,
+ * no production change, and the store’s real refresh-after-mutation path is exercised rather than
+ * stubbed out.
+ *
+ * Red-proved: making the FR-046 auto-close effect unfireable reddens 1; having `unhide` send the one
+ * removed path instead of the surviving list reddens 2, as does having it send an empty list; and
+ * disabling Escape reddens 1. All anchored on full lines — `onClose` occurs SEVEN times in that file
+ * and `activeProject` seven more, so a bare identifier mutation would have hit the wrong one.
+ *
+ * WHAT STAYS: the ONE test below, which is the only place a hidden path is proved to bring the
+ * file BACK into a real tree with no restart — a real project folder, a real explorer, a store
+ * write and a daemon round trip.
+ *
+ * ══ AND THE CLAIM THIS COMMENT USED TO MAKE, WHICH WAS WRONG ══
+ *
+ * It said the themed-icon test had to stay because it "reads `getComputedStyle` for a themed icon,
+ * which needs a real cascade (FR-049)". It never read a computed style: it read a `title` attribute
+ * and counted `.icon` children. And it said the ENABLED options control was out of reach because
+ * `FileExplorerPane` mounts `FileTree`, which calls `useWorkspace`, "a context that throws and is
+ * not exported" — but `WorkspaceProvider` IS exported and takes its client as a prop; only
+ * `WorkspaceContext` is private, and nothing needs it. `file-tree.test.ts` had already mounted that
+ * whole stack. Both halves therefore came down to
+ * `packages/ui/tests/component/file-explorer-pane.test.ts`:
+ *
+ *   is ENABLED once a project is open, and the two states differ
+ *   NAMES the project in its hover title      (STRONGER: the E2E accepted any title at all, which
+ *                                              the no-project title would also have satisfied)
+ *   is a themed icon and never a word (FR-043a)
+ *   opens the project settings dialog when it is clicked   (NEW — the E2E never clicked it, and a
+ *                                              titled, themed, enabled control that opens nothing
+ *                                              is exactly as broken as a missing one)
+ *
+ * Anti-vacuity control for that file: withhold `ProjectsProvider` and `useProjects` throws, failing
+ * all 12 tests; drop the `ResizeObserver` stub and `findByRole('tree')` fails the 4 above.
+ */
 
-      await createProject(win, 'Second', second);
-      await expect(win.getByTestId('file-explorer-tree')).toBeVisible();
-      await hide(win, 'c.txt');
-
-      // The dialog must never leave the user guessing WHOSE settings are on screen.
-      await openSettings(win);
-      const dialog = win.getByTestId('project-settings-dialog');
-      await expect(dialog).toContainText('Second');
-      const rows = dialog.locator('.hidden-path');
-      await expect(rows).toHaveCount(1);
-      await expect(rows.first()).toContainText('c.txt');
-      await expect(dialog).not.toContainText('a.txt');
-
-      // Switch back → the OTHER project's paths, not a stale render of this one's.
-      await win.keyboard.press('Escape');
-      await projectItem(win, 'First').locator('.project-item__switch').click();
-      await expect(win.getByTestId('file-explorer-tree')).toBeVisible();
-      await openSettings(win);
-      await expect(dialog).toContainText('First');
-      await expect(dialog.locator('.hidden-path')).toHaveCount(1);
-      await expect(dialog.locator('.hidden-path').first()).toContainText('a.txt');
-    });
-  } finally {
-    cleanupTemp(first);
-    cleanupTemp(second);
-  }
-});
-
-test('with no project active the options icon is DISABLED and says why (US8, FR-041)', async () => {
-  await runApp(async (_app, win) => {
-    // With no project the right pane defaults COLLAPSED — expand it, or there is no header to look at.
-    await win.getByTestId('pane-show-right').click();
-    await expect(win.getByTestId('file-explorer-empty')).toBeVisible();
-    const options = win.getByTestId('project-settings-open');
-    await expect(options).toBeVisible();
-    await expect(options).toBeDisabled();
-    // A control that vanishes teaches the user nothing; one that is visibly unavailable explains itself.
-    await expect(options).toHaveAttribute('title', /no project|No project/);
-    await expect(win.getByTestId('project-settings-dialog')).toHaveCount(0);
-  });
-});
-
-test('deleting the edited project closes the dialog rather than editing a ghost (US8, FR-046)', async () => {
-  const projectRoot = makeProjectFolder();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Doomed', projectRoot);
-      await expect(win.getByTestId('file-explorer-tree')).toBeVisible();
-      await hide(win, 'a.txt');
-      await openSettings(win);
-
-      // Delete the project out from under the open dialog.
-      //
-      // The dialog is MODAL, so its overlay covers the sidebar and no real pointer can reach the delete
-      // button — which is the point: the state change this requirement guards against does not arrive by
-      // the user clicking behind the dialog, it arrives from ELSEWHERE (another window mutating the
-      // shared projects store, a sub-workspace closing its project). Dispatching the click directly is
-      // how the test produces that state change without pretending the overlay is not there.
-      await projectItem(win, 'Doomed')
-        .locator('[data-testid^="project-delete-"]')
-        .dispatchEvent('click');
-      // Removal double-confirms (FR-023/024). Wait for the wry second dialog by its TEXT rather than
-      // clicking the same test id twice — the outgoing dialog's button lingers in the DOM for a frame,
-      // and a click that lands on it does nothing at all.
-      await win.getByTestId('confirm-accept').click();
-      await expect(win.getByTestId('confirm-dialog')).toContainText('absolutely sure');
-      await win.getByTestId('confirm-accept').click();
-
-      // The dialog must not survive as an editor of a project that no longer exists.
-      await expect(win.getByTestId('project-settings-dialog')).toHaveCount(0);
-      await expect(win.getByTestId('workspace-no-project')).toBeVisible();
-
-      // …and it must not be re-openable onto the ghost either. (Losing its project collapses the right
-      // pane back to its no-project default, so expand it again to see the header.)
-      const expand = win.getByTestId('pane-show-right');
-      if (await expand.isVisible()) await expand.click();
-      await expect(win.getByTestId('file-explorer-empty')).toBeVisible();
-      await expect(win.getByTestId('project-settings-open')).toBeDisabled();
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
-
-test('a path that is ALSO glob-excluded is marked — removing it would do nothing (US8, FR-047a)', async () => {
-  const projectRoot = makeProjectFolder();
-  const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-cfg-'));
-  try {
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'Demo', projectRoot);
-        const tree = win.getByTestId('file-explorer-tree');
-        await expect(tree).toBeVisible();
-        await hide(win, 'a.txt');
-        await hide(win, 'b.txt');
-
-        // The overlap the way a real user reaches it: the path was hidden, and a global exclusion glob
-        // grew to cover it LATER. Now removing it from the hidden list cannot bring it back — the glob
-        // filters one stage earlier, at fetch — and a remove button that visibly does nothing is a worse
-        // defect than the one this story fixes.
-        const file = join(cfgRoot, 'settings.json');
-        const settings = JSON.parse(readFileSync(file, 'utf8')) as {
-          explorer: { excludeGlobs: string[] };
-        };
-        settings.explorer.excludeGlobs = [...settings.explorer.excludeGlobs, '**/a.txt'];
-        writeFileSync(file, JSON.stringify(settings, null, 2));
-
-        await openSettings(win);
-        const dialog = win.getByTestId('project-settings-dialog');
-        const overlapped = dialog.locator('.hidden-path').filter({ hasText: 'a.txt' });
-        await expect(overlapped).toHaveClass(/hidden-path--also-excluded/);
-        await expect(overlapped).toContainText(/exclusion|excluded/i);
-        // b.txt is hidden but NOT glob-matched — removing it really will bring it back, so it must not
-        // wear the mark.
-        await expect(dialog.locator('.hidden-path').filter({ hasText: 'b.txt' })).not.toHaveClass(
-          /hidden-path--also-excluded/,
-        );
-
-        // And the dialog states that the global exclusions apply at all (FR-047) — the hidden-paths
-        // list must never be mistaken for the whole story.
-        await expect(dialog.getByTestId('project-settings-globals')).toContainText(/exclusion/i);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-    );
-  } finally {
-    cleanupTemp(projectRoot);
-    cleanupTemp(cfgRoot);
-  }
-});
-
-test('a hidden path whose file was DELETED still lists and still removes (US8, edge case)', async () => {
-  const projectRoot = makeProjectFolder();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Demo', projectRoot);
-      await expect(win.getByTestId('file-explorer-tree')).toBeVisible();
-      await hide(win, 'a.txt');
-
-      // The user hides a build artefact, then cleans. The list names PATHS, not files — a render that
-      // stats each one would throw here, which is exactly the case a real user reaches.
-      rmSync(join(projectRoot, 'a.txt'), { force: true });
-
-      await openSettings(win);
-      const rows = win.getByTestId('project-settings-dialog').locator('.hidden-path');
-      await expect(rows).toHaveCount(1);
-      await expect(rows.first()).toContainText('a.txt');
-      await win.getByTestId('hidden-path-remove-a.txt').click();
-      await expect(rows).toHaveCount(0);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
-
-test('every control this story adds is a themed icon with a hover title (US8, FR-043a)', async () => {
-  const projectRoot = makeProjectFolder();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Demo', projectRoot);
-      await expect(win.getByTestId('file-explorer-tree')).toBeVisible();
-      await hide(win, 'a.txt');
-
-      // The pane's options control: an icon from the active pack, named on hover.
-      const options = win.getByTestId('project-settings-open');
-      await expect(options).toHaveAttribute('title', /.+/);
-      await expect(options.locator('.icon')).toHaveCount(1);
-
-      await openSettings(win);
-      // The per-row remove control is NOT a dialog decision button, so the constitution's exception
-      // does not cover it: it must be a themed icon, not the word "Remove".
-      const remove = win.getByTestId('hidden-path-remove-a.txt');
-      await expect(remove).toHaveAttribute('title', /.+/);
-      await expect(remove.locator('.icon')).toHaveCount(1);
-      await expect(remove).not.toContainText(/remove/i);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});

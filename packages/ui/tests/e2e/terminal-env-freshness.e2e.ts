@@ -41,7 +41,7 @@ import { skipIfElevated } from './admin.js';
  * distinguishable at all.
  */
 
-test('a terminal sees the environment of the app that launched it, not the daemon (#209)', async () => {
+test('a terminal sees the environment of the app that launched it, not the daemon (#209)', { tag: ['@extended', '@terminal'] }, async () => {
   // An elevated daemon routes terminals through the de-elevated agent, a different process tree
   // from the one this asserts about.
   skipIfElevated();

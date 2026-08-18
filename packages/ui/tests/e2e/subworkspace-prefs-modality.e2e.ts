@@ -53,7 +53,7 @@ async function enabledStates(app: ElectronApplication): Promise<boolean[]> {
   );
 }
 
-test('a sub-workspace opened while Preferences is open is interactive (#263)', async () => {
+test('a sub-workspace opened while Preferences is open is interactive (#263)', { tag: ['@extended', '@window'] }, async () => {
   test.setTimeout(120_000);
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-cfg-263-'));
 

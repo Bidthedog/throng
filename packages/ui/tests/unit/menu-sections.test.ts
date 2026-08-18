@@ -28,7 +28,10 @@ import type { MenuAction, MenuItem } from '../../src/renderer/workspace/context-
 import { withDividers } from '../../src/renderer/workspace/menu-dividers.js';
 import { buildContextMenuItems } from '../../src/renderer/explorer/context-menu-items.js';
 import { editorContentMenu } from '../../src/renderer/editor/content-menu.js';
-import { panelHeaderMenu } from '../../src/renderer/workspace/panel-header-menu.js';
+import {
+  panelHeaderMenu,
+  type PanelHeaderMenuActions,
+} from '../../src/renderer/workspace/panel-header-menu.js';
 import { tabContextMenu } from '../../src/renderer/workspace/tab-menu.js';
 import { terminalContentMenu } from '../../src/renderer/terminal/terminal-content-menu.js';
 import { cogMenuItems } from '../../src/renderer/title-bar/cog-menu-items.js';
@@ -465,6 +468,62 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
     ]);
   });
 
+  /*
+   * The chords the panel menu SHOWS (034 FR-045).
+   *
+   * MIGRATED FROM the first half of `packages/ui/tests/e2e/panel-rename-key.e2e.ts:24`, which
+   * launched Electron, created a project, made an editor panel and opened a real context menu to
+   * assert `menu-item-Rename` contained the text "F2" and `menu-item-Zoom In` contained "Ctrl".
+   *
+   * `panelHeaderMenu` is a pure function of its `keybindings` argument — `shortcut:
+   * firstBinding(keybindings, …)` — so the menu's own claim is settled here, against
+   * `DEFAULT_KEYBINDINGS`, and settled HARDER than the E2E settled it: "contains Ctrl" is true of
+   * every chord in the application, and would have passed with Zoom In showing Zoom Out's binding.
+   *
+   * What is NOT claimed here, and stays end-to-end: that this shortcut string reaches the RENDERED
+   * menu item. `menu-keyboard.test.ts` mounts the real menu, and the surviving E2E test presses the
+   * key for real.
+   */
+  it('names the chord beside Rename and beside each Zoom item, and names the RIGHT one', () => {
+    const items = panelHeader({ panel: panel({ kind: 'editor' }), editor: { dirty: false, hasFilePath: true } });
+
+    expect(items.find((i) => i.label === 'Rename')?.shortcut).toBe('F2');
+
+    const zoom = items.find((i) => i.label === 'Zoom')?.submenu ?? [];
+    expect(
+      zoom.map((i) => [i.label, i.shortcut]),
+      'each zoom item shows its OWN chord — "contains Ctrl" cannot tell them apart',
+    ).toEqual([
+      ['Zoom In', 'Ctrl+Alt+='],
+      ['Zoom Out', 'Ctrl+Alt+-'],
+      ['Reset Zoom', 'Ctrl+Alt+0'],
+    ]);
+  });
+
+  it('shows a REBOUND chord rather than the shipped one, so the menu teaches the live key', () => {
+    /*
+     * The half that makes the test above evidence rather than a restatement of the defaults table:
+     * a menu that hard-coded "F2" passes it perfectly and lies to every user who has rebound
+     * `panel.rename`. `firstBinding` is what this asserts, at the one call site that matters.
+     */
+    const rebound = {
+      ...DEFAULT_KEYBINDINGS,
+      bindings: { ...DEFAULT_KEYBINDINGS.bindings, 'panel.rename': ['Ctrl+Shift+M'] },
+    };
+    const items = panelHeaderMenu({
+      panel: panel({}),
+      panelVerb: 'Destroy',
+      keybindings: rebound,
+      otherTabs: [],
+      editor: null,
+      editorFailure: false,
+      detach: null,
+      actions: panelActions,
+    });
+
+    expect(items.find((i) => i.label === 'Rename')?.shortcut).toBe('Ctrl+Shift+M');
+  });
+
   it('an editor panel backed by a file: Destroy moves to the middle, Reset Name leaves Rename’s side', () => {
     const shape = shapeOf(
       panelHeader({ panel: panel({ kind: 'editor' }), editor: { dirty: false, hasFilePath: true } }),
@@ -563,5 +622,101 @@ describe('Go To Line is on the editor content menu, in Navigate, showing its cur
     const goto = editorMenu().find((i) => i.label === 'Go To Line…');
     expect(goto?.section).toBe('navigate');
     expect(goto?.shortcut).toBe('Ctrl+G');
+  });
+});
+
+/*
+ * "Send to Tab" — the SUBMENU, not merely its parent row (034 FR-045).
+ *
+ * MIGRATED FROM `packages/ui/tests/e2e/editor-menus.e2e.ts`,
+ * `test('Send to Tab offers New Tab on the panel menu')`. That test launched Electron, a daemon and
+ * a window, created a project against a real temp folder and typed an editor panel into existence —
+ * in order to right-click a panel handle and read one label out of a flyout.
+ *
+ * WHY IT IS A GAP AT ALL, given the shape tests above already pin `Send to Tab`: `shapeOf` walks
+ * `withDividers(actions)`, which is ONE level. It sees the parent row and stops. So what the submenu
+ * actually offers was asserted nowhere below E2E, and that is what these three close.
+ *
+ * The RENDERING half is deliberately not re-proved here — it is already component-proved over this
+ * exact row: `packages/ui/tests/component/context-menu-lifecycle.test.ts:150` clicks
+ * `menu-item-Send to Tab` and asserts `submenu-Send to Tab` is visible with its children reachable.
+ * Builder data here, flyout rendering there; between them they say everything the E2E said.
+ *
+ * ANTI-VACUITY CONTROL: delete the `New Tab` entry from the `submenu` array in
+ * `panel-header-menu.ts` (the one at `label: 'Send to Tab'`) and ALL THREE tests below fail — each
+ * one reads `sendToTabRow(...).submenu` and asserts on its contents, so none of them can pass
+ * against a menu that does not offer the target.
+ */
+describe('Send to Tab offers New Tab first, then every other Tab (005 FR-027)', () => {
+  /** The `Send to Tab` row, or a failure that says the menu no longer has one. */
+  const sendToTabRow = (items: MenuAction[]): MenuAction => {
+    const row = items.find((i) => i.label === 'Send to Tab');
+    if (!row) throw new Error('the panel header menu has no Send to Tab row');
+    return row;
+  };
+
+  /** `panelHeader` above fixes `otherTabs`; this one varies it and can spy on the actions. */
+  const withTabs = (
+    otherTabs: { id: string; title: string }[],
+    actions: Partial<PanelHeaderMenuActions> = {},
+  ): MenuAction[] =>
+    panelHeaderMenu({
+      panel: panel({}),
+      panelVerb: 'Destroy',
+      keybindings: DEFAULT_KEYBINDINGS,
+      otherTabs,
+      editor: null,
+      editorFailure: false,
+      detach: null,
+      actions: { ...panelActions, ...actions },
+    });
+
+  it('puts New Tab ahead of the other Tabs, on an untyped panel and on an editor alike', () => {
+    // Both fixtures, because the E2E drove an EDITOR panel and the shape tests above drive an
+    // untyped one — the submenu must not depend on which.
+    for (const built of [
+      panelHeader({ panel: panel({}) }),
+      panelHeader({
+        panel: panel({ kind: 'editor' }),
+        editor: { dirty: false, hasFilePath: true },
+      }),
+    ]) {
+      const submenu = sendToTabRow(built).submenu ?? [];
+      expect(submenu.map((i) => i.label)).toEqual(['New Tab', 'Tab 2']);
+      // FR-049 applies per level: every submenu row declares a section too.
+      expect(submenu.map((i) => i.section)).toEqual(['navigate', 'navigate']);
+    }
+  });
+
+  it('sends to a NEW tab, not to the first existing one — the two actions are distinct', () => {
+    /*
+     * The regression this catches, and the reason the labels alone are not enough: `New Tab` wired
+     * to `actions.sendToTab(otherTabs[0].id)` draws an identical menu and silently drops the Panel
+     * into Tab 2. The E2E could not have caught it either — it only read the label.
+     */
+    const called: string[] = [];
+    const items = withTabs([{ id: 't2', title: 'Tab 2' }], {
+      sendToNewTab: () => {
+        called.push('new');
+      },
+      sendToTab: (id: string) => {
+        called.push(id);
+      },
+    });
+
+    const submenu = sendToTabRow(items).submenu ?? [];
+    expect(submenu).toHaveLength(2);
+    for (const row of submenu) {
+      expect(row.onClick, `${row.label ?? '(no label)'} carries no action`).toBeDefined();
+      row.onClick?.();
+    }
+
+    expect(called).toEqual(['new', 't2']);
+  });
+
+  it('still offers New Tab when it is the ONLY target — a lone Tab can still send onward', () => {
+    // The empty-`otherTabs` case the E2E never reached: with no other Tab, a submenu built purely
+    // by mapping `otherTabs` would be empty, and an empty flyout is a dead row.
+    expect(sendToTabRow(withTabs([])).submenu?.map((i) => i.label)).toEqual(['New Tab']);
   });
 });

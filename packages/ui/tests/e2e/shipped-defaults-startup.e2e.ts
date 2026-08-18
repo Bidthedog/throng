@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildShippedDefaults } from '@throng/core';
@@ -67,7 +67,7 @@ async function boot(root: string): Promise<void> {
   );
 }
 
-test('first run (empty config): seeds settings, keybindings, every built-in theme and the version marker from the record', async () => {
+test('first run (empty config): seeds settings, keybindings, every built-in theme and the version marker from the record', { tag: ['@extended', '@prefs'] }, async () => {
   const root = makeRoot(); // empty → true first run
 
   await boot(root);
@@ -84,7 +84,7 @@ test('first run (empty config): seeds settings, keybindings, every built-in them
   expect(JSON.parse(readFileSync(themePath(root, A_BUILTIN), 'utf8'))).toEqual(SHIPPED.themes[A_BUILTIN]);
 });
 
-test('relaunch is idempotent: a second start rewrites no config file', async () => {
+test('relaunch is idempotent: a second start rewrites no config file', { tag: ['@extended', '@prefs'] }, async () => {
   const root = makeRoot();
   await boot(root); // seed
 
@@ -105,78 +105,23 @@ test('relaunch is idempotent: a second start rewrites no config file', async () 
   expect(themeFilesOnDisk(root)).toEqual(before.themes);
 });
 
-test('existing config without a marker (pre-010): additive upgrade adds the marker and missing default themes, leaving user settings untouched', async () => {
-  // Simulate a user who is already running throng (so it is NOT a first run) but
-  // predates the shipped-defaults marker: a customised, PARTIAL settings.json, and
-  // only a couple of theme files present.
-  const present = ['throng', A_BUILTIN];
-  const root = makeRoot((r) => {
-    mkdirSync(join(r, 'themes'), { recursive: true });
-    writeFileSync(settingsPath(r), serialize({ confirmations: { destroyPanel: 'none' } }));
-    writeFileSync(keybindingsPath(r), serialize(SHIPPED.keybindings));
-    for (const n of present) writeFileSync(themePath(r, n), serialize(SHIPPED.themes[n]));
-  });
-  const settingsBefore = readFileSync(settingsPath(root), 'utf8');
-  expect(existsSync(markerPath(root))).toBe(false);
-
-  await boot(root);
-
-  // Marker now recorded (upgrade ran) and every reserved theme was materialised.
-  expect(JSON.parse(readFileSync(markerPath(root), 'utf8'))).toEqual({ version: SHIPPED.version });
-  expect(themeFilesOnDisk(root)).toEqual(THEME_NAMES);
-  // The user's partial/customised settings file was NOT rewritten (never overwrite).
-  expect(readFileSync(settingsPath(root), 'utf8')).toBe(settingsBefore);
-});
-
-test('existing theme missing a colour token: upgrade materialises the missing token from the record without overwriting an edited value, idempotently', async () => {
-  // A built-in theme file that is missing one shipped colour token (a newly-added
-  // property) and has another token edited to a user value.
-  const shippedTheme = SHIPPED.themes[A_BUILTIN];
-  const colourKeys = Object.keys(shippedTheme.colours ?? {});
-  expect(colourKeys.length).toBeGreaterThanOrEqual(2); // guard the fixture
-  const editedKey = colourKeys[0];
-  const missingKey = colourKeys[1];
-  const userValue = '#010203';
-
-  const partial = JSON.parse(JSON.stringify(shippedTheme)) as { colours: Record<string, string> };
-  partial.colours[editedKey] = userValue; // user edited this token
-  delete partial.colours[missingKey]; // this token is absent on disk (missing key)
-
-  const root = makeRoot((r) => {
-    mkdirSync(join(r, 'themes'), { recursive: true });
-    // settings.json present so the launch is an upgrade, not a first-run seed.
-    writeFileSync(settingsPath(r), serialize({ editor: { autoSave: false } }));
-    writeFileSync(themePath(r, A_BUILTIN), serialize(partial));
-  });
-
-  await boot(root);
-
-  const filled = JSON.parse(readFileSync(themePath(root, A_BUILTIN), 'utf8')) as {
-    colours: Record<string, string>;
-  };
-  expect(filled.colours[missingKey]).toBe(shippedTheme.colours?.[missingKey]); // absent token materialised
-  expect(filled.colours[editedKey]).toBe(userValue); // edited value preserved
-  const afterFirst = readFileSync(themePath(root, A_BUILTIN), 'utf8');
-
-  await boot(root); // relaunch — marker now current, upgrade gated off
-
-  expect(readFileSync(themePath(root, A_BUILTIN), 'utf8')).toBe(afterFirst); // idempotent
-});
-
-test('existing config missing keybindings.json: the missing user-profile file is created from the record while settings are preserved', async () => {
-  // settings.json present (customised) but keybindings.json absent and no marker.
-  const root = makeRoot((r) => {
-    writeFileSync(settingsPath(r), serialize({ confirmations: { destroyPanel: 'none' } }));
-  });
-  const settingsBefore = readFileSync(settingsPath(root), 'utf8');
-  expect(existsSync(keybindingsPath(root))).toBe(false);
-
-  await boot(root);
-
-  // The absent user-profile file was created from the record...
-  expect(readFileSync(keybindingsPath(root), 'utf8')).toBe(serialize(SHIPPED.keybindings));
-  // ...the pre-existing settings file was left exactly as it was...
-  expect(readFileSync(settingsPath(root), 'utf8')).toBe(settingsBefore);
-  // ...and the upgrade recorded the version marker.
-  expect(JSON.parse(readFileSync(markerPath(root), 'utf8'))).toEqual({ version: SHIPPED.version });
-});
+/*
+ * DELETED (034 FR-045) — the three UPGRADE-CONTENT tests, each of which booted the whole
+ * application to check what a service writes into a directory.
+ *
+ * `packages/ui/tests/integration/shipped-defaults-seed-upgrade.test.ts` runs that service against
+ * a real filesystem, eleven cases deep, and covers all three:
+ *   - the pre-010 additive upgrade → "adds a newly-shipped theme without touching existing
+ *     values" + "is non-destructive: preserves a document the user pre-placed (create-if-absent)"
+ *     + "is idempotent: a second upgrade changes nothing and records the version"
+ *   - the missing colour token → "materialises a newly-added property into a built-in AND a
+ *     custom theme, without changing existing values" — the custom-theme half is a case this
+ *     file never had
+ *   - the absent keybindings.json → "is non-destructive: preserves a document the user pre-placed
+ *     (create-if-absent)", which is that claim by name
+ *
+ * WHAT STAYS, and why it is TWO tests rather than one: the only thing this layer can add is that
+ * `main.ts` makes the seed-or-upgrade DECISION at a real boot. The first run proves it seeds an
+ * empty root; the relaunch proves a second real boot consults the marker and rewrites nothing.
+ * One without the other would leave half the decision untested.
+ */

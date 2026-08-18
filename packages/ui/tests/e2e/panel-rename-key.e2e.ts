@@ -9,19 +9,81 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { test, expect } from '@playwright/test';
+import {
+  openApp,
+  createProject,
+  firstPanelId,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
 
-/** Close an app that has a live terminal by answering the prompt it earns. */
-async function terminateAllClose(app: ElectronApplication, win: Page): Promise<void> {
-  const closed = app.waitForEvent('close', { timeout: 20_000 });
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
-  await expect(win.getByTestId('app-close-dialog')).toBeVisible({ timeout: 15_000 });
-  await win.getByTestId('app-close-terminate').click();
-  await closed;
-}
+/*
+ * ONE app for this file, not one per test (034 FR-045).
+ *
+ * Neither test seeds anything before launch: each creates its own project and its own panel, which
+ * a shared window does just as well as a pristine one. The shim REFUSES launch options rather than
+ * ignoring them — a swallowed config root does not fail, it passes for the wrong reason.
+ *
+ * The second test used to end by closing the window and answering the terminate prompt. That was
+ * teardown, not an assertion, and `openApp`'s own teardown already kills the app-spawned daemon and
+ * the shell tree behind it — which is why `panel-zoom.e2e.ts` shares one app across tests that
+ * leave two live `cmd` sessions behind. `app-close-terminals.e2e.ts` and `terminate-all-drain.e2e.ts`
+ * are where the close PROMPT is the subject, and they are untouched.
+ *
+ * Serial mode is required — shared window, shared database — and it means a failure skips the rest
+ * rather than running them against whatever state the failure left behind.
+ */
+test.describe.configure({ mode: 'serial' });
 
-test('F2 renames an editor panel, and the menu advertises the chord', async () => {
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
+
+/*
+ * MOVED to `packages/ui/tests/unit/menu-sections.test.ts` (034 FR-045) — the menu half of the test
+ * below, which opened a real context menu to read two accelerator labels.
+ *
+ *   names the chord beside Rename and beside each Zoom item, and names the RIGHT one
+ *   shows a REBOUND chord rather than the shipped one, so the menu teaches the live key
+ *
+ * STRONGER than what it replaces, in the way that matters: the E2E asserted `menu-item-Zoom In`
+ * "contains Ctrl", which is true of every chord in the application and would have passed with Zoom
+ * In showing Zoom Out's binding. The unit test pins all three zoom chords by value, and adds the
+ * half no fixed string can prove — that a REBOUND `panel.rename` moves what the menu shows, which
+ * a menu hard-coding "F2" would fail. `panelHeaderMenu` is a pure function of its `keybindings`
+ * argument, so this is the layer the claim actually lives at.
+ *
+ * The two Escapes (FR-018b — one steps out of the sub-menu, one closes the root) were ALREADY
+ * covered against the real mounted menu, before this trim, by
+ * `packages/ui/tests/component/menu-keyboard.test.ts:120` ("Escape inside a sub-menu steps back to
+ * the parent and leaves the root menu open") and `:134` ("Escape at the root closes the whole
+ * menu"). Nothing about them moved; they were simply already there.
+ *
+ * WHAT DID NOT MOVE, and is why this test keeps its place: the KEY. That F2 reaches the active
+ * panel and opens its rename box, that the Enter which commits the name does not also land in the
+ * CodeMirror document behind it, and that focus returns to the editor afterwards — a real keyboard,
+ * a real focus path and a real document. Its title is rewritten to say so; the old one named the
+ * menu, which is no longer here.
+ */
+test('F2 opens the rename box on the active panel, and its Enter never reaches the document', { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-f2-'));
   writeFileSync(join(root, 'a.txt'), 'x\n');
   try {
@@ -32,17 +94,6 @@ test('F2 renames an editor panel, and the menu advertises the chord', async () =
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       await win.getByTestId(`editor-${pid}`).click();
 
-      // The menu NAMES the key — a menu that offers an action without naming its chord teaches
-      // nobody the chord.
-      await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-      await expect(win.getByTestId('menu-item-Rename')).toContainText('F2');
-      // …and so do the zoom items, which had no shortcut shown at all.
-      await win.getByTestId('menu-item-Zoom').hover();
-      await expect(win.getByTestId('menu-item-Zoom In')).toContainText('Ctrl');
-      // Two Escapes: the first steps out of the Zoom sub-menu, the second closes the root (FR-018b).
-      await win.keyboard.press('Escape');
-      await win.keyboard.press('Escape');
-      await expect(win.getByTestId('context-menu')).toHaveCount(0);
 
       // F2 opens the rename box on the ACTIVE panel.
       await win.getByTestId(`editor-${pid}`).click();
@@ -70,10 +121,10 @@ test('F2 renames an editor panel, and the menu advertises the chord', async () =
   }
 });
 
-test('F2 renames a terminal panel, and is not delivered to the shell', async () => {
+test('F2 renames a terminal panel, and is not delivered to the shell', { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-f2t-'));
   try {
-    await runApp(async (app, win) => {
+    await runApp(async (_app, win) => {
       await createProject(win, 'F2TermProj', root);
       const pid = await firstPanelId(win);
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
@@ -90,8 +141,6 @@ test('F2 renames a terminal panel, and is not delivered to the shell', async () 
       await input.fill('Build shell');
       await input.press('Enter');
       await expect(win.getByTestId(`panel-title-${pid}`)).toHaveText('Build shell');
-
-      await terminateAllClose(app, win);
     });
   } finally {
     cleanupTemp(root);

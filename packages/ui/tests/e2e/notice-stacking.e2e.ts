@@ -98,7 +98,7 @@ async function moveIntoDst(win: Page, name: string): Promise<void> {
   await win.keyboard.press('Control+v');
 }
 
-test('two different failures show as two notices, each naming what was attempted', async () => {
+test('two different failures show as two notices, each naming what was attempted', { tag: ['@extended', '@failure'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-notices-'));
   mkdirSync(join(root, 'dst'));
   for (const name of ['a.txt', 'b.txt']) {
@@ -128,6 +128,7 @@ test('two different failures show as two notices, each naming what was attempted
       // The SAME failure again is one event seen twice, not a third notice — a watcher re-reporting
       // an unchanged error must not pile up copies of it.
       await moveIntoDst(win, 'a.txt');
+      // sleep-justified: an identical failure message leaves useErrorNotice's effect deps unchanged (react-hooks/exhaustive-deps), so no notify() runs and nothing observable marks the retry settling
       await win.waitForTimeout(500);
       await expect(notices).toHaveCount(2);
 

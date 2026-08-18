@@ -52,7 +52,6 @@ let projectSeq = 0;
 const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
-
 // A sub-workspace seeded with one Panel it OWNS (originProjectId names no real project,
 // so it is not a mirrored project view).
 const seedOwnedSub = `(() => window.throng.invoke('workspace.persistSubWorkspaces', { subWorkspaces: [
@@ -67,7 +66,7 @@ const seedOwnedSub = `(() => window.throng.invoke('workspace.persistSubWorkspace
 // terminal; the session-termination-vs-keeps-running rows are covered by the
 // destroy/destroy-cascade specs (behaviour unchanged) plus the assertions here.
 
-test('a project uses the Remove verb and states no files are deleted', async () => {
+test('a project uses the Remove verb and states no files are deleted', { tag: ['@extended', '@explorer'] }, async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'Verbs', 'C:/c/verbs');
 
@@ -87,20 +86,48 @@ test('a project uses the Remove verb and states no files are deleted', async () 
   });
 });
 
-test('a tab uses the Destroy verb', async () => {
-  await runApp(async (_app, win) => {
-    await createProject(win, 'TabVerbs', 'C:/c/tabverbs');
-    await win.getByTestId('tab-add').click();
-    await expect(win.locator('.tab-chip')).toHaveCount(2);
-    const firstTab = win.locator('.tab-chip').first();
-    await firstTab.click();
-    await firstTab.click({ button: 'right' });
-    await expect(win.getByTestId('menu-item-Destroy Tab')).toBeVisible();
-    await win.keyboard.press('Escape');
-  });
-});
+/*
+ * DELETED, ALREADY COVERED (034 FR-045/FR-046a) — "a tab uses the Destroy verb".
+ *
+ * It created a project, added a tab, right-clicked the first chip and asserted that
+ * `menu-item-Destroy Tab` was VISIBLE. `destroy.e2e.ts:133-136` does the same three steps and then
+ * CLICKS that item:
+ *
+ *     const firstTab = win.locator(‘.tab-chip’).first();
+ *     await firstTab.click();
+ *     await firstTab.click({ button: ‘right’ });
+ *     await win.getByTestId(‘menu-item-Destroy Tab’).click();
+ *
+ * A click is strictly stronger than a visibility check on the same locator — the verb has to be
+ * right for the click to land at all, and that test then goes on to prove the confirmation the
+ * item raises. So the row of the FR-030..037 verb matrix this test held is still walked end to end;
+ * it is walked once instead of twice.
+ *
+ * WHAT DID NOT MOVE, and why the other three tests in this file stay:
+ *
+ *   - "a project uses the Remove verb" is the rendered CONFIRMATION DIALOG reached through the real
+ *     projects sidebar. Mounting `ProjectsPanel` needs five providers (`ProjectsProvider`,
+ *     `ConfirmProvider`, the workspace store, the notification host and dnd-kit), and a source-scan
+ *     for the sentence is a claim about a string literal, not about what the user is shown.
+ *   - "a project-owned panel in the MAIN window uses Destroy" reads the header × button’s tooltip.
+ *     `panelVerb` is computed inline in `panel-placeholder.tsx` and rendered into a `title`
+ *     attribute; there is no seam below the component. The cheapest real improvement is extracting
+ *     that ternary into `@throng/core` with a unit test, which is a PRODUCTION change and out of
+ *     scope here.
+ *   - "a sub-workspace-OWNED panel uses Destroy in its sub-workspace window" needs a SECOND real
+ *     Electron window (Principle V, window lifecycle). Faking the sub-workspace context at the
+ *     component layer would make the test assert its own fixture — `subWin !== null` IS the claim.
+ *
+ * The other file in this batch, `context-menu-sections.e2e.ts`, was deleted whole: its one test
+ * moved to `packages/ui/tests/component/menu-section-rendering.test.ts`, which asserts all four
+ * separator INDICES rather than the first separator’s visibility, asserts that a rule carries
+ * role="separator" and is not one of the role="menuitem" rows (a claim NO test at any layer made
+ * before — `menu-sections.test.ts` drives the pure `withDividers` and never renders), and pins the
+ * whole "Open In" flyout in order rather than only its first row. Anti-vacuity control: replacing
+ * `withDividers(actions)` with `[]` in `context-menu.tsx` renders an empty <ul> and fails all six.
+ */
 
-test('a project-owned panel in the MAIN window uses Destroy', async () => {
+test('a project-owned panel in the MAIN window uses Destroy', { tag: ['@extended', '@explorer'] }, async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'PanelVerbs', 'C:/c/panelverbs');
     const pid = await win
@@ -111,7 +138,7 @@ test('a project-owned panel in the MAIN window uses Destroy', async () => {
   });
 });
 
-test('a sub-workspace-OWNED panel uses Destroy in its sub-workspace window', async () => {
+test('a sub-workspace-OWNED panel uses Destroy in its sub-workspace window', { tag: ['@extended', '@explorer'] }, async () => {
   await runApp(async (app, win) => {
     await win.evaluate(seedOwnedSub);
     await reloadWindow(win);

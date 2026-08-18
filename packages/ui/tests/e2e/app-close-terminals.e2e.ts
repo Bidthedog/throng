@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, panelIds, cleanupTemp, APP_CLOSE_TIMEOUT_MS } from './harness.js';
 
 // T068 (US3 / FR-015): closing the app while terminals are running must warn with
 // a three-choice prompt (leave running / terminate all / cancel) instead of
@@ -15,7 +15,7 @@ async function requestClose(app: ElectronApplication): Promise<void> {
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
 }
 
-test('closing with a running terminal shows the three-choice warning; Cancel keeps it open', async () => {
+test('closing with a running terminal shows the three-choice warning; Cancel keeps it open', { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-close-'));
   try {
     await runApp(async (app, win) => {
@@ -54,7 +54,7 @@ test('closing with a running terminal shows the three-choice warning; Cancel kee
   }
 });
 
-test('“Terminate all” closes the app', async () => {
+test('“Terminate all” closes the app', { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-close2-'));
   try {
     await runApp(async (app, win) => {
@@ -72,7 +72,7 @@ test('“Terminate all” closes the app', async () => {
       // Terminate all → the daemon kills the sessions and the app quits. (The
       // transient "Closing your terminals…" overlay races the fast quit; the closing
       // overlay text is asserted in the plain-close case below.)
-      const closed = app.waitForEvent('close', { timeout: 10000 });
+      const closed = app.waitForEvent('close', { timeout: APP_CLOSE_TIMEOUT_MS });
       await win.getByTestId('app-close-terminate').click();
       await closed;
     });
@@ -81,7 +81,7 @@ test('“Terminate all” closes the app', async () => {
   }
 });
 
-test('warns with the right count when several terminals run (incl. a busy one)', async () => {
+test('warns with the right count when several terminals run (incl. a busy one)', { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-close-many-'));
   try {
     await runApp(async (app, win) => {
@@ -122,7 +122,7 @@ test('warns with the right count when several terminals run (incl. a busy one)',
       await expect(details).toContainText('Command Prompt'); // cmd flavour label
 
       // Terminate all → the app quits (clean teardown, no lingering terminals).
-      const closed = app.waitForEvent('close', { timeout: 10000 });
+      const closed = app.waitForEvent('close', { timeout: APP_CLOSE_TIMEOUT_MS });
       await win.getByTestId('app-close-terminate').click();
       await closed;
     });
@@ -131,13 +131,13 @@ test('warns with the right count when several terminals run (incl. a busy one)',
   }
 });
 
-test('closing with no running terminals shows a brief closing overlay, then quits', async () => {
+test('closing with no running terminals shows a brief closing overlay, then quits', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (app, win) => {
     await createProject(win, 'PlainClose', 'C:/c/plainclose');
     await expect(win.getByTestId('tab-strip')).toBeVisible();
 
     // No terminals → no warning; a brief blocking "closing" overlay, then quit.
-    const closed = app.waitForEvent('close', { timeout: 10000 });
+    const closed = app.waitForEvent('close', { timeout: APP_CLOSE_TIMEOUT_MS });
     await requestClose(app);
     await expect(win.getByTestId('app-closing-message')).toContainText('Closing throng');
     await closed;

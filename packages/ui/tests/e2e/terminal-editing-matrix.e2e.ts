@@ -2,7 +2,14 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import {
+  runApp,
+  createProject,
+  firstPanelId,
+  cleanupTemp,
+  quiesced,
+  TERMINAL_OUTPUT_TIMEOUT_MS,
+} from './harness.js';
 
 /**
  * The line-editing chords, across every shell throng ships, asserted by OUTCOME.
@@ -92,18 +99,76 @@ async function rows(win: Page, panelId: string): Promise<string> {
 /** Submit the line and wait for the shell to print `marker` on a line of its own. */
 async function expectPrinted(win: Page, pid: string, marker: string): Promise<boolean> {
   await win.keyboard.press('Enter');
-  for (let i = 0; i < 25; i += 1) {
-    await win.waitForTimeout(400);
-    const text = await rows(win, pid);
-    // The command line itself contains the marker too, so look for it on a line that is NOT the
-    // echoed command — the shell's own output has no `echo`/`Write-Output` in front of it.
-    const printed = text
-      .split(String.fromCharCode(10))
-      .map((l) => l.trim())
-      .some((l) => l === marker);
-    if (printed) return true;
+  try {
+    await expect
+      .poll(
+        async () => {
+          const text = await rows(win, pid);
+          // The command line itself contains the marker too, so look for it on a line that is
+          // NOT the echoed command — the shell's own output has no `echo`/`Write-Output` in front
+          // of it.
+          return text
+            .split(String.fromCharCode(10))
+            .map((l) => l.trim())
+            .some((l) => l === marker);
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(true);
+    return true;
+  } catch {
+    return false;
   }
-  return false;
+}
+
+/**
+ * Type `text`, then WAIT UNTIL THE SHELL HAS ECHOED IT — issue #252.
+ *
+ * `keyboard.type` resolves when the keystrokes have been DISPATCHED, not when the shell has
+ * assembled a line out of them. Every chord step below used to send its chord the instant typing
+ * returned, so under load the chord operated on a line that was not yet what the test believed it
+ * was: Home moved to the start of a half-built line, the repair character landed in the wrong
+ * place, and the command printed nothing the assertion recognised. The reported failure was
+ * "Home/End did not move the cursor within the line", which is a true statement about a line that
+ * had not finished existing.
+ *
+ * git-bash surfaced it first, and that is not because git-bash is broken — its line editor simply
+ * assembles on a different schedule from PSReadLine's, so it lost the race first. Fixing only the
+ * reported step would have left the same race in the other three (FR-014 says every step).
+ *
+ * This is exactly the principle `openShell` already applies to the prompt: it refuses to trust a
+ * painted prompt and runs a real command instead, because "that the shell echoed, edited and printed
+ * READYOK is the only evidence that the next keystroke will be seen". Same rule, per step.
+ *
+ * Whitespace is stripped from BOTH sides before comparing: a long command wraps across terminal rows,
+ * and the wrap inserts a newline mid-string that would otherwise defeat a literal match. This is an
+ * echo check, not the assertion the test exists for — the markers below do that work.
+ */
+async function typeAndEcho(win: Page, pid: string, text: string, expected = text): Promise<void> {
+  await win.keyboard.type(text, { delay: 25 });
+  await awaitEcho(win, pid, expected);
+}
+
+/**
+ * Wait until `expected` is on the screen, without typing anything.
+ *
+ * Separate from `typeAndEcho` because what is TYPED and what should then APPEAR are not always the
+ * same string — repairing a line types one character and expects the whole command. Conflating them
+ * is not a hypothetical: the first version of this fix passed the full command to `typeAndEcho`
+ * where only its first character should have been typed, so the line became `echo LINEOKcho LINEOK`,
+ * printed nothing, and took the spec from 0 failures in 3 runs under load to 3 in 3. It was caught
+ * by measuring before as well as after, which is the only reason it is not in the branch.
+ */
+async function awaitEcho(win: Page, pid: string, expected: string): Promise<void> {
+  const bare = (s: string): string => s.replace(/\s+/g, '');
+  await expect
+    .poll(async () => bare(await rows(win, pid)).includes(bare(expected)), {
+      timeout: TERMINAL_OUTPUT_TIMEOUT_MS,
+      message:
+        `the shell never showed "${expected}", so the chord under test would have edited a line ` +
+        `that had not finished being assembled`,
+    })
+    .toBe(true);
 }
 
 /**
@@ -116,13 +181,22 @@ async function expectPrinted(win: Page, pid: string, marker: string): Promise<bo
  */
 async function printedOneOf(win: Page, pid: string, markers: string[]): Promise<string | undefined> {
   await win.keyboard.press('Enter');
-  for (let i = 0; i < 25; i += 1) {
-    await win.waitForTimeout(400);
-    const lines = (await rows(win, pid)).split(String.fromCharCode(10)).map((l) => l.trim());
-    const hit = markers.find((m) => lines.includes(m));
-    if (hit) return hit;
+  let hit: string | undefined;
+  try {
+    await expect
+      .poll(
+        async () => {
+          const lines = (await rows(win, pid)).split(String.fromCharCode(10)).map((l) => l.trim());
+          hit = markers.find((m) => lines.includes(m));
+          return hit !== undefined;
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(true);
+    return hit;
+  } catch {
+    return undefined;
   }
-  return undefined;
 }
 
 /** Open a terminal of this flavour and wait for a prompt that is ready to take a command. */
@@ -162,7 +236,7 @@ async function openShell(win: Page, root: string, flavour: Flavour): Promise<str
 }
 
 for (const flavour of FLAVOURS) {
-  test(`line-editing chords — ${flavour.label}`, async () => {
+  test(`line-editing chords — ${flavour.label}`, { tag: ['@extended', '@terminal'] }, async () => {
     test.setTimeout(240_000);
     const root = mkdtempSync(join(tmpdir(), `throng-chords-${flavour.id}-`));
     try {
@@ -172,7 +246,7 @@ for (const flavour of FLAVOURS) {
         await test.step('Ctrl+Backspace deletes the previous word', async () => {
           // A trailing word the chord must remove in one press. If it deletes one character, or
           // nothing, the leftover makes the command print the wrong thing.
-          await win.keyboard.type(`${flavour.echo('BKSPOK')} DELETEME`, { delay: 25 });
+          await typeAndEcho(win, pid, `${flavour.echo('BKSPOK')} DELETEME`);
           await win.keyboard.press('Control+Backspace');
           expect(
             await expectPrinted(win, pid, 'BKSPOK'),
@@ -183,9 +257,13 @@ for (const flavour of FLAVOURS) {
         await test.step('Home and End move within the line', async () => {
           const full = flavour.echo('LINEOK');
           // Missing its FIRST character, repaired by travelling to the start of the line…
-          await win.keyboard.type(full.slice(1), { delay: 25 });
+          await typeAndEcho(win, pid, full.slice(1));
           await win.keyboard.press('Home');
-          await win.keyboard.type(full[0], { delay: 25 });
+          // Type ONLY the missing first character, then wait for the WHOLE command to be on the
+          // line. Note the two arguments: what is typed is one character, what should then appear
+          // is the repaired command. If Home had not landed, this shows the character in the wrong
+          // place and the step fails HERE, naming the line, rather than later naming the marker.
+          await typeAndEcho(win, pid, full[0], full);
           // …and End must bring the cursor back, or the newline lands mid-command.
           await win.keyboard.press('End');
           expect(
@@ -196,7 +274,7 @@ for (const flavour of FLAVOURS) {
 
         await test.step('Ctrl+Left lands BEFORE the last word, not inside it', async () => {
           // Word-left puts the marker before `bravo`; a character-left would put it inside.
-          await win.keyboard.type(flavour.phrase('alpha bravo'), { delay: 25 });
+          await typeAndEcho(win, pid, flavour.phrase('alpha bravo'));
           await win.keyboard.press('Control+ArrowLeft');
           await win.keyboard.type('WORDLOK', { delay: 25 });
           expect(
@@ -215,7 +293,7 @@ for (const flavour of FLAVOURS) {
            * Right prints `aWORDROKlpha bravo`, and one not arriving at all prints
            * `WORDROKalpha bravo`. Those are excluded by not being in the accepted set.
            */
-          await win.keyboard.type(flavour.phrase('alpha bravo'), { delay: 25 });
+          await typeAndEcho(win, pid, flavour.phrase('alpha bravo'));
           await win.keyboard.press('Control+ArrowLeft');
           await win.keyboard.press('Control+ArrowLeft');
           await win.keyboard.press('Control+ArrowRight');
@@ -238,7 +316,7 @@ for (const flavour of FLAVOURS) {
           await win.keyboard.type(flavour.fill, { delay: 12 });
           await win.keyboard.press('Enter');
           await expect(term).toContainText('SCROLLMARK120', { timeout: 30_000 });
-          await win.waitForTimeout(1500);
+          await quiesced(term, { what: 'scrollback fill settling before scrolling' });
 
           expect(
             await rows(win, pid),
@@ -246,13 +324,13 @@ for (const flavour of FLAVOURS) {
           ).toContain('SCROLLMARK120');
 
           await win.keyboard.press('Control+Home');
-          await win.waitForTimeout(1500);
+          await quiesced(term, { what: 'buffer scrolled to top (Ctrl+Home)' });
           expect(await rows(win, pid), 'Ctrl+Home should show the TOP of the buffer').not.toContain(
             'SCROLLMARK120',
           );
 
           await win.keyboard.press('Control+End');
-          await win.waitForTimeout(1500);
+          await quiesced(term, { what: 'buffer scrolled back to bottom (Ctrl+End)' });
           expect(await rows(win, pid), 'Ctrl+End should return to the newest output').toContain(
             'SCROLLMARK120',
           );

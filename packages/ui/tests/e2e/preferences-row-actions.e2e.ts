@@ -1,9 +1,17 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, cleanupTemp} from './harness.js';
+import { openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import {
+  configRootSeeded,
+  settleConfigRoot,
+  snapshotConfigRoot,
+  type ConfigRootSnapshot,
+} from './helpers/config-snapshot.js';
+import { closePrefsWindow } from './helpers/prefs-window.js';
+import { writeSettingsAtomic } from './helpers/config-write.js';
 
 /**
  * Feature 015, FR-015 – FR-018: the per-item affordance gutter and the three actions in it.
@@ -15,20 +23,74 @@ import { runApp, cleanupTemp} from './harness.js';
  */
 const cfgRoots: string[] = [];
 
-/** A config root seeded with settings/keybindings already overridden BEFORE the window opens. */
-function freshCfgRoot(seed: { settings?: unknown; keybindings?: unknown } = {}): string {
+/** The isolated config root the shared app runs against. */
+function freshCfgRoot(): string {
   const dir = mkdtempSync(join(tmpdir(), 'throng-cfg-rowact-'));
   cfgRoots.push(dir);
-  if (seed.settings) writeFileSync(join(dir, 'settings.json'), JSON.stringify(seed.settings, null, 2), 'utf8');
-  if (seed.keybindings) writeFileSync(join(dir, 'keybindings.json'), JSON.stringify(seed.keybindings, null, 2), 'utf8');
   return dir;
 }
 
-test.afterAll(() => {
-  for (const dir of cfgRoots.splice(0)) {
-    cleanupTemp(dir);
-  }
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-010).
+ *
+ * Seven of the nine tests seeded nothing at all. The two that did — an `autoSaveDebounceMs` already
+ * overridden to 900 — needed that override in place before the WINDOW opened, not before the process
+ * started: the value revert owes the user back is the one `preferences-app.tsx` photographs when the
+ * window mounts. They now write it into the running root instead, atomically.
+ *
+ * The shim below REFUSES launch options rather than ignoring them: a swallowed config root does not
+ * fail, it makes a test pass for the wrong reason.
+ *
+ * Serial mode is not optional. These tests share a window, a config root and the ONE preferences
+ * window throng allows, so they must not interleave — and when one fails the rest are SKIPPED rather
+ * than run against whatever state the failure left behind (see `openApp` in harness.ts).
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let cfgRoot: string;
+let baseline: ConfigRootSnapshot;
+
+test.beforeAll(async () => {
+  cfgRoot = freshCfgRoot();
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
+  await settle(shared.win);
+  // Photograph the root only once first-run seeding has finished — settings, key bindings and every
+  // shipped theme. A partial snapshot would have every later restore DELETE whatever arrived late.
+  await expect.poll(() => configRootSeeded(cfgRoot), { timeout: 30_000 }).toBe(true);
+  baseline = snapshotConfigRoot(cfgRoot);
 });
+
+/*
+ * Put the config root back between tests — with the preferences window CLOSED FIRST.
+ *
+ * The order is load-bearing twice over. A dirty JSON buffer raises `json-external-change` when the
+ * file changes underneath it, so restoring against an open window would hand the next test a notice
+ * it never asked for. And the on-entry snapshot that Revert and Revert All compare against is
+ * captured when the preferences window MOUNTS (`preferences-app.tsx`), so carrying one window across
+ * tests would carry the first test's baseline into the last one.
+ */
+test.afterEach(async () => {
+  await closePrefsWindow(shared.app);
+  await settleConfigRoot(baseline);
+});
+
+test.afterAll(async () => {
+  await shared?.close();
+  for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
 
 function readJson(cfgRoot: string, file: string): any {
   try {
@@ -52,85 +114,63 @@ async function openPrefs(
   return prefs;
 }
 
-test('all three actions are always present, and the control never moves (FR-015, SC-016)', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPrefs(app, win, 'settings');
-      const row = prefs.getByTestId('setting-editor.autoSave');
-      await expect(row).toBeVisible();
+/*
+ * MOVED to `packages/ui/tests/component/preferences-row-actions.test.ts` (034 FR-045):
+ *   - "all three actions are always present, and the control never moves (FR-015, SC-016)"
+ *
+ * A statement about GEOMETRY — that a disabled action is shown and greyed rather than hidden,
+ * so the row's control cannot slide out from under the pointer at the moment the user touches
+ * it. Which is a DOM fact, and needed no application to read.
+ */
 
-      const control = row.locator('.settings-row__control');
-      const actions = prefs.getByTestId('setting-actions-editor.autoSave');
+/*
+ * MOVED (034 FR-045) — four tests, to two new component files.
+ *
+ * To `packages/ui/tests/component/preferences-themes-tab.test.ts`:
+ *   - "the Themes tab has a typeahead over its token rows"
+ *   - "the icon section takes part in the Themes search, and is not exempt from it"
+ *   - "the theme font stack can be emptied outright and re-populated"
+ * To `packages/ui/tests/component/preferences-keybindings-tab.test.ts`:
+ *   - "the Key Bindings typeahead narrows by name AND by chord"
+ *
+ * All four opened a SECOND Electron window through the cog menu in order to type into a search
+ * box, or click one button, and then count what was left on screen. None of them read a file.
+ * `ThemesTab` takes no props and `KeybindingsTab` takes one optional number; both read contexts
+ * whose DEFAULTS are the shipped settings, the shipped theme and the shipped key bindings — so a
+ * render already holds the state these claims are about.
+ *
+ * WHAT THE REPLACEMENTS SAY MORE STRONGLY:
+ *   - the key-bindings typeahead is asserted against a mutation that empties the CHORD out of the
+ *     search haystack. That reddens the by-chord test and leaves the by-name ones green, which is
+ *     the exact coupling `settings-search.test.ts` structurally cannot see — it proves the pure
+ *     function, not which value this tab feeds it.
+ *   - the icon-section claim is asserted against `filter={null}`, so "the section ignores the
+ *     search" reddens directly rather than being inferred from a count.
+ *   - the font stack runs through the REAL write-then-adopt round trip (`write-config.ts` ->
+ *     `config-store.tsx`), with only the process boundary stubbed. Rendered bare, `ThemesTab` is
+ *     controlled and nothing on screen would change — which is why a test that merely mounted it
+ *     would have passed while the Clear did nothing at all.
+ *
+ * WHAT DID NOT MOVE, and why:
+ *   - "groups tokens by app area, General first and Icons last" reads `boundingBox().y`. jsdom
+ *     has no layout — 034 FR-049 and the v5.1.0 real-layout reserve.
+ *   - "a built-in theme row offers all three actions" also switches TABS and makes the same claim
+ *     about a Settings row. Its themes half is covered; a partial replacement is not a
+ *     replacement (FR-047).
+ *   - the revert/reset pair turns on which BASELINE a row reads — the shipped record, or the
+ *     snapshot `preferences-app.tsx` takes when the WINDOW mounts — and asserts settings.json.
+ *   - "clear unbinds an action entirely, and reset brings the chords back" resets through
+ *     `window.throng.config.resetBinding`, a main-process IPC, and reads keybindings.json. Its
+ *     rendering half IS asserted in the component file, because a tab that wrote `[]` and went on
+ *     drawing the old pills would satisfy every file assertion here.
+ *
+ * ANTI-VACUITY CONTROL, run and failing: aliasing `ResetNoticeProvider` (resp. `ConfirmProvider`)
+ * to `Fragment` in each component file withholds a provider whose hook THROWS, so the tab cannot
+ * render — 12 and 11 failures respectively. Six of the new assertions are about something being
+ * ABSENT after a search, and every one of those passes in a tree that rendered nothing.
+ */
 
-      // Nothing is overridden, changed or clearable on a pristine row — and yet all THREE
-      // actions are on screen, disabled. That is the requirement, not a side-effect: an
-      // affordance that comes and goes moves the control, and one the user cannot see until
-      // they have already changed something teaches them nothing.
-      await expect(actions.locator('button')).toHaveCount(3);
-      const reset = prefs.getByTestId('setting-reset-editor.autoSave');
-      const revert = prefs.getByTestId('setting-revert-editor.autoSave');
-      const clear = prefs.getByTestId('setting-clear-editor.autoSave');
-      await expect(reset).toBeDisabled();
-      await expect(revert).toBeDisabled();
-      await expect(clear).toBeDisabled(); // editor.autoSave is required — never clearable
-
-      // A disabled action says WHY it will not respond (FR-015a).
-      await expect(reset).toHaveAttribute('title', /already at its default/i);
-      await expect(revert).toHaveAttribute('title', /has not changed/i);
-
-      // The actions sit AFTER the control.
-      const controlBefore = await control.boundingBox();
-      const actionsBox = await actions.boundingBox();
-      expect(actionsBox!.x).toBeGreaterThanOrEqual(controlBefore!.x + controlBefore!.width - 1);
-
-      // Override the setting — reset and revert become live...
-      await prefs.getByTestId('control-editor.autoSave').click();
-      await expect(reset).toBeEnabled();
-      await expect(revert).toBeEnabled(); // it changed this session too
-      await expect(clear).toBeDisabled(); // still required
-
-      // ...and the control has NOT moved a pixel, because nothing appeared or vanished.
-      const controlAfter = await control.boundingBox();
-      expect(controlAfter!.x).toBeCloseTo(controlBefore!.x, 0);
-      expect(controlAfter!.width).toBeCloseTo(controlBefore!.width, 0);
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('the Themes tab has a typeahead over its token rows (FR-021, SC-024)', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPrefs(app, win, 'themes');
-      const search = prefs.getByTestId('themes-search');
-      await expect(search).toBeVisible();
-
-      const terminalBg = prefs.getByTestId('theme-row-colours.terminalBg');
-      const editorBg = prefs.getByTestId('theme-row-colours.editorBg');
-      await expect(terminalBg).toBeVisible();
-      await expect(editorBg).toBeVisible();
-
-      // The Themes tab has several hundred rows and was the only one of the three with no way
-      // to find anything in it.
-      await search.fill('terminal');
-      await expect(terminalBg).toBeVisible();
-      await expect(editorBg).toHaveCount(0);
-
-      await search.fill('zzzznothing');
-      await expect(prefs.getByTestId('themes-search-empty')).toBeVisible();
-
-      await prefs.getByTestId('themes-search-clear').click();
-      await expect(search).toHaveValue('');
-      await expect(editorBg).toBeVisible();
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('the Themes tab groups tokens by app area, and search matches a section name (021)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('the Themes tab groups tokens by app area, General first and Icons last (021, FR-003a/FR-004)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'themes');
@@ -147,62 +187,24 @@ test('the Themes tab groups tokens by app area, and search matches a section nam
       const iy = await icons.boundingBox();
       expect(gy!.y).toBeLessThan(iy!.y); // General first, Icons last
 
-      // Section-name search: typing an AREA name returns every token in it — including the syntax
-      // colours, whose own names contain no "editor" (FR-015/FR-016). Terminal tokens are excluded.
-      const search = prefs.getByTestId('themes-search');
-      await search.fill('editor');
-      await expect(prefs.getByTestId('theme-row-colours.syntaxKeyword')).toBeVisible();
-      await expect(prefs.getByTestId('theme-row-colours.editorBg')).toBeVisible();
-      await expect(prefs.getByTestId('theme-row-colours.terminalBg')).toHaveCount(0);
-
-      // Name search still works regardless of group (US3/FR-013).
-      await search.fill('gutter');
-      await expect(prefs.getByTestId('theme-row-colours.editorGutterBg')).toBeVisible();
+      /*
+       * The SEARCH half of this test is gone (034 FR-045).
+       *
+       * It typed an area name and checked that every token in that area came back — including the
+       * syntax colours, whose own names contain no "editor". That is `filterFields`, the same
+       * function behind all three tabs' typeaheads, and its section-name behaviour is proved on the
+       * registry in `packages/core/tests/unit/settings-search.test.ts` — a group name returning every
+       * field of its section INCLUDING nested sub-groups, unioned with name matches, without
+       * duplicates. That the Themes typeahead is WIRED to it is asserted at the component
+       * layer, in `packages/ui/tests/component/preferences-themes-tab.test.ts`.
+       *
+       * What is left is the half no lower layer can see: where the groups actually sit on screen.
+       */
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('the icon section takes part in the Themes search, and is not exempt from it', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPrefs(app, win, 'themes');
-      const iconGrid = prefs.getByTestId('icon-grid');
-      const iconSection = prefs.getByTestId('settings-group-Icons');
-      await expect(iconGrid).toBeVisible();
-      const matchAll = await iconGrid.locator('.icon-cell').count(); // the unfiltered grid
-      expect(matchAll).toBeGreaterThan(5);
-
-      // A query that matches NO icon and no colour must empty the tab — icons included. The
-      // section used to sit outside the filter, so it survived every search and looked like a
-      // result. A section that ignores the filter is worse than one with no filter at all.
-      await prefs.getByTestId('themes-search').fill('zzzznothing');
-      await expect(iconSection).toHaveCount(0);
-      await expect(prefs.getByTestId('themes-search-empty')).toBeVisible();
-
-      // A query that matches an icon TOKEN keeps the section, narrowed to the matching cells.
-      await prefs.getByTestId('themes-search').fill('destroy');
-      await expect(iconSection).toBeVisible();
-      await expect(prefs.getByTestId('icon-cell-destroy')).toBeVisible();
-      await expect(prefs.getByTestId('icon-cell-rename')).toHaveCount(0);
-
-      // …and it is a REAL result, not the whole grid surviving the filter untouched.
-      //
-      // Not an exact count: the search matches an icon's description as well as its name, and
-      // `dismiss` is described as clearing a message "without destroying anything" — so it
-      // legitimately matches "destroy" too. That is the search working, not failing. What the
-      // requirement actually says is that the grid NARROWS, so that is what this asserts.
-      const shown = await iconGrid.locator('.icon-cell').count();
-      expect(shown).toBeGreaterThan(0);
-      expect(shown).toBeLessThan(matchAll);
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('a built-in theme row offers all three actions, like Settings (issue #76)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('a built-in theme row offers all three actions, like Settings (issue #76)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'themes');
@@ -219,18 +221,24 @@ test('a built-in theme row offers all three actions, like Settings (issue #76)',
       await expect(settingActions).toBeVisible();
       await expect(settingActions.locator('button')).toHaveCount(3);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('revert restores the value the window OPENED with, not the shipped default (FR-016, SC-017)', async () => {
+test('revert restores the value the window OPENED with, not the shipped default (FR-016, SC-017)', { tag: ['@extended', '@prefs'] }, async () => {
   // The user arrives with autoSaveDebounceMs already overridden to 900. That override is their
   // starting point, and it is what revert owes them back.
   // `version` matters: feature 010's startup seeding rewrites a document it cannot version, and
   // the override would be gone before the window ever opened.
-  const cfgRoot = freshCfgRoot({ settings: { version: 1, editor: { autoSaveDebounceMs: 900 } } });
   await runApp(
     async (app, win) => {
+      /*
+       * The override goes into the RUNNING app's config root rather than being seeded before launch.
+       * What revert owes the user back is the value the WINDOW opened with, and that snapshot is
+       * captured when the preferences window mounts — so a write that lands before the window opens
+       * is the same starting point. `version: 1` still matters: 010's seeding rewrites a document it
+       * cannot version, and the override would be gone before the window ever opened.
+       */
+      writeSettingsAtomic(cfgRoot, { version: 1, editor: { autoSaveDebounceMs: 900 } });
       const prefs = await openPrefs(app, win, 'settings');
       const input = prefs.getByTestId('control-editor.autoSaveDebounceMs');
       await expect(input).toHaveValue('900');
@@ -255,16 +263,22 @@ test('revert restores the value the window OPENED with, not the shipped default 
       await expect(prefs.getByTestId('setting-revert-editor.autoSaveDebounceMs')).toBeDisabled();
       await expect(prefs.getByTestId('setting-reset-editor.autoSaveDebounceMs')).toBeEnabled();
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('reset leaves a revert behind — a reset is itself undoable (FR-016, SC-017)', async () => {
+test('reset leaves a revert behind — a reset is itself undoable (FR-016, SC-017)', { tag: ['@extended', '@prefs'] }, async () => {
   // `version` matters: feature 010's startup seeding rewrites a document it cannot version, and
   // the override would be gone before the window ever opened.
-  const cfgRoot = freshCfgRoot({ settings: { version: 1, editor: { autoSaveDebounceMs: 900 } } });
   await runApp(
     async (app, win) => {
+      /*
+       * The override goes into the RUNNING app's config root rather than being seeded before launch.
+       * What revert owes the user back is the value the WINDOW opened with, and that snapshot is
+       * captured when the preferences window mounts — so a write that lands before the window opens
+       * is the same starting point. `version: 1` still matters: 010's seeding rewrites a document it
+       * cannot version, and the override would be gone before the window ever opened.
+       */
+      writeSettingsAtomic(cfgRoot, { version: 1, editor: { autoSaveDebounceMs: 900 } });
       const prefs = await openPrefs(app, win, 'settings');
       await expect(prefs.getByTestId('control-editor.autoSaveDebounceMs')).toHaveValue('900');
 
@@ -279,12 +293,10 @@ test('reset leaves a revert behind — a reset is itself undoable (FR-016, SC-01
       await revert.click();
       await expect(prefs.getByTestId('control-editor.autoSaveDebounceMs')).toHaveValue('900');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('clear unbinds an action entirely, and reset brings the chords back (FR-016, SC-018)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('clear unbinds an action entirely, and reset brings the chords back (FR-016, SC-018)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'keybindings');
@@ -307,79 +319,5 @@ test('clear unbinds an action entirely, and reset brings the chords back (FR-016
         .poll(() => readJson(cfgRoot, 'keybindings.json')?.bindings?.['zoom.in']?.length)
         .toBeGreaterThan(1); // zoom.in ships with several chords
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('the Key Bindings typeahead narrows by name AND by chord (FR-017, SC-019)', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPrefs(app, win, 'keybindings');
-      const search = prefs.getByTestId('keybindings-search');
-      await expect(search).toBeVisible();
-
-      const zoomIn = prefs.getByTestId('binding-zoom.in');
-      await expect(zoomIn).toBeVisible();
-
-      // By name.
-      await search.fill('zoom');
-      await expect(zoomIn).toBeVisible();
-
-      // A query matching nothing empties the list and says so.
-      await search.fill('zzzznothing');
-      await expect(prefs.getByTestId('keybindings-search-empty')).toBeVisible();
-      await expect(zoomIn).toHaveCount(0);
-
-      // By CHORD — the thing you actually remember when you want to know what a key does.
-      // Best-effort read of the (currently filtered-out) chord: bound it (issue #75). The list is
-      // empty here from the 'zzzznothing' query above, so this testid is absent; without a timeout
-      // the read auto-waits the whole per-test budget before the .catch — fine at 60s, a 30s
-      // timeout at 30s. A short bound keeps it a best-effort read.
-      const chords: string[] = (await prefs
-        .getByTestId('binding-zoom.in-chord')
-        .textContent({ timeout: 2000 })
-        .catch(() => '')) as string;
-      await prefs.getByTestId('keybindings-search-clear').click();
-      await expect(search).toHaveValue('');
-      const oneChord = (chords || '').trim().split(/\s+/)[0] ?? 'Ctrl';
-      await search.fill(oneChord);
-      await expect(zoomIn).toBeVisible();
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('the theme font stack can be emptied outright and re-populated (FR-018, SC-020)', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPrefs(app, win, 'themes');
-      await expect(prefs.getByTestId('themes-tab')).toBeVisible();
-
-      // The font stack ships POPULATED and is still clearable — the value's validity when empty
-      // is what makes it clearable, not the shape of its default (FR-016a).
-      const clear = prefs.getByTestId('theme-clear-fonts.family');
-      await expect(clear).toBeVisible();
-      await clear.click();
-
-      // Emptied: no pills left, and the add control survives so a family can be put back.
-      await expect(prefs.locator('[data-testid^="control-fonts.family-pill-"]')).toHaveCount(0);
-      const input = prefs.getByTestId('control-fonts.family');
-      await expect(input).toBeVisible();
-      await expect(input).toHaveAttribute('placeholder', 'Add a font family…');
-
-      // An empty stack is a value, not a hole — and clearing it again would be a no-op, so the
-      // affordance goes inert. It stays on screen (FR-015): the row's geometry must not change
-      // just because the user emptied something.
-      await expect(clear).toBeDisabled();
-
-      // Put one back.
-      await input.fill('Consolas');
-      await input.press('Enter');
-      await expect(prefs.getByTestId('control-fonts.family-pill-0')).toBeVisible();
-      await expect(prefs.getByTestId('theme-clear-fonts.family')).toBeEnabled();
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });

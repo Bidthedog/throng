@@ -8,7 +8,7 @@ import { skipIfElevated } from './admin.js';
 // unelevated terminal shows no ADMIN pill. The enabled/checked → ADMIN-pill path
 // requires an actually-elevated runner and is documented as skipped there.
 
-test('the "run as admin" checkbox is disabled with a hover hint when the daemon is not elevated', async () => {
+test('the "run as admin" checkbox is disabled with a hover hint when the daemon is not elevated', { tag: ['@extended', '@terminal'] }, async () => {
   skipIfElevated();
   await runApp(async (_app, win) => {
     await createProject(win, 'Admin', 'C:/c/admin');

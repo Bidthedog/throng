@@ -4,7 +4,14 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { runApp, cleanupTemp} from './harness.js';
+import { openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import {
+  configRootSeeded,
+  settleConfigRoot,
+  snapshotConfigRoot,
+  type ConfigRootSnapshot,
+} from './helpers/config-snapshot.js';
+import { closePrefsWindow } from './helpers/prefs-window.js';
 
 /**
  * 018 / US5 — icons take their colour from the theme (FR-027 … FR-031).
@@ -25,10 +32,70 @@ function freshCfgRoot(): string {
   cfgRoots.push(dir);
   return dir;
 }
-test.afterAll(() => {
-  for (const dir of cfgRoots.splice(0))
-    cleanupTemp(dir);
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-010).
+ *
+ * All three tests seeded nothing. Only the third writes: it sets `colours.iconColour`, watches the
+ * MAIN window adopt it, and then clears it again — so it already tidies up after itself, and the
+ * restore is the belt to that braces.
+ *
+ * The ordering worth naming: the second test asserts the token is UNSET, both in the theme file and
+ * as a live CSS variable in the main window. It runs before the third, and it polls rather than
+ * reads — so even a broadcast still in flight from a restore converges rather than failing.
+ *
+ * The shim below REFUSES launch options rather than ignoring them: a swallowed config root does not
+ * fail, it makes a test pass for the wrong reason.
+ *
+ * Serial mode is not optional. These tests share a window, a config root and the ONE preferences
+ * window throng allows, so they must not interleave — and when one fails the rest are SKIPPED rather
+ * than run against whatever state the failure left behind (see `openApp` in harness.ts).
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let cfgRoot: string;
+let baseline: ConfigRootSnapshot;
+
+test.beforeAll(async () => {
+  cfgRoot = freshCfgRoot();
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
+  await settle(shared.win);
+  // Photograph the root only once first-run seeding has finished — settings, key bindings and every
+  // shipped theme. A partial snapshot would have every later restore DELETE whatever arrived late.
+  await expect.poll(() => configRootSeeded(cfgRoot), { timeout: 30_000 }).toBe(true);
+  baseline = snapshotConfigRoot(cfgRoot);
 });
+
+/*
+ * Put the config root back between tests — with the preferences window CLOSED FIRST.
+ *
+ * The order is load-bearing twice over. A dirty JSON buffer raises `json-external-change` when the
+ * file changes underneath it, so restoring against an open window would hand the next test a notice
+ * it never asked for. And the on-entry snapshot that Revert and Revert All compare against is
+ * captured when the preferences window MOUNTS (`preferences-app.tsx`), so carrying one window across
+ * tests would carry the first test's baseline into the last one.
+ */
+test.afterEach(async () => {
+  await closePrefsWindow(shared.app);
+  await settleConfigRoot(baseline);
+});
+
+test.afterAll(async () => {
+  await shared?.close();
+  for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
 
 async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
   await win.getByTestId('title-bar-cog').click();
@@ -54,8 +121,7 @@ function iconColourInApp(win: Page): Promise<string | null> {
   });
 }
 
-test('the icon colour has exactly ONE control, beside the icon-pack selector (FR-027)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('the icon colour has exactly ONE control, beside the icon-pack selector (FR-027)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -73,12 +139,10 @@ test('the icon colour has exactly ONE control, beside the icon-pack selector (FR
         prefs.getByTestId('icon-colour-row').getByTestId('control-colours.iconColour-hex'),
       ).toBeVisible();
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('UNSET, icons inherit their host’s colour — so no bundled theme changes (FR-029)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('UNSET, icons inherit their host’s colour — so no bundled theme changes (FR-029)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -104,12 +168,10 @@ test('UNSET, icons inherit their host’s colour — so no bundled theme changes
       // The theme file carries no icon colour either.
       expect(readTheme(cfgRoot)?.iconColour).toBeUndefined();
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('SET, every icon in every window adopts it (FR-030)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('SET, every icon in every window adopts it (FR-030)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -133,6 +195,5 @@ test('SET, every icon in every window adopts it (FR-030)', async () => {
       await field.press('Enter');
       await expect.poll(() => iconColourInApp(win)).not.toBe('rgb(255, 0, 170)');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });

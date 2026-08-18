@@ -34,7 +34,7 @@ import { skipIfElevated } from './admin.js';
 /** The status-bar indicator: present only when the daemon is NOT healthy (029 FR-008). */
 const indicator = (win: Page) => win.getByTestId('status-daemon');
 
-test('the daemon indicator reports the state, restarts on demand, and outlives the notice', async () => {
+test('the daemon indicator reports the state, restarts on demand, and outlives the notice', { tag: ['@extended', '@failure'] }, async () => {
   // An elevated daemon lives in a different process tree (the de-elevated agent), which
   // `forceKillProcessTree` on the health.ping pid does not describe.
   skipIfElevated();
@@ -190,7 +190,7 @@ test('the daemon indicator reports the state, restarts on demand, and outlives t
  * effect never re-runs, and no second notice is raised whatever the store believes. It tested the
  * notification model's de-duplication, not this bug.
  */
-test('a failed project switch leaves the active project where it was (#212)', async () => {
+test('a failed project switch leaves the active project where it was (#212)', { tag: ['@extended', '@failure'] }, async () => {
   skipIfElevated();
   test.setTimeout(180_000);
 
@@ -226,14 +226,31 @@ test('a failed project switch leaves the active project where it was (#212)', as
         // ── The switch cannot succeed: nothing is there to serve it. ──────────────────────────
         await switchTo('Bravo');
         /*
-         * A fixed wait, because the assertion is that something did NOT move. The optimistic update
-         * is synchronous and the revert lands when the RPC rejects, so checking immediately would
-         * pass against the un-fixed code by looking before it was put back.
+         * A FENCE WAS TRIED HERE AND DOES NOT WORK. Recorded rather than removed, because the next
+         * person will have the same idea.
+         *
+         * The attempt asserted the optimistic update — `expect(active).toContainText('Bravo')` —
+         * on the reasoning that seeing Bravo proves the switch was genuinely attempted rather than
+         * nothing having happened yet. It failed all three attempts, every run, at ~19s each.
+         *
+         * The state is TRANSIENT and this is the one case where it is at its most transient: the
+         * daemon has just been force-killed, so the RPC does not time out, it is refused as soon as
+         * the pipe is found dead. Bravo can appear and revert between two of Playwright's polls, so
+         * the assertion is a race against the very failure the test is about — and asserting a
+         * transient state is unreliable by construction, not by bad luck.
+         *
+         * `quiesced()` does not rescue it either: two consecutive equal reads settle immediately on
+         * the pre-switch value if the optimistic update has not applied yet, which is the vacuous
+         * pass wearing the condition's clothes.
+         *
+         * sleep-justified: nothing durable marks "the rejected switch has been handled" — there is
+         * sleep-justified: no notice, no state change that survives, and the only observable is the
+         * sleep-justified: optimistic update, which is a transient this test races by construction.
          */
         await win.waitForTimeout(5000);
 
         /**
-         * Alpha is still the active project.
+         * Alpha is active again once the RPC rejects (no daemon to serve it).
          *
          * Before the fix the highlight followed the optimistic update and stayed on Bravo — a project
          * the app never opened, given the active marker and, through the same `activeProject`, the

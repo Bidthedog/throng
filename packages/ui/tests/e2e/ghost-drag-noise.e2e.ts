@@ -3,7 +3,7 @@ import { createProject, firstPanelId, runApp } from './harness.js';
 
 // Probe: dragging a Panel/Tab must not spew Chromium widget-rejection errors from
 // the drag-ghost OS window (`Message N rejected by interface blink.mojom.Widget`).
-test('dragging does not emit blink.mojom.Widget rejections', async () => {
+test('dragging does not emit blink.mojom.Widget rejections', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (app, win) => {
     const stderr: string[] = [];
     const proc = app.process();
@@ -24,6 +24,10 @@ test('dragging does not emit blink.mojom.Widget rejections', async () => {
       await win.mouse.move(box.x + box.width / 2 + 12, box.y + box.height / 2 + 12, { steps: 4 });
       await win.mouse.move(box.x + box.width / 2 + 40, box.y + box.height / 2 + 40, { steps: 6 });
       await win.mouse.up();
+      // sleep-justified: the thing under test is Chromium's own native drag-ghost widget teardown
+      // sleep-justified: writing (or not) a `blink.mojom.Widget` rejection to the app's stderr — a
+      // sleep-justified: process-level, native-window race with nothing on the DOM or app state to
+      // sleep-justified: observe, so there is no condition to await between repetitions.
       await win.waitForTimeout(250);
     }
 

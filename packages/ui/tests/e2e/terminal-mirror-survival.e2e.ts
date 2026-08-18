@@ -30,7 +30,7 @@ async function newTerminal(win: Page, root: string): Promise<string> {
   return pid;
 }
 
-test('a running terminal survives being mirrored into a new sub-workspace and streams to both windows', async () => {
+test('a running terminal survives being mirrored into a new sub-workspace and streams to both windows', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-termsurv-'));
   try {
     await runApp(async (app, win, { pipeName }) => {

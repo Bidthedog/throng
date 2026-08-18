@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, cleanupTemp} from './harness.js';
+import { runApp, createProject, cleanupTemp, FILE_OP_TIMEOUT_MS } from './harness.js';
 
 /**
  * 026 / #186 — the Files & Folders tree must stay live-synced with the filesystem.
@@ -66,7 +66,7 @@ function permanentDeleteConfig(): string {
   return cfgRoot;
 }
 
-test('a file created and then deleted OUTSIDE throng appears and disappears with no user action', async () => {
+test('a file created and then deleted OUTSIDE throng appears and disappears with no user action', { tag: ['@extended', '@explorer'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -89,7 +89,7 @@ test('a file created and then deleted OUTSIDE throng appears and disappears with
   }
 });
 
-test('a file created OUTSIDE throng in an EXPANDED subfolder appears there', async () => {
+test('a file created OUTSIDE throng in an EXPANDED subfolder appears there', { tag: ['@extended', '@explorer'] }, async () => {
   // A loaded-but-nested directory is the case `reloadDirs()` re-reads by walking every loaded key,
   // and the case a re-pointed or dead watcher breaks first.
   const root = makeProject();
@@ -110,7 +110,7 @@ test('a file created OUTSIDE throng in an EXPANDED subfolder appears there', asy
   }
 });
 
-test('a file deleted INSIDE throng leaves the tree immediately', async () => {
+test('a file deleted INSIDE throng leaves the tree immediately', { tag: ['@extended', '@explorer'] }, async () => {
   const root = makeProject();
   const cfgRoot = permanentDeleteConfig();
   try {
@@ -130,7 +130,7 @@ test('a file deleted INSIDE throng leaves the tree immediately', async () => {
 
         // The delete really happened — so a tree that still shows it is a tree that is stale,
         // not an operation that failed.
-        await expect.poll(() => existsSync(join(root, 'seed.txt')), { timeout: 8000 }).toBe(false);
+        await expect.poll(() => existsSync(join(root, 'seed.txt')), { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
         await expect(tree.getByText('seed.txt', { exact: true })).toHaveCount(0, { timeout: 10_000 });
         await expect(tree.locator('.explorer__error')).toHaveCount(0);
       },
@@ -142,7 +142,7 @@ test('a file deleted INSIDE throng leaves the tree immediately', async () => {
   }
 });
 
-test('a FOLDER deleted INSIDE throng leaves the tree immediately', async () => {
+test('a FOLDER deleted INSIDE throng leaves the tree immediately', { tag: ['@extended', '@explorer'] }, async () => {
   const root = makeProject();
   const cfgRoot = permanentDeleteConfig();
   try {
@@ -160,7 +160,7 @@ test('a FOLDER deleted INSIDE throng leaves the tree immediately', async () => {
         const wry = win.getByTestId('confirm-accept');
         if (await wry.isVisible().catch(() => false)) await wry.click();
 
-        await expect.poll(() => existsSync(join(root, 'sub')), { timeout: 8000 }).toBe(false);
+        await expect.poll(() => existsSync(join(root, 'sub')), { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
         await expect(tree.getByText('sub', { exact: true })).toHaveCount(0, { timeout: 10_000 });
       },
       { env: { THRONG_CONFIG_ROOT: cfgRoot } },

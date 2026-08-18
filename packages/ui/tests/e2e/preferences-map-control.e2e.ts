@@ -3,7 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, cleanupTemp} from './harness.js';
+import { openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import {
+  configRootSeeded,
+  settleConfigRoot,
+  snapshotConfigRoot,
+  type ConfigRootSnapshot,
+} from './helpers/config-snapshot.js';
+import { closePrefsWindow } from './helpers/prefs-window.js';
 
 /**
  * The keyed-table control (016, F5/FR-022/FR-022c · T076).
@@ -22,11 +29,67 @@ function freshCfgRoot(): string {
   cfgRoots.push(dir);
   return dir;
 }
-test.afterAll(() => {
-  for (const dir of cfgRoots.splice(0)) {
-    cleanupTemp(dir);
-  }
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-010).
+ *
+ * All three tests seeded nothing. Each adds or removes a map row and reads settings.json back —
+ * writes to the CONTENTS of a config root, which `restoreConfigRoot` undoes. That matters more here
+ * than elsewhere: the middle test asserts that the extension map is EMPTY after a reset, which is
+ * only true if the previous test's `.bar` entry has gone.
+ *
+ * The shim below REFUSES launch options rather than ignoring them: a swallowed config root does not
+ * fail, it makes a test pass for the wrong reason.
+ *
+ * Serial mode is not optional. These tests share a window, a config root and the ONE preferences
+ * window throng allows, so they must not interleave — and when one fails the rest are SKIPPED rather
+ * than run against whatever state the failure left behind (see `openApp` in harness.ts).
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let cfgRoot: string;
+let baseline: ConfigRootSnapshot;
+
+test.beforeAll(async () => {
+  cfgRoot = freshCfgRoot();
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
+  await settle(shared.win);
+  // Photograph the root only once first-run seeding has finished — settings, key bindings and every
+  // shipped theme. A partial snapshot would have every later restore DELETE whatever arrived late.
+  await expect.poll(() => configRootSeeded(cfgRoot), { timeout: 30_000 }).toBe(true);
+  baseline = snapshotConfigRoot(cfgRoot);
 });
+
+/*
+ * Put the config root back between tests — with the preferences window CLOSED FIRST.
+ *
+ * The order is load-bearing twice over. A dirty JSON buffer raises `json-external-change` when the
+ * file changes underneath it, so restoring against an open window would hand the next test a notice
+ * it never asked for. And the on-entry snapshot that Revert and Revert All compare against is
+ * captured when the preferences window MOUNTS (`preferences-app.tsx`), so carrying one window across
+ * tests would carry the first test's baseline into the last one.
+ */
+test.afterEach(async () => {
+  await closePrefsWindow(shared.app);
+  await settleConfigRoot(baseline);
+});
+
+test.afterAll(async () => {
+  await shared?.close();
+  for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
 
 function readSettings(cfgRoot: string): any {
   try {
@@ -47,69 +110,23 @@ async function openPrefs(app: ElectronApplication, win: Page): Promise<Page> {
   return prefs;
 }
 
-test('both maps render as keyed tables — not as “[object Object]” in a text box', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPrefs(app, win);
-
-      // The failure this guards against is not a crash: a `map` descriptor with no case in the
-      // control dispatch falls through to the DEFAULT arm and renders as a text field showing
-      // "[object Object]". Valid descriptor, valid control, nonsense on screen.
-      await expect(prefs.getByTestId('control-editor.indentByLanguage')).toBeVisible();
-      await expect(prefs.getByTestId('control-editor.languageByExtension')).toBeVisible();
-
-      // The indentation map ships POPULATED, from the language registry.
-      await expect(prefs.getByTestId('map-row-editor.indentByLanguage-go')).toBeVisible();
-      await expect(
-        prefs.getByTestId('map-cell-editor.indentByLanguage-go-style'),
-      ).toHaveValue('tabs');
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('a row can be added, and a duplicate or invalid key is REFUSED with a reason', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPrefs(app, win);
-
-      // An extension must look like an extension. Rejected with a REASON — "invalid" with no reason
-      // is a dead end for a user who cannot see what the rule is.
-      await prefs.getByTestId('map-new-key-editor.languageByExtension').fill('foo');
-      await prefs.getByTestId('map-add-editor.languageByExtension').click();
-      await expect(prefs.getByTestId('map-error-editor.languageByExtension')).toContainText('dot');
-
-      // …and a valid one is accepted and persisted.
-      await prefs.getByTestId('map-new-key-editor.languageByExtension').fill('.foo');
-      await prefs.getByTestId('map-add-editor.languageByExtension').click();
-      await expect(prefs.getByTestId('map-row-editor.languageByExtension-.foo')).toBeVisible();
-      await expect
-        .poll(() => Object.keys(readSettings(cfgRoot)?.editor?.languageByExtension ?? {}))
-        .toContain('.foo');
-
-      /*
-       * A successful add CLEARS the new-key input, and that clear is asynchronous. Typing the
-       * duplicate before it arrives means the clear wipes what was just typed, the click then adds
-       * an empty key, and no duplicate is ever attempted — so the error below never appears and the
-       * failure reads as "the product stopped refusing duplicates". Measured: 1 in 12 under eight
-       * CPU hogs. Waiting for the field to be empty is waiting for the add to have fully settled.
-       */
-      await expect(prefs.getByTestId('map-new-key-editor.languageByExtension')).toHaveValue('');
-      // A duplicate is refused — two rows claiming one extension have no defined winner.
-      await prefs.getByTestId('map-new-key-editor.languageByExtension').fill('.foo');
-      await prefs.getByTestId('map-add-editor.languageByExtension').click();
-      await expect(prefs.getByTestId('map-error-editor.languageByExtension')).toContainText(
-        'already mapped',
-      );
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('a row can be removed, and the removal STICKS — an empty map means empty (FR-022c)', async () => {
-  const cfgRoot = freshCfgRoot();
+/*
+ * MOVED to `packages/ui/tests/component/preferences-map-control.test.ts` (034 FR-045):
+ *   - "both maps render as keyed tables — not as “[object Object]” in a text box"
+ *   - "a row can be added, and a duplicate or invalid key is REFUSED with a reason"
+ *
+ * Both are about what the control RENDERS and what it refuses. The defect the first one guards
+ * — a `map` descriptor falling through to the default arm and rendering as a text field full of
+ * "[object Object]" — throws nothing and fails no type check; only looking at it reveals it,
+ * which is what a DOM does. The second is `validateKey`, which is exported and pure, plus the
+ * control showing its message.
+ *
+ * The add case also asserted that the new key reached settings.json. That half is not lost: the
+ * removal test below adds a row, watches it reach the file, and then removes it — so the write
+ * path keeps a witness, and FR-022c (an empty map means empty, rather than falling back to the
+ * shipped value) keeps the end-to-end test it actually needs.
+ */
+test('a row can be removed, and the removal STICKS — an empty map means empty (FR-022c)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win);
@@ -129,12 +146,10 @@ test('a row can be removed, and the removal STICKS — an empty map means empty 
         .toEqual({});
       await expect(prefs.getByTestId('map-row-editor.languageByExtension-.bar')).toHaveCount(0);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('reset CLEARS the extension map and REPOPULATES the indentation map', async () => {
-  const cfgRoot = freshCfgRoot();
+test('reset CLEARS the extension map and REPOPULATES the indentation map', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win);
@@ -172,7 +187,6 @@ test('reset CLEARS the extension map and REPOPULATES the indentation map', async
         .poll(() => readSettings(cfgRoot)?.editor?.indentByLanguage?.go?.style)
         .toBe('tabs');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
@@ -184,8 +198,7 @@ test('reset CLEARS the extension map and REPOPULATES the indentation map', async
  * called. And adding a row meant TYPING one of those ids from memory into a free-text box that
  * accepted anything: get it wrong and you had silently mapped a language that does not exist.
  */
-test('the language map names its key column, shows real language names, and offers a picker', async () => {
-  const cfgRoot = freshCfgRoot();
+test('the language map names its key column, shows real language names, and offers a picker', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win);
@@ -224,7 +237,6 @@ test('the language map names its key column, shows real language names, and offe
         .poll(() => readSettings(cfgRoot)?.editor?.indentByLanguage?.ruby)
         .toBeDefined();
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { cleanupTemp, commitPanelRename, shutdownApp } from './harness.js';
+import { cleanupTemp, commitPanelRename, shutdownApp, DAEMON_READY_TIMEOUT_MS } from './harness.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -22,7 +22,7 @@ function startDaemon(pipeName: string, dataDir: string): Promise<ChildProcess> {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('daemon not ready')), 10_000);
+    const timer = setTimeout(() => reject(new Error('daemon not ready')), DAEMON_READY_TIMEOUT_MS);
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', (c: string) => {
       if (c.includes('listening')) {
@@ -75,7 +75,7 @@ async function panelIds(win: Page): Promise<string[]> {
   );
 }
 
-test('drag a Panel onto "+" → new active Tab containing only that Panel', async () => {
+test('drag a Panel onto "+" → new active Tab containing only that Panel', { tag: ['@extended', '@window'] }, async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
   try {

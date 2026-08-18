@@ -3,7 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, cleanupTemp} from './harness.js';
+import { openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import {
+  configRootSeeded,
+  settleConfigRoot,
+  snapshotConfigRoot,
+  type ConfigRootSnapshot,
+} from './helpers/config-snapshot.js';
+import { closePrefsWindow } from './helpers/prefs-window.js';
 
 /**
  * Issue #50 — two edits in quick succession must not clobber each other.
@@ -23,9 +30,67 @@ function freshCfgRoot(): string {
   cfgRoots.push(dir);
   return dir;
 }
-test.afterAll(() => {
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-010).
+ *
+ * Neither test seeded anything. Both read the SHIPPED value of what they are about to edit before
+ * editing it (`zoom.in`'s chord count, `editor.autoSave` being false), so both depend on arriving at a
+ * pristine config root — which is precisely what `restoreConfigRoot` guarantees, and what running
+ * second in a shared app would otherwise take away.
+ *
+ * The shim below REFUSES launch options rather than ignoring them: a swallowed config root does not
+ * fail, it makes a test pass for the wrong reason.
+ *
+ * Serial mode is not optional. These tests share a window, a config root and the ONE preferences
+ * window throng allows, so they must not interleave — and when one fails the rest are SKIPPED rather
+ * than run against whatever state the failure left behind (see `openApp` in harness.ts).
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let cfgRoot: string;
+let baseline: ConfigRootSnapshot;
+
+test.beforeAll(async () => {
+  cfgRoot = freshCfgRoot();
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
+  await settle(shared.win);
+  // Photograph the root only once first-run seeding has finished — settings, key bindings and every
+  // shipped theme. A partial snapshot would have every later restore DELETE whatever arrived late.
+  await expect.poll(() => configRootSeeded(cfgRoot), { timeout: 30_000 }).toBe(true);
+  baseline = snapshotConfigRoot(cfgRoot);
+});
+
+/*
+ * Put the config root back between tests — with the preferences window CLOSED FIRST.
+ *
+ * The order is load-bearing twice over. A dirty JSON buffer raises `json-external-change` when the
+ * file changes underneath it, so restoring against an open window would hand the next test a notice
+ * it never asked for. And the on-entry snapshot that Revert and Revert All compare against is
+ * captured when the preferences window MOUNTS (`preferences-app.tsx`), so carrying one window across
+ * tests would carry the first test's baseline into the last one.
+ */
+test.afterEach(async () => {
+  await closePrefsWindow(shared.app);
+  await settleConfigRoot(baseline);
+});
+
+test.afterAll(async () => {
+  await shared?.close();
   for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
 
 function readJson(cfgRoot: string, file: string): any {
   try {
@@ -45,8 +110,7 @@ async function openPrefs(app: ElectronApplication, win: Page, tab: 'settings' | 
   return prefs;
 }
 
-test('two key-binding edits in quick succession both survive (#50)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('two key-binding edits in quick succession both survive (#50)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'keybindings');
@@ -70,6 +134,9 @@ test('two key-binding edits in quick succession both survive (#50)', async () =>
        * is the one case where a bounded wait beats waiting on a condition. It goes BEFORE the pair;
        * the two clicks stay back-to-back, because their being back-to-back is the whole point.
        */
+      // sleep-justified: React's own handler-binding for this row raises no event, sets no
+      // sleep-justified: attribute and changes no text — there is nothing to poll() or quiesced()
+      // sleep-justified: on, which is what the paragraph above measured and this 600ms stands in for.
       await prefs.waitForTimeout(600);
       // Back-to-back, with NO wait between them — this is the whole point.
       await prefs.getByTestId('binding-zoom.in-remove-0').click();
@@ -91,12 +158,10 @@ test('two key-binding edits in quick succession both survive (#50)', async () =>
         })
         .toBe(`${zoomOutBefore.length - 1},${zoomInBefore.length - 1}`);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('two settings edits in quick succession both survive (#50)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('two settings edits in quick succession both survive (#50)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'settings');
@@ -120,6 +185,9 @@ test('two settings edits in quick succession both survive (#50)', async () => {
        * the fact that the two tests were otherwise structurally identical and only one had the wait.
        * Repeated full-suite runs are the verification, because that is the only place it has failed.
        */
+      // sleep-justified: same as the keybindings case above — no observable marks the moment
+      // sleep-justified: React finishes binding this row's click handler, so there is nothing for
+      // sleep-justified: a poll to watch; this 600ms is the bounded wait in its place.
       await prefs.waitForTimeout(600);
       // Toggle two independent settings back-to-back, with NO wait between them.
       await prefs.getByTestId('control-editor.autoSave').click();
@@ -134,6 +202,5 @@ test('two settings edits in quick succession both survive (#50)', async () => {
         })
         .toBe('false,true');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });

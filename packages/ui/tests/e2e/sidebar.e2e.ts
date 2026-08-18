@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
 import {
   openApp,
+  geom,
   type AppOptions,
   type OpenApp,
 } from './harness.js';
@@ -52,7 +53,7 @@ const runApp = (
 // panels — the Terminals panel was removed — and the Sub-workspaces panel is
 // pinned to the bottom of the pane (headers stay fixed-size; #2/#3).
 
-test('sidebar shows Projects + Sub-workspaces only (no Terminals panel)', async () => {
+test('sidebar shows Projects + Sub-workspaces only (no Terminals panel)', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     await expect(win.getByTestId('projects-panel')).toBeVisible();
     await expect(win.locator('.sidebar-panel--subworkspaces')).toBeVisible();
@@ -62,7 +63,7 @@ test('sidebar shows Projects + Sub-workspaces only (no Terminals panel)', async 
   });
 });
 
-test('pane headers are fixed-size and the Sub-workspaces panel has a min height', async () => {
+test('pane headers are fixed-size and the Sub-workspaces panel has a min height', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     await expect(win.locator('.sidebar-panel--subworkspaces')).toBeVisible();
     const m = await win.evaluate(() => {
@@ -86,7 +87,7 @@ test('pane headers are fixed-size and the Sub-workspaces panel has a min height'
   });
 });
 
-test('Sub-workspaces is pinned to the bottom of the sidebar body', async () => {
+test('Sub-workspaces is pinned to the bottom of the sidebar body', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     await expect(win.locator('.sidebar-panel--subworkspaces')).toBeVisible();
     const gap = await win.evaluate(() => {
@@ -98,7 +99,7 @@ test('Sub-workspaces is pinned to the bottom of the sidebar body', async () => {
   });
 });
 
-test('the Projects / Sub-workspaces divider resizes them independently', async () => {
+test('the Projects / Sub-workspaces divider resizes them independently', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     // Two panels → exactly one divider (below Projects); the last panel has none.
     await expect(win.getByTestId('sidebar-vresize')).toBeVisible();
@@ -121,7 +122,7 @@ test('the Projects / Sub-workspaces divider resizes them independently', async (
   });
 });
 
-test('on window resize only PROJECTS changes; Sub-workspaces stays pinned to the bottom', async () => {
+test('on window resize only PROJECTS changes; Sub-workspaces stays pinned to the bottom', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (app: ElectronApplication, win) => {
     await expect(win.getByTestId('projects-panel')).toBeVisible();
     const measure = () =>
@@ -138,10 +139,12 @@ test('on window resize only PROJECTS changes; Sub-workspaces stays pinned to the
       });
 
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1000, 900));
-    await win.waitForTimeout(300);
+    // Wait for Projects — the panel that actually absorbs the resize — to stop moving before
+    // measuring, rather than assuming a fixed duration is always enough for it to propagate.
+    await geom(win.getByTestId('projects-panel'));
     const big = await measure();
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1000, 680));
-    await win.waitForTimeout(300);
+    await geom(win.getByTestId('projects-panel'));
     const small = await measure();
 
     expect(big.proj - small.proj).toBeGreaterThan(150); // Projects absorbed the change
