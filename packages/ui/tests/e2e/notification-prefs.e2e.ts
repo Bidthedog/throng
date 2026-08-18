@@ -33,17 +33,29 @@
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import Database from 'better-sqlite3';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
 import {
   addPanels,
   cleanupTemp,
   createProject,
+  openApp,
   panelIds,
-  runApp,
+  runApp as runOwnApp,
   setSlider,
   settle,
+  stayedAbsent,
+  type AppOptions,
+  type OpenApp,
 } from './harness.js';
+import {
+  configRootSeeded,
+  settleConfigRoot,
+  snapshotConfigRoot,
+  type ConfigRootSnapshot,
+} from './helpers/config-snapshot.js';
+import { closePrefsWindow } from './helpers/prefs-window.js';
 
 /**
  * Each test opens the Preferences window AND drives the main window's workspace — a project
@@ -60,9 +72,85 @@ function freshCfgRoot(seed?: Record<string, unknown>): string {
   if (seed) writeFileSync(join(dir, 'settings.json'), JSON.stringify({ version: 1, ...seed }), 'utf8');
   return dir;
 }
-test.afterAll(() => {
-  for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
+
+/*
+ * ONE app for five of these six tests (034 FR-045, SC-010) — 6 launches -> 2.
+ *
+ * Five called `freshCfgRoot()` with no argument: write isolation, not pre-launch state, and
+ * `restoreConfigRoot` provides that between tests. The sixth SEEDS a pre-030 settings.json before
+ * launch and asserts what STARTUP does with it, so it keeps `runOwnApp` — a launch that cannot be
+ * shared, stated rather than worked around.
+ *
+ * The shim below REFUSES launch options rather than ignoring them: a swallowed config root does not
+ * fail, it makes a test pass for the wrong reason. That is exactly the mistake the seeded test would
+ * otherwise make.
+ *
+ * Serial mode is not optional — one window, one config root, one preferences window.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let cfgRoot: string;
+let dataDir: string;
+let baseline: ConfigRootSnapshot;
+
+test.beforeAll(async () => {
+  cfgRoot = freshCfgRoot();
+  // Captured (rather than left to openApp's own default) so the "Dismiss only" test below can poll
+  // the daemon's SQLite store directly for a persisted rename, instead of sleeping past its debounce.
+  dataDir = mkdtempSync(join(tmpdir(), 'throng-data-notice-prefs-'));
+  shared = await openApp({ dataDir, env: { THRONG_CONFIG_ROOT: cfgRoot } });
+  await settle(shared.win);
+  await expect.poll(() => configRootSeeded(cfgRoot), { timeout: 30_000 }).toBe(true);
+  baseline = snapshotConfigRoot(cfgRoot);
 });
+
+/*
+ * Close the preferences window, THEN restore the config root.
+ *
+ * The restore is what keeps every shipped-default assertion in this file meaning what it meant
+ * against a pristine app — `:153` reads all of them, and another test leaves `error` at
+ * `{ timed, 30000 }`. Closing first is what lets the next `waitForEvent('window')` fire, and what
+ * stops a restore landing under an open window.
+ */
+test.afterEach(async () => {
+  await closePrefsWindow(shared.app);
+  // `settleConfigRoot`, not a bare restore: the preferences editors write on a DEBOUNCE, so a test
+  // whose last assertion is about the screen can finish with a write still in flight. It would land
+  // after the restore and poison the next test — the class of leak `dcdcb46` reverted three
+  // conversions for. This restores, waits, re-diffs, and throws NAMING the drifting paths, charged
+  // to the `afterEach` of the test that leaked rather than to whichever test ran next.
+  await settleConfigRoot(baseline, 5_000);
+});
+
+/*
+ * Project roots the WARNING test creates, removed once — after the app has closed.
+ *
+ * `cfgRoots` already worked this way. A project root did not: it was deleted in that test's own
+ * `finally`, which under one app for the file removes a folder the application is still WATCHING.
+ * That is the class `dcdcb46` reverted three conversions for, and here it would have fired into the
+ * test after it as an explorer failure nobody raised on purpose.
+ */
+const ownedRoots: string[] = [];
+
+test.afterAll(async () => {
+  await shared?.close();
+  cleanupTemp(dataDir);
+  for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
+  for (const dir of ownedRoots.splice(0)) cleanupTemp(dir);
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
 
 function readSettings(cfgRoot: string): Record<string, any> | null {
   try {
@@ -103,7 +191,70 @@ async function appliedInMainWindow(
     .toEqual(expected);
   // `config.get()` reflects MAIN's copy, which is set in the same call that broadcasts to the
   // windows — not by a window receiving it. One settle for the renderer to re-render under it.
+  // sleep-justified: the renderer's own uptake of the hot-reload broadcast is unobservable from outside except by raising a notice under it, which is exactly what every caller does next.
   await win.waitForTimeout(500);
+}
+
+/**
+ * A fence for `stayedAbsent`: has the notice log recorded this raise?
+ *
+ * A *Never display* notice renders nothing on screen, but 030 FR-005/FR-008 requires the record to
+ * reach `logs/main.log` regardless — `notice-logging.e2e.ts` proves the write happens for a
+ * silenced severity — so its arrival is proof the raise was actually processed and the decision to
+ * say nothing on screen was actually made, not merely that nothing has happened yet.
+ */
+async function noticeLogged(userDataDir: string, pattern: RegExp): Promise<void> {
+  await expect
+    .poll(
+      () => {
+        try {
+          return readFileSync(join(userDataDir, 'logs', 'main.log'), 'utf8')
+            .split(/\r?\n/)
+            .some((line) => line.includes('[renderer-notice]') && pattern.test(line));
+        } catch {
+          return false; // the file may not exist yet
+        }
+      },
+      { timeout: 15_000, message: `no [renderer-notice] record matching ${String(pattern)}` },
+    )
+    .toBe(true);
+}
+
+/**
+ * Poll the daemon's own SQLite store for a persisted layout matching `predicate` — the layout the
+ * PANEL-NAME service actually reads (`panel-name-service.ts`'s `claim` goes through
+ * `workspaceStore.load`, never an in-memory registry), so this is the real condition a debounced
+ * write's caller needs, rather than a duration standing in for it. Mirrors
+ * `persistence-restore.e2e.ts`'s (unexported) `expectLayoutSaved`.
+ */
+async function expectLayoutPersisted(
+  projectName: string,
+  predicate: (layoutJson: string) => boolean,
+): Promise<void> {
+  await expect
+    .poll(
+      () => {
+        let db: InstanceType<typeof Database> | undefined;
+        try {
+          db = new Database(join(dataDir, 'throng.db'), { readonly: true });
+          const row = db
+            .prepare(
+              `SELECT w.layout_json AS json
+                 FROM workspace_layout w
+                 JOIN projects p ON p.id = w.project_id
+                WHERE p.name = ?`,
+            )
+            .get(projectName) as { json?: string } | undefined;
+          return row?.json !== undefined && predicate(row.json);
+        } catch {
+          return false; // not written yet, or a transient read of a mid-write DB
+        } finally {
+          db?.close();
+        }
+      },
+      { timeout: 15_000, message: `the layout for "${projectName}" was never persisted` },
+    )
+    .toBe(true);
 }
 
 /** Open the preferences window on the Settings tab and return its Page. */
@@ -150,8 +301,7 @@ async function renamePanel(win: Page, panelId: string, to: string): Promise<void
 
 const SEVERITIES = ['error', 'warning', 'info', 'success'] as const;
 
-test('the Notifications category offers a mode and a bounded duration for all four severities', async () => {
-  const cfgRoot = freshCfgRoot();
+test('the Notifications category offers a mode and a bounded duration for all four severities', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openSettings(app, win);
@@ -209,12 +359,10 @@ test('the Notifications category offers a mode and a bounded duration for all fo
       await expect(prefs.getByTestId('control-notifications.info.mode')).toHaveValue('timed');
       await expect(prefs.getByTestId('control-notifications.success.mode')).toHaveValue('timed');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('Never display shows nothing at all, and Dismiss only shows it again in the same session (FR-012, FR-016)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('Never display shows nothing at all, and Dismiss only shows it again in the same session (FR-012, FR-016)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       await settle(win);
@@ -240,11 +388,16 @@ test('Never display shows nothing at all, and Dismiss only shows it again in the
       await appliedInMainWindow(win, (n) => n?.error?.mode, 'never');
 
       await raiseErrorNotice(win);
-      // The project really did open — so the failure really was raised, and the empty notice list
-      // below is a decision rather than an unrendered DOM.
+      // The project really did open — so the failure really was raised. The FENCE below is the
+      // record it still wrote to `logs/main.log` even though "never" suppressed it on screen (030
+      // FR-005/FR-008) — proof the opportunity to display it has actually passed, not a guess at
+      // how long that takes.
       await expect(win.locator('.project-item[data-active="true"]')).toContainText('Ghost2');
-      await win.waitForTimeout(2000);
-      await expect(notices).toHaveCount(0);
+      await stayedAbsent(
+        () => noticeLogged(shared.userDataDir, /severity=error.*ghost2/i),
+        () => notices.count(),
+        'a suppressed error notice for ghost2',
+      );
 
       // ── FR-016 / T014a: the change applies to the NEXT notice raised in this SAME session.
       // Nothing is reloaded, relaunched or reopened between here and the notice below.
@@ -256,7 +409,6 @@ test('Never display shows nothing at all, and Dismiss only shows it again in the
       await expect(notices).toHaveCount(1, { timeout: 20_000 });
       await expect(notices).toContainText('ghost3');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
@@ -269,19 +421,23 @@ test('Never display shows nothing at all, and Dismiss only shows it again in the
  * once N has elapsed*, was never measured, and a regression that armed every timed notice at one
  * hard-coded duration would have stayed green.
  *
- * Two dwells, at opposite ends of the allowed range, in one session, remove that. A hypothetical
- * constant C has to satisfy both: C < SHORT_BUDGET to clear the first, C > STILL_UP_AFTER to clear
- * the second. `C < 8000` and `C > 15000` cannot both hold, so no constant passes — only a provider
- * actually reading the user's number does.
+ * Two dwells, at opposite ends of the allowed range, used to remove that — but only the SHORT one
+ * still waits real time here. A hypothetical constant C had to satisfy both: C < SHORT_BUDGET to
+ * clear the first, C > 15000 (the old `STILL_UP_AFTER` margin) to clear the second, and `C < 8000`
+ * and `C > 15000` cannot both hold — so no constant passed either check. The LONG half of that pair
+ * (034 FR-045/SC-008) moved to `packages/ui/tests/component/notice-dismissal-timer.test.ts`, which
+ * proves it with a fake clock using these SAME two numbers (`LONG_MS` and its own `STILL_UP_AFTER`):
+ * still present 15000 ms in, gone once `LONG_MS` itself elapses — the positive half no real-time wait
+ * here ever proved. What stays real-time is that a genuine Preferences slider drag reaching `LONG_MS`
+ * and a REAL error notice both actually happen; what no longer waits real seconds is "and it survived
+ * N of them", which needs no window to prove.
  */
 const SHORT_MS = 3_000; // the floor of the allowed range, and on the slider's 500 grid
-const SHORT_BUDGET = 8_000; // generous over 3000, and comfortably under STILL_UP_AFTER
-const LONG_MS = 30_000; // the ceiling
-const STILL_UP_AFTER = 15_000; // …so a notice armed at anything short would already have gone
+const SHORT_BUDGET = 8_000; // generous over 3000, and comfortably under the old 15000 ms margin
+const LONG_MS = 30_000; // the ceiling — mirrored in notice-dismissal-timer.test.ts
 
-test('Display for N takes an ERROR notice away after N, and NOT before (FR-004, FR-012)', async () => {
+test('Display for N takes an ERROR notice away after N, and NOT before (FR-004, FR-012)', { tag: ['@extended', '@prefs'] }, async () => {
   test.setTimeout(180_000);
-  const cfgRoot = freshCfgRoot();
   await runApp(
     async (app, win) => {
       await settle(win);
@@ -333,15 +489,17 @@ test('Display for N takes an ERROR notice away after N, and NOT before (FR-004, 
 
       await raiseErrorNotice(win);
       await expect(notices).toHaveCount(1, { timeout: 20_000 });
-      // Still there long after the previous dwell — and long after any plausible hard-coded one.
-      // This is the half that makes the first half mean something.
-      await win.waitForTimeout(STILL_UP_AFTER);
-      await expect(
-        notices,
-        `a ${LONG_MS} ms notice left within ${STILL_UP_AFTER} ms — the timer is not the user's number`,
-      ).toHaveCount(1);
+      /*
+       * "…and it is still there 15000 ms in, and gone once LONG_MS itself elapses" — the half that
+       * makes the SHORT case above mean something — is no longer waited out here in real time. 034
+       * FR-045/SC-008: `notice-dismissal-timer.test.ts` proves both ends of that with a fake clock,
+       * against this SAME `LONG_MS`, and goes further than any real-time wait could — an hour past a
+       * `dismiss`-mode notice's non-existent timer, not fifteen seconds past a `timed` one's. What
+       * this Electron window still proves, and only it can: that a real Preferences slider drag
+       * actually reaches `NotificationProvider` and a real error notice actually renders under it —
+       * both asserted above, with no wait needed for either.
+       */
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
@@ -361,14 +519,14 @@ test('Display for N takes an ERROR notice away after N, and NOT before (FR-004, 
  * still be theirs afterwards — an upgrade that "worked" by resetting the file would pass a test that
  * only looked at the notifications.
  */
-test('a pre-030 settings file opens with its preferences intact and no configuration error (FR-014, SC-014)', async () => {
+test('a pre-030 settings file opens with its preferences intact and no configuration error (FR-014, SC-014)', { tag: ['@extended', '@prefs'] }, async () => {
   const cfgRoot = freshCfgRoot({
     editor: { autoSave: true, autoSaveDebounceMs: 900 },
   });
   // Stated rather than assumed: the seed has to be genuinely pre-030 for the test to mean anything.
   expect(readSettings(cfgRoot)?.notifications).toBeUndefined();
 
-  await runApp(
+  await runOwnApp(
     async (app, win) => {
       await settle(win);
 
@@ -416,135 +574,55 @@ test('a pre-030 settings file opens with its preferences intact and no configura
   );
 });
 
-test('Dismiss only outlives any timeout — asserted on a WARNING, which auto-vanishes today (FR-012)', async () => {
+test('Dismiss only outlives any timeout — asserted on a WARNING, which auto-vanishes today (FR-012)', { tag: ['@extended', '@prefs'] }, async () => {
+  // Registered, not deleted here: under one app this root is watched for the rest of the file.
   const root = mkdtempSync(join(tmpdir(), 'throng-notice-prefs-warn-'));
-  const cfgRoot = freshCfgRoot();
-  try {
-    await runApp(
-      async (app, win) => {
-        await settle(win);
-        const prefs = await openSettings(app, win);
-        // The shipped default for `warning` IS Dismiss only (FR-013) — pinned here because the
-        // whole assertion rests on it.
-        await expect(prefs.getByTestId('control-notifications.warning.mode')).toHaveValue('dismiss');
-
-        // A real warning: two panels, one name. The daemon adjusts the second and says so once.
-        await createProject(win, 'WarnProj', root);
-        await addPanels(win, 1);
-        const ids = await panelIds(win);
-        expect(ids.length).toBeGreaterThanOrEqual(2);
-        await renamePanel(win, ids[0]!, 'Build');
-        // The daemon grants names from the PERSISTED layouts, and the layout write is debounced —
-        // ask the second panel for "Build" too soon and the name is not taken yet, so nothing is
-        // adjusted and no warning is raised. Without this wait the test fails at "no notice", which
-        // reads as the notice model being broken when the rename simply succeeded.
-        await win.waitForTimeout(1500);
-        await renamePanel(win, ids[1]!, 'Build');
-        // The ADJUSTMENT is the event. Asserted here so a producer that did not fire is reported as
-        // a producer that did not fire, and never as a missing notice.
-        await expect(win.getByTestId(`panel-title-${ids[1]!}`)).toHaveText('Build (2)');
-
-        const notice = win.getByTestId('panel-name-adjusted');
-        await expect(notice).toBeVisible({ timeout: 15_000 });
-        await expect(notice).toHaveClass(/notice--warning/);
-
-        // Past `AUTO_DISMISS_MS` (5000) with room to spare. On master the timer is armed for every
-        // severity but `error`, so this warning is gone by now whatever Preferences says.
-        await win.waitForTimeout(7000);
-        await expect(notice).toBeVisible();
-
-        // Dismiss only still means dismissABLE.
-        await win.getByTestId('panel-name-adjusted-dismiss').click();
-        await expect(notice).toHaveCount(0);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-    );
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('the duration control is inert unless the mode is Display for (FR-011)', async () => {
-  const cfgRoot = freshCfgRoot();
+  ownedRoots.push(root);
   await runApp(
     async (app, win) => {
+      await settle(win);
       const prefs = await openSettings(app, win);
-      const mode = prefs.getByTestId('control-notifications.error.mode');
-      // BOTH halves of the control: `NumberControl` renders a range input AND a typed field, and a
-      // disabled thumb beside a live text box is not an inert control.
-      const slider = prefs.getByTestId('control-notifications.error.timeoutMs-slider');
-      const field = prefs.getByTestId('control-notifications.error.timeoutMs');
+      // The shipped default for `warning` IS Dismiss only (FR-013) — pinned here because the
+      // whole assertion rests on it.
+      await expect(prefs.getByTestId('control-notifications.warning.mode')).toHaveValue('dismiss');
 
-      // Dismiss only (the shipped default for `error`): the duration means nothing.
-      await expect(mode).toHaveValue('dismiss');
-      await expect(slider).toBeDisabled();
-      await expect(field).toBeDisabled();
+      // A real warning: two panels, one name. The daemon adjusts the second and says so once.
+      await createProject(win, 'WarnProj', root);
+      await addPanels(win, 1);
+      const ids = await panelIds(win);
+      expect(ids.length).toBeGreaterThanOrEqual(2);
+      await renamePanel(win, ids[0]!, 'Build');
+      // The daemon grants names from the PERSISTED layouts (`panel-name-service.ts`'s `claim` reads
+      // straight through `workspaceStore.load`, never an in-memory registry) and the write is
+      // debounced — ask the second panel for "Build" before the first rename has actually reached
+      // the store and nothing is taken yet, so nothing is adjusted and no warning is raised. Poll the
+      // store itself rather than asserting a duration is always long enough for the debounce plus
+      // its IPC round trip.
+      await expectLayoutPersisted('WarnProj', (json) => json.includes('"title":"Build"'));
+      await renamePanel(win, ids[1]!, 'Build');
+      // The ADJUSTMENT is the event. Asserted here so a producer that did not fire is reported as
+      // a producer that did not fire, and never as a missing notice.
+      await expect(win.getByTestId(`panel-title-${ids[1]!}`)).toHaveText('Build (2)');
 
-      // Display for: it is the only mode the number has a meaning in.
-      await mode.selectOption('timed');
-      await expect(slider).toBeEnabled();
-      await expect(field).toBeEnabled();
-
-      // Never display: inert again.
-      await mode.selectOption('never');
-      const confirmed = prefs.getByTestId('confirm-dialog');
-      if (await confirmed.isVisible().catch(() => false)) {
-        await confirmed.getByRole('button').last().click();
-      }
-      await expect(slider).toBeDisabled();
-      await expect(field).toBeDisabled();
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('a duration below 3000 or above 30000 cannot be committed (FR-010)', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openSettings(app, win);
-      // The field only accepts input in the mode that uses it, so put it there first.
-      await prefs.getByTestId('control-notifications.error.mode').selectOption('timed');
-      const field = prefs.getByTestId('control-notifications.error.timeoutMs');
-      await expect(field).toBeEnabled();
-
-      for (const rejected of ['2999', '30001']) {
-        await field.fill(rejected);
-        await field.press('Enter');
-        await expect(prefs.getByTestId('control-notifications.error.timeoutMs-invalid')).toBeVisible();
-        // Not applied: the settings file keeps the last valid value.
-        expect(readSettings(cfgRoot)?.notifications?.error?.timeoutMs ?? 5000).toBe(5000);
-      }
+      const notice = win.getByTestId('panel-name-adjusted');
+      await expect(notice).toBeVisible({ timeout: 15_000 });
+      await expect(notice).toHaveClass(/notice--warning/);
 
       /*
-       * …and ANY value inside the bounds commits — the grid belongs to the slider, not to the
-       * setting (FR-010).
-       *
-       * 3567 is on no stop of a 500 ms slider, and that is the point: the bound is the contract and
-       * the step is an affordance, so typing an exact number the thumb cannot land on is a first-
-       * class way to set this. It must reach the settings file unrounded and STAY there — a control
-       * that quietly snapped it to 3500 would be answering a question the user did not ask.
+       * On master (pre-030) the timer was armed for every severity but `error`, so this warning would
+       * have been gone by `AUTO_DISMISS_MS` (5000) whatever Preferences said. That NO timer is ever
+       * armed for `mode: 'dismiss'` — at any severity, for any duration, an hour included — is proven
+       * with a fake clock in `notice-dismissal-timer.test.ts` ("Dismiss only never arms a timer,
+       * whatever the severity", 034 FR-045/SC-008), so this spec no longer waits real seconds to
+       * gesture at the same fact. What stays here, and only Electron can prove it: that a REAL
+       * panel-rename collision through the real daemon raises a real `warning` notice under the
+       * shipped `dismiss` default, and that it is still dismissible — both asserted around this.
        */
-      await field.fill('3567');
-      await field.press('Enter');
-      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.timeoutMs).toBe(3567);
-      /*
-       * Still 3567 after the write has been read back in — the round trip through the config
-       * watcher is where a rounding parse would show up, and where the field would be re-rendered
-       * from the stored value if it had been changed.
-       *
-       * Asserted on the DIGITS, not the exact string: the field renders through `formatGrouped`, so
-       * whether this reads "3567" or "3,567" depends on the digit-grouping threshold, which is a
-       * separate question from whether the value survived. Pinning the punctuation here would make
-       * this test fail for a reason that has nothing to do with FR-010.
-       */
-      await prefs.waitForTimeout(1000);
-      await expect
-        .poll(async () => (await field.inputValue()).replace(/[^0-9]/g, ''))
-        .toBe('3567');
-      expect(readSettings(cfgRoot)?.notifications?.error?.timeoutMs).toBe(3567);
+
+      // Dismiss only still means dismissABLE.
+      await win.getByTestId('panel-name-adjusted-dismiss').click();
+      await expect(notice).toHaveCount(0);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
@@ -560,8 +638,20 @@ test('a duration below 3000 or above 30000 cannot be committed (FR-010)', async 
  * dialog (`confirm-dialog.tsx` settles it as DISMISSED) and it does not pre-decide a testid for a
  * control that has not been written yet.
  */
-test('choosing Never display for an error asks first, and declining changes nothing (FR-008)', async () => {
-  const cfgRoot = freshCfgRoot();
+/*
+ * MOVED to `packages/ui/tests/component/preferences-number-control.test.ts` (034 FR-045):
+ *   - "the duration control is inert unless the mode is Display for (FR-011)"
+ *   - "a duration below 3000 or above 30000 cannot be committed (FR-010)"
+ *
+ * Both are about the numeric control alone: its bounds, and its `disabled` state when the mode
+ * beside it takes its meaning away. Being INERT rather than hidden is the requirement — a control
+ * that vanishes takes its explanation with it, and the user cannot see that the duration is still
+ * there waiting for the mode that uses it — and "shown but disabled" is a DOM fact.
+ *
+ * This file was measured at 60.8 seconds, among the ten slowest in the suite. What remains is what
+ * earns that: real notices appearing, surviving a dismissal, and vanishing on a real timer.
+ */
+test('choosing Never display for an error asks first, and declining changes nothing (FR-008)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openSettings(app, win);
@@ -575,9 +665,12 @@ test('choosing Never display for an error asks first, and declining changes noth
 
       await prefs.keyboard.press('Escape');
       await expect(dialog).toHaveCount(0);
-      // Unchanged, on screen and on disk.
+      // Unchanged, on screen and on disk — and no wait is needed to say so. `commit()`
+      // (settings-tab.tsx) only calls `applyEdit` inside the confirm promise's
+      // `.then((accepted) => accepted && applyEdit(...))`, and Escape resolves that promise to
+      // `false`, so a decline never starts a write for a sleep to wait out. The dialog's own removal
+      // above is already proof the decision (and non-write) landed.
       await expect(errorMode).toHaveValue('dismiss');
-      await prefs.waitForTimeout(500);
       expect(readSettings(cfgRoot)?.notifications?.error?.mode ?? 'dismiss').toBe('dismiss');
 
       // `warning` asks too — a partly-failed operation reporting nothing is the same bargain.
@@ -591,6 +684,5 @@ test('choosing Never display for an error asks first, and declining changes noth
       await expect.poll(() => readSettings(cfgRoot)?.notifications?.info?.mode).toBe('never');
       await expect(prefs.getByTestId('confirm-dialog')).toHaveCount(0);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });

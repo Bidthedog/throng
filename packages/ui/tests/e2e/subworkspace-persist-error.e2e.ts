@@ -12,7 +12,7 @@ import { createProject, runApp, seedDatabase, cleanupTemp} from './harness.js';
 // We simulate a daemon-side persist failure deterministically by seeding a trigger
 // that aborts any INSERT into sub_workspaces.
 
-test('surfaces an error when persisting a new sub-workspace fails', async () => {
+test('surfaces an error when persisting a new sub-workspace fails', { tag: ['@extended', '@window'] }, async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-e2e-persistfail-'));
   seedDatabase(dataDir, (db) => {
     db.exec(`

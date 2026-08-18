@@ -40,7 +40,7 @@ async function flavourAvailable(
 }
 
 for (const flavour of FLAVOURS) {
-  test(`[${flavour}] a startup command runs and leaves a live prompt (FR-004/FR-005)`, async () => {
+  test(`[${flavour}] a startup command runs and leaves a live prompt (FR-004/FR-005)`, { tag: ['@extended', '@terminal'] }, async () => {
     test.setTimeout(120_000);
     const root = mkdtempSync(join(tmpdir(), `throng-suc-${flavour}-`));
     let present = true;
@@ -69,7 +69,7 @@ for (const flavour of FLAVOURS) {
     }
   });
 
-  test(`[${flavour}] a QUOTED executable path runs, and reports no parse error`, async () => {
+  test(`[${flavour}] a QUOTED executable path runs, and reports no parse error`, { tag: ['@extended', '@terminal'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.

@@ -2,7 +2,21 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import {
+  openApp,
+  createProject,
+  firstPanelId,
+  settle,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+import {
+  configRootSeeded,
+  settleConfigRoot,
+  snapshotConfigRoot,
+  type ConfigRootSnapshot,
+} from './helpers/config-snapshot.js';
 import { writeSettingsAtomic } from './helpers/config-write.js';
 
 // US2 (config half) / Plan Phase B (FR-010/010a/011/012): the Flavour dropdown is
@@ -18,7 +32,66 @@ import { writeSettingsAtomic } from './helpers/config-write.js';
 // the fake-resolver cases in the WindowsShellDetection contract test
 // (packages/platform-windows/tests/contract/windows-shell-detection.contract.test.ts).
 
-test('the Flavour dropdown is populated from the machine and Shell Arguments follows the flavour', async () => {
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-010) — 2 launches -> 1.
+ *
+ * Nothing is seeded before launch. Test 2's `writeSettingsAtomic` (:70-76) is a hot-reload write
+ * THROUGH the running app, which is the mechanism under test.
+ *
+ * NO SHELL IS EVER STARTED here — neither test clicks `panel-type-confirm`, so both only open the
+ * type form and read the dropdown. That is what separates this file from every other `terminal-*`
+ * one, where a live shell outliving its test is the blocker.
+ *
+ * Left behind: `terminals.flavours` carrying `my-wsl`, and two panels sitting in the type form. The
+ * restore removes the flavour, which is what keeps test 2's opening assertion — that `my-wsl` is
+ * ABSENT (:60) — true in any order rather than only while it runs second.
+ *
+ * The shim below REFUSES launch options rather than ignoring them: a swallowed config root does not
+ * fail, it makes a test pass for the wrong reason.
+ *
+ * Serial mode is not optional — one window and one config root.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let sharedCfg: string;
+let baseline: ConfigRootSnapshot;
+
+test.beforeAll(async () => {
+  sharedCfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: sharedCfg } });
+  await settle(shared.win);
+  // Only once first-run seeding has finished — settings, key bindings and every shipped theme. A
+  // snapshot taken mid-seed photographs a partial root, and every restore after it would DELETE
+  // whatever arrived late.
+  await expect.poll(() => configRootSeeded(sharedCfg), { timeout: 30_000 }).toBe(true);
+  baseline = snapshotConfigRoot(sharedCfg);
+});
+
+test.afterEach(async () => {
+  // Restore, wait, re-diff, restore again — and throw NAMING the paths if it will not converge,
+  // rather than handing a poisoned root to the next test.
+  await settleConfigRoot(baseline, 5_000);
+});
+
+test.afterAll(async () => {
+  await shared?.close();
+  cleanupTemp(sharedCfg);
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
+
+test('the Flavour dropdown is populated from the machine and Shell Arguments follows the flavour', { tag: ['@extended', '@terminal'] }, async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'Flavours', 'C:/c/flavours');
     const pid = await firstPanelId(win);
@@ -45,44 +118,38 @@ test('the Flavour dropdown is populated from the machine and Shell Arguments fol
   });
 });
 
-test('a user-defined flavour added to settings.json appears in the dropdown (hot-reload, FR-010a)', async () => {
-  const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
-  try {
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'UserFlav', 'C:/c/userflav');
-        const pid = await firstPanelId(win);
-        await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-        const flavour = win.getByTestId('terminal-flavour');
-        await expect(flavour).toBeVisible();
+test('a user-defined flavour added to settings.json appears in the dropdown (hot-reload, FR-010a)', { tag: ['@extended', '@terminal'] }, async () => {
+  await runApp(
+    async (_app, win) => {
+      await createProject(win, 'UserFlav', 'C:/c/userflav');
+      const pid = await firstPanelId(win);
+      await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
+      const flavour = win.getByTestId('terminal-flavour');
+      await expect(flavour).toBeVisible();
 
-        // Not present until the user adds it.
-        await expect(flavour.locator('option[value="my-wsl"]')).toHaveCount(0);
+      // Not present until the user adds it.
+      await expect(flavour.locator('option[value="my-wsl"]')).toHaveCount(0);
 
-        /*
-         * Add a user flavour to settings.json → config hot-reload → it appears.
-         *
-         * ATOMICALLY (032 FR-013, G8): the app is running and watching this file. `writeFileSync`
-         * truncates before it fills, so the watcher can wake on the empty file, parse nothing,
-         * broadcast the shipped defaults, and never look again — the flavour is lost rather than
-         * late, and the spec fails claiming the dropdown does not honour user flavours.
-         */
-        writeSettingsAtomic(cfg, {
-          terminals: {
-            flavours: [
-              { id: 'my-wsl', label: 'WSL: Ubuntu', file: 'wsl.exe', args: ['-d', 'Ubuntu'], defaultShellArguments: '--cd ~' },
-            ],
-          },
-        });
-        await expect(flavour.locator('option[value="my-wsl"]')).toHaveCount(1);
+      /*
+       * Add a user flavour to settings.json → config hot-reload → it appears.
+       *
+       * ATOMICALLY (032 FR-013, G8): the app is running and watching this file. `writeFileSync`
+       * truncates before it fills, so the watcher can wake on the empty file, parse nothing,
+       * broadcast the shipped defaults, and never look again — the flavour is lost rather than
+       * late, and the spec fails claiming the dropdown does not honour user flavours.
+       */
+      writeSettingsAtomic(sharedCfg, {
+        terminals: {
+          flavours: [
+            { id: 'my-wsl', label: 'WSL: Ubuntu', file: 'wsl.exe', args: ['-d', 'Ubuntu'], defaultShellArguments: '--cd ~' },
+          ],
+        },
+      });
+      await expect(flavour.locator('option[value="my-wsl"]')).toHaveCount(1);
 
-        // And it carries its own default Shell Arguments.
-        await flavour.selectOption('my-wsl');
-        await expect(win.getByTestId('terminal-shell-arguments')).toHaveValue('--cd ~');
-      },
-      { env: { THRONG_CONFIG_ROOT: cfg } },
-    );
-  } finally {
-    cleanupTemp(cfg);
-  }
+      // And it carries its own default Shell Arguments.
+      await flavour.selectOption('my-wsl');
+      await expect(win.getByTestId('terminal-shell-arguments')).toHaveValue('--cd ~');
+    },
+  );
 });

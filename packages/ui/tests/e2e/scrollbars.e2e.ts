@@ -4,7 +4,14 @@ import { join } from 'node:path';
 
 import { expect, test } from '@playwright/test';
 
-import { createProject, firstPanelId, runApp, cleanupTemp} from './harness.js';
+import {
+  createProject,
+  firstPanelId,
+  openApp,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
 
 /**
  * 018 / US3 — scrollbars are part of the theme (FR-009 … FR-012).
@@ -14,7 +21,60 @@ import { createProject, firstPanelId, runApp, cleanupTemp} from './harness.js';
  * light-grey bar in an otherwise dark application.
  */
 
-test('every scrollable surface gets a classic themed bar of the theme WIDTH (FR-010 / #130)', async () => {
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-027) — 2 launches -> 1.
+ *
+ * The live `cmd` shell that made this file two apps is in the LAST test, so no test runs after
+ * it. Its own `finally` already records that the shell can still hold the project root after
+ * teardown; that cleanup therefore moves to `afterAll`, where the app has actually closed —
+ * keeping the swallow, for the same reason it was written.
+ *
+ * Nothing is seeded before launch. Test 1 makes no project at all and measures a throwaway
+ * element it creates and removes itself, so it neither leaves nor reads any shared state; test
+ * 2's `.terminal-panel .xterm-viewport` is window-wide but test 1 opens no terminal.
+ */
+const ownedRoots: string[] = [];
+/** Register a project root for removal in `afterAll`, once the shared app has closed. */
+function own(dir: string): string {
+  ownedRoots.push(dir);
+  return dir;
+}
+
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+
+test.afterAll(async () => {
+  await shared?.close();
+  for (const dir of ownedRoots.splice(0)) {
+    // Principle V: a test cleans up after itself — but a FAILURE to clean up is not a failure
+    // of the test. The app has closed by here, yet on a slow runner the de-elevated cmd.exe
+    // test 2 spawned can still hold a handle to the root for a moment, so rmSync throws EBUSY.
+    try {
+      cleanupTemp(dir);
+    } catch {
+      /* the OS reaps the temp dir; a locked handle here is not a product defect */
+    }
+  }
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
+
+test('every scrollable surface gets a classic themed bar of the theme WIDTH (FR-010 / #130)', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     // The provider writes the custom properties onto :root in an effect, so poll rather than
     // sampling the first frame. An UNDEFINED custom property resolves to the empty string — which
@@ -57,8 +117,8 @@ test('every scrollable surface gets a classic themed bar of the theme WIDTH (FR-
   });
 });
 
-test('the terminal keeps its classic, non-overlay bar — MEASURED, not read from the stylesheet (FR-011)', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-sb-'));
+test('the terminal keeps its classic, non-overlay bar — MEASURED, not read from the stylesheet (FR-011)', { tag: ['@extended', '@window'] }, async () => {
+  const root = own(mkdtempSync(join(tmpdir(), 'throng-sb-')));
   try {
     await runApp(async (_app, win) => {
     // Open a real terminal: there is nothing to measure otherwise, and a test that passes because
@@ -98,16 +158,8 @@ test('the terminal keeps its classic, non-overlay bar — MEASURED, not read fro
     ).toBe(12);
     });
   } finally {
-    // Constitution, Principle V: a test cleans up the artefacts it creates — but a FAILURE to clean
-    // up is not a failure of the test. `runApp` has already closed the app by here, yet on a slow CI
-    // runner the de-elevated `cmd.exe` this test spawned can still hold a handle to the project root
-    // for a moment after the window is gone, so `rmSync` throws EBUSY. Swallowing it keeps a teardown
-    // race from turning a green measurement red; the temp dir is under the OS temp root and is reaped
-    // regardless. (retryDelay matches the other terminal-spawning suites, which clean up in 250ms steps.)
-    try {
-      cleanupTemp(root);
-    } catch {
-      /* the OS will reap the temp dir; a locked handle here is not a product defect */
-    }
+    // The root is deleted in `afterAll`, once the SHARED app has closed — the swallow that used
+    // to live here moved with it, because the reason for it (a cmd.exe still holding a handle)
+    // is unchanged.
   }
 });

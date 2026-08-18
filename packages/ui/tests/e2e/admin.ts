@@ -118,7 +118,19 @@ export function skipWithoutInteractiveDesktop(): void {
  * zero-arg body (admin tests drive the app via `runApp`, not Playwright fixtures).
  */
 export function adminTest(title: string, body: () => Promise<void>): void {
-  test(title, { tag: '@admin' }, async () => {
+  /*
+   * Three tags, on independent axes (034 FR-052/FR-053).
+   *
+   * `@admin` says WHERE it can run — an environment guard, routed to the elevated runner.
+   * `@extended` says WHICH LANE wants it, and it is not `@core` for a reason worth stating: the
+   * critical lane gates every push and runs unelevated, where these tests can only ever skip. A
+   * test that cannot execute in the lane gating merges does not belong in it, and `e2e-tags.test.ts`
+   * fails the build if one is put there.
+   * `@terminal` is the category, hardcoded rather than passed in because elevation only ever matters
+   * here for run-as-admin and de-elevation — both terminal. If a non-terminal @admin spec is ever
+   * written, this signature grows a parameter rather than the spec acquiring a wrong tag.
+   */
+  test(title, { tag: ['@admin', '@extended', '@terminal'] }, async () => {
     test.skip(!isElevated(), 'requires elevated privileges — run `npm run test:e2e:admin`');
     await body();
   });

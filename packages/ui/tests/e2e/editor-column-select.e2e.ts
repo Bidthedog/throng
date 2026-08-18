@@ -2,16 +2,14 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import {
-  openApp,
+import { openApp,
   createProject as newProject,
   firstPanelId,
   panelIds,
   addPanels,
   cleanupTemp,
   type AppOptions,
-  type OpenApp,
-} from './harness.js';
+  type OpenApp, FILE_OP_TIMEOUT_MS } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -57,7 +55,6 @@ const runApp = (
 let projectSeq = 0;
 const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
-
 
 /**
  * US6 — rectangular (column) selection (016, FR-025 · T077-T083).
@@ -146,29 +143,38 @@ const coordsAt = (
     { id: pid, line, col },
   );
 
-test('Shift+Alt+Arrow builds a real block — a typed character lands on EVERY row', async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Column', root);
-      const pid = await openFileInEditor(win, 'grid.txt', 'aaaa');
+/*
+ * MOVED to the component layer (034 FR-045) — two tests.
+ *
+ * The replacements are `packages/ui/tests/component/editor-command-semantics.test.ts` (14 tests).
+ * That file drives the REAL commands from `commands.ts` over a REAL `EditorState` — real facets,
+ * the real `columnBlockField`, real transactions — behind a two-member stand-in for the view,
+ * because every one of these commands touches only `view.state` and `view.dispatch`.
+ *
+ * WHAT THE APP WAS BUYING, AND WHY IT IS NOT NEEDED: the translation from a keystroke to a command
+ * call. That is CodeMirror’s `keymap`, which is not throng’s code to re-test. throng’s own half of
+ * it — which chord reaches which command — is `packages/ui/tests/unit/scope.test.ts:149` and `:168`,
+ * and the chord→CodeMirror-key spelling is asserted in the replacement itself.
+ *
+ * ANTI-VACUITY CONTROL: delete `this.state = tr.state;` from the replacement’s `FakeView.dispatch`,
+ * so transactions are recorded but never applied. ALL FOURTEEN fail. Nothing in that file can pass
+ * over an inert editor.
+ *
+ * STRONGER THAN WHAT WAS HERE:
+ *   - the head column’s CLAMP to the widest row the block covers (`commands.ts:531`) is asserted,
+ *     and asserted the only way it can fail: by pressing Left once afterwards. Both specs only ever
+ *     grew a block over equal-length lines, where an unclamped column materialises identically and
+ *     the bug shows two keystrokes later.
+ *   - a verbatim paste whose line count does NOT match the row count is asserted to replace every
+ *     row with the whole text. `perRow` hard-coded to `true` passed the surviving case.
+ *
+ * WHAT STAYS, AND WHY: Alt+drag with real character coordinates (real layout), the cross-panel
+ * copy that proves the clipboard MODE is app-global (two panels, the OS clipboard, UI main), the
+ * tab-padded paste asserted on the BYTES on disk, Delete’s promise not to touch the clipboard, and
+ * the ten-row single-undo. None of those is a claim about a document alone.
+ */
 
-      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('Shift+Alt+ArrowDown');
-      await win.keyboard.press('Shift+Alt+ArrowDown');
-
-      // Three zero-width cursors, stacked in column 0. Typing must replace every row — not one.
-      await win.keyboard.type('X');
-
-      await expect.poll(() => docText(win, pid)).toBe('Xaaaa\nXbbbb\nXcccc\ndddd\n');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('Alt+drag makes a block, and cutting it takes ONLY the block’s characters (FR-025e)', async () => {
+test('Alt+drag makes a block, and cutting it takes ONLY the block’s characters (FR-025e)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -200,7 +206,7 @@ test('Alt+drag makes a block, and cutting it takes ONLY the block’s characters
   }
 });
 
-test('Delete on a block clears it per row and NEVER touches the clipboard (FR-025g)', async () => {
+test('Delete on a block clears it per row and NEVER touches the clipboard (FR-025g)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -227,7 +233,7 @@ test('Delete on a block clears it per row and NEVER touches the clipboard (FR-02
   }
 });
 
-test('a block copied in one panel pastes COLUMN-WISE in another — the mode is app-global', async () => {
+test('a block copied in one panel pastes COLUMN-WISE in another — the mode is app-global', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -267,32 +273,7 @@ test('a block copied in one panel pastes COLUMN-WISE in another — the mode is 
   }
 });
 
-test('N EXTERNAL lines over an N-row block distribute one line per row (FR-025h)', async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Column', root);
-      const pid = await openFileInEditor(win, 'grid.txt', 'aaaa');
-
-      // Text from another application: plain, verbatim, carrying no rectangular signal. Three lines
-      // over a three-row block is the ONLY route by which external column data enters a block.
-      await writeExternal(win, '1\n2\n3');
-
-      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('Shift+Alt+ArrowDown');
-      await win.keyboard.press('Shift+Alt+ArrowDown');
-      await win.keyboard.press('Shift+Alt+ArrowRight');
-      await win.keyboard.press('Control+v');
-
-      await expect.poll(() => docText(win, pid)).toBe('1aaa\n2bbb\n3ccc\ndddd\n');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('a column paste into a TAB-indented file pads with TABS, and lands on the column (FR-025c1)', async () => {
+test('a column paste into a TAB-indented file pads with TABS, and lands on the column (FR-025c1)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -323,7 +304,7 @@ test('a column paste into a TAB-indented file pads with TABS, and lands on the c
       // carries column 1 → 4, then two spaces land exactly on column 6 — a second tab would have
       // jumped to column 8 and put the text where the user never pointed.
       await expect
-        .poll(() => readFileSync(join(root, 'tabs.txt'), 'utf8'), { timeout: 8000 })
+        .poll(() => readFileSync(join(root, 'tabs.txt'), 'utf8'), { timeout: FILE_OP_TIMEOUT_MS })
         .toBe('\tAAaAA\nB\t  b\n\tCCcCC\n');
     });
   } finally {
@@ -331,7 +312,7 @@ test('a column paste into a TAB-indented file pads with TABS, and lands on the c
   }
 });
 
-test('ONE Undo reverts a ten-row column paste — a command is one undo entry (FR-026)', async () => {
+test('ONE Undo reverts a ten-row column paste — a command is one undo entry (FR-026)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

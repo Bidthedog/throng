@@ -2,7 +2,8 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp, quiesced} from './harness.js';
+import { quiesceSampler } from './quiesce-sampler.js';
 import { writeAltScreenProgram, makeCmdTerminal, runAltScreenProgram } from './altscreen-fixture.js';
 import { skipIfElevated } from './admin.js';
 
@@ -38,17 +39,20 @@ function arrowCount(log: string): number {
  * The arrow count once the fixture's log has stopped changing.
  *
  * Two identical reads in a row, because the only thing that distinguishes "the program received
- * nothing more" from "the write has not landed yet" is time passing without a change.
+ * nothing more" from "the write has not landed yet" is time passing without a change. Built on the
+ * same {@link quiesceSampler} `quiesced()` uses for a redrawing DOM — this is the identical
+ * condition applied to a file instead of a Locator's textContent.
  */
-async function settledArrowCount(win: Page, root: string): Promise<number> {
-  let last = -1;
-  for (let i = 0; i < 20; i += 1) {
-    await win.waitForTimeout(300);
-    const now = arrowCount(keysReceived(root));
-    if (now === last) return now;
-    last = now;
-  }
-  return last;
+async function settledArrowCount(root: string): Promise<number> {
+  const sampler = quiesceSampler();
+  await expect
+    .poll(() => sampler.sample(String(arrowCount(keysReceived(root)))), {
+      timeout: 8_000,
+      message: 'the fixture log never stopped changing, so there is no settled arrow count to read',
+      intervals: [300],
+    })
+    .toBe(true);
+  return Number(sampler.settled());
 }
 
 async function wheelOver(win: Page, panelId: string, deltaY: number, ctrl = false): Promise<void> {
@@ -59,10 +63,14 @@ async function wheelOver(win: Page, panelId: string, deltaY: number, ctrl = fals
   if (ctrl) await win.keyboard.down('Control');
   await win.mouse.wheel(0, deltaY);
   if (ctrl) await win.keyboard.up('Control');
-  await win.waitForTimeout(1200);
+  // Let the gesture's effect on the terminal (a repaint, a scroll, a zoom reflow) actually land and
+  // settle before the caller looks at anything — the same redrawing-terminal condition quiesced()
+  // exists for, applicable here regardless of which of the three effects this particular wheel
+  // produced.
+  await quiesced(term, { what: 'terminal after wheel gesture' });
 }
 
-test('a wheel notch moves an alternate-screen program that never asked for the mouse', async () => {
+test('a wheel notch moves an alternate-screen program that never asked for the mouse', { tag: ['@extended', '@terminal'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -94,7 +102,7 @@ test('a wheel notch moves an alternate-screen program that never asked for the m
   }
 });
 
-test('a wheel at a SHELL prompt types nothing — it scrolls the viewport', async () => {
+test('a wheel at a SHELL prompt types nothing — it scrolls the viewport', { tag: ['@extended', '@terminal'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-wheel-shell-'));
   try {
@@ -110,7 +118,9 @@ test('a wheel at a SHELL prompt types nothing — it scrolls the viewport', asyn
       await win.keyboard.press('Enter');
       await expect(term).toContainText('WHEELFILL80', { timeout: 30_000 });
       await win.keyboard.type('echo UNTOUCHED');
-      await win.waitForTimeout(800);
+      // Wait for the typed marker to actually echo into the terminal and settle before scrolling —
+      // the same redrawing-terminal condition quiesced() exists for.
+      await quiesced(term, { what: 'terminal after typing the UNTOUCHED marker' });
 
       await wheelOver(win, pid, -400);
       await wheelOver(win, pid, 400);
@@ -135,7 +145,7 @@ test('a wheel at a SHELL prompt types nothing — it scrolls the viewport', asyn
   }
 });
 
-test('Ctrl+wheel is left to zoom, not sent to the program', async () => {
+test('Ctrl+wheel is left to zoom, not sent to the program', { tag: ['@extended', '@terminal'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-wheel-zoom-'));
   writeAltScreenProgram(root, { rows: 5 });
@@ -154,7 +164,7 @@ test('Ctrl+wheel is left to zoom, not sent to the program', async () => {
        * involved at all, failing an assertion about a gesture that behaved perfectly. Measured as
        * this test failing and flaking at three workers and at six.
        */
-      const before = await settledArrowCount(win, root);
+      const before = await settledArrowCount(root);
       await wheelOver(win, pid, -300, true);
       await wheelOver(win, pid, 300, true);
 

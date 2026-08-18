@@ -10,7 +10,7 @@ import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 // exit info, and can be re-typed: selecting Terminal again + Confirm starts a fresh
 // session. The Panel's type is fixed only while content is live.
 
-test('typing exit reverts the Panel to the form with exit info, then it re-types', async () => {
+test('typing exit reverts the Panel to the form with exit info, then it re-types', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-revert-'));
   try {
     await runApp(async (_app, win) => {
@@ -59,9 +59,14 @@ test('typing exit reverts the Panel to the form with exit info, then it re-types
       await expect(term2).toBeVisible();
       await expect(term2).toContainText(basename(root), { timeout: 20000 });
 
-      // Clean up the live session so the app-close warning doesn't block teardown.
+      /*
+       * Clean up the live session so the app-close warning doesn't block teardown. The kill IPC
+       * resolving only means the daemon accepted the request — the Panel reverting to its
+       * type-select form (asserted twice already above) is the renderer's own confirmation that the
+       * session is actually gone.
+       */
       await win.evaluate((id) => window.throng?.terminal?.kill?.(id), pid);
-      await win.waitForTimeout(1200);
+      await expect(win.getByTestId(`panel-type-form-${pid}`)).toBeVisible({ timeout: 15000 });
     });
   } finally {
     cleanupTemp(root);

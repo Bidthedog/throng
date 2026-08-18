@@ -3,7 +3,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, cleanupTemp} from './harness.js';
+import { openApp, runApp as runOwnApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import {
+  configRootSeeded,
+  settleConfigRoot,
+  snapshotConfigRoot,
+  type ConfigRootSnapshot,
+} from './helpers/config-snapshot.js';
+import { closePrefsWindow } from './helpers/prefs-window.js';
+import { writeConfigAtomic } from './helpers/config-write.js';
 
 /**
  * US6 (007 Phase G): reset-current restores the tab's defaults (disabled for a
@@ -11,21 +19,81 @@ import { runApp, cleanupTemp} from './harness.js';
  * require an explicit confirmation (cancel is a no-op).
  */
 const cfgRoots: string[] = [];
-function freshCfgRoot(seedThemes: Record<string, unknown> = {}): string {
+function freshCfgRoot(): string {
   const dir = mkdtempSync(join(tmpdir(), 'throng-cfg-reset-'));
   cfgRoots.push(dir);
-  if (Object.keys(seedThemes).length) {
-    const themesDir = join(dir, 'themes');
-    mkdirSync(themesDir, { recursive: true });
-    for (const [name, theme] of Object.entries(seedThemes)) {
-      writeFileSync(join(themesDir, `${name}.json`), JSON.stringify(theme, null, 2), 'utf8');
-    }
-  }
   return dir;
 }
-test.afterAll(() => {
+
+/** Put a custom theme into the RUNNING app's themes directory (see `helpers/config-snapshot.ts`). */
+function seedTheme(name: string, theme: unknown): void {
+  mkdirSync(join(cfgRoot, 'themes'), { recursive: true });
+  writeConfigAtomic(join(cfgRoot, 'themes', `${name}.json`), `${JSON.stringify(theme, null, 2)}\n`);
+}
+
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-010).
+ *
+ * Eight of the nine tests press reset/revert controls and then read settings.json or
+ * keybindings.json — writes to the CONTENTS of a config root, which `restoreConfigRoot` undoes. One
+ * seeded a custom theme, and a theme file is read per call, so it writes it into the running root.
+ *
+ * The ninth keeps its own app, and says why where it stands.
+ *
+ * The shim below REFUSES launch options rather than ignoring them: a swallowed config root does not
+ * fail, it makes a test pass for the wrong reason.
+ *
+ * Serial mode is not optional. These tests share a window, a config root and the ONE preferences
+ * window throng allows, so they must not interleave — and when one fails the rest are SKIPPED rather
+ * than run against whatever state the failure left behind (see `openApp` in harness.ts).
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let cfgRoot: string;
+let baseline: ConfigRootSnapshot;
+
+test.beforeAll(async () => {
+  cfgRoot = freshCfgRoot();
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
+  await settle(shared.win);
+  // Photograph the root only once first-run seeding has finished — settings, key bindings and every
+  // shipped theme. A partial snapshot would have every later restore DELETE whatever arrived late.
+  await expect.poll(() => configRootSeeded(cfgRoot), { timeout: 30_000 }).toBe(true);
+  baseline = snapshotConfigRoot(cfgRoot);
+});
+
+/*
+ * Put the config root back between tests — with the preferences window CLOSED FIRST.
+ *
+ * The order is load-bearing twice over. A dirty JSON buffer raises `json-external-change` when the
+ * file changes underneath it, so restoring against an open window would hand the next test a notice
+ * it never asked for. And the on-entry snapshot that Revert and Revert All compare against is
+ * captured when the preferences window MOUNTS (`preferences-app.tsx`), so carrying one window across
+ * tests would carry the first test's baseline into the last one.
+ */
+test.afterEach(async () => {
+  await closePrefsWindow(shared.app);
+  await settleConfigRoot(baseline);
+});
+
+test.afterAll(async () => {
+  await shared?.close();
   for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
+
 function readSettings(cfgRoot: string): any {
   try {
     return JSON.parse(readFileSync(join(cfgRoot, 'settings.json'), 'utf8'));
@@ -74,8 +142,7 @@ async function openPrefs(
   return prefs!;
 }
 
-test('the per-tab reset restores the Settings editor from the shipped record (with confirm)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('the per-tab reset restores the Settings editor from the shipped record (with confirm)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'settings');
@@ -89,67 +156,35 @@ test('the per-tab reset restores the Settings editor from the shipped record (wi
       await prefs.getByTestId('prefs-reset-confirm-yes').click();
       await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave).toBe(false); // default
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('the per-tab reset is HIDDEN on the Themes tab (015, FR-011)', async () => {
-  // It used to be shown-but-disabled for a custom theme. Feature 014 gives every built-in
-  // theme row its own restore-to-shipped affordance, so a per-tab reset here would be a
-  // second control performing an identical write — it is removed rather than disabled.
-  const cfgRoot = freshCfgRoot({
-    MyUser: { name: 'MyUser', colours: {}, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} },
-  });
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPrefs(app, win, 'themes');
-      await expect(prefs.getByTestId('themes-tab')).toBeVisible();
-      await expect(prefs.getByTestId('prefs-reset-current')).toHaveCount(0);
-      // …while on an editor tab it is present and names the editor it applies to.
-      await prefs.getByTestId('prefs-tab-settings').click();
-      await expect(prefs.getByTestId('prefs-reset-current')).toBeVisible();
-      await expect(prefs.getByTestId('prefs-reset-current')).toHaveAttribute(
-        'title',
-        'Reset the Settings editor to its defaults',
-      );
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
+/*
+ * MOVED to `packages/ui/tests/component/preferences-toolbar.test.ts` (034 FR-045) — two tests:
+ *   - the per-tab reset is HIDDEN on the Themes tab, present and named on the editor tabs (FR-011)
+ *   - every toolbar control is a themed icon with a truthful title, no inline <svg>, and the
+ *     misleading `prefs-reset-all` identifier is still gone (FR-009b/FR-012a)
+ *
+ * Each launched Electron, seeded a config root on disk and opened the preferences window in order
+ * to read four `title` attributes and count `<svg>` elements. Nothing they asserted depended on a
+ * process, a window, a file or a write.
+ *
+ * The blocker was structural rather than a judgement about layers: the markup lived inside
+ * `PreferencesShell`, which reaches the config store, the confirm dialog, the reset notice, the
+ * JSON edit gate and IPC, and so cannot mount outside Electron. `preferences-toolbar.tsx` was
+ * extracted first and verified against these specs UNCHANGED — 11 here and 17 in
+ * `preferences-json.e2e.ts`, both green — before a single test was touched.
+ *
+ * Red-proved, five mutations: the per-tab reset returning on Themes, a control regaining the
+ * `prefs-reset-all` id, a title that stops naming its editor, reset-all and revert-all wired to
+ * each other's handler, and the glyph losing its `aria-hidden`.
+ *
+ * WHAT STAYS: every test below that PRESSES one of these buttons and then reads the config off
+ * disk. A component test sees a callback fire; that a click reaches a confirm dialog, an IPC call,
+ * an atomic write and a reload is what those are for, and none of it is visible from jsdom.
+ */
 
-test('every toolbar control is a THEMED icon with a truthful title (015, FR-009b/FR-012a)', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPrefs(app, win, 'settings');
-      await expect(prefs.getByTestId('settings-tab')).toBeVisible();
-      const resetCurrent = prefs.getByTestId('prefs-reset-current');
-      const resetPreferences = prefs.getByTestId('prefs-reset-preferences');
-      const revertAll = prefs.getByTestId('prefs-revert-all');
-      const modeToggle = prefs.getByTestId('prefs-mode-toggle');
-      // Names state the true scope. "Revert All" was a session undo calling itself a reset-all,
-      // and the id `prefs-reset-all` named a scope it did not have.
-      await expect(resetCurrent).toHaveAttribute('title', 'Reset the Settings editor to its defaults');
-      await expect(resetPreferences).toHaveAttribute('title', 'Reset All Preferences');
-      await expect(revertAll).toHaveAttribute('title', 'Revert All Preferences');
-      // The misleading identifier is gone: `prefs-reset-all` used to belong to the SESSION UNDO.
-      await expect(prefs.getByTestId('prefs-reset-all')).toHaveCount(0);
-      // Icons now come from theme tokens — NO inline <svg> survives anywhere in the toolbar
-      // (constitution v3.12.0; these were recorded as known violations at that amendment).
-      await expect(resetCurrent.locator('svg')).toHaveCount(0);
-      await expect(resetPreferences.locator('svg')).toHaveCount(0);
-      await expect(revertAll.locator('svg')).toHaveCount(0);
-      await expect(modeToggle.locator('svg')).toHaveCount(0);
-      // Each renders a themed glyph.
-      expect((await resetCurrent.innerText()).trim().length).toBeGreaterThan(0);
-      expect((await resetPreferences.innerText()).trim().length).toBeGreaterThan(0);
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('reset-all reverts the session to on-entry; cancel is a no-op', async () => {
-  const cfgRoot = freshCfgRoot();
+test('reset-all reverts the session to on-entry; cancel is a no-op', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'settings');
@@ -166,7 +201,6 @@ test('reset-all reverts the session to on-entry; cancel is a no-op', async () =>
       await prefs.getByTestId('prefs-reset-confirm-yes').click();
       await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave).toBe(false);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
@@ -186,8 +220,7 @@ function readKeybindings(cfgRoot: string): any {
   }
 }
 
-test('US1: a key binding shows a reset icon only once overridden, and resetting it restores the shipped chords', async () => {
-  const cfgRoot = freshCfgRoot();
+test('US1: a key binding shows a reset icon only once overridden, and resetting it restores the shipped chords', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'keybindings');
@@ -243,12 +276,10 @@ test('US1: a key binding shows a reset icon only once overridden, and resetting 
       expect(readKeybindings(cfgRoot)?.bindings?.['zoom.out']).toEqual(zoomOutAfterEdit);
       await expect(prefs.getByTestId('binding-reset-zoom.out')).toBeEnabled();
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('US2: a setting shows a reset icon only once overridden, and resetting it leaves its siblings alone', async () => {
-  const cfgRoot = freshCfgRoot();
+test('US2: a setting shows a reset icon only once overridden, and resetting it leaves its siblings alone', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'settings');
@@ -279,16 +310,13 @@ test('US2: a setting shows a reset icon only once overridden, and resetting it l
       expect(readSettings(cfgRoot)?.editor?.autoSaveDebounceMs).toBe(900);
       await expect(prefs.getByTestId('setting-reset-editor.autoSaveDebounceMs')).toBeEnabled();
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('US3: Reset All Preferences restores settings + bindings, states both sides of its scope, and spares custom themes', async () => {
-  const cfgRoot = freshCfgRoot({
-    MyUser: { name: 'MyUser', colours: { accent: '#abcdef' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} },
-  });
+test('US3: Reset All Preferences restores settings + bindings, states both sides of its scope, and spares custom themes', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
+      seedTheme('MyUser', { name: 'MyUser', colours: { accent: '#abcdef' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} });
       const prefs = await openPrefs(app, win, 'settings');
       await expect(prefs.getByTestId('settings-tab')).toBeVisible();
 
@@ -321,12 +349,10 @@ test('US3: Reset All Preferences restores settings + bindings, states both sides
       const custom = JSON.parse(readFileSync(join(cfgRoot, 'themes', 'MyUser.json'), 'utf8'));
       expect(custom.colours.accent).toBe('#abcdef');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('JSON mode hides the row affordances but keeps the toolbar controls', async () => {
-  const cfgRoot = freshCfgRoot();
+test('JSON mode hides the row affordances but keeps the toolbar controls', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'settings');
@@ -346,23 +372,28 @@ test('JSON mode hides the row affordances but keeps the toolbar controls', async
       await expect(prefs.getByTestId('prefs-revert-all')).toBeVisible();
       await expect(prefs.getByTestId('prefs-reset-current')).toBeVisible();
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('a reset that cannot be written says so, and says nothing changed (FR-006a, SC-012)', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
+test('a reset that cannot be written says so, and says nothing changed (FR-006a, SC-012)', { tag: ['@extended', '@prefs'] }, async () => {
+  /*
+   * ITS OWN APP (034 FR-045). This test replaces settings.json with a NON-EMPTY DIRECTORY so the
+   * atomic commit's rename fails. That deliberately corrupts the one resource every other test in
+   * this file shares, and one Electron launch is a fair price for not making the file's remaining
+   * tests depend on the repair at the bottom of this one having worked.
+   */
+  const ownCfgRoot = freshCfgRoot();
+  await runOwnApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'settings');
       await expect(prefs.getByTestId('settings-tab')).toBeVisible();
       await prefs.getByTestId('control-editor.autoSave').click();
       await expect(prefs.getByTestId('setting-reset-editor.autoSave')).toBeEnabled();
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave).toBe(true);
+      await expect.poll(() => readSettings(ownCfgRoot)?.editor?.autoSave).toBe(true);
 
       // Make settings.json unwritable the only way Windows reliably allows: replace it with a
       // NON-EMPTY directory, so the atomic commit's rename fails and feature 010 rolls back.
-      const settingsPath = join(cfgRoot, 'settings.json');
+      const settingsPath = join(ownCfgRoot, 'settings.json');
       const saved = readFileSync(settingsPath, 'utf8');
       rmSync(settingsPath, { force: true });
       mkdirSync(settingsPath, { recursive: true });
@@ -382,12 +413,11 @@ test('a reset that cannot be written says so, and says nothing changed (FR-006a,
       rmSync(settingsPath, { recursive: true, force: true });
       writeFileSync(settingsPath, saved, 'utf8');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+    { env: { THRONG_CONFIG_ROOT: ownCfgRoot } },
   );
 });
 
-test('a reset performed in JSON mode refreshes the visible document (FR-013b)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('a reset performed in JSON mode refreshes the visible document (FR-013b)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'settings');
@@ -409,12 +439,10 @@ test('a reset performed in JSON mode refreshes the visible document (FR-013b)', 
       await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave).toBe(false);
       await expect(json).toContainText('"autoSave": false');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('resets are idempotent, and the four scopes are distinguishable (SC-003, SC-008, SC-011)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('resets are idempotent, and the four scopes are distinguishable (SC-003, SC-008, SC-011)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'settings');
@@ -442,6 +470,5 @@ test('resets are idempotent, and the four scopes are distinguishable (SC-003, SC
         'Revert All Preferences',
       ]);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });

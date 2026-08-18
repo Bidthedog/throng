@@ -59,13 +59,14 @@ async function longTasks(win: Page): Promise<LongTask[]> {
 /** Add a panel to the current tab and make it a cmd terminal. */
 async function addTerminal(win: Page, root: string, existingPanelId: string): Promise<void> {
   await win.getByTestId(`panel-add-${existingPanelId}`).click();
-  await win.waitForTimeout(800);
-  const form = await win.locator('[data-testid^="panel-type-form-"]').first().getAttribute('data-testid');
+  const formLocator = win.locator('[data-testid^="panel-type-form-"]').first();
+  await expect(formLocator).toBeVisible();
+  const form = await formLocator.getAttribute('data-testid');
   const pid = form!.replace('panel-type-form-', '');
   await makeCmdTerminal(win, pid, basename(root));
 }
 
-test('switching to a tab of four terminals never blocks the main thread', async () => {
+test('switching to a tab of four terminals never blocks the main thread', { tag: ['@extended', '@terminal'] }, async () => {
   test.setTimeout(180_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-activation-'));
   try {
@@ -81,15 +82,17 @@ test('switching to a tab of four terminals never blocks the main thread', async 
 
       // A second tab to switch away to.
       await win.getByTestId('tab-add').click();
-      await win.waitForTimeout(1500);
+      const tabs = win.getByTestId('tab-strip').locator('.tab-chip');
+      await expect(tabs).toHaveCount(2);
 
       await watchLongTasks(win);
 
-      const tabs = win.getByTestId('tab-strip').locator('.tab-chip');
       for (let round = 0; round < 3; round += 1) {
         await tabs.first().click(); // back to the four terminals — the expensive direction
+        // sleep-justified: MEASUREMENT WINDOW, not a sync point — the four panels' rebuild, re-attach and redraw requests must run to completion (and any long task be captured by the observer below) before the next switch starts a fresh one.
         await win.waitForTimeout(2500);
         await tabs.last().click();
+        // sleep-justified: MEASUREMENT WINDOW — settle on the away tab so each of the 3 rounds is a genuinely cold re-activation, not overlapping the previous round's async work; same SC-012 sampling cadence as the wait above.
         await win.waitForTimeout(1500);
       }
 

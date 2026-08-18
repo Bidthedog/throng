@@ -9,6 +9,7 @@ import {
   cleanupTemp,
   type AppOptions,
   type OpenApp,
+  TERMINAL_OUTPUT_TIMEOUT_MS,
 } from './harness.js';
 
 /*
@@ -76,7 +77,7 @@ async function newTerminal(win: Page, root: string): Promise<string> {
   const term = win.getByTestId(`terminal-${pid}`);
   await expect(term).toBeVisible();
   // cmd.exe's prompt shows its cwd — the project root — once it is ready for input.
-  await expect(term).toContainText(basename(root), { timeout: 20000 });
+  await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
   return pid;
 }
 
@@ -123,7 +124,7 @@ async function grid(win: Page, pid: string): Promise<{ width: number; rows: numb
   }));
 }
 
-test('finds in the scrollback, counts and steps matches — and types nothing at the shell', async () => {
+test('finds in the scrollback, counts and steps matches — and types nothing at the shell', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-tfind-'));
   try {
     await runApp(async (_app, win) => {
@@ -161,7 +162,7 @@ test('finds in the scrollback, counts and steps matches — and types nothing at
   }
 });
 
-test('parked on a match, incoming output does not yank the viewport away (FR-012a)', async () => {
+test('parked on a match, incoming output does not yank the viewport away (FR-012a)', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-tfind-'));
   try {
     await runApp(async (_app, win) => {
@@ -188,6 +189,7 @@ test('parked on a match, incoming output does not yank the viewport away (FR-012
       await expect(term).toContainText('FREEZE_MARKER');
 
       // The delayed output lands while we sit on the match…
+      // sleep-justified: the only signal that LATE_OUTPUT reached the buffer while parked is the Control+End jump this test performs AFTER, which is the auto-follow resume FR-012a proves happens later.
       await win.waitForTimeout(9000);
 
       // …and the viewport has NOT been dragged down to it: the match is still on screen
@@ -199,14 +201,14 @@ test('parked on a match, incoming output does not yank the viewport away (FR-012
       // is also what resumes following (FR-012a / FR-014).
       await win.getByTestId('find-close').click();
       await win.keyboard.press('Control+End');
-      await expect(term).toContainText('LATE_OUTPUT', { timeout: 15000 });
+      await expect(term).toContainText('LATE_OUTPUT', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
     });
   } finally {
     cleanupTemp(root);
   }
 });
 
-test('with no find bar open, Escape still reaches the shell (it is not throng’s key)', async () => {
+test('with no find bar open, Escape still reaches the shell (it is not throng’s key)', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-tfind-'));
   try {
     await runApp(async (_app, win) => {
@@ -227,7 +229,9 @@ test('with no find bar open, Escape still reaches the shell (it is not throng’
       await win.keyboard.type('echo ESC_REACHED_SHELL', { delay: 15 });
       await win.keyboard.press('Enter');
 
-      await expect(term).toContainText('ESC_REACHED_SHELL', { timeout: 20000 });
+      await expect(term).toContainText('ESC_REACHED_SHELL', {
+        timeout: TERMINAL_OUTPUT_TIMEOUT_MS,
+      });
       await expect(term).not.toContainText('is not recognized');
 
       // While find IS open, Escape is ours: it closes the bar (and still does not reach
@@ -242,7 +246,7 @@ test('with no find bar open, Escape still reaches the shell (it is not throng’
   }
 });
 
-test('the find bar is scoped to one panel — no stray bar on another (spec Edge Cases)', async () => {
+test('the find bar is scoped to one panel — no stray bar on another (spec Edge Cases)', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-tfind-'));
   try {
     await runApp(async (_app, win) => {

@@ -56,7 +56,6 @@ let projectSeq = 0;
 const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
-
 /**
  * US4 — per-language indentation (016, FR-018/FR-018a/FR-018d · T075).
  *
@@ -98,7 +97,7 @@ const docText = (win: Page, pid: string): Promise<string> =>
     pid,
   );
 
-test('a TAB-indented file keeps taking TABS, though the setting says spaces (FR-018a)', async () => {
+test('a TAB-indented file keeps taking TABS, though the setting says spaces (FR-018a)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -122,28 +121,56 @@ test('a TAB-indented file keeps taking TABS, though the setting says spaces (FR-
   }
 });
 
-test('a 4-space file takes 4 spaces, though the global default is 2 (FR-018a)', async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Indent', root);
-      const pid = await openFile(win, 'four.py', 'def a()');
-      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
+/*
+ * MOVED / DELETED (034 FR-045) — two tests.
+ *
+ * 1. `Tab and Shift+Tab indent and outdent EVERY line a selection touches` → the component layer.
+ * The replacements are `packages/ui/tests/component/editor-command-semantics.test.ts` (14 tests).
+ * That file drives the REAL commands from `commands.ts` over a REAL `EditorState` — real facets,
+ * the real `columnBlockField`, real transactions — behind a two-member stand-in for the view,
+ * because every one of these commands touches only `view.state` and `view.dispatch`.
+ *
+ * WHAT THE APP WAS BUYING, AND WHY IT IS NOT NEEDED: the translation from a keystroke to a command
+ * call. That is CodeMirror’s `keymap`, which is not throng’s code to re-test. throng’s own half of
+ * it — which chord reaches which command — is `packages/ui/tests/unit/scope.test.ts:149` and `:168`,
+ * and the chord→CodeMirror-key spelling is asserted in the replacement itself.
+ *
+ * ANTI-VACUITY CONTROL: delete `this.state = tr.state;` from the replacement’s `FakeView.dispatch`,
+ * so transactions are recorded but never applied. ALL FOURTEEN fail. Nothing in that file can pass
+ * over an inert editor.
+ *
+ *    STRONGER: the replacement also asserts that Tab leaves an EMPTY line ALONE
+ *    (`commands.ts:355`) — never covered here, invisible on screen, and loud in a diff — that the
+ *    indent is exactly ONE transaction carrying `input.indent`, and that a TAB-indented line is
+ *    outdented as a tab while the profile says spaces (FR-018a read off the LINE, not the setting).
+ *
+ * 2. `a 4-space file takes 4 spaces, though the global default is 2` → DELETED as already covered
+ *    by `packages/ui/tests/integration/indent-infer.integration.test.ts:132`:
+ *
+ *        expect(settings.indent.indentWidth).toBe(2);
+ *        const inferred = inferIndent(FOUR_SPACE);
+ *        expect(inferred).toEqual({ style: 'spaces', width: 4 });
+ *        expect(indentUnitOf(effectiveIndent({ inferred, languageId: 'python', settings }))).toBe('    ');
+ *
+ *    …and by the component replacement, which asserts that the profile’s unit is what a Tab at a
+ *    bare caret actually inserts.
+ *
+ * WHAT STAYS, AND WHY IT IS NOT AN OVERSIGHT:
+ *
+ *   - `a TAB-indented file keeps taking TABS` is the WIRING WITNESS. `useEditor` calls
+ *     `reinferIndent(state.text)` when a document lands (`use-editor.ts:1153`, `:1036`), and no
+ *     layer below E2E exercises that hook — the integration test proves the DECISION, this proves
+ *     the decision is actually consulted. Deleting it would be the exact "the lower test proves a
+ *     pure function while the E2E proves the wired result" loss FR-046a exists to stop.
+ *   - `an unindented Go file takes a TAB` is the second witness, for the other input to the same
+ *     decision: it is the only test proving the panel’s DETECTED LANGUAGE reaches
+ *     `effectiveIndent` (`use-editor.ts:322`).
+ *   - `opening a file NEVER reindents it, and never marks it dirty` keeps its second half: the
+ *     integration test asserts `dirty === false` at the AUTHORITY, and nothing below E2E asserts
+ *     that the panel’s unsaved dot therefore stays dark.
+ */
 
-      await content.click();
-      await win.keyboard.press('Control+End');
-      await win.keyboard.press('Enter');
-      await win.keyboard.press('Tab');
-      await win.keyboard.type('y');
-
-      await expect.poll(() => docText(win, pid)).toContain('    y'); // …four, not two
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('an unindented Go file takes a TAB — its LANGUAGE decides (FR-018)', async () => {
+test('an unindented Go file takes a TAB — its LANGUAGE decides (FR-018)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -165,39 +192,7 @@ test('an unindented Go file takes a TAB — its LANGUAGE decides (FR-018)', asyn
   }
 });
 
-test('Tab and Shift+Tab indent and outdent EVERY line a selection touches — one undo', async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Indent', root);
-      const pid = await openFile(win, 'four.py', 'def a()');
-      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
-
-      // Select the whole document and indent it.
-      await content.click();
-      await win.keyboard.press('Control+a');
-      await win.keyboard.press('Tab');
-
-      await expect.poll(() => docText(win, pid)).toBe(
-        '    def a():\n        if x:\n            return 1\n',
-      );
-
-      // ONE undo takes the whole indent back, however many lines it moved (FR-026).
-      await win.keyboard.press('Control+z');
-      await expect.poll(() => docText(win, pid)).toBe('def a():\n    if x:\n        return 1\n');
-
-      // …and Shift+Tab outdents every line it touches, leaving an unindented line alone rather than
-      // eating its first character.
-      await win.keyboard.press('Control+a');
-      await win.keyboard.press('Shift+Tab');
-      await expect.poll(() => docText(win, pid)).toBe('def a():\nif x:\n    return 1\n');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('opening a file NEVER reindents it, and never marks it dirty (FR-018d)', async () => {
+test('opening a file NEVER reindents it, and never marks it dirty (FR-018d)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

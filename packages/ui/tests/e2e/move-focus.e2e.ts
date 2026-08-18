@@ -68,7 +68,7 @@ async function expectActive(win: Page, pid: string): Promise<void> {
   await expect(win.locator('.panel-box--active')).toHaveCount(1);
 }
 
-test('directional keys move focus in layout order and stay put at the edge', async () => {
+test('directional keys move focus in layout order and stay put at the edge', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'MoveFocus', 'C:/c/mf');
     await addPanels(win, 2); // a row of three: p1 | p2 | p3
@@ -102,7 +102,7 @@ test('directional keys move focus in layout order and stay put at the edge', asy
   });
 });
 
-test('cycle forward/backward visits panels in layout order, wrapping the ring (SC-008a)', async () => {
+test('cycle forward/backward visits panels in layout order, wrapping the ring (SC-008a)', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'CycleFocus', 'C:/c/cf');
     await addPanels(win, 2); // p1 | p2 | p3
@@ -127,7 +127,7 @@ test('cycle forward/backward visits panels in layout order, wrapping the ring (S
   });
 });
 
-test('move-focus works from a focused terminal and editor, and input routing follows (FR-003)', async () => {
+test('move-focus works from a focused terminal and editor, and input routing follows (FR-003)', { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-mf-io-'));
   try {
     await runApp(async (_app, win) => {

@@ -32,7 +32,45 @@ const TERMINAL_VIEW = /^terminal-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}
  */
 const EXIT_NOTICE = /^panel-exit-[0-9a-f-]{36}$/;
 
-test('a Panel restored with a now-removed flavour surfaces unavailability, not a blank terminal', async () => {
+/**
+ * Wait until the project's layout has actually been persisted to the daemon's SQLite store, in the
+ * shape `predicate` wants — the same idiom `persistence-restore.e2e.ts`'s `expectLayoutSaved` uses,
+ * needed here for the same reason: the layout save is debounced (400ms), and the next step in this
+ * test REWRITES that persisted row directly, so proceeding before it exists means rewriting nothing
+ * (`changed.changes` at 0) rather than the config the confirm click just wrote.
+ */
+async function layoutPersisted(
+  dataDir: string,
+  projectName: string,
+  predicate: (layoutJson: string) => boolean,
+): Promise<void> {
+  await expect
+    .poll(
+      () => {
+        let db: InstanceType<typeof Database> | undefined;
+        try {
+          db = new Database(join(dataDir, 'throng.db'), { readonly: true });
+          const row = db
+            .prepare(
+              `SELECT w.layout_json AS json
+                 FROM workspace_layout w
+                 JOIN projects p ON p.id = w.project_id
+                WHERE p.name = ?`,
+            )
+            .get(projectName) as { json?: string } | undefined;
+          return row?.json !== undefined && predicate(row.json);
+        } catch {
+          return false; // not written yet, or a transient read of a mid-write DB
+        } finally {
+          db?.close();
+        }
+      },
+      { timeout: 15_000, message: `the layout for "${projectName}" was never persisted with a cmd flavour` },
+    )
+    .toBe(true);
+}
+
+test('a Panel restored with a now-removed flavour surfaces unavailability, not a blank terminal', { tag: ['@extended', '@terminal'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -50,7 +88,7 @@ test('a Panel restored with a now-removed flavour surfaces unavailability, not a
         await win.getByTestId('terminal-flavour').selectOption('cmd');
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
         await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: 20000 });
-        await win.waitForTimeout(900); // layout save debounce (400ms) + slack
+        await layoutPersisted(dataDir, 'Persist', (json) => json.includes('"flavourId":"cmd"'));
       },
       { dataDir },
     );

@@ -83,7 +83,7 @@ async function newEditor(win: Page): Promise<string> {
   return pid;
 }
 
-test('clicking a file opens it into the editor; another file replaces a clean doc', async () => {
+test('clicking a file opens it into the editor; another file replaces a clean doc', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -115,7 +115,7 @@ test('clicking a file opens it into the editor; another file replaces a clean do
   }
 });
 
-test('opening a file into a dirty editor shows the four-choice prompt; cancel is a no-op', async () => {
+test('opening a file into a dirty editor shows the four-choice prompt; cancel is a no-op', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -172,7 +172,7 @@ test('opening a file into a dirty editor shows the four-choice prompt; cancel is
 // Repro: a dirty editor whose file was DELETED is active; clicking another file shows
 // the unsaved-changes prompt; "Open in new editor" MUST open the CLICKED file — not
 // some other file (bug: it opened CLAUDE.md / the wrong file).
-test('"Open in new editor" from the unsaved prompt opens the CLICKED file (not CLAUDE.md)', async () => {
+test('"Open in new editor" from the unsaved prompt opens the CLICKED file (not CLAUDE.md)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeDirtyProject();
   try {
     await runApp(async (_app, win) => {

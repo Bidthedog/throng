@@ -25,7 +25,7 @@ async function newEditor(win: Page, pid: string): Promise<void> {
   await expect(win.getByTestId(`editor-${pid}`)).toBeVisible();
 }
 
-test("a panel's zoom and a single active panel survive tab switch, split, and close (FR-005/010)", async () => {
+test("a panel's zoom and a single active panel survive tab switch, split, and close (FR-005/010)", { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-fzl-'));
   try {
     await runApp(async (_app, win) => {
@@ -72,7 +72,7 @@ test("a panel's zoom and a single active panel survive tab switch, split, and cl
   }
 });
 
-test('the main window and a detached sub-workspace hold independent active panels (FR-006)', async () => {
+test('the main window and a detached sub-workspace hold independent active panels (FR-006)', { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-fzl2-'));
   try {
     await runApp(async (app, win) => {
@@ -81,7 +81,11 @@ test('the main window and a detached sub-workspace hold independent active panel
       await win.getByTestId(`panel-add-${p1}`).click();
       await commitPanelRename(win);
       await expect(win.locator('.panel-box')).toHaveCount(2);
-      await win.waitForTimeout(600); // let the debounced layout save flush before reload
+      // sleep-justified: the layout blob sits behind workspace-store's fixed 400ms debounce
+      // sleep-justified: (layout-saves.ts:5) and the write is fire-and-forget past it — nothing on
+      // sleep-justified: `window` reports when the save actually lands, only `settleLayoutSaves()`
+      // sleep-justified: does (main.tsx's app-close drain), which reloadWindow below does not run.
+      await win.waitForTimeout(600);
 
       // Seed + open a sub-workspace window (its own single panel 'p').
       await win.evaluate(seedSub);

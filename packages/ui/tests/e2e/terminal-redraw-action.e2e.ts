@@ -18,7 +18,7 @@ import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
  * focus or layout change, no input typed at the shell, and safe to repeat (FR-043–046).
  */
 
-test('the redraw action is on both menus, changes nothing visible, and types nothing', async () => {
+test('a redraw from either menu, and from Ctrl+F5 three times, loses nothing and types nothing', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-redraw-'));
   const marker = basename(root);
   try {
@@ -44,9 +44,13 @@ test('the redraw action is on both menus, changes nothing visible, and types not
       await term.click({ button: 'right' });
       const item = win.getByTestId('menu-item-Refresh / redraw terminal');
       await expect(item).toBeVisible();
-      // The chord is SHOWN, not merely bound — a menu that offers an action without naming its key
-      // teaches nobody the key (constitution v4.3.0).
-      await expect(item).toContainText('Ctrl+F5');
+      // The chord SHOWN on this row, and on the header row below, is now
+      // `tests/unit/redraw-menu-parity.test.ts` (034 FR-045): it is builder data, and that file
+      // asserts it harder than a launch could — the two labels are compared with EACH OTHER rather
+      // than written out twice, a REBIND is shown to move what both menus display (this test only
+      // ever ran against the shipped binding, so a hard-coded string passed it), and each row’s
+      // onClick is observed. Both menu items are still opened here, because they are the triggers
+      // this test needs; what stays is everything a real ConPTY is required for.
       await item.click();
 
       // Nothing was lost, and nothing was typed: a redraw is never a keystroke (FR-044).

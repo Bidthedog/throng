@@ -16,7 +16,7 @@ import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
  *     large. The session is registered before the delay, so the retry (a reuse) is fast.
  * `skipDaemon` makes the APP spawn its own daemon, which inherits these env vars.
  */
-test('a slow-starting terminal shows the "still starting" state and recovers on retry', async () => {
+test('a slow-starting terminal shows the "still starting" state and recovers on retry', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-slowstart-'));
   try {
     await runApp(
@@ -65,7 +65,17 @@ test('a slow-starting terminal shows the "still starting" state and recovers on 
         // "still starting", and the terminal never painted — the test then sat for 20s on a
         // blank terminal. (Reproduced 3/3 under load; 3/3 green in isolation.) The retry was
         // never meant to be on a clock; only the first attach is.
-        env: { THRONG_ATTACH_TIMEOUT_MS: '2000', THRONG_ATTACH_DELAY_MS: '8000' },
+        //
+        // 8000/2000 was that fix, and it was not enough. The SAME failure recurred at six
+        // workers in the 034 baseline — blank terminal, the 20s assertion below timing out —
+        // because a 2000ms budget still does not cover the retry's round-trip on a saturated
+        // box. That diagnosis was right and its numbers were merely too small, so the numbers
+        // move again and the reasoning does not: 5000 gives the retry room a contended
+        // round-trip actually needs, and 20000 keeps delay >> budget at the same 4x margin,
+        // so the FIRST attach still always misses. The delay costs no wall-clock — the daemon
+        // registers the session before it delays, so the retry is a reuse and returns at once;
+        // nothing ever waits 20 seconds.
+        env: { THRONG_ATTACH_TIMEOUT_MS: '5000', THRONG_ATTACH_DELAY_MS: '20000' },
       },
     );
   } finally {

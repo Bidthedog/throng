@@ -9,6 +9,7 @@ import {
   firstPanelId,
   panelIds,
   cleanupTemp,
+  quiesced,
   type AppOptions,
   type OpenApp,
 } from './harness.js';
@@ -78,7 +79,7 @@ const createProject = (win: OpenApp['win'], name: string, root: string): Promise
  * DEFECT 1 — clicking into a terminal running a full-screen program wipes its screen down to one
  * line, and only a wheel-up (which sends the program arrow keys, making it redraw) brings it back.
  */
-test('clicking into a terminal on the alternate screen does not wipe its screen', async () => {
+test('clicking into a terminal on the alternate screen does not wipe its screen', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-altclick-'));
   const marker = basename(root);
   writeAltScreenProgram(root);
@@ -93,12 +94,15 @@ test('clicking into a terminal on the alternate screen does not wipe its screen'
       // Click elsewhere and back — the reported gesture.
       await win.getByTestId('tab-strip').click();
       await term.click();
-      await win.waitForTimeout(1500);
+      // Wait for whatever the click does to the screen to actually happen and settle — a redrawing
+      // terminal is exactly what quiesced() exists for, and it keeps waiting if the wipe this test
+      // guards against arrives late rather than resolving before it has had its chance.
+      const settledText = await quiesced(term, { what: 'terminal after click back' });
 
       // Every painted row must still be there. The program has not been asked to redraw, so this
       // is a pure question about what throng did to the screen it was already showing.
       for (let i = 1; i <= 5; i += 1) {
-        await expect(term).toContainText(`${ALT_MARKER}${i}`);
+        expect(settledText).toContain(`${ALT_MARKER}${i}`);
       }
     });
   } finally {
@@ -116,7 +120,7 @@ test('clicking into a terminal on the alternate screen does not wipe its screen'
  * The tail is the removable one: a program on the alternate screen has no scrollback worth
  * replaying, and painting it is a flash the user sees for nothing.
  */
-test('re-attaching to an alternate-screen program replays no scrollback', async () => {
+test('re-attaching to an alternate-screen program replays no scrollback', { tag: ['@extended', '@terminal'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -169,7 +173,7 @@ test('re-attaching to an alternate-screen program replays no scrollback', async 
  * This drives the shape directly: put real scrollback above a program that repaints exactly like a
  * `cls` when the window changes, then ask for a redraw. The scrollback must survive.
  */
-test('a requested redraw is not mistaken for a screen clear', async () => {
+test('a requested redraw is not mistaken for a screen clear', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-redrawclear-'));
   const marker = basename(root);
   // A NORMAL-buffer program: no alt screen, so the existing alt-screen guard cannot save it.
@@ -203,12 +207,14 @@ process.stdin.resume();
 
       // Ask for a redraw — the program repaints in exactly the shape of a `cls`.
       await win.keyboard.press('Control+F5');
-      await win.waitForTimeout(2000);
+      // Wait for the requested redraw to actually land and settle before reading anything — the
+      // same redrawing-terminal condition quiesced() exists for.
+      const settledText = await quiesced(term, { what: 'terminal after requested redraw' });
 
       // The scrollback must survive. If it does not, the redraw was mistaken for a screen clear and
       // `term.clear()` threw everything above the cursor away.
-      await expect(term).toContainText('KEEPLINE-A');
-      await expect(term).toContainText('KEEPLINE-B');
+      expect(settledText).toContain('KEEPLINE-A');
+      expect(settledText).toContain('KEEPLINE-B');
     });
   } finally {
     cleanupTemp(root);

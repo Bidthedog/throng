@@ -2,7 +2,14 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import {
+  openApp,
+  createProject,
+  firstPanelId,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
 
 // US1 / Plan Phase A (FR-001..008, SC-001/002/010): a new Panel shows an
 // extensible type-selection form instead of "Empty Panel"; choosing Terminal
@@ -10,8 +17,70 @@ import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 // also launches the live terminal, and closing it reverts the Panel to the form.
 // (Reload persistence is covered by terminal-persistence.e2e.ts / US3.)
 
-test('replaces Empty Panel with the type form; swaps inputs; Clear resets; Confirm types + launches', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-form-'));
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-027) — 2 launches -> 1.
+ *
+ * ══ THIS FILE STARTS TWO REAL SHELLS, AND THAT IS EXACTLY WHY IT IS SAFE ══
+ *
+ * The blanket rule is that a spec leaving a live shell keeps its own app, because the shell
+ * outlives the test that made it and holds the project root. Here the shell's DEATH is the
+ * subject: each test types `exit` and then asserts the panel has REVERTED TO ITS TYPE FORM
+ * (:62, :102). That assertion is the application observing the session end — a named teardown,
+ * awaited, not a hope. Neither test can pass with its shell still running.
+ *
+ * The roots still move to `afterAll`: cmd can hold a handle for a moment after the panel has
+ * reverted, and deleting a watched root under the running app is the class dcdcb46 reverted.
+ *
+ * Test 2 also opens a SUB-WORKSPACE WINDOW and never closes it. The afterEach closes it: a
+ * second top-level window competes for focus, and throng closes menus on blur.
+ */
+const ownedRoots: string[] = [];
+/** Register a project root for removal in `afterAll`, once the shared app has closed. */
+function own(dir: string): string {
+  ownedRoots.push(dir);
+  return dir;
+}
+
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+
+test.afterAll(async () => {
+  await shared?.close();
+  for (const dir of ownedRoots.splice(0)) cleanupTemp(dir);
+});
+
+test.afterEach(async () => {
+  if (!shared) return;
+  for (const page of shared.app.windows()) {
+    if (!page.isClosed() && page.url().includes('sw=')) await page.close().catch(() => {});
+  }
+  await expect
+    .poll(() => shared.app.windows().filter((w) => w.url().includes('sw=')).length, {
+      timeout: 5000,
+    })
+    .toBe(0);
+  await shared.win.bringToFront();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
+
+test('replaces Empty Panel with the type form; swaps inputs; Clear resets; Confirm types + launches', { tag: ['@extended', '@window'] }, async () => {
+  const root = own(mkdtempSync(join(tmpdir(), 'throng-form-')));
   try {
     await runApp(async (_app, win) => {
       await createProject(win, 'Typed', root);
@@ -62,12 +131,14 @@ test('replaces Empty Panel with the type form; swaps inputs; Clear resets; Confi
       await expect(win.getByTestId(`panel-type-form-${pid}`)).toBeVisible({ timeout: 15000 });
     });
   } finally {
-    cleanupTemp(root);
+    // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would
+    // remove a folder the application is still watching — the class dcdcb46 reverted three
+    // conversions for.
   }
 });
 
-test('the type form renders and confirms in a sub-workspace window (FR-008)', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-form-sub-'));
+test('the type form renders and confirms in a sub-workspace window (FR-008)', { tag: ['@extended', '@window'] }, async () => {
+  const root = own(mkdtempSync(join(tmpdir(), 'throng-form-sub-')));
   try {
     await runApp(async (app, win) => {
       await createProject(win, 'SubForm', root);
@@ -102,6 +173,8 @@ test('the type form renders and confirms in a sub-workspace window (FR-008)', as
       await expect(child.getByTestId(`panel-type-form-${pid}`)).toBeVisible({ timeout: 15000 });
     });
   } finally {
-    cleanupTemp(root);
+    // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would
+    // remove a folder the application is still watching — the class dcdcb46 reverted three
+    // conversions for.
   }
 });

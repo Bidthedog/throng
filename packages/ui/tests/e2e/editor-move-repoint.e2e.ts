@@ -27,9 +27,9 @@
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import Database from 'better-sqlite3';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, addPanels, cleanupTemp} from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { runApp, createProject, firstPanelId, cleanupTemp, FILE_OP_TIMEOUT_MS } from './harness.js';
 
 /** A project with a file at the root and an empty `dest` folder to move it into. */
 function makeProject(tag: string): string {
@@ -90,14 +90,6 @@ async function docPath(win: Page, pid: string): Promise<string | null> {
   return normPath(raw);
 }
 
-/** The one-buffer registry's answer for a path: focus an existing editor, or open a new one? */
-function openDecision(win: Page, absPath: string): Promise<string> {
-  return win.evaluate(
-    async (p) => (await window.throng.editor.openInto({ absPath: p })).action,
-    absPath,
-  );
-}
-
 const menuItem = (win: Page, label: string) =>
   win.locator('.context-menu__item', { hasText: label });
 
@@ -118,8 +110,8 @@ async function cutPaste(win: Page, name: string, destName: string): Promise<void
  * failure below can only mean the editor got it wrong.
  */
 async function expectMovedOnDisk(from: string, to: string): Promise<void> {
-  await expect.poll(() => existsSync(to), { timeout: 10000 }).toBe(true);
-  await expect.poll(() => existsSync(from), { timeout: 10000 }).toBe(false);
+  await expect.poll(() => existsSync(to), { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
+  await expect.poll(() => existsSync(from), { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
 }
 
 /**
@@ -133,10 +125,57 @@ async function expectMovedOnDisk(from: string, to: string): Promise<void> {
  * is an order of magnitude more than it needs.
  */
 async function letWatcherFire(win: Page): Promise<void> {
+  // sleep-justified: the assertions after this are NEGATIVE (no dirty flag, no notice) and the
+  // sleep-justified: watch is an fs.watch + re-read with no completion signal a test can observe —
+  // sleep-justified: waiting on docPath() instead would make the re-point assertion HARD and defeat
+  // sleep-justified: the soft-expect design right above, which wants all three symptoms reported.
   await win.waitForTimeout(1500);
 }
 
-test('AC1 — a cut+paste move re-points the editor; it does not go dirty and raises no notice', async () => {
+/**
+ * Wait until PROJECT's persisted layout has actually picked up PATH — replacing a guess about the
+ * layout autosave's 400ms debounce with the real write (the #246 defect class: slept past a write
+ * it then could not read). Walks every string leaf of the parsed layout and compares it by
+ * IDENTITY via {@link normPath}, the same way `docPath` above does, so it matches regardless of
+ * which separator style the persisted path happens to use.
+ */
+async function expectLayoutHasPath(dataDir: string, projectName: string, path: string): Promise<void> {
+  const target = normPath(path);
+  await expect
+    .poll(
+      () => {
+        let db: InstanceType<typeof Database> | undefined;
+        try {
+          db = new Database(join(dataDir, 'throng.db'), { readonly: true });
+          const row = db
+            .prepare(
+              `SELECT w.layout_json AS json
+                 FROM workspace_layout w
+                 JOIN projects p ON p.id = w.project_id
+                WHERE p.name = ?`,
+            )
+            .get(projectName) as { json?: string } | undefined;
+          if (row?.json === undefined) return false;
+          const strings: string[] = [];
+          const walk = (v: unknown): void => {
+            if (typeof v === 'string') strings.push(v);
+            else if (Array.isArray(v)) v.forEach(walk);
+            else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+          };
+          walk(JSON.parse(row.json));
+          return strings.some((s) => normPath(s) === target);
+        } catch {
+          return false; // not written yet, or a transient read of a mid-write DB
+        } finally {
+          db?.close();
+        }
+      },
+      { timeout: 15_000, message: `the layout for "${projectName}" never picked up ${path}` },
+    )
+    .toBe(true);
+}
+
+test('AC1 — a cut+paste move re-points the editor; it does not go dirty and raises no notice', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject('ac1');
   const oldPath = join(root, 'note.txt');
   const newPath = join(root, 'dest', 'note.txt');
@@ -174,7 +213,7 @@ test('AC1 — a cut+paste move re-points the editor; it does not go dirty and ra
   }
 });
 
-test('AC2 — a drag-move re-points the editor just as a cut+paste does', async () => {
+test('AC2 — a drag-move re-points the editor just as a cut+paste does', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject('ac2');
   const oldPath = join(root, 'note.txt');
   const newPath = join(root, 'dest', 'note.txt');
@@ -197,7 +236,7 @@ test('AC2 — a drag-move re-points the editor just as a cut+paste does', async 
   }
 });
 
-test('AC3 — saving after a move writes to the NEW location and does not re-create the old file', async () => {
+test('AC3 — saving after a move writes to the NEW location and does not re-create the old file', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject('ac3');
   const oldPath = join(root, 'note.txt');
   const newPath = join(root, 'dest', 'note.txt');
@@ -220,7 +259,7 @@ test('AC3 — saving after a move writes to the NEW location and does not re-cre
 
       // The edit lands at the NEW location…
       await expect
-        .poll(() => (existsSync(newPath) ? readFileSync(newPath, 'utf8') : ''), { timeout: 8000 })
+        .poll(() => (existsSync(newPath) ? readFileSync(newPath, 'utf8') : ''), { timeout: FILE_OP_TIMEOUT_MS })
         .toContain('EDITED-AFTER-MOVE');
       // …and the save does NOT silently undo the move by re-creating the old file.
       expect(existsSync(oldPath), `save re-created the moved-from file at ${oldPath}`).toBe(false);
@@ -231,120 +270,32 @@ test('AC3 — saving after a move writes to the NEW location and does not re-cre
   }
 });
 
-test('AC4 — the one-buffer registry follows the move: the new path focuses the existing editor', async () => {
-  const root = makeProject('ac4');
-  const oldPath = join(root, 'note.txt');
-  const newPath = join(root, 'dest', 'note.txt');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Mv4', root);
-      const pid = await newEditor(win, await firstPanelId(win));
-      await openInto(win, pid, 'note.txt', 'MOVE-ME-BODY');
-      // Before the move, the registry knows the file is open at its original path.
-      expect(await openDecision(win, oldPath)).toBe('focus');
-
-      await cutPaste(win, 'note.txt', 'dest');
-      await expectMovedOnDisk(oldPath, newPath);
-      await letWatcherFire(win);
-
-      // FR-011a, one buffer per file: the file is still open — at its new path.
-      expect(await openDecision(win, newPath)).toBe('focus');
-      // And the old path is no longer claimed by anyone — a stale claim there would refuse a
-      // later Save-As onto it ("already open in another editor", editor-coordinator.ts:480).
-      expect(await openDecision(win, oldPath)).toBe('open');
-    });
-  } finally {
-    rmRoot(root);
-  }
-});
-
-test('AC5 — a clean move leaves no recovery snapshot stranding the document at its old path', async () => {
-  const root = makeProject('ac5');
-  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-mv-ac5-ud-'));
-  const oldPath = join(root, 'note.txt');
-  const newPath = join(root, 'dest', 'note.txt');
-  try {
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'Mv5', root);
-        const pid = await newEditor(win, await firstPanelId(win));
-        await openInto(win, pid, 'note.txt', 'MOVE-ME-BODY');
-
-        await cutPaste(win, 'note.txt', 'dest');
-        await expectMovedOnDisk(oldPath, newPath);
-        await letWatcherFire(win);
-
-        /*
-         * Snapshots are keyed by panelId and carry no path (editor-recovery.ts), so a moved
-         * document's snapshot cannot "point" anywhere by itself — it strands the document by
-         * EXISTING. The panel's path is restored from the persisted layout (the OLD path), and
-         * a snapshot beside it is then restored over it, dirty. So the property that matters is
-         * that a move leaves the document CLEAN and therefore leaves no snapshot at all: the
-         * same thing `load()`'s re-point branch does when a panel is pointed at a new file
-         * (editor-coordinator.ts:217, `await this.recovery.remove(...)`).
-         *
-         * Today `markDeleted` writes one immediately and undebounced (editor-coordinator.ts:288),
-         * which is precisely the crash-restores-to-the-old-path hazard the criterion names.
-         */
-        const snapshot = join(userDataDir, 'recovery', encodeURIComponent(pid));
-        expect(
-          existsSync(snapshot),
-          `a recovery snapshot was written for a document that only MOVED (${snapshot})`,
-        ).toBe(false);
-      },
-      { userDataDir },
-    );
-  } finally {
-    rmRoot(root);
-    rmRoot(userDataDir);
-  }
-});
-
-test('AC6 — moving a FOLDER re-points every open file inside it', async () => {
-  skipIfElevated();
-  const root = mkdtempSync(join(tmpdir(), 'throng-mv-ac6-'));
-  mkdirSync(join(root, 'pack'));
-  mkdirSync(join(root, 'dest'));
-  writeFileSync(join(root, 'pack', 'one.txt'), 'ONE-BODY\n');
-  writeFileSync(join(root, 'pack', 'two.txt'), 'TWO-BODY\n');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Mv6', root);
-      await addPanels(win, 1); // two panels → two editors, one file each
-      const [pidA, pidB] = await win
-        .locator('.panel-box')
-        .evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.panelId ?? ''));
-      await newEditor(win, pidA);
-      await newEditor(win, pidB);
-
-      /*
-       * Expand `pack` via its TWISTY, not by clicking its name.
-       *
-       * #121 made the folder name select-only; expansion is the twisty's job alone. This test kept
-       * clicking the name, so the folder never opened and `one.txt` was never in the tree — it has
-       * been failing in every environment since, which the elevation guard hid on CI.
-       */
-      const tree = win.getByTestId('file-explorer-tree');
-      await tree.getByTestId('tree-twisty-pack').click();
-      await expect(tree.getByText('one.txt', { exact: true })).toBeVisible();
-      await openInto(win, pidA, 'one.txt', 'ONE-BODY');
-      await openInto(win, pidB, 'two.txt', 'TWO-BODY');
-
-      // Move the whole folder into `dest`.
-      await cutPaste(win, 'pack', 'dest');
-      await expectMovedOnDisk(join(root, 'pack', 'one.txt'), join(root, 'dest', 'pack', 'one.txt'));
-      await letWatcherFire(win);
-
-      // Both documents live under the folder's new home; neither went dirty.
-      expect(await docPath(win, pidA)).toBe(normPath(join(root, 'dest', 'pack', 'one.txt')));
-      expect(await docPath(win, pidB)).toBe(normPath(join(root, 'dest', 'pack', 'two.txt')));
-      await expect(win.getByTestId(`panel-unsaved-${pidA}`)).toHaveCount(0);
-      await expect(win.getByTestId(`panel-unsaved-${pidB}`)).toHaveCount(0);
-    });
-  } finally {
-    rmRoot(root);
-  }
-});
+/*
+ * DELETED (034 FR-045) — AC4, AC5 and AC6, each already asserted in
+ * `packages/ui/tests/integration/editor-move.integration.test.ts` against the real coordinator:
+ *
+ *   AC4 → "the one-buffer registry and the folder watch both follow the file". It asserts the
+ *   EXACT pair this test did — `openInto(to)` is `focus` for the same panel, `openInto(from)` is
+ *   `open` — and then goes further, writing to the moved file and requiring the document to
+ *   notice, which proves the per-folder watch re-attached. Strictly more than the E2E asked.
+ *
+ *   AC5 → "a clean move is not news: no dirty, no delete, no notice, and no recovery snapshot
+ *   (FR-003/AC5)", which names the criterion in its own title and asks `coord.recover()` rather
+ *   than looking for a file under a seeded `userDataDir`. That also removes one of this file’s
+ *   two own-app launches.
+ *
+ *   AC6 → "rewrites the path by prefix, in the destination folder’s own spelling" plus
+ *   "matches by identity, never by spelling: `pack-lock.txt` is not under `pack`". The second is
+ *   the trap a prefix rewrite actually falls into, and no E2E here ever tested it. AC6 also
+ *   called `skipIfElevated()`, so it never ran on CI at all — the coverage it appeared to give
+ *   was only ever a developer’s local run.
+ *
+ * WHAT STAYS: AC1, because it is the one test joining the tree gesture to the coordinator and the
+ * only assertion on the panel’s file pill; AC2 and AC3, whose residues are a real drag and a real
+ * Ctrl+S clearing the unsaved indicator; AC7, the external-mover guard; and AC8, which restarts
+ * the app and is the only thing that can tell "the view adopted the path on remount" from "the
+ * layout learnt it".
+ */
 
 /**
  * FR-008, for a panel that is NOT on screen when the move happens.
@@ -358,7 +309,7 @@ test('AC6 — moving a FOLDER re-points every open file inside it', async () => 
  * The restart is the assertion. Nothing else can distinguish "the view adopted the new path when it
  * remounted" (which was always true, and is worth nothing here) from "the LAYOUT learnt it".
  */
-test('AC8 — a move reaches the persisted layout of a panel in a BACKGROUND tab (FR-008)', async () => {
+test('AC8 — a move reaches the persisted layout of a panel in a BACKGROUND tab (FR-008)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject('ac8');
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-mv-ac8-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-mv-ac8-ud-'));
@@ -380,7 +331,7 @@ test('AC8 — a move reaches the persisted layout of a panel in a BACKGROUND tab
         await expectMovedOnDisk(oldPath, newPath);
         // The coordinator is the authority and knows where the document lives, mounted or not.
         expect(await docPath(win, pid)).toBe(normPath(newPath));
-        await win.waitForTimeout(1200); // > the layout autosave debounce (400ms)
+        await expectLayoutHasPath(dataDir, 'Mv8', newPath);
       },
       { dataDir, userDataDir },
     );
@@ -420,7 +371,7 @@ test('AC8 — a move reaches the persisted layout of a panel in a BACKGROUND tab
  * file is the correct answer (FR-099), and it is the behaviour the fix for #87 must not sweep
  * away while making in-app moves quiet.
  */
-test('AC7 (guard) — a file moved by ANOTHER program still keeps its buffer, dirty and recoverable', async () => {
+test('AC7 (guard) — a file moved by ANOTHER program still keeps its buffer, dirty and recoverable', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject('ac7');
   const oldPath = join(root, 'note.txt');
   const away = join(root, 'dest', 'note.txt');
@@ -447,7 +398,7 @@ test('AC7 (guard) — a file moved by ANOTHER program still keeps its buffer, di
       await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
       await win.keyboard.press('Control+s');
       await expect
-        .poll(() => (existsSync(oldPath) ? readFileSync(oldPath, 'utf8') : ''), { timeout: 8000 })
+        .poll(() => (existsSync(oldPath) ? readFileSync(oldPath, 'utf8') : ''), { timeout: FILE_OP_TIMEOUT_MS })
         .toContain('MOVE-ME-BODY');
     });
   } finally {

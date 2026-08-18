@@ -62,8 +62,9 @@ import { skipIfElevated } from './admin.js';
  * id were ever wrong, so the negatives elsewhere cannot quietly stop testing anything.
  *
  * NOTE for whoever picks up #246 ("reads the layout after a fixed sleep, not after the write"): that
- * defect is in this file's `waitForTimeout(3000)` + `layoutJson` reads and is untouched here. This
- * change moves locators only.
+ * defect lived in this file's timed wait plus `layoutJson` reads, addressed in 034 (I251) — see the
+ * `sleep-justified` markers by the two waits below for why a fence is still not possible there. This
+ * change moved locators only.
  */
 
 /**
@@ -86,7 +87,13 @@ function bannerControl(win: Page, pid: string, name: string): Locator {
   return failureBanner(win, pid).getByRole('button', { name, exact: true });
 }
 
-/** The persisted layout blob for `projectName`, or '' if there isn't one yet. */
+/**
+ * The persisted layout blob for `projectName`, or '' if there isn't one yet.
+ *
+ * '' means "could not read", NOT "the layout is empty" — the two are different facts and collapsing
+ * them is the defect #246 was reported for. Every caller must therefore establish that this returned
+ * something before asserting on what it contains; a bare read can be the database mid-write.
+ */
 function layoutJson(dataDir: string, projectName: string): string {
   let db: InstanceType<typeof Database> | undefined;
   try {
@@ -140,7 +147,7 @@ async function enterProject(win: Page, name: string): Promise<void> {
   await expect(win.locator('.panel-box').first()).toBeVisible({ timeout: 20_000 });
 }
 
-test('a terminal that could not start offers Try again and Clear, on the badge and in its menu', async () => {
+test('a terminal that could not start offers Try again and Clear, on the badge and in its menu', { tag: ['@extended', '@terminal'] }, async () => {
   // An elevated daemon routes terminals through the de-elevated agent — a different process tree
   // from the one these assertions describe.
   skipIfElevated();
@@ -304,7 +311,7 @@ test('a terminal that could not start offers Try again and Clear, on the badge a
  * asserted here, because getting any one of them wrong turns a helpful line into either noise or a
  * false alarm. `fallbackToReport` unit-tests WHEN to report; this is the half that reaches a user.
  */
-test('a remembered directory that has gone is reported in the panel, and is not an error', async () => {
+test('a remembered directory that has gone is reported in the panel, and is not an error', { tag: ['@extended', '@terminal'] }, async () => {
   skipIfElevated();
   test.setTimeout(300_000);
 
@@ -439,7 +446,7 @@ test('a remembered directory that has gone is reported in the panel, and is not 
  * renderer-local — it unmounts and remounts the panel — so it reaches the attach path with no daemon
  * needed to get there.
  */
-test('a terminal keeps its configuration when the daemon is gone, not just when a folder is', async () => {
+test('a terminal keeps its configuration when the daemon is gone, not just when a folder is', { tag: ['@extended', '@terminal'] }, async () => {
   skipIfElevated();
   test.setTimeout(240_000);
 
@@ -486,7 +493,39 @@ test('a terminal keeps its configuration when the daemon is gone, not just when 
          * The persisted half is the one that matters: a reverted layout is written back, so the loss
          * outlives the session that caused it. That is what "for good" means in #204's title.
          */
-        await win.waitForTimeout(3000); // let any erroneous revert be written before reading
+        /*
+         * #246. The reported failure here was NOT a late write — it was an empty READ.
+         *
+         * `layoutJson` returns '' for any read it cannot complete, including a database the dying
+         * daemon still holds. The old code slept 3000ms and then read once, so an unreadable moment
+         * became the string '', and the assertion below fired with "the persisted layout stopped
+         * describing a terminal" — accusing the product of a revert that never happened and sending
+         * the reader into it. FR-013: an unwritten or unreadable file is an unfinished precondition,
+         * never evidence.
+         *
+         * A FENCE WAS TRIED HERE FIRST AND IS NOT POSSIBLE, which is worth writing down because it
+         * is not obvious. The natural fix for "prove nothing was written" is to observe a LATER
+         * write and reason that anything earlier must already be on disk. There is no later write:
+         * the daemon owns the layout, the daemon has just been killed, and nothing persists until it
+         * comes back. Measured — adding two more tabs takes the UI to three while the stored layout
+         * stays at one, for the full 30s. So there is no observable event to wait for, which is
+         * exactly the case FR-016 allows a fixed wait for, with its reason stated.
+         *
+         * So the wait stays and the READ is what changes: poll until the layout is actually
+         * readable, then assert on it.
+         */
+        // sleep-justified: the daemon is dead and owns the layout, so no later write exists to fence against — polling the READ below for readability is the only condition left, and it is what this wait leads into.
+        await win.waitForTimeout(3000); // FR-016: the revert window; with the daemon dead nothing
+        // signals "the app has decided not to write", and no later write exists to fence against.
+        await expect
+          .poll(() => layoutJson(dataDir, 'DaemonGone').length, {
+            timeout: 30_000,
+            message:
+              'the persisted layout was never readable, so the assertions below would have been ' +
+              'about a failed read rather than about the product',
+          })
+          .toBeGreaterThan(0);
+
         const layout = layoutJson(dataDir, 'DaemonGone');
         expect(layout, 'the persisted layout stopped describing a terminal').toContain('"kind":"terminal"');
         expect(layout, 'the flavour the user chose was discarded').toContain('"flavourId":"cmd"');
@@ -508,7 +547,16 @@ test('a terminal keeps its configuration when the daemon is gone, not just when 
         const retry = bannerControl(win, pid, 'Try again');
         if (await retry.isVisible().catch(() => false)) {
           await retry.click();
+          // Same reasoning as above: no later write exists to fence against while the daemon is
+          // down, so the wait stays (FR-016) and the read is made robust instead.
+          // sleep-justified: the daemon is still dead here too, so there is no later write to fence against — the readability poll right below is the only real condition available.
           await win.waitForTimeout(3000);
+          await expect
+            .poll(() => layoutJson(dataDir, 'DaemonGone').length, {
+              timeout: 30_000,
+              message: 'the persisted layout was never readable, so the assertion below proves nothing',
+            })
+            .toBeGreaterThan(0);
           expect(
             layoutJson(dataDir, 'DaemonGone'),
             'pressing Retry with the daemon down destroyed the panel configuration',

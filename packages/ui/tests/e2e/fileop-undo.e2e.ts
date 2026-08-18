@@ -10,14 +10,12 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import {
-  openApp,
+import { openApp,
   createProject as newProject,
   firstPanelId,
   cleanupTemp,
   type AppOptions,
-  type OpenApp,
-} from './harness.js';
+  type OpenApp, FILE_OP_TIMEOUT_MS } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /*
@@ -72,7 +70,7 @@ async function rowMenu(win: Page, name: string): Promise<void> {
   await expect(win.getByTestId('context-menu')).toBeVisible();
 }
 
-test('Ctrl+Z reverses a rename, and Ctrl+Y puts it back', async () => {
+test('Ctrl+Z reverses a rename, and Ctrl+Y puts it back', { tag: ['@extended', '@explorer'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-undo-'));
   writeFileSync(join(root, 'before.txt'), 'content\n');
   try {
@@ -116,7 +114,7 @@ test('Ctrl+Z reverses a rename, and Ctrl+Y puts it back', async () => {
   }
 });
 
-test('undo works from anywhere in the pane, not only with a row focused', async () => {
+test('undo works from anywhere in the pane, not only with a row focused', { tag: ['@extended', '@explorer'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-undopane-'));
   writeFileSync(join(root, 'renamed.txt'), 'x\n');
   try {
@@ -138,7 +136,7 @@ test('undo works from anywhere in the pane, not only with a row focused', async 
       // Click the pane's header — inside Files & Folders, but not on a row and not in the tree.
       await win.getByTestId('files-pane').getByText('Files & Folders').click();
       await win.keyboard.press('Control+z');
-      await expect.poll(() => existsSync(join(root, 'renamed.txt')), { timeout: 8000 }).toBe(true);
+      await expect.poll(() => existsSync(join(root, 'renamed.txt')), { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
       expect(existsSync(join(root, 'other.txt'))).toBe(false);
     });
   } finally {
@@ -146,7 +144,7 @@ test('undo works from anywhere in the pane, not only with a row focused', async 
   }
 });
 
-test('undo reverses a move back out of the folder it went into', async () => {
+test('undo reverses a move back out of the folder it went into', { tag: ['@extended', '@explorer'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-undomove-'));
   mkdirSync(join(root, 'dst'));
   writeFileSync(join(root, 'moved.txt'), 'x\n');
@@ -174,7 +172,7 @@ test('undo reverses a move back out of the folder it went into', async () => {
         .poll(
           () =>
             `${existsSync(join(root, 'dst', 'moved.txt'))},${existsSync(join(root, 'moved.txt'))}`,
-          { timeout: 8000 },
+          { timeout: FILE_OP_TIMEOUT_MS },
         )
         .toBe('true,false');
 
@@ -190,11 +188,11 @@ test('undo reverses a move back out of the folder it went into', async () => {
        * `evaluate` in this position — a few milliseconds of round-trip was enough to hide it, which
        * is what identified the gap as the cause rather than focus. (That probe also ruled focus out
        * directly: `document.activeElement` was the same unclassed DIV in every run, passing or not.)
-       *
-       * `canUndoFileOp` drives the context menu's Undo item, but it is only rendered while that menu
-       * is open, so there is no passive signal to wait on — the one case where a bounded wait beats
-       * waiting on a condition.
        */
+      // sleep-justified: canUndoFileOp only renders while the context menu is open, so there is no
+      // sleep-justified: passive signal for "the undo entry was recorded" to wait on — the poll above
+      // sleep-justified: proves the move landed on disk, not that the renderer pushed its undo record,
+      // sleep-justified: and under load the chord can arrive first and find nothing to undo.
       await win.waitForTimeout(300);
       // Undo puts it back at the root, where the user had it — again, both ends together.
       await win.keyboard.press('Control+z');
@@ -202,7 +200,7 @@ test('undo reverses a move back out of the folder it went into', async () => {
         .poll(
           () =>
             `${existsSync(join(root, 'moved.txt'))},${existsSync(join(root, 'dst', 'moved.txt'))}`,
-          { timeout: 8000 },
+          { timeout: FILE_OP_TIMEOUT_MS },
         )
         .toBe('true,false');
     });
@@ -211,7 +209,7 @@ test('undo reverses a move back out of the folder it went into', async () => {
   }
 });
 
-test('undoing a delete un-strands the editor that was open on the file', async () => {
+test('undoing a delete un-strands the editor that was open on the file', { tag: ['@extended', '@explorer'] }, async () => {
   skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-undodel-'));
   writeFileSync(join(root, 'open.txt'), 'ORIGINAL\n');
@@ -240,7 +238,7 @@ test('undoing a delete un-strands the editor that was open on the file', async (
       // the user their work is at risk over a file that is sitting on disk again, and every later
       // "save before closing?" asks about a document with nothing to save.
       await win.keyboard.press('Control+z');
-      await expect.poll(() => existsSync(join(root, 'open.txt')), { timeout: 8000 }).toBe(true);
+      await expect.poll(() => existsSync(join(root, 'open.txt')), { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toHaveCount(0, { timeout: 8000 });
       // …and the tree's own dirty mark goes with it.
       await expect(win.getByTestId('tree-unsaved-open.txt')).toHaveCount(0);
@@ -250,7 +248,7 @@ test('undoing a delete un-strands the editor that was open on the file', async (
   }
 });
 
-test('a refused undo says why, and keeps the entry so it can be retried', async () => {
+test('a refused undo says why, and keeps the entry so it can be retried', { tag: ['@extended', '@explorer'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-undoblock-'));
   writeFileSync(join(root, 'one.txt'), 'x\n');
   try {

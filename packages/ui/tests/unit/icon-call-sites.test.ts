@@ -98,6 +98,13 @@ describe('<Icon> renders synchronously, from memory (FR-006b / SC-009)', () => {
     // The accessible name comes from the ENCLOSING control, which the constitution already
     // requires to carry a hover title naming its action. An icon that announced itself as well
     // would be read out twice.
+    //
+    // This is a source grep and would pass on a file that merely MENTIONED `aria-hidden` in a
+    // comment. It is kept as a cheap tripwire beside the guard above — the real assertion is
+    // `packages/ui/tests/component/icon.test.ts`, which renders the component on both branches and
+    // reads the attribute off the element (034 FR-045). Together with the call-site guard above,
+    // those two say what the E2E sweep of a running window used to say, and say it about branches
+    // no single window could have shown at once.
     const source = iconSource();
     expect(source).toContain('aria-hidden');
   });

@@ -244,7 +244,7 @@ test.beforeEach(() => {
  * OFF — the shipped defaults (AS-18, AS-13, FR-057, M1, SC-014's first half)
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('at the shipped defaults BOTH modals reopen empty, even straight after a value was accepted (AS-18, AS-13, FR-057)', async () => {
+test('at the shipped defaults BOTH modals reopen empty, even straight after a value was accepted (AS-18, AS-13, FR-057)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject('throng-remember-off-');
   // Its own config root, holding both settings explicitly OFF. Explicit rather than absent on
   // purpose: an absent key and a `false` one must behave identically, and only one of the two is
@@ -313,7 +313,7 @@ test('at the shipped defaults BOTH modals reopen empty, even straight after a va
  * ON — Quick Open (AS-19, AS-20, AS-21, FR-060, FR-061, FR-062)
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('with rememberQuickOpenQuery on, the accepted query comes back selected with its own results — an abandoned one never does, and a project change discards it (AS-19, AS-20, AS-21)', async () => {
+test('with rememberQuickOpenQuery on, the accepted query comes back selected with its own results — an abandoned one never does, and a project change discards it (AS-19, AS-20, AS-21)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject('throng-remember-qo-');
   const other = makeOtherProject();
   const cfg = freshCfgRoot(true);
@@ -409,73 +409,19 @@ test('with rememberQuickOpenQuery on, the accepted query comes back selected wit
  * ON — Go To Line (AS-14, FR-060, FR-061)
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('with rememberGotoLineNumber on, the line that was GONE TO comes back selected — and it is the line reached, not the number typed (AS-14, FR-060, FR-061)', async () => {
-  const root = makeProject('throng-remember-goto-');
-  const cfg = freshCfgRoot(true);
-  try {
-    await runApp(
-      async (_app, win) => {
-        await settle(win);
-        await createProject(win, 'RememberGotoLine', root);
-        const pid = await newEditor(win);
-        await openFileAndFocus(win, pid, 'long.txt', 'line-0001');
-
-        // Nothing accepted yet: the first invocation is empty whatever the setting says (FR-057).
-        await openGotoLine(win);
-        await expect(win.getByTestId('gotoline-input')).toHaveValue('');
-        await win.keyboard.press('Escape');
-        await expect(win.getByTestId('gotoline')).toHaveCount(0);
-
-        // An abandoned number is not accepted either — the same rule as Quick Open's (FR-061).
-        await openGotoLine(win);
-        await win.keyboard.type('137');
-        await win.keyboard.press('Escape');
-        await expect(win.getByTestId('gotoline')).toHaveCount(0);
-        await openGotoLine(win);
-        await expect(win.getByTestId('gotoline-input')).toHaveValue('');
-        await win.keyboard.press('Escape');
-        await expect(win.getByTestId('gotoline')).toHaveCount(0);
-
-        // AS-14 — go to 42, and reopen.
-        await acceptGotoLine(win, '42');
-        await openGotoLine(win);
-        expect(await inputState(win.getByTestId('gotoline-input'))).toEqual({
-          value: '42',
-          fullySelected: true,
-        });
-        // …and typing a new number replaces it outright.
-        await win.keyboard.type('7');
-        await expect(win.getByTestId('gotoline-input')).toHaveValue('7');
-        await win.keyboard.press('Escape');
-        await expect(win.getByTestId('gotoline')).toHaveCount(0);
-
-        /*
-         * FR-061 — what is remembered is the line the user WENT TO, not the text they typed.
-         *
-         * `long.txt` has exactly 400 lines, so a request for 99999 is clamped by `resolveGotoLine`
-         * and the caret lands on 400. Reopening with `99999` would show a number that names nothing
-         * in the document being looked at — and would be the tell that the typed text was recorded
-         * ahead of the decision about what it meant.
-         */
-        await acceptGotoLine(win, '99999');
-        await openGotoLine(win);
-        await expect(win.getByTestId('gotoline-input')).toHaveValue(String(LONG_LINES));
-        await win.keyboard.press('Escape');
-        await expect(win.getByTestId('gotoline')).toHaveCount(0);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfg } },
-    );
-  } finally {
-    cleanupTemp(root);
-    cleanupTemp(cfg);
-  }
-});
+/*
+ * MOVED to `packages/core/tests/unit/goto-line.test.ts` +
+ * `packages/ui/tests/unit/navigation-remember-store.test.ts` (034 FR-046a): "the line that was
+ * GONE TO comes back selected — and it is the line REACHED, not the number typed". The
+ * distinction it guards is the clamp (99999 typed, 400 reached, 400 remembered), and the clamp
+ * is what the unit test asserts — breaking it reddens 9 cases.
+ */
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * The preferences window — FR-059, FR-063, AS-15, SC-014
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('both toggles live in Editor · Navigation, ship off, and turning them off DISCARDS what is held (FR-059, FR-063, AS-15, SC-014)', async () => {
+test('both toggles live in Editor · Navigation, ship off, and turning them off DISCARDS what is held (FR-059, FR-063, AS-15, SC-014)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject('throng-remember-prefs-');
   const cfg = freshCfgRoot(true);
   try {

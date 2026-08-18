@@ -42,7 +42,7 @@ async function openPrefs(app: ElectronApplication, win: Page): Promise<Page> {
   return prefs;
 }
 
-test('each preferences tab keeps its own scroll position across tab switches', async () => {
+test('each preferences tab keeps its own scroll position across tab switches', { tag: ['@extended', '@prefs'] }, async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(
     async (app, win) => {

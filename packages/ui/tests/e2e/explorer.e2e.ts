@@ -12,14 +12,11 @@ const realErrors = (errors: string[]): string[] =>
   errors.filter((e) => !e.includes('Content Security Policy') && !e.includes('data:image'));
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  openApp,
-  runApp as runOwnApp,
+import { openApp,
   createProject as newProject,
   cleanupTemp,
   type AppOptions,
-  type OpenApp,
-} from './harness.js';
+  type OpenApp, FILE_OP_TIMEOUT_MS } from './harness.js';
 import type { Locator } from '@playwright/test';
 
 /**
@@ -96,72 +93,79 @@ function makeProjectFolder(): string {
   return root;
 }
 
-test('renders the active project tree: sorted, excludes hidden, lazy expand', async () => {
-  const projectRoot = makeProjectFolder();
-  try {
-    await runApp(async (_app, win) => {
-      const errors: string[] = [];
-      win.on('pageerror', (e) => errors.push(String(e)));
-      win.on('console', (m) => {
-        if (m.type() === 'error') errors.push(m.text());
-      });
+/*
+ * DELETED, ALREADY COVERED (034 FR-045/FR-046a) — "renders the active project tree: sorted,
+ * excludes hidden, lazy expand".
+ *
+ * IT WAS MEANT TO GO WITH THE OTHER FIVE AND WAS MISSED. `component/file-tree.test.ts:7` names
+ * `explorer.e2e.ts:97` — this test — among the six line numbers it migrated, and its first
+ * describe is titled "the rows the tree draws (…, migrated from explorer.e2e.ts:97)". The MOVED
+ * note below it says twelve tests stay; thirteen did. The trim list simply omitted this title,
+ * and the count is right again now.
+ *
+ * EVERY CLAIM, AND WHERE IT NOW LIVES — each verified by reading the covering assertion, not by
+ * matching a title (FR-046a):
+ *   "src / README.md / a.txt are visible"  → `file-tree.test.ts:360` asserts the whole row list IN
+ *     ORDER (`['demo', 'src', 'a.txt', 'README.md']`), which is what the deleted title claimed
+ *     and its body never checked — three `toBeVisible()` calls pass for a tree in any order.
+ *   "`.git` is excluded"                    → `file-tree.test.ts:398` asserts BOTH that no row is
+ *     drawn for it AND that the folder is never listed. The exclusion is applied in the RENDERER
+ *     (`use-explorer-data.ts:382`, over the shipped DEFAULT_EXCLUDE_GLOBS), so that is the same
+ *     code path this test drove — nothing about it lived in main.
+ *   "subfolders start collapsed; the chevron expands lazily" → `file-tree.test.ts:414` asserts the
+ *     FETCH CALL LOG as well as the rows, so a tree that read every folder eagerly and kept them
+ *     shut reddens there and passed here.
+ *   "no renderer errors"                    → the `realErrors` probe is unchanged and still run by
+ *     "collapsing the tree raises no error" below, on this same shared app and window.
+ *
+ * Nothing is lost by the fixture being a fake `files.list` rather than a real temp folder: every
+ * other test in this file still creates a real project on a real root and waits for the tree to
+ * render before doing anything else.
+ */
 
-      await createProject(win, 'Demo', projectRoot);
+/*
+ * MOVED to `packages/ui/tests/component/file-tree.test.ts` (034 FR-045) — five tests.
+ *
+ * THE TREE RENDERS IN JSDOM, which is the finding that unlocked this and was not obvious. The
+ * blocker was never react-arborist — it ships its own jsdom tests and virtualises arithmetically,
+ * measuring no DOM. It is throng’s own `useSize` gate (`file-tree.tsx`): `ResizeObserver` is absent
+ * from jsdom entirely, so the effect throws, `width > 0 && height > 0` stays false and `<Tree>`
+ * never mounts. ONE global is stubbed — an observer reporting a fixed 320×600 box — and that is not
+ * a simplification of a real thing, because jsdom has no layout to simplify.
+ *
+ * The stub is honest about what it costs: at 24px rows a 600px box holds 25, and the largest
+ * fixture is 7, so WHICH rows and IN WHAT ORDER is faithful while row COUNT is not. That is exactly
+ * why "a large folder stays responsive — virtualised rows" is NOT in this list and stays below.
+ *
+ * `double-click mode` is the headline: it was this file’s only `runOwnApp` — a second Electron
+ * launch and a second daemon — spent on one enum. It is now a `ConfigProvider` mount.
+ *
+ * FOUR OF THE FIVE LAND STRONGER THAN THE E2E DID:
+ *   - the rendered sort order is asserted against a reversal that does not touch the sort function
+ *   - the lazy load is asserted on the fetch CALL LOG, so making the load eager reddens it while
+ *     changing not one rendered row — a claim the E2E could not make at all
+ *   - Collapse-all is asserted to leave the ROOT open, which was the E2E’s blind spot: it only
+ *     checked that a nested file had vanished
+ *   - the open intent is asserted on its `absPath`, not merely that something opened
+ *
+ * Anti-vacuity control run first, and it is the reason the rest can be believed: withholding the
+ * `ResizeObserver` stub fails ALL FIFTEEN component tests with "Unable to find role=tree". The tree
+ * is load-bearing, not scenery — these do not pass on an empty DOM.
+ *
+ * A CORRECTION TO THIS BRANCH’S OWN WORKING ASSUMPTION, recorded because it reopens work already
+ * declined: `useWorkspace` was treated as out of scope everywhere in this migration because
+ * `WorkspaceContext` is private. But `WorkspaceProvider` IS exported and takes its client as a
+ * prop, so the real provider mounts over a fake `ThrongBridge` — no production change, the same
+ * pattern `project-settings-dialog.test.ts` uses. Migrations rejected on that ground deserve a
+ * second look.
+ *
+ * WHAT STAYS: twelve tests, and every one of them touches something no jsdom can supply — real
+ * filesystem watchers, a real recycle bin, real drag-and-drop hit-testing, modifier-click selection
+ * through react-arborist, an inline rename with real text-selection state, virtualisation, and
+ * per-project state surviving a real project switch.
+ */
 
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-
-      // Root row + top-level entries are present; .git is excluded.
-      await expect(tree.getByText('src', { exact: true })).toBeVisible();
-      await expect(tree.getByText('README.md', { exact: true })).toBeVisible();
-      await expect(tree.getByText('a.txt', { exact: true })).toBeVisible();
-      await expect(tree.getByText('.git', { exact: true })).toHaveCount(0);
-
-      // Subfolders start collapsed.
-      await expect(tree.getByText('index.ts', { exact: true })).toHaveCount(0);
-
-      // Click the folder's chevron → it expands and its children appear (lazy
-      // load). The NAME only selects now (#121); the chevron is the toggle.
-      await toggleFolder(tree, 'src');
-      await expect(tree.getByText('index.ts', { exact: true })).toBeVisible();
-      await expect(tree.getByText('inner', { exact: true })).toBeVisible();
-
-      expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
-
-test('Expand button steps levels; Collapse all resets to level 1', async () => {
-  const projectRoot = makeProjectFolder();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Demo', projectRoot);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-
-      // Expand (nothing selected → level 1): src opens? No — level 1 just opens
-      // top-level folders. `src` opens, `inner` (level 2) stays hidden.
-      await win.getByRole('button', { name: 'Expand' }).click();
-      await expect(tree.getByText('index.ts', { exact: true })).toBeVisible();
-      await expect(tree.getByText('inner', { exact: true })).toBeVisible();
-      await expect(tree.getByText('deep.ts', { exact: true })).toHaveCount(0);
-
-      // Second Expand → level 2 (inner opens).
-      await win.getByRole('button', { name: 'Expand' }).click();
-      await expect(tree.getByText('deep.ts', { exact: true })).toBeVisible();
-
-      // Collapse all → back to just the top level.
-      await win.getByRole('button', { name: 'Collapse all' }).click();
-      await expect(tree.getByText('index.ts', { exact: true })).toHaveCount(0);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
-
-test('collapsing the tree raises no error (no bogus internal-root path)', async () => {
+test('collapsing the tree raises no error (no bogus internal-root path)', { tag: ['@extended', '@explorer'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -184,6 +188,10 @@ test('collapsing the tree raises no error (no bogus internal-root path)', async 
       await expect(tree.getByText('index.ts', { exact: true })).toHaveCount(0);
 
       // No error banner and no realpath/internal-root error must appear.
+      // sleep-justified: "Collapse all" itself is synchronous, but the bug this guards against was
+      // sleep-justified: a stray error raised from a later, unrelated data-reload reacting to the
+      // sleep-justified: root/open-state change — there is no single named async op to await, only
+      // sleep-justified: time for a delayed error to have had the chance to surface.
       await win.waitForTimeout(500);
       await expect(tree.locator('.explorer__error')).toHaveCount(0);
       expect(realErrors(errors), `errors:\n${errors.join('\n')}`).toEqual([]);
@@ -193,7 +201,7 @@ test('collapsing the tree raises no error (no bogus internal-root path)', async 
   }
 });
 
-test('reflects external filesystem changes live, preserving expansion (US2)', async () => {
+test('reflects external filesystem changes live, preserving expansion (US2)', { tag: ['@extended', '@explorer'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -224,7 +232,7 @@ test('reflects external filesystem changes live, preserving expansion (US2)', as
   }
 });
 
-test('file operations via context menu + toolbar (US3): delete, new folder, cut/paste, rename', async () => {
+test('file operations via context menu + toolbar (US3): delete, new folder, cut/paste, rename', { tag: ['@extended', '@explorer'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -273,7 +281,7 @@ test('file operations via context menu + toolbar (US3): delete, new folder, cut/
   }
 });
 
-test('keyboard shortcuts operate on the tree: Del deletes, F2 renames (US3)', async () => {
+test('keyboard shortcuts operate on the tree: Del deletes, F2 renames (US3)', { tag: ['@extended', '@explorer'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -312,7 +320,7 @@ test('keyboard shortcuts operate on the tree: Del deletes, F2 renames (US3)', as
   }
 });
 
-test('copy/paste duplicates with a non-clobbering name; open-in-explorer raises no error (US3)', async () => {
+test('copy/paste duplicates with a non-clobbering name; open-in-explorer raises no error (US3)', { tag: ['@extended', '@explorer'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (app, win) => {
@@ -341,6 +349,10 @@ test('copy/paste duplicates with a non-clobbering name; open-in-explorer raises 
       await tree.getByText('a.txt', { exact: true }).click({ button: 'right' });
       await win.getByTestId('menu-item-Open In').click();
       await win.getByTestId('submenu-Open In').locator('.context-menu__item').first().click();
+      // sleep-justified: the reveal goes through an async main-process IPC round trip (even though
+      // sleep-justified: shell.showItemInFolder is no-op'd above) with no renderer-visible
+      // sleep-justified: completion signal — an error could still surface after the click's own
+      // sleep-justified: await resolves, and there is nothing to wait ON for "it did not".
       await win.waitForTimeout(300);
       await expect(tree.locator('.explorer__error')).toHaveCount(0);
     });
@@ -349,7 +361,7 @@ test('copy/paste duplicates with a non-clobbering name; open-in-explorer raises 
   }
 });
 
-test('drag-and-drop moves a file into a folder (US3b)', async () => {
+test('drag-and-drop moves a file into a folder (US3b)', { tag: ['@extended', '@explorer'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -366,7 +378,7 @@ test('drag-and-drop moves a file into a folder (US3b)', async () => {
       // state (react-arborist may leave `src` collapsed, hiding the moved node). It
       // moved, not copied: README.md is under src/ and no longer at the root.
       await expect
-        .poll(() => existsSync(join(projectRoot, 'src', 'README.md')), { timeout: 10000 })
+        .poll(() => existsSync(join(projectRoot, 'src', 'README.md')), { timeout: FILE_OP_TIMEOUT_MS })
         .toBe(true);
       expect(existsSync(join(projectRoot, 'README.md'))).toBe(false);
     });
@@ -375,7 +387,7 @@ test('drag-and-drop moves a file into a folder (US3b)', async () => {
   }
 });
 
-test('multi-select (Ctrl-click) then Delete removes all selected (US3b)', async () => {
+test('multi-select (Ctrl-click) then Delete removes all selected (US3b)', { tag: ['@extended', '@explorer'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -399,7 +411,7 @@ test('multi-select (Ctrl-click) then Delete removes all selected (US3b)', async 
   }
 });
 
-test('delete confirmation can be cancelled; the toolbar Delete button works (US3 polish)', async () => {
+test('delete confirmation can be cancelled; the toolbar Delete button works (US3 polish)', { tag: ['@extended', '@explorer'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -425,29 +437,7 @@ test('delete confirmation can be cancelled; the toolbar Delete button works (US3
   }
 });
 
-test('cut greys the item; Escape clears the clipboard (US3 polish)', async () => {
-  const projectRoot = makeProjectFolder();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Demo', projectRoot);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-
-      await tree.getByText('a.txt', { exact: true }).click({ button: 'right' });
-      await win.locator('.context-menu__item', { hasText: 'Cut' }).click();
-      await expect(tree.locator('.tree-row--cut', { hasText: 'a.txt' })).toBeVisible();
-
-      // Focus the tree, press Escape → the cut is cancelled (no longer greyed).
-      await tree.getByText('a.txt', { exact: true }).click();
-      await win.keyboard.press('Escape');
-      await expect(tree.locator('.tree-row--cut')).toHaveCount(0);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
-
-test('New folder in a collapsed folder expands it and overwrites the selected name (US3 polish)', async () => {
+test('New folder in a collapsed folder expands it and overwrites the selected name (US3 polish)', { tag: ['@extended', '@explorer'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -481,7 +471,7 @@ test('New folder in a collapsed folder expands it and overwrites the selected na
   }
 });
 
-test('right-click Hide removes the item from this project view (US3 hide)', async () => {
+test('right-click Hide removes the item from this project view (US3 hide)', { tag: ['@extended', '@explorer'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -502,84 +492,7 @@ test('right-click Hide removes the item from this project view (US3 hide)', asyn
   }
 });
 
-const installOpenListener = (win: import('@playwright/test').Page): Promise<void> =>
-  win.evaluate(() => {
-    (globalThis as Record<string, unknown>).__opens = [];
-    window.addEventListener('throng:open-file', (e) =>
-      (
-        (globalThis as Record<string, unknown>).__opens as unknown[]
-      ).push((e as CustomEvent).detail),
-    );
-  });
-const openCount = (win: import('@playwright/test').Page): Promise<number> =>
-  win.evaluate(() => ((globalThis as Record<string, unknown>).__opens as unknown[]).length);
-
-test('single-click opens a file (default); the chevron toggles a folder and the name selects, never opening (US4)', async () => {
-  const projectRoot = makeProjectFolder();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Demo', projectRoot);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-      await installOpenListener(win);
-
-      // Single click on a file → exactly one open-file intent for its path.
-      await tree.getByText('a.txt', { exact: true }).click();
-      await expect.poll(() => openCount(win)).toBe(1);
-      const opens = await win.evaluate(
-        () => (globalThis as Record<string, unknown>).__opens as Array<{ relPath: string }>,
-      );
-      expect(opens[0].relPath).toBe('a.txt');
-
-      // A folder never opens into an editor (#121): the chevron toggles it, and
-      // clicking the name only selects — neither raises an open intent.
-      await toggleFolder(tree, 'src');
-      await expect(tree.getByText('index.ts', { exact: true })).toBeVisible();
-      await tree.getByText('src', { exact: true }).click(); // name → selects only
-      await win.waitForTimeout(150);
-      expect(await openCount(win)).toBe(1);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
-
-test('double-click mode: a single click only selects; a double click opens (US4)', async () => {
-  const projectRoot = makeProjectFolder();
-  const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-cfg-dbl-'));
-  // 006 moved the file-open-on-click trigger from explorer.openMode to
-  // editor.openOnClick (single | double | none); files now open into an editor.
-  writeFileSync(
-    join(cfgRoot, 'settings.json'),
-    JSON.stringify({ version: 1, editor: { openOnClick: 'double' } }),
-  );
-  try {
-    // Its own app: `editor.openOnClick` is read at launch, so it cannot be applied to a running one.
-    await runOwnApp(
-      async (_app, win) => {
-        await newProject(win, 'Demo', projectRoot);
-        const tree = win.getByTestId('file-explorer-tree');
-        await expect(tree).toBeVisible();
-        await installOpenListener(win);
-
-        // Single click → selects only, no open intent.
-        await tree.getByText('a.txt', { exact: true }).click();
-        await win.waitForTimeout(250);
-        expect(await openCount(win)).toBe(0);
-
-        // Double click → exactly one open intent.
-        await tree.getByText('a.txt', { exact: true }).dblclick();
-        await expect.poll(() => openCount(win)).toBe(1);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-    );
-  } finally {
-    cleanupTemp(projectRoot);
-    cleanupTemp(cfgRoot);
-  }
-});
-
-test('a large folder stays responsive — virtualised rows (polish T061)', async () => {
+test('a large folder stays responsive — virtualised rows (polish T061)', { tag: ['@extended', '@explorer'] }, async () => {
   const projectRoot = mkdtempSync(join(tmpdir(), 'throng-big-'));
   mkdirSync(join(projectRoot, 'big'));
   for (let i = 0; i < 800; i += 1) {
@@ -595,6 +508,9 @@ test('a large folder stays responsive — virtualised rows (polish T061)', async
       await expect(tree.getByText('f-0000.txt', { exact: true })).toBeVisible();
 
       // Virtualised: only a small window of rows is in the DOM, not all 800.
+      // not-a-clock: 200 bounds the number of ROWS the virtualiser leaves in the DOM, not a
+      // duration — expanding 800 entries must not materialise 800 elements. Nothing here is timed,
+      // so 034 SC-007 does not govern it.
       const rows = await tree.locator('.tree-row').count();
       expect(rows).toBeGreaterThan(0);
       expect(rows).toBeLessThan(200);
@@ -604,22 +520,7 @@ test('a large folder stays responsive — virtualised rows (polish T061)', async
   }
 });
 
-test('an empty project folder shows the root with no children and no error (polish T062)', async () => {
-  const projectRoot = mkdtempSync(join(tmpdir(), 'throng-empty-'));
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Empty', projectRoot);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-      await expect(tree.locator('.tree-row--root')).toBeVisible();
-      await expect(tree.locator('.explorer__error')).toHaveCount(0);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
-
-test('remembers expansion + selection per project; root is selectable', async () => {
+test('remembers expansion + selection per project; root is selectable', { tag: ['@extended', '@explorer'] }, async () => {
   const rootA = makeProjectFolder();
   const rootB = makeProjectFolder();
   try {

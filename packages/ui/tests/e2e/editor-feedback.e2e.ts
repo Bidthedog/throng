@@ -2,14 +2,12 @@ import { mkdtempSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import {
-  openApp,
+import { openApp,
   createProject as newProject,
   firstPanelId,
   cleanupTemp,
   type AppOptions,
-  type OpenApp,
-} from './harness.js';
+  type OpenApp, FILE_OP_TIMEOUT_MS } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -83,7 +81,7 @@ async function stubSaveDialog(app: ElectronApplication, picked: string): Promise
   }, picked);
 }
 
-test('a refused out-of-tree save shows a visible message and leaves the buffer unsaved', async () => {
+test('a refused out-of-tree save shows a visible message and leaves the buffer unsaved', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   const outside = mkdtempSync(join(tmpdir(), 'throng-out-'));
   try {
@@ -115,7 +113,7 @@ test('a refused out-of-tree save shows a visible message and leaves the buffer u
   }
 });
 
-test('Open In offers "New Editor" (a second panel) and disables it once the file is open', async () => {
+test('Open In offers "New Editor" (a second panel) and disables it once the file is open', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -145,7 +143,7 @@ test('Open In offers "New Editor" (a second panel) and disables it once the file
   }
 });
 
-test('panel-header Save saves; Revert discards changes after confirmation', async () => {
+test('panel-header Save saves; Revert discards changes after confirmation', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   const savePath = join(root, 'note.txt');
   try {
@@ -161,7 +159,7 @@ test('panel-header Save saves; Revert discards changes after confirmation', asyn
       await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
       await item(win, 'Save').click();
       await expect
-        .poll(() => (existsSync(savePath) ? readFileSync(savePath, 'utf8') : ''), { timeout: 8000 })
+        .poll(() => (existsSync(savePath) ? readFileSync(savePath, 'utf8') : ''), { timeout: FILE_OP_TIMEOUT_MS })
         .toBe('first');
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toHaveCount(0);
 
@@ -182,7 +180,7 @@ test('panel-header Save saves; Revert discards changes after confirmation', asyn
   }
 });
 
-test('the editor renders in the themeable monospace font (Consolas default)', async () => {
+test('the editor renders in the themeable monospace font (Consolas default)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

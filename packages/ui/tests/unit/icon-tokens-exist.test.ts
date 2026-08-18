@@ -20,7 +20,7 @@ import { THRONG_THEME } from '@throng/core';
  * because no automated check in the repository could see it.
  *
  * A source walk is the only thing that can catch this, and it is the established pattern here
- * (`notice-models.test.ts` walks the renderer, `shard-plan.test.ts` walks the E2E directory). It
+ * (`notice-models.test.ts` walks the renderer, `tier-plan.test.ts` walks the E2E directory). It
  * DISCOVERS the usages rather than checking the files someone remembered to list, which is what makes
  * it hold as the renderer grows.
  */

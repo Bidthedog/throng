@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp, geom, quiesced} from './harness.js';
 
 // Regression (005 Phase C·1 UX): enlarging a Panel must NOT wipe the terminal's
 // contents. ConPTY repaints the whole enlarged viewport on resize (cursor-home +
@@ -26,7 +26,7 @@ function xtermRows(win: Page, pid: string): Promise<number> {
     .evaluate((el) => el.querySelector('.xterm-rows')?.children.length ?? -1);
 }
 
-test('enlarging a Terminal Panel keeps its scrollback (does not clear on resize)', async () => {
+test('enlarging a Terminal Panel keeps its scrollback (does not clear on resize)', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-term-resize-'));
   try {
     await runApp(async (app, win) => {
@@ -60,16 +60,21 @@ test('enlarging a Terminal Panel keeps its scrollback (does not clear on resize)
       // erroneous clear. Asserting before it lands would race past the bug.
       await setWindowSize(app, 1100, 1040);
       await expect.poll(() => xtermRows(win, pid), { timeout: 10000 }).toBeGreaterThan(smallRows);
-      await win.waitForTimeout(1500);
+      // Wait for the panel to stop resizing, then for the async ConPTY repaint (the same shape as a
+      // `cls`) to actually land and settle — that repaint is what used to trigger the erroneous
+      // clear, and checking before it lands would race past the bug.
+      await geom(term);
+      const grownText = await quiesced(term, { what: 'terminal after enlarge repaint' });
 
       // The canary text must survive the enlarge (before the fix it was wiped).
-      await expect(term).toContainText('RESIZE_CANARY_777', { timeout: 10000 });
+      expect(grownText).toContain('RESIZE_CANARY_777');
 
       // Shrinking back must also keep it (the other half of the reported symptom).
       await setWindowSize(app, 1100, 560);
       await expect.poll(() => xtermRows(win, pid), { timeout: 10000 }).toBeLessThan(smallRows + 1);
-      await win.waitForTimeout(1500);
-      await expect(term).toContainText('RESIZE_CANARY_777', { timeout: 10000 });
+      await geom(term);
+      const shrunkText = await quiesced(term, { what: 'terminal after shrink repaint' });
+      expect(shrunkText).toContain('RESIZE_CANARY_777');
 
       // Clean up: close the shell so the project root unlocks for teardown.
       await term.click();

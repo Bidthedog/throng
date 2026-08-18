@@ -18,7 +18,7 @@ import { createProject, firstPanelId, runApp } from './harness.js';
  * possible: a Playwright locator can now SEE the option list. It could not before.
  */
 
-test('a drop-down’s popup is drawn by us, and its hover highlight is not the operating system’s blue', async () => {
+test('a drop-down’s popup is drawn by us, and its hover highlight is not the operating system’s blue', { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-sel-'));
   await runApp(async (_app, win) => {
     await createProject(win, 'Selects', root);

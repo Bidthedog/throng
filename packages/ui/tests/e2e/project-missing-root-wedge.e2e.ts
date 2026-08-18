@@ -128,7 +128,7 @@ async function allNoticeText(win: Page): Promise<string> {
   return parts.join(' | ').replace(/\n/g, ' ') || '(no notices)';
 }
 
-test('entering a project whose folder is gone reports it and does not split the workspace', async () => {
+test('entering a project whose folder is gone reports it and does not split the workspace', { tag: ['@extended', '@window'] }, async () => {
   skipIfElevated();
   test.setTimeout(240_000);
 
@@ -222,6 +222,7 @@ test('entering a project whose folder is gone reports it and does not split the 
          * event that means "the entry has finished failing", which is exactly when a wait with a
          * stated reason is the honest instrument.
          */
+        // sleep-justified: entering a project fans out into independent async failures (explorer listing, terminal attach, notice consolidation) with no single event marking "the cascade has finished failing", and the assertions below — including the negative ones — must read whatever it settles on, not any one piece mid-flight.
         await win.waitForTimeout(8000);
         const noticeText = await allNoticeText(win);
         const explorerName = await explorerProject(win);
@@ -307,6 +308,7 @@ test('entering a project whose folder is gone reports it and does not split the 
          * cause key rather than by a second rule: the notice is live, so the cause is spoken for.
          * Waited out rather than triggered, because the recurrence IS the watcher's own timer.
          */
+        // sleep-justified: the explorer's re-check runs on its own filesystem-watch timer with no signal exposed to this test, so waiting out at least one of its cycles is the only way to give a recurring failure the chance to raise the second notice this asserts absent.
         await win.waitForTimeout(5000);
         expect(
           await notices.count(),

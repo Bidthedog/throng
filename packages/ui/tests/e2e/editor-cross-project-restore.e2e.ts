@@ -21,17 +21,80 @@
  * asserted in test 1 rather than in their own test: they are the same restart, they cost nothing
  * extra there, and if the fix ever narrows to "reload everything on switch" they are what notices.
  */
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import Database from 'better-sqlite3';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, cleanupTemp } from './harness.js';
+import { runApp, createProject, firstPanelId, panelIds, quiesced, cleanupTemp } from './harness.js';
 
 /** A project root holding the named files, each with its own unmistakable content. */
 function makeProject(prefix: string, files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), prefix));
   for (const [name, text] of Object.entries(files)) writeFileSync(join(root, name), text);
   return root;
+}
+
+function dbPath(dataDir: string): string {
+  return join(dataDir, 'throng.db');
+}
+
+/**
+ * Wait until PROJECT's layout has actually landed in the daemon's SQLite store, in the shape
+ * `predicate` names — replacing a guess about the 400ms debounce with the real condition (017
+ * FR-013a, the class behind #246: "slept past a write it then could not read"). A restart reads
+ * this file straight off disk, so anything not yet written here is restored wrong or not at all.
+ */
+async function expectLayoutSaved(
+  dataDir: string,
+  projectName: string,
+  predicate: (layoutJson: string) => boolean,
+): Promise<void> {
+  await expect
+    .poll(
+      () => {
+        let db: InstanceType<typeof Database> | undefined;
+        try {
+          db = new Database(dbPath(dataDir), { readonly: true });
+          const row = db
+            .prepare(
+              `SELECT w.layout_json AS json
+                 FROM workspace_layout w
+                 JOIN projects p ON p.id = w.project_id
+                WHERE p.name = ?`,
+            )
+            .get(projectName) as { json?: string } | undefined;
+          return row?.json !== undefined && predicate(row.json);
+        } catch {
+          return false; // not written yet, or a transient read of a mid-write DB
+        } finally {
+          db?.close();
+        }
+      },
+      { timeout: 15_000, message: `the layout for "${projectName}" was never persisted` },
+    )
+    .toBe(true);
+}
+
+/** Tabs in a persisted layout. */
+const savedTabCount = (json: string): number =>
+  ((JSON.parse(json) as { tabs?: unknown[] }).tabs ?? []).length;
+
+/**
+ * The dirty-buffer recovery snapshot's persisted text for a panel, or null while it has not
+ * (yet) been written — `EditorRecovery.write` (packages/ui/src/main/editor-recovery.ts), on the
+ * same 400ms debounce, to `<userDataDir>/recovery/<encoded panelId>`. This is the OTHER deferred
+ * write a restart depends on: the layout says which file a panel has open, this says what its
+ * unsaved buffer holds.
+ */
+function recoveredText(userDataDir: string, panelId: string): string | null {
+  try {
+    const raw = readFileSync(join(userDataDir, 'recovery', encodeURIComponent(panelId)), 'utf8');
+    const parsed = JSON.parse(raw) as { text?: string };
+    return typeof parsed.text === 'string' ? parsed.text : null;
+  } catch {
+    return null; // not written yet, or a transient read of a mid-write file
+  }
 }
 
 /**
@@ -76,7 +139,7 @@ async function openFileNames(win: Page): Promise<string[]> {
   return win.locator('.panel-box__file-name').allTextContents();
 }
 
-test('switching to a second project restores ITS files, not the one the last project loaded (#228)', async () => {
+test('switching to a second project restores ITS files, not the one the last project loaded (#228)', { tag: ['@extended', '@editor'] }, async () => {
   test.setTimeout(240_000);
   const rootA = makeProject('throng-x228-alpha-', {
     'alpha-one.txt': 'ALPHA-ONE\n',
@@ -115,7 +178,16 @@ test('switching to a second project restores ITS files, not the one the last pro
         betaPanel = await firstPanelId(win);
         await openFileInPanel(win, betaPanel, 'beta-one.txt');
 
-        await win.waitForTimeout(3000); // the debounced layout writes
+        await expectLayoutSaved(
+          dataDir,
+          'AlphaProj',
+          (json) =>
+            savedTabCount(json) === 2 &&
+            json.includes('alpha-one.txt') &&
+            json.includes('alpha-two.txt') &&
+            json.includes('alpha-three.txt'),
+        );
+        await expectLayoutSaved(dataDir, 'BetaProj', (json) => json.includes('beta-one.txt'));
       },
       { dataDir, userDataDir },
     );
@@ -147,7 +219,9 @@ test('switching to a second project restores ITS files, not the one the last pro
           'BETA-ONE',
           { timeout: 20_000 },
         );
-        await win.waitForTimeout(4000);
+        await quiesced(win.getByTestId(`panel-title-${pid}`), {
+          what: 'beta panel title after the project switch',
+        });
         expect(await openFileNames(win)).toEqual(['beta-one.txt']);
         await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText('BETA-ONE');
         await expect(win.getByTestId(`panel-title-${pid}`)).toHaveText('beta-one');
@@ -181,7 +255,7 @@ test('switching to a second project restores ITS files, not the one the last pro
   }
 });
 
-test('a dirty buffer restored in another project keeps ITS OWN path (#228)', async () => {
+test('a dirty buffer restored in another project keeps ITS OWN path (#228)', { tag: ['@extended', '@editor'] }, async () => {
   test.setTimeout(240_000);
   const rootA = makeProject('throng-x228d-alpha-', { 'alpha-only.txt': 'ALPHA-ONLY\n' });
   const rootB = makeProject('throng-x228d-beta-', { 'beta-only.txt': 'BETA-ONLY\n' });
@@ -206,7 +280,14 @@ test('a dirty buffer restored in another project keeps ITS OWN path (#228)', asy
         await win.keyboard.type('BETA-UNSAVED-EDIT');
         await expect(win.getByTestId(`panel-unsaved-${betaPanel}`)).toBeVisible({ timeout: 15_000 });
 
-        await win.waitForTimeout(3000);
+        await expectLayoutSaved(dataDir, 'DirtyAlpha', (json) => json.includes('alpha-only.txt'));
+        await expectLayoutSaved(dataDir, 'DirtyBeta', (json) => json.includes('beta-only.txt'));
+        await expect
+          .poll(() => (recoveredText(userDataDir, betaPanel) ?? '').includes('BETA-UNSAVED-EDIT'), {
+            timeout: 15_000,
+            message: `the dirty buffer's recovery snapshot for "${betaPanel}" was never written to disk`,
+          })
+          .toBe(true);
       },
       { dataDir, userDataDir },
     );
@@ -226,7 +307,9 @@ test('a dirty buffer restored in another project keeps ITS OWN path (#228)', asy
           'BETA-UNSAVED-EDIT',
           { timeout: 20_000 },
         );
-        await win.waitForTimeout(4000);
+        await quiesced(win.getByTestId(`panel-title-${pid}`), {
+          what: 'beta panel title after the project switch',
+        });
 
         // The recovered buffer stays attached to the file it was edited FROM. A dirty document
         // wearing another project's path is unsaveable by the confinement guard — and saveable, over

@@ -53,7 +53,6 @@ let projectSeq = 0;
 const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
-
 // US7 / 003 clone-and-sync (feedback items 3-5): a Tab/Panel can be "Sync to"-ed
 // into an EXISTING sub-workspace from the context menu (and, via drag, by dropping
 // onto its window). Cloning leaves the original in place.
@@ -65,26 +64,48 @@ const seedSub = `(() => window.throng.invoke('workspace.persistSubWorkspaces', {
     tabs: [{ id: 't', title: 'T', root: { type: 'panel', id: 'p', originProjectId: 'x', title: 'P' } }] },
 ] }))()`;
 
-test('syncs a Tab into an existing sub-workspace via the menu', async () => {
-  await runApp(async (_app, win) => {
-    await win.evaluate(seedSub);
-    await reloadWindow(win);
-    await createProject(win, 'Syncer', 'C:/c/syncer');
-    await expect(win.getByTestId('tab-strip')).toBeVisible();
-    await expect(win.getByTestId('subworkspace-counts-sw1')).toContainText('1T');
+/*
+ * MOVED to `packages/ui/tests/component/subworkspace-sync.test.ts` (034 FR-045) — two tests:
+ * "syncs a Tab into an existing sub-workspace via the menu" and "syncing a Panel as a \"New\"
+ * Tab adds a Tab to the sub-workspace".
+ *
+ * This file shares one app, so no Electron launch is saved — the case for moving them is
+ * FR-045 alone. Both were entirely about what the sync WRITES, and the component layer can see
+ * that where this one could only see a count.
+ *
+ * WHAT UNLOCKED IT, because it reopens work declined elsewhere on this branch: the sync hub is
+ * `DetachProvider`, which consumes `useWorkspace()`. `WorkspaceContext` is private, so this was
+ * written off as E2E-only. But `WorkspaceProvider` IS exported and takes `client` and
+ * `activeProjectId` as PROPS, and `WorkspaceClient`/`SubWorkspacesClient` are one-argument
+ * classes over `ThrongBridge`. The real providers mount over a fake daemon, no production
+ * change, exactly as `project-settings-dialog.test.ts` does.
+ *
+ * WHAT THE REPLACEMENTS ASSERT MORE STRONGLY THAN THESE DID:
+ *   - the PERSISTED payload as well as the counts, so "the Panel landed in the Tab the user
+ *     chose" is distinguishable from "a Panel landed somewhere" — two states with the same
+ *     `1T·2P`
+ *   - the counts themselves are DERIVED by the fake from what was persisted, using the same two
+ *     lines the real repository uses (`packages/persistence/src/subworkspace-repository.ts:24`),
+ *     so a count is evidence of a write rather than of a fixture
+ *   - "clone, not move" against the whole main layout rather than a `.tab-chip` count
+ *
+ * WHAT DID NOT MOVE:
+ *   - "syncs a Panel into a chosen Tab (third level)" stays because of its `toBeInViewport()`
+ *     assertions: that the third-level flyout is fully on screen is the flip/clamp behaviour,
+ *     which is real layout and which jsdom cannot see at all (034 FR-049). Its STATE half is
+ *     re-proved below as a strengthening, not as a replacement.
+ *   - "a Panel cannot be synced to a sub-workspace twice (greyed out)" stays because the three
+ *     lines at `workspace/panel-placeholder.tsx:507` that DERIVE `alreadyHasPanel` from the
+ *     sub-workspace’s own panels belong to that call site, and the component host mirrors them
+ *     rather than running them. A mirrored mapping is not a covered mapping (FR-047) — though
+ *     the rendering of the greyed row AND the menu refreshing after a sync are both proved
+ *     below.
+ *
+ * ANTI-VACUITY CONTROL: drop the `DetachProvider` wrapper from the replacement’s `mount()` —
+ * all SIX of its tests fail.
+ */
 
-    // Right-click the Tab → Sync to → Detached A.
-    await win.locator('.tab-chip').first().click({ button: 'right' });
-    await win.getByTestId('menu-item-Sync to').click(); // opens the submenu
-    await win.getByTestId('menu-item-Detached A').click();
-
-    // The sub-workspace gains a second Tab (the clone) — original stays in the main.
-    await expect(win.getByTestId('subworkspace-counts-sw1')).toContainText('2T');
-    await expect(win.locator('.tab-chip')).toHaveCount(1); // main unchanged
-  });
-});
-
-test('syncs a Panel into a chosen Tab of an existing sub-workspace (third level)', async () => {
+test('syncs a Panel into a chosen Tab of an existing sub-workspace (third level)', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     await win.evaluate(seedSub);
     await reloadWindow(win);
@@ -107,23 +128,7 @@ test('syncs a Panel into a chosen Tab of an existing sub-workspace (third level)
   });
 });
 
-test('syncing a Panel as a "New" Tab adds a Tab to the sub-workspace', async () => {
-  await runApp(async (_app, win) => {
-    await win.evaluate(seedSub);
-    await reloadWindow(win);
-    await createProject(win, 'NewTabSync', 'C:/c/newtabsync');
-    const pid = await firstPanelId(win);
-
-    await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-    await win.getByTestId('menu-item-Sync to').click();
-    await win.getByTestId('menu-item-Detached A').click();
-    await win.getByTestId('menu-item-New Tab').click(); // a fresh Tab in the sub-workspace
-
-    await expect(win.getByTestId('subworkspace-counts-sw1')).toContainText('2T·2P');
-  });
-});
-
-test('a Panel cannot be synced to a sub-workspace twice (greyed out)', async () => {
+test('a Panel cannot be synced to a sub-workspace twice (greyed out)', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     await win.evaluate(seedSub);
     await reloadWindow(win);

@@ -8,6 +8,8 @@ import {
   createProject as newProject,
   firstPanelId,
   cleanupTemp,
+  stayedAbsent,
+  TYPE_DELAY,
   type AppOptions,
   type OpenApp,
 } from './harness.js';
@@ -172,6 +174,36 @@ async function runScript(win: Page, term: Locator, printed: string): Promise<voi
 }
 
 /**
+ * A real fence for "no SECOND open occurred after this gesture" (FR-016/FR-017): run an
+ * unrelated command through the SAME live shell and require its echo.
+ *
+ * `shell.openExternal` is reached by an IPC hop off the click's own event handling, and there is
+ * no dedicated acknowledgement for "that hop, if it happened, is done" — so a positive event is
+ * needed to prove the opportunity has passed, rather than a guessed idle period. A full daemon
+ * round-trip (keystroke → pty → shell → echoed output → renderer) is exactly the harness's own
+ * worked example of a fence ("the shell has echoed the following command" — see `stayedAbsent`'s
+ * doc comment in harness.ts): falsifiable, and it throws rather than resolving if the shell has
+ * stopped answering.
+ */
+async function fenceOnEcho(win: Page, term: Locator, marker: string): Promise<void> {
+  /*
+   * TYPE_DELAY, not `{ delay: 0 }`, and the first version of this fence is why.
+   *
+   * At zero delay the keystrokes race the PTY and arrive out of ORDER. Measured: the fence typed
+   * `LINKFENCE1` and the shell echoed **`KNFILENCE1`** — the same letters, scrambled — so the
+   * assertion waited out its full twenty seconds for a string that was never going to appear, and
+   * the test went flaky rather than failing outright. It is the harness's default for exactly this,
+   * and every other terminal spec here already uses it.
+   *
+   * The irony is worth leaving in the file: a fence added to make a wait honest introduced a race
+   * of its own, by typing faster than the thing it was fencing on could listen.
+   */
+  await win.keyboard.type(`echo ${marker}`, { delay: TYPE_DELAY });
+  await win.keyboard.press('Enter');
+  await expect(term).toContainText(marker, { timeout: 20_000 });
+}
+
+/**
  * Click the rendered cells holding `text`, optionally with Ctrl held.
  *
  * xterm is on its DOM renderer here (no canvas/webgl addon is loaded), so the printed line is a
@@ -188,6 +220,7 @@ async function clickLink(win: Page, text: string, opts: { ctrl: boolean }): Prom
 
   // Rest on the link so xterm resolves it, THEN press. See the gesture note in the header.
   await win.mouse.move(x, y);
+  // sleep-justified: xterm's Linkifier2 resolves the hovered link internally with no DOM signal of its own; the one visible proxy, throng's hover tip, is gated by a separate longer linkHoverDelayMs (500ms default) and would over-wait and couple this to an unrelated setting.
   await win.waitForTimeout(300);
   if (opts.ctrl) await win.keyboard.down('Control');
   await win.mouse.down();
@@ -195,7 +228,7 @@ async function clickLink(win: Page, text: string, opts: { ctrl: boolean }): Prom
   if (opts.ctrl) await win.keyboard.up('Control');
 }
 
-test('Ctrl+clicking an OSC 8 link whose text IS the url opens the browser exactly once', async () => {
+test('Ctrl+clicking an OSC 8 link whose text IS the url opens the browser exactly once', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-link1-'));
   const url = 'https://example.com/osc8-same-text';
   try {
@@ -210,8 +243,9 @@ test('Ctrl+clicking an OSC 8 link whose text IS the url opens the browser exactl
       await clickLink(win, url, { ctrl: true });
 
       await expect.poll(() => opens.urls(), { timeout: 5000 }).toEqual([url]);
-      // Held past the click so a SECOND, later open would still be caught.
-      await win.waitForTimeout(1000);
+      // A SECOND, later open would still be caught — fenced on a real round-trip through the
+      // same terminal rather than a guessed idle period. See fenceOnEcho's doc comment.
+      await fenceOnEcho(win, term, 'LINKFENCE1');
       expect(await opens.urls()).toEqual([url]);
     });
   } finally {
@@ -219,7 +253,7 @@ test('Ctrl+clicking an OSC 8 link whose text IS the url opens the browser exactl
   }
 });
 
-test('Ctrl+clicking a PLAIN-TEXT url opens exactly once', async () => {
+test('Ctrl+clicking a PLAIN-TEXT url opens exactly once', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-link2-'));
   const url = 'https://example.com/plain-text-url';
   try {
@@ -234,7 +268,8 @@ test('Ctrl+clicking a PLAIN-TEXT url opens exactly once', async () => {
       await clickLink(win, url, { ctrl: true });
 
       await expect.poll(() => opens.urls(), { timeout: 5000 }).toEqual([url]);
-      await win.waitForTimeout(1000);
+      // A SECOND, later open would still be caught — see fenceOnEcho's doc comment.
+      await fenceOnEcho(win, term, 'LINKFENCE2');
       expect(await opens.urls()).toEqual([url]);
     });
   } finally {
@@ -242,7 +277,7 @@ test('Ctrl+clicking a PLAIN-TEXT url opens exactly once', async () => {
   }
 });
 
-test('Ctrl+clicking an OSC 8 link with non-url text opens its TARGET, exactly once', async () => {
+test('Ctrl+clicking an OSC 8 link with non-url text opens its TARGET, exactly once', { tag: ['@extended', '@terminal'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -263,7 +298,8 @@ test('Ctrl+clicking an OSC 8 link with non-url text opens its TARGET, exactly on
 
       // The destination, never the visible text.
       await expect.poll(() => opens.urls(), { timeout: 5000 }).toEqual([url]);
-      await win.waitForTimeout(1000);
+      // A SECOND, later open would still be caught — see fenceOnEcho's doc comment.
+      await fenceOnEcho(win, term, 'LINKFENCE3');
       expect(await opens.urls()).toEqual([url]);
     });
   } finally {
@@ -271,7 +307,7 @@ test('Ctrl+clicking an OSC 8 link with non-url text opens its TARGET, exactly on
   }
 });
 
-test('a PLAIN click on a link opens nothing — it keeps its terminal meaning', async () => {
+test('a PLAIN click on a link opens nothing — it keeps its terminal meaning', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-link4-'));
   const url = 'https://example.com/no-modifier';
   try {
@@ -285,8 +321,14 @@ test('a PLAIN click on a link opens nothing — it keeps its terminal meaning', 
 
       await clickLink(win, url, { ctrl: false });
 
-      await win.waitForTimeout(1200);
-      expect(await opens.urls()).toEqual([]);
+      // A bare `expect(await opens.urls()).toEqual([])` right here would be satisfied whether the
+      // click genuinely opens nothing, or the app just hasn't gotten around to it yet — the exact
+      // vacuous-negative trap `stayedAbsent` exists for. Fence on a real round-trip instead.
+      await stayedAbsent(
+        () => fenceOnEcho(win, term, 'LINKFENCE4'),
+        async () => (await opens.urls()).length,
+        'a plain click opened the browser',
+      );
     });
   } finally {
     cleanupTemp(root);
@@ -305,7 +347,7 @@ test('a PLAIN click on a link opens nothing — it keeps its terminal meaning', 
  * an OSC 8 sequence at a prompt puts the URL in the echoed command line, and the test then clicks
  * the echo instead of the link.
  */
-test('Ctrl+clicking a link on the ALTERNATE screen opens exactly once', async () => {
+test('Ctrl+clicking a link on the ALTERNATE screen opens exactly once', { tag: ['@extended', '@terminal'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -345,6 +387,7 @@ test('Ctrl+clicking a link on the ALTERNATE screen opens exactly once', async ()
 
       await opens.reset();
       await clickLink(win, 'ALTLINKTEXT', { ctrl: true });
+      // sleep-justified: no fence is available — altlink.cjs never reads stdin meaningfully (it only resumes it and sits in an interval), so unlike the shells above there is no echo to wait on as proof the opportunity has passed.
       await win.waitForTimeout(1500);
 
       // Exactly once, at the seam — the same claim the normal-screen fences make, in the condition

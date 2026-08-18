@@ -5,10 +5,42 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import Database from 'better-sqlite3';
 import { test, expect, _electron as electron } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
 import { skipIfElevated } from './admin.js';
-import { cleanupTemp } from './harness.js';
+import { cleanupTemp, APP_CLOSE_TIMEOUT_MS } from './harness.js';
+
+/**
+ * Poll the persisted layout for `needle` rather than sleeping and hoping the autosave landed
+ * (034 FR-019/FR-015b, and the exact defect class behind #246: sleeping past a WRITE and then
+ * being unable to read it). Mirrors the query `terminal-command-memory.e2e.ts` and
+ * `terminal-persistence.e2e.ts` already use directly against the daemon's SQLite store.
+ */
+async function expectLayoutContains(dataDir: string, project: string, needle: string): Promise<void> {
+  await expect
+    .poll(
+      () => {
+        let db: InstanceType<typeof Database> | undefined;
+        try {
+          db = new Database(join(dataDir, 'throng.db'), { readonly: true });
+          const row = db
+            .prepare(
+              `SELECT w.layout_json AS json FROM workspace_layout w
+                 JOIN projects p ON p.id = w.project_id WHERE p.name = ?`,
+            )
+            .get(project) as { json?: string } | undefined;
+          return row?.json?.includes(needle) ?? false;
+        } catch {
+          return false;
+        } finally {
+          db?.close();
+        }
+      },
+      { timeout: 20_000, message: `the layout for "${project}" never persisted ${JSON.stringify(needle)}` },
+    )
+    .toBe(true);
+}
 
 // US3 (T067/T069, partial): a terminal opened in one session is kept alive by the
 // detached daemon across an app restart, reattaches on relaunch, and — crucially —
@@ -45,7 +77,7 @@ const requestClose = (app: ElectronApplication): Promise<void> =>
  */
 const TERMINAL_VIEW = /^terminal-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-test('a pre-existing terminal reattaches after restart and still warns on close', async () => {
+test('a pre-existing terminal reattaches after restart and still warns on close', { tag: ['@extended', '@terminal'] }, async () => {
   skipIfElevated();
   const pipe = `\\\\.\\pipe\\throng-reattach-${process.pid}-${Date.now()}`;
   const dataDir = mkdtempSync(join(tmpdir(), 'reattach-data-'));
@@ -78,16 +110,19 @@ test('a pre-existing terminal reattaches after restart and still warns on close'
     await win1.getByTestId('terminal-flavour').selectOption('cmd');
     await win1.getByTestId(`panel-type-confirm-${pid}`).click();
     await expect(win1.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: 15000 });
-    await win1.waitForTimeout(1500); // let the layout autosave
+    // That is a wait for a WRITE, not a redraw: poll the persisted layout for the terminal config
+    // the autosave writes, rather than sleeping and hoping it landed.
+    await expectLayoutContains(dataDir, 'Persist', '"flavourId":"cmd"');
     expect(await daemonSessionCount(pipe)).toBe(1);
 
     await requestClose(app1);
     await expect(win1.getByTestId('app-close-dialog')).toBeVisible({ timeout: 8000 });
     // The dialog must NOT auto-dismiss (regression: an autofocused button used to
     // self-activate the instant it appeared) — it is still up after a beat.
+    // sleep-justified: would wait for the auto-dismiss to occur, but the claim under test is precisely that no such event ever fires — there is no positive signal for an absence, only elapsed time in which one did not happen.
     await win1.waitForTimeout(800);
     await expect(win1.getByTestId('app-close-dialog')).toBeVisible();
-    const closed1 = app1.waitForEvent('close', { timeout: 10000 });
+    const closed1 = app1.waitForEvent('close', { timeout: APP_CLOSE_TIMEOUT_MS });
     // "Leave running" quits the app; fire the DOM click directly (Playwright's
     // click() races the synchronous app-close and reports "page closed"). The app's
     // own close event is what we await.
@@ -111,7 +146,7 @@ test('a pre-existing terminal reattaches after restart and still warns on close'
     await win2.getByTestId('app-close-details').locator('summary').click();
     await expect(win2.getByTestId('app-close-details')).toContainText('Persist');
     await expect(win2.getByTestId('app-close-details')).toContainText('Command Prompt');
-    const closed2 = app2.waitForEvent('close', { timeout: 12000 });
+    const closed2 = app2.waitForEvent('close', { timeout: APP_CLOSE_TIMEOUT_MS });
     await win2.getByTestId('app-close-terminate').click();
     await closed2;
     await expect.poll(() => daemonSessionCount(pipe), { timeout: 8000 }).toBe(0);

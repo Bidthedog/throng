@@ -3,7 +3,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, stubFolderDialog, cleanupTemp} from './harness.js';
+import { openApp, runApp as runOwnApp, settle, stubFolderDialog, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import {
+  configRootSeeded,
+  settleConfigRoot,
+  snapshotConfigRoot,
+  type ConfigRootSnapshot,
+} from './helpers/config-snapshot.js';
+import { closePrefsWindow } from './helpers/prefs-window.js';
+import { writeSettingsAtomic } from './helpers/config-write.js';
 
 /**
  * US2 (007 Phase B): the Settings tab edits every control type from a visual form
@@ -17,9 +25,69 @@ function freshCfgRoot(): string {
   cfgRoots.push(dir);
   return dir;
 }
-test.afterAll(() => {
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-010).
+ *
+ * Seven of the nine tests seeded nothing; they edit controls and read settings.json back, which is a
+ * change to the CONTENTS of a config root and is exactly what `restoreConfigRoot` undoes. One seeded a
+ * stale `explorer.openMode` key, and the key is dropped by the tolerant PARSE — which runs on every
+ * read, not only at startup — so it writes it into the running root instead.
+ *
+ * The ninth keeps its own app, and says why where it stands.
+ *
+ * The shim below REFUSES launch options rather than ignoring them: a swallowed config root does not
+ * fail, it makes a test pass for the wrong reason.
+ *
+ * Serial mode is not optional. These tests share a window, a config root and the ONE preferences
+ * window throng allows, so they must not interleave — and when one fails the rest are SKIPPED rather
+ * than run against whatever state the failure left behind (see `openApp` in harness.ts).
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let cfgRoot: string;
+let baseline: ConfigRootSnapshot;
+
+test.beforeAll(async () => {
+  cfgRoot = freshCfgRoot();
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
+  await settle(shared.win);
+  // Photograph the root only once first-run seeding has finished — settings, key bindings and every
+  // shipped theme. A partial snapshot would have every later restore DELETE whatever arrived late.
+  await expect.poll(() => configRootSeeded(cfgRoot), { timeout: 30_000 }).toBe(true);
+  baseline = snapshotConfigRoot(cfgRoot);
+});
+
+/*
+ * Put the config root back between tests — with the preferences window CLOSED FIRST.
+ *
+ * The order is load-bearing twice over. A dirty JSON buffer raises `json-external-change` when the
+ * file changes underneath it, so restoring against an open window would hand the next test a notice
+ * it never asked for. And the on-entry snapshot that Revert and Revert All compare against is
+ * captured when the preferences window MOUNTS (`preferences-app.tsx`), so carrying one window across
+ * tests would carry the first test's baseline into the last one.
+ */
+test.afterEach(async () => {
+  await closePrefsWindow(shared.app);
+  await settleConfigRoot(baseline);
+});
+
+test.afterAll(async () => {
+  await shared?.close();
   for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
 
 function readSettings(cfgRoot: string): Record<string, any> | null {
   try {
@@ -41,8 +109,7 @@ async function openSettings(app: ElectronApplication, win: Page): Promise<Page> 
   return prefs;
 }
 
-test('edits toggle / select / number / array controls and applies + persists each', async () => {
-  const cfgRoot = freshCfgRoot();
+test('edits toggle / select / number / array controls and applies + persists each', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openSettings(app, win);
@@ -87,7 +154,6 @@ test('edits toggle / select / number / array controls and applies + persists eac
         .poll(() => readSettings(cfgRoot)?.explorer?.excludeGlobs)
         .toContain('**/dist');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
@@ -95,8 +161,7 @@ test('edits toggle / select / number / array controls and applies + persists eac
 const rowCount = (prefs: Page, key: string): Promise<number> =>
   prefs.getByTestId(`setting-${key}`).count();
 
-test('the Override start folder renders the shared folder picker (browse + typing) (011 FR-042/042a)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('the Override start folder renders the shared folder picker (browse + typing) (011 FR-042/042a)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openSettings(app, win);
@@ -123,36 +188,44 @@ test('the Override start folder renders the shared folder picker (browse + typin
         .poll(() => readSettings(cfgRoot)?.newProject?.overridePath)
         .toBe('C:/typed/override');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('enum dropdowns show machine tokens in Title Case; stored value is unchanged (011 polish)', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openSettings(app, win);
+/*
+ * MOVED to `packages/ui/tests/component/preferences-enum-labels.test.ts` (034 FR-045):
+ *   “enum dropdowns show machine tokens in Title Case; stored value is unchanged (011 polish)”.
+ *
+ * It launched Electron and opened a second window through the cog menu in order to read the text
+ * and the `value` attribute of five `<option>` elements. It wrote nothing, read no file and made
+ * no claim about layout: `humanizeOptionLabel` deciding what a `<select>` renders is the whole of
+ * it.
+ *
+ * SEVEN TESTS REPLACE IT, and four of the claims are new:
+ *   - `cr` is asserted. It was the third member of the same override table and the one the naive
+ *     Title-Caser mangles most quietly — “Cr” is a plausible-looking word, so it would have
+ *     shipped.
+ *   - “Stored value is unchanged” is now a SWEEP over every static enum in the registry: the
+ *     option values are the descriptor’s `allowedValues` verbatim, in order, nothing added. A
+ *     display-side change leaking into a stored value would have to survive all of them.
+ *   - No option anywhere is shown to the user as a raw camelCase token.
+ *   - The E2E never selected anything. Choosing “Override” is now asserted to commit `override`,
+ *     which is the display-only claim itself rather than a proxy for it.
+ *   - The default is read from `buildShippedDefaults()`, not from whatever the running app had
+ *     written into its config root.
+ *
+ * WHAT DID NOT MOVE: that a selection reaches `settings.json` — “edits toggle / select / number /
+ * array controls and applies + persists each” drives the same control through the real write path
+ * and stays.
+ *
+ * Red-proved, two mutations: skipping the abbreviation override table (1 red — and the camelCase
+ * sweep stays GREEN, which is why the abbreviations need their own assertion), and labelling an
+ * option with its raw token (4 red, while the option-VALUES sweep and the commit test stay green).
+ *
+ * ANTI-VACUITY CONTROL: in `form-controls.tsx`, change `SelectControl`’s
+ * `data-testid={testId(descriptor.key)}` to anything else — all 7 fail on `getByTestId`.
+ */
 
-      // The New Project starting-folder enum: each token renders EXACTLY Title-cased
-      // (option text) while its stored value stays the machine token (option value).
-      const start = prefs.getByTestId('control-newProject.startingFolder');
-      await expect(start.locator('option[value="lastViewed"]')).toHaveText('Last Viewed');
-      await expect(start.locator('option[value="override"]')).toHaveText('Override');
-      await expect(start.locator('option[value="profile"]')).toHaveText('Profile');
-      // …and the DEFAULT is Last Viewed.
-      await expect(start).toHaveValue('lastViewed');
-
-      // Line-ending abbreviations keep their casing (LF/CRLF/CR, never "Lf"/"Crlf").
-      const le = prefs.getByTestId('control-editor.defaultLineEnding');
-      await expect(le.locator('option[value="crlf"]')).toHaveText('CRLF');
-      await expect(le.locator('option[value="lf"]')).toHaveText('LF');
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('the settings search filters by name, description and value (FR-049)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('the settings search box is wired to the filter, and empties the form when nothing matches (FR-049)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openSettings(app, win);
@@ -164,113 +237,79 @@ test('the settings search filters by name, description and value (FR-049)', asyn
       const firstGroup = await prefs.getByTestId('settings-group-Appearance').boundingBox();
       expect(searchBox!.y).toBeLessThan(firstGroup!.y);
 
-      // Matches a NAME (label/key): only the Theme row survives; other groups vanish.
+      /*
+       * ONE query, not five (034 FR-045).
+       *
+       * This used to type five: a name, a description word, a value, two words for the OR, and a
+       * miss. WHAT each of those matches on is `filterFields`, and `filterFields` is a pure
+       * function over the settings registry with twenty-three cases against it in
+       * `packages/core/tests/unit/settings-search.test.ts` — including the description-only word,
+       * the value, the OR, and the section names that used to have a whole test of their own here.
+       *
+       * What no unit test can see is that the BOX is wired to it: that typing narrows the rendered
+       * form and empties the groups that no longer have rows. That is one keystroke's worth of
+       * evidence, and it is what is left.
+       */
       await search.fill('theme');
       await expect(prefs.getByTestId('setting-appearance.theme')).toBeVisible();
       await expect.poll(() => rowCount(prefs, 'behaviour.tabHoverActivateMs')).toBe(0);
+      // A group with no surviving rows goes with them, rather than staying as an empty heading.
       await expect(prefs.getByTestId('settings-group-Confirmations')).toHaveCount(0);
-
-      // Matches a DESCRIPTION word — 'dwell' appears only in tabHoverActivateMs's description
-      // ('…must dwell over another tab before that tab comes to the front…'), never in its label or
-      // key, so a hit here can only have come from matching the description text.
-      await search.fill('dwell');
-      await expect(prefs.getByTestId('setting-behaviour.tabHoverActivateMs')).toBeVisible();
-      await expect.poll(() => rowCount(prefs, 'appearance.theme')).toBe(0);
-
-      // Matches a VALUE (tabHoverActivateMs defaults to 600).
-      await search.fill('600');
-      await expect(prefs.getByTestId('setting-behaviour.tabHoverActivateMs')).toBeVisible();
-      await expect.poll(() => rowCount(prefs, 'appearance.theme')).toBe(0);
-
-      // ANY typed word matches (OR), so several words WIDEN the results.
-      await search.fill('theme globs');
-      await expect(prefs.getByTestId('setting-appearance.theme')).toBeVisible();
-      await expect(prefs.getByTestId('setting-explorer.excludeGlobs')).toBeVisible();
 
       // No match → an empty state, no groups.
       await search.fill('nosuchsettinganywhere');
       await expect(prefs.getByTestId('settings-search-empty')).toBeVisible();
       await expect(prefs.getByTestId('settings-group-Appearance')).toHaveCount(0);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('the settings search matches a section (group) name, including nested sub-groups (021)', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openSettings(app, win);
-      const search = prefs.getByTestId('settings-search');
-
-      // Group-only match: `editor.openOnClick` lives in the "File Explorer" group, but neither its key
-      // (`editor.openOnClick`) nor its label contains "explorer". Typing the SECTION name still returns
-      // it — and the rest of that section too (FR-015/FR-017).
-      await search.fill('explorer');
-      await expect(prefs.getByTestId('setting-editor.openOnClick')).toBeVisible();
-      await expect(prefs.getByTestId('setting-explorer.deleteMode')).toBeVisible();
-      // A setting in a different section (Appearance) is not pulled in.
-      await expect.poll(() => rowCount(prefs, 'appearance.theme')).toBe(0);
-
-      // Nested sub-group: typing the PARENT area name "editor" returns settings in its
-      // "Editor · Indentation" sub-group too (SC-007, Settings side).
-      await search.fill('editor');
-      await expect(prefs.getByTestId('setting-editor.indent.style')).toBeVisible();
-
-      // A query that matches nothing still empties the form.
-      await search.fill('zzzznothing');
-      await expect(prefs.getByTestId('settings-search-empty')).toBeVisible();
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('the settings search is debounced and has a reset (X) button (FR-049)', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openSettings(app, win);
-      const search = prefs.getByTestId('settings-search');
-
-      // The reset button only appears once there is something to reset.
-      await expect(prefs.getByTestId('settings-search-clear')).toHaveCount(0);
-
-      // Debounce: type, then read the DOM in the SAME task. React flushes the
-      // controlled input synchronously for a discrete event, so the text is
-      // already there — while the filter, being debounced, provably has not run.
-      const immediate = await prefs.evaluate(() => {
-        const input = document.querySelector('[data-testid="settings-search"]') as HTMLInputElement;
-        const setValue = Object.getOwnPropertyDescriptor(
-          window.HTMLInputElement.prototype,
-          'value',
-        )!.set!;
-        setValue.call(input, 'theme');
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        return {
-          typed: input.value,
-          unmatchedStillRendered: Boolean(
-            document.querySelector('[data-testid="setting-behaviour.tabHoverActivateMs"]'),
-          ),
-        };
-      });
-      expect(immediate.typed).toBe('theme'); // typing is never laggy
-      expect(immediate.unmatchedStillRendered).toBe(true); // …but the filter waited
-
-      // Once the debounce quiets, the filter applies.
-      await expect.poll(() => rowCount(prefs, 'behaviour.tabHoverActivateMs')).toBe(0);
-
-      // The reset (X) button clears the query and restores every row at once.
-      const clear = prefs.getByTestId('settings-search-clear');
-      await expect(clear).toBeVisible();
-      await clear.click();
-      await expect(search).toHaveValue('');
-      await expect(prefs.getByTestId('setting-behaviour.tabHoverActivateMs')).toBeVisible();
-      await expect(prefs.getByTestId('setting-appearance.theme')).toBeVisible();
-      await expect(clear).toHaveCount(0); // hidden again when empty
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
+/*
+ * DELETED (034 FR-045): "the settings search matches a section (group) name, including nested
+ * sub-groups (021)".
+ *
+ * Every claim it made is proved directly, on the registry, in
+ * `packages/core/tests/unit/settings-search.test.ts`: the group is in the haystack; a field matches
+ * by its section name when its own name does not contain the query; a group name returns every field
+ * of that section INCLUDING nested sub-groups; section matches union with name matches without
+ * duplicates; a group-less field is unaffected. Five cases, no app.
+ *
+ * The one thing it added — that the search box is connected to that function at all — is asserted
+ * once, above, and adding it a second time with different words does not make it truer.
+ */
+/*
+ * MOVED to `packages/ui/tests/component/preferences-settings-search.test.ts` (034 FR-045):
+ *   “the settings search is debounced and has a reset (X) button (FR-049)”.
+ *
+ * It launched Electron and opened a second window to assert four things about React state: the X
+ * appears only once there is something to clear, typing updates the field before the filter has
+ * run, the filter applies once the debounce quiets, and the X restores every row. `SettingsTab`
+ * holds two pieces of state — `query` (instant) and `applied` (debounced) — and that is all of it.
+ *
+ * SIX TESTS REPLACE IT, and the two that matter most were not previously provable:
+ *   - The E2E proved the debounce by RACING it: write through the native setter, read the DOM in
+ *     the same task, and trust that 150ms had not elapsed. That is a timing assumption dressed as
+ *     an assertion, and on a loaded machine it goes quiet rather than red. The clock is fake now
+ *     and advanced by hand.
+ *   - The E2E polled after pressing the X, so it could not distinguish a reset that applies AT
+ *     ONCE from one routed through the same debounce. `clearSearch` calls `applySearch.cancel()`
+ *     precisely so it is the former; the replacement asserts the rows are back WITHOUT advancing
+ *     the clock, and separately that a keystroke still in flight does not land afterwards and
+ *     re-filter a form the user has just emptied.
+ *
+ * WHAT DID NOT MOVE: WHICH settings a query matches is `filterFields`, a pure function with
+ * twenty-three cases in `packages/core/tests/unit/settings-search.test.ts`. And the test above
+ * this one stays whole — its first assertion compares the search box’s bounding box against the
+ * first group’s, which is real layout and has no meaning in jsdom (FR-049).
+ *
+ * Red-proved, four mutations: filtering on every keystroke (1 red), `clearSearch` not cancelling
+ * the in-flight keystroke (1 red), the reset routed through the debounce (1 red), and the box
+ * disconnected from the filter entirely (3 red).
+ *
+ * ANTI-VACUITY CONTROL: delete `ResetNoticeProvider` from the replacement’s `mount()`.
+ * `useResetNotice` throws rather than defaulting, so `SettingsTab` cannot render — all 6 fail
+ * before an assertion runs.
+ */
 
 /**
  * 019 US5 / #95 (C1, C2, FR-021/FR-023/FR-024): open-on-click has exactly one owner,
@@ -282,8 +321,7 @@ test('the settings search is debounced and has a reset (X) button (FR-049)', asy
  * migration of a setting that works) and moves to the File Explorer group, where the inert
  * `explorer.openMode` used to sit.
  */
-test('open-on-click is one control, in the File Explorer group, offering none (#95, C2)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('open-on-click is one control, in the File Explorer group, offering none (#95, C2)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openSettings(app, win);
@@ -312,22 +350,17 @@ test('open-on-click is one control, in the File Explorer group, offering none (#
       await control.selectOption('none');
       await expect.poll(() => readSettings(cfgRoot)?.editor?.openOnClick).toBe('none');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('a hand-written explorer.openMode changes nothing, warns nothing, and is stripped (#95, C1)', async () => {
-  const cfgRoot = freshCfgRoot();
-  // A user who set the inert control before the fix. FR-023: it is DROPPED, not migrated —
-  // it never had any effect, so dropping preserves exactly the behaviour they have today
-  // (single click), while migrating would change it.
-  writeFileSync(
-    join(cfgRoot, 'settings.json'),
-    JSON.stringify({ version: 1, explorer: { openMode: 'double', deleteMode: 'permanent' } }),
-    'utf8',
-  );
+test('a hand-written explorer.openMode changes nothing, warns nothing, and is stripped (#95, C1)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
+      // A user who set the inert control before the fix. FR-023: it is DROPPED, not migrated —
+      // it never had any effect, so dropping preserves exactly the behaviour they have today
+      // (single click), while migrating would change it. Written into the RUNNING root: the key is
+      // dropped by the tolerant PARSE, which runs on every read, so nothing here needs a launch.
+      writeSettingsAtomic(cfgRoot, { version: 1, explorer: { openMode: 'double', deleteMode: 'permanent' } });
       const warnings: string[] = [];
       const prefs = await openSettings(app, win);
       prefs.on('console', (m) => {
@@ -352,12 +385,10 @@ test('a hand-written explorer.openMode changes nothing, warns nothing, and is st
       expect(readSettings(cfgRoot)?.explorer?.openMode).toBeUndefined();
       expect(readSettings(cfgRoot)?.explorer?.deleteMode).toBe('permanent');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('an invalid number is not applied and is surfaced; last valid value stays', async () => {
-  const cfgRoot = freshCfgRoot();
+test('an invalid number is not applied and is surfaced; last valid value stays', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openSettings(app, win);
@@ -368,21 +399,25 @@ test('an invalid number is not applied and is surfaced; last valid value stays',
       await expect(prefs.getByTestId('control-behaviour.tabHoverActivateMs-invalid')).toBeVisible();
       expect(readSettings(cfgRoot)?.behaviour?.tabHoverActivateMs).toBe(600);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('a malformed settings.json opens the defaults-merged form without crashing (FR-043)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('a malformed settings.json opens the defaults-merged form without crashing (FR-043)', { tag: ['@extended', '@prefs'] }, async () => {
+  /*
+   * ITS OWN APP (034 FR-045). The claim is that the application STARTS on a broken settings file —
+   * which is the whole of FR-043 — so producing the malformed document after startup would prove
+   * something else entirely, however similar the assertions looked.
+   */
+  const ownCfgRoot = freshCfgRoot();
   // Seed a malformed file before launch.
-  writeFileSync(join(cfgRoot, 'settings.json'), '{ this is : not valid json ', 'utf8');
-  await runApp(
+  writeFileSync(join(ownCfgRoot, 'settings.json'), '{ this is : not valid json ', 'utf8');
+  await runOwnApp(
     async (app, win) => {
       const prefs = await openSettings(app, win);
       // The form renders (defaults-merged) — a known control is present and shows a default.
       await expect(prefs.getByTestId('control-confirmations.destroyProject')).toBeVisible();
       await expect(prefs.getByTestId('control-confirmations.destroyProject')).toHaveValue('double');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
+    { env: { THRONG_CONFIG_ROOT: ownCfgRoot } },
   );
 });

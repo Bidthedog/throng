@@ -35,7 +35,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { addPanels, cleanupTemp, createProject, panelIds, runApp, settle } from './harness.js';
+import { addPanels, cleanupTemp, createProject, panelIds, quiesced, runApp, settle } from './harness.js';
 
 /** The consolidated notice raised for panels one action defeated. */
 function consolidated(win: Page): Locator {
@@ -169,7 +169,7 @@ async function renamePanel(win: Page, panelId: string, to: string): Promise<void
  * workspace, and rebuilding it four times would cost four two-launch dances (~4 minutes) to observe
  * four facets of one state. What each block is proving is stated where it sits.
  */
-test('one cause across several tabs is one notice, listing every panel it defeated', async () => {
+test('one cause across several tabs is one notice, listing every panel it defeated', { tag: ['@extended', '@failure'] }, async () => {
   test.setTimeout(420_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-consol-root-'));
   const moved = `${root}-renamed`;
@@ -233,9 +233,10 @@ test('one cause across several tabs is one notice, listing every panel it defeat
         // ═══ T037 — ONE notice, not one per casualty. ═══
         const notice = consolidated(win);
         await expect(notice).toBeVisible({ timeout: 90_000 });
-        // Settle: the editor's mount, the tab-open watcher's 300ms scan and the terminal's attach
-        // all report at different moments, and "one notice" is a claim about the end state.
-        await win.waitForTimeout(3000);
+        // Settle: the editor's mount, the tab-open watcher's 300ms scan and the terminal's attach all
+        // report at different moments, so wait for the notice surface to actually STOP redrawing
+        // before reading how many notices it settled on — "one notice" is a claim about the end state.
+        await quiesced(win.getByTestId('notices'), { what: 'consolidated notice stack' });
         await expect(notice, 'one cause raised more than one consolidated notice').toHaveCount(1);
 
         // The per-tab dialog is GONE OUTRIGHT (FR-035) — not narrowed, not merely unused here.
@@ -244,11 +245,25 @@ test('one cause across several tabs is one notice, listing every panel it defeat
 
         // ═══ The project is named ONCE, in the heading, and never on a row (FR-031). ═══
         await expect(notice.locator('.notice__title')).toContainText('Consol');
+
+        /*
+         * ═══ Editors AND terminals, in the same list. ═══
+         *
+         * THE COUNT IS ASSERTED BEFORE THE TEXT IS SNAPSHOTTED, and the order is the fix.
+         *
+         * `allInnerTexts()` takes a still photograph; `toHaveCount` waits. With the snapshot first,
+         * the text was captured while only the terminal had joined the notice and the editor's
+         * 300ms tab-open scan had not yet reported — so the later `toContain('Docs')` failed against
+         * a list that was complete on screen by then, and the count assertion two lines down passed.
+         * A three-second sleep used to sit above all this and hid the ordering entirely.
+         *
+         * Waiting for BOTH casualties is also the honest condition. It is what "one cause, every
+         * panel it defeated" means, and unlike settling it cannot be satisfied by a lull between
+         * the two reports arriving.
+         */
+        await expect(rows(win)).toHaveCount(2);
         const rowText = (await rows(win).allInnerTexts()).join('\n');
         expect(rowText, 'a row repeats the project the heading already names').not.toContain('Consol');
-
-        // ═══ Editors AND terminals, in the same list. ═══
-        await expect(rows(win)).toHaveCount(2);
         expect(rowText, 'the editor panel is missing from the list').toContain('Docs');
         expect(rowText, 'the terminal panel is missing from the list').toContain('Shell');
 
@@ -356,7 +371,7 @@ test('one cause across several tabs is one notice, listing every panel it defeat
  * The second half is the one that keeps that from becoming "everything is one notice": two project
  * opens are two actions, and two actions are two notices, each speaking only for its own casualties.
  */
-test('an unclassified multi-panel failure groups by operation, and two operations are two notices', async () => {
+test('an unclassified multi-panel failure groups by operation, and two operations are two notices', { tag: ['@extended', '@failure'] }, async () => {
   test.setTimeout(420_000);
   const rootA = mkdtempSync(join(tmpdir(), 'throng-consol-a-'));
   const rootB = mkdtempSync(join(tmpdir(), 'throng-consol-b-'));

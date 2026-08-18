@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -24,7 +24,15 @@ const FLAVOURS = ['cmd', 'windows-powershell', 'pwsh', 'git-bash'] as const;
  *
  * These fail at the HEADER assertion below — i.e. the cwd is never observed at all, upstream of
  * directory memory — so they are marked `fixme` rather than deleted: the test is correct and the
- * product is not. `terminal-cwd.e2e.ts` only ever covered `cmd`, which is why this was never seen.
+ * product is not. `terminal-cwd.e2e.ts` only ever covered `cmd`, which is why this was
+ * never seen.
+ *
+ * THAT FILE IS NOW GONE (034 FR-045), absorbed here. Its whole body was: confirm a cmd
+ * terminal, assert `panel-cwd-<pid>` shows the project root, type `cd deepdir`, assert the
+ * header follows. The `[cmd]` case below performs exactly those steps and then asserts two
+ * things it never did — that the live xterm node SURVIVES the recording (no tear-down flash),
+ * and that the directory reaches the persisted layout, which is what the next launch reads.
+ * A strict superset, for one app launch instead of two.
  *
  * `windows-powershell` was the first taken off this list. Its `Set-Location` never moves the
  * process working directory, so no external read can ever see it; shell integration (on by
@@ -69,7 +77,7 @@ async function expectLayout(
 }
 
 for (const flavour of FLAVOURS) {
-  test(`[${flavour}] the working directory is remembered against the panel (FR-027)`, async () => {
+  test(`[${flavour}] the working directory is remembered against the panel (FR-027)`, { tag: ['@extended', '@terminal'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -160,7 +168,7 @@ for (const flavour of FLAVOURS) {
   });
 }
 
-test('with "Reopen in the last directory" OFF, nothing is remembered (FR-027a)', async () => {
+test('with "Reopen in the last directory" OFF, nothing is remembered (FR-027a)', { tag: ['@extended', '@terminal'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -218,46 +226,39 @@ test('with "Reopen in the last directory" OFF, nothing is remembered (FR-027a)',
   }
 });
 
-test('with shell integration OFF, PowerShell cannot offer "Reopen in the last directory"', async () => {
-  test.setTimeout(120_000);
-  const root = mkdtempSync(join(tmpdir(), 'throng-dirmem-nointeg-'));
-  const cfg = mkdtempSync(join(tmpdir(), 'throng-dirmem-nointeg-cfg-'));
-  try {
-    writeFileSync(
-      join(cfg, 'settings.json'),
-      JSON.stringify({ terminals: { shellIntegration: false } }, null, 2),
-      'utf8',
-    );
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'NoInteg', root);
-        const pid = await firstPanelId(win);
-        await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-        const select = win.getByTestId('terminal-flavour');
-        await expect(select).toBeVisible();
-        const values = await select
-          .locator('option')
-          .evaluateAll((opts) => opts.map((o) => (o as HTMLOptionElement).value));
-        const remember = win.getByTestId('terminal-remember-directory');
-
-        // cmd moves its real working directory, so it never needed integration — still offered.
-        await select.selectOption('cmd');
-        await expect(remember).toBeEnabled();
-        await expect(remember).toBeChecked();
-
-        if (values.includes('windows-powershell')) {
-          // PowerShell cannot report its directory without integration. Offering the control here
-          // would look enabled and silently do nothing, which is the misleading state this guards.
-          await select.selectOption('windows-powershell');
-          await expect(remember).toBeDisabled();
-          await expect(remember).not.toBeChecked();
-        }
-      },
-      { env: { THRONG_CONFIG_ROOT: cfg } },
-    );
-  } finally {
-    for (const d of [root, cfg]) {
-      cleanupTemp(d);
-    }
-  }
-});
+/*
+ * ══ MOVED (034 FR-045) — "with shell integration OFF, PowerShell cannot offer 'Reopen in the
+ * last directory'" ══
+ *
+ * It seeded `{ terminals: { shellIntegration: false } }` into a temp config root and launched a
+ * whole Electron app to read two checkbox states off a form. It never started a shell — and
+ * because the setting has to be on disk BEFORE the app starts, it could not share an app with
+ * its neighbours either, so it cost a launch entirely of its own.
+ *
+ * SPLIT THREE WAYS, because a partial replacement is not a replacement (FR-047). The claim ran
+ * settings.json → flavour → IPC → hook → disabled checkbox, and no single layer holds all of it:
+ *
+ *   1. `packages/core/tests/unit/terminal-flavour-reports-directory.test.ts` — `mergeFlavours`
+ *      carries `settings.shellIntegration` onto every flavour it builds, on BOTH branches
+ *      (detected built-ins and user entries), for all four built-in shells rather than the one
+ *      the E2E drove. `flavourReportsDirectory` already had unit tests and they were green
+ *      throughout; what had none was whether the dropdown is actually built from it.
+ *   2. `packages/ui/tests/component/terminal-panel-type-inputs.test.ts` — the flag reaching a
+ *      rendered, disabled, unchecked control, driven through the REAL `useFlavours` hook over a
+ *      fake preload bridge so the mapping at `use-flavours.ts:25` is under test rather than
+ *      stubbed past. Stronger than the E2E in one respect: it also asserts the control says WHY
+ *      it is inert, which is the difference between a disabled box and a disabled box a user can
+ *      do something about.
+ *   3. `ipcMain.handle('throng:terminal:listFlavours')` → `shellDetectionService.listFlavours()`
+ *      (main.ts:1290) is covered by NEITHER. It is a one-line delegation with no logic in it, and
+ *      it is named here rather than left implied because an unstated gap is what FR-046a exists
+ *      to stop.
+ *
+ * ANTI-VACUITY CONTROLS, both mandatory before believing the above: make `stubBridge` resolve
+ * `[]` and all 4 component tests fail on the awaited `terminal-flavour`; make `mergeFlavours`
+ * return `[]` and all 5 unit tests fail.
+ *
+ * WHAT STAYS: the five below. Each drives a REAL shell of a different flavour, types a `cd` into
+ * it, and waits for the daemon's own observation of the new directory to reach the panel header
+ * and the persisted layout. That is PTY fidelity end to end, and nothing cheaper can see it.
+ */

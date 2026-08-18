@@ -10,7 +10,7 @@
 import { test, expect } from '@playwright/test';
 import { runApp, createProject } from './harness.js';
 
-test('a renderer-opened window is denied; http(s) is routed to the OS opener (#159)', async () => {
+test('a renderer-opened window is denied; http(s) is routed to the OS opener (#159)', { tag: ['@extended', '@terminal'] }, async () => {
   await runApp(async (app, win) => {
     await createProject(win, 'LinksProj', 'C:/c/links');
 

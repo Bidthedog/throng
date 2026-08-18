@@ -120,7 +120,7 @@ async function runInTerminal(
   await expect(term).toContainText(evidence, { timeout: 25_000 });
 }
 
-test('memory ON: a command started IN the terminal is observed and persisted (US2 row 2)', async () => {
+test('memory ON: a command started IN the terminal is observed and persisted (US2 row 2)', { tag: ['@extended', '@terminal'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -139,7 +139,7 @@ test('memory ON: a command started IN the terminal is observed and persisted (US
   });
 });
 
-test('memory ON: stopping the command leaves nothing to promote (US2 rows 3 and 4)', async () => {
+test('memory ON: stopping the command leaves nothing to promote (US2 rows 3 and 4)', { tag: ['@extended', '@terminal'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -167,17 +167,36 @@ test('memory ON: stopping the command leaves nothing to promote (US2 rows 3 and 
   });
 });
 
-test('memory OFF: a running command is never recorded at all (US2 row 6)', async () => {
+test('memory OFF: a running command is never recorded at all (US2 row 6)', { tag: ['@extended', '@terminal'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
   skipIfElevated();
   test.setTimeout(120_000);
-  await withTerminal('MemRow6', { remember: false }, async ({ win, data, term }) => {
+  await withTerminal('MemRow6', { remember: false }, async ({ win, pid, data, term }) => {
     await runInTerminal(win, term, LONG_RUNNING, 'Reply from');
-    // Give the observation at least a couple of poll intervals to prove it is genuinely not being
-    // written, rather than merely slower than the assertion.
-    await win.waitForTimeout(4000);
+    /*
+     * The fence: wait until the DAEMON's own observation of the running command has reached the
+     * renderer, via `window.__throngTerminalCommand` (command-store.ts) — populated by the SAME
+     * `terminal.command` notification the memory-gated write effect subscribes to
+     * (terminal-panel.tsx:417-423), regardless of whether memory is on or off. Once that value
+     * shows the running ping, the effect has had its one chance to persist it and — because
+     * `rememberCommand` is false — chose not to. That is a real "the opportunity has passed"
+     * condition, not a guess about how long a write takes.
+     */
+    await expect
+      .poll(
+        () =>
+          win.evaluate(
+            (p) =>
+              (
+                window as unknown as { __throngTerminalCommand?: (panelId: string) => string | null | undefined }
+              ).__throngTerminalCommand?.(p) ?? null,
+            pid,
+          ),
+        { timeout: 25_000, message: 'the daemon never observed the running ping command for this panel' },
+      )
+      .toMatch(/ping/i);
     const json = layoutJson(data, 'MemRow6') ?? '';
     expect(json, 'the layout row was never written at all').not.toBe('');
     expect(json, 'a command was recorded despite memory being off').not.toMatch(/"observedCommand":"/);
@@ -185,7 +204,7 @@ test('memory OFF: a running command is never recorded at all (US2 row 6)', async
   });
 });
 
-test('memory ON: a later command replaces the earlier one (US2 row 5)', async () => {
+test('memory ON: a later command replaces the earlier one (US2 row 5)', { tag: ['@extended', '@terminal'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -232,7 +251,7 @@ test('memory ON: a later command replaces the earlier one (US2 row 5)', async ()
   });
 });
 
-test('a command that takes over REPLACES the startup command the user typed (US2 row 2)', async () => {
+test('a command that takes over REPLACES the startup command the user typed (US2 row 2)', { tag: ['@extended', '@terminal'] }, async () => {
   test.setTimeout(180_000);
   // Reported from real use: start a terminal on `ping`, stop it, run something else, end the
   // terminal — and the something else was never saved as the Panel's Startup Command. Each piece

@@ -18,7 +18,7 @@ function makeProject(): string {
 const editors = (win: import('@playwright/test').Page) =>
   win.locator('[data-testid^="editor-"]').filter({ has: win.locator('.cm-content') });
 
-test('with "New Editor", each opened file lands in a new editor panel (#141)', async () => {
+test('with "New Editor", each opened file lands in a new editor panel (#141)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   const cfg = mkdtempSync(join(tmpdir(), 'throng-us7-cfg-'));
   writeFileSync(join(cfg, 'settings.json'), JSON.stringify({ editor: { openTarget: 'new' } }, null, 2));
@@ -41,7 +41,7 @@ test('with "New Editor", each opened file lands in a new editor panel (#141)', a
   }
 });
 
-test('with "Last Active Editor" (default), opens reuse one editor (#141)', async () => {
+test('with "Last Active Editor" (default), opens reuse one editor (#141)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

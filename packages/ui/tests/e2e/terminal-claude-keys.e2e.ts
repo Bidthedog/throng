@@ -9,7 +9,7 @@ import {
 import { homedir, tmpdir } from 'node:os';
 import { basename, join, sep } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, step, TYPE_DELAY } from './harness.js';
+import { runApp, createProject, firstPanelId, step, TYPE_DELAY, quiesced } from './harness.js';
 
 /**
  * 028 follow-up — the reported defects, driven against REAL Claude Code.
@@ -121,14 +121,6 @@ function cleanup(root: string): void {
   }
 }
 
-/** Everything the terminal is currently showing, as one string. */
-async function screen(win: Page, panelId: string): Promise<string> {
-  return (await win.getByTestId(`terminal-${panelId}`).textContent()) ?? '';
-}
-
-
-
-
 /**
  * What the DAEMON says is running in the panel — the process table, not the screen and not the
  * window title.
@@ -156,7 +148,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
     'needs a logged-in `claude` on PATH: set THRONG_CLAUDE_E2E=1, and never runs on CI',
   );
 
-  test('Ctrl+Backspace works when claude is TYPED at a prompt, not launched as a startup command', async () => {
+  test('Ctrl+Backspace works when claude is TYPED at a prompt, not launched as a startup command', { tag: ['@extended', '@terminal'] }, async () => {
     test.setTimeout(240_000);
     /*
      * The user's actual flow, and the one difference every passing test here had quietly avoided.
@@ -185,13 +177,15 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
         await win.keyboard.type('claude', { delay: 60 });
         await win.keyboard.press('Enter');
         await expect(term).toContainText(/Welcome back|auto mode on/i, { timeout: 180_000 });
-        await win.waitForTimeout(3000);
+        await quiesced(term, { what: 'claude startup banner (typed launch)' });
 
         await term.click();
         await win.keyboard.type('alpha bravo charlie', { delay: 60 });
         await expect(term).toContainText('alpha bravo charlie', { timeout: 30_000 });
         await win.keyboard.press('Control+Backspace');
-        await win.waitForTimeout(2500);
+        // quiesced() is the fence for the negative assertions below: the redraw finishing IS the
+        // signal that Ctrl+Backspace has had whatever effect it is going to have.
+        const after = await quiesced(term, { what: 'terminal after Ctrl+Backspace (typed launch)' });
 
         const diag = await win.evaluate(
           () =>
@@ -205,16 +199,15 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
           console.log('DIAG-TYPED', JSON.stringify(d.keys.filter((k) => k.chord.includes('Backspace'))));
         }
 
-        const after = await screen(win, pid);
         expect(after).toContain('alpha bravo');
         expect(after, 'Ctrl+Backspace deleted nothing').not.toContain('charlie');
         expect(after, 'Ctrl+Backspace deleted one CHARACTER, not a word').not.toContain('charli');
 
         await win.keyboard.press('Control+C');
-        await win.waitForTimeout(500);
+        await quiesced(term, { what: 'terminal after Ctrl+C (typed launch)' });
         await win.keyboard.type('/exit', { delay: 60 });
         await win.keyboard.press('Enter');
-        await win.waitForTimeout(1500);
+        await quiesced(term, { what: 'terminal after /exit (typed launch)' });
       });
     } finally {
       untrust();
@@ -222,7 +215,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
     }
   });
 
-  test('Ctrl+Backspace deletes a WORD in claude when the shell negotiated NOTHING', async () => {
+  test('Ctrl+Backspace deletes a WORD in claude when the shell negotiated NOTHING', { tag: ['@extended', '@terminal'] }, async () => {
     test.setTimeout(240_000);
     /*
      * The case the PowerShell tests cannot reach.
@@ -245,13 +238,14 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
 
         const term = win.getByTestId(`terminal-${pid}`);
         await expect(term).toContainText(/Welcome back|auto mode on/i, { timeout: 180_000 });
-        await win.waitForTimeout(3000);
+        await quiesced(term, { what: 'claude startup banner (cmd launch)' });
 
         await term.click();
         await win.keyboard.type('alpha bravo charlie', { delay: 60 });
         await expect(term).toContainText('alpha bravo charlie', { timeout: 30_000 });
         await win.keyboard.press('Control+Backspace');
-        await win.waitForTimeout(2500);
+        // quiesced() is the fence for the negative assertions below.
+        const after = await quiesced(term, { what: 'terminal after Ctrl+Backspace (cmd launch)' });
 
         const diag = await win.evaluate(
           () =>
@@ -266,16 +260,15 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
           console.log('DIAG-CMD', JSON.stringify(keys.filter((k) => k.chord.includes('Backspace'))));
         }
 
-        const after = await screen(win, pid);
         expect(after).toContain('alpha bravo');
         expect(after, 'Ctrl+Backspace deleted nothing').not.toContain('charlie');
         expect(after, 'Ctrl+Backspace deleted one CHARACTER, not a word').not.toContain('charli');
 
         await win.keyboard.press('Control+C');
-        await win.waitForTimeout(500);
+        await quiesced(term, { what: 'terminal after Ctrl+C (cmd launch)' });
         await win.keyboard.type('/exit', { delay: 60 });
         await win.keyboard.press('Enter');
-        await win.waitForTimeout(1500);
+        await quiesced(term, { what: 'terminal after /exit (cmd launch)' });
       });
     } finally {
       untrust();
@@ -283,7 +276,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
     }
   });
 
-  test('Ctrl+Backspace still deletes a WORD in claude after a tab switch', async () => {
+  test('Ctrl+Backspace still deletes a WORD in claude after a tab switch', { tag: ['@extended', '@terminal'] }, async () => {
     test.setTimeout(240_000);
     /*
      * The same chord as the first test, after the trigger that breaks the OTHER one.
@@ -303,21 +296,24 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
 
         const term = win.getByTestId(`terminal-${pid}`);
         await expect(term).toContainText(/Welcome back|auto mode on/i, { timeout: 180_000 });
-        await win.waitForTimeout(3000);
+        await quiesced(term, { what: 'claude startup banner (before tab switch)' });
 
         // Switch away and back BEFORE typing — the terminal is rebuilt, carrying whatever the shell
         // negotiated with it.
         await win.getByTestId('tab-add').click();
-        await win.waitForTimeout(1200);
+        await expect(win.getByTestId('tab-strip').locator('.tab-chip')).toHaveCount(2);
         await win.getByTestId('tab-strip').locator('.tab-chip').first().click();
-        await win.waitForTimeout(2500);
 
         const back = win.getByTestId(`terminal-${pid}`);
+        // The terminal panel is torn down and rebuilt across the switch; wait for its repaint to
+        // settle before touching it, rather than guessing how long a rebuild takes.
+        await quiesced(back, { what: 'terminal after switching tabs back' });
         await back.click();
         await win.keyboard.type('alpha bravo charlie', { delay: 60 });
         await expect(back).toContainText('alpha bravo charlie', { timeout: 30_000 });
         await win.keyboard.press('Control+Backspace');
-        await win.waitForTimeout(2500);
+        // quiesced() is the fence for the negative assertions below.
+        const after = await quiesced(back, { what: 'terminal after Ctrl+Backspace (post tab-switch)' });
 
         const diag = await win.evaluate(
           () =>
@@ -331,16 +327,15 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
           console.log('DIAG-BKSP', panel, JSON.stringify(d.keys));
         }
 
-        const after = await screen(win, pid);
         expect(after).toContain('alpha bravo');
         expect(after, 'Ctrl+Backspace deleted nothing after the tab switch').not.toContain('charlie');
         expect(after, 'Ctrl+Backspace deleted one CHARACTER, not a word').not.toContain('charli');
 
         await win.keyboard.press('Control+C');
-        await win.waitForTimeout(500);
+        await quiesced(back, { what: 'terminal after Ctrl+C (post tab-switch)' });
         await win.keyboard.type('/exit', { delay: 60 });
         await win.keyboard.press('Enter');
-        await win.waitForTimeout(1500);
+        await quiesced(back, { what: 'terminal after /exit (post tab-switch)' });
       });
     } finally {
       untrust();
@@ -348,7 +343,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
     }
   });
 
-  test('Ctrl+End still reaches claude after a tab switch', async () => {
+  test('Ctrl+End still reaches claude after a tab switch', { tag: ['@extended', '@terminal'] }, async () => {
     test.setTimeout(240_000);
     /*
      * Borrows a REAL project and one of its existing claude sessions.
@@ -376,7 +371,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
         await expect(term).toContainText(/Welcome back|auto mode on|Jump to Bottom/i, {
           timeout: 180_000,
         });
-        await win.waitForTimeout(4000);
+        await quiesced(term, { what: 'claude startup banner (resumed session)' });
 
         // Scroll claude's own transcript to the top: it then offers the way back, which is the
         // observable this test turns on.
@@ -394,16 +389,20 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
         await win.keyboard.press('Control+Home');
         await expect(term).toContainText(/Jump to Bottom/i, { timeout: 30_000 });
         await win.getByTestId('tab-add').click();
-        await win.waitForTimeout(1500);
+        await expect(win.getByTestId('tab-strip').locator('.tab-chip')).toHaveCount(2);
         await win.getByTestId('tab-strip').locator('.tab-chip').first().click();
-        await win.waitForTimeout(3000);
 
         const back = win.getByTestId(`terminal-${pid}`);
+        // Wait for the rebuilt terminal's repaint to settle before reading it or the "still
+        // scrolled" read below inherits whatever the previous panel last showed.
+        const settledAfterSwitch = await quiesced(back, { what: 'terminal after switching tabs back' });
         await back.click();
-        const stillScrolled = /Jump to Bottom/i.test(await screen(win, pid));
+        const stillScrolled = /Jump to Bottom/i.test(settledAfterSwitch);
         console.log('CLAUDE-END: after switch, still scrolled up =', stillScrolled);
         await win.keyboard.press('Control+End');
-        await win.waitForTimeout(3000);
+        // quiesced() is the fence for the negative assertion below (FR-016/FR-017): the redraw
+        // finishing is what lets "still offering Jump to Bottom" mean something.
+        await quiesced(back, { what: 'terminal after Ctrl+End (post tab-switch)' });
 
         // What did throng BELIEVE when that key arrived? This is the question every stand-in failed
         // to answer, and the diagnostic exists precisely so it can be read from a failing run.
@@ -430,116 +429,28 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
     }
   });
 
-  /**
-   * Escape on claude's AGENT LIST, driven against the real program, in the user's own flow:
-   * `claude` typed at a PowerShell prompt, then Left to reach the agents view, then Escape.
+  /*
+   * REMOVED (034 FR-045/FR-046): test('Escape reaches claude in the encoding claude negotiated').
    *
-   * Reported as re-entering the selected session instead of leaving claude, and only sometimes. The
-   * user's diagnostics showed why: at that keypress throng's state read `kitty: true`. Claude had
-   * negotiated the kitty keyboard protocol, whose disambiguate flag exists for exactly one problem —
-   * 0x1b is BOTH the Escape key and the first byte of every escape sequence. Under that flag Escape
-   * must be reported as `CSI 27 u`; a bare 0x1b is the ambiguity the program asked to be rid of, and
-   * what it decides then depends on what arrives next, which is the intermittency.
+   * It asserted `sent === kitty ? CSI 27 u : ESC` — that a program which negotiated the kitty
+   * protocol receives `CSI 27 u` for Escape. That is the behaviour throng DELIBERATELY REVERTED,
+   * and `kitty-keyboard.ts` says so in twelve lines above `WIN32_KEYS`: throng sent `CSI 27 u`
+   * for a day, and Windows Terminal — which does not implement the protocol, and is the terminal
+   * Claude Code demonstrably works in — sends a bare `1b` even with the flags pushed. So Escape
+   * is absent from that table and from every re-encoding path, on purpose.
    *
-   * The assertion is the INVARIANT rather than a fixed byte, because the right answer depends on
-   * what the program negotiated: CSI-u once it has asked to disambiguate, the legacy byte otherwise.
-   * That way this states the rule instead of encoding one machine's session.
+   * So this was not a duplicate. It asserted the OPPOSITE of a decision the product had already
+   * taken, and `packages/ui/tests/unit/modified-keys.test.ts:130` asserts the real rule — "stays
+   * the bare byte even once the program asked to disambiguate" — quoting the same evidence.
+   *
+   * It survived because it could never run: this whole describe is skipped unless
+   * THRONG_CLAUDE_E2E=1 and not CI, and it needs `claude` on PATH with a working login. A test
+   * that cannot run cannot be wrong out loud — which is the argument for deleting it rather
+   * than leaving a contradiction in the suite for whoever next turns the flag on.
+   *
+   * Delivery of the negotiated encoding, which is the part that IS real, stays covered by
+   * terminal-kitty-editing-keys.e2e.ts against a fixture that pushes CSI > 1 u as claude does.
    */
-  test('Escape reaches claude in the encoding claude negotiated', async () => {
-    test.setTimeout(240_000);
-    const root = CLAUDE_ROOT ?? mkdtempSync(join(tmpdir(), 'throng-claude-esc-'));
-    const untrust = trustProject(root);
-    try {
-      await runApp(async (_app, win) => {
-        await createProject(win, 'ClaudeEsc', root);
-        const pid = await firstPanelId(win);
-        // NO startup command: the user types `claude` at the prompt, and how claude is launched has
-        // already been shown to change what the terminal has negotiated by the time it starts.
-        await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
-        await win.getByTestId(`panel-type-confirm-${pid}`).click();
-
-        const term = win.getByTestId(`terminal-${pid}`);
-        await expect(term).toBeVisible();
-        /*
-         * Wait for the PROMPT before typing a character.
-         *
-         * A shell that has not finished painting its prompt loses the start of what is typed at it,
-         * and the command then submits half-formed - observed as `claud` + Enter on one line and a
-         * stray `e` on the next, which PowerShell duly reported as an error. The prompt shows the
-         * working directory, so that is the thing to wait for.
-         */
-        await expect(term).toContainText(basename(root), { timeout: 30_000 });
-        await term.click();
-        await step(win, 'a PowerShell prompt — about to type `claude`, as the user does');
-        await win.keyboard.type('claude', { delay: TYPE_DELAY });
-        // …and confirm the whole command is on the line before submitting it. A plain containment
-        // check, because xterm's textContent joins the rows with no line breaks, so an end-anchored
-        // pattern never matches what is actually the last thing typed.
-        await expect(term).toContainText('claude', { timeout: 15_000 });
-        await win.keyboard.press('Enter');
-
-        await expect(term).toContainText(/Welcome back|auto mode on|for agents/i, {
-          timeout: 180_000,
-        });
-        await win.waitForTimeout(4000);
-        await step(win, 'claude is up');
-
-        await term.click();
-        await win.keyboard.press('ArrowLeft');
-        await win.waitForTimeout(2500);
-        await step(win, 'pressed Left — this opens the agents view');
-
-        /*
-         * Prove the agents view is actually open before pressing the key under test. Its footer is
-         * distinctive, and without this check a run against a project with no sessions presses
-         * Escape at an ordinary prompt and reports on a state the user is never in.
-         */
-        await expect(term).toContainText(/enter to return|space to reply|ctrl\+x to delete/i, {
-          timeout: 20_000,
-        });
-        await step(win, 'the agents view is open — about to press Escape');
-
-        await win.keyboard.press('Escape');
-        await win.waitForTimeout(2500);
-        await step(win, 'pressed Escape — the key under test');
-
-        const diag = await win.evaluate(
-          () =>
-            (
-              window as unknown as {
-                __throngTerminalDiagnostics?: () => Record<
-                  string,
-                  { keys: { chord: string; sent?: string; kitty: boolean; altBuffer: boolean }[] }
-                >;
-              }
-            ).__throngTerminalDiagnostics?.() ?? {},
-        );
-        const keys = Object.values(diag).flatMap((d) => d.keys);
-        const esc = keys.filter((k) => k.chord === 'Escape').at(-1);
-        expect(esc, 'no Escape keypress was recorded at all').toBeDefined();
-        console.log(
-          `[claude-esc] kitty=${esc?.kitty} altBuffer=${esc?.altBuffer} sent=${JSON.stringify(esc?.sent)}`,
-        );
-
-        /*
-         * `sent` is stored ESCAPED (`recordKeyBytes` runs it through JSON.stringify), because a raw
-         * control byte in a blob a user pastes back is unreadable — and invisible in a terminal,
-         * which is how a first cut of this compared the six characters `` against a real ESC
-         * byte and reported a failure that was entirely the test's own.
-         *
-         * The rule being asserted: once the program has asked to disambiguate, Escape is a CSI-u
-         * report; until then the legacy byte is the correct and only answer.
-         */
-        // Six characters - a backslash, u, 0, 0, 1, b - NOT the ESC byte.
-        const ESCAPED_ESC = '\\u001b';
-        expect(esc?.sent).toBe(esc?.kitty ? `${ESCAPED_ESC}[27u` : ESCAPED_ESC);
-      });
-    } finally {
-      untrust();
-      cleanup(root);
-    }
-  });
 
   /**
    * The USER'S use case, asserted as an outcome rather than as bytes: on claude's agents view,
@@ -577,7 +488,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
    *
    * Nothing is sent to the model: Ctrl+C is a signal, not a prompt.
    */
-  test('the panel header reports claude leaving when it really exits', async () => {
+  test('the panel header reports claude leaving when it really exits', { tag: ['@extended', '@terminal'] }, async () => {
     test.setTimeout(240_000);
     const root = CLAUDE_ROOT ?? mkdtempSync(join(tmpdir(), 'throng-claude-oracle-'));
     const untrust = trustProject(root);
@@ -599,22 +510,33 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
         await expect(term).toContainText(/for agents|auto mode on|Welcome back/i, {
           timeout: 180_000,
         });
-        await win.waitForTimeout(4000);
+        await quiesced(term, { what: 'claude startup banner (oracle)' });
 
         // While it runs, the header names it.
         expect(await runningCommand(win, pid)).toMatch(/claude/i);
 
         await term.click();
         await win.keyboard.press('Control+c');
-        await win.waitForTimeout(600);
+        await quiesced(term, { what: 'terminal after first Ctrl+C (oracle)' });
         await win.keyboard.press('Control+c');
-        await win.waitForTimeout(6000);
 
-        const after = await runningCommand(win, pid);
+        // The header is a DAEMON poll (every second), not the screen, so the fence for the negative
+        // assertion below is a poll on that same signal rather than quiesced() — waiting for the
+        // screen to settle would say nothing about whether the daemon has caught up.
+        let after = '';
+        await expect
+          .poll(
+            async () => {
+              after = await runningCommand(win, pid);
+              return after;
+            },
+            {
+              timeout: 15_000,
+              message: 'the header never stopped naming claude, so the oracle is unusable',
+            },
+          )
+          .not.toMatch(/claude/i);
         console.log(`[claude-oracle] after Ctrl+C twice the header says: ${JSON.stringify(after)}`);
-        expect(after, 'the header never stopped naming claude, so the oracle is unusable').not.toMatch(
-          /claude/i,
-        );
       });
     } finally {
       untrust();
@@ -638,7 +560,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
    * sets for itself). A control test elsewhere in this file proves it flips when claude really exits.
    */
   for (const flavour of ['cmd', 'windows-powershell', 'pwsh', 'git-bash']) {
-    test(`Escape leaves the agents view without exiting claude (${flavour})`, async () => {
+    test(`Escape leaves the agents view without exiting claude (${flavour})`, { tag: ['@extended', '@terminal'] }, async () => {
       test.setTimeout(240_000);
       const root = CLAUDE_ROOT ?? mkdtempSync(join(tmpdir(), `throng-esc-${flavour}-`));
       const untrust = trustProject(root);
@@ -662,7 +584,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
           await expect(term).toContainText(/for agents|auto mode on|Welcome back/i, {
             timeout: 180_000,
           });
-          await win.waitForTimeout(4000);
+          await quiesced(term, { what: `claude startup banner (${flavour})` });
 
           await term.click();
           await win.keyboard.press('ArrowLeft');
@@ -674,9 +596,10 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
           await step(win, `${flavour}: agents view open, pressing Escape`);
 
           await win.keyboard.press('Escape');
-          await win.waitForTimeout(5000);
+          // The redraw settling is the fence for the negative assertion below (the agents view text
+          // going away).
+          await quiesced(term, { what: `agents view closing after Escape (${flavour})` });
 
-          const running = await runningCommand(win, pid);
           const sent = await win.evaluate(
             (id) =>
               (
@@ -692,17 +615,29 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
                 .at(-1) ?? null,
             pid,
           );
-          console.log(`[esc-${flavour}] sent=${JSON.stringify(sent)} running=${JSON.stringify(running)}`);
           // The key reached claude as the bare byte every terminal sends…
           expect(sent?.sent, `Escape was not transmitted as a bare byte (${flavour})`).toBe(
             String.fromCharCode(92) + 'u001b',
           );
           // …the agents view closed…
           await expect(term).not.toContainText(/enter to return|space to reply/i, { timeout: 15_000 });
-          // …and claude is still running, which is the documented behaviour.
-          expect(running, `claude should still be running after Escape (${flavour})`).toMatch(
-            /claude/i,
-          );
+          // …and claude is still running, which is the documented behaviour. The header is a DAEMON
+          // poll (every second), not the screen, so this polls that signal directly rather than
+          // trusting quiesced()'s screen-settle to also mean the daemon has caught up.
+          let running = '';
+          await expect
+            .poll(
+              async () => {
+                running = await runningCommand(win, pid);
+                return running;
+              },
+              {
+                timeout: 15_000,
+                message: `claude should still be running after Escape (${flavour})`,
+              },
+            )
+            .toMatch(/claude/i);
+          console.log(`[esc-${flavour}] sent=${JSON.stringify(sent)} running=${JSON.stringify(running)}`);
         });
       } finally {
         untrust();
@@ -724,7 +659,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
    * bug is claude's status footer drawn BELOW the returned prompt, so the assertion is about what
    * comes last on screen, not about whether claude's words appear at all.
    */
-  test('claude leaves no interface behind when it exits', async () => {
+  test('claude leaves no interface behind when it exits', { tag: ['@extended', '@terminal'] }, async () => {
     test.setTimeout(240_000);
     const root = CLAUDE_ROOT ?? mkdtempSync(join(tmpdir(), 'throng-claude-exit-'));
     const untrust = trustProject(root);
@@ -746,16 +681,24 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
         await expect(term).toContainText(/for agents|auto mode on|Welcome back/i, {
           timeout: 180_000,
         });
-        await win.waitForTimeout(4000);
+        await quiesced(term, { what: 'claude startup banner (exit test)' });
 
         await term.click();
         await win.keyboard.press('Control+c');
-        await win.waitForTimeout(700);
+        await quiesced(term, { what: 'terminal after first Ctrl+C (exit test)' });
         await win.keyboard.press('Control+c');
-        await win.waitForTimeout(6000);
 
-        // Claude is really gone — asked of the process table, not of the screen.
-        expect(await runningCommand(win, pid)).not.toMatch(/claude/i);
+        // Two different sources, two fences. The header is a DAEMON poll (every second), so its
+        // negative assertion is fenced by polling that signal directly; the on-screen footer is
+        // fenced by quiesced() once the daemon confirms claude has actually gone.
+        await expect
+          .poll(() => runningCommand(win, pid), {
+            timeout: 15_000,
+            message: 'claude never stopped appearing in the process table after Ctrl+C twice',
+          })
+          .not.toMatch(/claude/i);
+
+        await quiesced(term, { what: 'terminal after claude exit' });
 
         // The last thing on screen is a shell prompt, not claude's status footer.
         const tail = await win.evaluate((id) => {
@@ -792,7 +735,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
    *
    * The gap does not matter: 150ms, 600ms and 1500ms were measured behaving the same.
    */
-  test('both Left presses reach claude, whatever claude then does with them', async () => {
+  test('both Left presses reach claude, whatever claude then does with them', { tag: ['@extended', '@terminal'] }, async () => {
     test.setTimeout(240_000);
     const root = CLAUDE_ROOT ?? mkdtempSync(join(tmpdir(), 'throng-claude-leftexit-'));
     const untrust = trustProject(root);
@@ -814,14 +757,16 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
         await expect(term).toContainText(/for agents|auto mode on|Welcome back/i, {
           timeout: 180_000,
         });
-        await win.waitForTimeout(4000);
+        await quiesced(term, { what: 'claude startup banner (left-exit test)' });
 
         // Type something and take it back out again — the user's exact route to an empty prompt.
         await term.click();
         await win.keyboard.type('delta echo', { delay: TYPE_DELAY });
-        await win.waitForTimeout(1200);
+        await expect(term).toContainText('delta echo', { timeout: 30_000 });
         for (let i = 0; i < 14; i += 1) await win.keyboard.press('Backspace');
-        await win.waitForTimeout(1200);
+        // Wait for the flurry of backspaces to finish landing before pressing Left, rather than
+        // guessing how long 14 keystrokes take to reach the screen.
+        await quiesced(term, { what: 'terminal after clearing the typed text' });
 
         await win.keyboard.press('ArrowLeft');
         // Claude answers with "press left arrow again to exit". Wait for it, so the second press
@@ -831,22 +776,31 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
         await step(win, 'claude is asking for a second Left');
 
         await win.keyboard.press('ArrowLeft');
-        await win.waitForTimeout(6000);
-
-        const keys = await win.evaluate(
-          (id) =>
-            (
-              window as unknown as {
-                __throngTerminalDiagnostics?: () => Record<
-                  string,
-                  { keys: { chord: string; sent?: string; reserved: boolean }[] }
-                >;
-              }
-            )
-              .__throngTerminalDiagnostics?.()
-              ?.[id]?.keys.filter((k) => k.chord === 'ArrowLeft') ?? [],
-          pid,
-        );
+        // Poll the diagnostics rather than guessing how long the second press takes to be recorded —
+        // the count reaching 2 IS "both presses landed".
+        let keys: { chord: string; sent?: string; reserved: boolean }[] = [];
+        await expect
+          .poll(
+            async () => {
+              keys = await win.evaluate(
+                (id) =>
+                  (
+                    window as unknown as {
+                      __throngTerminalDiagnostics?: () => Record<
+                        string,
+                        { keys: { chord: string; sent?: string; reserved: boolean }[] }
+                      >;
+                    }
+                  )
+                    .__throngTerminalDiagnostics?.()
+                    ?.[id]?.keys.filter((k) => k.chord === 'ArrowLeft') ?? [],
+                pid,
+              );
+              return keys.length;
+            },
+            { timeout: 15_000, message: 'both Left presses should have been recorded' },
+          )
+          .toBeGreaterThanOrEqual(2);
         console.log(`[left-exit] ArrowLeft decisions: ${JSON.stringify(keys.slice(-2))}`);
         const writes = await win.evaluate(
           (id) =>
@@ -858,11 +812,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
           pid,
         );
         console.log(`[left-exit] raw stream: ${JSON.stringify(writes)}`);
-        const running = await runningCommand(win, pid);
-        console.log(`[left-exit] daemon says running: ${JSON.stringify(running)}`);
 
-        // throng's part: two presses, transmitted identically, neither reserved.
-        expect(keys.length, 'both Left presses should have been recorded').toBeGreaterThanOrEqual(2);
         // Eight characters, as the diagnostics store them: \\u001b[D — not the ESC byte.
         const ESCAPED_LEFT = '\\u001b[D';
         for (const k of keys.slice(-2)) {
@@ -877,11 +827,23 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
         /*
          * Claude's part, recorded as MEASURED — in throng and in Windows Terminal alike, the second
          * press does not confirm and claude stays up. Asserted so that an upstream change is caught
-         * here rather than silently agreed with.
+         * here rather than silently agreed with. The daemon polls this every second, so it is fenced
+         * by polling that same signal rather than by a fixed sleep.
          */
-        expect(running, 'claude exited — the upstream behaviour has changed, revisit this').toMatch(
-          /claude/i,
-        );
+        let running = '';
+        await expect
+          .poll(
+            async () => {
+              running = await runningCommand(win, pid);
+              return running;
+            },
+            {
+              timeout: 15_000,
+              message: 'claude exited — the upstream behaviour has changed, revisit this',
+            },
+          )
+          .toMatch(/claude/i);
+        console.log(`[left-exit] daemon says running: ${JSON.stringify(running)}`);
       });
     } finally {
       untrust();

@@ -81,7 +81,7 @@ function mainWindowState(app: ElectronApplication): Promise<{
   });
 }
 
-test('title bar spans the top and hosts the cog + window controls', async () => {
+test('title bar spans the top and hosts the cog + window controls', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (app, win) => {
     const bar = win.getByTestId('title-bar');
     await expect(bar).toBeVisible();
@@ -104,7 +104,7 @@ test('title bar spans the top and hosts the cog + window controls', async () => 
   });
 });
 
-test('the cog reveals exactly Settings / Key Bindings / Themes / Logs / About and is dismissible', async () => {
+test('the cog reveals exactly Settings / Key Bindings / Themes / Logs / About and is dismissible', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     await win.getByTestId('title-bar-cog').click();
     const menu = win.getByTestId('cog-menu');
@@ -155,7 +155,7 @@ test.afterAll(() => {
     cleanupTemp(dir);
 });
 
-test('the cog dropdown menu follows the active theme (018/021, FR-008/FR-023)', async () => {
+test('the cog dropdown menu follows the active theme (018/021, FR-008/FR-023)', { tag: ['@extended', '@window'] }, async () => {
   // A theme file carrying `surface`, `surfaceActive` and `accent`. 021 (FR-023) folded the menu card
   // onto `surfaceActive` (the old `menuSurface` is gone), so the cog dropdown — a shared context menu
   // — paints on the theme's OWN `surfaceActive`. This is the end-to-end proof that the menu card
@@ -190,7 +190,7 @@ test('the cog dropdown menu follows the active theme (018/021, FR-008/FR-023)', 
   );
 });
 
-test('window controls maximise/restore (button + double-click) and minimise', async () => {
+test('window controls maximise/restore (button + double-click) and minimise', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (app, win) => {
     // Maximise then restore via the control.
     await win.getByTestId('window-max').click();
@@ -217,7 +217,7 @@ test('window controls maximise/restore (button + double-click) and minimise', as
   });
 });
 
-test('cog opens the single shared preferences window on the matching tab; non-modal + movable', async () => {
+test('cog opens the single shared preferences window on the matching tab; non-modal + movable', { tag: ['@extended', '@window'] }, async () => {
   /*
    * Its OWN app. The subject here is the cog OPENING that window, and there is only one of them per
    * app — so if any earlier test in this file has already opened it, the cog re-uses it, no `window`

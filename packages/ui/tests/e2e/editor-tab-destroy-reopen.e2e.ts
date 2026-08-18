@@ -24,7 +24,14 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import {
+  openApp,
+  createProject,
+  firstPanelId,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
 
 /** A project with a single file at its root. */
 function makeProject(tag: string): string {
@@ -33,8 +40,55 @@ function makeProject(tag: string): string {
   return root;
 }
 
-const rmRoot = (dir: string): void => {
-  cleanupTemp(dir);
+
+const ownedRoots: string[] = [];
+/** Register a project root for removal in `afterAll`, once the shared app has closed. */
+function own(dir: string): string {
+  ownedRoots.push(dir);
+  return dir;
+}
+
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-010) — 2 launches -> 1.
+ *
+ * Nothing is seeded before launch. Two temp roots, two project names (`TabDestroy1`,
+ * `TabDestroy2`). Both files are called note.txt, which is safe because the one-buffer registry is
+ * keyed by ABSOLUTE path (`packages/core/src/editor/open-registry.ts`) and the two roots differ —
+ * checked, because "different project" is not the same claim as "different key".
+ *
+ * The roots are deleted in `afterAll`, NOT per test: under one app a per-test cleanup removes a
+ * folder the application is still watching. Test 1 leaves its project on one tab; test 2's
+ * `.tab-chip` counts are scoped to its own project's workspace, so they do not see it.
+ *
+ * The shim below REFUSES launch options rather than ignoring them: a swallowed option does not fail,
+ * it makes a test pass for the wrong reason.
+ *
+ * Serial mode is not optional — one window and one daemon, so a failure SKIPS the rest rather than
+ * running them against what it left behind.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+
+test.afterAll(async () => {
+  await shared?.close();
+  for (const dir of ownedRoots.splice(0)) cleanupTemp(dir);
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
 };
 
 /** Turn the panel `pid` into an editor. */
@@ -76,60 +130,52 @@ async function destroyTab(win: Page, index: number): Promise<void> {
   }
 }
 
-test('AC1 — destroying the tab that hosts an editor releases the one-buffer registry', async () => {
-  const root = makeProject('ac1');
+test('AC1 — destroying the tab that hosts an editor releases the one-buffer registry', { tag: ['@extended', '@editor'] }, async () => {
+  const root = own(makeProject('ac1'));
   const filePath = join(root, 'note.txt');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'TabDestroy1', root);
-      const pid = await newEditor(win, await firstPanelId(win));
-      await openInto(win, pid, 'note.txt', 'REOPEN-ME-BODY');
-      // The registry knows the file is open — a second open would focus this editor.
-      expect(await openDecision(win, filePath)).toBe('focus');
+  await runApp(async (_app, win) => {
+    await createProject(win, 'TabDestroy1', root);
+    const pid = await newEditor(win, await firstPanelId(win));
+    await openInto(win, pid, 'note.txt', 'REOPEN-ME-BODY');
+    // The registry knows the file is open — a second open would focus this editor.
+    expect(await openDecision(win, filePath)).toBe('focus');
 
-      // A second tab so tab 1 (the editor's tab) can be destroyed — closeTab keeps the
-      // workspace non-empty, so the last tab cannot be closed. Adds and switches to it.
-      await win.getByTestId('tab-add').click();
-      await expect(win.locator('.tab-chip')).toHaveCount(2);
+    // A second tab so tab 1 (the editor's tab) can be destroyed — closeTab keeps the
+    // workspace non-empty, so the last tab cannot be closed. Adds and switches to it.
+    await win.getByTestId('tab-add').click();
+    await expect(win.locator('.tab-chip')).toHaveCount(2);
 
-      // Destroy tab 1, which hosts the editor.
-      await destroyTab(win, 0);
-      await expect(win.locator('.tab-chip')).toHaveCount(1);
+    // Destroy tab 1, which hosts the editor.
+    await destroyTab(win, 0);
+    await expect(win.locator('.tab-chip')).toHaveCount(1);
 
-      // The document is gone with its panel, so the file is no longer claimed by anyone:
-      // a fresh open must open a NEW editor, not focus the destroyed one.
-      await expect
-        .poll(() => openDecision(win, filePath), { timeout: 8000 })
-        .toBe('open');
-    });
-  } finally {
-    rmRoot(root);
-  }
+    // The document is gone with its panel, so the file is no longer claimed by anyone:
+    // a fresh open must open a NEW editor, not focus the destroyed one.
+    await expect
+      .poll(() => openDecision(win, filePath), { timeout: 8000 })
+      .toBe('open');
+  });
 });
 
-test('AC2 — after the tab is destroyed the file opens again in a new editor', async () => {
-  const root = makeProject('ac2');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'TabDestroy2', root);
-      const pid = await newEditor(win, await firstPanelId(win));
-      await openInto(win, pid, 'note.txt', 'REOPEN-ME-BODY');
+test('AC2 — after the tab is destroyed the file opens again in a new editor', { tag: ['@extended', '@editor'] }, async () => {
+  const root = own(makeProject('ac2'));
+  await runApp(async (_app, win) => {
+    await createProject(win, 'TabDestroy2', root);
+    const pid = await newEditor(win, await firstPanelId(win));
+    await openInto(win, pid, 'note.txt', 'REOPEN-ME-BODY');
 
-      // Second tab, then destroy the editor's tab.
-      await win.getByTestId('tab-add').click();
-      await expect(win.locator('.tab-chip')).toHaveCount(2);
-      await destroyTab(win, 0);
-      await expect(win.locator('.tab-chip')).toHaveCount(1);
+    // Second tab, then destroy the editor's tab.
+    await win.getByTestId('tab-add').click();
+    await expect(win.locator('.tab-chip')).toHaveCount(2);
+    await destroyTab(win, 0);
+    await expect(win.locator('.tab-chip')).toHaveCount(1);
 
-      // In the surviving tab, make a new editor and open the same file. With the bug the
-      // stale "focus" claim routes the open to the dead panel and this editor stays empty.
-      const pid2 = await newEditor(win, await firstPanelId(win));
-      await openInto(win, pid2, 'note.txt', 'REOPEN-ME-BODY');
-      await expect(win.getByTestId(`editor-${pid2}`).locator('.cm-content')).toContainText(
-        'REOPEN-ME-BODY',
-      );
-    });
-  } finally {
-    rmRoot(root);
-  }
+    // In the surviving tab, make a new editor and open the same file. With the bug the
+    // stale "focus" claim routes the open to the dead panel and this editor stays empty.
+    const pid2 = await newEditor(win, await firstPanelId(win));
+    await openInto(win, pid2, 'note.txt', 'REOPEN-ME-BODY');
+    await expect(win.getByTestId(`editor-${pid2}`).locator('.cm-content')).toContainText(
+      'REOPEN-ME-BODY',
+    );
+  });
 });

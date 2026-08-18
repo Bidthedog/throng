@@ -2,7 +2,7 @@ import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, reloadWindow, cleanupTemp} from './harness.js';
+import { runApp, createProject, reloadWindow, cleanupTemp, FILE_OP_TIMEOUT_MS } from './harness.js';
 
 // FR-077 (post-Delivery-E feedback): a sub-workspace-OWNED editor (created inside a
 // sub-workspace, no owning project) can be SAVED (outside every project) and
@@ -18,7 +18,7 @@ const seedSub = `(() => window.throng.invoke('workspace.persistSubWorkspaces', {
 const menu = (page: import('@playwright/test').Page, label: string) =>
   page.getByTestId(`menu-item-${label}`);
 
-test('a sub-workspace-owned editor saves outside projects and can be destroyed', async () => {
+test('a sub-workspace-owned editor saves outside projects and can be destroyed', { tag: ['@extended', '@editor'] }, async () => {
   const projectRoot = mkdtempSync(join(tmpdir(), 'throng-swo-proj-'));
   const outside = mkdtempSync(join(tmpdir(), 'throng-swo-out-'));
   const savePath = join(outside, 'scratch.txt');
@@ -52,7 +52,7 @@ test('a sub-workspace-owned editor saves outside projects and can be destroyed',
       await child.keyboard.press('Control+s');
 
       await expect
-        .poll(() => (existsSync(savePath) ? readFileSync(savePath, 'utf8') : ''), { timeout: 8000 })
+        .poll(() => (existsSync(savePath) ? readFileSync(savePath, 'utf8') : ''), { timeout: FILE_OP_TIMEOUT_MS })
         .toBe('owned content');
 
       // Edit again (dirty), then Destroy → the save/discard/cancel prompt appears

@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page, type ElectronApplication } from '@playwright/test';
-import { runApp, createProject, firstPanelId, reloadWindow, daemonRpc, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, reloadWindow, daemonRpc, cleanupTemp, quiesced } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /**
@@ -81,6 +81,20 @@ async function resizeWindow(
   );
 }
 
+/**
+ * Settle BOTH mirrored views before comparing their rendered rows.
+ *
+ * The alt-screen program only repaints on its own `resize` handler and otherwise sits idle, so
+ * `quiesced()` — poll until two consecutive reads agree — settles almost immediately once a
+ * repaint (or the absence of one, on the resize-never-arrives bug this file quarantines) has
+ * actually landed, replacing a guessed settle duration with the real condition either outcome
+ * needs: the surface has stopped changing, whatever it ended up saying.
+ */
+async function settleBothViews(win: Page, child: Page, pid: string, what: string): Promise<void> {
+  await quiesced(win.getByTestId(`terminal-${pid}`), { what: `${what} (main view)` });
+  await quiesced(child.getByTestId(`terminal-${pid}`), { what: `${what} (mirrored view)` });
+}
+
 async function newTerminal(win: Page, root: string): Promise<string> {
   const pid = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
@@ -131,7 +145,7 @@ async function newTerminal(win: Page, root: string): Promise<string> {
  * enumerable in the meantime:
  *   THRONG_E2E_INCLUDE_QUARANTINE=1 npx playwright test --grep @quarantine --list
  */
-test('@quarantine a full-screen (alt-screen) program renders identically in two different-sized views, and stays identical when either window is resized', async () => {
+test('@quarantine a full-screen (alt-screen) program renders identically in two different-sized views, and stays identical when either window is resized', { tag: ['@extended', '@terminal'] }, async () => {
   skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-alt-'));
   writeFileSync(join(root, 'alt.js'), ALT_PROGRAM);
@@ -148,7 +162,7 @@ test('@quarantine a full-screen (alt-screen) program renders identically in two 
       // program is the moment the grid must shrink and BOTH views re-lay-out to the new grid.
       await daemonRpc(pipeName, 'terminal.write', { panelId: pid, data: 'node alt.js\r\n' });
       await expect(win.getByTestId(`terminal-${pid}`)).toContainText('L1|', { timeout: 20000 });
-      await win.waitForTimeout(800);
+      await quiesced(win.getByTestId(`terminal-${pid}`), { what: 'alt-screen render before mirroring' });
 
       // Now mirror into the small sub-workspace window.
       const [child] = await Promise.all([
@@ -161,7 +175,7 @@ test('@quarantine a full-screen (alt-screen) program renders identically in two 
       await win.getByTestId('menu-item-Small').hover();
       await win.getByTestId('menu-item-T').click();
       await expect(child.getByTestId(`terminal-${pid}`)).toContainText('L1|', { timeout: 20000 });
-      await win.waitForTimeout(1500);
+      await settleBothViews(win, child, pid, 'post-mirror render');
 
       // INVARIANT 1: both views share one grid → identical rendered rows. This is where the
       // reported bug bites: the sub-workspace view renders the (large-grid) content offset.
@@ -170,13 +184,13 @@ test('@quarantine a full-screen (alt-screen) program renders identically in two 
       // Resize the LARGE (main) window; the program redraws on the resize. Both views must
       // remain identical afterwards — the non-resized window must not be left offset.
       await resizeWindow(app, 'large', 980, 700);
-      await win.waitForTimeout(1500);
+      await settleBothViews(win, child, pid, 'post-large-resize render');
       expect(await visibleRows(win, pid)).toEqual(await visibleRows(child, pid));
 
       // Resize the SMALL (sub-workspace) window; the reported symptom is that this makes the
       // small view correct but breaks the large one (last-writer-wins). Must stay identical.
       await resizeWindow(app, 'small', 860, 600);
-      await win.waitForTimeout(1500);
+      await settleBothViews(win, child, pid, 'post-small-resize render');
       expect(await visibleRows(win, pid)).toEqual(await visibleRows(child, pid));
 
       // Kill the full-screen program so the project root unlocks for teardown.

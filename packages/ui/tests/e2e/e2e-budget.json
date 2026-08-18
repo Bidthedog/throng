@@ -1,0 +1,15 @@
+{
+  "note": "The declared ceiling on the E2E suite (034 FR-060, constitution v5.0.0 Principle V). A RATCHET: these numbers may only go DOWN. The build fails when a count exceeds its budget, AND when a count falls below it - because a ratchet that is never tightened is not a ratchet, it is a ceiling nobody is holding. Lower the number in the same commit that removes the tests. Raising one is a deliberate act that a reviewer will see in the diff, which is the whole point: the rule this replaces failed because growth was invisible. Before raising it, answer in one sentence what the new test can assert that a unit, component or integration test cannot.",
+  "measuredFrom": "spec 034, after tagging; the migration batches lower these as they land",
+  "countingBasis": "DECLARATIONS, not executed tests. Playwright reports a larger number for the same suite, and neither is wrong: four spec files declare tests inside a module-level loop over shell flavours, so one declaration becomes several executed tests. Declarations are what a budget should count - it is a limit on what people WRITE, and a table-driven test that gains a fifth flavour has not made the suite harder to maintain. This total also includes the @admin and @quarantine tests that grepInvert removes from a default run.",
+  "total": 689,
+  "core": 35,
+  "byCategory": {
+    "@editor": 154,
+    "@explorer": 63,
+    "@failure": 24,
+    "@prefs": 117,
+    "@terminal": 105,
+    "@window": 226
+  }
+}

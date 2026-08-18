@@ -6,6 +6,7 @@ import { test, expect } from '@playwright/test';
 import {
   openApp,
   createProject as newProject,
+  daemonRpc,
   firstPanelId,
   cleanupTemp,
   type AppOptions,
@@ -64,7 +65,7 @@ const createProject = (win: OpenApp['win'], name: string, root: string): Promise
 // Tab/Project destroys stay level-based. Cancelling any destroy leaves state
 // unchanged (FR-025).
 
-test('destroys an empty Panel immediately — no terminal, no confirmation', async () => {
+test('destroys an empty Panel immediately — no terminal, no confirmation', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'Destroyer', 'C:/c/destroyer');
     await expect(win.getByTestId('tab-strip')).toBeVisible();
@@ -82,10 +83,10 @@ test('destroys an empty Panel immediately — no terminal, no confirmation', asy
   });
 });
 
-test('warns before destroying a Panel that hosts a live terminal', async () => {
+test('warns before destroying a Panel that hosts a live terminal', { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-destroy-term-'));
   try {
-    await runApp(async (_app, win) => {
+    await runApp(async (_app, win, { pipeName }) => {
       await createProject(win, 'TermDestroy', root);
       const pid = await firstPanelId(win);
 
@@ -115,16 +116,29 @@ test('warns before destroying a Panel that hosts a live terminal', async () => {
       await win.getByTestId('confirm-accept').click(); // "Yes, I'm absolutely sure"
 
       await expect(win.locator('.panel-box')).toHaveCount(1);
-      // Destroying killed the terminal; let the daemon clear the session before
-      // teardown so the app-close handshake doesn't see a dying terminal.
-      await win.waitForTimeout(1200);
+      /*
+       * Destroying killed the terminal; poll the daemon's OWN session list until it agrees the
+       * session is gone, rather than guessing how long that takes — the real signal the app-close
+       * handshake needs before teardown, and a poll on daemon state rather than a duration.
+       */
+      await expect
+        .poll(
+          async () => {
+            const result = (await daemonRpc(pipeName, 'terminal.list', {})) as
+              | { sessions?: { panelId: string }[] }
+              | null;
+            return result?.sessions?.some((s) => s.panelId === pid) ?? false;
+          },
+          { timeout: 15_000, message: `daemon never cleared the killed terminal's session (panel ${pid})` },
+        )
+        .toBe(false);
     });
   } finally {
     cleanupTemp(root);
   }
 });
 
-test('cancelling a Tab destroy leaves all state unchanged (FR-025)', async () => {
+test('cancelling a Tab destroy leaves all state unchanged (FR-025)', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'Canceller', 'C:/c/canceller');
     await win.getByTestId('tab-add').click();

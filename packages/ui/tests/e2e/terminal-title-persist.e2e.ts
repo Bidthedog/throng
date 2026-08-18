@@ -5,6 +5,13 @@
  * (dispose), leaving the header showing the bare panel name until the shell happened to re-emit a
  * title. Here: open a terminal, switch away to a new tab (unmounting it), switch back, and assert the
  * header still shows the shell's reported title rather than falling back to "Panel 1".
+ *
+ * ABSORBED `terminal-title-header.e2e.ts` (034 FR-045), which is now deleted. That file made two
+ * assertions — the header is not "Panel 1", and it contains "cmd.exe" — against a cmd terminal
+ * in a freshly created project. The second implies the first (a header containing "cmd.exe"
+ * cannot have the exact text "Panel 1"), and this test makes it TWICE against the same setup:
+ * once before the tab switch, which is the first-mount claim in full, and once after, which is
+ * the claim that file could not make. A strict superset, for one app launch instead of two.
  */
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -12,7 +19,7 @@ import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import { runApp, createProject, firstPanelId, commitTabRename, cleanupTemp} from './harness.js';
 
-test('a terminal keeps its window title across a tab switch (#7)', async () => {
+test('a terminal keeps its window title across a tab switch (#7)', { tag: ['@extended', '@terminal'] }, async () => {
   test.setTimeout(60000);
   const root = mkdtempSync(join(tmpdir(), 'throng-titlep-'));
   try {

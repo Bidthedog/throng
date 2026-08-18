@@ -46,7 +46,7 @@ async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
   return prefs;
 }
 
-test('a user pack is selectable, re-skins its tokens, and missing tokens fall back', async () => {
+test('a user pack is selectable, re-skins its tokens, and missing tokens fall back', { tag: ['@extended', '@prefs'] }, async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(
     async (app, win) => {
@@ -63,7 +63,7 @@ test('a user pack is selectable, re-skins its tokens, and missing tokens fall ba
   );
 });
 
-test('overriding a single token changes only that token', async () => {
+test('overriding a single token changes only that token', { tag: ['@extended', '@prefs'] }, async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(
     async (app, win) => {
@@ -81,7 +81,7 @@ test('overriding a single token changes only that token', async () => {
   );
 });
 
-test('a fresh install seeds the throng glyph pack + an SVG image pack (H6, FR-040b)', async () => {
+test('a fresh install seeds the throng glyph pack + an SVG image pack (H6, FR-040b)', { tag: ['@extended', '@prefs'] }, async () => {
   const cfgRoot = bareCfgRoot();
   await runApp(
     async (app, win) => {
@@ -123,16 +123,38 @@ test('a fresh install seeds the throng glyph pack + an SVG image pack (H6, FR-04
   );
 });
 
-test('the pack-format README is seeded under icon-packs/', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      await openThemes(app, win);
-      await expect.poll(() => existsSync(join(cfgRoot, 'icon-packs', 'README.md'))).toBe(true);
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
+/*
+ * MOVED to `packages/ui/tests/unit/icon-pack-seeding.test.ts` (034 FR-045): "the pack-format README
+ * is seeded under icon-packs/" (FR-040a).
+ *
+ * It launched Electron, opened the Preferences window through the cog menu and waited for the Themes
+ * tab — in order to assert `existsSync(join(cfgRoot, 'icon-packs', 'README.md'))`. The window was
+ * not the mechanism either: `ensureReadme()` runs on the main-process startup path (main.ts:694),
+ * long before a preferences window exists, so opening one was a way of WAITING rather than a way of
+ * testing. The README is a file that a method with a directory argument writes.
+ *
+ * THE REPLACEMENT CARRIES BOTH HALVES (FR-047) and goes further than the E2E on each:
+ *   1. the method writes it — and the README is asserted to DOCUMENT the manifest the loader
+ *      actually parses (`pack.json`, `tokens`, `.svg`), not merely to exist. A README that exists
+ *      and says nothing useful is the failure this requirement is about.
+ *   2. a SECOND call never overwrites a user’s edit — a branch no automated run had ever taken,
+ *      because a fresh temp config root is by definition a first run.
+ *   3. startup CALLS it, into the config root’s own `icon-packs/` — a source guard over main.ts,
+ *      the same shape as `tests/unit/icon-call-sites.test.ts`, because no temp directory can report
+ *      the presence of a call in another module.
+ *
+ * WHAT STAYS BELOW: that a fresh install’s bundled packs are selectable and draw at the theme’s
+ * measured 24px box (FR-049 — real layout), that a selected pack re-skins the MAIN window live with
+ * no restart, that pack art takes its colour from the theme rather than rendering black (an SVG
+ * inside an <img> is an isolated document — that is the bug, and it needs real style resolution),
+ * that a user pack re-skins its tokens with the missing ones falling back, that a single-token
+ * override wins, and that a broken pack degrades without stopping the app.
+ *
+ * Anti-vacuity control: making `ensureReadme()` a no-op fails the three behavioural tests. The other
+ * two are independent BY DESIGN and each has its own mutation — the fixture precondition (which no
+ * production change can redden, and which is what stops the other three passing for free) and the
+ * main.ts source guard (reddened by removing the call). Red-proved as three separate mutations.
+ */
 
 /**
  * 017 / #54 — the assertions that were MISSING, and whose absence is why the bug shipped.
@@ -142,7 +164,7 @@ test('the pack-format README is seeded under icon-packs/', async () => {
  * whatsoever in the application the user was actually looking at. These tests assert the MAIN
  * WINDOW.
  */
-test('selecting a pack changes the icons in the MAIN WINDOW, live, with no restart (FR-001/005)', async () => {
+test('selecting a pack changes the icons in the MAIN WINDOW, live, with no restart (FR-001/005)', { tag: ['@extended', '@prefs'] }, async () => {
   const cfgRoot = bareCfgRoot();
   await runApp(
     async (app, win) => {
@@ -170,7 +192,7 @@ test('selecting a pack changes the icons in the MAIN WINDOW, live, with no resta
   );
 });
 
-test('pack icons take their colour from the THEME, not a fixed black (FR-004)', async () => {
+test('pack icons take their colour from the THEME, not a fixed black (FR-004)', { tag: ['@extended', '@prefs'] }, async () => {
   const cfgRoot = bareCfgRoot();
   await runApp(
     async (app, win) => {
@@ -197,35 +219,38 @@ test('pack icons take their colour from the THEME, not a fixed black (FR-004)', 
   );
 });
 
-test('icons are DECORATIVE to assistive technology (FR-006c / SC-010)', async () => {
-  const cfgRoot = bareCfgRoot();
-  await runApp(
-    async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'Icons', 'C:/c/icons');
+/*
+ * MOVED to `packages/ui/tests/component/icon.test.ts` (034 FR-045): "icons are DECORATIVE to
+ * assistive technology (FR-006c / SC-010)".
+ *
+ * It launched Electron, created a project, then swept the whole window for `.icon` and required
+ * every one to carry `aria-hidden="true"`. A sweep of a real DOM is the only way to make an app-wide
+ * claim — unless the claim reduces, and this one does, into two halves that are each cheaper AND
+ * stronger than the sweep:
+ *
+ *   1. `<Icon>` marks what it draws as decorative — now asserted by RENDERING it, on the fallback
+ *      branch as well as the ordinary one, where an attribute is likeliest to be forgotten. The
+ *      sweep could only ever see whichever branch the running theme happened to take.
+ *   2. Nothing else in the renderer draws an icon — already a source guard,
+ *      `tests/unit/icon-call-sites.test.ts`, which fails the build if any renderer module reaches
+ *      for the deleted `resolveIcon`. That is a stronger statement than the sweep made, because a
+ *      sweep only sees the icons that were ON SCREEN in one window at one moment.
+ *
+ * The decorativeness half of that guard was a grep of the component's SOURCE for the string
+ * `aria-hidden`, which would pass on a file that merely mentioned it in a comment. It now names the
+ * render test instead of pretending to be one.
+ *
+ * Red-proved: removing `aria-hidden` from the glyph branch reddens 2; dropping the base `icon`
+ * class when a custom one is given reddens 1 — which is the mutation that would have made the old
+ * sweep silently find fewer icons and still pass.
+ *
+ * WHAT STAYS BELOW: that a selected pack re-skins the MAIN window live with no restart, that pack
+ * art takes its colour from the theme rather than rendering black (an SVG inside an `<img>` is an
+ * isolated document — that is the bug, and it needs real style resolution to see), that a fresh
+ * install seeds the packs and the README, and that a broken pack degrades without stopping the app.
+ */
 
-      // Every icon is hidden from the accessibility tree. The accessible name comes from the
-      // ENCLOSING control — so a screen-reader user hears the action once, and never the glyph.
-      // (Before 017 the raw glyph character was in the DOM as text and was read aloud.)
-      const icons = win.locator('.icon');
-      const count = await icons.count();
-      expect(count).toBeGreaterThan(0);
-      const hidden = await icons.evaluateAll((els) =>
-        els.map((el) => el.getAttribute('aria-hidden')),
-      );
-      expect(hidden.every((v) => v === 'true')).toBe(true);
-
-      // …and the button around it still names its action.
-      const button = win.locator('.icon-button').first();
-      if ((await button.count()) > 0) {
-        await expect(button).toHaveAttribute('aria-label', /.+/);
-      }
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('a BROKEN pack degrades: the app starts, icons fall back, and the picker says why (FR-004a / SC-011)', async () => {
+test('a BROKEN pack degrades: the app starts, icons fall back, and the picker says why (FR-004a / SC-011)', { tag: ['@extended', '@prefs'] }, async () => {
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-cfg-icons-'));
   cfgRoots.push(cfgRoot);
   // A pack directory whose manifest is unreadable. Silently dropping it would recreate the exact

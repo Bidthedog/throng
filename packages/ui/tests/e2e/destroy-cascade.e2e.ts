@@ -40,7 +40,7 @@ async function projectWithMirroredPanel(app: ElectronApplication, win: Page) {
   return { a, b, child };
 }
 
-test('destroying a mirrored Panel in the PROJECT removes it from the sub-workspace too (with warning)', async () => {
+test('destroying a mirrored Panel in the PROJECT removes it from the sub-workspace too (with warning)', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (app, win) => {
     const { a, b, child } = await projectWithMirroredPanel(app, win);
 
@@ -57,7 +57,7 @@ test('destroying a mirrored Panel in the PROJECT removes it from the sub-workspa
   });
 });
 
-test('destroying a mirrored Panel INSIDE a sub-workspace is local — the project keeps it', async () => {
+test('destroying a mirrored Panel INSIDE a sub-workspace is local — the project keeps it', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (app, win) => {
     const { a, b, child } = await projectWithMirroredPanel(app, win);
 
@@ -79,7 +79,7 @@ test('destroying a mirrored Panel INSIDE a sub-workspace is local — the projec
   });
 });
 
-test('destroying a mirrored TERMINAL Panel inside a sub-workspace keeps the session running in the project', async () => {
+test('destroying a mirrored TERMINAL Panel inside a sub-workspace keeps the session running in the project', { tag: ['@extended', '@window'] }, async () => {
   // Revision (2026-07-02): a local sub-workspace destroy of a CLONED project Panel
   // must NOT kill the shared terminal session — the project keeps the Panel AND its
   // live terminal (FR-021/026); only the sub-workspace's view goes away.
@@ -129,13 +129,16 @@ test('destroying a mirrored TERMINAL Panel inside a sub-workspace keeps the sess
       // terminal would revert to the type-selection form (FR-020). Instead the
       // project keeps the live terminal view and never shows the form.
       await expect(win.getByTestId(`terminal-${a}`)).toBeVisible();
-      await win.waitForTimeout(1000); // give any (unwanted) exit→revert time to happen
+      // sleep-justified: proving a kill did NOT happen has no positive event to fence on — the correct path issues no RPC at all, so there is nothing to poll for
+      await win.waitForTimeout(1000);
       await expect(win.getByTestId(`terminal-${a}`)).toBeVisible();
       await expect(win.getByTestId(`panel-type-form-${a}`)).toHaveCount(0);
 
-      // Terminate before teardown so the app-close warning can't block it.
+      // Terminate before teardown so the app-close warning can't block it — wait for the panel's
+      // own exit notice, the real signal that the daemon has processed the kill (same idiom as
+      // notice-subjects.e2e.ts's terminal-flavour test).
       await win.evaluate((id) => window.throng?.terminal?.kill?.(id), a);
-      await win.waitForTimeout(1200);
+      await expect(win.getByTestId(`panel-exit-${a}`)).toBeVisible({ timeout: 15_000 });
     });
   } finally {
     cleanupTemp(root);

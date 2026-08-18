@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, _electron as electron } from '@playwright/test';
 import type { ElectronApplication, Locator, Page } from '@playwright/test';
 import { openDatabase, runMigrations, type ThrongDatabase } from '@throng/persistence';
+import { quiesceSampler } from './quiesce-sampler.js';
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
@@ -211,9 +212,11 @@ export interface OpenApp {
  * Open an app and hand back the handle, leaving teardown to the caller.
  *
  * `runApp` opens one app per call, which for most specs means one Electron launch, one daemon and
- * one shell start PER TEST — measured at ~2s each on CI, and 604 launches across the suite. Where a
- * file's tests do not need distinct pre-launch state (a seeded config root, a seeded database), they
- * can share one app through `beforeAll`, which is what this exists for:
+ * one shell start PER TEST — measured at ~2s each on CI. The suite was 592 launches before spec 034
+ * (`node scripts/count-e2e-launches.mjs --baseline d55054b`); run that script with no arguments for
+ * today's figure, and see `launch-sharing.md` for the per-file decision. Where a file's tests do not
+ * need distinct pre-launch state, they can share one app through `beforeAll`, which is what this
+ * exists for:
  *
  *   let h: OpenApp;
  *   test.describe.configure({ mode: 'serial' });
@@ -224,8 +227,30 @@ export interface OpenApp {
  * so they must not interleave — and when one fails, the rest are skipped rather than run against
  * whatever state the failure left behind, which would turn one fault into a page of noise.
  *
- * Prefer `runApp` when a test seeds state before launch or deliberately wants a pristine app; the
- * isolation is worth 2s. This is for the files where that 2s buys nothing.
+ * Prefer `runApp` when a test's claim is ABOUT THE STARTUP PATH, or when it deliberately wants a
+ * pristine app; the isolation is worth 2s. This is for the files where that 2s buys nothing.
+ *
+ * ══ "SEEDS A CONFIG ROOT" IS NOT THE TEST, AND READING IT AS ONE COST ~70 LAUNCHES ══
+ *
+ * Spec 034's SC-010 recorded that the whole `preferences-*` family was unshareable because "every one
+ * of their tests seeds `THRONG_CONFIG_ROOT` BEFORE the app starts". Most of them call
+ * `freshCfgRoot()` with NO ARGUMENTS: the isolated root is WRITE ISOLATION so one test's writes do
+ * not reach another's, not state the app must find already there. The two are indistinguishable at
+ * the call site, which is why a whole family was written off in a success criterion.
+ *
+ * The question that actually decides it is whether the state could be written THROUGH the running
+ * app. It usually can — `helpers/config-write.ts` exists for exactly that, the config store
+ * hot-reloads, and `preferences-json.e2e.ts` already rewrote a live app's `settings.json` and watched
+ * the open editor follow it. That file went from 16 launches to 5.
+ *
+ * What genuinely resists is narrow and has one shape: a malformed file that must survive the STARTUP
+ * read, a nonexistent active theme at boot, a fresh-install seeding — and anything fixed when the
+ * `BrowserWindow` is CONSTRUCTED. `theme-flash.e2e.ts` was converted and had to be reverted for the
+ * last of those: sharing made its Light test read a DARK native background while the renderer had
+ * correctly gone light.
+ *
+ * Verify a conversion at `--repeat-each=3`, never on one green pass. Four conversions on this branch
+ * passed once and were undone; see `launch-sharing.md`.
  */
 export async function openApp(opts: AppOptions = {}): Promise<OpenApp> {
   const started = await launchApp(opts);
@@ -450,6 +475,88 @@ function watchForSuddenDeath(app: ElectronApplication): () => void {
 const SHUTDOWN_GRACE_MS = 15_000;
 
 /**
+ * How long to allow an Electron app to emit its own `close` event (spec 034, FR-016).
+ *
+ * MEASURED, not guessed. Closing a throng app is not a quick operation under load — it drains
+ * pending layout writes, stops a daemon and reaps real shells — and the teardown reporter in this
+ * very file logged `shutdownApp took 14514ms` and `15953ms` during the 034 baseline at six workers.
+ * Specs that allowed 10s for it therefore failed on a close that was proceeding perfectly normally:
+ * `terminal-reattach` did exactly that, twice, on an app that had 4.5s of closing left to do.
+ *
+ * The value is DERIVED, not picked. `shutdownApp` in this same file allows a closing app a 15s
+ * graceful window and then gives `taskkill` a further 10s — so the harness's own position is that an
+ * app may legitimately take up to ~25s to die. Any spec waiting less than that is contradicting its
+ * own harness: it declares a failure while the mechanism that would have handled it is still
+ * within its allowance. 30s is that 25s plus margin, and it stays inside the 60s test budget so the
+ * failure still reads as "the app never closed" rather than as an anonymous test timeout.
+ *
+ * Measured against, twice. At 20s — already double what most specs allowed — `terminal-reattach`
+ * still failed on the "Terminate all" path, which has to reap a real shell before the window goes.
+ * The suite previously had 10000, 12000 and 20_000 at different close sites; `terminate-all-drain`,
+ * the file that has spent the most time getting app-close right, used the largest. All of them were
+ * under the harness's own bound.
+ *
+ * This is a HANG DETECTOR, not an assertion about how fast throng closes. A spec that means to
+ * measure close latency must say so and name the requirement it defends (FR-018); nothing here
+ * does, so nothing here should be timing it.
+ */
+export const APP_CLOSE_TIMEOUT_MS = 30_000;
+
+/**
+ * How long a spec-spawned daemon gets to print `listening` before the spec gives up (spec 034).
+ *
+ * Nine spec files carry a copy-pasted `setTimeout(() => reject(new Error('daemon not ready')),
+ * 10_000)` around the daemon's stdout. Ten seconds is a cold Node process start, a pipe bind and a
+ * SQLite open — comfortable on an idle box, and NOT comfortable on one already running six Electron
+ * apps and their daemons. In the 034 verification runs `persistence-restore` failed twice on exactly
+ * this, rejecting "daemon not ready" for a daemon that was merely still starting.
+ *
+ * 30s is a HANG DETECTOR: it still fails a daemon that never binds, and it fails well inside the 60s
+ * test budget so the failure reads as "daemon not ready" rather than as an anonymous test timeout.
+ * It asserts nothing about how fast the daemon starts; no requirement here claims that.
+ *
+ * The duplication itself is the deeper defect — nine copies of one wait, so nine places to get this
+ * wrong again. Sharing the BUDGET is the minimum fix; extracting the whole helper is tracked as
+ * follow-up rather than done here, because it touches nine files this change has no other reason to
+ * disturb.
+ */
+export const DAEMON_READY_TIMEOUT_MS = 30_000;
+
+/**
+ * How long to wait for a real shell's output to reach the terminal (spec 034).
+ *
+ * The slowest specs here do not merely start a shell, they make it WORK: a 200-iteration `cmd` loop
+ * painting 200 lines through a ConPTY, a `ping -n 7` delivering output on its own schedule. On an
+ * idle box that lands in a couple of seconds. On one running six Electron apps, six daemons and
+ * their shells, it does not, and the 20s these specs allowed was the last budget still failing after
+ * the harness-wide ones were right-sized — `terminal-scrollback-nav` failed on it in two of three
+ * consecutive verification runs.
+ *
+ * 30s is a hang detector for "the shell produced nothing", and it sits inside the 60s test budget so
+ * the failure still names the text it was waiting for. Nothing here asserts throughput; the specs
+ * that mean to measure terminal performance say so and name their requirement (FR-018).
+ *
+ * If a spec needs MORE than this, the honest answer is usually that it is doing too much work for a
+ * parallel worker and the tier mechanism applies to it — not that the number should grow again.
+ */
+export const TERMINAL_OUTPUT_TIMEOUT_MS = 30_000;
+
+/**
+ * How long to wait for a filesystem effect to become observable (spec 034).
+ *
+ * A drag that moves a folder is not one syscall: it is a renderer gesture, an IPC hop, a real
+ * `rename` on a real disk, and a watcher waking up to notice. Polling for the result is the RIGHT
+ * pattern — these sites already use `expect.poll` rather than a sleep — but 10s to complete that
+ * chain is another budget sized on a quiet machine. `explorer-tree-state` flaked on exactly this in
+ * the 034 verification run, waiting for a moved `child.txt` that arrived late rather than never.
+ *
+ * NOTE the wider problem this only partly addresses: roughly a dozen other spec files poll for a
+ * filesystem effect on the same 10s budget. They did not flake in this run, which is not the same as
+ * being right. Sweeping them belongs to the wait-and-budget work (FR-015 to FR-022), not here.
+ */
+export const FILE_OP_TIMEOUT_MS = 30_000;
+
+/**
  * When a teardown phase is worth reporting (#211).
  *
  * 2s is comfortably above a healthy teardown (an app that closes when asked is a few hundred ms) and
@@ -469,30 +576,14 @@ const SLOW_TEARDOWN_TOTAL_MS = 10_000;
 /**
  * Force-kill an OS process and its entire child tree, best-effort and BOUNDED.
  *
- * On Windows this is `taskkill /T /F` (whole tree, unconditional) — the only reliable way to reap
- * a wedged Electron app together with its renderer/GPU/utility children and any conhost it spawned.
- * A missing process (already exited) or an access error is swallowed: this is a last-resort cleanup,
- * never an assertion.
+ * Lives in `./process-tree.ts` so it can be proved at the integration layer without dragging
+ * `@playwright/test` and `@throng/persistence` into a vitest worker (034 FR-045). Re-exported here
+ * because this is the name ~a dozen specs and `shutdownApp` already import.
+ *
+ * Proved by `packages/ui/tests/integration/force-kill-process-tree.integration.test.ts`, which
+ * replaced `harness-shutdown.e2e.ts`.
  */
-export function forceKillProcessTree(pid: number): void {
-  try {
-    if (process.platform === 'win32') {
-      execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], {
-        stdio: 'ignore',
-        timeout: 10_000,
-        windowsHide: true,
-      });
-    } else {
-      try {
-        process.kill(-pid, 'SIGKILL'); // negative pid → the process group
-      } catch {
-        process.kill(pid, 'SIGKILL');
-      }
-    }
-  } catch {
-    /* already gone, or no permission — best effort, by design */
-  }
-}
+export { forceKillProcessTree } from './process-tree.js';
 
 /**
  * Tear down the Electron app without teardown hangs. Two distinct hazards, both closed here:
@@ -610,6 +701,11 @@ export const E2E_STEP_MS = Number(process.env.THRONG_E2E_STEP_MS ?? 0);
 export async function step(win: Page, label: string): Promise<void> {
   if (E2E_STEP_MS <= 0) return;
   console.log(`[step] ${label}`);
+  // sleep-justified: this is the deliberate slow-motion debug knob documented on E2E_STEP_MS above
+  // sleep-justified: — opt-in only (THRONG_E2E_STEP_MS), zero by default, and the entire function
+  // sleep-justified: returns before this line when it is unset, so a normal run pays nothing for it.
+  // sleep-justified: there is no condition to wait on here: the whole point is an artificial pause
+  // sleep-justified: for a human to watch, not a race the suite needs to resolve.
   await win.waitForTimeout(E2E_STEP_MS);
 }
 
@@ -828,6 +924,64 @@ export async function geom(
   }
   const box: { x: number; y: number; width: number; height: number } = settledBox;
   return { x: box.x, y: box.y, w: box.width, h: box.height };
+}
+
+/**
+ * The rendered text of something that redraws, read once it has STOPPED redrawing (034 FR-019).
+ *
+ * `geom()` is this idea applied to geometry; this is the same idea applied to text, and it exists
+ * because the geometry version could not cover the expensive half of the suite. A terminal running a
+ * real TUI reports itself ready and then keeps painting — claude redraws its banner, its status line
+ * and its input box for a second or two afterwards, and nothing it emits marks the end of that. The
+ * suite's answer was `waitForTimeout(3000)`: eighty seconds of deliberate idling in one spec file,
+ * and an assertion that three seconds is always enough on every machine at every worker count. On a
+ * loaded box it is not, which is how #251 was diagnosed as starvation rather than a defect.
+ *
+ * Polling until two consecutive reads agree replaces that guess with a CONDITION — "the surface has
+ * stopped changing" — and it is strictly better in both directions: it returns in about 200ms on an
+ * idle machine instead of sleeping three seconds, and it keeps waiting on a machine where three
+ * seconds would not have been enough.
+ *
+ * Two properties are deliberate:
+ *
+ *   - **It throws rather than giving up quietly.** A surface that never goes quiet — a spinner, an
+ *     animation, a stream still arriving — is a real finding about the test, not something to paper
+ *     over with a fallback sleep. A fallback would make this a `waitForTimeout` wearing a condition's
+ *     name, which is the thing FR-015 forbids.
+ *   - **It returns the settled text**, so the caller does not take a second read that may already
+ *     have moved on. Reading twice is how a "stable" assertion goes flaky.
+ *
+ * Where a surface genuinely never quiesces, keep the sleep and declare it — see
+ * `packages/ui/tests/unit/sleep-declared.test.ts` for the marker the build requires.
+ */
+export async function quiesced(
+  locator: Locator,
+  opts: { what?: string; timeout?: number } = {},
+): Promise<string> {
+  const what = opts.what ?? locator.toString();
+  await expect(locator).toBeVisible();
+
+  const sampler = quiesceSampler();
+
+  await expect
+    .poll(
+      async () => sampler.sample((await locator.textContent()) ?? ''),
+      {
+        timeout: opts.timeout ?? 15_000,
+        message:
+          `quiesced(${what}): the surface never stopped changing, so there is no settled state to ` +
+          `read. Something is still animating or still streaming — find out what, rather than ` +
+          `replacing this with a sleep.`,
+        intervals: [100, 100, 150, 150, 250],
+      },
+    )
+    .toBe(true);
+
+  const settledText = sampler.settled();
+  if (settledText === null) {
+    throw new Error(`quiesced(${what}): polled to completion without capturing a settled read`);
+  }
+  return settledText;
 }
 
 /**
@@ -1076,5 +1230,56 @@ export function cleanupTemp(target: string): void {
       return;
     }
     console.warn(`[cleanup] ${code ?? 'error'} removing ${target} — left for the temp sweep`);
+  }
+}
+
+/**
+ * Assert something did NOT happen, having first established that it HAD ITS CHANCE (FR-016/FR-017).
+ *
+ * ══ THE DEFECT THIS EXISTS FOR ══
+ *
+ * `await expect(thing).toHaveCount(0)` immediately after an action is green whether the behaviour is
+ * right or the application is merely slow. It asserts "not yet", and reports it as "never". The
+ * usual repair is a sleep long enough to feel safe, which is the same bug with a longer fuse: it is
+ * green on a fast machine and red on a loaded one, and 222 such sites were measured across this
+ * suite at the 034 baseline.
+ *
+ * ══ WHAT A FENCE IS ══
+ *
+ * A POSITIVE observable that can only occur once the opportunity for the absent thing has passed.
+ * Not a duration — an event. "The next screen has rendered", "the write has landed", "the shell has
+ * echoed the following command". Then, and only then, absence means something.
+ *
+ * ══ AND WHY IT THROWS ══
+ *
+ * If the fence itself never occurs, this FAILS rather than proceeding. That is FR-017 and it is the
+ * half that is easy to omit: a fence that quietly gives up degrades into the sleep it replaced, and
+ * the absence check downstream then passes for the wrong reason — the most expensive kind of green,
+ * because it looks like evidence.
+ *
+ * @param fence      resolves once the opportunity has demonstrably passed; MUST reject or time out
+ *                   rather than resolve if it never does.
+ * @param count      how many of the forbidden thing exist right now.
+ * @param what       named in both failure messages, so a red says which claim broke.
+ */
+export async function stayedAbsent(
+  fence: () => Promise<unknown>,
+  count: () => Promise<number>,
+  what: string,
+): Promise<void> {
+  try {
+    await fence();
+  } catch (cause) {
+    // Deliberately NOT falling through to the absence check. An unmet fence means the opportunity
+    // cannot be shown to have passed, so the absence below would be unfalsifiable.
+    throw new Error(
+      `stayedAbsent(${what}): the fence never occurred, so "${what} did not happen" cannot be ` +
+        `asserted — this would otherwise pass for the wrong reason`,
+      { cause },
+    );
+  }
+  const n = await count();
+  if (n !== 0) {
+    throw new Error(`stayedAbsent(${what}): expected none after the fence, found ${n}`);
   }
 }

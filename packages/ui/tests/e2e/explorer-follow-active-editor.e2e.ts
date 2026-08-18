@@ -16,7 +16,8 @@ import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import {
-  runApp,
+  openApp,
+  runApp as runOwnApp,
   createProject,
   firstPanelId,
   panelIds,
@@ -24,6 +25,8 @@ import {
   commitPanelRename,
   commitTabRename,
   cleanupTemp,
+  type AppOptions,
+  type OpenApp,
 } from './harness.js';
 
 /**
@@ -109,8 +112,63 @@ async function twoEditors(win: Page, name: string, root: string): Promise<[strin
   return [pidA, pidB];
 }
 
-test('on by default: making an editor active selects its file and expands its ancestors (#188)', async () => {
-  const root = makeProject();
+/*
+ * ONE app for the first four tests (034 FR-045, SC-027) — 5 launches -> 2.
+ *
+ * Test 5 keeps `runOwnApp` and has to: it writes `explorer.autoRevealActiveFile = false` into
+ * settings.json BEFORE the app starts and its whole first half is what the tree does with the
+ * preference OFF from boot. It then turns it back on by hand-editing that file, which is a
+ * hot-reload through the running app — but the OFF state has to be there at startup.
+ *
+ * ══ WHY THE REAL POWERSHELL IN TEST 4 IS NOT A BLOCKER ══
+ *
+ * It was read as one: a shell with no teardown outlives the test that started it and holds the
+ * project root. Both halves are true, and neither reaches anything. Test 4 is the LAST test in
+ * the shared app — test 5 launches its own — so there is no later test for the shell to disturb;
+ * it dies when `afterAll` closes the app. What DID have to change is the root it is sitting in:
+ * every root now goes in `afterAll`, after the close, instead of being deleted from under a
+ * live shell and a live watcher.
+ *
+ * The four projects already had four distinct names (FollowOn, FollowMarked, FollowFocus,
+ * FollowTerminal) on four distinct roots, and every locator here is scoped to the tree or to a
+ * panel id the test itself made — an inactive project's workspace is not rendered at all.
+ * Test 3 leaves a second TAB open; that belongs to its own project's workspace, which nothing
+ * after it looks at.
+ */
+test.describe.configure({ mode: 'serial' });
+
+const ownedRoots: string[] = [];
+/** Register a project root for removal in `afterAll`, once the shared app has closed. */
+function own(dir: string): string {
+  ownedRoots.push(dir);
+  return dir;
+}
+
+let shared: OpenApp;
+
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+
+test.afterAll(async () => {
+  await shared?.close();
+  for (const dir of ownedRoots.splice(0)) cleanupTemp(dir);
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
+
+test('on by default: making an editor active selects its file and expands its ancestors (#188)', { tag: ['@extended', '@explorer'] }, async () => {
+  const root = own(makeProject());
   try {
     await runApp(async (_app, win) => {
       const [pidA, pidB] = await twoEditors(win, 'FollowOn', root);
@@ -126,16 +184,17 @@ test('on by default: making an editor active selects its file and expands its an
       await expect(tree.locator('.tree-row--selected')).toContainText('deep.txt');
     });
   } finally {
-    cleanupTemp(root);
+    // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would
+    // remove a folder the explorer is still watching.
   }
 });
 
-test('the active editor’s file stays visibly marked while the EDITOR holds focus (#188)', async () => {
+test('the active editor’s file stays visibly marked while the EDITOR holds focus (#188)', { tag: ['@extended', '@explorer'] }, async () => {
   // The selection highlight is scoped to the active pane (explorer.css), which is right for "what
   // the next keystroke acts on" — but it means that while the user types in the editor, the tree
   // that has just followed along shows nothing at all. The active file therefore carries its own
   // mark, and this asserts it is genuinely PAINTED, not merely a class nobody styled.
-  const root = makeProject();
+  const root = own(makeProject());
   try {
     await runApp(async (_app, win) => {
       const [pidA, pidB] = await twoEditors(win, 'FollowMarked', root);
@@ -158,12 +217,13 @@ test('the active editor’s file stays visibly marked while the EDITOR holds foc
       await expect(tree.locator('.tree-row--active-file')).toHaveCount(1);
     });
   } finally {
-    cleanupTemp(root);
+    // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would
+    // remove a folder the explorer is still watching.
   }
 });
 
-test('the auto-reveal never moves keyboard focus or the caret (#188, guards #144)', async () => {
-  const root = makeProject();
+test('the auto-reveal never moves keyboard focus or the caret (#188, guards #144)', { tag: ['@extended', '@explorer'] }, async () => {
+  const root = own(makeProject());
   try {
     await runApp(async (_app, win) => {
       const [pidA] = await twoEditors(win, 'FollowFocus', root);
@@ -208,12 +268,13 @@ test('the auto-reveal never moves keyboard focus or the caret (#188, guards #144
       expect(lines[0]).toBe('AAAA'); // would read "ZAAAA" had the caret been reset
     });
   } finally {
-    cleanupTemp(root);
+    // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would
+    // remove a folder the explorer is still watching.
   }
 });
 
-test('a terminal or unsaved editor becoming active does not move the tree selection (#188)', async () => {
-  const root = makeProject();
+test('a terminal or unsaved editor becoming active does not move the tree selection (#188)', { tag: ['@extended', '@explorer'] }, async () => {
+  const root = own(makeProject());
   try {
     await runApp(async (_app, win) => {
       await createProject(win, 'FollowTerminal', root);
@@ -239,6 +300,10 @@ test('a terminal or unsaved editor becoming active does not move the tree select
 
       // Nothing to reveal for a terminal: the selection neither moves nor blanks. Given a beat, so
       // a reveal that fires late fails this rather than passing by being slow.
+      // sleep-justified: the auto-reveal effect (file-tree.tsx's `!activeFileRel` guard) either
+      // sleep-justified: calls revealInTree or does not, inside a plain useEffect with no debounce
+      // sleep-justified: and no exposed completion signal — there is nothing to wait ON for "it did
+      // sleep-justified: not fire late", only time for it to have had the chance to.
       await win.waitForTimeout(500);
       await expect(tree.locator('.tree-row--selected')).toHaveCount(1);
       await expect(tree.locator('.tree-row--selected')).toContainText('deep.txt');
@@ -248,22 +313,26 @@ test('a terminal or unsaved editor becoming active does not move the tree select
       const pidBlank = await addPanel(win, pidEditor);
       await newEditor(win, pidBlank);
       await focusEditor(win, pidBlank);
+      // sleep-justified: same as above — the auto-reveal effect's guard fires or does not with no
+      // sleep-justified: exposed completion signal, so there is nothing to wait ON for "it stayed
+      // sleep-justified: quiet", only time for a late fire to have shown itself.
       await win.waitForTimeout(500);
       await expect(tree.locator('.tree-row--selected')).toContainText('deep.txt');
       await expect(win.getByTestId('explorer-error')).toHaveCount(0);
     });
   } finally {
-    cleanupTemp(root);
+    // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would
+    // remove a folder the explorer is still watching.
   }
 });
 
-test('off: the tree never moves on its own, and the setting re-applies with no restart (#188)', async () => {
+test('off: the tree never moves on its own, and the setting re-applies with no restart (#188)', { tag: ['@extended', '@explorer'] }, async () => {
   const root = makeProject();
   const cfg = mkdtempSync(join(tmpdir(), 'throng-i188-cfg-'));
   const settings = join(cfg, 'settings.json');
   writeFileSync(settings, JSON.stringify({ explorer: { autoRevealActiveFile: false } }, null, 2));
   try {
-    await runApp(
+    await runOwnApp(
       async (_app, win) => {
         const [pidA, pidB] = await twoEditors(win, 'FollowOff', root);
         const tree = win.getByTestId('file-explorer-tree');
@@ -271,6 +340,9 @@ test('off: the tree never moves on its own, and the setting re-applies with no r
         // The selection sits on deep.txt, which `src` being collapsed hides entirely. Switching to
         // the other editor moves neither: no row is selected, and src stays shut.
         await focusEditor(win, pidA);
+        // sleep-justified: same as the terminal/unsaved-editor cases in the other test above — the
+        // sleep-justified: auto-reveal effect's guard fires or does not with no exposed completion
+        // sleep-justified: signal, so there is nothing to wait ON for "it stayed quiet" here either.
         await win.waitForTimeout(500);
         await expect(tree.getByText('deep.txt', { exact: true })).toHaveCount(0);
         await expect(tree.locator('.tree-row--selected')).toHaveCount(0);

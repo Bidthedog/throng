@@ -7,8 +7,6 @@ import { expect, test, type ElectronApplication, type Page } from '@playwright/t
 import {
   openApp,
   runApp as runOwnApp,
-  createProject as newProject,
-  firstPanelId,
   cleanupTemp,
   type AppOptions,
   type OpenApp,
@@ -55,10 +53,6 @@ const runApp = (
   });
 };
 
-let projectSeq = 0;
-const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
-  newProject(win, `${name}-${(projectSeq += 1)}`, root);
-
 
 /** Open the preferences window on a tab, through the cog — the same route every prefs suite uses. */
 async function openPrefs(app: ElectronApplication, win: Page, tab: string): Promise<Page> {
@@ -80,54 +74,23 @@ async function openPrefs(app: ElectronApplication, win: Page, tab: string): Prom
  * inline vector — the constitution prohibits that outright, and it is the whole of issue #56.
  */
 
-test('the shared menu is keyboard-navigable — arrows move, Enter fires, Escape closes (FR-013a)', async () => {
-  await runApp(async (_app, win) => {
-    // The cog menu was a list of real focusable buttons. Folding it into a menu that handled Escape
-    // and NOTHING else would have been an accessibility regression shipped under the banner of
-    // unifying the menus — so the shared menu gained roving focus first, and this pins it.
-    await win.getByTestId('title-bar-cog').click();
-    const menu = win.getByTestId('cog-menu');
-    await expect(menu).toBeVisible();
+/*
+ * MOVED to `packages/ui/tests/component/context-menu-lifecycle.test.ts` (034 FR-045) — two tests.
+ *
+ * The keyboard one asserted `document.activeElement` inside a single component over a real
+ * keyboard: the menu takes focus on open with NO item chosen (the pre-023 defect was "Settings"
+ * sitting lit up whether or not the pointer was near it), arrows move, End jumps to the last, Enter
+ * fires the row AND closes, Escape closes. All of it is focus within one rendered tree.
+ *
+ * The blur one is the plainest case in this whole migration: it synthesised `new Event('blur')`
+ * itself and dispatched it. Electron contributed nothing but start-up cost.
+ *
+ * WHAT STAYS BELOW: the cog gear coming from the theme’s icon pack with no inline vector; the
+ * flip near the bottom-right corner, which reads `boundingBox()` and is real layout; and the Key
+ * Bindings chord menu, which removes a chord from the file on disk.
+ */
 
-    // NOTHING is chosen on open. The menu itself takes focus — so the first arrow lands in the menu
-    // rather than scrolling the page behind it — but no ITEM is focused, because focusing one would
-    // highlight it, and a menu that opens with an item already highlighted has answered a question the
-    // user has not asked. (It used to focus the first item, and "Settings" sat there lit up whether or
-    // not the pointer was anywhere near it.)
-    await expect
-      .poll(() => win.evaluate(() => document.activeElement?.getAttribute('data-testid')))
-      .toBe('cog-menu');
-    await expect(menu.locator('.context-menu__item:focus')).toHaveCount(0);
-
-    // The first Down lands on the FIRST item.
-    await win.keyboard.press('ArrowDown');
-    await expect
-      .poll(() => win.evaluate(() => document.activeElement?.getAttribute('data-testid')))
-      .toBe('cog-menu-settings');
-
-    await win.keyboard.press('ArrowDown');
-    await expect
-      .poll(() => win.evaluate(() => document.activeElement?.getAttribute('data-testid')))
-      .toBe('cog-menu-keybindings');
-
-    await win.keyboard.press('ArrowUp');
-    await expect
-      .poll(() => win.evaluate(() => document.activeElement?.getAttribute('data-testid')))
-      .toBe('cog-menu-settings');
-
-    // End jumps to the last item; the focus wraps rather than dead-ending. The cog menu's last item
-    // is "About throng" (020 FR-003), added after Settings / Key Bindings / Themes.
-    await win.keyboard.press('End');
-    await expect
-      .poll(() => win.evaluate(() => document.activeElement?.getAttribute('data-testid')))
-      .toBe('cog-menu-about');
-
-    await win.keyboard.press('Escape');
-    await expect(menu).toBeHidden();
-  });
-});
-
-test('the cog gear comes from the theme’s icon pack — no inline vector (FR-014b, SC-002)', async () => {
+test('the cog gear comes from the theme’s icon pack — no inline vector (FR-014b, SC-002)', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     // The gear was drawn from a hard-coded path because the theme had no settings glyph to resolve.
     // 018 adds the token; the same one serves the project-settings options icon.
@@ -144,34 +107,7 @@ test('the cog gear comes from the theme’s icon pack — no inline vector (FR-0
   });
 });
 
-test('opening any menu closes any other, and a menu closes when its window loses focus (FR-017, FR-017a)', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-menus-'));
-  await runApp(async (_app, win) => {
-    // A panel only exists once a project is open — and the panel's menu is the one that proves the
-    // invariant, because it is the SHARED menu the cog has just been folded into.
-    await createProject(win, 'Menus', root);
-    const pid = await firstPanelId(win);
-
-    await win.getByTestId('title-bar-cog').click();
-    await expect(win.getByTestId('cog-menu')).toBeVisible();
-
-    // Right-click the panel: the cog menu must go. The invariant is STRUCTURAL now — the provider
-    // holds one menu state, and the cog menu is no longer a second implementation with a life of its
-    // own. Before, it closed only because a right-click happens to fire mousedown.
-    await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-    await expect(win.getByTestId('cog-menu')).toBeHidden();
-    await expect(win.getByTestId('context-menu')).toBeVisible();
-
-    // Blur the window: no menu may be left hanging in a window the user has clicked away from.
-    // This is what "application-wide" was actually reaching for — the three window kinds are separate
-    // renderer processes, so a provider cannot reach across them without inter-process messaging.
-    await win.evaluate(() => window.dispatchEvent(new Event('blur')));
-    await expect(win.getByTestId('context-menu')).toBeHidden();
-  });
-  cleanupTemp(root);
-});
-
-test('the cog menu flips to stay on-screen near the bottom-right corner (FR-016)', async () => {
+test('the cog menu flips to stay on-screen near the bottom-right corner (FR-016)', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     // The bespoke cog menu positioned itself with a bare CSS `top:100%; right:0` — no measurement,
     // no flip, no clamp. On the shared menu it inherits all three.
@@ -191,7 +127,7 @@ test('the cog menu flips to stay on-screen near the bottom-right corner (FR-016)
   });
 });
 
-test('the Key Bindings chord menu is the SHARED menu, and still removes the chord (FR-019)', async () => {
+test('the Key Bindings chord menu is the SHARED menu, and still removes the chord (FR-019)', { tag: ['@extended', '@window'] }, async () => {
   // The Key Bindings menu had ZERO end-to-end coverage — the ONLY menu in the application with none.
   // That is precisely why nobody noticed it was a second implementation, and it is why FR-019 makes
   // covering it an explicit obligation of this feature rather than a nice-to-have. This is its first

@@ -3,7 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, cleanupTemp } from './harness.js';
+import { openApp, cleanupTemp, settle, type AppOptions, type OpenApp } from './harness.js';
+import {
+  configRootSeeded,
+  settleConfigRoot,
+  snapshotConfigRoot,
+  type ConfigRootSnapshot,
+} from './helpers/config-snapshot.js';
+import { closePrefsWindow } from './helpers/prefs-window.js';
 
 /**
  * #102 — a config write that FAILS must tell the user.
@@ -48,9 +55,88 @@ function freshCfgRoot(): string {
   cfgRoots.push(dir);
   return dir;
 }
-test.afterAll(() => {
+
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-010).
+ *
+ * All three tests called `freshCfgRoot()` with NO arguments and seeded nothing into it before
+ * launching — the isolated root was write ISOLATION between tests, not pre-launch state. What they
+ * actually need is a config root that looks untouched when each one starts, which is
+ * `settleConfigRoot`'s whole job.
+ *
+ * ══ WHY THE RESTORE IS NOT OPTIONAL HERE ══
+ *
+ * The first two tests both begin by clicking `control-editor.autoSave` and polling for `true`. That
+ * is a TOGGLE. Without a restore between them the second click would set it back to `false` and the
+ * poll would time out — in the SETUP, before the test reached anything it is about, which is the
+ * worst place for a shared-app conversion to break.
+ *
+ * `restoreConfigRoot` already understands the obstruction these tests use: it explicitly clears a
+ * path that a test replaced with a DIRECTORY before writing the file back (`helpers/config-snapshot.ts`,
+ * which names `preferences-reset` doing the same thing). Each test's own `finally` still restores,
+ * because a test that leaves the config root broken for the next one should say so itself.
+ *
+ * ══ ORDER ══
+ *
+ * The main-window test runs LAST. It creates two projects, and a project is DAEMON state — the
+ * config restore cannot undo it, so it goes where nothing follows it. The two preferences-window
+ * tests are order-independent of each other.
+ *
+ * ══ AND THE PREFERENCES WINDOW IS CLOSED BETWEEN TESTS ══
+ *
+ * `openPrefs` polls the window list for one carrying `prefs-mode-toggle`. throng allows exactly one
+ * preferences window, so a surviving one from the previous test would be found instantly — on the
+ * previous test's tab, with the previous test's on-entry snapshot behind Revert, and with a JSON
+ * buffer that raises `json-external-change` the moment the restore rewrites the file underneath it.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let cfgRoot: string;
+let settingsPath: string;
+let baseline: ConfigRootSnapshot;
+
+test.beforeAll(async () => {
+  cfgRoot = freshCfgRoot();
+  settingsPath = join(cfgRoot, 'settings.json');
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
+  await settle(shared.win);
+  // Snapshot only once first-run seeding has finished — settings, key bindings and every shipped
+  // theme. A partial photograph would have every later restore DELETE whatever arrived late.
+  await expect.poll(() => configRootSeeded(cfgRoot), { timeout: 30_000 }).toBe(true);
+  baseline = snapshotConfigRoot(cfgRoot);
+});
+
+test.afterEach(async () => {
+  await closePrefsWindow(shared.app);
+  await settleConfigRoot(baseline);
+});
+
+test.afterAll(async () => {
+  await shared?.close();
   for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
+
+/**
+ * The shared app, in the shape `runApp` had — plus the run's own Electron data directory, which the
+ * #265 test reads `logs/main.log` out of.
+ *
+ * It REFUSES launch options rather than ignoring them: a swallowed config root does not fail, it
+ * makes a test pass for the wrong reason.
+ */
+const runApp = (
+  fn: (
+    app: OpenApp['app'],
+    win: OpenApp['win'],
+    ctx: { userDataDir: string },
+  ) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error('this file shares one app; a test needing launch options must open its own');
+  }
+  return fn(shared.app, shared.win, { userDataDir: shared.userDataDir });
+};
 
 /** Open the preferences window on `tab` and return its page (as `preferences-reset.e2e.ts` does). */
 async function openPrefs(
@@ -96,10 +182,8 @@ function obstruct(path: string): string {
   return saved;
 }
 
-test('a JSON edit that could not be saved says so, instead of silently not applying (#102)', async () => {
+test('a JSON edit that could not be saved says so, instead of silently not applying (#102)', { tag: ['@extended', '@prefs'] }, async () => {
   test.setTimeout(180_000);
-  const cfgRoot = freshCfgRoot();
-  const settingsPath = join(cfgRoot, 'settings.json');
 
   await runApp(
     async (app, win) => {
@@ -160,7 +244,6 @@ test('a JSON edit that could not be saved says so, instead of silently not apply
         writeFileSync(settingsPath, saved, 'utf8');
       }
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
@@ -199,10 +282,8 @@ test('a JSON edit that could not be saved says so, instead of silently not apply
  * chokepoint reporter was built. Keeping the specific-sounding one and deleting the general one
  * would re-open #102 for every text and number edit in preferences.
  */
-test('a failed settings write raises ONE notice, says why, and can be copied (#265)', async () => {
+test('a failed settings write raises ONE notice, says why, and can be copied (#265)', { tag: ['@extended', '@prefs'] }, async () => {
   test.setTimeout(180_000);
-  const cfgRoot = freshCfgRoot();
-  const settingsPath = join(cfgRoot, 'settings.json');
 
   await runApp(
     async (app, win, { userDataDir }) => {
@@ -310,7 +391,6 @@ test('a failed settings write raises ONE notice, says why, and can be copied (#2
         writeFileSync(settingsPath, saved, 'utf8');
       }
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
@@ -341,10 +421,12 @@ test('a failed settings write raises ONE notice, says why, and can be copied (#2
  *
  * RED until the subscriber is mounted in the main window (T039) and in sub-workspace windows (T040).
  */
-test('a config write that fails in the MAIN window says so (032 FR-010, G-09)', async () => {
+test('a config write that fails in the MAIN window says so (032 FR-010, G-09)', { tag: ['@extended', '@prefs'] }, async () => {
   test.setTimeout(180_000);
-  const cfgRoot = freshCfgRoot();
-  const settingsPath = join(cfgRoot, 'settings.json');
+  /*
+   * DECLARED LAST on purpose (see the shared-app note at the top): the two projects this creates are
+   * DAEMON state, and the config-root restore between tests cannot undo them. Nothing follows it.
+   */
   /*
    * TWO folders, and this is load-bearing rather than tidiness.
    *
@@ -360,6 +442,9 @@ test('a config write that fails in the MAIN window says so (032 FR-010, G-09)', 
 
   await runApp(
     async (_app, win) => {
+      // The previous test finished in the preferences window; `afterEach` destroyed it, and this
+      // brings the main window forward so the clicks below land where they are aimed.
+      await win.bringToFront();
       /*
        * SETUP: one project created normally, so `settings.json` exists and the main window's write
        * path is demonstrably working. Without this, silence below could mean "the main window never
@@ -408,6 +493,5 @@ test('a config write that fails in the MAIN window says so (032 FR-010, G-09)', 
         writeFileSync(settingsPath, saved, 'utf8');
       }
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });

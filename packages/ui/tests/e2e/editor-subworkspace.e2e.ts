@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, reloadWindow, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, reloadWindow, cleanupTemp, geom, quiesced } from './harness.js';
 
 // US10 (Delivery E): a project editor synced into a sub-workspace mirrors ONE
 // document across both windows — content typed in the main window appears in the
@@ -22,7 +22,7 @@ async function newEditor(win: Page): Promise<string> {
   return pid;
 }
 
-test('a synced project editor mirrors one document across both windows', async () => {
+test('a synced project editor mirrors one document across both windows', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-swed-'));
   try {
     await runApp(async (app, win) => {
@@ -34,7 +34,9 @@ test('a synced project editor mirrors one document across both windows', async (
       // Type content into the main-window editor and let it flush to UI main.
       await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
       await win.keyboard.type('HELLO-MIRROR');
-      await win.waitForTimeout(300);
+      await quiesced(win.getByTestId(`editor-${pid}`).locator('.cm-content'), {
+        what: 'main editor after typing HELLO-MIRROR',
+      });
 
       // Open the sub-workspace window.
       const [child] = await Promise.all([
@@ -56,7 +58,7 @@ test('a synced project editor mirrors one document across both windows', async (
         timeout: 10000,
       });
       // Let the child editor's initial load settle so it doesn't race the next edit.
-      await child.waitForTimeout(500);
+      await geom(childEditor);
 
       // A live edit in the MAIN window mirrors into the sub-workspace window.
       await win.bringToFront();
@@ -82,7 +84,7 @@ test('a synced project editor mirrors one document across both windows', async (
  * So: cut-line, a column paste whose block was copied in the OTHER window (the mode is app-global,
  * FR-015c), and the language picker — all driven in the child.
  */
-test('cut-line, a column paste and the language picker all work in a sub-workspace window', async () => {
+test('cut-line, a column paste and the language picker all work in a sub-workspace window', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-swpar-'));
   try {
     writeFileSync(join(root, 'grid.txt'), 'aaaa\nbbbb\ncccc\ndddd\n');
@@ -123,7 +125,8 @@ test('cut-line, a column paste and the language picker all work in a sub-workspa
       const childEditor = child.getByTestId(`editor-${pid}`);
       await expect(childEditor).toBeVisible({ timeout: 10000 });
       await expect(childEditor.locator('.cm-content')).toContainText('aaaa', { timeout: 10000 });
-      await child.waitForTimeout(500);
+      // Let the child editor's initial load settle so it doesn't race the next edit.
+      await geom(childEditor);
 
       const childDoc = (): Promise<string> =>
         child.evaluate(

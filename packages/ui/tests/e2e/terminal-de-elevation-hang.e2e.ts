@@ -80,25 +80,37 @@ adminTest(
 
         // Within the budget the panel must settle into exactly one of two acceptable
         // outcomes. Anything else — a blank terminal that is still "running" — is #94.
-        const deadline = Date.now() + LAUNCH_BUDGET_MS;
         let text = '';
         let outcome: 'prompt' | 'visible-error' | null = null;
-        while (Date.now() < deadline) {
-          text = await term.innerText();
-          if (text.includes(marker)) {
-            outcome = 'prompt'; // the intended outcome: a working non-elevated shell
-            break;
-          }
-          if (/\[throng\]|failed/i.test(text)) {
-            outcome = 'visible-error'; // the acceptable fallback: fail fast, visibly
-            break;
-          }
-          // The panel reverting to the type form is also a surfaced failure (FR-020).
-          if (await win.getByTestId(`panel-type-form-${pid}`).isVisible()) {
-            outcome = 'visible-error';
-            break;
-          }
-          await win.waitForTimeout(250);
+        try {
+          // A hand-rolled `Date.now()` loop with a fixed interval is what `expect.poll` already is,
+          // with its own backoff — use that instead of reimplementing it. The catch below is only to
+          // preserve the rich #94 diagnostic the plain `expect` after it produces; a bare poll timeout
+          // would otherwise report its own generic message instead.
+          await expect
+            .poll(
+              async () => {
+                text = await term.innerText();
+                if (text.includes(marker)) {
+                  outcome = 'prompt'; // the intended outcome: a working non-elevated shell
+                  return true;
+                }
+                if (/\[throng\]|failed/i.test(text)) {
+                  outcome = 'visible-error'; // the acceptable fallback: fail fast, visibly
+                  return true;
+                }
+                // The panel reverting to the type form is also a surfaced failure (FR-020).
+                if (await win.getByTestId(`panel-type-form-${pid}`).isVisible()) {
+                  outcome = 'visible-error';
+                  return true;
+                }
+                return false;
+              },
+              { timeout: LAUNCH_BUDGET_MS },
+            )
+            .toBe(true);
+        } catch {
+          /* fall through — the assertion below reports the #94 diagnostic with the terminal text */
         }
 
         expect(

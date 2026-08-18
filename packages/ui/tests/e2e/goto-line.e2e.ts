@@ -87,16 +87,6 @@ const createProject = (win: Page, name: string, root: string): Promise<void> =>
 
 const LINE_COUNT = 400;
 
-/**
- * The LAST line of these files is line 401, and it is empty.
- *
- * Both fixtures end with a newline, as a text file should — and a trailing newline means the
- * document has one more line than it has lines of text. Measured, not assumed: the first version of
- * this file expected `400` from a jump past the end and the gutter drew `401`, which is the editor
- * being right about a file the test was wrong about. Naming it here rather than trimming the newline
- * keeps the fixture a normal file and makes "the last line" mean what it means on disk.
- */
-const LAST_LINE = LINE_COUNT + 1;
 
 /** Line `n` reads `line-NNNN`, so the RENDERED text of a line names its own number. */
 const marker = (n: number): string => `line-${String(n).padStart(4, '0')}`;
@@ -232,15 +222,6 @@ const scrollTop = (win: Page, panelId: string): Promise<number> =>
     .locator('.cm-scroller')
     .evaluate((el) => Math.round(el.scrollTop));
 
-/** The drawn selection's rectangles — read from the layer CodeMirror paints, not from its state. */
-const selectionBoxes = (win: Page, panelId: string): Promise<string[]> =>
-  win.getByTestId(`editor-${panelId}`).evaluate((root) =>
-    Array.from(root.querySelectorAll('.cm-selectionBackground')).map((el) => {
-      const r = el.getBoundingClientRect();
-      return `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)},${Math.round(r.height)}`;
-    }),
-  );
-
 /** Turn the tab's first panel into an editor and hand back its id. */
 async function newEditor(win: Page): Promise<string> {
   const pid = await firstPanelId(win);
@@ -316,7 +297,7 @@ const expectNoNewNotice = async (win: Page, baseline: number): Promise<void> => 
  * AS-1, AS-2, AS-3 · G1, G2 · SC-006 — the unwrapped document
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('the chord opens a modal with the caret in its input, and the line reached is the one the GUTTER draws (AS-1, AS-2, AS-3, G1, G2, SC-006)', async () => {
+test('the chord opens a modal with the caret in its input, and the line reached is the one the GUTTER draws (AS-1, AS-2, AS-3, G1, G2, SC-006)', { tag: ['@core', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -367,7 +348,7 @@ test('the chord opens a modal with the caret in its input, and the line reached 
  * SC-006, second half — the WRAPPED document, where visual rows and logical lines disagree
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('in a WRAPPED document the number typed is still the number the gutter draws (SC-006, G2, FR-021)', async () => {
+test('in a WRAPPED document the number typed is still the number the gutter draws (SC-006, G2, FR-021)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -430,141 +411,31 @@ test('in a WRAPPED document the number typed is still the number the gutter draw
  * AS-4, AS-5 · G3 — clamping is never an error
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('a number past the end lands on the LAST line, and 0 or a negative on the FIRST — neither raises a notice (AS-4, AS-5, G3)', async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'GotoClamp', root);
-      const pid = await newEditor(win);
-      await openFile(win, pid, 'plain.txt');
-      await setWordWrap(win, pid, false);
-      await focusContent(win, pid);
-      await win.keyboard.press('Control+Home');
-
-      const notices = await noticeCount(win);
-
-      // AS-4 — beyond the document's line count.
-      await openGotoLine(win);
-      await win.keyboard.type('99999');
-      await win.keyboard.press('Enter');
-      await expect(win.getByTestId('gotoline')).toHaveCount(0);
-      const last = await caretReadout(win, pid);
-      expect(last.gutter).toBe(String(LAST_LINE));
-      // …and the last line of a file that ends with a newline is the empty one after the text.
-      expect(last.lineText).toBe('');
-      expect(last.atFirstColumn).toBe(true);
-      await expectNoNewNotice(win, notices);
-
-      // AS-5 — zero.
-      await openGotoLine(win);
-      await win.keyboard.type('0');
-      await win.keyboard.press('Enter');
-      await expect(win.getByTestId('gotoline')).toHaveCount(0);
-      const zero = await caretReadout(win, pid);
-      expect(zero.gutter).toBe('1');
-      expect(zero.lineText).toBe(marker(1));
-      expect(zero.atFirstColumn).toBe(true);
-      await expectNoNewNotice(win, notices);
-
-      // …move away again, so the negative below cannot pass merely by leaving the caret where it is.
-      await openGotoLine(win);
-      await win.keyboard.type('300');
-      await win.keyboard.press('Enter');
-      await expect.poll(async () => (await caretReadout(win, pid)).gutter).toBe('300');
-
-      // AS-5 — a negative, which must NOT be read as "count back from the end".
-      await openGotoLine(win);
-      await win.keyboard.type('-5');
-      await win.keyboard.press('Enter');
-      await expect(win.getByTestId('gotoline')).toHaveCount(0);
-      const negative = await caretReadout(win, pid);
-      expect(negative.gutter).toBe('1');
-      expect(negative.lineText).toBe(marker(1));
-      await expectNoNewNotice(win, notices);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * MOVED to `packages/core/tests/unit/goto-line.test.ts` (034 FR-046a):
+ *   - "a number past the end lands on the LAST line, and 0 or a negative on the FIRST"
+ *   - "Escape, an empty value and a non-numeric one all leave the caret … as they were"
+ *
+ * Both are `resolveGotoLine` deciding — clamp to the last line, clamp to the first, and return
+ * null so the caller does not move. Spec 033 wrote that unit test alongside these; breaking the
+ * clamp reddens 9 of its cases, which is what earned the deletion.
+ *
+ * One fact from the deleted fixture, kept here because it was learned the expensive way and would
+ * otherwise leave with the constant that held it: these files carry 400 lines of TEXT and their
+ * last line is **401**, because both end with a trailing newline as a text file should. The first
+ * version of the deleted test expected 400 from a jump past the end and the gutter drew 401 — the
+ * editor being right about a file the test was wrong about.
+ */
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * AS-6, AS-7 · G4, G6 — nothing moves
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('Escape, an empty value and a non-numeric one all leave the caret, the selection and the scroll exactly as they were (AS-6, AS-7, G4, G6)', async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'GotoNoop', root);
-      const pid = await newEditor(win);
-      await openFile(win, pid, 'plain.txt');
-      await setWordWrap(win, pid, false);
-      await focusContent(win, pid);
-
-      const notices = await noticeCount(win);
-
-      // Somewhere in the middle, with a real selection and a real scroll offset — so "unchanged" is
-      // a claim about something, rather than about the top of an unscrolled document.
-      await openGotoLine(win);
-      await win.keyboard.type('180');
-      await win.keyboard.press('Enter');
-      await expect.poll(async () => (await caretReadout(win, pid)).gutter).toBe('180');
-      await win.keyboard.press('Shift+End');
-
-      const before = {
-        readout: await caretReadout(win, pid),
-        scroll: await scrollTop(win, pid),
-        selection: await selectionBoxes(win, pid),
-      };
-      expect(before.selection.length, 'nothing is selected — this test would be vacuous').toBe(1);
-      expect(
-        before.scroll,
-        'the document is not scrolled — this test would be vacuous',
-      ).toBeGreaterThan(0);
-
-      const unchanged = async (why: string): Promise<void> => {
-        await expect(
-          win.getByTestId(`editor-${pid}`).locator('.cm-editor.cm-focused'),
-        ).toBeVisible();
-        const after = await caretReadout(win, pid);
-        expect(after.gutter, why).toBe(before.readout.gutter);
-        expect(after.caret, why).toEqual(before.readout.caret);
-        expect(await scrollTop(win, pid), why).toBe(before.scroll);
-        expect(await selectionBoxes(win, pid), why).toEqual(before.selection);
-        await expectNoNewNotice(win, notices);
-      };
-
-      // AS-6 — Escape.
-      await openGotoLine(win);
-      await win.keyboard.press('Escape');
-      await expect(win.getByTestId('gotoline')).toHaveCount(0);
-      await unchanged('Escape moved something');
-
-      // AS-7 — an empty value confirmed.
-      await openGotoLine(win);
-      await win.keyboard.press('Enter');
-      await expect(win.getByTestId('gotoline')).toHaveCount(0);
-      await unchanged('an empty value moved something');
-
-      // AS-7 — and a non-numeric one.
-      await openGotoLine(win);
-      await win.keyboard.type('abc');
-      await win.keyboard.press('Enter');
-      await expect(win.getByTestId('gotoline')).toHaveCount(0);
-      await unchanged('a non-numeric value moved something');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * AS-12 · G8 — FR-026: the find bar keeps everything but the focus
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('an open find bar keeps its query, its match count and its highlights, and merely loses focus (AS-12, G8, FR-026)', async () => {
+test('an open find bar keeps its query, its match count and its highlights, and merely loses focus (AS-12, G8, FR-026)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -676,7 +547,7 @@ async function inputWrites(win: Page, panelId: string): Promise<string[]> {
  */
 const BEL = '\\u0007';
 
-test('with a terminal focused the chord opens nothing and the shell receives ^G (AS-8, A3, SC-007)', async () => {
+test('with a terminal focused the chord opens nothing and the shell receives ^G (AS-8, A3, SC-007)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -727,7 +598,7 @@ test('with a terminal focused the chord opens nothing and the shell receives ^G 
  * AS-9 · A4 — no active panel
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('with no editor active the chord does nothing — and the same chord opens the modal once one is (AS-9, A4)', async () => {
+test('with no editor active the chord does nothing — and the same chord opens the modal once one is (AS-9, A4)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -772,7 +643,7 @@ test('with no editor active the chord does nothing — and the same chord opens 
  * FR-066 · S1 — one slot, one modal
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('opening Quick Open while Go To Line is open leaves exactly one modal on screen (FR-066, S1)', async () => {
+test('opening Quick Open while Go To Line is open leaves exactly one modal on screen (FR-066, S1)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -802,7 +673,7 @@ test('opening Quick Open while Go To Line is open leaves exactly one modal on sc
  * G10 · FR-028 — throng's modal on throng's binding, and no second surface
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('CodeMirror’s own go-to-line panel is not reachable — Ctrl+Alt+G opens nothing (G10, FR-028)', async () => {
+test('CodeMirror’s own go-to-line panel is not reachable — Ctrl+Alt+G opens nothing (G10, FR-028)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

@@ -36,13 +36,9 @@
  * underneath this one — which is why `parallel-plan.json` lists this file. It was in the parallel tier
  * until the toggle arrived; the move is a consequence of that assertion, not of the file's age.
  */
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import {
   openApp,
-  runApp as runOwnApp,
   createProject as newProject,
   firstPanelId,
   panelIds,
@@ -50,7 +46,6 @@ import {
   commitPanelRename,
   commitTabRename,
   settle,
-  cleanupTemp,
   type AppOptions,
   type OpenApp,
 } from './harness.js';
@@ -58,10 +53,11 @@ import { createDeepTree, cleanupDeepTree, DEEP_TREE } from './helpers/deep-tree.
 import { openQuickOpen, quickOpenRows, quickOpenRowPaths } from './helpers/navigation.js';
 
 /*
- * ONE app for this file. Only the last test seeds state before launch — a config root carrying
- * `editor.openTarget: 'new'`, which is read at launch — and it says so by calling `runOwnApp`.
- * The shim refuses options rather than ignoring them: a dropped config root does not fail, it
- * passes for the wrong reason.
+ * ONE app for this file, and now EVERY test in it shares that one. The last spec that seeded
+ * state before launch — a config root carrying `editor.openTarget: 'new'`, read at startup —
+ * moved to the component layer with the rest of the header controls and took its `runOwnApp`
+ * launch with it. The shim below still REFUSES options rather than ignoring them: a dropped
+ * config root does not fail, it passes for the wrong reason.
  */
 test.describe.configure({ mode: 'serial' });
 
@@ -155,77 +151,52 @@ async function addEditorPanel(win: Page, pid: string): Promise<string> {
   return next;
 }
 
-/** The `data-testid`s inside the dialog card, in DOM order — how "above the input" is checked. */
-async function dialogOrder(win: Page): Promise<string[]> {
-  return win
-    .getByTestId('quickopen')
-    .evaluate((card) =>
-      [...card.querySelectorAll('[data-testid]')].map((el) => el.getAttribute('data-testid') ?? ''),
-    );
-}
-
-/** Is focus still inside the modal? P7's question, asked of the document rather than of a guess. */
-async function focusInsideModal(win: Page): Promise<boolean> {
-  return win.evaluate(() => {
-    const card = document.querySelector('[data-testid="quickopen"]');
-    return card !== null && document.activeElement !== null && card.contains(document.activeElement);
-  });
-}
-
 /* ────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('invoked from inside an editor the control sits ABOVE the input, preselected from the shipped default, with focus in the query field (AS-11, AS-11a, T1–T3, T6, P7, P8)', async () => {
-  const tree = createDeepTree('throng-qot-shape-');
-  try {
-    await runApp(async (_app, win) => {
-      await editorWithProject(win, 'QOTargetShape', tree.root);
-      await openQuickOpen(win);
+/*
+ * MOVED to `packages/ui/tests/component/quick-open-header.test.ts` (034 FR-045) — five tests,
+ * nineteen cases:
+ *   :177  the control ABOVE the input, preselected, focus in the query field, Tab trapped
+ *   :311  Shift+Tab reaches it and Space toggles it without opening anything
+ *   :346  E1 — Enter opens a file ONLY from the query input
+ *   :536  the preselection follows `editor.openTarget`
+ *   :656  the two header controls are siblings, and only the target one is conditional
+ *
+ * THE SUBJECT THERE IS THE REAL `QuickOpen`, not a hand-built header, and that is what makes the
+ * migration honest: these claims ARE the composition — which control, in what order, inside which
+ * element, and which of the two is conditional. A host that assembled `Picker`, `QuickOpenHidden`
+ * and `QuickOpenTarget` itself would be asserting its own arrangement and would leave
+ * `quick-open.tsx`’s header block untested (FR-047). It mounts at all because the candidate set
+ * arrives as a PROP (`index: FileIndexView`), so there is no walk, no daemon and no project on
+ * disk; the only context is `useWorkspace`, whose provider is exported and takes its client as a
+ * prop.
+ *
+ * FIVE OF THE NINETEEN LAND STRONGER THAN THE E2E DID:
+ *   - the hover title is asserted to name BOTH destinations, not merely to be non-empty
+ *   - Tab is asserted as a SEQUENCE (hidden → target → input). The E2E asked only "still inside",
+ *     which a trap pinned to one element satisfies perfectly — and which is exactly what a
+ *     missing `offsetParent` stub produces in jsdom, so the component file stubs it and says why
+ *   - the Enter that opens is asserted on the ROUTER CALL — the exact absolute path (Q1) and the
+ *     exact `EditorOpenTarget` — where the E2E could only see that some editor held the file
+ *   - the `invokedFrom === null` branch of that same ternary is covered for the first time at any
+ *     layer
+ *   - the exclusion toggle is asserted to report UPWARDS rather than hold a value of its own,
+ *     which is the property `navigation-chrome.tsx` depends on and which nothing checked
+ *
+ * WHAT DID NOT MOVE, AND WHY:
+ *   - `:228`’s "the modal must not JUMP as the sentence changes length" — a `boundingBox()`
+ *     compared across the toggle. jsdom has no layout engine, so that assertion has no meaning
+ *     there at any fidelity (FR-049). Its WORDING half IS re-proved at the component layer, as a
+ *     STRENGTHENING rather than a replacement: `:228` keeps its declaration below.
+ *   - the one-buffer cases and the two hiding mechanisms. Those are `openFileInTab`’s decisions
+ *     and a real project’s exclusion rules, neither of which is the header.
+ *
+ * ANTI-VACUITY CONTROL, stated in that file and runnable: drop the `WorkspaceProvider` wrapper
+ * from its `mount()` and `useWorkspace` throws, so nothing renders — ALL NINETEEN fail, every one
+ * of them on the `findByTestId('quickopen-input')` that each test awaits before it starts.
+ */
 
-      // T3 — drawn, because this modal was invoked from inside an editor panel.
-      await expect(target(win)).toBeVisible();
-
-      // P7 — ABOVE the input, which is a claim about DOM order and therefore about tab order.
-      // Asserted on the order rather than on pixels: the control being first in the DOM is what
-      // makes E5's Shift+Tab reach it.
-      const order = await dialogOrder(win);
-      expect(order).toContain('quickopen-target');
-      expect(order.indexOf('quickopen-target')).toBeLessThan(order.indexOf('quickopen-input'));
-
-      // T2 — preselected from `editor.openTarget`, which is `lastActive` at the shipped default.
-      await expect(target(win)).toHaveAttribute('data-value', 'lastActive');
-
-      // T6 — a themeable control with a hover title naming what it does.
-      const title = await target(win).getAttribute('title');
-      expect(title ?? '', 'the target control has no hover title').not.toBe('');
-
-      /*
-       * AS-11a / P8 — focus starts in the query input and TYPING GOES THERE.
-       *
-       * `openQuickOpen` already asserted the input holds focus; this asserts the consequence, which
-       * is the thing a user would notice. A control that quietly swallowed the first keystroke
-       * would pass a focus assertion and fail here.
-       */
-      await win.keyboard.type('config');
-      await expect(win.getByTestId('quickopen-input')).toHaveValue('config');
-      await expect(target(win)).toHaveAttribute('data-value', 'lastActive');
-      await expect(quickOpenRows(win)).toHaveCount(2);
-
-      // E3 / P7 — Tab reaches the trap and cannot leave the modal through the header.
-      expect(await focusInsideModal(win)).toBe(true);
-      await win.keyboard.press('Tab');
-      expect(await focusInsideModal(win), 'Tab escaped the modal through the header').toBe(true);
-      await win.keyboard.press('Tab');
-      expect(await focusInsideModal(win), 'Tab escaped the modal through the header').toBe(true);
-
-      await win.keyboard.press('Escape');
-      await expect(win.getByTestId('quickopen')).toHaveCount(0);
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
-
-test('the control says where the file will land IN WORDS, names the panel, and is one click target (SC-020, FR-068)', async () => {
+test('the control says where the file will land IN WORDS, names the panel, and is one click target (SC-020, FR-068)', { tag: ['@extended', '@editor'] }, async () => {
   const tree = createDeepTree('throng-qot-words-');
   try {
     await runApp(async (_app, win) => {
@@ -308,159 +279,21 @@ test('the control says where the file will land IN WORDS, names the panel, and i
   }
 });
 
-test('Shift+Tab reaches the control and Space changes its value without opening anything (AS-11b, T4, E5)', async () => {
-  const tree = createDeepTree('throng-qot-space-');
-  try {
-    await runApp(async (_app, win) => {
-      await editorWithProject(win, 'QOTargetSpace', tree.root);
-      await openQuickOpen(win);
-
-      // A row is HIGHLIGHTED throughout. "Space opened nothing" is a much weaker statement against
-      // an empty list — there would be nothing for it to open even if it tried.
-      await win.keyboard.type('README');
-      await expect(quickOpenRows(win)).toHaveCount(1);
-      const before = await editors(win).count();
-
-      await win.keyboard.press('Shift+Tab');
-      await expect(target(win)).toBeFocused();
-
-      await win.keyboard.press('Space');
-      await expect(target(win)).toHaveAttribute('data-value', 'new');
-      await expect(win.getByTestId('quickopen')).toBeVisible(); // …opened nothing, closed nothing
-      expect(await editors(win).count()).toBe(before);
-
-      // …and it TOGGLES, rather than only ever moving one way.
-      await win.keyboard.press('Space');
-      await expect(target(win)).toHaveAttribute('data-value', 'lastActive');
-      await expect(win.getByTestId('quickopen')).toBeVisible();
-      expect(await editors(win).count()).toBe(before);
-
-      await win.keyboard.press('Escape');
-      await expect(win.getByTestId('quickopen')).toHaveCount(0);
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
-
-test('Enter on the control changes its value and opens nothing; Enter in the list is the only thing that opens (AS-11c, E1, FR-010b)', async () => {
-  const tree = createDeepTree('throng-qot-enter-');
-  try {
-    await runApp(async (_app, win) => {
-      const pid = await editorWithProject(win, 'QOTargetEnter', tree.root);
-      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
-      await openQuickOpen(win);
-
-      await win.keyboard.type('README');
-      await expect(quickOpenRows(win)).toHaveCount(1);
-      const before = await editors(win).count();
-
-      // E1 — Enter is claimed ONLY when the event target is the query input. From the control it
-      // falls through to the control's own handler, which changes the value.
-      await win.keyboard.press('Shift+Tab');
-      await expect(target(win)).toBeFocused();
-      await win.keyboard.press('Enter');
-      await expect(target(win)).toHaveAttribute('data-value', 'new');
-      await expect(win.getByTestId('quickopen')).toBeVisible();
-      expect(await editors(win).count()).toBe(before);
-      await expect(content).not.toContainText('// README.md');
-
-      // …and back in the input, the same key opens the highlighted row. That is what makes the
-      // assertion above about WHERE the key came from rather than about Enter being inert.
-      await win.keyboard.press('Tab');
-      await expect(win.getByTestId('quickopen-input')).toBeFocused();
-      await win.keyboard.press('Enter');
-      await expect(win.getByTestId('quickopen')).toHaveCount(0);
-      /*
-       * SOME editor holds the file — deliberately not `.first()`.
-       *
-       * The Enter above was pressed with the control left on `new`, which is the whole point of the
-       * assertion before it, so the file lands in a NEW editor panel and the first panel in DOM
-       * order is the empty one this test started from. `.first()` therefore encoded an assumption
-       * this test had itself just falsified. WHICH panel a target value produces is the subject of
-       * the two T5 tests below, which assert it directly; what belongs here is only that Enter from
-       * the input — and nothing else pressed along the way — opened the file at all.
-       */
-      await expect(editors(win).filter({ hasText: '// README.md' })).toHaveCount(1, {
-        timeout: 8000,
-      });
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
-
-test('choosing "the currently active editor" performs the Last-Active-Editor route (T5, AS-11)', async () => {
-  const tree = createDeepTree('throng-qot-last-');
-  try {
-    await runApp(async (_app, win) => {
-      const pid = await editorWithProject(win, 'QOTargetLastActive', tree.root);
-      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
-
-      await openQuickOpen(win);
-      await win.keyboard.type('README');
-      await chooseTheOnlyRow(win);
-      await expect(content).toContainText('// README.md', { timeout: 8000 });
-      await expect(editors(win)).toHaveCount(1);
-
-      // Second open, control explicitly left on `lastActive`: the document is REPLACED in the same
-      // panel — the route `openFileInTab(ws, tabId, absPath, 'lastActive')` already takes.
-      await focusEditor(win, pid);
-      await openQuickOpen(win);
-      await expect(target(win)).toHaveAttribute('data-value', 'lastActive');
-      await win.keyboard.type('deep-widget');
-      await chooseTheOnlyRow(win);
-
-      await expect(editors(win)).toHaveCount(1);
-      await expect(content).toContainText('// src/app/components/widgets/deep-widget.ts', {
-        timeout: 8000,
-      });
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
-
-test('choosing "a new editor panel in this tab" opens a new editor panel in the CURRENT tab (T5, FR-010)', async () => {
-  const tree = createDeepTree('throng-qot-new-');
-  try {
-    await runApp(async (_app, win) => {
-      const pid = await editorWithProject(win, 'QOTargetNewPanel', tree.root);
-      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
-
-      await openQuickOpen(win);
-      await win.keyboard.type('README');
-      await chooseTheOnlyRow(win);
-      await expect(content).toContainText('// README.md', { timeout: 8000 });
-      await expect(editors(win)).toHaveCount(1);
-
-      await focusEditor(win, pid);
-      await openQuickOpen(win);
-      await win.keyboard.type('deep-widget');
-      await win.keyboard.press('Shift+Tab');
-      await win.keyboard.press('Space');
-      await expect(target(win)).toHaveAttribute('data-value', 'new');
-      await win.keyboard.press('Tab');
-      await expect(win.getByTestId('quickopen-input')).toBeFocused();
-      await chooseTheOnlyRow(win);
-
-      /*
-       * A SECOND editor panel — and in THIS tab, which is what the option promises.
-       *
-       * Only the active tab's panels are rendered, so counting two on screen is the same statement
-       * as "both are in the current tab"; a panel opened into another tab would leave this count at
-       * one and the assertion would name the count, which is the visible symptom.
-       */
-      await expect(editors(win)).toHaveCount(2);
-      await expect(content).toContainText('// README.md'); // …the original panel is untouched
-      await expect(
-        editors(win).filter({ hasText: '// src/app/components/widgets/deep-widget.ts' }),
-      ).toHaveCount(1);
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
+/*
+ * MOVED to the pre-existing suite (034 FR-046a) — two tests, and the argument is a chain rather
+ * than a single covering test:
+ *
+ *   quick-open.e2e.ts:778     a file opened by Quick Open produces the SAME OUTCOME as the same
+ *                             file opened from the tree (SC-004)
+ *   editor-open-target.e2e.ts with "New Editor" each file lands in a new panel; with "Last Active
+ *                             Editor" opens reuse one (#141)
+ *
+ * The route is proven equivalent once, and the setting is proven on that route once. Asserting
+ * the setting a third time through Quick Open tests the same branch with a different way in.
+ *
+ * The one-buffer cases below are deliberately NOT covered by that argument: they are not what the
+ * setting selects, they are what it does when the file is already open.
+ */
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * The one-buffer rule holds on the `new` target too — FR-008, FR-011a, AS-9
@@ -475,7 +308,7 @@ test('choosing "a new editor panel in this tab" opens a new editor panel in the 
  * README" is true of the broken build as well as the fixed one.
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('with the control on "a new editor panel", a file already open in this tab is activated, not copied (FR-008, FR-011a, AS-9)', async () => {
+test('with the control on "a new editor panel", a file already open in this tab is activated, not copied (FR-008, FR-011a, AS-9)', { tag: ['@core', '@editor'] }, async () => {
   const tree = createDeepTree('throng-qot-onebuf-');
   try {
     await runApp(async (_app, win) => {
@@ -533,7 +366,7 @@ test('with the control on "a new editor panel", a file already open in this tab 
   }
 });
 
-test('with the control on "a new editor panel", a file open in ANOTHER tab activates that tab’s editor (FR-011a)', async () => {
+test('with the control on "a new editor panel", a file open in ANOTHER tab activates that tab’s editor (FR-011a)', { tag: ['@extended', '@editor'] }, async () => {
   const tree = createDeepTree('throng-qot-onebuf-tab-');
   try {
     await runApp(async (_app, win) => {
@@ -589,39 +422,6 @@ test('with the control on "a new editor panel", a file open in ANOTHER tab activ
   }
 });
 
-test('with "Open files in" set to New Editor the control opens preselected on the new-panel option (T2)', async () => {
-  const tree = createDeepTree('throng-qot-pre-');
-  const cfg = mkdtempSync(join(tmpdir(), 'throng-qot-cfg-'));
-  writeFileSync(
-    join(cfg, 'settings.json'),
-    JSON.stringify({ editor: { openTarget: 'new' } }, null, 2),
-  );
-  try {
-    // Its OWN app: the setting is read at launch, so it must be on disk before the window exists.
-    await runOwnApp(
-      async (_app, win) => {
-        await settle(win);
-        await newProject(win, 'QOTargetPreselect', tree.root);
-        const pid = await firstPanelId(win);
-        await win.getByTestId(`panel-type-select-${pid}`).selectOption('editor');
-        await win.getByTestId(`panel-type-confirm-${pid}`).click();
-        await expect(win.getByTestId(`editor-${pid}`)).toBeVisible();
-        await focusEditor(win, pid);
-
-        await openQuickOpen(win);
-        await expect(target(win)).toHaveAttribute('data-value', 'new');
-
-        await win.keyboard.press('Escape');
-        await expect(win.getByTestId('quickopen')).toHaveCount(0);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfg } },
-    );
-  } finally {
-    cleanupDeepTree(tree);
-    cleanupTemp(cfg);
-  }
-});
-
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * The exclusion toggle — FR-069 to FR-069c, SC-018, SC-022
  *
@@ -655,7 +455,7 @@ async function hideInProject(win: Page, folder: string, name: string): Promise<v
   await expect(tree.getByText(name, { exact: true })).toHaveCount(0);
 }
 
-test('at the shipped default NEITHER mechanism’s files are candidates, and the toggle brings both back (SC-018, SC-022, FR-069c)', async () => {
+test('at the shipped default NEITHER mechanism’s files are candidates, and the toggle brings both back (SC-018, SC-022, FR-069c)', { tag: ['@extended', '@editor'] }, async () => {
   const tree = createDeepTree('throng-qot-hidden-');
   try {
     await runApp(async (_app, win) => {
@@ -709,59 +509,7 @@ test('at the shipped default NEITHER mechanism’s files are candidates, and the
   }
 });
 
-test('the toggle is the target button’s sibling in the header, and is drawn even when the target button is not (FR-069)', async () => {
-  const tree = createDeepTree('throng-qot-sibling-');
-  try {
-    await runApp(async (_app, win) => {
-      const pid = await editorWithProject(win, 'QOToggleSibling', tree.root);
-      await openQuickOpen(win);
-
-      // Both controls, in ONE header row — "drawn as its sibling", asked of the DOM rather than of
-      // a screenshot.
-      await expect(target(win)).toBeVisible();
-      await expect(hiddenToggle(win)).toBeVisible();
-      const sharedHeader = await win.getByTestId('quickopen').evaluate((card) => {
-        const a = card.querySelector('[data-testid="quickopen-target"]')?.closest('.picker__header');
-        const b = card.querySelector('[data-testid="quickopen-hidden"]')?.closest('.picker__header');
-        return a !== null && a === b;
-      });
-      expect(sharedHeader, 'the two header controls are not siblings in one .picker__header').toBe(
-        true,
-      );
-
-      // A themeable icon control carrying a hover title that names both the state and the action.
-      const title = (await hiddenToggle(win).getAttribute('title')) ?? '';
-      expect(title, 'the toggle has no hover title').not.toBe('');
-
-      await win.keyboard.press('Escape');
-      await expect(win.getByTestId('quickopen')).toHaveCount(0);
-
-      /*
-       * FR-011 draws the target control only from inside an editor; FR-069 draws the toggle ALWAYS.
-       *
-       * The header used to be built as a whole only when the modal was invoked from an editor, so a
-       * toggle rendered inside it would silently vanish for every invocation from the tree or a
-       * terminal — which is most of them.
-       */
-      await win.getByTestId('file-explorer-tree').getByText('README.md', { exact: true }).click();
-      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
-        '// README.md',
-        { timeout: 8000 },
-      );
-      await openQuickOpen(win);
-      await expect(target(win), 'FR-011 — not invoked from an editor').toHaveCount(0);
-      await expect(hiddenToggle(win), 'FR-069 — the toggle is drawn regardless').toBeVisible();
-      await expect(hiddenToggle(win)).toHaveAttribute('data-value', 'exclude');
-
-      await win.keyboard.press('Escape');
-      await expect(win.getByTestId('quickopen')).toHaveCount(0);
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
-
-test('flipping the toggle to SHOW excluded files never empties the list mid-flight (FR-069d)', async () => {
+test('flipping the toggle to SHOW excluded files never empties the list mid-flight (FR-069d)', { tag: ['@extended', '@editor'] }, async () => {
   const tree = createDeepTree('throng-qot-noflash-');
   try {
     await runApp(async (_app, win) => {

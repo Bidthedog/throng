@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId } from './harness.js';
+import { runApp, createProject, firstPanelId, FILE_OP_TIMEOUT_MS } from './harness.js';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
 /**
@@ -158,12 +158,12 @@ async function runFixture(win: Page, root: string, ready: string) {
 
 async function readCapture(root: string): Promise<string> {
   const capFile = join(root, 'cap.bin');
-  await expect.poll(() => readFileSync(capFile).toString('latin1'), { timeout: 15000 }).toContain('d');
+  await expect.poll(() => readFileSync(capFile).toString('latin1'), { timeout: FILE_OP_TIMEOUT_MS }).toContain('d');
   return readFileSync(capFile).toString('latin1');
 }
 const between = (got: string, l: string, r: string) => got.slice(got.indexOf(l) + 1, got.indexOf(r));
 
-test('at a PowerShell prompt, a modified Enter inserts a soft line break and the cursor advances', async () => {
+test('at a PowerShell prompt, a modified Enter inserts a soft line break and the cursor advances', { tag: ['@extended', '@terminal'] }, async () => {
   test.skip(
     !(await negotiatesWin32Input()),
     "this console host never requests win32-input-mode, so there is no key event to send and throng correctly falls back to a bare LF — the cursor advance it buys is not available here to observe (seen on windows-2022 / build 20348)",
@@ -194,7 +194,7 @@ test('at a PowerShell prompt, a modified Enter inserts a soft line break and the
   });
 });
 
-test('a program that negotiates the kitty protocol gets a distinct CSI-u sequence', async () => {
+test('a program that negotiates the kitty protocol gets a distinct CSI-u sequence', { tag: ['@extended', '@terminal'] }, async () => {
   const root = tmpDir('throng-me-kitty-');
   copyFileSync(KITTY, join(root, 'k.mjs'));
   await runApp(async (_app, win) => {

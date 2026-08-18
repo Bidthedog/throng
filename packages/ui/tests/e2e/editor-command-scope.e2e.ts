@@ -111,7 +111,7 @@ async function openTerminal(win: Page, pid: string, root: string): Promise<void>
   await expect(term).toContainText(basename(root), { timeout: 20000 });
 }
 
-test('with a TERMINAL active, none of the editor commands fire — and the chord reaches the shell', async () => {
+test('with a TERMINAL active, none of the editor commands fire — and the chord reaches the shell', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -147,7 +147,7 @@ test('with a TERMINAL active, none of the editor commands fire — and the chord
   }
 });
 
-test('with the FILE TREE focused, Tab does not indent the document', async () => {
+test('with the FILE TREE focused, Tab does not indent the document', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -168,7 +168,7 @@ test('with the FILE TREE focused, Tab does not indent the document', async () =>
   }
 });
 
-test('with the FIND BAR focused, Tab does not indent the document', async () => {
+test('with the FIND BAR focused, Tab does not indent the document', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

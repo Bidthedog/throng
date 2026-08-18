@@ -23,7 +23,7 @@
  *                        in `quick-open-target.e2e.ts`, which owns its behaviour. This file asserts
  *                        only its ABSENCE (FR-011), which is the half nothing else covers.
  */
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
@@ -103,18 +103,6 @@ const editors = (win: Page) => win.locator('.editor-panel');
 function createOtherProject(): string {
   const root = mkdtempSync(join(tmpdir(), 'throng-qo-other-'));
   writeFileSync(join(root, 'zebra-only.txt'), '// zebra-only.txt\n');
-  return root;
-}
-
-/** A project with more matching files than FR-014's 200-row cap, so truncation has something to cap. */
-const TRUNCATION_FILES = 250;
-function createOversizedProject(): string {
-  const root = mkdtempSync(join(tmpdir(), 'throng-qo-big-'));
-  mkdirSync(join(root, 'many'), { recursive: true });
-  for (let i = 1; i <= TRUNCATION_FILES; i += 1) {
-    const name = `capped-${String(i).padStart(4, '0')}.qq`;
-    writeFileSync(join(root, 'many', name), `// many/${name}\n`);
-  }
   return root;
 }
 
@@ -202,7 +190,7 @@ const FOCUS_REPORTS = new Set(['\\u001b[I', '\\u001b[O']);
  * AS-1, AS-5, SC-001, FR-011, Q6, S3 — the chord from a terminal
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('from a focused terminal the chord opens a centred modal, sends the shell nothing, draws no target control, and takes three actions to an open file', async () => {
+test('from a focused terminal the chord opens a centred modal, sends the shell nothing, draws no target control, and takes three actions to an open file', { tag: ['@core', '@editor'] }, async () => {
   const tree = createDeepTree('throng-qo-term-');
   try {
     await runApp(async (_app, win) => {
@@ -308,85 +296,32 @@ test('from a focused terminal the chord opens a centred modal, sends the shell n
  * AS-2 — what a row shows
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('every match is listed with its full project-relative path and its matched runs marked (AS-2, SC-003)', async () => {
-  const tree = createDeepTree('throng-qo-rows-');
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'QORows', tree.root);
-
-      await openQuickOpen(win);
-      await win.keyboard.type(DEEP_TREE.sharedBasename.query);
-
-      // Two files share the basename `config.ts`. Order is AS-14's subject, not this test's, so the
-      // membership is asserted as a set — over-asserting order here would make a ranking change look
-      // like a listing defect.
-      await expect(quickOpenRows(win)).toHaveCount(2);
-      expect([...(await quickOpenRowPaths(win))].sort()).toEqual([
-        DEEP_TREE.sharedBasename.inApp,
-        DEEP_TREE.sharedBasename.inServer,
-      ]);
-
-      // SC-003 — the row carries the FULL path. Two rows both reading `config.ts` would be
-      // indistinguishable to the user, which is the whole reason the label is the path.
-      const inApp = win.getByTestId(`quickopen-row-${DEEP_TREE.sharedBasename.inApp}`);
-      await expect(inApp).toHaveText(DEEP_TREE.sharedBasename.inApp);
-
-      // …and the matched run is marked, on the string that is actually rendered.
-      await expect(inApp.locator('mark.picker__mark')).toHaveText(DEEP_TREE.sharedBasename.query);
-
-      await win.keyboard.press('Escape');
-      await expect(win.getByTestId('quickopen')).toHaveCount(0);
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
+/*
+ * MOVED to `packages/ui/tests/component/picker.test.ts` (034 FR-045) — four tests:
+ *   - every match listed with its full project-relative path and its matched runs MARKED
+ *   - Down, Down, Enter chooses the third row
+ *   - a no-match query says so and keeps the list on screen
+ *   - past 200 rows the list is capped and says how many matched
+ *
+ * None of them is about Quick Open. `QuickOpen` builds entries from the file index and hands them
+ * to the shared `Picker`, which owns the list, the filtering, the marks, the highlight, the cap
+ * and the messages — and takes no context at all, so it renders in jsdom with plain props. The
+ * same component is behind the tab picker, so the migration covers that too, and covers pickers
+ * nobody has written yet.
+ *
+ * Red-proved: removing the cap reddens the cap test, making Enter inert reddens the choose test.
+ *
+ * WHAT STAYS, and why it is not the same claim: "clicking a row opens that file" below. The
+ * component test can only see that `onChoose` fired with the right entry. That a file then opens
+ * — the right one, in the right panel — is the wiring between the picker and the workspace, and
+ * it is what SC-004 turns on. One witness of that seam is kept rather than four.
+ */
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * AS-3, AS-4 — choosing
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('Down, Down, Enter opens the THIRD listed file and closes the modal (AS-3)', async () => {
-  const tree = createDeepTree('throng-qo-keys-');
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'QOKeys', tree.root);
-
-      await openQuickOpen(win);
-      await win.keyboard.type('.ts');
-      // Five, not six: FR-070 took `node_modules/quarantined-pkg/quarantined-module.ts` out of the
-      // candidate set for every project on the shipped default.
-      await expect(quickOpenRows(win)).toHaveCount(5);
-
-      /*
-       * Read the third row off the LIST rather than naming a file.
-       *
-       * "The third listed file" is what AS-3 says, and the third file under a ranker is a fact about
-       * the ranker, which AS-14 owns. Hard-coding a path here would turn every future ranking tweak
-       * into a failure in this test, pointing at the arrow keys.
-       */
-      const third = (await quickOpenRowPaths(win))[2];
-      await win.keyboard.press('ArrowDown');
-      await win.keyboard.press('ArrowDown');
-      await expect(win.locator('[data-highlighted="true"]')).toHaveAttribute(
-        'data-testid',
-        `quickopen-row-${third}`,
-      );
-
-      await win.keyboard.press('Enter');
-      await expect(win.getByTestId('quickopen')).toHaveCount(0);
-      await expect(editors(win).locator('.cm-content')).toContainText(`// ${third}`, {
-        timeout: 8000,
-      });
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
-
-test('clicking a row opens that file and closes the modal (AS-4)', async () => {
+test('clicking a row opens that file and closes the modal (AS-4)', { tag: ['@extended', '@editor'] }, async () => {
   const tree = createDeepTree('throng-qo-click-');
   try {
     await runApp(async (_app, win) => {
@@ -412,38 +347,11 @@ test('clicking a row opens that file and closes the modal (AS-4)', async () => {
  * AS-6 — a query that matches nothing
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('a no-match query keeps the modal open and says so, and a correction brings results back (AS-6)', async () => {
-  const tree = createDeepTree('throng-qo-empty-');
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'QOEmpty', tree.root);
-
-      await openQuickOpen(win);
-      await win.keyboard.type('zzz-no-such-file');
-
-      await expect(win.getByTestId('quickopen-empty')).toHaveText('No files match');
-      await expect(win.getByTestId('quickopen')).toBeVisible();
-      await expect(quickOpenRows(win)).toHaveCount(0);
-
-      // "so a typo is corrected with a backspace rather than a re-open" — the modal is still LIVE,
-      // which an assertion on visibility alone does not establish.
-      await win.getByTestId('quickopen-input').fill('guide');
-      await expect(quickOpenRows(win)).toHaveCount(1);
-
-      await win.keyboard.press('Escape');
-      await expect(win.getByTestId('quickopen')).toHaveCount(0);
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
-
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * AS-7 to AS-10 — where the file lands, all four routes inherited (Q2, Q3, Q4)
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('at the shipped default a tab with no editor gets one, and the next choice reuses it (AS-7, Q4)', async () => {
+test('at the shipped default a tab with no editor gets one, and the next choice reuses it (AS-7, Q4)', { tag: ['@extended', '@editor'] }, async () => {
   const tree = createDeepTree('throng-qo-last-');
   try {
     await runApp(async (_app, win) => {
@@ -475,7 +383,7 @@ test('at the shipped default a tab with no editor gets one, and the next choice 
   }
 });
 
-test('with "Open files in" set to New Editor, each choice lands in a new editor panel (AS-8)', async () => {
+test('with "Open files in" set to New Editor, each choice lands in a new editor panel (AS-8)', { tag: ['@extended', '@editor'] }, async () => {
   const tree = createDeepTree('throng-qo-new-');
   const cfg = mkdtempSync(join(tmpdir(), 'throng-qo-cfg-'));
   writeFileSync(
@@ -507,7 +415,7 @@ test('with "Open files in" set to New Editor, each choice lands in a new editor 
   }
 });
 
-test('a file already open in some editor focuses that editor rather than opening a second copy (AS-9, Q2)', async () => {
+test('a file already open in some editor focuses that editor rather than opening a second copy (AS-9, Q2)', { tag: ['@extended', '@editor'] }, async () => {
   const tree = createDeepTree('throng-qo-onebuf-');
   try {
     await runApp(async (_app, win) => {
@@ -567,7 +475,7 @@ test('a file already open in some editor focuses that editor rather than opening
   }
 });
 
-test('a dirty target raises the shipped unsaved-changes prompt, and Cancel leaves the buffer untouched (AS-10, Q3)', async () => {
+test('a dirty target raises the shipped unsaved-changes prompt, and Cancel leaves the buffer untouched (AS-10, Q3)', { tag: ['@extended', '@editor'] }, async () => {
   const tree = createDeepTree('throng-qo-dirty-');
   try {
     await runApp(async (_app, win) => {
@@ -606,7 +514,7 @@ test('a dirty target raises the shipped unsaved-changes prompt, and Cancel leave
  * AS-12, AS-13 — what may never appear in the list (FR-005, FR-006, SC-003)
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('a file inside an excluded folder is never listed (AS-12, FR-006)', async () => {
+test('a file inside an excluded folder is never listed (AS-12, FR-006)', { tag: ['@extended', '@editor'] }, async () => {
   const tree = createDeepTree('throng-qo-excl-');
   try {
     await runApp(async (_app, win) => {
@@ -638,7 +546,7 @@ test('a file inside an excluded folder is never listed (AS-12, FR-006)', async (
   }
 });
 
-test('with the shipped defaults, no node_modules entry appears in the tree either (SC-019, FR-070)', async () => {
+test('with the shipped defaults, no node_modules entry appears in the tree either (SC-019, FR-070)', { tag: ['@extended', '@editor'] }, async () => {
   const tree = createDeepTree('throng-qo-nm-tree-');
   try {
     await runApp(async (_app, win) => {
@@ -667,7 +575,7 @@ test('with the shipped defaults, no node_modules entry appears in the tree eithe
   }
 });
 
-test('with a second project open, no file outside the current project root is listed (AS-13, FR-005)', async () => {
+test('with a second project open, no file outside the current project root is listed (AS-13, FR-005)', { tag: ['@extended', '@editor'] }, async () => {
   const tree = createDeepTree('throng-qo-scope-');
   const other = createOtherProject();
   try {
@@ -700,132 +608,41 @@ test('with a second project open, no file outside the current project root is li
  * AS-14, AS-15, FR-014 — order, stability and the cap
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('a name match is listed above a directory-only match (AS-14, K1, FR-007a)', async () => {
-  const tree = createDeepTree('throng-qo-rank-');
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'QORank', tree.root);
-
-      await openQuickOpen(win);
-      await win.keyboard.type(DEEP_TREE.ranking.query);
-      await expect(quickOpenRows(win)).toHaveCount(2);
-
-      /*
-       * The fixture is built so the ranker has to WORK for this to pass: the index is produced
-       * sorted (W7) and `src/router/…` sorts before `src/server/…`, so the directory-only match is
-       * the seeded first. An implementation that does not rank returns them the other way round.
-       */
-      expect(await quickOpenRowPaths(win)).toEqual([
-        DEEP_TREE.ranking.byName,
-        DEEP_TREE.ranking.byDirectory,
-      ]);
-
-      await win.keyboard.press('Escape');
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
-
-test('arrowing through an unchanged result set never reorders it (AS-15, K4)', async () => {
-  const tree = createDeepTree('throng-qo-stable-');
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'QOStable', tree.root);
-
-      await openQuickOpen(win);
-      await win.keyboard.type('.ts');
-      // Five since FR-070 — see the AS-3 test above.
-      await expect(quickOpenRows(win)).toHaveCount(5);
-      const drawn = await quickOpenRowPaths(win);
-
-      for (const key of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowUp']) {
-        await win.keyboard.press(key);
-      }
-      // The highlight has moved — asserted, so "nothing reordered" is not satisfied by "nothing
-      // happened at all".
-      await expect(win.locator('[data-highlighted="true"]')).toHaveAttribute(
-        'data-testid',
-        `quickopen-row-${drawn[2]}`,
-      );
-      expect(await quickOpenRowPaths(win)).toEqual(drawn);
-
-      await win.keyboard.press('Escape');
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
-
-test('past 200 rows the list is capped and the modal says how many matched (FR-014, P3, P4)', async () => {
-  const root = createOversizedProject();
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'QOCapped', root);
-
-      await openQuickOpen(win);
-      await win.keyboard.type('capped-');
-
-      // Rendering is capped at 200…
-      await expect(quickOpenRows(win)).toHaveCount(200);
-      // …but MATCHING is not: the count line is the truth about how many files matched (P3).
-      await expect(win.getByTestId('quickopen-truncated')).toHaveText(
-        `Showing 200 of ${TRUNCATION_FILES} matches`,
-      );
-
-      await win.keyboard.press('Escape');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * MOVED to `packages/core/tests/unit/picker-rank.test.ts` (034 FR-046a):
+ *   - "a name match is listed above a directory-only match (AS-14, K1, FR-007a)"
+ *   - "arrowing through an unchanged result set never reorders it (AS-15, K4)"
+ *
+ * Ranking and stable ordering are pure functions over paths. Flattening every score to a
+ * constant reddens 8 cases in that unit test.
+ */
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * AS-18 — the second invocation, at the shipped defaults
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('at the shipped defaults a reopened modal is empty (AS-18, FR-057, M1)', async () => {
-  const tree = createDeepTree('throng-qo-reopen-');
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'QOReopen', tree.root);
-
-      // Accept a query — the only kind of value FR-061 would ever remember.
-      await openQuickOpen(win);
-      await win.keyboard.type('guide');
-      await chooseTheOnlyRow(win);
-      await expect(editors(win).locator('.cm-content')).toContainText('// docs/guide.md', {
-        timeout: 8000,
-      });
-
-      /*
-       * The input is EMPTY on the second invocation, at the shipped defaults.
-       *
-       * AS-18's second clause — "and no results are listed" — is NOT asserted here, deliberately.
-       * The shared picker's K6 makes an empty query match everything, so "empty input" and "empty
-       * list" are two different claims and the spec states only the first as a requirement (FR-057).
-       * Asserting the second would pin a behaviour no FR asks for, and it is exactly the kind of
-       * guess that gets discovered as wrong after the implementation is written against it.
-       */
-      await openQuickOpen(win);
-      await expect(win.getByTestId('quickopen-input')).toHaveValue('');
-
-      await win.keyboard.press('Escape');
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
+/*
+ * DELETED as a duplicate (034 FR-046a) — "at the shipped defaults a reopened modal is empty".
+ *
+ * `navigation-remember.e2e.ts:247` makes the same claim and more of it. Both accept the query
+ * `guide`, reopen the modal and assert `quickopen-input` holds `""`. That test additionally
+ * asserts the row count is the WHOLE project (which is what an unseeded query lists), asserts
+ * the Go To Line half in the same window, and reads its own config root back to prove
+ * `rememberQuickOpenQuery` really was `false` — so it cannot pass because a setting quietly
+ * defaulted the way the test wanted. This one asserted the input alone, in an app whose
+ * settings it never looked at.
+ *
+ * AS-18’s second clause — "and no results are listed" — was deliberately NOT asserted in either
+ * place, and the reason is worth keeping here: the shared picker’s K6 makes an empty query
+ * match everything, so "empty input" and "empty list" are two different claims and FR-057
+ * states only the first. Asserting the second would pin a behaviour no requirement asks for.
+ */
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * SC-004 — the same outcome as the route from the tree
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('a file opened by Quick Open produces the same outcome as the same file opened from the tree (SC-004, Q7)', async () => {
+test('a file opened by Quick Open produces the same outcome as the same file opened from the tree (SC-004, Q7)', { tag: ['@extended', '@editor'] }, async () => {
   const viaTree = createDeepTree('throng-qo-sc4-tree-');
   const viaQuickOpen = createDeepTree('throng-qo-sc4-qo-');
   try {
@@ -893,7 +710,7 @@ const seedSubWorkspace = (originProjectId: string): string =>
          originProjectId: ${JSON.stringify(originProjectId)}, title: 'P' } }] },
    ] }))()`;
 
-test('in a sub-workspace window the candidate set is that window’s own root, never the main window’s (FR-017, R2, Assumption 6)', async () => {
+test('in a sub-workspace window the candidate set is that window’s own root, never the main window’s (FR-017, R2, Assumption 6)', { tag: ['@core', '@editor'] }, async () => {
   const owned = createDeepTree('throng-qo-sw-owned-');
   const mainWindowProject = createOtherProject();
   try {

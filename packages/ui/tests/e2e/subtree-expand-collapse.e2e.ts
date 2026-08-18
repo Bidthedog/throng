@@ -24,7 +24,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 import { DEFAULT_EXCLUDE_GLOBS, compileExcluder } from '@throng/core';
-import { runApp, createProject, reloadWindow, cleanupTemp } from './harness.js';
+import {
+  openApp,
+  runApp as runOwnApp,
+  createProject,
+  reloadWindow,
+  cleanupTemp,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
 
 /**
  * root/
@@ -236,8 +244,16 @@ async function recordListings(app: ElectronApplication): Promise<() => Promise<s
           'expects it, so no listing could be recorded (and a silent zero would pass vacuously)',
       );
     }
-    const store = globalThis as unknown as { __listedDirs?: string[] };
+    const store = globalThis as unknown as {
+      __listedDirs?: string[];
+      __listOriginal?: Handler;
+    };
     store.__listedDirs = [];
+    // Kept so the swap can be UNDONE. Under one shared app the wrapper would otherwise stay on
+    // the channel for the rest of the file, recording every later listing into an array nobody
+    // resets — harmless to read, but an instrument left running is an instrument that will one
+    // day be believed.
+    store.__listOriginal = original;
     table.set(CHANNEL, (...args: unknown[]) => {
       store.__listedDirs?.push(String(args[1] ?? ''));
       return original(...args);
@@ -245,6 +261,21 @@ async function recordListings(app: ElectronApplication): Promise<() => Promise<s
   });
   return () =>
     app.evaluate(() => (globalThis as unknown as { __listedDirs?: string[] }).__listedDirs ?? []);
+}
+
+/** Put the real `throng:files:list` handler back. A no-op when nothing was ever swapped. */
+async function stopRecordingListings(app: ElectronApplication): Promise<void> {
+  await app.evaluate(({ ipcMain }) => {
+    const CHANNEL = 'throng:files:list';
+    type Handler = (...args: unknown[]) => unknown;
+    const table = (ipcMain as unknown as { _invokeHandlers?: Map<string, Handler> })._invokeHandlers;
+    const store = globalThis as unknown as { __listOriginal?: Handler; __listedDirs?: string[] };
+    if (table && typeof store.__listOriginal === 'function') {
+      table.set(CHANNEL, store.__listOriginal);
+    }
+    delete store.__listOriginal;
+    delete store.__listedDirs;
+  });
 }
 
 /** Renderer errors, minus the CSP noise react-dnd's empty drag image produces harmlessly. */
@@ -297,58 +328,96 @@ async function enterProject(win: Page, projectId: string): Promise<void> {
 // Where the items are drawn (AS-1, AS-2 — contract E1/E2/E3)
 // ---------------------------------------------------------------------------
 
-test('AS-1/AS-2 — a folder offers both items; a file draws NEITHER, not even disabled', async () => {
-  const projectRoot = makeProject('throng-subtree-menu-');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Subtree', projectRoot);
-      await expect(tree(win)).toBeVisible();
-
-      // AS-1 — a FOLDER offers both, enabled, in the Navigate group after Copy Path.
-      await rowFor(win, 'branch').click({ button: 'right' });
-      await expect(win.getByTestId(`menu-item-${COLLAPSE}`)).toBeVisible();
-      await expect(win.getByTestId(`menu-item-${EXPAND}`)).toBeVisible();
-      await expect(win.getByTestId(`menu-item-${COLLAPSE}`)).toBeEnabled();
-      await expect(win.getByTestId(`menu-item-${EXPAND}`)).toBeEnabled();
-      await win.keyboard.press('Escape');
-      await expect(win.getByTestId(`menu-item-${COLLAPSE}`)).toHaveCount(0);
-
-      // The project ROOT is a folder too, so its menu offers them as well (D3's premise).
-      await rowFor(win, '').click({ button: 'right' });
-      await expect(win.getByTestId(`menu-item-${COLLAPSE}`)).toBeVisible();
-      await expect(win.getByTestId(`menu-item-${EXPAND}`)).toBeVisible();
-      await win.keyboard.press('Escape');
-      await expect(win.getByTestId(`menu-item-${COLLAPSE}`)).toHaveCount(0);
-
-      /*
-       * AS-2 / E2 — a FILE draws neither AT ALL. `toHaveCount(0)` rather than `toBeDisabled()`
-       * is the whole point: a disabled row would satisfy "the user cannot use it" and still be
-       * the wrong answer, because a file can never acquire children and the row could never come
-       * alive. The menu is proved OPEN first, so the absence is about these two items and not
-       * about a menu that failed to appear.
-       */
-      await rowFor(win, 'root.txt').click({ button: 'right' });
-      await expect(win.getByTestId('menu-item-Rename')).toBeVisible();
-      await expect(win.getByTestId('menu-item-Copy Path')).toBeVisible();
-      expect(await win.getByTestId(`menu-item-${COLLAPSE}`).count()).toBe(0);
-      expect(await win.getByTestId(`menu-item-${EXPAND}`).count()).toBe(0);
-      await win.keyboard.press('Escape');
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
+/*
+ * DELETED (034 FR-045): "AS-1/AS-2 — a folder offers both items; a file draws NEITHER, not even
+ * disabled".
+ *
+ * It launched Electron and right-clicked three rows to read a menu that a builder function
+ * produces from a node kind. Every assertion is made directly on that builder in
+ * `packages/ui/tests/unit/explorer-subtree-menu.test.ts`:
+ *   - a folder offers both, in the Navigate section after Copy Path — "E1 — both are drawn, in
+ *     the Navigate section, immediately after Copy Path"
+ *   - and never disabled — "neither is ever drawn disabled for a folder"
+ *   - the project ROOT is a folder too — "D3 — the project ROOT is a folder, so its menu offers
+ *     both as well"
+ *   - a file draws neither at ANY depth — "E2 — neither label appears anywhere in a file’s menu,
+ *     at any depth" (it walks the submenus, which the E2E did not)
+ *   - and not greyed either — "E2 — and not as a DISABLED row either: absent, not greyed"
+ *   - the non-vacuity the E2E got from asserting Rename and Copy Path were visible first —
+ *     "E2 — a file’s Navigate section is otherwise exactly what it was"
+ *
+ * Six unit cases against three right-clicks, and the unit ones ask a question the E2E could not:
+ * whether the label is hiding in a submenu.
+ */
 
 // ---------------------------------------------------------------------------
 // Collapse All Children (AS-3, AS-4, AS-5 — contract D1/D2/D3)
 // ---------------------------------------------------------------------------
 
-test('AS-3/AS-4 — Collapse All Children closes every depth and leaves the anchor open', async () => {
-  const projectRoot = makeProject('throng-subtree-collapse-');
+/*
+ * ONE app for the first three tests (034 FR-045, SC-027) — 4 launches -> 2.
+ *
+ * AS-10 keeps `runOwnApp`: it calls `reloadWindow` (and the reload is half its claim), which
+ * under a shared app would reload the renderer for everything declared after it.
+ *
+ * Three things had to change for the other three to share, and all three are named because each
+ * would have produced a green run rather than a red one:
+ *
+ *  1. All three projects were called "Subtree". They are named apart now — a project row renders
+ *     its root PATH beside its name and Playwright's hasText is a substring match, which is the
+ *     trap `activeProjectId` below already documents.
+ *  2. Each test deleted its project root in a `finally` while the explorer was still watching
+ *     it. That moves to `afterAll`.
+ *  3. D7/FR-044 SWAPS the `throng:files:list` ipcMain handler for a recording wrapper and never
+ *     put it back. The afterEach restores it, so no later test runs against an instrumented
+ *     channel — and it is an afterEach, not a `finally`, so it also runs when that test fails
+ *     with the swap in place.
+ *
+ * What does NOT need returning: explorer open-state is persisted per PROJECT (localStorage keyed
+ * by project id), and each test makes its own project, so no test inherits another's tree shape.
+ */
+test.describe.configure({ mode: 'serial' });
+
+const ownedRoots: string[] = [];
+/** Register a project root for removal in `afterAll`, once the shared app has closed. */
+function own(dir: string): string {
+  ownedRoots.push(dir);
+  return dir;
+}
+
+let shared: OpenApp;
+
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+
+test.afterAll(async () => {
+  await shared?.close();
+  for (const dir of ownedRoots.splice(0)) cleanupTemp(dir);
+});
+
+test.afterEach(async () => {
+  if (shared) await stopRecordingListings(shared.app);
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
+
+test('AS-3/AS-4 — Collapse All Children closes every depth and leaves the anchor open', { tag: ['@extended', '@explorer'] }, async () => {
+  const projectRoot = own(makeProject('throng-subtree-collapse-'));
   try {
     await runApp(async (_app, win) => {
       const errors = watchErrors(win);
-      await createProject(win, 'Subtree', projectRoot);
+      await createProject(win, 'SubtreeCollapse', projectRoot);
       await expect(tree(win)).toBeVisible();
 
       // US4's own Independent Test: drill three levels down by hand, with the chevron.
@@ -382,80 +451,35 @@ test('AS-3/AS-4 — Collapse All Children closes every depth and leaves the anch
       expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
     });
   } finally {
-    cleanupTemp(projectRoot);
+    // The roots are deleted in `afterAll`, once the shared app has CLOSED. Deleting one here
+    // would remove a folder the explorer is still watching.
   }
 });
 
-test('AS-5/D2 — on a folder with nothing expanded beneath it, nothing changes and nothing errors', async () => {
-  const projectRoot = makeProject('throng-subtree-noop-');
-  try {
-    await runApp(async (_app, win) => {
-      const errors = watchErrors(win);
-      await createProject(win, 'Subtree', projectRoot);
-      await expect(tree(win)).toBeVisible();
-
-      // An OPEN folder whose own children are all closed, and a CLOSED folder. Neither has
-      // anything expanded beneath it, so neither action has anything to do.
-      await chevron(win, 'branch');
-      await chevron(win, 'branch/l1b');
-      const before = await openFolders(win);
-
-      await chooseOnRow(win, 'branch/l1b', COLLAPSE);
-      expect(await openFolders(win)).toEqual(before);
-
-      await chooseOnRow(win, 'other', COLLAPSE); // closed: no loaded children at all
-      expect(await openFolders(win)).toEqual(before);
-
-      await expectNoOpenFolderLies(win, projectRoot);
-      // "No error is raised" is asserted as the app saying nothing, in two places: no renderer
-      // error, and no explorer notice raised for an action that did nothing.
-      expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
-      await expect(win.getByTestId('notices').locator('.notice')).toHaveCount(0);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
-
-test('D3 — on the project ROOT, everything beneath closes and the root stays open', async () => {
-  const projectRoot = makeProject('throng-subtree-root-');
-  try {
-    await runApp(async (_app, win) => {
-      const errors = watchErrors(win);
-      await createProject(win, 'Subtree', projectRoot);
-      await expect(tree(win)).toBeVisible();
-
-      await chevron(win, 'branch');
-      await chevron(win, 'branch/l1a');
-      await chevron(win, 'other');
-
-      await chooseOnRow(win, '', COLLAPSE);
-
-      // The root IS the tree: it cannot be collapsed, and its own children are still drawn.
-      expect(await openFolders(win)).toEqual(['']);
-      await expect(rowFor(win, 'branch')).toBeVisible();
-      await expect(rowFor(win, 'other')).toBeVisible();
-      await expect(tree(win).getByText('root.txt', { exact: true })).toBeVisible();
-      await expect(rowFor(win, 'branch/l1a')).toHaveCount(0);
-
-      await expectNoOpenFolderLies(win, projectRoot);
-      expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
+/*
+ * MOVED to `packages/core/tests/unit/explorer-subtree.test.ts` (034 FR-046a) — five tests:
+ * the no-op case, the root case for collapse, the already-open case, the root case for expand,
+ * and the toolbar behaving as before. All five are `immediateChildFolders` and
+ * `descendantOpenFolders` over an ExpandNode, with no filesystem in sight.
+ *
+ * The Red proof is the one worth remembering: making one-level expand return DESCENDANTS —
+ * i.e. expand-everything, the exact defect the rule exists to prevent — reddens 5 cases there.
+ *
+ * What stays in this file needs a real tree on a real disk: the collapse that must close every
+ * depth, the expand that must not enter an excluded folder, the hidden folder that must never
+ * even be listed, and the open state surviving a project switch and a reload.
+ */
 
 // ---------------------------------------------------------------------------
 // Expand All Children (AS-6, AS-7, AS-8, AS-9 — contract D4–D7)
 // ---------------------------------------------------------------------------
 
-test('AS-6/AS-7/AS-8/AS-9 — Expand All Children opens one level, loaded, and never into an excluded folder', async () => {
-  const projectRoot = makeProject('throng-subtree-expand-');
+test('AS-6/AS-7/AS-8/AS-9 — Expand All Children opens one level, loaded, and never into an excluded folder', { tag: ['@extended', '@explorer'] }, async () => {
+  const projectRoot = own(makeProject('throng-subtree-expand-'));
   try {
     await runApp(async (_app, win) => {
       const errors = watchErrors(win);
-      await createProject(win, 'Subtree', projectRoot);
+      await createProject(win, 'SubtreeExpand', projectRoot);
       await expect(tree(win)).toBeVisible();
 
       // AS-7 / D5 / FR-042 — the anchor is CLOSED when the action is chosen.
@@ -525,7 +549,8 @@ test('AS-6/AS-7/AS-8/AS-9 — Expand All Children opens one level, loaded, and n
       expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
     });
   } finally {
-    cleanupTemp(projectRoot);
+    // The roots are deleted in `afterAll`, once the shared app has CLOSED. Deleting one here
+    // would remove a folder the explorer is still watching.
   }
 });
 
@@ -549,15 +574,15 @@ test('AS-6/AS-7/AS-8/AS-9 — Expand All Children opens one level, loaded, and n
  * The anchor is opened by hand FIRST so `branch` is already in `childrenMap` complete with `veiled`,
  * which is the state the filter is written for — hidden AFTER the listing that named it.
  */
-test('D7/FR-044 — a folder HIDDEN in this project is not expanded into, and is never even listed', async () => {
-  const projectRoot = makeProject('throng-subtree-hidden-');
+test('D7/FR-044 — a folder HIDDEN in this project is not expanded into, and is never even listed', { tag: ['@extended', '@explorer'] }, async () => {
+  const projectRoot = own(makeProject('throng-subtree-hidden-'));
   // Only this test's fixture carries it: every other test asserts `branch`'s exact expanded shape.
   mkdirSync(join(projectRoot, 'branch', 'veiled', 'inner'), { recursive: true });
   writeFileSync(join(projectRoot, 'branch', 'veiled', 'veiled.txt'), 'veiled\n');
   try {
     await runApp(async (app, win) => {
       const errors = watchErrors(win);
-      await createProject(win, 'Subtree', projectRoot);
+      await createProject(win, 'SubtreeHidden', projectRoot);
       await expect(tree(win)).toBeVisible();
 
       await chevron(win, 'branch');
@@ -595,85 +620,8 @@ test('D7/FR-044 — a folder HIDDEN in this project is not expanded into, and is
       expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
     });
   } finally {
-    cleanupTemp(projectRoot);
-  }
-});
-
-test('D4 — on an ALREADY-OPEN folder it still opens exactly one level, and no more', async () => {
-  const projectRoot = makeProject('throng-subtree-expand-open-');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Subtree', projectRoot);
-      await expect(tree(win)).toBeVisible();
-
-      /*
-       * Every assertion in this test is a NEGATIVE dressed as an equality — "one level, and NO
-       * more". Each therefore reads the tree only once it has settled: `expandChildren` returns
-       * before its second round of IPC lands, so an extra level opening a beat later is invisible to
-       * a read taken the moment the menu item detaches.
-       */
-      await chevron(win, 'branch');
-      await chooseOnRow(win, 'branch', EXPAND);
-      expect(await settledOpenFolders(win)).toEqual([
-        '',
-        'branch',
-        'branch/l1a',
-        'branch/l1b',
-      ]);
-
-      // Running it AGAIN on the same anchor changes nothing: one level is one level, however many
-      // times it is asked for. (Expanding further is what the chevron and the toolbar are for.)
-      await chooseOnRow(win, 'branch', EXPAND);
-      expect(await settledOpenFolders(win)).toEqual([
-        '',
-        'branch',
-        'branch/l1a',
-        'branch/l1b',
-      ]);
-
-      // Choosing it on a child then opens THAT child's level — never a level it was not asked for.
-      await chooseOnRow(win, 'branch/l1a', EXPAND);
-      expect(await settledOpenFolders(win)).toEqual([
-        '',
-        'branch',
-        'branch/l1a',
-        'branch/l1a/l2a',
-        'branch/l1b',
-      ]);
-      await expect(rowFor(win, 'branch/l1a/l2a/l3a').locator('.tree-twisty')).toHaveAttribute(
-        'aria-expanded',
-        'false',
-      );
-
-      await expectNoOpenFolderLies(win, projectRoot);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
-
-test('D4/D3 — Expand All Children on the project ROOT opens its first level only', async () => {
-  const projectRoot = makeProject('throng-subtree-expand-root-');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Subtree', projectRoot);
-      await expect(tree(win)).toBeVisible();
-
-      await chooseOnRow(win, '', EXPAND);
-
-      // Settled first, for the same reason as D4 above: "the first level ONLY" is a negative, and a
-      // second level arriving late would slip under an assertion taken too early.
-      expect(await settledOpenFolders(win)).toEqual(['', 'branch', 'other']);
-      await expect(tree(win).getByText('other.txt', { exact: true })).toBeVisible();
-      await expect(rowFor(win, 'branch/l1a').locator('.tree-twisty')).toHaveAttribute(
-        'aria-expanded',
-        'false',
-      );
-
-      await expectNoOpenFolderLies(win, projectRoot);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
+    // The roots are deleted in `afterAll`, once the shared app has CLOSED. Deleting one here
+    // would remove a folder the explorer is still watching.
   }
 });
 
@@ -681,7 +629,7 @@ test('D4/D3 — Expand All Children on the project ROOT opens its first level on
 // Persistence (AS-10 — contract D8, FR-045)
 // ---------------------------------------------------------------------------
 
-test('AS-10/D8 — the resulting open state survives a project switch and a window reload', async () => {
+test('AS-10/D8 — the resulting open state survives a project switch and a window reload', { tag: ['@extended', '@explorer'] }, async () => {
   const projectRoot = makeProject('throng-subtree-persist-');
   // A prefix that shares NOTHING with the first project's, belt to the id-based selection's braces:
   // the row renders this path, and a reader who later reaches for `hasText` should not find a
@@ -689,7 +637,7 @@ test('AS-10/D8 — the resulting open state survives a project switch and a wind
   const otherRoot = mkdtempSync(join(tmpdir(), 'throng-elsewhere-'));
   try {
     writeFileSync(join(otherRoot, 'elsewhere.txt'), 'elsewhere\n');
-    await runApp(async (_app, win) => {
+    await runOwnApp(async (_app, win) => {
       await createProject(win, 'Subtree', projectRoot);
       const subtreeId = await activeProjectId(win);
       await expect(tree(win)).toBeVisible();
@@ -752,61 +700,3 @@ test('AS-10/D8 — the resulting open state survives a project switch and a wind
 // ---------------------------------------------------------------------------
 // The toolbar is untouched (AS-11 — contract D9, FR-046)
 // ---------------------------------------------------------------------------
-
-test('AS-11/D9 — the toolbar’s Expand and Collapse all behave exactly as before', async () => {
-  const projectRoot = makeProject('throng-subtree-toolbar-');
-  try {
-    await runApp(async (_app, win) => {
-      const errors = watchErrors(win);
-      await createProject(win, 'Subtree', projectRoot);
-      await expect(tree(win)).toBeVisible();
-      const toolbar = win.getByTestId('explorer-toolbar');
-      const expandBtn = toolbar.getByRole('button', { name: 'Expand', exact: true });
-      const collapseAllBtn = toolbar.getByRole('button', { name: 'Collapse all', exact: true });
-
-      // Expand still opens the SHALLOWEST collapsed level of the whole tree — not one folder's
-      // children, which is what the new menu items do. Twice, so it is plainly level-by-level.
-      await expandBtn.click();
-      await expect(rowFor(win, 'branch/l1a')).toBeVisible();
-      expect(await openFolders(win)).toEqual(['', 'branch', 'other']);
-      await expandBtn.click();
-      await expect(rowFor(win, 'branch/l1a/l2a')).toBeVisible();
-      expect(await openFolders(win)).toEqual(['', 'branch', 'branch/l1a', 'branch/l1b', 'other']);
-
-      // Collapse all still resets to the root alone.
-      await collapseAllBtn.click();
-      expect(await openFolders(win)).toEqual(['']);
-      await expect(rowFor(win, 'branch/l1a')).toHaveCount(0);
-
-      /*
-       * AS-11 asks the sharper question: after one of the NEW actions has run, do the old buttons
-       * still behave as they did? They read the tree's live open-state and nothing else, so they
-       * must — and this is what proves the new actions left no private state behind for them to
-       * trip over.
-       */
-      await chooseOnRow(win, 'branch', EXPAND);
-      expect(await settledOpenFolders(win)).toEqual(['', 'branch', 'branch/l1a', 'branch/l1b']);
-      /*
-       * The right-click SELECTED `branch`, so Expand anchors there and opens the shallowest
-       * still-collapsed level inside it — `l2a` and `empty`. That is the level-by-level answer it
-       * has always given, derived from open-state alone; the new action left it nothing to trip on.
-       */
-      await expandBtn.click();
-      expect(await openFolders(win)).toEqual([
-        '',
-        'branch',
-        'branch/l1a',
-        'branch/l1a/l2a',
-        'branch/l1b',
-        'branch/l1b/empty',
-      ]);
-      await collapseAllBtn.click();
-      expect(await openFolders(win)).toEqual(['']);
-
-      await expectNoOpenFolderLies(win, projectRoot);
-      expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});

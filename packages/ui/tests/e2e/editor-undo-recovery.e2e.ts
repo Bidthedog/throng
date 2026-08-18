@@ -1,9 +1,24 @@
-import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
-import { skipIfElevated } from './admin.js';
+
+/**
+ * The dirty-buffer recovery snapshot's persisted text for a panel, or null while it has not (yet)
+ * been written — `EditorRecovery.write` (packages/ui/src/main/editor-recovery.ts), on a 400ms
+ * debounce, to `<userDataDir>/recovery/<encoded panelId>`. Same idiom as
+ * `editor-cross-project-restore.e2e.ts`'s `recoveredText`.
+ */
+function recoveredText(userDataDir: string, panelId: string): string | null {
+  try {
+    const raw = readFileSync(join(userDataDir, 'recovery', encodeURIComponent(panelId)), 'utf8');
+    const parsed = JSON.parse(raw) as { text?: string };
+    return typeof parsed.text === 'string' ? parsed.text : null;
+  } catch {
+    return null; // not written yet, or a transient read of a mid-write file
+  }
+}
 
 /**
  * The undo history, end to end (016, FR-026/FR-027a/FR-027c · T092).
@@ -39,38 +54,6 @@ async function reopenProject(win: Page, name: string): Promise<string> {
   return firstPanelId(win);
 }
 
-function readSettings(cfgRoot: string): Record<string, any> | null {
-  try {
-    return JSON.parse(readFileSync(join(cfgRoot, 'settings.json'), 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-/** The single recovery snapshot on disk, parsed — or null if there is none yet. */
-function snapshotOnDisk(userDataDir: string): Record<string, any> | null {
-  try {
-    const dir = join(userDataDir, 'recovery');
-    const [name] = readdirSync(dir);
-    if (!name) return null;
-    return JSON.parse(readFileSync(join(dir, name), 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-/** Open Preferences on the Settings tab. */
-async function openSettings(app: ElectronApplication, win: Page): Promise<Page> {
-  await win.getByTestId('title-bar-cog').click();
-  const [prefs] = await Promise.all([
-    app.waitForEvent('window'),
-    win.getByTestId('cog-menu-settings').click(),
-  ]);
-  await prefs.waitForLoadState('domcontentloaded');
-  await expect(prefs.getByTestId('settings-tab')).toBeVisible();
-  return prefs;
-}
-
 const docText = (win: Page, pid: string): Promise<string> =>
   win.evaluate(
     (id) =>
@@ -80,7 +63,7 @@ const docText = (win: Page, pid: string): Promise<string> =>
     pid,
   );
 
-test('undo past a SAVE re-dirties the document, and a revert clears the history', async () => {
+test('undo past a SAVE re-dirties the document, and a revert clears the history', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-undo-'));
   writeFileSync(join(root, 'doc.txt'), 'original\n');
   try {
@@ -117,7 +100,7 @@ test('undo past a SAVE re-dirties the document, and a revert clears the history'
   }
 });
 
-test('a crash restores the content AND its undo history — Ctrl+Z still reaches the past', async () => {
+test('a crash restores the content AND its undo history — Ctrl+Z still reaches the past', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-undorec-'));
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-undorec-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-undorec-ud-'));
@@ -130,12 +113,19 @@ test('a crash restores the content AND its undo history — Ctrl+Z still reaches
         const pid = await newEditor(win);
         await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
         await win.keyboard.type('FIRST');
-        // A pause longer than the 500 ms typing-run window, so the two runs cannot coalesce into a
-        // single undo entry — otherwise this test would pass even with no history at all.
+        // sleep-justified: CodeMirror's own history groups changes within a 500ms window into one
+        // sleep-justified: undo entry (newGroupDelay); that grouping is internal to CM and has no
+        // sleep-justified: externally observable effect until the SECOND typing run happens, so
+        // sleep-justified: there is nothing to poll — only exceeding the window itself proves it.
         await win.waitForTimeout(700);
         await win.keyboard.type('-SECOND');
         await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible();
-        await win.waitForTimeout(800); // > the 400 ms recovery debounce
+        await expect
+          .poll(() => (recoveredText(userDataDir, pid) ?? '').includes('FIRST-SECOND'), {
+            timeout: 15_000,
+            message: `the recovery snapshot for panel "${pid}" was never written to disk`,
+          })
+          .toBe(true);
       },
       { dataDir, userDataDir },
     );
@@ -165,92 +155,38 @@ test('a crash restores the content AND its undo history — Ctrl+Z still reaches
   }
 });
 
-test('with persistUndoHistory OFF, the content still recovers — only the history is gone', async () => {
-  skipIfElevated();
-  const root = mkdtempSync(join(tmpdir(), 'throng-undooff-'));
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-undooff-data-'));
-  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-undooff-ud-'));
-  const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-undooff-cfg-'));
-  const env = { THRONG_CONFIG_ROOT: cfgRoot };
-  try {
-    await runApp(
-      async (app, win) => {
-        // Turn it off through the real Settings editor — the way a user would, which also proves
-        // the toggle is actually reachable there (FR-022).
-        const prefs = await openSettings(app, win);
-        await prefs.getByTestId('control-editor.persistUndoHistory').click();
-        await expect
-          .poll(() => readSettings(cfgRoot)?.editor?.persistUndoHistory, { timeout: 8000 })
-          .toBe(false);
-        await prefs.close();
-        /*
-         * Wait for the setting to be IN EFFECT, not merely on disk.
-         *
-         * `persistUndoHistory` is read in UI main at snapshot-WRITE time from a cache the config
-         * watcher refreshes some time after the file lands. The poll above only proves the file was
-         * written, so an edit made in that gap produced a snapshot WITH history — and since the
-         * FR-027c purge had already run, nothing ever rewrote it. The test then polled for ten
-         * seconds against a file that was never going to change, and failed in every environment.
-         *
-         * Measured: waiting for the cache makes it pass. Kept as a bounded settle rather than a bare
-         * sleep so the reason travels with it.
-         */
-        await win.waitForTimeout(3000);
-
-        await createProject(win, 'OffProj', root);
-        const pid = await newEditor(win);
-        await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-        await win.keyboard.type('KEEP-ME');
-        await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible();
-
-        // The snapshot on disk ends up holding the CONTENT and no history.
-        //
-        // Polled, not asserted once, and deliberately so: UI main's cached settings are refreshed by
-        // the config watcher, which lands some time AFTER the settings file itself is written — so a
-        // snapshot taken in that window can still carry a history. It does not survive: turning the
-        // setting off PURGES what is already on disk (FR-027c), which is exactly why the purge
-        // exists rather than trusting the next keystroke to overwrite it. This polls the guarantee
-        // the requirement actually makes, instead of racing the mechanism that delivers it.
-        // Three-valued on purpose. Polling `snapshot?.history` for `undefined` would pass the
-        // instant it ran, before any snapshot existed at all — a test that asserts nothing and
-        // reports success, which is worse than one that fails.
-        await expect
-          .poll(
-            () => {
-              const snap = snapshotOnDisk(userDataDir);
-              if (!snap) return 'no-snapshot';
-              return 'history' in snap ? 'has-history' : 'no-history';
-            },
-            { timeout: 10000 },
-          )
-          .toBe('no-history');
-        expect(snapshotOnDisk(userDataDir)?.text).toBe('KEEP-ME');
-      },
-      { dataDir, userDataDir, env },
-    );
-
-
-    await runApp(
-      async (_app, win) => {
-        const pid = await reopenProject(win, 'OffProj');
-        // FR-027c is explicit: a crash with the toggle off still recovers the DOCUMENT in full.
-        // Turning off the history must never turn off recovery.
-        await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
-          'KEEP-ME',
-          { timeout: 10000 },
-        );
-
-        // …but there is no past to step back into: Ctrl+Z leaves the recovered text alone.
-        await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-        await win.keyboard.press('Control+z');
-        await win.waitForTimeout(500);
-        expect(await docText(win, pid)).toContain('KEEP-ME');
-      },
-      { dataDir, userDataDir, env },
-    );
-  } finally {
-    for (const dir of [root, dataDir, userDataDir, cfgRoot]) {
-      cleanupTemp(dir);
-    }
-  }
-});
+/*
+ * DELETED (034 FR-045/FR-046a) — `test('with persistUndoHistory OFF, the content still recovers —
+ * only the history is gone')`. TWO Electron launches, a preferences window, a `skipIfElevated()`
+ * that made it behave differently on CI, and a documented three-second settle for a config-cache
+ * race. Every claim it made is proved below E2E, and named here so the deletion can be checked
+ * rather than believed:
+ *
+ *   the snapshot carries the CONTENT and no history
+ *     → `packages/ui/tests/integration/recovery-history.integration.test.ts:166`
+ *       "with the toggle OFF, the content still recovers in full — only the history is absent"
+ *       expect(parsed.text).toBe('work in progress'); expect(parsed.history).toBeUndefined();
+ *
+ *   a history already on disk is PURGED the moment the toggle goes off (FR-027c)
+ *     → `recovery-history.integration.test.ts:181`
+ *       expect(parsed.history).toBeUndefined(); expect(parsed.text).toBe('SECRET-KEY');
+ *     (the E2E never asserted the purge at all — it only polled for its effect)
+ *
+ *   a snapshot is written and restored across a relaunch
+ *     → `editor-recovery.integration.test.ts:56`
+ *       "writes in-progress content to a recovery temp and restores it after relaunch"
+ *
+ *   the toggle is REACHABLE in the Settings editor (FR-022)
+ *     → `packages/core/tests/unit/settings-metadata.test.ts:22`
+ *       "describes every configurable settings leaf and no unknown keys" — universally quantified
+ *       over AppSettings, and `editor.persistUndoHistory` is a leaf (`app-settings.ts:188`,
+ *       descriptor at `settings-metadata.ts:671`) — with `:121` "groups every descriptor into a
+ *       labelled section". The preferences editor renders from that registry; there is no path by
+ *       which this key has a descriptor and no control.
+ *
+ * WHAT IS HONESTLY LOST: nothing proves, in one test, that a REAL restart with the toggle off
+ * shows the recovered text in a real CodeMirror view while Ctrl+Z leaves it alone. That residue is
+ * the NEGATIVE of the claim the surviving crash test above makes end to end, over the same
+ * snapshot file and the same restart — so what is unproven is that the absence of a history in the
+ * snapshot reaches the view, given that its presence demonstrably does.
+ */

@@ -3,7 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, cleanupTemp} from './harness.js';
+import { openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import {
+  configRootSeeded,
+  settleConfigRoot,
+  snapshotConfigRoot,
+  type ConfigRootSnapshot,
+} from './helpers/config-snapshot.js';
+import { closePrefsWindow } from './helpers/prefs-window.js';
 
 /**
  * US3 (007 Phase D) + H2 (2026-07-08): the Key Bindings tab rebinds a shortcut by
@@ -21,9 +28,67 @@ function freshCfgRoot(): string {
   cfgRoots.push(dir);
   return dir;
 }
-test.afterAll(() => {
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-010).
+ *
+ * Not one of the seven tests here needs anything on disk BEFORE the app starts — every one called
+ * `freshCfgRoot()` with no arguments. The isolated root was for write ISOLATION between tests, and
+ * that is what `restoreConfigRoot` provides: the root is photographed once the app has seeded it and
+ * put back after every test.
+ *
+ * The shim below REFUSES launch options rather than ignoring them: a swallowed config root does not
+ * fail, it makes a test pass for the wrong reason.
+ *
+ * Serial mode is not optional. These tests share a window, a config root and the ONE preferences
+ * window throng allows, so they must not interleave — and when one fails the rest are SKIPPED rather
+ * than run against whatever state the failure left behind (see `openApp` in harness.ts).
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let cfgRoot: string;
+let baseline: ConfigRootSnapshot;
+
+test.beforeAll(async () => {
+  cfgRoot = freshCfgRoot();
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
+  await settle(shared.win);
+  // Photograph the root only once first-run seeding has finished — settings, key bindings and every
+  // shipped theme. A partial snapshot would have every later restore DELETE whatever arrived late.
+  await expect.poll(() => configRootSeeded(cfgRoot), { timeout: 30_000 }).toBe(true);
+  baseline = snapshotConfigRoot(cfgRoot);
+});
+
+/*
+ * Put the config root back between tests — with the preferences window CLOSED FIRST.
+ *
+ * The order is load-bearing twice over. A dirty JSON buffer raises `json-external-change` when the
+ * file changes underneath it, so restoring against an open window would hand the next test a notice
+ * it never asked for. And the on-entry snapshot that Revert and Revert All compare against is
+ * captured when the preferences window MOUNTS (`preferences-app.tsx`), so carrying one window across
+ * tests would carry the first test's baseline into the last one.
+ */
+test.afterEach(async () => {
+  await closePrefsWindow(shared.app);
+  await settleConfigRoot(baseline);
+});
+
+test.afterAll(async () => {
+  await shared?.close();
   for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
 
 function readBindings(cfgRoot: string): Record<string, string[]> | null {
   try {
@@ -60,8 +125,7 @@ async function sendChord(
   );
 }
 
-test('double-click captures a chord and ADDS it (multiple chords per action)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('double-click captures a chord and ADDS it (multiple chords per action)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openKeybindings(app, win);
@@ -73,12 +137,10 @@ test('double-click captures a chord and ADDS it (multiple chords per action)', a
         .poll(() => readBindings(cfgRoot)?.['view.toggleProjects'])
         .toEqual(['Ctrl+Alt+B', 'Ctrl+K']); // added, not replaced
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('a single key binds (no modifier required); double-click does not select text', async () => {
-  const cfgRoot = freshCfgRoot();
+test('a single key binds (no modifier required); double-click does not select text', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openKeybindings(app, win);
@@ -92,12 +154,10 @@ test('a single key binds (no modifier required); double-click does not select te
         .poll(() => readBindings(cfgRoot)?.['view.toggleExplorer'])
         .toEqual(['Ctrl+Alt+N', 'F7']); // added to the default, not replaced
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('the capture ("Bind") dialog does not allow text selection', async () => {
-  const cfgRoot = freshCfgRoot();
+test('the capture ("Bind") dialog does not allow text selection', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openKeybindings(app, win);
@@ -113,27 +173,10 @@ test('the capture ("Bind") dialog does not allow text selection', async () => {
           .evaluate((el) => getComputedStyle(el).userSelect),
       ).toBe('none');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('an excluded single key (Space) is rejected and not saved', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openKeybindings(app, win);
-      await prefs.getByTestId('binding-view.toggleExplorer').dblclick();
-      await sendChord(prefs, ' '); // Space — excluded
-      await expect(prefs.getByTestId('capture-error')).toBeVisible();
-      await expect(prefs.getByTestId('capture-modal')).toBeVisible(); // stays open
-      expect(readBindings(cfgRoot)?.['view.toggleExplorer']).toEqual(['Ctrl+Alt+N']); // unchanged
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('a chord pill removes just that binding (FR-033b)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('a chord pill removes just that binding (FR-033b)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openKeybindings(app, win);
@@ -151,27 +194,20 @@ test('a chord pill removes just that binding (FR-033b)', async () => {
         .poll(() => readBindings(cfgRoot)?.['view.toggleProjects'])
         .toEqual(['Ctrl+K']);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('a reserved OS combo is surfaced as unavailable and not saved', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openKeybindings(app, win);
-      await prefs.getByTestId('binding-view.toggleExplorer').dblclick();
-      await sendChord(prefs, 'F4', { altKey: true }); // Alt+F4 (reserved)
-      await expect(prefs.getByTestId('capture-error')).toContainText('reserved');
-      await expect(prefs.getByTestId('capture-modal')).toBeVisible();
-      expect(readBindings(cfgRoot)?.['view.toggleExplorer']).toEqual(['Ctrl+Alt+N']);
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('a conflicting chord warns and Reassign moves it from the other action', async () => {
-  const cfgRoot = freshCfgRoot();
+/*
+ * MOVED to `packages/ui/tests/component/preferences-capture-modal.test.ts` (034 FR-045):
+ *   - "an excluded single key (Space) is rejected and not saved"
+ *   - "a reserved OS combo is surfaced as unavailable and not saved"
+ *
+ * Both dispatched a synthetic KeyboardEvent at `window` and then asserted that an error appeared,
+ * the modal stayed open, and nothing was saved. The first two are the modal deciding; the third
+ * follows from them, because a refused chord is never handed to `onApply` and so there is nothing
+ * for the parent to write. Two Electron launches for a validation rule.
+ */
+test('a conflicting chord warns and Reassign moves it from the other action', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openKeybindings(app, win);
@@ -189,75 +225,38 @@ test('a conflicting chord warns and Reassign moves it from the other action', as
       // Removed from the previous owner.
       await expect.poll(() => readBindings(cfgRoot)?.['view.toggleProjects']).toEqual([]);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-/**
- * 016 FR-017b0 · T110 — the SCOPE column.
+/*
+ * MOVED to `packages/ui/tests/component/preferences-keybindings-tab.test.ts` (034 FR-045):
+ *   - "every command shows WHERE it is live, and Ctrl+X coexists on two of them (FR-017b0)"
+ *   - "a REAL clash — scopes that intersect — still warns and never silently steals the chord"
  *
- * `Ctrl+X` appears twice in this list, and that is correct: one entry cuts a LINE in an editor, the
- * other cuts a FILE in the tree, and they can never both fire. The scope is the only thing on screen
- * that says so. Without it, a user seeing the duplicate concludes throng is broken and "fixes" it by
- * rebinding one of the two — breaking something that worked.
+ * Neither read a file. The first asserted the TEXT of the scope pills for four commands, the
+ * chord text for two, and that no conflict was raised anywhere on the tab. The second
+ * double-clicked a row, dispatched a synthetic KeyboardEvent at `window` — which is what a
+ * component test does natively — and then read two rows back. Both spent an Electron launch and
+ * a second BrowserWindow on a DOM.
+ *
+ * The tab renders from `DEFAULT_KEYBINDINGS` and `COMMAND_SCOPES` with three real providers and
+ * no bridge, so what the component version says about the shipped command table is the same
+ * statement this file was making — against the same data.
+ *
+ * STRONGER THERE THAN HERE: the clash test now also asserts that the conflict names
+ * `editor.cutLine` and NOT `file.cut`. Both hold Ctrl+X; only one of them intersects the editor
+ * scope. That is the whole point of a scope-aware `findConflict`, and this file never checked it —
+ * it only checked that SOME warning appeared. Red-proved by deleting the `scopesIntersect` guard
+ * in `chord-capture.ts:154`, which turns the named owner into `file.cut`.
+ *
+ * WHAT STAYS HERE, and none of it is a near miss:
+ *   - every test that reads `keybindings.json` — capture-adds-a-chord, a bare single key, a pill
+ *     removing just its own chord, and Reassign moving a chord between two actions. The tab hands
+ *     `writeConfig` a map; whether that map survives the write path is the config store’s claim.
+ *   - the two `user-select: none` assertions, which read a value INHERITED from the application
+ *     stylesheet. jsdom applies no real cascade, so asserting them there would be asserting about
+ *     jsdom — 034 FR-049 exactly.
+ *
+ * ANTI-VACUITY CONTROL: aliasing `ResetNoticeProvider` to `Fragment` in the component file makes
+ * `useResetNotice()` throw, the tab renders nothing, and ALL 12 tests fail. Run, and failing.
  */
-test('every command shows WHERE it is live, and Ctrl+X coexists on two of them (FR-017b0)', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openKeybindings(app, win);
-
-      // The two commands that share Ctrl+X — shown side by side, each with the scope that makes the
-      // sharing legitimate.
-      await expect(prefs.getByTestId('binding-editor.cutLine-scope')).toHaveText('Editor');
-      await expect(prefs.getByTestId('binding-file.cut-scope')).toHaveText('File Explorer');
-      await expect(prefs.getByTestId('binding-editor.cutLine-chord')).toContainText('Ctrl+X');
-      await expect(prefs.getByTestId('binding-file.cut-chord')).toContainText('Ctrl+X');
-
-      // …and neither is flagged as a clash: no conflict warning is raised anywhere on the tab, and
-      // both keep their chord.
-      await expect(prefs.getByTestId('capture-conflict')).toHaveCount(0);
-
-      // A window-level command reads "Everywhere" — one pill, because listing all three contexts
-      // says the same thing less clearly and would drown the rows that carry real information.
-      const everywhere = prefs.getByTestId('binding-focus.left-scope').locator('.keybinding-scope');
-      await expect(everywhere).toHaveCount(1);
-      await expect(everywhere).toHaveText('Everywhere');
-
-      // …and a command live in the panels but not the file tree gets TWO SEPARATE pills. Joined into
-      // one, "Editor · Terminal" reads as a single exotic scope rather than as two ordinary ones.
-      const panels = prefs.getByTestId('binding-editor.save-scope').locator('.keybinding-scope');
-      await expect(panels).toHaveCount(2);
-      await expect(panels).toHaveText(['Editor', 'Terminal']);
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
-
-test('a REAL clash — scopes that intersect — still warns and never silently steals the chord', async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openKeybindings(app, win);
-
-      // Both of these are EDITOR-scoped, so their scopes intersect: this is a genuine clash, and it
-      // must still raise 007 FR-034's warn → Reassign/Cancel.
-      //
-      // This is the journey a scope-aware `findConflict` could quietly destroy. Make it a shade too
-      // permissive — have it answer "no conflict" when it should not — and the last writer silently
-      // takes the chord, which is exactly the behaviour FR-017b2 bans. Nothing else catches that:
-      // the scope table would still be right, the coexistence test above would still pass, and the
-      // only symptom is a binding the user never agreed to give up.
-      await prefs.getByTestId('binding-editor.indentLines').dblclick();
-      await sendChord(prefs, 'x', { ctrlKey: true }); // …Ctrl+X, owned by editor.cutLine
-      await expect(prefs.getByTestId('capture-conflict')).toBeVisible();
-
-      // Cancel keeps BOTH bindings exactly as they were — the chord is not stolen.
-      await prefs.getByTestId('capture-cancel').click();
-      await expect(prefs.getByTestId('capture-modal')).toBeHidden();
-      await expect(prefs.getByTestId('binding-editor.cutLine-chord')).toContainText('Ctrl+X');
-      await expect(prefs.getByTestId('binding-editor.indentLines-chord')).not.toContainText('Ctrl+X');
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});

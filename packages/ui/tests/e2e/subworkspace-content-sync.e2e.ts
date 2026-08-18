@@ -15,7 +15,7 @@ const seedSub = `(() => window.throng.invoke('workspace.persistSubWorkspaces', {
     tabs: [{ id: 't', title: 'T', root: { type: 'panel', id: 'p', originProjectId: 'x', title: 'P' } }] },
 ] }))()`;
 
-test('a sub-workspace edited in its own window updates the main window’s sync menu', async () => {
+test('a sub-workspace edited in its own window updates the main window’s sync menu', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (app, win) => {
     await win.evaluate(seedSub);
     await reloadWindow(win);

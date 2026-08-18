@@ -1,9 +1,16 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, cleanupTemp} from './harness.js';
+import { openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import {
+  configRootSeeded,
+  settleConfigRoot,
+  snapshotConfigRoot,
+  type ConfigRootSnapshot,
+} from './helpers/config-snapshot.js';
+import { closePrefsWindow } from './helpers/prefs-window.js';
 
 /**
  * Issue #76 — per-token Reset and Revert on the Themes tab.
@@ -16,20 +23,73 @@ import { runApp, cleanupTemp} from './harness.js';
  * with; both match Settings and Key Bindings.
  */
 const cfgRoots: string[] = [];
-function freshCfgRoot(seedThemes: Record<string, unknown> = {}): string {
+function freshCfgRoot(): string {
   const dir = mkdtempSync(join(tmpdir(), 'throng-cfg-thmreset-'));
   cfgRoots.push(dir);
-  for (const [name, theme] of Object.entries(seedThemes)) {
-    mkdirSync(join(dir, 'themes'), { recursive: true });
-    writeFileSync(join(dir, 'themes', `${name}.json`), JSON.stringify(theme, null, 2), 'utf8');
-  }
   return dir;
 }
-test.afterAll(() => {
-  for (const dir of cfgRoots.splice(0)) {
-    cleanupTemp(dir);
-  }
+
+/*
+ * ONE app for this file, not one per test (034 FR-045, SC-010).
+ *
+ * Neither test ever passed `freshCfgRoot` a seed — the parameter was dead. Both edit `colours.accent`
+ * on the active built-in theme and then undo it through the control under test; the restore is what
+ * guarantees the SECOND test still opens on the shipped value, which is the baseline its whole claim
+ * rests on.
+ *
+ * The shim below REFUSES launch options rather than ignoring them: a swallowed config root does not
+ * fail, it makes a test pass for the wrong reason.
+ *
+ * Serial mode is not optional. These tests share a window, a config root and the ONE preferences
+ * window throng allows, so they must not interleave — and when one fails the rest are SKIPPED rather
+ * than run against whatever state the failure left behind (see `openApp` in harness.ts).
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let cfgRoot: string;
+let baseline: ConfigRootSnapshot;
+
+test.beforeAll(async () => {
+  cfgRoot = freshCfgRoot();
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
+  await settle(shared.win);
+  // Photograph the root only once first-run seeding has finished — settings, key bindings and every
+  // shipped theme. A partial snapshot would have every later restore DELETE whatever arrived late.
+  await expect.poll(() => configRootSeeded(cfgRoot), { timeout: 30_000 }).toBe(true);
+  baseline = snapshotConfigRoot(cfgRoot);
 });
+
+/*
+ * Put the config root back between tests — with the preferences window CLOSED FIRST.
+ *
+ * The order is load-bearing twice over. A dirty JSON buffer raises `json-external-change` when the
+ * file changes underneath it, so restoring against an open window would hand the next test a notice
+ * it never asked for. And the on-entry snapshot that Revert and Revert All compare against is
+ * captured when the preferences window MOUNTS (`preferences-app.tsx`), so carrying one window across
+ * tests would carry the first test's baseline into the last one.
+ */
+test.afterEach(async () => {
+  await closePrefsWindow(shared.app);
+  await settleConfigRoot(baseline);
+});
+
+test.afterAll(async () => {
+  await shared?.close();
+  for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error(
+      'this file shares one app; a test needing launch options must call runOwnApp instead',
+    );
+  }
+  return fn(shared.app, shared.win);
+};
 
 async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
   await win.getByTestId('title-bar-cog').click();
@@ -47,8 +107,7 @@ const control = (prefs: Page) => prefs.getByTestId(`control-${KEY}-hex`);
 const reset = (prefs: Page) => prefs.getByTestId(`theme-reset-${KEY}`);
 const revert = (prefs: Page) => prefs.getByTestId(`theme-revert-${KEY}`);
 
-test('Reset returns a built-in theme token to its shipped value (#76)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('Reset returns a built-in theme token to its shipped value (#76)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win); // a built-in (throng) is active by default
@@ -67,12 +126,10 @@ test('Reset returns a built-in theme token to its shipped value (#76)', async ()
       await expect(control(prefs)).toHaveValue(shipped);
       await expect(reset(prefs)).toBeDisabled();
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('Revert returns a token to the value the window opened with (#76)', async () => {
-  const cfgRoot = freshCfgRoot();
+test('Revert returns a token to the value the window opened with (#76)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -89,42 +146,16 @@ test('Revert returns a token to the value the window opened with (#76)', async (
       await expect(control(prefs)).toHaveValue(onEntry);
       await expect(revert(prefs)).toBeDisabled();
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
-test('a CUSTOM theme declines Reset (no shipped baseline) but still offers Revert (#76)', async () => {
-  // A custom/cloned theme has no factory value to return to, so Reset is DECLINED — absent, not
-  // merely disabled. Revert still applies: the on-entry value exists for any theme.
-  const cfgRoot = freshCfgRoot({
-    MyCustom: {
-      name: 'MyCustom',
-      colours: { accent: '#00ff41' },
-      fonts: { family: 'Consolas', baseSizePx: 13, weights: { normal: 400, bold: 600 } },
-      icons: {},
-    },
-  });
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-      await expect
-        .poll(() => prefs.getByTestId('theme-select').locator('option').count())
-        .toBeGreaterThan(14);
-      await prefs.getByTestId('theme-select').selectOption('MyCustom');
-      await expect(prefs.getByTestId('theme-select')).toHaveValue('MyCustom');
-
-      // Reset is DECLINED for a custom theme — the button is not rendered at all.
-      await expect(reset(prefs)).toHaveCount(0);
-      // Revert is still present (disabled until something changes).
-      await expect(revert(prefs)).toBeVisible();
-
-      // And it works: edit, then revert restores the value the custom theme opened with.
-      const onEntry = await control(prefs).inputValue();
-      await control(prefs).fill('#123456');
-      await expect(revert(prefs)).toBeEnabled();
-      await revert(prefs).click();
-      await expect(control(prefs)).toHaveValue(onEntry);
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
+/*
+ * MOVED to `packages/ui/tests/component/preferences-row-actions.test.ts` (034 FR-045):
+ *   - "a CUSTOM theme declines Reset (no shipped baseline) but still offers Revert (#76)"
+ *
+ * DECLINING is an omitted handler, and the component renders nothing for one — so "absent
+ * because it will never apply here" versus "greyed because it does not apply yet" is visible
+ * without a window. What stays in this file is what Reset and Revert actually DO, which
+ * differ only in which baseline they read: the shipped value against the value the window
+ * opened with. A component handed an `onReset` callback cannot tell you which it is wired to.
+ */

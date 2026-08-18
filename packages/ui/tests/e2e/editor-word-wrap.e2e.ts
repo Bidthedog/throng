@@ -25,7 +25,7 @@ async function contentWraps(win: import('@playwright/test').Page, pid: string): 
   return ws === 'break-spaces' || ws === 'pre-wrap' || ws === 'normal';
 }
 
-test('word wrap toggles from the status bar, the chord, and the content menu (#152)', async () => {
+test('word wrap toggles from the status bar, the chord, and the content menu (#152)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

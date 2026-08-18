@@ -64,7 +64,7 @@ async function makeTerminal(win: Page, panelId: string, marker: string): Promise
   await expect(term).toContainText(marker, { timeout: 20000 });
 }
 
-test('switching tabs asks each rebuilt terminal to redraw, and its content survives', async () => {
+test('switching tabs asks each rebuilt terminal to redraw, and its content survives', { tag: ['@extended', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-tabswitch-'));
   const marker = basename(root);
   try {

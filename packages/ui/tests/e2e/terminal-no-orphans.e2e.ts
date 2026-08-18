@@ -61,20 +61,36 @@ async function openTerminal(
   await expect
     .poll(() => conhostChildren(dpid).length, { timeout: 20000 })
     .toBeGreaterThan(before);
-  await win.waitForTimeout(1200); // let the host attribute the conhost pid
+  /*
+   * `NodePtyHost.attributeConhosts()` (platform-windows/src/node-pty-host.ts) maps this conhost to
+   * the session with ONE synchronous WMI query, made the instant `pty.spawn()` returns — before this
+   * test's own WMI poll above even ran. If THAT query's view of the process table lagged the real
+   * spawn (a real WMI/CIM staleness, not an application race we can observe), `session.conhostPid`
+   * stays null and nothing retries it until the NEXT terminal spawns. No RPC exposes
+   * `session.conhostPid`, so there is nothing external to wait ON — only the daemon's own comment
+   * that this window is "~200ms" gives a number to out-wait.
+   */
+  // sleep-justified: would wait for NodePtyHost.attributeConhosts() to have resolved this conhost's pid, but nothing exposes that internal state — this covers its documented ~200ms attribution window with margin.
+  await win.waitForTimeout(1200);
 }
 
 /** Click through however many confirmation dialogs the destroy flow shows. */
 async function acceptConfirmations(win: Page): Promise<void> {
+  const dialog = win.getByTestId('confirm-dialog');
   for (let i = 0; i < 3; i += 1) {
-    const dialog = win.getByTestId('confirm-dialog');
-    if (!(await dialog.isVisible().catch(() => false))) break;
+    const appeared = await dialog
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!appeared) break;
     await win.getByTestId('confirm-accept').click();
-    await win.waitForTimeout(150);
+    // Wait for THIS dialog to actually close before the next iteration looks for another one —
+    // otherwise a not-yet-closed dialog would be mistaken for a fresh, unconfirmed one.
+    await dialog.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
   }
 }
 
-test('panel-destroy reaps the conhost for EVERY detected terminal flavour', async () => {
+test('panel-destroy reaps the conhost for EVERY detected terminal flavour', { tag: ['@core', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-orphan-destroy-'));
   try {
     await runApp(async (_app, win, { pipeName }) => {
@@ -118,7 +134,7 @@ test('panel-destroy reaps the conhost for EVERY detected terminal flavour', asyn
   }
 });
 
-test('deleting a project reaps its terminals’ conhosts', async () => {
+test('deleting a project reaps its terminals’ conhosts', { tag: ['@core', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-orphan-projdel-'));
   try {
     await runApp(async (_app, win, { pipeName }) => {
@@ -138,7 +154,7 @@ test('deleting a project reaps its terminals’ conhosts', async () => {
   }
 });
 
-test('app-close “Terminate all” reaps every terminal’s conhost', async () => {
+test('app-close “Terminate all” reaps every terminal’s conhost', { tag: ['@core', '@terminal'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-orphan-closeall-'));
   try {
     await runApp(async (_app, win, { pipeName }) => {

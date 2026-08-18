@@ -15,7 +15,7 @@ const beforeBg = (win: Page, sel: string): Promise<string> =>
 const widthOf = (win: Page, sel: string): Promise<number> =>
   win.evaluate((s) => (document.querySelector(s) as HTMLElement).getBoundingClientRect().width, sel);
 
-test('resize handles draw no line at rest (single border) and keep their hit-area width', async () => {
+test('resize handles draw no line at rest (single border) and keep their hit-area width', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'Handles', 'C:/c/handles'); // explorer auto-expands; a panel exists
 
