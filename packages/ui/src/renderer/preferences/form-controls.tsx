@@ -363,10 +363,22 @@ function NumberControl({ descriptor, value, disabled, onCommit }: SettingControl
         /*
          * 018 / FR-033 — the slider and the field drive ONE value, and each reflects the other.
          *
-         * The two commit paths are reconciled deliberately. The slider commits on every `change`,
-         * because it is bounded and stepped BY CONSTRUCTION: it cannot produce an invalid value, so
-         * there is nothing to validate and nothing to defer. The field keeps its blur/Enter commit,
-         * reading the LIVE DOM input rather than React state.
+         * The two commit paths are reconciled deliberately. The slider needs no VALIDATION, because
+         * it is bounded and stepped BY CONSTRUCTION and cannot produce an invalid value — but it
+         * still defers the WRITE, because a drag fires `change` for every step it passes through and
+         * committing each one would rewrite the config file dozens of times for one gesture. So it
+         * shows as it moves and writes when the user lets go (`onPointerUp`/`onKeyUp`/`onBlur`). The
+         * field keeps its blur/Enter commit, reading the LIVE DOM input rather than React state.
+         *
+         * This paragraph said "the slider commits on every `change`" until a component test
+         * (`tests/component/preferences-number-control.test.ts`) asserted it and found the code doing
+         * the better thing. The COMMENT had drifted; the behaviour was correct.
+         *
+         * It was also asserted end-to-end, by `preferences-fonts-and-sliders.e2e.ts` reading
+         * settings.json mid-drag — an Electron launch to learn that a callback had not fired yet. 034
+         * removed that one: the component test separates the two halves the file could not (the field
+         * follows the thumb at once; the commit waits for `pointerup`), and separating them is what
+         * the E2E was reaching for by reading a file at a particular moment.
          *
          * That last detail is not incidental. A fast paste-then-blur fires the commit before React
          * has re-rendered, so a handler closing over the previous state silently drops the edit — a

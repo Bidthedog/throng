@@ -1,14 +1,10 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import {
-  checkSettingsText,
-  formatSettingsProblem,
-  type ConfigDocId,
-  type SettingsProblem,
-} from '@throng/core';
+import { checkSettingsText, formatSettingsProblem, type ConfigDocId } from '@throng/core';
 import { registerPendingCommit, writeConfig } from '../config/write-config.js';
 import { StandaloneEditor } from '../editor/standalone-editor.js';
 import { useCopyToClipboard } from '../common/use-copy.js';
 import { useJsonEditGate } from './json-edit-gate.js';
+import { JsonDocumentNotice, type JsonProblem } from './json-document-notice.js';
 
 /**
  * A JSON editor tab (feature 007, US5 — FR-016/017/021/022a/043; lifecycle reworked by 032,
@@ -61,18 +57,6 @@ function fileNameOf(docId: ConfigDocId): string {
   }
 }
 
-/**
- * One thing wrong with the buffer.
- *
- * A union rather than a single shape, because the two cases carry genuinely different information: a
- * bad VALUE has a setting behind it — a label, a key, a permitted set — while a document that will
- * not parse at all has only the parser's sentence. Flattening them would mean inventing a key for
- * the second, and a notice that names a setting which is not the problem is worse than one that
- * names nothing.
- */
-type JsonProblem =
-  | { kind: 'setting'; problem: SettingsProblem }
-  | { kind: 'document'; text: string };
 
 /**
  * What is wrong with `text`.
@@ -343,7 +327,6 @@ export function JsonTab({ docId }: JsonTabProps): ReactElement {
     void writeConfig(docId, textRef.current);
   };
 
-  const invalid = problems.length > 0;
 
   return (
     <div className="json-tab" data-testid={`json-tab-${docId.kind}`}>
@@ -367,82 +350,17 @@ export function JsonTab({ docId }: JsonTabProps): ReactElement {
         </div>
       ) : null}
 
-      {!invalid ? (
-        /*
-         * THE STANDING EXPLANATION — shown whenever there is no error to show instead.
-         *
-         * FR-017 is the least discoverable thing about this editor: nothing is written while you
-         * type, and there is no moment where the app appears to save. A user who does not know that
-         * reads the silence as "my changes are being lost", which is what happened — the behaviour
-         * was reported as a bug by the person who asked for it.
-         *
-         * So the rule is stated on screen, permanently, rather than left to be inferred. It occupies
-         * the SAME slot as the invalidity notice because the two are alternatives: while a document
-         * is invalid the user has a more urgent thing to read, and stacking both would push the
-         * editor up for no gain.
-         *
-         * The second sentence is the one that earns its place. Because the buffer is only written on
-         * leaving, a change made to the file by anything else — a text editor, another tool — is
-         * overwritten when the user leaves, and that is genuinely a way to lose work. The dirty-buffer
-         * branch of the external-change notice exists to catch it; this says so before it happens.
-         *
-         * Amber, not red: `--throng-colour-warning` is documented as exactly this — "a warning is
-         * not a failure, and colouring it red would" overstate it. Nothing here has gone wrong.
-         */
-        <div className="json-tab__warning" data-testid="json-unsaved-warning">
-          This file will not be saved until you switch back to the UI, switch tab, or close
-          preferences. Editing <strong>{fileNameOf(docId)}</strong> directly whilst in JSON editing
-          mode here may result in data loss.
-        </div>
-      ) : (
-        /*
-         * `key={refusals}` remounts this on every refused exit so the flash animation replays. It is
-         * the one notice for this condition — there is no toast and no second strip, and it says what
-         * is WRONG rather than what the user may not do, because Discard means they always may.
-         */
-        <div
-          key={refusals}
-          className={`json-tab__error${refusals > 0 ? ' json-tab__error--flash' : ''}`}
-          data-testid="json-invalid"
-          role="alert"
-        >
-          <p className="json-tab__error-heading">This document is not valid:</p>
-          <ul>
-            {problems.map((p, i) =>
-              p.kind === 'setting' ? (
-                <li key={`${p.problem.key}-${i}`}>
-                  &quot;{p.problem.label}&quot; (<em>{p.problem.key}</em>) {p.problem.reason}. Found{' '}
-                  {p.problem.foundText}.
-                </li>
-              ) : (
-                <li key={`doc-${i}`}>{p.text}</li>
-              ),
-            )}
-          </ul>
-          <div className="json-tab__error-actions">
-            <button
-              type="button"
-              data-testid="json-copy-problems"
-              onClick={() => copy(problemsAsText(problems), { kind: 'none' })}
-            >
-              Copy
-            </button>
-            <button type="button" data-testid="json-discard" onClick={discard}>
-              Discard
-            </button>
-            <button
-              type="button"
-              data-testid="json-discard-and-close"
-              onClick={() => {
-                discard();
-                window.throng?.window?.close?.();
-              }}
-            >
-              Discard and close
-            </button>
-          </div>
-        </div>
-      )}
+      <JsonDocumentNotice
+        problems={problems}
+        fileName={fileNameOf(docId)}
+        refusals={refusals}
+        onCopy={() => copy(problemsAsText(problems), { kind: 'none' })}
+        onDiscard={discard}
+        onDiscardAndClose={() => {
+          discard();
+          window.throng?.window?.close?.();
+        }}
+      />
     </div>
   );
 }

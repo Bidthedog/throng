@@ -47,7 +47,20 @@ import { registerLayoutFlusher, trackLayoutSave } from './layout-saves.js';
 import { useAppSettings } from '../config/config-store.js';
 import { beginOperation } from '../workspace/operation.js';
 
-const AUTOSAVE_DEBOUNCE_MS = 400;
+/**
+ * How long an edit sits before it is written (019 FR-010, #86).
+ *
+ * 400ms in every real run. `?autosaveMs=` overrides it, and ONLY a test sets that — main appends it
+ * from `THRONG_AUTOSAVE_DEBOUNCE_MS` (see `rendererQuery` in main.ts, which explains why #245 needs
+ * it). Read from the URL because that is already how this renderer receives per-window values.
+ *
+ * A bad or absent value falls back to 400 rather than to NaN: a debounce of NaN never fires, which
+ * would turn a typo into silently unsaved layouts.
+ */
+const AUTOSAVE_DEBOUNCE_MS = (() => {
+  const raw = Number(new URLSearchParams(window.location.search).get('autosaveMs'));
+  return Number.isFinite(raw) && raw > 0 ? raw : 400;
+})();
 
 function newId(): string {
   return globalThis.crypto.randomUUID();
