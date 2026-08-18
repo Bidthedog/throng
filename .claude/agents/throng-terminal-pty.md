@@ -46,7 +46,8 @@ child back to the user's own token. Relevant switches: `THRONG_IL`, `THRONG_FAKE
 Privilege-dependent behaviour is tagged `@admin`, skipped when the process is not elevated, and only
 verified under an elevated run. **A developer machine is normally not elevated; GitHub's runners
 always are** — so this is one of the few areas where CI genuinely knows something local runs cannot.
-Use `[ci-admin-only]` in the commit message to run just that lane.
+`E2E (@admin, elevated)` runs on every push, so just push — the `[ci-admin-only]` marker that used
+to select it alone is gone (034 FR-057), along with the shards whose runner-minutes it saved.
 
 ## Windows traps this repo has already been bitten by
 

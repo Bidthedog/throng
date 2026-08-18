@@ -65,12 +65,15 @@ the shard script.
 
 ## Spending runner minutes well
 
-**Run it locally before you push it** — the full E2E suite is ~10 minutes locally against ~12 minutes
-per shard on CI. The one thing local runs genuinely cannot answer is elevation: a developer machine
-is normally not elevated, GitHub's runners always are. For those, put **`[ci-admin-only]`** anywhere
-in the commit message — it skips the three shards and the merged report, keeping lint, the unit
-layers and the elevated suite, turning ~36 runner-minutes into ~4. Drop the marker before merging so
-the full suite runs.
+**Run it locally before you push it** — the full E2E suite is ~21 minutes locally (measured
+2026-08-18 at 229 spec files), while CI runs only the 50-test `@core` lane in four to five minutes.
+The one thing local runs genuinely cannot answer is elevation: a developer machine is normally not
+elevated, GitHub's runners always are.
+
+There is **no way to skip a CI job any more** — the `[ci-admin-only]` marker and the `plan` job that
+read it are gone (034 FR-057). The marker existed to avoid spending ~36 runner-minutes on three
+12-minute shards; there are no shards, so it would now skip one short job while making the gating
+lane something a commit message could switch off.
 
 ## Not yours
 

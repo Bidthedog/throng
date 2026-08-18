@@ -134,18 +134,13 @@ else must be green locally first.
 
 ### Testing something that only CI can answer
 
-Put **`[ci-admin-only]`** anywhere in the commit message. The `E2E (@core)` job is skipped; lint,
-the unit layers and `E2E (@admin, elevated)` still run.
+Just push. Every job runs on every push, and `E2E (@core)` is four to five minutes.
 
-```
-git commit -m "fix(025): de-elevated agent keeps the panel's cwd [ci-admin-only]"
-```
-
-Skipping is opt-IN on purpose. Forgetting the marker costs runner minutes; forgetting to ask for the
-gating lane would let a branch merge unverified, which is the more expensive mistake.
-
-**Drop the marker before merging** — push any commit without it so `E2E (@core)` runs, and let it go
-green before the PR comes out of draft.
+**There used to be a `[ci-admin-only]` marker** that skipped the E2E lane so an elevated-path change
+did not pay for it. It is gone, and the arithmetic is why: it existed to avoid spending
+~36 runner-minutes on three 12-minute shards, and FR-057 deleted the shards. What it would skip now
+is one short job — while making the gating lane something a commit message can switch off. A
+required check that a commit message can disable is not a check.
 
 ### Every E2E test carries two tags
 
