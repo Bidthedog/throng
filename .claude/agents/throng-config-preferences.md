@@ -81,6 +81,19 @@ Token in the theme model + `theme-metadata.ts`, a value in every default theme, 
 themes tab, and no hardcoded colour at the call site — `css-variables-defined`, `theme-usage`,
 `surface-token-roles`, `icon-tokens-exist` and `no-inline-artwork` will catch you.
 
+## Testing altitude
+
+Almost nothing here is an E2E. A descriptor, a bound, a clamp, a default, a format and a collision
+rule are **unit** tests. A control's rendered form, its two-way binding, what a chord capture accepts
+and rejects, and what a reset button does to the DOM are **component** tests. Writing
+`settings.json`, `keybindings.json` or a theme file and watching it hot-reload — including the
+atomic-write and concurrency semantics — is an **integration** test, and the real ones already live
+in `packages/ui/tests/integration/config-*`.
+
+Reach for E2E only where the preferences *window itself* is the subject: it opening as a real second
+window, focus returning to the main window, a native dialog. If your assertion would survive with no
+window at all, it does not belong at that layer.
+
 ## Not yours
 
 Preference *window* focus/layout behaviour → `throng-renderer-ui` (and remember: any spec opening the

@@ -69,8 +69,11 @@ about it but which elements to emit. The renderer's own: `notice-models`, `notic
 - **De-duplicate by cause key**, not by message text.
 - Wording is part of the model, not the call site — if two places phrase the same failure
   differently, the cause is the thing to fix.
-- A notice is UI: it needs E2E coverage (Principle V), and if it is clickable or focus-stealing,
-  check the parallel-plan rules with `throng-e2e-harness`.
+- A notice is UI: it needs coverage at the lowest layer that can prove it (Principle V). What it
+  renders, how it stacks, what it announces and where focus goes inside it is a **component test**;
+  that it was written to the diagnostics log is an **integration test**. Reserve E2E for a notice
+  whose behaviour needs a real window — and if such a spec is clickable or focus-stealing, check the
+  parallel-plan rules with `throng-e2e-harness`.
 - **Never dump a raw thrown string into a notice** as a shortcut. That is the exact defect 029 was
   written to close. The raw error still reaches the user — through Copy and the diagnostics log
   (030 FR-034/FR-048a) — but never through the rendered text.
