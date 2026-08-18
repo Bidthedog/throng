@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { defineConfig } from '@playwright/test';
 
@@ -57,66 +57,51 @@ if (!process.env.THRONG_E2E_INCLUDE_ADMIN) excludedTags.push(/@admin/);
 if (!process.env.THRONG_E2E_INCLUDE_QUARANTINE) excludedTags.push(/@quarantine/);
 
 /*
- * SHARDING (issue #75, part 2). CI splits the suite across N parallel single-worker jobs, each on
- * its own fresh runner (`--shard=i/N`), and a downstream job MERGES their reports into one — see
- * .github/workflows/ci.yml. A shard must emit a `blob` report (the only mergeable format) instead
- * of the human `list`, so `THRONG_E2E_SHARDS` (the shard total, set by the CI matrix) switches the
- * reporter over. `list` is kept alongside blob so each shard's own log still streams live; the
- * admin-reminder reporter — a developer nicety — is dropped in this mode, since it has nothing to
- * add to a machine-merged report. Sharding changes only HOW the suite is distributed and reported;
- * every gate above (grepInvert, failOnFlakyTests, retries, single-worker) is untouched.
- */
-const sharded = Number(process.env.THRONG_E2E_SHARDS) > 0;
-
-/*
- * BALANCED SHARDS. `--shard=i/N` splits by test COUNT in file order, which on this suite means the
- * alphabet decides the split — and every `terminal-*` spec sorts into the same third. Measured, that
- * gave shards of 3.7, 8.3 and 36 minutes, the last of which exceeded a 30-minute job cap and was
- * killed mid-run.
+ * SHARDING IS GONE (034 FR-057), and what it cost is worth recording so nobody reinstates it by
+ * reflex.
  *
- * `THRONG_E2E_GROUP` selects a group from `shard-plan.json` instead, whose lists are built from
- * MEASURED per-file durations. Nothing else changes: each group still emits a blob report and merges
- * exactly as a shard did.
+ * It existed because raising `THRONG_E2E_WORKERS` on one runner reintroduces the CPU and focus
+ * contention that turns into red runs, so parallelism ACROSS machines was the only kind available.
+ * Three single-worker jobs on separate 4-vCPU runners turned ~12 minutes into ~4-5 — at THREE TIMES
+ * the runner-minutes, plus a fixed ~3-4 minute `npm ci` + build toll per shard before a single test
+ * ran (#103).
  *
- * A spec file missing from the plan would silently never run, which is the one failure mode worth
- * more than the balance — so `shard-plan.test.ts` fails if any spec is absent or listed twice.
+ * That trade paid on a 235-file suite gating every push. It does not pay on the two lanes that
+ * replace it: the critical lane is ≤50 tests, where three shards would spend ~12 runner-minutes of
+ * pure toll to save two or three minutes of wall-clock, and the full lane runs only at release,
+ * where wall-clock is on nobody's critical path.
+ *
+ * Deleted with it: `shard-plan.json` (235 hand-maintained filenames), `THRONG_E2E_SHARDS`,
+ * `THRONG_E2E_GROUP`, the blob reporter and `THRONG_E2E_BLOB_OUT`, the `merge-e2e` job, and
+ * `blob-report-naming.test.ts` — the last four being the entire apparatus built for #216, which
+ * only ever existed because three shards wrote one filename.
+ *
+ * If release wall-clock ever becomes a real complaint, Playwright's native `--shard` is adequate at
+ * that point: the reason it was originally rejected — the alphabet sorting every `terminal-*` spec
+ * into one third, giving 3.7 / 8.3 / 36-minute shards — is an artefact of a 235-file suite, not a
+ * sixty-file one.
  */
-const shardGroup = process.env.THRONG_E2E_GROUP;
-const plannedIgnores = ((): RegExp[] => {
-  if (!shardGroup) return [];
-  const plan = JSON.parse(
-    readFileSync(new URL('./packages/ui/tests/e2e/shard-plan.json', import.meta.url), 'utf8'),
-  ) as { groups: Record<string, string[]> };
-  const mine = new Set(plan.groups[shardGroup] ?? []);
-  if (mine.size === 0) throw new Error(`THRONG_E2E_GROUP=${shardGroup} is not in shard-plan.json`);
-  const others = Object.entries(plan.groups)
-    .filter(([g]) => g !== shardGroup)
-    .flatMap(([, files]) => files)
-    .filter((f) => !mine.has(f));
-  /*
-   * Anchored to a path separator, which is not fussiness: `terminal.e2e.ts$` alone also matches
-   * `subworkspace-owned-terminal.e2e.ts`, so listing one file quietly excluded the other from EVERY
-   * group and 18 tests stopped running. Caught by counting `--list` per group and finding the totals
-   * did not add up to the whole suite.
-   */
-  return others.map((f) => new RegExp(`[\\/]${f.replace(/\./g, '[.]')}$`));
-})();
 
 /*
  * `THRONG_E2E_TIER` splits the suite by whether a spec can tolerate ANOTHER headed window.
  *
  * Focus contention is per-DESKTOP, not per-machine: throng deliberately closes menus and popups when
  * its window loses focus (context-menu.tsx), and the preferences window is a child window that takes
- * focus. So workers are the lever WITHIN a machine and shards are the lever ACROSS machines, and the
- * two compose — this filter is applied on top of `plannedIgnores`, not instead of it.
+ * focus. So workers are the lever WITHIN a machine — which is the only lever left, now that the
+ * across-machines one has been removed for costing more than it saved.
  *
  * The membership in `parallel-plan.json` is MEASURED, not guessed: the whole suite was run at six
  * workers three times with retries off, and the serial tier is every spec that opens the preferences
  * window (the contention mechanism) plus every spec observed failing. A boundary drawn only from
  * observed failures would encode luck, since contention produces a different failure set each run.
  *
- * Measured: 208 specs, 37 serial, 171 parallel. The full suite at six workers ran in ~8-11 minutes
- * against ~35 minutes at one worker.
+ * Measured at 208 specs: 37 serial, 171 parallel. The full suite at six workers ran in ~8-11 minutes
+ * against ~35 minutes at one worker. (Current membership is larger — see `parallel-plan.json` — and
+ * is re-measured by 034 Story 1 rather than being trusted from this line.)
+ *
+ * TIERS SURVIVE THE DELETION OF SHARDS, and the distinction is the whole reason: a tier is about
+ * contention WITHIN one machine, a shard was about splitting ACROSS machines. Only the second stopped
+ * paying for itself.
  */
 const tier = process.env.THRONG_E2E_TIER;
 const tierIgnores = ((): RegExp[] => {
@@ -126,14 +111,26 @@ const tierIgnores = ((): RegExp[] => {
   }
   const plan = JSON.parse(
     readFileSync(new URL('./packages/ui/tests/e2e/parallel-plan.json', import.meta.url), 'utf8'),
-  ) as { serial: string[] };
-  const serial = new Set(plan.serial);
-  const shardPlan = JSON.parse(
-    readFileSync(new URL('./packages/ui/tests/e2e/shard-plan.json', import.meta.url), 'utf8'),
-  ) as { groups: Record<string, string[]> };
-  const every = Object.values(shardPlan.groups).flat();
-  // Ignore the OTHER tier's files. Same path-separator anchoring as above, and for the same reason:
-  // an unanchored `terminal.e2e.ts$` also matches `subworkspace-owned-terminal.e2e.ts`.
+    // `serial` maps filename -> the mechanism that put it there (034 FR-001). The tier filter wants
+    // only the membership, so it reads the keys; the values exist for the reader, and live in the
+    // same object precisely so the list and its reasons cannot drift apart.
+  ) as { serial: Record<string, string> };
+  const serial = new Set(Object.keys(plan.serial));
+  /*
+   * The universe of spec files comes from DISK.
+   *
+   * It used to come from `shard-plan.json` — a file whose purpose was distributing work across
+   * machines, quietly doing second duty as the only enumeration of what exists. That coupling is why
+   * deleting the shard plan had to be sequenced ahead of the migration rather than after it: a spec
+   * absent from the plan was invisible to the tier filter too, so one hand-maintained list decided
+   * two unrelated things.
+   */
+  const every = readdirSync(new URL('./packages/ui/tests/e2e/', import.meta.url)).filter((f) =>
+    f.endsWith('.e2e.ts'),
+  );
+  // Ignore the OTHER tier's files. Anchored to a path separator, which is not fussiness:
+  // an unanchored `terminal.e2e.ts$` also matches `subworkspace-owned-terminal.e2e.ts`, which once
+  // removed 18 tests from every group at a stroke.
   const exclude = every.filter((f) => (tier === 'serial' ? !serial.has(f) : serial.has(f)));
   return exclude.map((f) => new RegExp(`[\\/]${f.replace(/\./g, '[.]')}$`));
 })();
@@ -141,8 +138,8 @@ const tierIgnores = ((): RegExp[] => {
 export default defineConfig({
   testDir: 'packages/ui/tests/e2e',
   testMatch: '**/*.e2e.ts',
-  // Empty unless THRONG_E2E_GROUP / THRONG_E2E_TIER are set, so an ordinary run is untouched.
-  testIgnore: [...plannedIgnores, ...tierIgnores],
+  // Empty unless THRONG_E2E_TIER is set, so an ordinary run is untouched.
+  testIgnore: tierIgnores,
   // Consolidate all E2E scratch under one %TEMP%/throng_e2e_<runhash>/ folder
   // (created here when run directly, or inherited from the top-level wrapper).
   globalSetup: './scripts/playwright-global-setup.mjs',
@@ -220,35 +217,69 @@ export default defineConfig({
    * evidence for that narrow, safe distinction; it can never turn a real test flake green.
    */
   /*
-   * The blob's FILENAME must be unique per shard, and Playwright will not do it for us here.
+   * One job, one report. `THRONG_E2E_JSON_OUT` asks for the machine-readable one alongside the
+   * human `list`, and CI sets it because `ci-e2e-run.ps1` classifies the outcome from it — a
+   * non-zero exit with zero unexpected AND zero flaky is an infrastructure fault rather than a test
+   * failure, which is a distinction only the report can make (Principle V).
    *
-   * `_defaultReportName()` appends a shard suffix ONLY when `config.shard` is set — which happens
-   * only under Playwright's own `--shard`, and this repo deliberately does not use it (see the
-   * THRONG_E2E_GROUP note above). So every shard job wrote `blob-report/report.zip`, all three
-   * artifacts were downloaded into ONE directory with `merge-multiple: true`, and they overwrote
-   * each other; the merge then read a half-written file and the merged report job failed:
-   *
-   *     Error: not enough bytes in the stream. expected 4019954. got only 3740141
-   *
-   * Two attempts over the same artifacts gave DIFFERENT byte counts (3531821, then 3740141), which
-   * is how a write race is told apart from one corrupt upload — a bad upload gives the same number
-   * twice. Issue #216.
+   * The `blob` reporter is gone with the shards (034 FR-057), and so is the apparatus around it.
+   * Blob is the only MERGEABLE format, which is the sole reason it was ever used here, and there is
+   * nothing left to merge. Worth remembering why it was fiddly: Playwright appends a shard suffix to
+   * a blob's filename ONLY when `config.shard` is set, and this repo deliberately never set it — so
+   * all three jobs wrote `blob-report/report.zip`, `merge-multiple: true` collapsed them onto each
+   * other, and the merge read a half-written zip. Two attempts over the same artifacts gave
+   * different byte counts (3531821, then 3740141), which is how a write race is told apart from one
+   * corrupt upload: a bad upload gives the same number twice. Issue #216, and it cannot recur.
    */
-  reporter: sharded
-    ? [
-        ['blob', { fileName: process.env.THRONG_E2E_BLOB_OUT ?? 'report.zip' }],
-        ['list'],
-        ['json', { outputFile: process.env.THRONG_E2E_JSON_OUT ?? 'shard-report.json' }],
-      ]
+  reporter: process.env.THRONG_E2E_JSON_OUT
+    ? [['list'], ['json', { outputFile: process.env.THRONG_E2E_JSON_OUT }]]
     : [['list'], ['./packages/ui/tests/e2e/admin-reminder.reporter.ts']],
-  // 30s per test (issue #75). 60s was too generous: when a test genuinely wedges (a window that
-  // never opens, a renderer that never settles), the old budget let it sit for a full minute
-  // before failing AND — because Playwright applies the test timeout to worker teardown too — gave
-  // a hung app a second 60s to blow the *worker-teardown* budget, which surfaces as "1 error was
-  // not a part of any test" (no retry absorbs it). 30s still clears the slowest legitimate journey
-  // (the multi-window theme/detach specs land ~5-9s) with headroom, and halves how long a real
-  // wedge can stall the suite. The harness force-kills a wedged app well inside this now
-  // (shutdownApp, packages/ui/tests/e2e/harness.ts), so teardown never rides the budget out.
-  timeout: 30_000,
-  expect: { timeout: 10_000 },
+  /*
+   * 60s per test (spec 034). This was 30s, and 30s had become an implicit PERFORMANCE assertion
+   * rather than a hang detector — which is the thing FR-018 forbids everywhere else in this suite.
+   *
+   * MEASURED, on a full run at six workers (specs/034-e2e-harness-integrity/baseline.md):
+   * ten tests failed and eight went flaky, and NINE OF THE TEN failures were this timeout. Not one
+   * of them was a defect. The tell is in the population: of the real-shell specs in the parallel
+   * tier, 0% of the starved ones raise their own `test.setTimeout`, against 36% of the healthy ones
+   * — `terminal-launch-failure-config` takes 84.8s per test and passes, because it opted out of
+   * this budget. Everything that died was relying on the default.
+   *
+   * The suite creates its own load, and it has grown: 214 spec files when 30s was chosen, 235 now.
+   * The longest LEGITIMATE journeys observed under six-worker contention land ~38s, so 30s was not
+   * a safety margin anybody was relying on — it was simply below the working range. Raising it to
+   * 60s and changing nothing else took the sixteen affected files from 20 passed / 14 failed to
+   * 37 passed / 1 failed, in LESS wall-clock (153s against 159s).
+   *
+   * WHY THIS DOES NOT REOPEN #75. The old comment here rejected 60s because Playwright applies the
+   * test timeout to WORKER TEARDOWN as well, so a wedged app got a second full budget and blew the
+   * teardown budget — surfacing as "1 error was not a part of any test", which no retry absorbs.
+   * That reasoning is superseded, and the old comment already said why: the harness now bounds its
+   * own teardown INDEPENDENTLY of this number. `shutdownApp` allows a 15s graceful window and the
+   * `taskkill` behind it a further 10s, so teardown completes within ~25s whatever this is set to
+   * (packages/ui/tests/e2e/harness.ts). The Constitution requires exactly that bound — "the harness
+   * MUST bound its own teardown… so this fault is prevented at source, not merely retried" — so it
+   * is the harness, not this budget, that protects the worker.
+   *
+   * What this still buys: a genuinely wedged test fails in 60s instead of hanging the suite. What
+   * it deliberately does NOT do is assert how fast the product is. `performance.e2e.ts` owns that,
+   * with explicit budgets that name the requirement they defend.
+   */
+  timeout: 60_000,
+  /*
+   * 15s per assertion (spec 034). This was 10s, and raising the test timeout above exposed it as
+   * the NEXT budget down: with 60s tests, the remaining failures at six workers stopped being
+   * 60-second timeouts and became 10-second ones — `projects.e2e.ts` failing at 10.0s and 10.1s,
+   * which is this budget exactly, not the test's.
+   *
+   * That is the same mistake in a smaller box. A retrying assertion's timeout is how long the
+   * condition is given to become true; on a machine running six Electron apps, six daemons and
+   * their shells, 10s is inside the range a perfectly healthy condition takes. It is not a
+   * statement about how fast throng is — `performance.e2e.ts` makes those, and names the
+   * requirement each one defends.
+   *
+   * Kept well under the 60s test budget so a genuinely stuck assertion still fails as itself, with
+   * its own locator and diff, rather than as an anonymous test timeout that says nothing.
+   */
+  expect: { timeout: 15_000 },
 });

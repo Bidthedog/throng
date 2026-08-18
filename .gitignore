@@ -27,9 +27,15 @@ Thumbs.db
 test-results/
 playwright-report/
 # Playwright sharding (issue #75): per-shard blob output and the merge job's staging dir.
+# Sharding is gone (034 FR-057); these stay only so an older checkout's leftovers are still ignored.
 blob-report/
 all-blob-reports/
 .last-run.json
+# The JSON run report. `docs/testing.md` tells developers to write this to the repo root to get
+# per-file durations (034 SC-015), and `release.yml` writes it on CI — so the documented procedure
+# produces it by design, and without this line it would sit untracked waiting to be committed by
+# accident. It is a measurement of a run, not source.
+e2e-report.json
 
 # Installer verification verdict (020): a generated CI artifact, not source.
 verification-verdict.json

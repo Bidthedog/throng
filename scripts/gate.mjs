@@ -8,15 +8,19 @@
  *
  * WHY FAIL-FAST MATTERS HERE, AND NOT ONLY AS TIDINESS
  *
- * The E2E stage costs ~21 minutes locally and ~36 runner-minutes on CI. Every
- * earlier stage costs seconds to a couple of minutes. Running the cheap stages to
- * completion before spending the expensive one is the entire economic argument for
- * this script: a lint error found in 12 seconds is a lint error that did not cost
- * 21 minutes of Electron launches to discover.
+ * The E2E stage costs roughly half an hour locally — 28.4 minutes measured 2026-08-17
+ * at 246 spec files, against a pre-034 baseline of 46.9; see docs/testing.md, which
+ * carries the current figure and names the measurement behind it. Do not re-quote a
+ * number here: this comment has already gone stale twice, and a duration in a place
+ * nobody re-measures is how the published 24.7 came to understate the truth by half.
+ * Every earlier stage costs seconds to a couple of minutes. Running the cheap stages
+ * to completion before spending the expensive one is the entire economic argument
+ * for this script: a lint error found in 12 seconds is a lint error that did not
+ * cost half an hour of Electron launches to discover.
  *
  * So the chain breaks the moment a stage fails, and the E2E stage itself breaks at
  * its first failing TEST (THRONG_E2E_FAIL_FAST, honoured by run-e2e-local.mjs)
- * rather than grinding through 651 tests to tell you about the one you already
+ * rather than grinding through the whole suite to tell you about the one you already
  * know about. Fix the failure — with the `running-tests` and `throng-testing`
  * skills — and run the gate again.
  *
@@ -58,6 +62,11 @@ const STAGES = [
   { name: 'typecheck', script: 'typecheck' },
   { name: 'build', script: 'build' },
   { name: 'unit', script: 'test:unit' },
+  // Component sits here, not later: it is the second-cheapest layer (jsdom, no app, no daemon,
+  // no shell) and it now carries assertions that used to cost an Electron launch each. A stage
+  // ordering that put it after the OS-heavy layers would spend minutes to learn something
+  // available in seconds.
+  { name: 'component', script: 'test:component' },
   { name: 'integration', script: 'test:integration' },
   { name: 'contract', script: 'test:contract' },
   { name: 'e2e', script: 'test:e2e', env: { THRONG_E2E_FAIL_FAST: '1' } },

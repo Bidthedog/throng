@@ -7,9 +7,9 @@
  *
  * This is deliberately NOT how CI is arranged. Focus contention is per-DESKTOP: throng closes menus
  * and popups when its window loses focus (context-menu.tsx), and the preferences window is a child
- * window that takes focus. So workers are the lever within a machine, and shards are the lever across
- * machines. CI has three machines and wants three balanced shards (`shard-plan.json`); a developer
- * has one machine and wants the two tiers back to back.
+ * window that takes focus. So workers are the lever within a machine — and since spec 034 removed
+ * the split across machines (FR-057), it is the only lever there is. CI runs one job at one worker;
+ * a developer has one machine and wants the two tiers back to back.
  *
  * MEASURED, not assumed. The whole suite was run at six workers three times with retries off. The
  * serial tier in `parallel-plan.json` is every spec that opens the preferences window — the
@@ -60,7 +60,8 @@ if (forwarded.length > 0) {
  * because a developer asking for the whole suite wants the whole failure set, not the
  * first item of it.
  *
- * The gate wants the opposite, and for a reason worth naming: this stage is ~21 minutes,
+ * The gate wants the opposite, and for a reason worth naming: this stage is ~40 minutes
+ * (measured 2026-08-16 at 235 spec files),
  * and a run that already has one confirmed failure cannot come back green. Every test
  * after that failure is wall-clock spent to learn nothing. So the gate stops the tier at
  * its first failing test (`--max-failures=1`) and does not start the next tier at all.
