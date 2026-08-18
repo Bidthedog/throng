@@ -17,7 +17,6 @@ import { ConfirmProvider, useConfirm } from '../confirm-dialog.js';
 import { NotificationProvider } from '../common/notification.js';
 import { useConfigWriteFailureNotices } from '../config/config-write-notices.js';
 import { ThemeProvider } from '../theme/theme-provider.js';
-import { IconButton } from '../common/icon-button.js';
 import { windowTitle } from '../common/window-title.js';
 import { HoverSuppression } from '../common/use-hover-suppression.js';
 import { TitleBar } from '../title-bar/title-bar.js';
@@ -28,6 +27,11 @@ import { KeybindingsTab } from './keybindings-tab.js';
 import { ThemesTab } from './themes-tab.js';
 import { JsonTab } from './json-tab.js';
 import { JsonEditGateProvider, useJsonEditGate } from './json-edit-gate.js';
+import {
+  PreferencesToolbar,
+  editorLabel,
+  type PreferencesTab as Tab,
+} from './preferences-toolbar.js';
 import './preferences.css';
 
 /**
@@ -38,20 +42,16 @@ import './preferences.css';
  * (US6). The per-tab editors are filled by later phases; this shell ships the
  * empty tabs so the entry point and window behaviour are independently testable.
  */
-export type PreferencesTab = 'settings' | 'keybindings' | 'themes';
+/*
+ * The tab vocabulary and the tab bar itself live in `preferences-toolbar.tsx` (034 FR-045) — see its
+ * header for why. Re-exported here so `main.tsx` and everything else that already imports them from
+ * this module keeps working: the extraction is a test-reachability change, not an API change.
+ */
+export type { PreferencesTab } from './preferences-toolbar.js';
+export { isPreferencesTab } from './preferences-toolbar.js';
 
-const TABS: readonly { id: PreferencesTab; label: string }[] = [
-  { id: 'settings', label: 'Settings' },
-  { id: 'keybindings', label: 'Key Bindings' },
-  { id: 'themes', label: 'Themes' },
-];
-
-export function isPreferencesTab(value: string | null): value is PreferencesTab {
-  return value === 'settings' || value === 'keybindings' || value === 'themes';
-}
-
-function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): ReactElement {
-  const [tab, setTab] = useState<PreferencesTab>(initialTab);
+function PreferencesShell({ initialTab }: { initialTab: Tab }): ReactElement {
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [mode, setMode] = useState<'ui' | 'json'>('ui'); // global UI⇄JSON toggle (FR-020)
   // A reset that could not be written must never fail silently (FR-006a) — including one
   // fired from a row inside a tab, which is why the reporter is shared through context.
@@ -84,7 +84,7 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
   // offset over to the next — scrolled deep into Settings, you land mid-way down Themes. Each
   // editor now keeps its own offset, restored when you switch back to it.
   const panelRef = useRef<HTMLDivElement>(null);
-  const scrollTops = useRef<Record<PreferencesTab, number>>({
+  const scrollTops = useRef<Record<Tab, number>>({
     settings: 0,
     keybindings: 0,
     themes: 0,
@@ -174,11 +174,15 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // The per-tab reset is HIDDEN on the Themes tab (015, FR-011): feature 014 already offers a
-  // restore-to-shipped affordance on every built-in theme row, so a per-tab reset there would be
-  // a second control performing an identical write.
-  const showResetCurrent = tab !== 'themes';
-  const currentEditorLabel = TABS.find((t) => t.id === tab)?.label ?? '';
+  /*
+   * The label the confirm message names, taken from the same function the button's title uses
+   * (`preferences-toolbar.tsx`). Two copies of that derivation is exactly how a button reading
+   * "Reset the Settings editor" ends up raising a dialog that names a different one.
+   *
+   * Whether the control is offered at all — FR-011's "not on Themes" — is decided where it is
+   * drawn, so it is no longer restated here.
+   */
+  const currentEditorLabel = editorLabel(tab);
 
   /**
    * Run a reset and report it if it fails. `Promise.resolve` matters: optional chaining
@@ -278,66 +282,25 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
         <HoverSuppression />
         <TitleBar identity={windowTitle('Preferences')} showCog={false} showMinimise={false} />
         <div className="prefs-body">
-          <div className="prefs-tabbar" role="tablist" aria-label="Preferences sections">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                aria-selected={tab === t.id}
-                className={`prefs-tab${tab === t.id ? ' prefs-tab--active' : ''}`}
-                data-testid={`prefs-tab-${t.id}`}
-                onClick={() => {
-                  // FR-018: switching tab is one of the three exits blocked while the JSON buffer
-                  // is invalid — and, when it is valid, the moment the buffer is applied (FR-017).
-                  if (mode === 'json' && !leaveJson()) return;
-                  setTab(t.id);
-                }}
-              >
-                {t.label}
-              </button>
-            ))}
-            <div className="prefs-tabbar__spacer" />
-            {/* Always-visible toolbar affordances (FR-019/008 — survive min size), every one a
-                themeable icon with a hover title (constitution v3.12.0). Their names state exactly
-                what they touch: nothing is called "configuration", because projects, window layout
-                and workspace state are never reset (015, FR-012a). */}
-            <IconButton
-              token={mode === 'ui' ? 'editJson' : 'editVisual'}
-              className="prefs-toolbtn prefs-toolbtn--icon"
-              testId="prefs-mode-toggle"
-              title={mode === 'ui' ? 'Switch to JSON editing' : 'Switch to the visual editor'}
-              onClick={() => {
-                // Leaving the JSON view is the other blocked exit (FR-018), and the commit trigger
-                // named first in the clarification: "closing the JSON view".
-                if (mode === 'json' && !leaveJson()) return;
-                setMode((m) => (m === 'ui' ? 'json' : 'ui'));
-              }}
-            />
-            {showResetCurrent ? (
-              <IconButton
-                token="retry"
-                className="prefs-toolbtn prefs-toolbtn--icon"
-                testId="prefs-reset-current"
-                title={`Reset the ${currentEditorLabel} editor to its defaults`}
-                onClick={doResetCurrent}
-              />
-            ) : null}
-            <IconButton
-              token="restoreAll"
-              className="prefs-toolbtn prefs-toolbtn--icon"
-              testId="prefs-reset-preferences"
-              title="Reset All Preferences"
-              onClick={doResetPreferences}
-            />
-            <IconButton
-              token="retry"
-              className="prefs-toolbtn prefs-toolbtn--icon prefs-toolbtn--revert"
-              testId="prefs-revert-all"
-              title="Revert All Preferences"
-              onClick={doRevertAll}
-            />
-          </div>
+          <PreferencesToolbar
+            tab={tab}
+            mode={mode}
+            onSelectTab={(next) => {
+              // FR-018: switching tab is one of the three exits blocked while the JSON buffer
+              // is invalid — and, when it is valid, the moment the buffer is applied (FR-017).
+              if (mode === 'json' && !leaveJson()) return;
+              setTab(next);
+            }}
+            onToggleMode={() => {
+              // Leaving the JSON view is the other blocked exit (FR-018), and the commit trigger
+              // named first in the clarification: "closing the JSON view".
+              if (mode === 'json' && !leaveJson()) return;
+              setMode((m) => (m === 'ui' ? 'json' : 'ui'));
+            }}
+            onResetCurrent={doResetCurrent}
+            onResetPreferences={doResetPreferences}
+            onRevertAll={doRevertAll}
+          />
 
           {/*
            * 018 / FR-051 — the inline confirm strip and the inline notice strip are GONE.
@@ -390,7 +353,7 @@ function PreferencesShell({ initialTab }: { initialTab: PreferencesTab }): React
   );
 }
 
-export function PreferencesApp({ initialTab }: { initialTab: PreferencesTab }): ReactElement {
+export function PreferencesApp({ initialTab }: { initialTab: Tab }): ReactElement {
   // 018 / FR-061a — the preferences window is a SEPARATE renderer realm with its own root, so it needs
   // the drop-navigation guard too. Without it, a file dropped anywhere on this window makes the engine
   // navigate to it, and the preferences session is simply replaced by a view of the dropped file. It has

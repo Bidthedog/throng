@@ -376,8 +376,37 @@ async function createMainWindow(
     saveWindowState(statePath, { ...bounds, maximized: window.isMaximized() });
   });
 
-  await window.loadFile(resolveFromHere('../renderer/index.html'));
+  await window.loadFile(resolveFromHere('../renderer/index.html'), { query: rendererQuery() });
   return window;
+}
+
+/**
+ * Extra query values every window's renderer receives, currently only a test seam.
+ *
+ * `THRONG_AUTOSAVE_DEBOUNCE_MS` overrides the renderer's layout-autosave debounce. It exists for
+ * ONE test — `terminate-all-drain`'s C6 case (#245) — and it is the difference between that test
+ * measuring the drain and merely timing the machine.
+ *
+ * C6 asserts that closing the main window drains a sub-workspace's PENDING layout write. That is
+ * only a claim about the drain if the child has not already saved the write by itself, and the
+ * child's own 400ms debounce is racing the close. The test used to prove non-vacuity by asserting
+ * the child window died within 400 wall-clock milliseconds — which fails on a busy machine while
+ * the product is perfectly healthy (measured at 948ms and 543ms), and which cannot tell a slow box
+ * from a broken drain.
+ *
+ * Setting the debounce far beyond any teardown makes it STRUCTURALLY impossible for the child to
+ * have saved by itself, so the guard stops being a measurement and becomes a fact. It also makes
+ * the test strictly stronger: with nothing able to self-save, the drain is the only thing that can
+ * produce the write at all.
+ *
+ * The renderer reads this from the URL because that is already how it receives per-window identity
+ * (`?sw=<id>`), and env-gated seams of exactly this shape already ship — `THRONG_ATTACH_TIMEOUT_MS`
+ * and `THRONG_ATTACH_DELAY_MS` do the same job for the attach path. Unset in every real run, where
+ * the renderer falls back to its own default.
+ */
+function rendererQuery(): Record<string, string> {
+  const autosaveMs = process.env.THRONG_AUTOSAVE_DEBOUNCE_MS;
+  return autosaveMs ? { autosaveMs } : {};
 }
 
 /**
@@ -428,7 +457,9 @@ function createSubWorkspaceWindow(
   // would have to be remembered for every window kind added later, which is precisely the omission
   // that produced #263.
   revealWhenPainted(window);
-  void window.loadFile(resolveFromHere('../renderer/index.html'), { query: { sw: id } });
+  void window.loadFile(resolveFromHere('../renderer/index.html'), {
+    query: { sw: id, ...rendererQuery() },
+  });
   return window;
 }
 
