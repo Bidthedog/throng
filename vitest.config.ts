@@ -17,12 +17,19 @@ const alias = {
 };
 
 // esbuild must honour legacy decorators for InversifyJS (@injectable/@inject).
+//
+// `jsx: react-jsx` is what lets a .tsx file be transformed at all here. Without it esbuild emits
+// classic `React.createElement` calls against an import the renderer's sources do not make — the
+// app builds fine because Vite is configured for the automatic runtime, so the gap only appears
+// the first time a test renders a component, as `ReferenceError: React is not defined`.
 const esbuild = {
   target: 'es2022',
+  jsx: 'automatic',
   tsconfigRaw: {
     compilerOptions: {
       experimentalDecorators: true,
       useDefineForClassFields: false,
+      jsx: 'react-jsx',
     },
   },
 } as const;
@@ -31,15 +38,22 @@ const esbuild = {
 // real OS processes (node-pty shells, directory-lock holders) and mutate shared
 // on-disk artifacts (e.g. daemon/dist/BUILD_ID in the build-id tests), so their
 // files MUST run serially in ONE worker: concurrent files race that shared state
-// and can hit the Windows "AttachConsole failed" limit under load. NOTE: per-project
-// `fileParallelism: false` is NOT honoured by Vitest (it is effectively root-only) —
-// `pool: 'forks'` + `singleFork` is what actually forces a single sequential worker.
-// The high timeouts give OS-state polling (busy-detection, lock/PTY teardown) ample
-// headroom, since node-pty's console-list helper is slow under full-suite load.
+// and can hit the Windows "AttachConsole failed" limit under load.
+//
+// `maxWorkers: 1` is what forces that, and it is stated alongside
+// `fileParallelism: false` deliberately rather than relying on either alone.
+//
+// This was `poolOptions: { forks: { singleFork: true } }` until Vitest 4 REMOVED
+// `poolOptions` in favour of top-level options — which meant the serialization these
+// layers depend on was being requested through an option the runner no longer read.
+// It announced itself only as a deprecation line above every integration and contract
+// run. Both suites still passed, because a race that needs load to appear does not
+// appear every time; that is precisely what makes silently-dropped serialization
+// worth fixing rather than living with.
 const osSerial = {
   fileParallelism: false,
   pool: 'forks',
-  poolOptions: { forks: { singleFork: true } },
+  maxWorkers: 1,
   testTimeout: 30_000,
   hookTimeout: 30_000,
 } as const;
@@ -60,6 +74,30 @@ export default defineConfig({
           name: 'unit',
           include: ['packages/**/tests/unit/**/*.test.ts'],
           environment: 'node',
+        },
+      },
+      {
+        resolve: { alias },
+        esbuild,
+        test: {
+          // The component layer: a renderer component rendered into a DOM and asked
+          // what it produces — markup, computed style, focus movement inside it,
+          // keyboard handling, accessibility attributes. No application, no window,
+          // no daemon, no shell, so it runs in the default parallel pool and costs
+          // milliseconds where the same assertion cost a ~2s Electron launch.
+          //
+          // It exists because it did not, and its absence was load-bearing: two unit
+          // tests (icon-call-sites, panel-identity-key) are source-text guards that
+          // say so in their own comments, and ~40% of the E2E suite asserted things
+          // that had nowhere cheaper to live. jsdom over happy-dom because the
+          // assertions moving here need getComputedStyle fidelity more than speed.
+          //
+          // What it CANNOT see, and what therefore stays at E2E (FR-049): compositing,
+          // hardware rendering, and operating-system focus.
+          name: 'component',
+          include: ['packages/**/tests/component/**/*.test.ts'],
+          environment: 'jsdom',
+          setupFiles: ['./packages/ui/tests/component/setup.ts'],
         },
       },
       {

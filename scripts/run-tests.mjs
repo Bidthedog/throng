@@ -12,7 +12,7 @@
 import { spawnSync } from 'node:child_process';
 import { ensureRunDir, cleanupRunDir } from './test-run-dir.mjs';
 
-const SUITES = ['test:unit', 'test:integration', 'test:contract', 'test:e2e'];
+const SUITES = ['test:unit', 'test:component', 'test:integration', 'test:contract', 'test:e2e'];
 
 // `--e2e-workers=N` (used by `npm run test:parallel`) sets the E2E worker count
 // for the whole run; the child `playwright` inherits it via THRONG_E2E_WORKERS.

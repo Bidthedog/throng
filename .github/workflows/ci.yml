@@ -32,22 +32,29 @@ env:
   npm_config_loglevel: error
 
 jobs:
-  # Which E2E does this push need?
+  # Does this push need the @core lane?
   #
-  # The full suite is three 12-minute shards. Most iterations do not need it: work on the elevated /
-  # de-elevation path only changes what `E2E (@admin, elevated)` covers, and running the other three
-  # to find that out spends ~36 runner-minutes proving nothing. Put `[ci-admin-only]` anywhere in the
-  # HEAD commit message and they are skipped.
+  # THIS JOB PREDATES THE SHARDS AND OUTLIVED THEM (034 FR-057). It used to decide whether to spend
+  # ~36 runner-minutes on three 12-minute shards; there are no shards now, and what it gates is the
+  # single `E2E (@core)` job — capped at 50 tests and measured at 4-5 minutes. The decision is
+  # smaller than it was but it is not free, and it is the same one: work on the elevated /
+  # de-elevation path only changes what `E2E (@admin, elevated)` covers, so running the critical
+  # lane to find that out proves nothing. Put `[ci-admin-only]` anywhere in the HEAD commit message
+  # and it is skipped.
   #
   # Deliberately opt-IN to skipping rather than opt-in to running: forgetting the marker costs runner
-  # minutes, whereas forgetting to ask for the full suite would let a branch merge unverified. Run the
-  # full suite before merging — see CLAUDE.md, "E2E on CI".
+  # minutes, whereas forgetting to ask for the lane would let a branch merge unverified. The FULL
+  # suite is not this workflow's job at all — it runs in release.yml before an installer is built.
+  # See CLAUDE.md, "E2E on CI".
   plan:
     name: Plan E2E
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      full: ${{ steps.decide.outputs.full }}
+      # `core`, not `full`: it gates the critical lane. It was named `full` when it gated three
+      # shards carrying the whole suite, and a value that says "full" while selecting 50 tests is
+      # exactly the kind of stale name the next reader trusts.
+      core: ${{ steps.decide.outputs.core }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -72,10 +79,10 @@ jobs:
           # case-sensitive.
           lower="${msg,,}"
           if [[ "$lower" == *'[ci-admin-only]'* ]]; then
-            echo "full=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::[ci-admin-only] found in the commit message - running the elevated @admin job only. Run the full suite before merging."
+            echo "core=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::[ci-admin-only] found in the commit message - running the elevated @admin job only. Drop the marker before merging so E2E (@core) runs."
           else
-            echo "full=true" >> "$GITHUB_OUTPUT"
+            echo "core=true" >> "$GITHUB_OUTPUT"
           fi
 
   lint:
@@ -129,54 +136,50 @@ jobs:
       # design (see docs/testing.md) — run each layer as its own step so a failure names it.
       - name: Unit tests
         run: npm run test:unit
+      # Component tests render renderer components into jsdom — no app, no daemon, no window.
+      # They run before the OS-heavy layers because they are nearly as cheap as unit and now
+      # carry assertions that used to cost an Electron launch apiece (034 FR-044).
+      - name: Component tests
+        run: npm run test:component
       - name: Integration tests
         run: npm run test:integration
       - name: Contract tests
         run: npm run test:contract
 
   e2e:
-    name: E2E (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+    name: E2E (@core)
     needs: plan
-    if: ${{ needs.plan.outputs.full == 'true' }}
+    if: ${{ needs.plan.outputs.core == 'true' }}
     runs-on: windows-2022
-    # Per shard: one build + ~1/3 of the suite at single worker.
+    # ONE JOB, the critical lane only (034 FR-056).
     #
-    # The "~4-5 min a shard actually takes" this comment used to claim has not been true for some
-    # time: measured on 028, shard 1 takes ~7 min, shard 2 ~20, and shard 3 exceeded the old 30-minute
-    # cap and was killed mid-run. Playwright shards by FILE in declaration order, so shard 3 inherits
-    # the alphabetical tail — which is where every terminal spec lives, and terminal specs each launch
-    # a daemon, an Electron app and a real shell.
+    # This was a three-way matrix, and the matrix was not there for balance — it was the only
+    # parallelism available, because raising THRONG_E2E_WORKERS on one runner reintroduces the CPU
+    # and focus contention that `failOnFlakyTests` turns into red runs. It bought ~12 minutes down
+    # to ~4-5, at THREE TIMES the runner-minutes, plus a fixed ~3-4 minute `npm ci` + build toll per
+    # shard before a single test ran (#103).
     #
-    # 45 buys headroom for the imbalance rather than pretending it is not there. The durable fix is to
-    # rebalance (more shards, or an explicit split that does not track the alphabet); that changes the
-    # set of required checks, so it is a deliberate decision and not a timeout bump.
+    # At the critical lane's size that trade inverts: three shards would spend ~12 runner-minutes of
+    # pure toll to save two or three minutes of wall-clock on the critical path. The rest of the
+    # suite is not dropped — it runs in full at release (release.yml), where wall-clock is on
+    # nobody's critical path.
+    #
+    # 45 minutes is kept as a hang detector rather than a budget. The lane is expected in single
+    # digits; if it approaches this, something is wrong that a larger number would only hide.
     timeout-minutes: 45
-    strategy:
-      # Do NOT cancel sibling shards when one fails: we want the full red/green picture, and the
-      # merged report needs every shard's blob present. Each shard is its own required check.
-      fail-fast: false
-      matrix:
-        # Three parallel single-worker shards, each on its own fresh 4-vCPU runner. This is the
-        # SAFE speed lever (issue #75, part 2): scale OUT across machines, never UP in
-        # workers-per-runner. Raising THRONG_E2E_WORKERS reintroduces the exact CPU contention
-        # (RPC-budget timeouts, launch-SLA misses, EPERM teardown races) that `failOnFlakyTests`
-        # now turns into red runs. ~12 min single-job -> ~4-5 min wall-time, at 3x runner-minutes.
-        shard: [1, 2, 3]
     env:
-      # SINGLE WORKER PER SHARD — the invariant the whole approach rests on (see the matrix note).
-      # Each worker is a full Electron app + detached daemon + real shells; per docs/testing.md
-      # failures RISE with worker count on this constrained runner.
+      # SINGLE WORKER — the invariant the whole approach rests on. Each worker is a full Electron
+      # app + detached daemon + real shells; per docs/testing.md failures RISE with worker count on
+      # this constrained runner. A smaller suite is not a reason to reopen a question that was
+      # measured shut.
       THRONG_E2E_WORKERS: 1
       # Retries kept for DIAGNOSTIC value only — they capture the first failure's assertion and
       # trace. They no longer absorb anything: `failOnFlakyTests` (playwright.config.ts) fails a
       # test that only passes on retry (017, FR-014). Green means every test passed FIRST attempt.
       THRONG_E2E_RETRIES: 3
-      # Non-empty => playwright.config.ts switches this shard's reporter to the mergeable `blob`
-      # format (the shard total, supplied so the config can log it). `merge-e2e` stitches them back.
-      THRONG_E2E_SHARDS: ${{ strategy.job-total }}
-      # Where the per-shard JSON report lands. ci-e2e-shard.ps1 reads its `stats` to tell a genuine
-      # test flake/failure (stays red) apart from a pure infra fault (retried once) — issue #75.
-      THRONG_E2E_JSON_OUT: shard-report.json
+      # Where the JSON report lands. ci-e2e-run.ps1 reads its `stats` to tell a genuine test
+      # flake/failure (stays red) apart from a pure infra fault (retried once) — Principle V.
+      THRONG_E2E_JSON_OUT: e2e-report.json
       # Lets the retry step comment on the tracking issue when an infra fault is auto-retried.
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -197,38 +200,12 @@ jobs:
       # The runner's virtual desktop defaults to 1024x768 — too small for the window
       # geometry some specs assert (e.g. restoring a 1100px-wide window clamps to 1024)
       # and cramped for drag-and-drop. Bump it before the app opens real windows.
+      # The runner's virtual desktop boots at 1024x768, which is too small for throng's window;
+      # several specs assert layout that only holds at a realistic size. Extracted to a script so
+      # release.yml's full-suite job can call the same thing (034 FR-056).
       - name: Set screen resolution to 1920x1080
         shell: pwsh
-        run: |
-          Add-Type @'
-          using System;
-          using System.Runtime.InteropServices;
-          public class Disp {
-            [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Ansi)]
-            public struct DEVMODE {
-              [MarshalAs(UnmanagedType.ByValTStr, SizeConst=32)] public string dmDeviceName;
-              public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
-              public int dmFields, dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
-              public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
-              [MarshalAs(UnmanagedType.ByValTStr, SizeConst=32)] public string dmFormName;
-              public short dmLogPixels; public int dmBitsPerPel, dmPelsWidth, dmPelsHeight;
-              public int dmDisplayFlags, dmDisplayFrequency, dmICMMethod, dmICMIntent, dmMediaType, dmDitherType;
-              public int dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
-            }
-            [DllImport("user32.dll")] public static extern int EnumDisplaySettings(string d, int n, ref DEVMODE dm);
-            [DllImport("user32.dll")] public static extern int ChangeDisplaySettings(ref DEVMODE dm, int f);
-            public static int Set(int w, int h) {
-              DEVMODE dm = new DEVMODE();
-              dm.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
-              if (EnumDisplaySettings(null, -1, ref dm) == 0) return -1;
-              dm.dmPelsWidth = w; dm.dmPelsHeight = h;
-              dm.dmFields = 0x80000 | 0x100000; // DM_PELSWIDTH | DM_PELSHEIGHT
-              return ChangeDisplaySettings(ref dm, 0);
-            }
-          }
-          '@
-          $rc = [Disp]::Set(1920, 1080)
-          Write-Host "ChangeDisplaySettings -> $rc (0 = success)"
+        run: ./scripts/ci-set-resolution.ps1
       # `pretest:e2e` builds the app first. The runner is elevated (GitHub Windows runners run as
       # administrator), so @admin specs remain excluded by default (playwright.config.ts grepInvert)
       # and get their own job below.
@@ -241,21 +218,15 @@ jobs:
       #
       # NOT `--shard=i/N` — that splits by test COUNT in file order, which let the alphabet put every
       # terminal-* spec in one third (measured 3.7 / 8.3 / 36 min, the last killed by the timeout).
-      # THRONG_E2E_GROUP selects this job's files from packages/ui/tests/e2e/shard-plan.json, which
-      # is balanced by measured duration. Playwright still splits by FILE (fullyParallel is false),
-      # so a describe.serial file stays whole.
+      # `--grep @core` selects the critical lane (034 FR-056). Playwright splits by FILE
+      # (fullyParallel is false), so a describe.serial file stays whole.
       #
-      # Because there is no `--shard`, Playwright does NOT add a shard suffix to the blob's name — it
-      # writes plain `blob-report/report.zip` in every job. All three are downloaded into one
-      # directory with `merge-multiple: true`, so identical names collided and the merge read a
-      # half-written zip (issue #216). THRONG_E2E_BLOB_OUT names each one, exactly as
-      # THRONG_E2E_JSON_OUT already names the json report.
-      # Run this shard under the issue-#75 flake policy: a genuine test flake/failure (report shows
+      # Run under the flake policy: a genuine test flake/failure (report shows
       # flaky>0 or unexpected>0) stays RED — the strict gate (failOnFlakyTests, Principle V) is
       # untouched. Only a PURE INFRA fault (non-zero exit with 0 flaky AND 0 unexpected — a worker/
       # global-teardown crash no test owns, which no retry absorbs) is retried once. The classifier
-      # cannot turn a real test flake green; see scripts/ci-e2e-shard.ps1 and the constitution.
-      # Run the shard at NORMAL INTEGRITY. GitHub's Windows runners are elevated, and 84 spec files
+      # cannot turn a real test flake green; see scripts/ci-e2e-run.ps1 and the constitution.
+      # Run at NORMAL INTEGRITY. GitHub's Windows runners are elevated, and 84 spec files
       # call skipIfElevated() because they assume a normal-integrity daemon — so before this, 208
       # tests self-skipped here and a green E2E stage said nothing whatever about them. Thirteen more
       # lacked the guard and simply failed, which the shard script's broken exit-code handling then
@@ -264,82 +235,17 @@ jobs:
       # here) and fails loudly rather than quietly running elevated.
       #
       # The @admin job below is deliberately NOT de-elevated: it is the elevated path's own coverage.
-      - name: Run E2E shard (flake-policy aware)
+      - name: Run E2E critical lane (flake-policy aware)
         shell: pwsh
-        env:
-          THRONG_E2E_BLOB_OUT: report-${{ matrix.shard }}.zip
-        run: ./scripts/ci-e2e-shard.ps1 -Shard "${{ matrix.shard }}/${{ strategy.job-total }}" -Group "${{ matrix.shard }}"
-      - name: Upload blob report
+        run: ./scripts/ci-e2e-run.ps1 -Grep '@core'
+      - name: Upload traces
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: blob-report-${{ matrix.shard }}
-          path: blob-report/
-          retention-days: 7
-          if-no-files-found: ignore
-      - name: Upload traces for this shard
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results-shard-${{ matrix.shard }}
+          name: test-results-e2e-core
           path: test-results/
           retention-days: 14
           if-no-files-found: ignore
-
-  # Stitch the shards back into ONE HTML report. This job is a REPORTER, not a gate — it never
-  # fails on a red shard, and it must NOT be a required status check.
-  #
-  # The required checks are the three `E2E (shard i/3)` jobs themselves. Gating on a downstream
-  # merge job instead put its `npm ci` (~2m) on the critical path for no signal the shards don't
-  # already carry: the shards go red on their own, and waiting for a report to tell us so cost
-  # more wall-time than the sharding saved (~11m to green vs ~12m unsharded — issue #75, part 2).
-  # With this job off the path, green arrives with the slowest shard, ~9m.
-  merge-e2e:
-    name: E2E report (merged)
-    # Run even when a shard failed (so the report is always produced), but not when cancelled, and
-    # not when the shards were skipped for an admin-only run (there would be no blobs to merge).
-    if: ${{ !cancelled() && needs.plan.outputs.full == 'true' }}
-    needs: [plan, e2e]
-    runs-on: windows-2022
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      # merge-reports needs @playwright/test present; npm ci is the simplest reliable way to get it.
-      - name: Install dependencies
-        run: npm ci
-      - name: Download shard blob reports
-        uses: actions/download-artifact@v4
-        with:
-          pattern: blob-report-*
-          path: all-blob-reports
-          merge-multiple: true
-      - name: Merge blobs into one HTML report
-        run: npx playwright merge-reports --reporter html ./all-blob-reports
-      - name: Upload merged Playwright report
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 14
-          if-no-files-found: ignore
-      # Say which shards failed, for whoever opens the report — but do NOT fail on it. The shard
-      # jobs are the gate; re-reddening here would only add a second, later copy of a signal
-      # branch protection already has, and would drag this job's cost onto the critical path.
-      - name: Note shard outcome
-        if: ${{ always() }}
-        shell: pwsh
-        run: |
-          $r = '${{ needs.e2e.result }}'
-          if ($r -ne 'success') {
-            Write-Host "::warning::One or more E2E shards did not pass (needs.e2e.result = $r) — see the shard checks."
-          } else {
-            Write-Host "All E2E shards passed."
-          }
 
   # 019 (FR-013a / SC-008) — RUN THE @admin SUBSET, on the runner that can actually run it.
   #
@@ -350,9 +256,12 @@ jobs:
   # coverage while docs/testing.md claimed CI ran non-elevated. That is how the hole read as
   # covered.
   #
-  # This is its OWN job rather than a step inside `e2e`: the shards split the suite by file, so an
-  # @admin step there would run three times or — if no @admin file landed on that shard — not at
-  # all. One job, one run, one signal.
+  # This is its OWN job rather than a step inside `e2e`, and the reason has CHANGED (034 FR-057).
+  # It used to be that the shards split the suite by file, so an @admin step would have run three
+  # times or — if no @admin file landed on that shard — not at all. There is one E2E job now, so
+  # that argument is spent. What keeps it separate is stronger: `e2e` runs DE-ELEVATED and this runs
+  # ELEVATED, which cannot be two steps of one job, and `e2e` is skippable via `[ci-admin-only]`
+  # while this is the lane that marker exists to keep. One job, one run, one signal.
   e2e-admin:
     name: E2E (@admin, elevated)
     runs-on: windows-2022

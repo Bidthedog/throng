@@ -19,7 +19,11 @@ on:
         type: boolean
         default: false
   push:
-    branches: [worktree-21-app-packaging]
+    # `master` rather than a long-dead feature branch. This said `worktree-21-app-packaging` — the
+    # branch feature 020 was built on, merged and deleted long ago — so the packaging path had not
+    # been exercised by a push in months and nobody noticed, because a trigger that never fires
+    # looks exactly like a trigger whose job always passes.
+    branches: [master]
     tags: ['v*']
 
 concurrency:
@@ -30,8 +34,71 @@ env:
   npm_config_loglevel: error
 
 jobs:
+  # THE FULL E2E SUITE, and this is the only place it runs (034 FR-056, constitution v5.0.0).
+  #
+  # CI gates every push on the `@core` lane — 35 critical journeys, single digit minutes. That is a
+  # deliberately smaller net, and this job is the other half of the trade: everything tagged
+  # `@extended` runs here, once, before an installer is built. Without it the reduced CI surface
+  # would not be a reduction, it would be a hole.
+  #
+  # It GATES rather than reports. `build-installer` needs it, so a red suite means no artifact —
+  # the distinction 034 insisted on, because a release-time signal nobody blocks on is a signal
+  # nobody reads.
+  #
+  # One job, no shards, one worker: the same arithmetic that removed sharding from CI (FR-057). This
+  # lane is not on anyone's critical path, so trading wall-clock for runner-minutes is the right way
+  # round here even more clearly than there.
+  e2e-full:
+    name: E2E (full suite)
+    runs-on: windows-2022
+    # The full suite measured 21.2 minutes locally at 229 spec files / 641 declarations, on the
+    # baseline machine at `53ff359` (2026-08-18) — two tiers, parallel 2.7 and serial 18.5. This job
+    # runs ONE worker rather than two tiers, so it is slower than that figure by design and slower
+    # again on a runner; 90 is a hang detector with headroom, not a budget to grow into.
+    timeout-minutes: 90
+    env:
+      THRONG_E2E_WORKERS: 1
+      THRONG_E2E_RETRIES: 3
+      THRONG_E2E_JSON_OUT: e2e-report.json
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      # Alias-free temp dir — the runner's default %TEMP% carries an 8.3 short name
+      # (C:\Users\RUNNER~1\...) that breaks in-tree path matching in some file specs. Same reason
+      # as ci.yml; not usable via `runner.temp` in a job-level `env`.
+      - name: Use an alias-free temp dir
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install dependencies
+        run: npm ci
+      # The runner's virtual desktop defaults to 1024x768, which is too small for the window the
+      # app opens; several specs assert layout that only holds at a realistic size.
+      - name: Set screen resolution to 1920x1080
+        shell: pwsh
+        run: ./scripts/ci-set-resolution.ps1
+      - name: Run the full E2E suite (flake-policy aware)
+        shell: pwsh
+        # No -Grep: everything except what grepInvert excludes (@admin, @quarantine). @admin has its
+        # own elevated job in ci.yml and is not duplicated here.
+        run: ./scripts/ci-e2e-run.ps1
+      - name: Upload traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-e2e-full
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
   build-installer:
     name: Build the per-user installer
+    needs: e2e-full
     runs-on: windows-2022
     timeout-minutes: 30
     outputs:

@@ -25,36 +25,35 @@
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)] [string] $Shard,          # e.g. "3/3" - reporting label only
-  # Which group of shard-plan.json to run. The plan is built from measured durations; Playwright's
-  # own --shard splits by test count in file order, which let the alphabet decide and produced
-  # 3.7 / 8.3 / 36-minute shards.
-  [string] $Group = '',
-  [string] $ReportFile = 'shard-report.json',
+  # Which lane to run, as a Playwright --grep. '@core' is the critical lane that gates every push;
+  # empty runs everything not excluded by grepInvert, which is what a release does.
+  [string] $Grep = '',
+  [string] $ReportFile = 'e2e-report.json',
   [int]    $TrackingIssue = 75
 )
 
 $ErrorActionPreference = 'Stop'
 
-function Invoke-Shard {
+# The label every message uses. A lane is named by what it selects, so whoever opens a red check
+# knows immediately whether the critical set or the whole suite went red — the thing the old
+# "shard 2/3" label could never tell them.
+$Lane = if ($Grep) { $Grep } else { 'full' }
+
+function Invoke-Lane {
   if (Test-Path $ReportFile) { Remove-Item $ReportFile -Force }
-  # Clear the blob dir too, so a retry's merged report isn't a doubled copy of this shard.
-  if (Test-Path 'blob-report') { Remove-Item 'blob-report' -Recurse -Force }
-  # `test:e2e:raw`, NOT `test:e2e`. The latter is the local two-pass runner, which re-runs a fixed
-  # list of contention-sensitive specs at one worker — meaningless here (a shard is already
-  # single-worker on its own runner) and actively wrong, because its explicit file list would
-  # override this shard's group and run other shards' specs.
-  if ($Group) {
-    $env:THRONG_E2E_GROUP = $Group
-    npm run test:e2e:raw
+  # `test:e2e:raw`, NOT `test:e2e`. The latter is the local two-pass tier runner — meaningless here
+  # (this job is single-worker already, so there is no contention to split away from) and actively
+  # wrong, because its own file selection would override the lane's --grep.
+  if ($Grep) {
+    npm run test:e2e:raw -- --grep $Grep
   }
   else {
-    npm run test:e2e:raw -- --shard=$Shard
+    npm run test:e2e:raw
   }
   # Publish the code through a script-scoped variable, NEVER as this function's return value.
   #
   # `return $LASTEXITCODE` looks equivalent and is not. A PowerShell function returns its whole
-  # OUTPUT STREAM, and a native command's stdout is part of that stream — so `$code = Invoke-Shard`
+  # OUTPUT STREAM, and a native command's stdout is part of that stream — so `$code = Invoke-Lane`
   # bound an ARRAY of every line npm printed, with the exit code last. `-eq` against an array is not
   # a comparison but a FILTER returning the matching elements, and the result is then judged for
   # truthiness. Playwright prints STRINGS, and `[bool]'0'` is $true in PowerShell (a non-empty
@@ -66,7 +65,7 @@ function Invoke-Shard {
   # Measured on run 30935446702: shard 3 reported "pass" in GitHub while its own blob report ended
   # `"status": "failed"` with 51 tests failing all four attempts. The strict gate below never ran,
   # which is why a suite with 51 known-red tests looked green for as long as it did.
-  $script:ShardExit = $LASTEXITCODE
+  $script:LaneExit = $LASTEXITCODE
 }
 
 function Get-Stats {
@@ -100,19 +99,19 @@ if ($env:CI -eq 'true') {
     [Security.Principal.WindowsBuiltInRole]::Administrator)
   if ($elevated) {
     $guarded = @(Select-String -Path 'packages/ui/tests/e2e/*.e2e.ts' -Pattern 'skipIfElevated' -List).Count
-    Write-Host "::warning::E2E shard ${Shard} runs WITH administrator rights, so $guarded spec files self-skip via skipIfElevated(). A green E2E stage says nothing about those specs; they are covered by a developer's non-elevated run."
+    Write-Host "::warning::E2E lane $Lane runs WITH administrator rights, so $guarded spec files self-skip via skipIfElevated(). A green E2E stage says nothing about those specs; they are covered by a developer's non-elevated run."
   }
   else {
-    Write-Host "shard ${Shard}: running without admin rights — skipIfElevated specs will execute"
+    Write-Host "${Lane}: running without admin rights — skipIfElevated specs will execute"
   }
 }
 
-Invoke-Shard
-$code = [int]$script:ShardExit
+Invoke-Lane
+$code = [int]$script:LaneExit
 
-# A scalar, or this whole gate is decorative — see the note in Invoke-Shard.
+# A scalar, or this whole gate is decorative — see the note in Invoke-Lane.
 if ($code -isnot [int]) {
-  Write-Host "::error::E2E shard $Shard could not determine an exit code (got '$code'). Treating as a hard failure."
+  Write-Host "::error::E2E lane $Lane could not determine an exit code (got '$code'). Treating as a hard failure."
   exit 1
 }
 
@@ -122,25 +121,25 @@ if ($code -isnot [int]) {
 if ($code -eq 0) {
   $ok = Get-Stats
   if ($ok -and (([int]$ok.unexpected) -gt 0 -or ([int]$ok.flaky) -gt 0)) {
-    Write-Host "::error::E2E shard $Shard exited 0 but its report says unexpected=$($ok.unexpected) flaky=$($ok.flaky). Refusing to call that a pass."
+    Write-Host "::error::E2E lane $Lane exited 0 but its report says unexpected=$($ok.unexpected) flaky=$($ok.flaky). Refusing to call that a pass."
     exit 1
   }
-  Write-Summary "E2E shard $Shard passed."
+  Write-Summary "E2E lane $Lane passed."
   exit 0
 }
 
 $stats = Get-Stats
 if ($null -eq $stats) {
-  Write-Host "::error::E2E shard $Shard exited $code and produced no readable JSON report — treating as a hard failure (no retry)."
+  Write-Host "::error::E2E lane $Lane exited $code and produced no readable JSON report — treating as a hard failure (no retry)."
   exit $code
 }
 
 $unexpected = [int]$stats.unexpected
 $flaky      = [int]$stats.flaky
-Write-Host "shard $Shard report: expected=$($stats.expected) unexpected=$unexpected flaky=$flaky skipped=$($stats.skipped) (exit $code)"
+Write-Host "$Lane report: expected=$($stats.expected) unexpected=$unexpected flaky=$flaky skipped=$($stats.skipped) (exit $code)"
 
 if ($unexpected -gt 0 -or $flaky -gt 0) {
-  Write-Host "::error::E2E shard $Shard has a genuine test failure/flake (unexpected=$unexpected, flaky=$flaky). Staying red — the flake gate holds (Principle V)."
+  Write-Host "::error::E2E lane $Lane has a genuine test failure/flake (unexpected=$unexpected, flaky=$flaky). Staying red — the flake gate holds (Principle V)."
   exit $code
 }
 
@@ -156,32 +155,32 @@ if ($unexpected -gt 0 -or $flaky -gt 0) {
 # `expected` is Playwright's count of tests it planned to run. Zero of them means the suite never
 # existed, which no retry has ever fixed.
 if ([int]$stats.expected -eq 0) {
-  Write-Host "::error::E2E shard $Shard collected NO tests (expected=0, exit $code). That is a build or configuration fault, not a transient one — failing immediately rather than retrying an identical failure."
-  Write-Summary "E2E shard $Shard collected no tests — build/config fault, not retried."
+  Write-Host "::error::E2E lane $Lane collected NO tests (expected=0, exit $code). That is a build or configuration fault, not a transient one — failing immediately rather than retrying an identical failure."
+  Write-Summary "E2E lane $Lane collected no tests — build/config fault, not retried."
   exit $code
 }
 
 # Pure infra fault: no test failed or flaked, yet the run exited non-zero.
-Write-Host "::warning::E2E shard $Shard hit an INFRA fault (0 unexpected, 0 flaky, exit $code) — a worker/global-teardown error owned by no test. Retrying the shard once (issue #75)."
-Write-Summary "⚠️ E2E shard $Shard infra-retried (0 unexpected / 0 flaky / exit $code)."
+Write-Host "::warning::E2E lane $Lane hit an INFRA fault (0 unexpected, 0 flaky, exit $code) — a worker/global-teardown error owned by no test. Retrying the lane once (issue #75)."
+Write-Summary "⚠️ E2E lane $Lane infra-retried (0 unexpected / 0 flaky / exit $code)."
 
 $run = "$($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)/actions/runs/$($env:GITHUB_RUN_ID)"
 if ($env:GH_TOKEN -or $env:GITHUB_TOKEN) {
   try {
-    $body = "Infra-level E2E fault auto-detected and retried on shard **$Shard** (0 unexpected, 0 flaky, exit $code — a worker/global-teardown error no test owns). Run: $run"
+    $body = "Infra-level E2E fault auto-detected and retried in the **$Lane** lane (0 unexpected, 0 flaky, exit $code — a worker/global-teardown error no test owns). Run: $run"
     gh issue comment $TrackingIssue --body $body 2>&1 | Out-Null
   } catch { Write-Host "note: could not comment on #$TrackingIssue ($_)" }
 }
 
-Invoke-Shard
-$code2 = [int]$script:ShardExit
+Invoke-Lane
+$code2 = [int]$script:LaneExit
 if ($code2 -eq 0) {
-  Write-Summary "E2E shard $Shard passed on infra-retry."
+  Write-Summary "E2E lane $Lane passed on infra-retry."
   exit 0
 }
 
 $stats2 = Get-Stats
 $u2 = if ($stats2) { [int]$stats2.unexpected } else { 1 }
 $f2 = if ($stats2) { [int]$stats2.flaky } else { 0 }
-Write-Host "::error::E2E shard $Shard failed again after infra-retry (unexpected=$u2, flaky=$f2, exit $code2). Staying red."
+Write-Host "::error::E2E lane $Lane failed again after infra-retry (unexpected=$u2, flaky=$f2, exit $code2). Staying red."
 exit $code2
