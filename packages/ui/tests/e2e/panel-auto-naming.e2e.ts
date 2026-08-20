@@ -289,21 +289,42 @@ test('an adjustment landing under an OPEN rename box is not a rename either (#21
   }
 });
 
-test('a panel created from the tab strip’s New Tab button auto-names itself (#218)', { tag: ['@extended', '@window'] }, async () => {
+/**
+ * The New Tab route's panel takes its name from the FILE it ends up holding (#218).
+ *
+ * ── WHAT LEFT (035 T055) ──
+ *
+ * Two of this test's three claims are `TabGroup`'s and are now
+ * `component/tab-strip.test.ts` ("the New Tab route names its panel automatically"):
+ *
+ *   - the TAB opens in rename mode, not the panel — the route's own comment said this behaviour
+ *     "was asserted nowhere";
+ *   - the panel it brings is NOT marked custom, which is the whole of #218. A panel that believes
+ *     it was renamed stops auto-naming, so the terminal title and the editor's file name are
+ *     suppressed on exactly the panels a user has just created — the reported symptom.
+ *
+ * The component version also asserts the Escape path, which this did by hand and never checked the
+ * consequence of. Red-proven by making `makePanel` mark every new panel custom: 2 red.
+ *
+ * ── WHY THE REST STAYS ──
+ *
+ * What is left is the JOURNEY that feeds the name: choose an editor, click `notes.md` in the real
+ * explorer tree, and watch the header become "notes". The naming RULE is `panelDisplayTitle`, pure
+ * and covered in core; reaching it needs the explorer, a real file on disk and the editor
+ * registering its path, which is three layers agreeing.
+ */
+test('a New Tab panel takes its name from the file its editor opens (#218)', { tag: ['@extended', '@window'] }, async () => {
   const root = makeProject('throng-newtab-');
   try {
     await runApp(async (_app, win) => {
       await createProject(win, 'NewTabProj', root);
       await firstPanelId(win);
 
-      // `addTab` does not set `lastAddedPanelId` — the TAB goes into rename mode instead — so this
-      // route has different rename-box behaviour from the header `+` and was asserted nowhere.
       await win.getByTestId('tab-add').click();
       await expect(win.locator('[data-testid^="tab-rename-input-"]')).toBeVisible();
       await win.keyboard.press('Escape');
 
       const pid = await firstPanelId(win); // the new tab's only panel
-      expect(await resetNameEnabled(win, pid)).toBe(false);
 
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('editor');
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
@@ -317,7 +338,7 @@ test('a panel created from the tab strip’s New Tab button auto-names itself (#
   }
 });
 
-test('a terminal that reattaches to its running session keeps its name (#218 B)', { tag: ['@extended', '@window'] }, async () => {
+test('a terminal that reattaches to its running session keeps its name (#218 B)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const root = makeProject('throng-reattach-name-');
   try {
     await runApp(async (_app, win) => {
@@ -365,7 +386,7 @@ test('a terminal that reattaches to its running session keeps its name (#218 B)'
   }
 });
 
-test('panel names survive a restart — the automatic ones and the typed one (#218 B)', { tag: ['@extended', '@window'] }, async () => {
+test('panel names survive a restart — the automatic ones and the typed one (#218 B)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   test.setTimeout(180_000);
   const root = makeProject('throng-restart-name-');
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-restart-name-data-'));

@@ -27,7 +27,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, reloadWindow, cleanupTemp} from './harness.js';
+import { NEW_WINDOW_TIMEOUT_MS, runApp, reloadWindow, cleanupTemp} from './harness.js';
 
 const LIGHT_APP_BG = '#f5f6f8'; // the bundled "Light" theme's appBg (default-themes/index.ts)
 
@@ -89,7 +89,36 @@ const seedSub = `(() => window.throng.invoke('workspace.persistSubWorkspaces', {
     tabs: [{ id: 't', title: 'T', root: { type: 'panel', id: 'p', originProjectId: 'x', title: 'P' } }] },
 ] }))()`;
 
-test('every window kind follows the saved LIGHT theme — no dark canvas flash (issue 132)', { tag: ['@extended', '@prefs'] }, async () => {
+/*
+ * ── ONE REMOVED (035 T055) ──
+ *
+ * `:156` "the default (dark) throng theme keeps color-scheme dark — the fix does not over-correct
+ * (issue 132)" → `packages/ui/tests/component/theme-provider.test.ts`.
+ *
+ * `themeColorScheme` is pure and covered in `core/tests/unit/theme.test.ts`. `ThemeProvider` — which
+ * writes the variables, the `data-theme` attribute and the inline `color-scheme` onto `<html>` — had
+ * no test at any layer, so this was the only thing saying the derivation reached the document.
+ *
+ * ── THE REPLACEMENT READS A STRICTER THING ──
+ *
+ * This test read `getComputedStyle(...).colorScheme`; the component test reads
+ * `root.style.colorScheme`. That is stronger rather than weaker: the value is set INLINE precisely
+ * so it overrides the stylesheet's fallback (`theme-provider.tsx:45`), and a computed read cannot
+ * tell an inline write from a stylesheet that happened to agree. Issue 132 IS the two disagreeing.
+ *
+ * Four cases came with it that a single default-theme launch could not make: a light theme reports
+ * light (without which a hard-coded `dark` passes), a dark→light switch follows — which is what a
+ * hot-reload does — the `data-theme` stamp tracks a switch rather than being written once, and 018's
+ * removal pass clears a token the new theme no longer emits. That last one is the bug whose shape
+ * the provider's own comment calls the worst: setting a colour worked, unsetting it silently did not.
+ *
+ * ── WHAT STAYS ──
+ *
+ * The FLASH, which is this file's subject. A window can paint before the renderer runs at all, so
+ * the remaining tests assert the PRELOAD's pre-paint write and the native `BrowserWindow`
+ * backgroundColor. Neither is reachable from a component.
+ */
+test('every window kind follows the saved LIGHT theme — no dark canvas flash (issue 132)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   const cfg = mkdtempSync(join(tmpdir(), 'throng-flash-cfg-'));
   try {
     await runApp(
@@ -105,7 +134,7 @@ test('every window kind follows the saved LIGHT theme — no dark canvas flash (
         // ABOUT window (a fresh app-modal BrowserWindow): same three invariants on cold open.
         await win.getByTestId('title-bar-cog').click();
         const [about] = await Promise.all([
-          app.waitForEvent('window', { timeout: 15_000 }),
+          app.waitForEvent('window', { timeout: NEW_WINDOW_TIMEOUT_MS }),
           win.getByTestId('cog-menu-about').click(),
         ]);
         // Bound every child-window readiness wait (issue #75). A bare waitForLoadState defaults to
@@ -122,7 +151,7 @@ test('every window kind follows the saved LIGHT theme — no dark canvas flash (
         // PREFERENCES window.
         await win.getByTestId('title-bar-cog').click();
         const [prefs] = await Promise.all([
-          app.waitForEvent('window', { timeout: 15_000 }),
+          app.waitForEvent('window', { timeout: NEW_WINDOW_TIMEOUT_MS }),
           win.getByTestId('cog-menu-themes').click(),
         ]);
         await prefs.waitForLoadState('domcontentloaded', { timeout: 15_000 });
@@ -136,7 +165,7 @@ test('every window kind follows the saved LIGHT theme — no dark canvas flash (
         await reloadWindow(win);
         await expect(win.getByTestId('subworkspace-name-sw1')).toHaveText('Detached A');
         const [child] = await Promise.all([
-          app.waitForEvent('window', { timeout: 15_000 }),
+          app.waitForEvent('window', { timeout: NEW_WINDOW_TIMEOUT_MS }),
           win.getByTestId('subworkspace-open-sw1').click(),
         ]);
         await child.waitForLoadState('domcontentloaded', { timeout: 15_000 });
@@ -153,10 +182,3 @@ test('every window kind follows the saved LIGHT theme — no dark canvas flash (
   }
 });
 
-test('the default (dark) throng theme keeps color-scheme dark — the fix does not over-correct (issue 132)', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(async (_app, win) => {
-    await win.waitForSelector('.throng-shell', { timeout: 8000 });
-    await expect.poll(() => win.evaluate(() => document.documentElement.dataset.theme)).toBe('throng');
-    expect(await colorScheme(win)).toBe('dark');
-  });
-});

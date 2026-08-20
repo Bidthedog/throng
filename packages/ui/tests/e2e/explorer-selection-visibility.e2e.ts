@@ -58,7 +58,7 @@ function own(dir: string): string {
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-
+
 test.beforeAll(async () => {
   shared = await openApp();
 });
@@ -90,7 +90,7 @@ function selectedRowBackground(win: Page): Promise<string> {
   });
 }
 
-test('the tree highlights its selection only while its pane is active', { tag: ['@extended', '@explorer'] }, async () => {
+test('the tree highlights its selection only while its pane is active', { tag: ['@extended', '@explorer', '@reserve:layout'] }, async () => {
   const root = own(mkdtempSync(join(tmpdir(), 'throng-selvis-')));
   writeFileSync(join(root, 'picked.txt'), 'x\n');
   // A FOLDER is the subject: a single click selects it and nothing else (#121/#140), so the row
@@ -122,7 +122,7 @@ test('the tree highlights its selection only while its pane is active', { tag: [
   });
 });
 
-test('an open file keeps its own mark from an inactive pane (#188)', { tag: ['@extended', '@explorer'] }, async () => {
+test('an open file keeps its own mark from an inactive pane (#188)', { tag: ['@extended', '@explorer', '@reserve:layout'] }, async () => {
   // The two rules meeting: the selection highlight is the active pane's, but the file the editor is
   // showing says so from anywhere. Here the SAME row is both, and only the second survives the pane
   // going inactive.

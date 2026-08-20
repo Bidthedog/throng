@@ -135,7 +135,7 @@ const savedPanels = (json: string): number => (json.match(/"type":"panel"/g) ?? 
 const savedTabs = (json: string): number =>
   ((JSON.parse(json) as { tabs?: unknown[] }).tabs ?? []).length;
 
-test('restores each project’s own layout after a restart (SC-006)', { tag: ['@core', '@window'] }, async () => {
+test('restores each project’s own layout after a restart (SC-006)', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
   try {
@@ -185,7 +185,7 @@ test('restores each project’s own layout after a restart (SC-006)', { tag: ['@
   }
 });
 
-test('falls back to the default workspace and notifies on a corrupt layout (SC-011)', { tag: ['@core', '@window'] }, async () => {
+test('falls back to the default workspace and notifies on a corrupt layout (SC-011)', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
   try {

@@ -24,7 +24,7 @@
  * the move signals the coordinator; the final `another program` test is a GUARD and is
  * expected to be GREEN already.
  */
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, renameSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -175,45 +175,37 @@ async function expectLayoutHasPath(dataDir: string, projectName: string, path: s
     .toBe(true);
 }
 
-test('AC1 — a cut+paste move re-points the editor; it does not go dirty and raises no notice', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject('ac1');
-  const oldPath = join(root, 'note.txt');
-  const newPath = join(root, 'dest', 'note.txt');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Mv1', root);
-      const pid = await newEditor(win, await firstPanelId(win));
-      await openInto(win, pid, 'note.txt', 'MOVE-ME-BODY');
-      expect(await docPath(win, pid)).toBe(normPath(oldPath));
-
-      await cutPaste(win, 'note.txt', 'dest');
-      await expectMovedOnDisk(oldPath, newPath);
-      await letWatcherFire(win);
-
-      /*
-       * SOFT, deliberately — this is the criterion that names all three symptoms at once, and a
-       * hard assertion on the first would hide the other two behind it. The re-point is the CAUSE
-       * and the dirty flag is what the user actually sees; a reader of a failing run is entitled
-       * to both, not to whichever happens to be checked first. Soft expectations still fail the
-       * test — they just finish gathering the evidence before they do.
-       */
-      // The document is the same document; only its path changed.
-      expect.soft(await docPath(win, pid)).toBe(normPath(newPath));
-      // It was never edited, so nothing about a move may make it look edited.
-      await expect.soft(win.getByTestId(`panel-unsaved-${pid}`)).toHaveCount(0);
-      await expect.soft(win.getByTestId('editor-notice-dialog')).toHaveCount(0);
-      // 030 US3 / T052 — the missing-file report moved to the consolidated notice (FR-035), so the
-      // line above no longer covers this path on its own and would pass vacuously without this one.
-      await expect.soft(win.getByTestId('panel-failure-notice')).toHaveCount(0);
-      // The panel header's file pill follows it too (its title is the full path).
-      await expect.soft(win.getByTestId(`panel-file-${pid}`)).toHaveAttribute('title', newPath);
-    });
-  } finally {
-    rmRoot(root);
-  }
-});
-
-test('AC2 — a drag-move re-points the editor just as a cut+paste does', { tag: ['@extended', '@editor'] }, async () => {
+/*
+ * ── TWO REMOVED (035 T056) ──
+ *
+ * `:178` AC1 — a cut+paste move re-points the editor, does not dirty it, raises no notice.
+ * `:374` AC7 — a file moved by ANOTHER program keeps its buffer, dirty and recoverable.
+ *
+ * AC1 SPLIT, AND THREE QUARTERS OF IT WAS ALREADY COVERED. The three symptoms it gathered — the
+ * re-point, the clean flag, the absent notice — are `integration/editor-move.integration.test.ts:158`
+ * ("a clean move is not news"), made against the authority that decides them, with `:99`/`:122`/`:138`
+ * adding the dirty case, the once-per-window broadcast, and the registry and folder watch following.
+ *
+ * THE FOURTH HAD NO TEST AT ANY LAYER, and it is the one `use-editor.ts:1086` names in its own
+ * comment: the header's FILE PILL, i.e. the view's copy of the path — which is also what a Ctrl+S
+ * writes to. Nothing below E2E had ever driven a `movedTo` message, so the hop from the broadcast
+ * to the renderer's store was untested in both directions. It is now
+ * `component/editor-moved-path.test.ts`, which adds the language re-derivation that rides with it
+ * (a move can change the extension: `notes.txt` → `notes.py`).
+ *
+ * AC7 WENT WHOLE to `integration/editor-move.integration.test.ts`, as three cases rather than one.
+ * It is the GUARD on every other test in that file: those are moves throng performed and knows
+ * about; this is the one that must NOT behave the same, because nothing told the app anything.
+ * The third case is new — a save must not reach the copy the external move created — and it could
+ * not be written here at all, because the E2E had both paths holding identical bytes.
+ *
+ * ── WHAT STAYS, EACH WITH ITS OWN ENTRY ──
+ *
+ * AC2 `@reserve:osdrag` (a real drag), AC3 `@reserve:input` (a real Ctrl+S), and AC8
+ * `@reserve:window` (a panel in a BACKGROUND tab, whose listener is not mounted — FR-008 is a claim
+ * about a window's other tabs, and there is no such thing below this layer).
+ */
+test('AC2 — a drag-move re-points the editor just as a cut+paste does', { tag: ['@extended', '@editor', '@reserve:osdrag'] }, async () => {
   const root = makeProject('ac2');
   const oldPath = join(root, 'note.txt');
   const newPath = join(root, 'dest', 'note.txt');
@@ -236,7 +228,7 @@ test('AC2 — a drag-move re-points the editor just as a cut+paste does', { tag:
   }
 });
 
-test('AC3 — saving after a move writes to the NEW location and does not re-create the old file', { tag: ['@extended', '@editor'] }, async () => {
+test('AC3 — saving after a move writes to the NEW location and does not re-create the old file', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
   const root = makeProject('ac3');
   const oldPath = join(root, 'note.txt');
   const newPath = join(root, 'dest', 'note.txt');
@@ -309,7 +301,7 @@ test('AC3 — saving after a move writes to the NEW location and does not re-cre
  * The restart is the assertion. Nothing else can distinguish "the view adopted the new path when it
  * remounted" (which was always true, and is worth nothing here) from "the LAYOUT learnt it".
  */
-test('AC8 — a move reaches the persisted layout of a panel in a BACKGROUND tab (FR-008)', { tag: ['@extended', '@editor'] }, async () => {
+test('AC8 — a move reaches the persisted layout of a panel in a BACKGROUND tab (FR-008)', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
   const root = makeProject('ac8');
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-mv-ac8-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-mv-ac8-ud-'));
@@ -371,37 +363,3 @@ test('AC8 — a move reaches the persisted layout of a panel in a BACKGROUND tab
  * file is the correct answer (FR-099), and it is the behaviour the fix for #87 must not sweep
  * away while making in-app moves quiet.
  */
-test('AC7 (guard) — a file moved by ANOTHER program still keeps its buffer, dirty and recoverable', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject('ac7');
-  const oldPath = join(root, 'note.txt');
-  const away = join(root, 'dest', 'note.txt');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Mv7', root);
-      const pid = await newEditor(win, await firstPanelId(win));
-      await openInto(win, pid, 'note.txt', 'MOVE-ME-BODY');
-
-      // Not throng: a move performed behind the app's back.
-      renameSync(oldPath, away);
-      await expectMovedOnDisk(oldPath, away);
-
-      // FR-099: the buffer survives and is force-dirtied so a save can re-create the file…
-      await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible({ timeout: 10000 });
-      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
-        'MOVE-ME-BODY',
-      );
-      // …and the document is still pointed at the path throng last knew it by. It did NOT
-      // follow the file, because nothing told it where the file went — that is the point.
-      expect(await docPath(win, pid)).toBe(normPath(oldPath));
-
-      // A save re-creates the file at the original location (the recoverable path).
-      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+s');
-      await expect
-        .poll(() => (existsSync(oldPath) ? readFileSync(oldPath, 'utf8') : ''), { timeout: FILE_OP_TIMEOUT_MS })
-        .toContain('MOVE-ME-BODY');
-    });
-  } finally {
-    rmRoot(root);
-  }
-});

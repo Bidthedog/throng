@@ -42,7 +42,7 @@ async function pressUntilZoomRises(
     .toBeGreaterThan(from);
 }
 
-test('keybindings.json drives accelerators at startup and hot-reloads', { tag: ['@extended', '@prefs'] }, async () => {
+test('keybindings.json drives accelerators at startup and hot-reloads', { tag: ['@extended', '@prefs', '@reserve:input'] }, async () => {
   const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
   try {
     // Seed BEFORE launch: zoom.in is bound to F8 (proves cross-session read). A plain write is

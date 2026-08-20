@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import {
-  addPanels,
   createProject,
   openApp,
   cleanupTemp,
@@ -107,7 +106,7 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('a dropped file is NEVER pasted into the editor as text (the content-injection bug)', { tag: ['@extended', '@explorer'] }, async () => {
+test('a dropped file is NEVER pasted into the editor as text (the content-injection bug)', { tag: ['@extended', '@explorer', '@reserve:osdrag'] }, async () => {
   const projectRoot = own(makeProjectFolder());
   try {
     await runApp(async (_app, win) => {
@@ -148,62 +147,23 @@ test('a dropped file is NEVER pasted into the editor as text (the content-inject
   }
 });
 
-test('a drop opens the file in the panel UNDER THE CURSOR, not the active one', { tag: ['@extended', '@explorer'] }, async () => {
-  const projectRoot = own(makeProjectFolder());
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'DropRouting', projectRoot);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-
-      // Two editors: a.txt in the first, and a second, empty one.
-      await tree.getByText('a.txt', { exact: true }).click();
-      await expect(win.locator('.editor-panel')).toBeVisible();
-      const first = await editorPanelId(win);
-
-      // A SECOND editor panel, made an editor via a drop of its own, then left alone. `first` stays
-      // the tab's last-active editor, which is exactly the trap: the drop below aims at `second`.
-      await addPanels(win, 1);
-      const untyped = await win
-        .locator('[data-testid^="panel-type-form-"]')
-        .first()
-        .getAttribute('data-testid');
-      const second = (untyped ?? '').slice('panel-type-form-'.length);
-      expect(second).not.toBe('');
-      expect(second).not.toBe(first);
-      await win.evaluate(
-        ([id, path]) => {
-          window.dispatchEvent(
-            new CustomEvent('throng:os-drop', { detail: { panelId: id, paths: [path] } }),
-          );
-        },
-        [second, join(projectRoot, 'src', 'seed.txt')] as const,
-      );
-      // Let it FINISH becoming an editor before aiming the next drop at it.
-      await expect(win.getByTestId(`editor-${second}`)).toContainText('seed');
-      // The FIRST panel is the tab's last-active editor again — click it, so the trap is armed.
-      await win.getByTestId(`editor-${first}`).click();
-
-      // Drop b.txt on the SECOND panel. It must open THERE — the drop is a gesture at a place, and
-      // routing it to whichever editor happened to be active last ignores where the user aimed.
-      await win.evaluate(
-        ([id, path]) => {
-          window.dispatchEvent(
-            new CustomEvent('throng:os-drop', { detail: { panelId: id, paths: [path] } }),
-          );
-        },
-        [second, join(projectRoot, 'b.txt')] as const,
-      );
-
-      await expect(win.getByTestId(`editor-${second}`)).toBeVisible();
-      await expect(win.getByTestId(`editor-${second}`)).toContainText('beta');
-      // …and the first editor is untouched.
-      await expect(win.getByTestId(`editor-${first}`)).toContainText('alpha');
-      await expect(win.getByTestId(`editor-${first}`)).not.toContainText('beta');
-    });
-  } finally {
-    // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would
-    // remove a folder the explorer is still watching — the class dcdcb46 reverted three
-    // conversions for.
-  }
-});
+/*
+ * ONE TEST REMOVED (035 FR-007) — "a drop opens the file in the panel UNDER THE CURSOR, not the
+ * active one".
+ *
+ * It dispatched `throng:os-drop` CustomEvents by hand — twice — rather than driving a drag, so the
+ * OS was never in it. What it asserted is `openFileInPanel` preferring the panel it was aimed at
+ * over the tab's last active editor, and that is
+ * `component/editor-open-routing.test.ts:349`, which makes the distinction more sharply than any
+ * E2E can: it puts the last-active editor somewhere ELSE and asserts the dropped-on panel's
+ * `openFile` fired while the last-active panel's did not.
+ *
+ * The E2E could not make that distinction, and its own setup shows why — it spent fifteen lines
+ * arming the trap (create a second editor by a drop, then click the first to make it last-active
+ * again) to reach a state the component test reaches in one call. An `openFileInPanel` that simply
+ * delegated to `openFileInTab` would still pass every OTHER drop test in the suite, because in all
+ * of them the dropped-on panel IS the last active one.
+ *
+ * The test above it stays. It builds a real `DataTransfer` and drops onto CodeMirror's own handler,
+ * which is the content-injection path and is not reproducible without a real drag.
+ */

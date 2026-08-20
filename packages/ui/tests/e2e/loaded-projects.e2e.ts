@@ -10,7 +10,7 @@ import { runApp, createProject, cleanupTemp} from './harness.js';
 // (lazy) so it begins UNLOADED. (006 removed the green "loaded" dot — the shared
 // red unsaved dot now occupies that slot; loaded state is shown via style only.)
 
-test('indicates loaded vs not-loaded projects', { tag: ['@extended', '@window'] }, async () => {
+test('indicates loaded vs not-loaded projects', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-e2e-loaded-'));
   try {
     await runApp(

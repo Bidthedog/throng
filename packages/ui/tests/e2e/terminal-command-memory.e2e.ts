@@ -120,7 +120,7 @@ async function runInTerminal(
   await expect(term).toContainText(evidence, { timeout: 25_000 });
 }
 
-test('memory ON: a command started IN the terminal is observed and persisted (US2 row 2)', { tag: ['@extended', '@terminal'] }, async () => {
+test('memory ON: a command started IN the terminal is observed and persisted (US2 row 2)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -139,7 +139,7 @@ test('memory ON: a command started IN the terminal is observed and persisted (US
   });
 });
 
-test('memory ON: stopping the command leaves nothing to promote (US2 rows 3 and 4)', { tag: ['@extended', '@terminal'] }, async () => {
+test('memory ON: stopping the command leaves nothing to promote (US2 rows 3 and 4)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -167,7 +167,7 @@ test('memory ON: stopping the command leaves nothing to promote (US2 rows 3 and 
   });
 });
 
-test('memory OFF: a running command is never recorded at all (US2 row 6)', { tag: ['@extended', '@terminal'] }, async () => {
+test('memory OFF: a running command is never recorded at all (US2 row 6)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -204,7 +204,7 @@ test('memory OFF: a running command is never recorded at all (US2 row 6)', { tag
   });
 });
 
-test('memory ON: a later command replaces the earlier one (US2 row 5)', { tag: ['@extended', '@terminal'] }, async () => {
+test('memory ON: a later command replaces the earlier one (US2 row 5)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -251,7 +251,7 @@ test('memory ON: a later command replaces the earlier one (US2 row 5)', { tag: [
   });
 });
 
-test('a command that takes over REPLACES the startup command the user typed (US2 row 2)', { tag: ['@extended', '@terminal'] }, async () => {
+test('a command that takes over REPLACES the startup command the user typed (US2 row 2)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(180_000);
   // Reported from real use: start a terminal on `ping`, stop it, run something else, end the
   // terminal — and the something else was never saved as the Panel's Startup Command. Each piece

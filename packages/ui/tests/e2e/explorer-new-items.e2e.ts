@@ -15,7 +15,7 @@ function makeProject(): string {
   return root;
 }
 
-test('New File on a folder creates a file inside it, in rename mode (FR-096)', { tag: ['@extended', '@explorer'] }, async () => {
+test('New File on a folder creates a file inside it, in rename mode (FR-096)', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

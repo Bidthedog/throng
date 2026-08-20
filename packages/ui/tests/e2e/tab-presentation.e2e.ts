@@ -100,7 +100,7 @@ test.describe('at the shipped arming delay', () => {
     await shared?.close();
   });
 
-  test('T095 — the panel count is a pill, and no square-bracket form survives (P1)', { tag: ['@extended', '@window'] }, async () => {
+  test('T095 — the panel count is a pill, and no square-bracket form survives (P1)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     const win = shared.win;
     await project(win, 'Pill');
     await addPanels(win, 2); // three panels in the one tab
@@ -140,7 +140,7 @@ test.describe('at the shipped arming delay', () => {
    * P2's actual CLAIM is unchanged and is still asserted in full here: the tab names itself, says
    * how many panels it holds, and then lists them. Only the surface it is read from has moved.
    */
-  test('T096 — hovering a tab shows its name, its panel count, and each panel (P2, FR-051)', { tag: ['@extended', '@window'] }, async () => {
+  test('T096 — hovering a tab shows its name, its panel count, and each panel (P2, FR-051)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     const win = shared.win;
     await project(win, 'Tooltip');
     await addPanels(win, 1); // two panels
@@ -200,7 +200,7 @@ test.describe('at the shipped arming delay', () => {
     await expect(popover, 'and it goes away with the pointer').toHaveCount(0);
   });
 
-  test('T097 — the affordance is on the active tab always, and on the tab under the pointer (P4)', { tag: ['@extended', '@window'] }, async () => {
+  test('T097 — the affordance is on the active tab always, and on the tab under the pointer (P4)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     const win = shared.win;
     await project(win, 'Reveal');
     await seedTabs(win, ['bravo', 'charlie']);
@@ -225,7 +225,7 @@ test.describe('at the shipped arming delay', () => {
     await expect(tabClose(win, others[1]!), 'P4: but no other tab gains one').toBeHidden();
   });
 
-  test('T098 — revealing the affordance moves nothing: its space is reserved (P5, SC-007b)', { tag: ['@extended', '@window'] }, async () => {
+  test('T098 — revealing the affordance moves nothing: its space is reserved (P5, SC-007b)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     const win = shared.win;
     await project(win, 'Reserved');
     await seedTabs(win, ['bravo', 'charlie']);
@@ -265,7 +265,7 @@ test.describe('at the shipped arming delay', () => {
     }
   });
 
-  test('T102 — sweeping the pointer across the whole strip destroys no tab (SC-007a)', { tag: ['@extended', '@window'] }, async () => {
+  test('T102 — sweeping the pointer across the whole strip destroys no tab (SC-007a)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     const win = shared.win;
     await project(win, 'Sweep');
     await seedTabs(win, ['bravo', 'charlie', 'delta']);
@@ -291,7 +291,7 @@ test.describe('at the shipped arming delay', () => {
     await expect(win.getByTestId('confirm-dialog'), 'and asked nothing, either').toHaveCount(0);
   });
 
-  test('T104 — the last tab in the main window offers no usable close affordance (P10)', { tag: ['@extended', '@window'] }, async () => {
+  test('T104 — the last tab in the main window offers no usable close affordance (P10)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     const win = shared.win;
     await project(win, 'Lonely');
     const ids = await tabIds(win);
@@ -342,7 +342,7 @@ test.describe('with a long arming delay', () => {
     cleanupTemp(cfgRoot);
   });
 
-  test('T099 — a click inside the arming window does nothing, then and later (P6, P7, P8)', { tag: ['@extended', '@window'] }, async () => {
+  test('T099 — a click inside the arming window does nothing, then and later (P6, P7, P8)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     const win = shared.win;
     await project(win, 'Inert');
     await seedTabs(win, ['bravo', 'charlie']);
@@ -381,7 +381,7 @@ test.describe('with a long arming delay', () => {
     await expect(win.getByTestId('confirm-dialog'), 'P7: and nothing was asked later').toHaveCount(0);
   });
 
-  test('T100 — after the delay the affordance runs Destroy Tab; leaving re-arms it from scratch (P3, P7)', { tag: ['@extended', '@window'] }, async () => {
+  test('T100 — after the delay the affordance runs Destroy Tab; leaving re-arms it from scratch (P3, P7)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     const win = shared.win;
     await project(win, 'Destroyer');
     await seedTabs(win, ['bravo', 'charlie']);
@@ -437,7 +437,7 @@ test.describe('with a long arming delay', () => {
    * "ignored, not queued" proof is carried over intact because a click that lands early on the
    * ACTIVE tab must not destroy anything later either.
    */
-  test('T101 — the active tab’s affordance arms on a rest like every other one (FR-057)', { tag: ['@extended', '@window'] }, async () => {
+  test('T101 — the active tab’s affordance arms on a rest like every other one (FR-057)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     const win = shared.win;
     await project(win, 'Immediate');
     await seedTabs(win, ['bravo']);
@@ -475,7 +475,7 @@ test.describe('with a long arming delay', () => {
     await expect(win.getByTestId(`tab-${active}`), 'cancelled, so nothing was destroyed').toBeVisible();
   });
 
-  test('T104a — the affordance is subdued while inert and normal once armed (FR-044f)', { tag: ['@extended', '@window'] }, async () => {
+  test('T104a — the affordance is subdued while inert and normal once armed (FR-044f)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     const win = shared.win;
     await project(win, 'Subdued');
     await seedTabs(win, ['bravo']);
@@ -520,7 +520,7 @@ test.describe('with the arming delay turned off', () => {
     cleanupTemp(cfgRoot);
   });
 
-  test('T103 — a delay of zero makes a hover-revealed affordance live immediately (FR-044h)', { tag: ['@extended', '@window'] }, async () => {
+  test('T103 — a delay of zero makes a hover-revealed affordance live immediately (FR-044h)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     const win = shared.win;
     await project(win, 'NoDelay');
     await seedTabs(win, ['bravo']);

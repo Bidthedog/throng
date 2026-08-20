@@ -11,7 +11,7 @@ import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 // both. (panel-sync.e2e proves both windows show the terminal; this proves the shared
 // session — that keystrokes in one view surface in the other.)
 
-test('a synced Terminal Panel mirrors one session: input in one view appears in both', { tag: ['@extended', '@terminal'] }, async () => {
+test('a synced Terminal Panel mirrors one session: input in one view appears in both', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-mirror-'));
   try {
     await runApp(async (app, win) => {

@@ -51,7 +51,7 @@ const animationOf = (win: Page, testId: string): Promise<string> =>
 test.describe.configure({ mode: 'serial' });
 
 let shared: OpenApp;
-const ownedRoots: string[] = [];
+const ownedRoots: string[] = [];
 
 test.beforeAll(async () => {
   shared = await openApp();
@@ -65,13 +65,13 @@ test.beforeAll(async () => {
  * nothing about what these tests assert can have changed with it.
  */
 test.afterEach(async () => {
-  // `null` restores the OS/Playwright default rather than pinning "no-preference" — the two are
-  // not the same, and test 1 asserts a real running animation.
+  // `null` restores the OS/Playwright default rather than pinning "no-preference" — the two are
+  // not the same, and test 1 asserts a real running animation.
   await shared.win.emulateMedia({ reducedMotion: null });
 });
 
 test.afterAll(async () => {
-  await shared?.close();
+  await shared?.close();
   for (const dir of ownedRoots.splice(0)) cleanupTemp(dir);
 });
 
@@ -87,7 +87,7 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('the unsaved dot pulses in step across panel, tab and project', { tag: ['@extended', '@editor'] }, async () => {
+test('the unsaved dot pulses in step across panel, tab and project', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-pulse-'));
   ownedRoots.push(root);
   await runApp(async (app, win) => {
@@ -121,7 +121,7 @@ test('the unsaved dot pulses in step across panel, tab and project', { tag: ['@e
   });
 });
 
-test('the unsaved dot is static at full opacity under reduced motion', { tag: ['@extended', '@editor'] }, async () => {
+test('the unsaved dot is static at full opacity under reduced motion', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-pulse-rm-'));
   ownedRoots.push(root);
   await runApp(async (_app, win) => {

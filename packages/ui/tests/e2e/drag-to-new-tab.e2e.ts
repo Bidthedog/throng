@@ -75,7 +75,7 @@ async function panelIds(win: Page): Promise<string[]> {
   );
 }
 
-test('drag a Panel onto "+" → new active Tab containing only that Panel', { tag: ['@extended', '@window'] }, async () => {
+test('drag a Panel onto "+" → new active Tab containing only that Panel', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
   try {

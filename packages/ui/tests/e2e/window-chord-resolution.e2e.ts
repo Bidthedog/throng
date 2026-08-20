@@ -172,7 +172,7 @@ async function focusEditorPanel(win: Page): Promise<void> {
  * The chords themselves. Each test restores whatever it changed.
  * ══════════════════════════════════════════════════════════════════════════════════════════════ */
 
-test('the pane toggles still resolve — Ctrl+Alt+B and Ctrl+Alt+N', { tag: ['@extended', '@window'] }, async () => {
+test('the pane toggles still resolve — Ctrl+Alt+B and Ctrl+Alt+N', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   const win = shared.win;
   await win.locator('body').click();
 
@@ -191,7 +191,7 @@ test('the pane toggles still resolve — Ctrl+Alt+B and Ctrl+Alt+N', { tag: ['@e
   await expect(win.getByTestId('pane-hide-right')).toBeVisible();
 });
 
-test('the tab picker still resolves — Ctrl+Alt+T', { tag: ['@extended', '@window'] }, async () => {
+test('the tab picker still resolves — Ctrl+Alt+T', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   const win = shared.win;
   await win.locator('body').click();
   await win.keyboard.press(chordFor('tabs.openPicker'));
@@ -200,7 +200,7 @@ test('the tab picker still resolves — Ctrl+Alt+T', { tag: ['@extended', '@wind
   await expect(win.getByTestId('tabpicker')).toHaveCount(0);
 });
 
-test('Quick Open still resolves — Ctrl+Shift+T, the chord the widening was made for', { tag: ['@core', '@window'] }, async () => {
+test('Quick Open still resolves — Ctrl+Shift+T, the chord the widening was made for', { tag: ['@core', '@window', '@reserve:input'] }, async () => {
   const win = shared.win;
   await focusEditorPanel(win);
   await win.keyboard.press(chordFor('navigate.quickOpen'));
@@ -212,7 +212,7 @@ test('Quick Open still resolves — Ctrl+Shift+T, the chord the widening was mad
   await expect(win.getByTestId('quickopen')).toHaveCount(0);
 });
 
-test('Go To Line still resolves over the active editor — Ctrl+G', { tag: ['@extended', '@window'] }, async () => {
+test('Go To Line still resolves over the active editor — Ctrl+G', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   const win = shared.win;
   await focusEditorPanel(win);
   await win.keyboard.press(chordFor('navigate.gotoLine'));
@@ -222,7 +222,7 @@ test('Go To Line still resolves over the active editor — Ctrl+G', { tag: ['@ex
   await expect(win.getByTestId('gotoline')).toHaveCount(0);
 });
 
-test('the panel rename box still resolves — F2', { tag: ['@extended', '@window'] }, async () => {
+test('the panel rename box still resolves — F2', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   const win = shared.win;
   await focusEditorPanel(win);
   await win.keyboard.press(chordFor('panel.rename'));
@@ -233,7 +233,7 @@ test('the panel rename box still resolves — F2', { tag: ['@extended', '@window
   await expect(input).toHaveCount(0);
 });
 
-test('file undo and redo still resolve with the tree active — Ctrl+Z and Ctrl+Y', { tag: ['@extended', '@window'] }, async () => {
+test('file undo and redo still resolve with the tree active — Ctrl+Z and Ctrl+Y', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   const win = shared.win;
   const tree = win.getByTestId('file-explorer-tree');
 
@@ -268,7 +268,7 @@ test('file undo and redo still resolve with the tree active — Ctrl+Z and Ctrl+
   await expect(tree.getByText(RENAME_FROM, { exact: true })).toBeVisible({ timeout: 8000 });
 });
 
-test('focus cycling still resolves in both directions — Ctrl+` and Ctrl+Shift+`', { tag: ['@extended', '@window'] }, async () => {
+test('focus cycling still resolves in both directions — Ctrl+` and Ctrl+Shift+`', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   const win = shared.win;
 
   /*
@@ -292,7 +292,7 @@ test('focus cycling still resolves in both directions — Ctrl+` and Ctrl+Shift+
   await expect(win.locator('.panel-box--active')).toHaveCount(1);
 });
 
-test('fullscreen still resolves — F11', { tag: ['@extended', '@window'] }, async () => {
+test('fullscreen still resolves — F11', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   const { app, win } = shared;
   const isFullScreen = (): Promise<boolean> =>
     app.evaluate(

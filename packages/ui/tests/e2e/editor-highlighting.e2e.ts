@@ -57,7 +57,6 @@ let projectSeq = 0;
 const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
-
 // 016 US1 (FR-001/002/004b/006/007/008a) — language-aware syntax highlighting.
 //
 // Assertions are on the TOKEN SPANS CodeMirror emits and the colours they compute to, never on
@@ -110,7 +109,34 @@ const tokenColours = (win: Page, pid: string): Promise<string[]> =>
     return [...colours];
   }, pid);
 
-test('opens a TypeScript file highlighted, and keeps highlighting as you type', { tag: ['@extended', '@editor'] }, async () => {
+/*
+ * ── ONE REMOVED (035 T055) ──
+ *
+ * `:201` "a >10,000-character line renders unhighlighted but editable, while the rest of the file
+ * highlights (FR-008a)" → `packages/ui/tests/component/editor-long-line.test.ts`.
+ *
+ * It was the one test in this file that asserted no COLOUR. It read `.cm-line` class lists — is
+ * `cm-throng-plain-line` on the long line and absent from the short one — and then typed to show
+ * the line was still editable. A class marker and a document edit, neither of which needs a real
+ * cascade; that is what its census verdict noticed, and it is the only reason it comes down while
+ * everything around it stays.
+ *
+ * The component file adds the two halves this one could not separate. It always had a short line
+ * beside the long one, so "the long line is marked" and "every line is marked" were
+ * indistinguishable from its assertions; there they are two tests, one long line alone and one
+ * ordinary file. Red-proven against `never-plain`, `always-plain` and `not-a-line-decoration`.
+ *
+ * ── WHAT STAYS, AND WHY ALL OF IT ──
+ *
+ * Every remaining test here samples a COMPUTED COLOUR against the live theme variables — that a
+ * keyword is painted as a keyword, that Python and JSON get grammars from their extensions alone,
+ * that an unknown extension stays the plain foreground, that a theme switch repaints without a
+ * reopen. That is a real cascade over a real render and jsdom computes neither, which is what
+ * `@reserve:layout` means. The COLOUR half of FR-008a is in that set too:
+ * `.cm-throng-plain-line span` forces `--throng-colour-editorFg`, and the theme-repaint test is
+ * where it is observable.
+ */
+test('opens a TypeScript file highlighted, and keeps highlighting as you type', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -144,7 +170,7 @@ test('opens a TypeScript file highlighted, and keeps highlighting as you type', 
   }
 });
 
-test('highlights Python and JSON from their extensions alone', { tag: ['@extended', '@editor'] }, async () => {
+test('highlights Python and JSON from their extensions alone', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -168,7 +194,7 @@ test('highlights Python and JSON from their extensions alone', { tag: ['@extende
   }
 });
 
-test('an unknown extension is plain text — no highlighting, no error, and a shebang changes nothing', { tag: ['@extended', '@editor'] }, async () => {
+test('an unknown extension is plain text — no highlighting, no error, and a shebang changes nothing', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -198,42 +224,7 @@ test('an unknown extension is plain text — no highlighting, no error, and a sh
   }
 });
 
-test('a >10,000-character line renders unhighlighted but editable, while the rest of the file highlights (FR-008a)', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'HL', root);
-      const pid = await openEditor(win);
-      await openFile(win, pid, 'bundle.min.js', 'const readable');
-
-      // The long line carries the plain-text marker; the short line does not.
-      const marked = await win.evaluate(
-        (id) => {
-          const lines = [...document.querySelectorAll(`[data-testid="editor-${id}"] .cm-line`)];
-          return lines.map((l) => ({
-            long: l.textContent!.length > 10_000,
-            plain: l.classList.contains('cm-throng-plain-line'),
-          }));
-        },
-        pid,
-      );
-      expect(marked.some((l) => l.long && l.plain), 'the long line is not exempted').toBe(true);
-      expect(marked.some((l) => !l.long && !l.plain), 'a normal line was wrongly exempted').toBe(true);
-
-      // …and it is still a document, not a picture of one: it takes an edit.
-      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+End');
-      await win.keyboard.type('// still editable');
-      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
-        '// still editable',
-      );
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('switching theme repaints code LIVE — no reopen, no view rebuild', { tag: ['@extended', '@editor'] }, async () => {
+test('switching theme repaints code LIVE — no reopen, no view rebuild', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
   try {
@@ -284,7 +275,7 @@ test('switching theme repaints code LIVE — no reopen, no view rebuild', { tag:
   }
 });
 
-test('embedded regions highlight in a Vue SFC and in HTML — or, at worst, raise no error (SHOULD)', { tag: ['@extended', '@editor'] }, async () => {
+test('embedded regions highlight in a Vue SFC and in HTML — or, at worst, raise no error (SHOULD)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

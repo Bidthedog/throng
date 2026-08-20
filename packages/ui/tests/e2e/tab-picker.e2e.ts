@@ -73,38 +73,23 @@ async function openPicker(via: 'chord' | 'control'): Promise<void> {
   await expect(shared.win.getByTestId('tabpicker-input')).toBeFocused();
 }
 
-test('T054 — every tab, in strip order, with its panel count, and the active one marked (K1, K9, K11)', { tag: ['@extended', '@window'] }, async () => {
-  await freshProject();
-  await seedOverflowingTabs(shared.win, 'picker-list');
-  await setScrollLeft(shared.win, 0);
-
-  const state = await stripState(shared.win);
-  const hidden = state.chips.filter((chip) => !isFullyVisible(state, chip));
-  expect(hidden.length, 'precondition: some tabs are off screen').toBeGreaterThan(0);
-
-  await openPicker('control');
-
-  // K1 — every tab, whether the strip is showing it or not, in the strip's own order (K11).
-  expect(await rowIds()).toEqual(state.chips.map((chip) => chip.tabId));
-
-  // K9 — the name AND the panel count, so two similarly named tabs can be told apart without
-  // opening either.
-  const first = shared.win.getByTestId(`tabpicker-row-${state.chips[0]!.tabId}`);
-  await expect(first.locator('.picker__meta')).toHaveText(/^\d+ panels?$/);
-
-  // K9 — and the tab the user is already on is marked, so "where am I?" needs no guess.
-  const active = state.chips.find((chip) => chip.active)!;
-  await expect(shared.win.getByTestId(`tabpicker-row-${active.tabId}`)).toHaveAttribute(
-    'data-current',
-    'true',
-  );
-  await expect(shared.win.locator('[data-testid^="tabpicker-row-"][data-current="true"]')).toHaveCount(
-    1,
-  );
-
-  await shared.win.keyboard.press('Escape');
-  await expect(shared.win.getByTestId('tabpicker')).toHaveCount(0);
-});
+/*
+ * ONE TEST REMOVED (035) — "T054 — every tab, in strip order, with its panel count, and the active
+ * one marked", now `packages/ui/tests/component/tab-strip.test.ts`.
+ *
+ * It seeded enough tabs to OVERFLOW the strip and asserted some were off screen, because "every tab,
+ * whether the strip is showing it or not" needed tabs the strip was not showing. That precondition
+ * is a layout fact and does not survive jsdom — but it is not what the claim rests on.
+ * `tabPickerEntries` is a pure function over `layout.tabs`, so a picker listing only the visible
+ * chips would have to be reading the DOM, and the source says the picker "opens at ANY tab count,
+ * including when nothing overflows" (`tab-group.tsx:1494`). The component test asserts the claim as
+ * it is written: every tab in the layout, in order.
+ *
+ * Two of its assertions are new. The meta line is asserted as "1 panel" and "2 panels" rather than
+ * against `/^\d+ panels?$/`, which passes on "1 panels" — a meta line is read by a human. And the
+ * current mark is checked with a LATER tab active, because with one tab, or with the active tab
+ * first, `isCurrent` and "index 0" agree and a picker marking the first row would pass.
+ */
 
 /*
  * MOVED (034 FR-045) — four tests, to two layers that were already most of the way there.
@@ -136,7 +121,7 @@ test('T054 — every tab, in strip order, with its panel count, and the active o
  * about the strip, the window or the keyboard — none of them is about a list.
  */
 
-test('T055 — choosing an entry scrolls the strip to that tab AND makes it active (K2)', { tag: ['@extended', '@window'] }, async () => {
+test('T055 — choosing an entry scrolls the strip to that tab AND makes it active (K2)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await freshProject();
   await seedOverflowingTabs(shared.win, 'picker-choose');
 
@@ -166,7 +151,7 @@ test('T055 — choosing an entry scrolls the strip to that tab AND makes it acti
     .toBe(true);
 });
 
-test('T056 — Ctrl+Alt+T opens the picker at ANY tab count, including with nothing hidden (T5)', { tag: ['@extended', '@window'] }, async () => {
+test('T056 — Ctrl+Alt+T opens the picker at ANY tab count, including with nothing hidden (T5)', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   await freshProject();
   // Deliberately NOT overflowing: the picker is a navigation aid, not an overflow affordance, and a
   // user who knows the name of the tab they want should not first have to make the strip too small.
@@ -185,7 +170,7 @@ test('T056 — Ctrl+Alt+T opens the picker at ANY tab count, including with noth
   await expect(shared.win.getByTestId('tabpicker')).toHaveCount(0);
 });
 
-test('T056 — the chord and the control open the SAME picker, with the same behaviour (T7)', { tag: ['@extended', '@window'] }, async () => {
+test('T056 — the chord and the control open the SAME picker, with the same behaviour (T7)', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   await freshProject();
   await seedOverflowingTabs(shared.win, 'picker-same');
   await setScrollLeft(shared.win, 0);
@@ -212,30 +197,28 @@ test('T056 — the chord and the control open the SAME picker, with the same beh
   await expect(shared.win.getByTestId('tabpicker')).toHaveCount(0);
 });
 
-test('T056 — dismissing returns focus to where it was (T8)', { tag: ['@extended', '@window'] }, async () => {
-  await freshProject();
-  await seedTabs(shared.win, ['focus-return']);
-
-  // Somewhere real to come back TO. New Tab is a focusable control in the strip itself, so this
-  // asserts the restore without dragging a terminal or an editor into the test.
-  await shared.win.getByTestId('tab-add').focus();
-  await expect(shared.win.getByTestId('tab-add')).toBeFocused();
-
-  await openPicker('chord');
-  // The picker took focus (that is what the input assertion in `openPicker` established)…
-  await shared.win.keyboard.press('Escape');
-  await expect(shared.win.getByTestId('tabpicker')).toHaveCount(0);
-  /*
-   * Measured, before the fix: `document.activeElement` after the dismissal was `BODY` — focus was
-   * not returned to the control it came from, and was not left on the picker either. It was simply
-   * lost.
-   *
-   * The mechanism was an ordering one. `Picker` recorded where focus was in a `useEffect`, but the
-   * query input carries `autoFocus`, which React applies during the COMMIT phase — before passive
-   * effects run. So the value recorded as "where focus was" was already the picker's own input; on
-   * unmount that element is gone, `document.contains(previous)` is false, and the restore was
-   * skipped. The capture happens during RENDER now, which is the only phase early enough.
-   */
-  // …and gave it back. Leaving focus on a dismissed overlay's corpse strands the user.
-  await expect(shared.win.getByTestId('tab-add')).toBeFocused();
-});
+/*
+ * ONE TEST REMOVED (035 T055) — "T056 — dismissing returns focus to where it was (T8)", now
+ * `packages/ui/tests/component/picker.test.ts` ("focus, when the picker goes away").
+ *
+ * The defect it guards is entirely a DOM story, and the comment it carried says so in its own words:
+ * `Picker` recorded where focus was in a `useEffect`, the query input carries `autoFocus`, React
+ * applies that during the COMMIT phase before passive effects run — so what was recorded as "where
+ * focus was" was already the picker's own input, and on unmount the restore was skipped and focus
+ * was left on `body`.
+ *
+ * Every noun in that paragraph — `activeElement`, `autoFocus`, commit versus passive effects,
+ * `document.contains` — is something jsdom models exactly. The Electron launch, the project and the
+ * seeded tab strip were the cost of reaching a component, not part of the claim.
+ *
+ * Red-proven twice, the second of which is a faithful reproduction: moving the capture back into the
+ * effect (the original defect) and removing the restore entirely both fail the component test.
+ *
+ * ── AND ONE TEST THAT WAS WRITTEN AND THEN REMOVED ──
+ *
+ * A third case was written there — the picker's opener removed while the picker is up — and its own
+ * red step deleted it. Both guards on the restore (`document.contains` and `!== document.body`) turn
+ * out to be UNOBSERVABLE: `.focus()` on a detached element or on `body` is a silent no-op, so
+ * removing either guard leaves every assertion green. The measurement is recorded there so nobody
+ * writes it again.
+ */

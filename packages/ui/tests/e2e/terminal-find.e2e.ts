@@ -57,7 +57,6 @@ let projectSeq = 0;
 const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
-
 // 013 US2 — find in a terminal's retained scrollback. The load-bearing property is that
 // searching is READ-ONLY: not one keystroke reaches the running program, and the
 // character grid is never resized by it (FR-010 / FR-013 / SC-002).
@@ -115,7 +114,6 @@ async function run(win: Page, pid: string, cmd: string, marker: string): Promise
     .toBeGreaterThanOrEqual(inCommand + 1);
 }
 
-
 /** xterm's live grid — searching must not resize it (FR-013). */
 async function grid(win: Page, pid: string): Promise<{ width: number; rows: number }> {
   return win.getByTestId(`terminal-${pid}`).evaluate((el) => ({
@@ -124,7 +122,29 @@ async function grid(win: Page, pid: string): Promise<{ width: number; rows: numb
   }));
 }
 
-test('finds in the scrollback, counts and steps matches — and types nothing at the shell', { tag: ['@extended', '@terminal'] }, async () => {
+/*
+ * ── ONE REMOVED AS A DUPLICATE, AND ITS FIXTURE COULD NOT TEST ITS OWN CLAIM (035 T055) ──
+ *
+ * `:249` "the find bar is scoped to one panel — no stray bar on another (spec Edge Cases)". No
+ * replacement was written, because `packages/ui/tests/unit/search-store.test.ts` already asserts
+ * the scoping and asserts it harder:
+ *
+ *   `:73`  "drives the engine of the panel find was opened on"
+ *   `:214` "starts a fresh session when find opens on a different panel" — TWO registered panels,
+ *          find opened on the first, then the second, asserting the session's `panelId` moved and
+ *          the term did NOT carry over
+ *
+ * The removed test created a project, started a real shell, ran `echo`, waited for the output,
+ * opened the find bar and asserted `[data-testid^="find-bar-"]` had a count of ONE — in a workspace
+ * containing exactly one panel. There was no second panel for a stray bar to appear on, so the
+ * assertion was satisfied by arithmetic rather than by the behaviour it named. A build that leaked a
+ * bar onto every panel would have passed it.
+ *
+ * That is worth recording rather than tidying away: the test was not merely redundant, it could not
+ * have failed for the reason it existed. The version that CAN fail was already in the suite, one
+ * layer down, and had been all along.
+ */
+test('finds in the scrollback, counts and steps matches — and types nothing at the shell', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-tfind-'));
   try {
     await runApp(async (_app, win) => {
@@ -162,7 +182,7 @@ test('finds in the scrollback, counts and steps matches — and types nothing at
   }
 });
 
-test('parked on a match, incoming output does not yank the viewport away (FR-012a)', { tag: ['@extended', '@terminal'] }, async () => {
+test('parked on a match, incoming output does not yank the viewport away (FR-012a)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-tfind-'));
   try {
     await runApp(async (_app, win) => {
@@ -208,7 +228,7 @@ test('parked on a match, incoming output does not yank the viewport away (FR-012
   }
 });
 
-test('with no find bar open, Escape still reaches the shell (it is not throng’s key)', { tag: ['@extended', '@terminal'] }, async () => {
+test('with no find bar open, Escape still reaches the shell (it is not throng’s key)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-tfind-'));
   try {
     await runApp(async (_app, win) => {
@@ -246,21 +266,3 @@ test('with no find bar open, Escape still reaches the shell (it is not throng’
   }
 });
 
-test('the find bar is scoped to one panel — no stray bar on another (spec Edge Cases)', { tag: ['@extended', '@terminal'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-tfind-'));
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'TScope', root);
-      const pid = await newTerminal(win, root);
-      await run(win, pid, 'echo SCOPE_TERM', 'SCOPE_TERM');
-
-      await win.keyboard.press('Control+f');
-      await expect(win.getByTestId(`find-bar-${pid}`)).toBeVisible();
-
-      // The session belongs to THIS panel's view: exactly one bar exists, on this panel.
-      expect(await win.locator('[data-testid^="find-bar-"]').count()).toBe(1);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});

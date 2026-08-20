@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -90,13 +90,6 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-function readBindings(cfgRoot: string): Record<string, string[]> | null {
-  try {
-    return JSON.parse(readFileSync(join(cfgRoot, 'keybindings.json'), 'utf8')).bindings;
-  } catch {
-    return null;
-  }
-}
 
 async function openKeybindings(app: ElectronApplication, win: Page): Promise<Page> {
   await win.getByTestId('title-bar-cog').click();
@@ -110,54 +103,43 @@ async function openKeybindings(app: ElectronApplication, win: Page): Promise<Pag
 }
 
 /** Dispatch a synthetic chord (keydown then keyup) on the prefs window. */
-async function sendChord(
-  prefs: Page,
-  key: string,
-  mods: { ctrlKey?: boolean; altKey?: boolean; shiftKey?: boolean; metaKey?: boolean } = {},
-): Promise<void> {
-  await prefs.evaluate(
-    ({ key: k, mods: m }) => {
-      const init = { key: k, bubbles: true, ...m } as KeyboardEventInit;
-      window.dispatchEvent(new KeyboardEvent('keydown', init));
-      window.dispatchEvent(new KeyboardEvent('keyup', init));
-    },
-    { key, mods },
-  );
-}
 
-test('double-click captures a chord and ADDS it (multiple chords per action)', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openKeybindings(app, win);
-      await prefs.getByTestId('binding-view.toggleProjects').dblclick();
-      await expect(prefs.getByTestId('capture-modal')).toBeVisible();
-      await sendChord(prefs, 'k', { ctrlKey: true }); // Ctrl+K added to the default Ctrl+Alt+B
-      await expect(prefs.getByTestId('capture-modal')).toBeHidden();
-      await expect
-        .poll(() => readBindings(cfgRoot)?.['view.toggleProjects'])
-        .toEqual(['Ctrl+Alt+B', 'Ctrl+K']); // added, not replaced
-    },
-  );
-});
-
-test('a single key binds (no modifier required); double-click does not select text', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openKeybindings(app, win);
-      const row = prefs.getByTestId('binding-view.toggleExplorer');
-      // Double-clicking the row must not highlight its text (FR-031).
-      expect(await row.evaluate((el) => getComputedStyle(el).userSelect)).toBe('none');
-      await row.dblclick();
-      await sendChord(prefs, 'F7'); // a bare single key is now bindable (F7 is unbound by default)
-      await expect(prefs.getByTestId('capture-modal')).toBeHidden();
-      await expect
-        .poll(() => readBindings(cfgRoot)?.['view.toggleExplorer'])
-        .toEqual(['Ctrl+Alt+N', 'F7']); // added to the default, not replaced
-    },
-  );
-});
-
-test('the capture ("Bind") dialog does not allow text selection', { tag: ['@extended', '@prefs'] }, async () => {
+/*
+ * FOUR TESTS REMOVED (035 T034) — now `packages/ui/tests/component/preferences-keybindings-tab.test.ts`:
+ *
+ *   - "double-click captures a chord and ADDS it"
+ *   - "a single key binds (no modifier required)"
+ *   - "a chord pill removes just that binding (FR-033b)"
+ *   - "a conflicting chord warns and Reassign moves it from the other action"
+ *
+ * ── WHY THEY COULD COME DOWN NOW AND NOT BEFORE ──
+ *
+ * The component file had already recorded a reason for keeping them: they assert
+ * `keybindings.json`, and *"whether that map survives the write path is the config store's claim,
+ * not this component's"*. That decomposition was right, and it left the OTHER half homeless — the
+ * store's claim is proven (`contract/config-write-patch.contract.test.ts`, and
+ * `component/config-store-adoption.test.ts` for adoption), but that the TAB hands the write path
+ * the right map was asserted nowhere at all.
+ *
+ * So the replacements assert what the tab hands over, not what lands in the file, and two of them
+ * are stronger than what they replace:
+ *
+ *   - the remove test asserts every OTHER action is byte-identical to the shipped table, where the
+ *     E2E read one key out of the file — a remove that rebuilds from a stale copy takes other
+ *     actions with it, and reading one key cannot see that;
+ *   - Reassign asserts both halves in ONE document (added to the new owner, gone from the old),
+ *     where the E2E polled the file twice and could have read a different write each time;
+ *   - and a new test asserts the document VERSION survives, which no assertion on `bindings` can
+ *     see and which no test made before.
+ *
+ * Red-proven against four mutations: no-write (4 red), drop-version (1), remove-clobbers (1), and
+ * replace-not-add at the modal's `applyAdd` (2 here, 2 in the modal's own file).
+ *
+ * The test BELOW stays. It reads `getComputedStyle(el).userSelect` for a value INHERITED from the
+ * application stylesheet, and jsdom applies no real cascade — asserting it at the component layer
+ * would be asserting about jsdom (034 FR-049). Its tag already says so: `@reserve:layout`.
+ */
+test('the capture ("Bind") dialog does not allow text selection', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openKeybindings(app, win);
@@ -176,26 +158,6 @@ test('the capture ("Bind") dialog does not allow text selection', { tag: ['@exte
   );
 });
 
-test('a chord pill removes just that binding (FR-033b)', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openKeybindings(app, win);
-      // Add Ctrl+K so view.toggleProjects has two chords, then remove the first.
-      await prefs.getByTestId('binding-view.toggleProjects').dblclick();
-      await sendChord(prefs, 'k', { ctrlKey: true });
-      await expect
-        .poll(() => readBindings(cfgRoot)?.['view.toggleProjects'])
-        .toEqual(['Ctrl+Alt+B', 'Ctrl+K']);
-      // Wait for the renderer to reflect both chords (the live-reload round-trip) so
-      // the remove acts on the current two-pill state, not the stale single-pill one.
-      await expect(prefs.getByTestId('binding-view.toggleProjects-pill-1')).toBeVisible();
-      await prefs.getByTestId('binding-view.toggleProjects-remove-0').click(); // remove Ctrl+Alt+B
-      await expect
-        .poll(() => readBindings(cfgRoot)?.['view.toggleProjects'])
-        .toEqual(['Ctrl+K']);
-    },
-  );
-});
 
 /*
  * MOVED to `packages/ui/tests/component/preferences-capture-modal.test.ts` (034 FR-045):
@@ -207,26 +169,6 @@ test('a chord pill removes just that binding (FR-033b)', { tag: ['@extended', '@
  * follows from them, because a refused chord is never handed to `onApply` and so there is nothing
  * for the parent to write. Two Electron launches for a validation rule.
  */
-test('a conflicting chord warns and Reassign moves it from the other action', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openKeybindings(app, win);
-      // Rebind view.toggleExplorer to Ctrl+Alt+B — already bound to view.toggleProjects.
-      await prefs.getByTestId('binding-view.toggleExplorer').dblclick();
-      // 026 / #165 — must be the chord the OTHER action actually holds, or there is no conflict to
-      // detect and this test silently stops testing the conflict path.
-      await sendChord(prefs, 'b', { ctrlKey: true, altKey: true });
-      await expect(prefs.getByTestId('capture-conflict')).toBeVisible();
-      await prefs.getByTestId('capture-reassign').click();
-      await expect(prefs.getByTestId('capture-modal')).toBeHidden();
-      // Reassign is additive here (FR-033/034): Ctrl+Alt+B is added to view.toggleExplorer's
-      // existing chord(s), not a replacement.
-      await expect.poll(() => readBindings(cfgRoot)?.['view.toggleExplorer']).toEqual(['Ctrl+Alt+N', 'Ctrl+Alt+B']);
-      // Removed from the previous owner.
-      await expect.poll(() => readBindings(cfgRoot)?.['view.toggleProjects']).toEqual([]);
-    },
-  );
-});
 
 /*
  * MOVED to `packages/ui/tests/component/preferences-keybindings-tab.test.ts` (034 FR-045):

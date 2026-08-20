@@ -29,7 +29,6 @@ import { test, expect } from '@playwright/test';
 import {
   openApp,
   runApp as runOwnApp,
-  openedPaths,
   FILE_OP_TIMEOUT_MS,
   type AppOptions,
   type OpenApp,
@@ -71,7 +70,35 @@ const runApp = (
   });
 };
 
-test('the main process writes a durable log into the per-user data directory', { tag: ['@extended', '@failure'] }, async () => {
+/*
+ * ── ONE REMOVED (035 T056) ──
+ *
+ * `:123` "a user can reach the logs folder without knowing its path" — three claims, and two
+ * already had homes:
+ *
+ *   the cog menu OFFERS it, with that test id and that icon
+ *     → `unit/menu-sections.test.ts:562` (the whole cog menu, in order) and
+ *       `unit/menu-icon-tokens.test.ts:221`
+ *   the folder it names is THIS run's log directory, and the OS is really asked to open it
+ *     → `contract/open-logs.contract.test.ts`
+ *
+ * The handler was four lines inside an `ipcMain.handle`, so the only thing that could observe it
+ * was an app. It is now `main/open-logs.ts`, taking its two collaborators as parameters (035
+ * FR-006) — which is also what makes the FAILURE path reachable: `shell.openPath` cannot be made to
+ * fail on demand from outside the process, so the migrated test asserted only the success half.
+ *
+ * The inverted-signal case is the one worth having. `shell.openPath` resolves to an EMPTY STRING on
+ * success and to a message on failure, and reading that the wrong way round is silent in both
+ * directions: every open reports failure while working, or every failure reports success and leaves
+ * the user hunting for a window that was never opened.
+ *
+ * ── WHAT STAYS ──
+ *
+ * Both remaining tests, `@reserve:runtime`: they assert that a real main process and a real daemon
+ * each write a durable log into the per-user data directory of a real run. That is application
+ * identity on disk, and there is nothing below this layer that has one.
+ */
+test('the main process writes a durable log into the per-user data directory', { tag: ['@extended', '@failure', '@reserve:runtime'] }, async () => {
   await runApp(async (_app, win, ctx) => {
     await expect(win.getByTestId('title-bar-cog')).toBeVisible({ timeout: 15000 });
 
@@ -95,7 +122,7 @@ test('the main process writes a durable log into the per-user data directory', {
   });
 });
 
-test('the daemon writes its own durable log beside the UI’s', { tag: ['@extended', '@failure'] }, async () => {
+test('the daemon writes its own durable log beside the UI’s', { tag: ['@extended', '@failure', '@reserve:runtime'] }, async () => {
   // `skipDaemon` so the APP spawns its own daemon through `ensureDaemon` — which is the path that
   // gives it a log directory at all. A daemon the harness pre-spawned was never told where to write.
   // This is the one test in the file that seeds the LAUNCH, so it keeps its own app.
@@ -120,38 +147,3 @@ test('the daemon writes its own durable log beside the UI’s', { tag: ['@extend
   }, { skipDaemon: true });
 });
 
-test('a user can reach the logs folder without knowing its path', { tag: ['@extended', '@failure'] }, async () => {
-  await runApp(async (app, win, ctx) => {
-    await win.getByTestId('title-bar-cog').click();
-    // The affordance is discoverable where About is — both are things you go looking for when
-    // reporting a problem.
-    await expect(win.getByTestId('cog-menu-logs')).toBeVisible();
-
-    /*
-     * It resolves to the run's own logs directory, and it really does ask the OS to open it.
-     *
-     * The comment here used to claim "the OS file manager is not opened during the test". That was
-     * simply untrue: this drives the same handler the menu item does, and the handler calls
-     * `shell.openPath` — so every run left a real Explorer window on the developer's desktop. Worse
-     * than untidy: a window appearing steals focus, and throng closes menus on blur by design, so a
-     * stray Explorer window can fail an unrelated test that had a menu open.
-     *
-     * `runApp` now stubs `shell.openPath` for every app and records what was asked for, so the
-     * request is asserted — which is the actual claim — without launching anything.
-     *
-     * The recorder belongs to the APP, not to the test, and this app is shared. So what is asserted
-     * is that the MOST RECENT thing the handler asked the OS to open is this run's logs directory —
-     * exactly the original claim, and it does not silently become weaker if a test is added above.
-     */
-    const result = await win.evaluate(() => window.throng?.diagnostics?.openLogs?.());
-    expect(result?.ok).toBe(true);
-    expect((result as { path: string }).path).toBe(logsIn(ctx.userDataDir));
-    expect(
-      (await openedPaths(app)).at(-1),
-      'the handler should have asked the OS to open the logs directory',
-    ).toBe(logsIn(ctx.userDataDir));
-
-    // Leave no menu open on a window the next test may inherit.
-    await win.keyboard.press('Escape');
-  });
-});

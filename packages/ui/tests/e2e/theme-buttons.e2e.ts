@@ -87,7 +87,7 @@ async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
   return prefs;
 }
 
-test('each button type paints only its own six tokens; an IconButton uses none', { tag: ['@extended', '@prefs'] }, async () => {
+test('each button type paints only its own six tokens; an IconButton uses none', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(
     async (app, win) => {

@@ -53,7 +53,6 @@ const runApp = (
   });
 };
 
-
 /** Open the preferences window on a tab, through the cog — the same route every prefs suite uses. */
 async function openPrefs(app: ElectronApplication, win: Page, tab: string): Promise<Page> {
   await win.getByTestId('title-bar-cog').click();
@@ -90,24 +89,39 @@ async function openPrefs(app: ElectronApplication, win: Page, tab: string): Prom
  * Bindings chord menu, which removes a chord from the file on disk.
  */
 
-test('the cog gear comes from the theme’s icon pack — no inline vector (FR-014b, SC-002)', { tag: ['@extended', '@window'] }, async () => {
-  await runApp(async (_app, win) => {
-    // The gear was drawn from a hard-coded path because the theme had no settings glyph to resolve.
-    // 018 adds the token; the same one serves the project-settings options icon.
-    const glyph = win.getByTestId('cog-glyph');
-    await expect(glyph).toHaveCount(1);
-    await expect(glyph.locator('.icon')).toHaveCount(1);
-
-    // The window controls too — they were four more inline vectors, and SC-002 claims ZERO.
-    for (const id of ['window-min', 'window-max', 'window-close']) {
-      await expect(win.getByTestId(id).locator('.icon')).toHaveCount(1);
-    }
-    // …and the Projects pane's "new project" control, which was a literal ＋ character.
-    await expect(win.getByTestId('project-new').locator('.icon')).toHaveCount(1);
-  });
-});
-
-test('the cog menu flips to stay on-screen near the bottom-right corner (FR-016)', { tag: ['@extended', '@window'] }, async () => {
+/*
+ * ── ONE REMOVED, SPLIT ACROSS TWO COMPONENT FILES (035 T055) ──
+ *
+ * `:93` "the cog gear comes from the theme's icon pack — no inline vector (FR-014b, SC-002)" →
+ *   `packages/ui/tests/component/title-bar.test.ts`          the cog and the three window controls
+ *   `packages/ui/tests/component/projects-panel-form.test.ts` the Projects pane's new-project control
+ *
+ * ── THE NEGATIVE WAS ALREADY PROVEN, REPO-WIDE ──
+ *
+ * SC-002's ban on inline artwork is `packages/ui/tests/unit/no-inline-artwork.test.ts:60` — "no
+ * component draws an inline <svg>, except the brand mark" — which sweeps EVERY component rather than
+ * the five this test happened to name, and is one of the guards `guards-are-live.test.ts` keeps
+ * un-skipped. So what this test uniquely carried was the POSITIVE: that each control actually draws
+ * something. A control that stopped drawing anything at all satisfies "no inline vector" perfectly.
+ *
+ * ── AND ONE THING THE MIGRATION HAD TO GET RIGHT ──
+ *
+ * The first draft of the new-project test asserted the control contained no ＋ character. It failed:
+ * the shipped pack's `add` token IS a ＋. A character supplied BY the pack is themed and swappable,
+ * which is the whole point; the literal 018 removed was a ＋ written into the JSX, outside the
+ * theming system — and the two are indistinguishable in `textContent`.
+ *
+ * So the assertion became about WHERE the glyph lives: the control's text is entirely accounted for
+ * by its icon, with nothing left over. That catches the icon-PLUS-stray-literal case, which is the
+ * shape of a half-finished migration and the one a bare `.icon` count cannot see. Red-proven as
+ * `new-project-icon-plus-literal`.
+ *
+ * ── WHAT STAYS ──
+ *
+ * The flip near the bottom-right corner, which reads `boundingBox()` and is real layout, and the Key
+ * Bindings chord menu, which removes a chord from the file on disk.
+ */
+test('the cog menu flips to stay on-screen near the bottom-right corner (FR-016)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (_app, win) => {
     // The bespoke cog menu positioned itself with a bare CSS `top:100%; right:0` — no measurement,
     // no flip, no clamp. On the shared menu it inherits all three.

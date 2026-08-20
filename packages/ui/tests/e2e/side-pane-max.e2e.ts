@@ -9,7 +9,7 @@ import { runApp, cleanupTemp, settle, geom } from './harness.js';
 // (panes.projects.maxWidth). With a custom max of 300, dragging the sidebar handle
 // far out must cap at 300 — not the default.
 
-test('the side-pane maximum width is configurable in settings.json', { tag: ['@extended', '@window'] }, async () => {
+test('the side-pane maximum width is configurable in settings.json', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgmax-'));
   writeFileSync(
     join(cfg, 'settings.json'),

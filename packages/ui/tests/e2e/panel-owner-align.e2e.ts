@@ -15,7 +15,7 @@ const seedSub = `(() => window.throng.invoke('workspace.persistSubWorkspaces', {
     tabs: [{ id: 't', title: 'T', root: { type: 'panel', id: 'p', originProjectId: 'x', title: 'P' } }] },
 ] }))()`;
 
-test('the sub-workspace/project owner text is right-aligned beside the panel controls', { tag: ['@extended', '@window'] }, async () => {
+test('the sub-workspace/project owner text is right-aligned beside the panel controls', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-owner-'));
   try {
     await runApp(async (app, win) => {

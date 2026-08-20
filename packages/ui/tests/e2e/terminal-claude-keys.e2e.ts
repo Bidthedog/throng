@@ -148,7 +148,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
     'needs a logged-in `claude` on PATH: set THRONG_CLAUDE_E2E=1, and never runs on CI',
   );
 
-  test('Ctrl+Backspace works when claude is TYPED at a prompt, not launched as a startup command', { tag: ['@extended', '@terminal'] }, async () => {
+  test('Ctrl+Backspace works when claude is TYPED at a prompt, not launched as a startup command', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
     test.setTimeout(240_000);
     /*
      * The user's actual flow, and the one difference every passing test here had quietly avoided.
@@ -215,7 +215,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
     }
   });
 
-  test('Ctrl+Backspace deletes a WORD in claude when the shell negotiated NOTHING', { tag: ['@extended', '@terminal'] }, async () => {
+  test('Ctrl+Backspace deletes a WORD in claude when the shell negotiated NOTHING', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
     test.setTimeout(240_000);
     /*
      * The case the PowerShell tests cannot reach.
@@ -276,7 +276,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
     }
   });
 
-  test('Ctrl+Backspace still deletes a WORD in claude after a tab switch', { tag: ['@extended', '@terminal'] }, async () => {
+  test('Ctrl+Backspace still deletes a WORD in claude after a tab switch', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
     test.setTimeout(240_000);
     /*
      * The same chord as the first test, after the trigger that breaks the OTHER one.
@@ -343,7 +343,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
     }
   });
 
-  test('Ctrl+End still reaches claude after a tab switch', { tag: ['@extended', '@terminal'] }, async () => {
+  test('Ctrl+End still reaches claude after a tab switch', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
     test.setTimeout(240_000);
     /*
      * Borrows a REAL project and one of its existing claude sessions.
@@ -488,7 +488,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
    *
    * Nothing is sent to the model: Ctrl+C is a signal, not a prompt.
    */
-  test('the panel header reports claude leaving when it really exits', { tag: ['@extended', '@terminal'] }, async () => {
+  test('the panel header reports claude leaving when it really exits', { tag: ['@extended', '@terminal', '@reserve:process'] }, async () => {
     test.setTimeout(240_000);
     const root = CLAUDE_ROOT ?? mkdtempSync(join(tmpdir(), 'throng-claude-oracle-'));
     const untrust = trustProject(root);
@@ -560,7 +560,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
    * sets for itself). A control test elsewhere in this file proves it flips when claude really exits.
    */
   for (const flavour of ['cmd', 'windows-powershell', 'pwsh', 'git-bash']) {
-    test(`Escape leaves the agents view without exiting claude (${flavour})`, { tag: ['@extended', '@terminal'] }, async () => {
+    test(`Escape leaves the agents view without exiting claude (${flavour})`, { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
       test.setTimeout(240_000);
       const root = CLAUDE_ROOT ?? mkdtempSync(join(tmpdir(), `throng-esc-${flavour}-`));
       const untrust = trustProject(root);
@@ -659,7 +659,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
    * bug is claude's status footer drawn BELOW the returned prompt, so the assertion is about what
    * comes last on screen, not about whether claude's words appear at all.
    */
-  test('claude leaves no interface behind when it exits', { tag: ['@extended', '@terminal'] }, async () => {
+  test('claude leaves no interface behind when it exits', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
     test.setTimeout(240_000);
     const root = CLAUDE_ROOT ?? mkdtempSync(join(tmpdir(), 'throng-claude-exit-'));
     const untrust = trustProject(root);
@@ -735,7 +735,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
    *
    * The gap does not matter: 150ms, 600ms and 1500ms were measured behaving the same.
    */
-  test('both Left presses reach claude, whatever claude then does with them', { tag: ['@extended', '@terminal'] }, async () => {
+  test('both Left presses reach claude, whatever claude then does with them', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
     test.setTimeout(240_000);
     const root = CLAUDE_ROOT ?? mkdtempSync(join(tmpdir(), 'throng-claude-leftexit-'));
     const untrust = trustProject(root);

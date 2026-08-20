@@ -34,7 +34,7 @@ import { skipIfElevated } from './admin.js';
 /** The status-bar indicator: present only when the daemon is NOT healthy (029 FR-008). */
 const indicator = (win: Page) => win.getByTestId('status-daemon');
 
-test('the daemon indicator reports the state, restarts on demand, and outlives the notice', { tag: ['@extended', '@failure'] }, async () => {
+test('the daemon indicator reports the state, restarts on demand, and outlives the notice', { tag: ['@extended', '@failure', '@reserve:process'] }, async () => {
   // An elevated daemon lives in a different process tree (the de-elevated agent), which
   // `forceKillProcessTree` on the health.ping pid does not describe.
   skipIfElevated();
@@ -190,7 +190,7 @@ test('the daemon indicator reports the state, restarts on demand, and outlives t
  * effect never re-runs, and no second notice is raised whatever the store believes. It tested the
  * notification model's de-duplication, not this bug.
  */
-test('a failed project switch leaves the active project where it was (#212)', { tag: ['@extended', '@failure'] }, async () => {
+test('a failed project switch leaves the active project where it was (#212)', { tag: ['@extended', '@failure', '@reserve:process'] }, async () => {
   skipIfElevated();
   test.setTimeout(180_000);
 

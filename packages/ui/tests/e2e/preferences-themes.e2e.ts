@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import { FILE_OP_TIMEOUT_MS, openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
 import {
   configRootSeeded,
   settleConfigRoot,
@@ -11,7 +11,6 @@ import {
   type ConfigRootSnapshot,
 } from './helpers/config-snapshot.js';
 import { closePrefsWindow } from './helpers/prefs-window.js';
-import { writeConfigAtomic } from './helpers/config-write.js';
 
 /**
  * The Themes tab — feature 007's base editor (activate, token edits apply + persist,
@@ -43,9 +42,6 @@ function freshCfgRoot(): string {
  * `restoreConfigRoot` removes it again in `afterEach`, which is what keeps the theme LIST (asserted
  * at exactly the shipped count by `waitForSeededList`) correct for the tests that follow.
  */
-function seedTheme(name: string, theme: unknown): void {
-  writeConfigAtomic(join(cfgRoot, 'themes', `${name}.json`), `${JSON.stringify(theme, null, 2)}\n`);
-}
 
 /*
  * ONE app for this file, not one per test (034 FR-045, SC-010).
@@ -158,35 +154,6 @@ async function pickTheme(prefs: Page, name: string): Promise<void> {
   await expect(prefs.getByTestId('theme-select')).toHaveValue(name);
 }
 
-test('editing a colour token applies to the active theme file and reflects live', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-      await prefs.getByTestId('control-colours.accent-hex').fill('#123456');
-      await expect.poll(() => readTheme(cfgRoot, 'throng')?.colours?.accent).toBe('#123456');
-      // Live: the prefs window repaints from the active theme.
-      await expect
-        .poll(() =>
-          prefs.evaluate(() =>
-            getComputedStyle(document.documentElement).getPropertyValue('--throng-colour-accent').trim(),
-          ),
-        )
-        .toBe('#123456');
-    },
-  );
-});
-
-test('selecting a theme in the dropdown activates it (select = activate)', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      seedTheme('CustomOne', { name: 'CustomOne', colours: { accent: '#00ff41' }, fonts: { family: 'Consolas', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} });
-      const prefs = await openThemes(app, win);
-      await pickTheme(prefs, 'CustomOne');
-      await expect.poll(() => readActiveTheme(cfgRoot)).toBe('CustomOne');
-    },
-  );
-});
-
 /*
  * MOVED to `packages/ui/tests/component/preferences-name-dialog.test.ts` (034 FR-045):
  *   “the rename dialog refuses a reserved built-in name and writes nothing”.
@@ -223,20 +190,67 @@ test('selecting a theme in the dropdown activates it (select = activate)', { tag
  * Every one of the ten reaches the input through `getByTestId`, which throws — all 10 fail.
  */
 
-test('deleting a theme requires a single confirm and removes the file', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      seedTheme('CustomOne', { name: 'CustomOne', colours: {}, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} });
-      const prefs = await openThemes(app, win);
-      await pickTheme(prefs, 'CustomOne');
-      await prefs.getByTestId('theme-delete').click();
-      await expect(prefs.getByTestId('theme-delete-confirm')).toBeVisible();
-      await prefs.getByTestId('theme-confirm-yes').click();
-      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'CustomOne.json'))).toBe(false);
-    },
-  );
-});
+/*
+ * THREE TESTS REMOVED (035) — the delete, Restore All, and per-theme restore journeys. Each launched
+ * Electron, opened a SECOND WINDOW, and then asserted almost entirely about FILES ON DISK.
+ *
+ * Every one of those file claims was ALREADY made, against a real filesystem, one layer down:
+ *
+ *   - `integration/restore-theme.test.ts` — six cases, including a target made unwritable (the whole
+ *     restore fails and every other theme is untouched) and idempotency across repeated recreates.
+ *   - `integration/restore-default-themes.test.ts` — three, including "does not overwrite an
+ *     existing, possibly user-edited default".
+ *
+ * Those are BETTER tests of the same thing: they can make a file unwritable, which a UI driving the
+ * same call cannot. Nine of them, verified passing at the moment these were removed.
+ *
+ * What nothing covered is the half between — this tab reaching those services at all, and the
+ * confirmation standing between a user and a destructive one. That is now
+ * `component/preferences-themes-tab.test.ts`, with three assertions the E2Es did not make:
+ *
+ *   - Refusing a confirmation calls NOTHING. All three only ever accepted, so a dialog whose answer
+ *     was ignored passed them.
+ *   - A FAILED Restore All says so and says nothing was changed (SC-007). `doRestoreAll` treats a
+ *     missing bridge method's `undefined` as a failure precisely because reporting "restored" when
+ *     nothing happened is untruthful — and only the happy path was ever taken.
+ *   - The delete warning is a DIFFERENT sentence for a custom theme, which has no shipped default
+ *     and cannot be brought back by Restore All. Telling a user otherwise would be a lie, and the
+ *     two branches of that ternary had no test.
+ *
+ * Red-proven four ways, one test each: dropping either confirmation's answer, silencing the restore
+ * failure, and collapsing the two delete sentences into one.
+ */
 
+/*
+ * ── TWO REMOVED (035 T056) ──
+ *
+ * `:161` "editing a colour token applies to the active theme file and reflects live"
+ * `:179` "selecting a theme in the dropdown activates it (select = activate)"
+ *
+ * → `packages/ui/tests/component/preferences-app.test.ts`.
+ *
+ * ── TWO WRITES, TO TWO DIFFERENT DOCUMENTS ──
+ *
+ * That is the whole of what they asserted, and it is the pair most easily crossed: a token edit
+ * writes the THEME document (`{ kind: 'theme', name }`), and choosing a theme PATCHES the SETTINGS
+ * document at `appearance.theme`. The component file's own fake bridge made exactly that crossing
+ * until 035 — parsing every write into `settings`, so a token edit replaced the settings document
+ * with a Theme — which is the strongest argument available that the distinction needs a test.
+ *
+ * Three cases the migrated pair did not make:
+ *
+ *   a token edit writes NOTHING to the settings document (`token-writes-settings`)
+ *   it is addressed to the theme that is ACTIVE, not to a fixed name, so editing a custom theme
+ *     cannot silently rewrite the built-in (`token-writes-fixed-name`)
+ *   activating a theme is a KEY-SCOPED patch, not a whole-document write — it must not rewrite
+ *     every other setting on its way past
+ *
+ * Red-proven: token-writes-settings (3), token-write-dropped (3), token-writes-fixed-name (1),
+ * select-does-not-activate (2).
+ *
+ * The CSS-variable repaint `:161` polled for is `component/theme-provider.test.ts`, and the
+ * filesystem round trip in front of both writes is `integration/config-store.integration.test.ts`.
+ */
 test('the font control is a pill editor saving a comma stack; a non-family role exposes it (H4)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
@@ -301,7 +315,7 @@ test('the three-type button tokens appear in the editor and apply live (021, US7
       // Edit confirmButtonBg → saved + reflected in the live CSS var. (The live BUTTON render across
       // all three types, rest + hover, is proven end-to-end in theme-buttons.e2e.ts.)
       await prefs.getByTestId('control-colours.confirmButtonBg-hex').fill('#123456');
-      await expect.poll(() => readTheme(cfgRoot, 'throng')?.colours?.confirmButtonBg).toBe('#123456');
+      await expect.poll(() => readTheme(cfgRoot, 'throng')?.colours?.confirmButtonBg, { timeout: FILE_OP_TIMEOUT_MS }).toBe('#123456');
       await expect
         .poll(() =>
           prefs.evaluate(() =>
@@ -318,91 +332,6 @@ test('the three-type button tokens appear in the editor and apply live (021, US7
 /* ---------------------------------------------------------------------------
  * Feature 014 — restore & create controls
  * ------------------------------------------------------------------------- */
-
-test('US1: Restore All resets edited built-ins, recreates a deleted built-in, and leaves customs untouched', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-      await waitForSeededList(prefs);
-
-      // 1. Edit a built-in (the active theme, throng).
-      await prefs.getByTestId('control-colours.accent-hex').fill('#123456');
-      await expect.poll(() => readTheme(cfgRoot, 'throng')?.colours?.accent).toBe('#123456');
-
-      // 2. Create a custom theme by cloning a built-in (Clone activates the new theme).
-      await pickTheme(prefs, 'Matrix');
-      await prefs.getByTestId('theme-clone').click();
-      await prefs.getByTestId('theme-name-input').fill('MyCustom');
-      await prefs.getByTestId('theme-name-confirm').click();
-      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'MyCustom.json'))).toBe(true);
-      const customBefore = readFileSync(join(cfgRoot, 'themes', 'MyCustom.json'), 'utf8');
-
-      // 3. Delete a built-in — it disappears from the list entirely (FR-005a).
-      await pickTheme(prefs, 'Debian');
-      await prefs.getByTestId('theme-delete').click();
-      await expect(prefs.getByTestId('theme-delete-confirm')).toBeVisible();
-      await prefs.getByTestId('theme-confirm-yes').click();
-      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Debian.json'))).toBe(false);
-      await expect.poll(() => prefs.getByTestId('theme-select').locator('option').allTextContents()).not.toContain('Debian');
-
-      // 4. Restore All — confirmed, because it destroys edits to built-ins (FR-004).
-      await prefs.getByTestId('theme-restore-all').click();
-      await expect(prefs.getByTestId('theme-confirm-dialog')).toBeVisible();
-      await prefs.getByTestId('theme-confirm-yes').click();
-
-      // Edited built-in reverted; deleted built-in recreated; custom byte-identical.
-      await expect.poll(() => readTheme(cfgRoot, 'throng')?.colours?.accent).not.toBe('#123456');
-      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Debian.json'))).toBe(true);
-      expect(readFileSync(join(cfgRoot, 'themes', 'MyCustom.json'), 'utf8')).toBe(customBefore);
-
-    },
-  );
-});
-
-test('US2: per-theme restore reverts only that built-in (confirmed); a deleted built-in leaves the list and only Restore All brings it back', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-      await waitForSeededList(prefs);
-
-      // Edit two built-ins: throng (active by default) and Matrix.
-      await prefs.getByTestId('control-colours.accent-hex').fill('#111111');
-      await expect.poll(() => readTheme(cfgRoot, 'throng')?.colours?.accent).toBe('#111111');
-      await pickTheme(prefs, 'Matrix');
-      await prefs.getByTestId('control-colours.accent-hex').fill('#222222');
-      await expect.poll(() => readTheme(cfgRoot, 'Matrix')?.colours?.accent).toBe('#222222');
-
-      // Restore ONLY Matrix (destructive to its edits → confirmed).
-      await pickTheme(prefs, 'Matrix');
-      await prefs.getByTestId('theme-restore').click();
-      await expect(prefs.getByTestId('theme-confirm-dialog')).toBeVisible();
-      await prefs.getByTestId('theme-confirm-yes').click();
-      await expect.poll(() => readTheme(cfgRoot, 'Matrix')?.colours?.accent).not.toBe('#222222');
-      // The other built-in's edit is untouched.
-      expect(readTheme(cfgRoot, 'throng')?.colours?.accent).toBe('#111111');
-
-      // Deleting a built-in removes it from the list ENTIRELY (FR-005a) — there is no per-theme
-      // recreate control; Restore All is the only way back.
-      await pickTheme(prefs, 'Debian');
-      await prefs.getByTestId('theme-delete').click();
-      await expect(prefs.getByTestId('theme-delete-confirm')).toBeVisible();
-      await prefs.getByTestId('theme-confirm-yes').click();
-      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Debian.json'))).toBe(false);
-      await expect
-        .poll(() => prefs.getByTestId('theme-select').locator('option').allTextContents())
-        .not.toContain('Debian');
-      await expect(prefs.getByTestId('theme-recreate')).toHaveCount(0);
-
-      await prefs.getByTestId('theme-restore-all').click();
-      await expect(prefs.getByTestId('theme-confirm-dialog')).toBeVisible();
-      await prefs.getByTestId('theme-confirm-yes').click();
-      await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'Debian.json'))).toBe(true);
-      await expect
-        .poll(() => prefs.getByTestId('theme-select').locator('option').allTextContents())
-        .toContain('Debian');
-    },
-  );
-});
 
 test('US3: Clone is the sole creation path — prefilled "<source> - Clone" with "Clone" pre-selected; rename uses the same dialog', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
@@ -438,7 +367,7 @@ test('US3: Clone is the sole creation path — prefilled "<source> - Clone" with
       await input.fill('MyTheme');
       await prefs.getByTestId('theme-name-confirm').click();
       await expect.poll(() => existsSync(join(cfgRoot, 'themes', 'MyTheme.json'))).toBe(true);
-      await expect.poll(() => readActiveTheme(cfgRoot)).toBe('MyTheme');
+      await expect.poll(() => readActiveTheme(cfgRoot), { timeout: FILE_OP_TIMEOUT_MS }).toBe('MyTheme');
       await expect.poll(() => prefs.getByTestId('theme-select').locator('option').allTextContents()).toContain('MyTheme');
       // It is a copy of the source, retargeted to the new name.
       expect(readTheme(cfgRoot, 'MyTheme')?.name).toBe('MyTheme');
@@ -454,7 +383,7 @@ test('US3: Clone is the sole creation path — prefilled "<source> - Clone" with
   );
 });
 
-test('the mode-toggle glyph stays on ONE line in every monospace-font theme (regression: two-line wrap)', { tag: ['@extended', '@prefs'] }, async () => {
+test('the mode-toggle glyph stays on ONE line in every monospace-font theme (regression: two-line wrap)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);

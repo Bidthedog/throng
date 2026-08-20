@@ -126,27 +126,35 @@ const tokenColours = (win: Page, pid: string): Promise<number> =>
     return colours.size;
   }, pid);
 
-test('the strip shows the detected language, and an extension-less file reads Plain Text', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'LangProj', root);
-      const pid = await openEditorOn(win, 'main.rs', 'fn main');
-
-      await expect(win.getByTestId(`editor-language-${pid}`)).toHaveText('Rust', { timeout: 8000 });
-
-      // …and a file detection cannot place says so, plainly, rather than guessing.
-      await win.getByTestId('file-explorer-tree').getByText('scriptfile', { exact: true }).click();
-      await expect(win.getByTestId(`editor-language-${pid}`)).toHaveText('Plain Text', {
-        timeout: 8000,
-      });
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('the language indicator is a themed control with a hover title (constitution — NON-NEGOTIABLE)', { tag: ['@extended', '@editor'] }, async () => {
+/*
+ * ── ONE REMOVED (035 T055) ──
+ *
+ * `:129` "the strip shows the detected language, and an extension-less file reads Plain Text" →
+ * `packages/ui/tests/component/editor-language-strip.test.ts`.
+ *
+ * Detection is `@throng/core`'s `resolveLanguage` and is thoroughly covered there.
+ * `editor-language.ts` is the renderer's side — the resolution store, the precedence chain and the
+ * hook the strip reads — and it had NO test at any layer. So this test was the only thing saying the
+ * strip shows what detection decided rather than, say, the extension upper-cased.
+ *
+ * The second assertion is the one worth having, and the replacement keeps it: a file detection
+ * cannot place says so plainly rather than guessing. A strip that kept the PREVIOUS file's language
+ * — the failure a shared panel makes easy — is wrong in a way the user only discovers when their
+ * colouring is silently another language's.
+ *
+ * Four cases came down with it that this test could not reach, because it drove one panel with no
+ * override: an override outranks the extension (FR-005a), an override applies to an unsaved document
+ * too (the SQL scratchpad), two panels resolve INDEPENDENTLY, and a strip mounted before its editor
+ * has resolved reads plain text rather than another panel's answer. A store keyed globally instead
+ * of per panel would have passed everything here and been wrong the moment two editors were open.
+ *
+ * ── WHAT STAYS ──
+ *
+ * That opening a file in a real editor causes `setPanelLanguage` to be called at all — the load
+ * path in `useEditor` — plus everything in this file about computed colours and the themed control,
+ * which is layout.
+ */
+test('the language indicator is a themed control with a hover title (constitution — NON-NEGOTIABLE)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -179,7 +187,7 @@ test('the language indicator is a themed control with a hover title (constitutio
   }
 });
 
-test('two clicks reach and change the language, it re-highlights at once, and it SURVIVES A RESTART (SC-004a)', { tag: ['@extended', '@editor'] }, async () => {
+test('two clicks reach and change the language, it re-highlights at once, and it SURVIVES A RESTART (SC-004a)', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-lang-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-lang-user-'));
@@ -242,7 +250,7 @@ test('two clicks reach and change the language, it re-highlights at once, and it
   }
 });
 
-test('the strip truncates in a narrow panel and never collapses the text area (FR-010c)', { tag: ['@extended', '@editor'] }, async () => {
+test('the strip truncates in a narrow panel and never collapses the text area (FR-010c)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -277,7 +285,7 @@ test('the strip truncates in a narrow panel and never collapses the text area (F
   }
 });
 
-test('the strip DIMS with its panel — it does not stay lit while every other indicator dims (FR-010g)', { tag: ['@extended', '@editor'] }, async () => {
+test('the strip DIMS with its panel — it does not stay lit while every other indicator dims (FR-010g)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

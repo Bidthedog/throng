@@ -32,7 +32,7 @@ async function newEditor(win: Page): Promise<string> {
   return pid;
 }
 
-test('restores unsaved editor content after an app restart (no close warning)', { tag: ['@extended', '@editor'] }, async () => {
+test('restores unsaved editor content after an app restart (no close warning)', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-recroot-'));
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-recdata-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-recud-'));

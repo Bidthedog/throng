@@ -40,7 +40,7 @@ async function projectWithMirroredPanel(app: ElectronApplication, win: Page) {
   return { a, b, child };
 }
 
-test('destroying a mirrored Panel in the PROJECT removes it from the sub-workspace too (with warning)', { tag: ['@extended', '@window'] }, async () => {
+test('destroying a mirrored Panel in the PROJECT removes it from the sub-workspace too (with warning)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
     const { a, b, child } = await projectWithMirroredPanel(app, win);
 
@@ -57,7 +57,7 @@ test('destroying a mirrored Panel in the PROJECT removes it from the sub-workspa
   });
 });
 
-test('destroying a mirrored Panel INSIDE a sub-workspace is local — the project keeps it', { tag: ['@extended', '@window'] }, async () => {
+test('destroying a mirrored Panel INSIDE a sub-workspace is local — the project keeps it', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
     const { a, b, child } = await projectWithMirroredPanel(app, win);
 
@@ -79,7 +79,7 @@ test('destroying a mirrored Panel INSIDE a sub-workspace is local — the projec
   });
 });
 
-test('destroying a mirrored TERMINAL Panel inside a sub-workspace keeps the session running in the project', { tag: ['@extended', '@window'] }, async () => {
+test('destroying a mirrored TERMINAL Panel inside a sub-workspace keeps the session running in the project', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   // Revision (2026-07-02): a local sub-workspace destroy of a CLONED project Panel
   // must NOT kill the shared terminal session — the project keeps the Panel AND its
   // live terminal (FR-021/026); only the sub-workspace's view goes away.

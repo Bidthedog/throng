@@ -21,7 +21,7 @@ function makeProject(): string {
 
 const scrollTop = (win: Page) => win.locator('.cm-scroller').first().evaluate((el) => el.scrollTop);
 
-test('with the pref off (default), opening a different file in place scrolls to the top (#154)', { tag: ['@extended', '@editor'] }, async () => {
+test('with the pref off (default), opening a different file in place scrolls to the top (#154)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

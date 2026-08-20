@@ -29,6 +29,28 @@ import { skipIfElevated } from './admin.js';
  * produced. On Windows that is `ENOENT`, because a named pipe that no longer exists is a missing
  * path — which reads as "a file is missing" and sends the user looking in entirely the wrong place.
  *
+ * ══ WHY THIS IS @reserve:process AND NOT @reserve:runtime (035 T060/T063) ══
+ *
+ * It carried `@reserve:runtime` — "the wiring is live" — and that justification is now false. Every
+ * span of the wiring is proven below E2E, and this test is where the phase's channel derivation
+ * (`specs/035-e2e-layer-migration/channel-derivation.md`) found its ONE genuine gap:
+ *
+ *   - **the raw string a dead pipe produces, and that the classifier recognises it** — this was the
+ *     hole. `failure-cause-message.test.ts` asserted `isTransportFailure('ENOENT')` against a string
+ *     it wrote down itself, annotated "what a dead pipe produces", which was an assumption about a
+ *     real dependency never measured. Now `contract/daemon-transport-failure.contract.test.ts`, on a
+ *     real socket against a real absent pipe;
+ *   - **one cause raises one notice, and further failures sharing it raise none** (FR-019) —
+ *     `unit/notice-suppression.test.ts`, 22 tests;
+ *   - **dismissal re-arms the cause** (FR-019c) — the same file, by name.
+ *
+ * What is left is the part none of those can reach: **a real daemon process tree actually dying**,
+ * and the running application noticing. That is process lifecycle, so the tag now says so.
+ *
+ * The correction is worth more than the retag. The cost of a stale justification is not that the
+ * test is expensive — it is that the tag stops anyone asking, and this one had been answering
+ * "wiring" for two releases after the wiring grew tests.
+ *
  * ══ WHAT THIS TEST ASSERTS ══
  *
  * That the user is TOLD, once, and is never handed a raw errno.
@@ -55,7 +77,7 @@ async function allNoticeText(win: import('@playwright/test').Page): Promise<stri
   return parts.join(' | ');
 }
 
-test('a daemon that dies is reported to the user, not turned into a raw RPC error', { tag: ['@extended', '@failure'] }, async () => {
+test('a daemon that dies is reported to the user, not turned into a raw RPC error', { tag: ['@extended', '@failure', '@reserve:process'] }, async () => {
   // An elevated daemon lives in a different process tree (the de-elevated agent), which
   // `forceKillProcessTree` on the health.ping pid does not describe.
   skipIfElevated();

@@ -1,13 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   openApp,
-  runApp as runOwnApp,
-  createProject,
-  panelIds,
-  commitPanelRename,
   cleanupTemp,
   type AppOptions,
   type OpenApp,
@@ -66,7 +62,37 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('hot-reloads the theme when themes/throng.json changes (no restart)', { tag: ['@extended', '@prefs'] }, async () => {
+/*
+ * ── ONE REMOVED (035 T056) ──
+ *
+ * `:111` "applies a hand-edited settings.json on startup (confirmations level)" — two halves, and
+ * only one of them was about configuration:
+ *
+ *   a hand-edited document is READ at startup
+ *     → `integration/config-store.integration.test.ts` and `integration/config-watcher-retry.test.ts`,
+ *       which also cover the unreadable and mid-write cases this could not reach
+ *   the level the user set REACHES the destroy, and `none` means no dialog
+ *     → `component/tab-strip.test.ts`
+ *
+ * `planConfirmations` is pure and covered in `core/tests/unit`. What had no test was that
+ * `panel-placeholder.tsx:322` hands it `settings.confirmations` rather than a default — which is
+ * the hop a hand-edited level actually travels, and the only part of this test that was not already
+ * proven somewhere else.
+ *
+ * The component version's panel holds a RUNNING TERMINAL, and that is load-bearing: a panel with
+ * nothing running is destroyed without a confirmation anyway at the shipped level, so a test that
+ * destroyed an EMPTY panel under `none` would prove nothing — both levels behave identically there.
+ * The migrated test destroyed an empty panel.
+ *
+ * Red-proven: ignores-the-setting (1), never-confirms (2), ignores-what-is-running (2).
+ *
+ * ── WHAT STAYS ──
+ *
+ * Both remaining tests, `@reserve:layout`: each writes a theme file into a RUNNING app's config root
+ * and polls a COMPUTED colour until the watcher's reload reaches the screen. jsdom computes no
+ * cascade, and the file-watch round trip is the subject rather than the setup.
+ */
+test('hot-reloads the theme when themes/throng.json changes (no restart)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   try {
     await runApp(
       async (_app, win) => {
@@ -87,7 +113,7 @@ test('hot-reloads the theme when themes/throng.json changes (no restart)', { tag
   }
 });
 
-test('themes the whole app — base text colour hot-reloads from the theme file', { tag: ['@extended', '@prefs'] }, async () => {
+test('themes the whole app — base text colour hot-reloads from the theme file', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   try {
     await runApp(
       async (_app, win) => {
@@ -108,34 +134,3 @@ test('themes the whole app — base text colour hot-reloads from the theme file'
   }
 });
 
-test('applies a hand-edited settings.json on startup (confirmations level)', { tag: ['@extended', '@prefs'] }, async () => {
-  const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
-  try {
-    // Pre-seed settings BEFORE launch: destroying a panel needs no confirmation.
-    mkdirSync(cfg, { recursive: true });
-    writeFileSync(
-      join(cfg, 'settings.json'),
-      JSON.stringify({ confirmations: { destroyPanel: 'none' } }, null, 2),
-      'utf8',
-    );
-
-    await runOwnApp(
-      async (_app, win) => {
-        await createProject(win, 'NoConfirm', 'C:/c/noconfirm');
-        const a = (await panelIds(win))[0];
-        await win.getByTestId(`panel-add-${a}`).click();
-        await commitPanelRename(win);
-        await expect(win.locator('.panel-box')).toHaveCount(2);
-
-        const [first] = await panelIds(win);
-        await win.getByTestId(`panel-close-${first}`).click();
-        // destroyPanel level is "none" → removed immediately, no dialog.
-        await expect(win.getByTestId('confirm-dialog')).toHaveCount(0);
-        await expect(win.locator('.panel-box')).toHaveCount(1);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfg } },
-    );
-  } finally {
-    cleanupTemp(cfg);
-  }
-});

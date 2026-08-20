@@ -48,7 +48,7 @@ import {
   type AppOptions,
   type OpenApp,
 } from './harness.js';
-import { GOTO_LINE_CHORD, QUICK_OPEN_CHORD, openGotoLine } from './helpers/navigation.js';
+import { GOTO_LINE_CHORD, openGotoLine } from './helpers/navigation.js';
 
 /*
  * ONE app for this file, not one per test — every launch is an Electron process, a daemon and a
@@ -86,7 +86,6 @@ const createProject = (win: Page, name: string, root: string): Promise<void> =>
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
 const LINE_COUNT = 400;
-
 
 /** Line `n` reads `line-NNNN`, so the RENDERED text of a line names its own number. */
 const marker = (n: number): string => `line-${String(n).padStart(4, '0')}`;
@@ -297,7 +296,38 @@ const expectNoNewNotice = async (win: Page, baseline: number): Promise<void> => 
  * AS-1, AS-2, AS-3 · G1, G2 · SC-006 — the unwrapped document
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('the chord opens a modal with the caret in its input, and the line reached is the one the GUTTER draws (AS-1, AS-2, AS-3, G1, G2, SC-006)', { tag: ['@core', '@editor'] }, async () => {
+/*
+ * ── THREE REMOVED (035 T055), FOR THREE DIFFERENT REASONS ──
+ *
+ * :601 "with no editor active the chord does nothing — and the same chord opens the modal once one
+ *      is" → `packages/ui/tests/unit/scope.test.ts`, "a panel-scoped chord resolves only in the
+ *      scope it belongs to (AS-9, A4)". Its shape survived the move, and it is the reason to trust
+ *      it: a negative on its own proves very little, so the unit test asserts the SAME chord over a
+ *      placeholder, a terminal, no tab at all, and an editor. Only the last resolves. The E2E was
+ *      buying an Electron launch to evaluate `resolveScoped`.
+ *
+ *      It also gained a case the E2E did not have: Quick Open, the NAMESPACE SIBLING, stays live
+ *      over all three. Both are `navigate.*` and only one is panel-scoped, so a gate written on the
+ *      prefix would silently kill Quick Open in a terminal — one of the two places FR-003 is about.
+ *
+ * :646 "opening Quick Open while Go To Line is open leaves exactly one modal" → DELETED as a strict
+ *      duplicate, with no replacement written. `transient-overlays.e2e.ts:195` loops SC-017's six
+ *      ordered pairs, this one among them, and asserts more: the whole SET of overlays in the DOM
+ *      rather than one absence, plus the scrim count. That file exists because "B is visible" passed
+ *      against the broken build — B was visible, and so was A, on top of it.
+ *
+ * :676 "CodeMirror's own go-to-line panel is not reachable" → `packages/ui/tests/unit/
+ *      codemirror-search-absent.test.ts`, a SOURCE GUARD, and the migration makes the claim
+ *      stronger rather than weaker. This test observed one editor view, in one window, in the one
+ *      configuration it built. The panel arrives through an `import`, which is a property of the
+ *      source — so the guard answers the question once for every view that will ever be constructed,
+ *      and answers it at unit speed.
+ *
+ *      It is an ALLOW-LIST of imported bindings (`SearchQuery`, in `search-model.ts`, and nothing
+ *      else) rather than a ban on named ones. A ban lists what is bad today and says nothing about
+ *      `highlightSelectionMatches`, which is what would be added next.
+ */
+test('the chord opens a modal with the caret in its input, and the line reached is the one the GUTTER draws (AS-1, AS-2, AS-3, G1, G2, SC-006)', { tag: ['@core', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -348,7 +378,7 @@ test('the chord opens a modal with the caret in its input, and the line reached 
  * SC-006, second half — the WRAPPED document, where visual rows and logical lines disagree
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('in a WRAPPED document the number typed is still the number the gutter draws (SC-006, G2, FR-021)', { tag: ['@extended', '@editor'] }, async () => {
+test('in a WRAPPED document the number typed is still the number the gutter draws (SC-006, G2, FR-021)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -435,7 +465,7 @@ test('in a WRAPPED document the number typed is still the number the gutter draw
  * AS-12 · G8 — FR-026: the find bar keeps everything but the focus
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('an open find bar keeps its query, its match count and its highlights, and merely loses focus (AS-12, G8, FR-026)', { tag: ['@extended', '@editor'] }, async () => {
+test('an open find bar keeps its query, its match count and its highlights, and merely loses focus (AS-12, G8, FR-026)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -547,7 +577,7 @@ async function inputWrites(win: Page, panelId: string): Promise<string[]> {
  */
 const BEL = '\\u0007';
 
-test('with a terminal focused the chord opens nothing and the shell receives ^G (AS-8, A3, SC-007)', { tag: ['@extended', '@editor'] }, async () => {
+test('with a terminal focused the chord opens nothing and the shell receives ^G (AS-8, A3, SC-007)', { tag: ['@extended', '@editor', '@reserve:pty'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -598,112 +628,11 @@ test('with a terminal focused the chord opens nothing and the shell receives ^G 
  * AS-9 · A4 — no active panel
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('with no editor active the chord does nothing — and the same chord opens the modal once one is (AS-9, A4)', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'GotoNoPanel', root);
-
-      /*
-       * A tab whose only panel is an untyped placeholder: there is no active EDITOR.
-       *
-       * The panel box is clicked first so the WORKSPACE is the active pane. Without that the tree
-       * would still hold it and the chord would be dead for a second reason — which is true, and is
-       * not what AS-9 is about. Clicking here narrows the negative to the one fact under test: the
-       * active panel is not an editor.
-       */
-      const pid = await firstPanelId(win);
-      await expect(win.getByTestId(`panel-type-select-${pid}`)).toBeVisible();
-      await win.locator(`.panel-box[data-panel-id="${pid}"]`).click({ position: { x: 5, y: 5 } });
-      await win.keyboard.press(GOTO_LINE_CHORD);
-      await expect(win.getByTestId('gotoline')).toHaveCount(0);
-
-      /*
-       * …and the negative above is not vacuous. The SAME chord, in the SAME window, once the panel is
-       * an editor, opens the modal — so "nothing happened" was the scope gate doing its job rather
-       * than a chord that was dead all along (#244's shape).
-       */
-      await win.getByTestId(`panel-type-select-${pid}`).selectOption('editor');
-      await win.getByTestId(`panel-type-confirm-${pid}`).click();
-      await expect(win.getByTestId(`editor-${pid}`)).toBeVisible();
-      await openFile(win, pid, 'plain.txt');
-      await focusContent(win, pid);
-      await win.keyboard.press(GOTO_LINE_CHORD);
-      await expect(win.getByTestId('gotoline')).toBeVisible();
-      await win.keyboard.press('Escape');
-      await expect(win.getByTestId('gotoline')).toHaveCount(0);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * FR-066 · S1 — one slot, one modal
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
-
-test('opening Quick Open while Go To Line is open leaves exactly one modal on screen (FR-066, S1)', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'GotoOneModal', root);
-      const pid = await newEditor(win);
-      await openFile(win, pid, 'plain.txt');
-      await focusContent(win, pid);
-
-      await openGotoLine(win);
-      await win.keyboard.press(QUICK_OPEN_CHORD);
-
-      await expect(win.getByTestId('quickopen')).toBeVisible();
-      await expect(win.getByTestId('gotoline')).toHaveCount(0);
-      // …and ONE scrim, not two stacked on each other.
-      await expect(win.locator('.modal-overlay')).toHaveCount(1);
-
-      await win.keyboard.press('Escape');
-      await expect(win.getByTestId('quickopen')).toHaveCount(0);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * G10 · FR-028 — throng's modal on throng's binding, and no second surface
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('CodeMirror’s own go-to-line panel is not reachable — Ctrl+Alt+G opens nothing (G10, FR-028)', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'GotoNoSecond', root);
-      const pid = await newEditor(win);
-      await openFile(win, pid, 'plain.txt');
-      await focusContent(win, pid);
-
-      /*
-       * `@codemirror/search` ships `gotoLine` on `Mod-Alt-g` through `searchKeymap`, and its panel
-       * would be a SECOND go-to-line surface with controls that cannot be theme-token driven. throng
-       * installs neither `search()` nor `searchKeymap` — only the `SearchQuery` TYPE, in
-       * `search/search-model.ts` — so the chord is unbound and no `.cm-panels` container is ever
-       * created. Asserted rather than argued: "we did not import it" is a fact about today's source,
-       * and FR-028 is a requirement about the shipped app.
-       */
-      await win.keyboard.press('Control+Alt+G');
-      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-panels')).toHaveCount(0);
-      await expect(win.getByTestId('gotoline')).toHaveCount(0);
-
-      // …while throng's OWN binding does open throng's own modal, so the absence above is a
-      // statement about the second surface rather than about a dead editor.
-      await win.keyboard.press(GOTO_LINE_CHORD);
-      await expect(win.getByTestId('gotoline')).toBeVisible();
-      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-panels')).toHaveCount(0);
-      await win.keyboard.press('Escape');
-      await expect(win.getByTestId('gotoline')).toHaveCount(0);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});

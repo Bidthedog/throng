@@ -65,25 +65,31 @@ const createProject = (win: OpenApp['win'], name: string, root: string): Promise
 // Tab/Project destroys stay level-based. Cancelling any destroy leaves state
 // unchanged (FR-025).
 
-test('destroys an empty Panel immediately — no terminal, no confirmation', { tag: ['@extended', '@window'] }, async () => {
-  await runApp(async (_app, win) => {
-    await createProject(win, 'Destroyer', 'C:/c/destroyer');
-    await expect(win.getByTestId('tab-strip')).toBeVisible();
+/*
+ * ONE TEST REMOVED (035) — "destroys an empty Panel immediately — no terminal, no confirmation",
+ * now `packages/ui/tests/component/panel-box.test.ts`.
+ *
+ * PanelPlaceholder mounts in jsdom under six providers, which was established by a spike rather
+ * than assumed: its thirty imports include dnd-kit, the terminal focus registry and the document
+ * authority, and every previous attempt to reach this component turned back at that list. Only
+ * `useProjects` actually throws without its provider; `useDraggable`, `useDroppable`,
+ * `useDetach`, `useSubWorkspaceWindow` and `useCapabilities` all tolerate absence, and
+ * ConfigContext has shipped defaults.
+ *
+ * The component test makes two claims this one could not. That the removal is PERSISTED — "the panel
+ * left the screen" and "the panel left the layout that gets saved" are different facts, and only the
+ * second survives a restart. And that `notifyDestroyed` fires, which is FR-026's cascade to the
+ * sub-workspaces mirroring that panel: a broadcast, not a rendered change, and invisible from here.
+ *
+ * WHAT STAYS, AND WHY IT IS NOT THE SAME DECISION.
+ *
+ * ":86" hosts a REAL cmd shell. Its confirmation is gated on `panelHasLiveTerminal`, which reads a
+ * registry fed by real PTY sessions, and its last assertion polls the DAEMON's own session list.
+ * ":141" cancels a TAB destroy, which is `tab-group.tsx` — a different component, and one nothing
+ * has yet mounted. Both are still on the movable backlog; neither is movable today.
+ */
 
-    // Two Panels so destroying one is allowed (the workspace keeps ≥ 1 Panel).
-    const pid = await firstPanelId(win);
-    await win.getByTestId(`panel-add-${pid}`).click();
-    await expect(win.locator('.panel-box')).toHaveCount(2);
-    await win.keyboard.press('Escape'); // dismiss the new Panel's rename input
-
-    // Header × on an empty Panel → removed immediately, no confirmation.
-    await win.getByTestId(`panel-close-${pid}`).click();
-    await expect(win.getByTestId('confirm-dialog')).toHaveCount(0);
-    await expect(win.locator('.panel-box')).toHaveCount(1);
-  });
-});
-
-test('warns before destroying a Panel that hosts a live terminal', { tag: ['@extended', '@window'] }, async () => {
+test('warns before destroying a Panel that hosts a live terminal', { tag: ['@extended', '@window', '@reserve:process'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-destroy-term-'));
   try {
     await runApp(async (_app, win, { pipeName }) => {
@@ -138,21 +144,23 @@ test('warns before destroying a Panel that hosts a live terminal', { tag: ['@ext
   }
 });
 
-test('cancelling a Tab destroy leaves all state unchanged (FR-025)', { tag: ['@extended', '@window'] }, async () => {
-  await runApp(async (_app, win) => {
-    await createProject(win, 'Canceller', 'C:/c/canceller');
-    await win.getByTestId('tab-add').click();
-    await expect(win.locator('.tab-chip')).toHaveCount(2);
-
-    const firstTab = win.locator('.tab-chip').first();
-    await firstTab.click();
-    await firstTab.click({ button: 'right' });
-    await win.getByTestId('menu-item-Destroy Tab').click();
-
-    // Cancel the first dialog → nothing is destroyed.
-    await expect(win.getByTestId('confirm-dialog')).toBeVisible();
-    await win.getByTestId('confirm-cancel').click();
-    await expect(win.getByTestId('confirm-dialog')).toHaveCount(0);
-    await expect(win.locator('.tab-chip')).toHaveCount(2);
-  });
-});
+/*
+ * ONE TEST REMOVED (035) — "cancelling a Tab destroy leaves all state unchanged (FR-025)", now
+ * `packages/ui/tests/component/tab-strip.test.ts`.
+ *
+ * `TabGroup` takes no props and renders the whole workspace — the strip, the New Tab button, the
+ * picker overlay and, through `SplitTree`, every panel — so mounting it needs the same six providers
+ * `panel-box.test.ts` established. Established by spike, not assumed.
+ *
+ * The component version makes three claims this could not:
+ *
+ *   - It compares the tab IDS rather than counting chips. FR-025's claim is a NEGATIVE, and a count
+ *     of 2 is satisfied by a destroy that removed one tab and added another.
+ *   - It asserts NOTHING WAS PERSISTED. A cancel that redrew correctly but still saved would restore
+ *     the tab on this run and lose it on the next.
+ *   - It has a POSITIVE CONTROL — and the control found something. Written with one accept, the tab
+ *     survived, correctly: `destroyTab` ships at level DOUBLE, so the first accept opens the "Are
+ *     you absolutely sure?" dialog. `core/tests/unit/destroy.test.ts:22` owns that plan; nothing
+ *     owned this call site honouring it, and a cancel-only test cannot tell a one-dialog flow from a
+ *     two-dialog one because it never reaches the second. Refusing the wry final is asserted too.
+ */

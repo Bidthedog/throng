@@ -129,7 +129,7 @@ const docText = (win: Page, pid: string): Promise<string> =>
  * run — and the composition is stated here rather than assumed.
  */
 
-test('in the File Explorer, Ctrl+X still cuts a FILE — the scopes are disjoint (D6)', { tag: ['@extended', '@editor'] }, async () => {
+test('in the File Explorer, Ctrl+X still cuts a FILE — the scopes are disjoint (D6)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

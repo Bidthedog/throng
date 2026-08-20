@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import { FILE_OP_TIMEOUT_MS, openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
 import {
   configRootSeeded,
   settleConfigRoot,
@@ -170,7 +170,42 @@ async function openPrefs(
  * ABSENT after a search, and every one of those passes in a tree that rendered nothing.
  */
 
-test('the Themes tab groups tokens by app area, General first and Icons last (021, FR-003a/FR-004)', { tag: ['@extended', '@prefs'] }, async () => {
+/*
+ * ── TWO MOVED (035 T055) ──
+ *
+ * `packages/ui/tests/component/preferences-app.test.ts`, "the row action gutter":
+ *
+ *   :207  a built-in theme row offers all three actions, like Settings (#76)
+ *   :269  reset leaves a revert behind — a reset is itself undoable (FR-016, SC-017)
+ *
+ * The second is the one that protects the user's work. A reset writes the SHIPPED value over
+ * whatever they had; if that were the end of it, one mis-click destroys an override with no way
+ * home, and the row looks entirely correct while it does. So a reset must leave a revert behind, and
+ * that revert must give back the value the WINDOW OPENED WITH rather than the shipped default it
+ * just wrote — which is why reset and revert are two controls and not one glyph with clever wording.
+ *
+ * Six tests now walk the whole cycle: overridden-and-untouched (reset only), edited (both), reset
+ * applied (reset now disabled, revert offered), reverted (back to the first row). Every step is
+ * renderer state over a config store.
+ *
+ * ── THE STUB WAS MISSING TWO THINGS, AND BOTH FAILED SILENTLY ──
+ *
+ * Worth recording, because both are the shape this spec keeps finding. `writePatch` accepted the
+ * patch and re-emitted nothing — exactly the failure that file's own harness comment warns about for
+ * `write`, sitting unnoticed beside it because no test had ever driven a patched write. And a RESET
+ * does not use either: it has its own `config.resetSetting` channel, deliberately, because it
+ * restores the shipped value from feature 010's record rather than any value the renderer computed
+ * (FR-011b, `settings-tab.tsx:390`). With no stub for it the reset resolved `undefined`, changed
+ * nothing, and the row went on reporting itself overridden.
+ *
+ * ── WHAT STAYS ──
+ *
+ * `:227` (revert restores the value the window opened with) keeps its launch: it reads
+ * `settings.json` back off disk after every step, which is the only thing that proves the writes
+ * land in the right shape and order. The component test proves the row's STATE; that one proves the
+ * document.
+ */
+test('the Themes tab groups tokens by app area, General first and Icons last (021, FR-003a/FR-004)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'themes');
@@ -204,27 +239,7 @@ test('the Themes tab groups tokens by app area, General first and Icons last (02
   );
 });
 
-test('a built-in theme row offers all three actions, like Settings (issue #76)', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPrefs(app, win, 'themes');
-      // A built-in theme is active by default, so its token rows now carry reset + revert + clear —
-      // the Themes tab used to decline reset/revert wholesale (015 FR-013); #76 supersedes that,
-      // because a per-token reset is a different write scope from 014's whole-theme restore.
-      const themeActions = prefs.getByTestId('theme-actions-colours.editorBg');
-      await expect(themeActions).toBeVisible();
-      await expect(themeActions.locator('button')).toHaveCount(3);
-
-      // …the same three-slot gutter a Settings row has (the window is reused across tabs).
-      await prefs.getByTestId('prefs-tab-settings').click();
-      const settingActions = prefs.getByTestId('setting-actions-editor.autoSave');
-      await expect(settingActions).toBeVisible();
-      await expect(settingActions.locator('button')).toHaveCount(3);
-    },
-  );
-});
-
-test('revert restores the value the window OPENED with, not the shipped default (FR-016, SC-017)', { tag: ['@extended', '@prefs'] }, async () => {
+test('revert restores the value the window OPENED with, not the shipped default (FR-016, SC-017)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   // The user arrives with autoSaveDebounceMs already overridden to 900. That override is their
   // starting point, and it is what revert owes them back.
   // `version` matters: feature 010's startup seeding rewrites a document it cannot version, and
@@ -250,13 +265,13 @@ test('revert restores the value the window OPENED with, not the shipped default 
       // Edit it this session → now it is BOTH overridden and changed, so both are offered.
       await input.fill('1500');
       await input.blur();
-      await expect.poll(() => readJson(cfgRoot, 'settings.json')?.editor?.autoSaveDebounceMs).toBe(1500);
+      await expect.poll(() => readJson(cfgRoot, 'settings.json')?.editor?.autoSaveDebounceMs, { timeout: FILE_OP_TIMEOUT_MS }).toBe(1500);
       await expect(prefs.getByTestId('setting-revert-editor.autoSaveDebounceMs')).toBeEnabled();
       await expect(prefs.getByTestId('setting-reset-editor.autoSaveDebounceMs')).toBeEnabled();
 
       // Revert → back to 900, the value they arrived with. NOT the shipped default.
       await prefs.getByTestId('setting-revert-editor.autoSaveDebounceMs').click();
-      await expect.poll(() => readJson(cfgRoot, 'settings.json')?.editor?.autoSaveDebounceMs).toBe(900);
+      await expect.poll(() => readJson(cfgRoot, 'settings.json')?.editor?.autoSaveDebounceMs, { timeout: FILE_OP_TIMEOUT_MS }).toBe(900);
       await expect(input).toHaveValue('900');
 
       // Nothing left to revert; still overridden, so the reset stays.
@@ -266,37 +281,7 @@ test('revert restores the value the window OPENED with, not the shipped default 
   );
 });
 
-test('reset leaves a revert behind — a reset is itself undoable (FR-016, SC-017)', { tag: ['@extended', '@prefs'] }, async () => {
-  // `version` matters: feature 010's startup seeding rewrites a document it cannot version, and
-  // the override would be gone before the window ever opened.
-  await runApp(
-    async (app, win) => {
-      /*
-       * The override goes into the RUNNING app's config root rather than being seeded before launch.
-       * What revert owes the user back is the value the WINDOW opened with, and that snapshot is
-       * captured when the preferences window mounts — so a write that lands before the window opens
-       * is the same starting point. `version: 1` still matters: 010's seeding rewrites a document it
-       * cannot version, and the override would be gone before the window ever opened.
-       */
-      writeSettingsAtomic(cfgRoot, { version: 1, editor: { autoSaveDebounceMs: 900 } });
-      const prefs = await openPrefs(app, win, 'settings');
-      await expect(prefs.getByTestId('control-editor.autoSaveDebounceMs')).toHaveValue('900');
-
-      // Reset to the shipped value. That IS a change from where the session started...
-      await prefs.getByTestId('setting-reset-editor.autoSaveDebounceMs').click();
-      await expect(prefs.getByTestId('setting-reset-editor.autoSaveDebounceMs')).toBeDisabled();
-
-      // ...so the row now offers a revert, and taking it gives the user their 900 back. Without
-      // this, a mis-clicked reset would silently destroy an override with no way home.
-      const revert = prefs.getByTestId('setting-revert-editor.autoSaveDebounceMs');
-      await expect(revert).toBeVisible();
-      await revert.click();
-      await expect(prefs.getByTestId('control-editor.autoSaveDebounceMs')).toHaveValue('900');
-    },
-  );
-});
-
-test('clear unbinds an action entirely, and reset brings the chords back (FR-016, SC-018)', { tag: ['@extended', '@prefs'] }, async () => {
+test('clear unbinds an action entirely, and reset brings the chords back (FR-016, SC-018)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'keybindings');
@@ -308,7 +293,7 @@ test('clear unbinds an action entirely, and reset brings the chords back (FR-016
       // Every action is clearable — unbound is a valid state for all of them.
       await prefs.getByTestId('binding-clear-zoom.in').click();
       await expect(chord).toContainText('unbound');
-      await expect.poll(() => readJson(cfgRoot, 'keybindings.json')?.bindings?.['zoom.in']).toEqual([]);
+      await expect.poll(() => readJson(cfgRoot, 'keybindings.json')?.bindings?.['zoom.in'], { timeout: FILE_OP_TIMEOUT_MS }).toEqual([]);
 
       // An unbound action offers no clear (it would be a no-op) but IS overridden, so it offers
       // a reset — which restores the FULL shipped chord set, not just one chord.

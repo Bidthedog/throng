@@ -28,7 +28,7 @@ import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
  * shows its content, and the panel reverts to its form when the shell exits.
  */
 
-test('an idle terminal keeps its content, and nothing repaints it on a timer', { tag: ['@extended', '@terminal'] }, async () => {
+test('an idle terminal keeps its content, and nothing repaints it on a timer', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-term-refresh-'));
   try {
     await runApp(async (_app, win) => {

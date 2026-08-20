@@ -67,7 +67,13 @@ async function boot(root: string): Promise<void> {
   );
 }
 
-test('first run (empty config): seeds settings, keybindings, every built-in theme and the version marker from the record', { tag: ['@extended', '@prefs'] }, async () => {
+// Promoted to @core by 035 when `config-files.e2e.ts` was deleted as a duplicate of this test.
+// That file asserted only that settings/keybindings/throng.json EXIST and that settings carries two
+// named properties; the assertions below are a strict superset — byte-for-byte equality against the
+// shipped record. But it was @core and this was @extended, so deleting it without promoting would
+// have quietly dropped first-run coverage out of the lane that gates every push. A broken first run
+// is not something to discover at release.
+test('first run (empty config): seeds settings, keybindings, every built-in theme and the version marker from the record', { tag: ['@core', '@prefs', '@reserve:window'] }, async () => {
   const root = makeRoot(); // empty → true first run
 
   await boot(root);
@@ -84,7 +90,7 @@ test('first run (empty config): seeds settings, keybindings, every built-in them
   expect(JSON.parse(readFileSync(themePath(root, A_BUILTIN), 'utf8'))).toEqual(SHIPPED.themes[A_BUILTIN]);
 });
 
-test('relaunch is idempotent: a second start rewrites no config file', { tag: ['@extended', '@prefs'] }, async () => {
+test('relaunch is idempotent: a second start rewrites no config file', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   const root = makeRoot();
   await boot(root); // seed
 

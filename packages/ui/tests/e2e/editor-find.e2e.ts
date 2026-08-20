@@ -82,6 +82,40 @@ const matches = (win: Page, pid: string) =>
 const currentMatch = (win: Page, pid: string) =>
   win.getByTestId(`editor-${pid}`).locator('.throng-search-match--current');
 
+/*
+ * ── THE CONTROLLER MOVED (035 T055) ──
+ *
+ * `packages/ui/tests/component/editor-search-controller.test.ts` now owns
+ * `createEditorSearchController` — the join between the matching model and the document, which had
+ * no test at any layer. `search-model.test.ts` proved the MATCHING and `search-store.test.ts`
+ * proved the BAR; the thing between them was proven only from here.
+ *
+ * ONE TEST REMOVED: `:131` "match-case and whole-word toggles narrow the matches live (FR-007)".
+ *
+ * ── 034 DECLINED THIS MIGRATION, AND THE REASON WAS HALF RIGHT ──
+ *
+ * The note below records why four of five stayed: they assert on `.throng-search-match`
+ * decorations, and *"the store test can say the controller was TOLD to clear; only the editor shows
+ * that the document stopped drawing them."*
+ *
+ * Right about the store, wrong about the layer. The decorations are a `StateField`
+ * (`editor-search.ts:45`) that provides `EditorView.decorations`, so a decoration set — its ranges
+ * AND its classes — exists in the STATE before anything is painted and without a view at all. The
+ * component test reads `state.facet(EditorView.decorations)`, which is the value the renderer draws
+ * from, and asserts on the offsets as well as the count: three decorations over the wrong text
+ * would satisfy the E2E and not it.
+ *
+ * ── WHAT STAYS, AND WHY EACH ──
+ *
+ *   :85  the wiring witness — that the decoration set is actually PAINTED as `.throng-search-match`
+ *        spans in a rendered document, and that the bar's count agrees with them. jsdom draws
+ *        nothing, so no lower layer can see it.
+ *   :184 retagged `@reserve:focus`. Its highlight half has moved; what remains is that Escape moves
+ *        focus from a DOM input back into a contenteditable such that the next keystroke lands in
+ *        the document. The component test can only say `view.focus()` was called.
+ *   :158, :209, :248, :334, :357 — selection-seeded input, the SC-007 budget on 10k lines, control
+ *        geometry, and block selection. All already reserve-tagged.
+ */
 test('finds as you type: highlights every match, marks the current one, counts them', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
@@ -128,34 +162,7 @@ test('finds as you type: highlights every match, marks the current one, counts t
  * stopped drawing them. That distinction is why four of the five stayed.
  */
 
-test('match-case and whole-word toggles narrow the matches live (FR-007)', { tag: ['@extended', '@editor'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'ModesProj', root);
-      const pid = await newEditor(win);
-      await typeInto(win, pid, 'foo Foo food\n');
-
-      await win.keyboard.press('Control+f');
-      await win.getByTestId('find-input').fill('foo');
-      // foo, Foo, foo(d) — case-insensitive substring.
-      await expect(win.getByTestId('find-count')).toHaveText('1 of 3');
-
-      await win.getByTestId('find-match-case').click();
-      // foo, foo(d) — 'Foo' drops out.
-      await expect(win.getByTestId('find-count')).toHaveText('1 of 2');
-
-      await win.getByTestId('find-whole-word').click();
-      // only the standalone 'foo' survives.
-      await expect(win.getByTestId('find-count')).toHaveText('1 of 1');
-      await expect(matches(win, pid)).toHaveCount(1);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('seeds the term from the selection, and shows a no-results state for a miss', { tag: ['@extended', '@editor'] }, async () => {
+test('seeds the term from the selection, and shows a no-results state for a miss', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -181,7 +188,7 @@ test('seeds the term from the selection, and shows a no-results state for a miss
   }
 });
 
-test('closing find clears the highlights and returns focus to the editor', { tag: ['@extended', '@editor'] }, async () => {
+test('closing find clears the highlights and returns focus to the editor', { tag: ['@extended', '@editor', '@reserve:focus'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -206,7 +213,7 @@ test('closing find clears the highlights and returns focus to the editor', { tag
   }
 });
 
-test('renders results within the 1000 ms budget on a ~10k-line file (SC-007)', { tag: ['@extended', '@editor'] }, async () => {
+test('renders results within the 1000 ms budget on a ~10k-line file (SC-007)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     // The SC-007 representative fixture: ~10k lines, 20 of them matching.
@@ -245,7 +252,7 @@ test('renders results within the 1000 ms budget on a ~10k-line file (SC-007)', {
   }
 });
 
-test('every find-bar action control is the same size, and match-case reads "Aa"', { tag: ['@extended', '@editor'] }, async () => {
+test('every find-bar action control is the same size, and match-case reads "Aa"', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     await runApp(async (_app, win) => {
@@ -293,6 +300,44 @@ test('every find-bar action control is the same size, and match-case reads "Aa"'
   }
 });
 
+/**
+ * VERDICT DECLINED (035 T055/FR-022) — this stays, and the reason took two wrong answers to reach.
+ *
+ * The census said `component`: "no-active-panel is a routing/logic no-op, no OS feature involved".
+ * That is true about the CODE and false about what can be proved.
+ *
+ * ── FIRST WRONG ANSWER: that the test is fine as it is ──
+ *
+ * It is not. Its assertion — `find-bar-<pid>` has count 0 — cannot fail. `FindBar` is rendered by
+ * `EditorPanel` and `TerminalPanel` and by nothing else, and an untyped panel renders the
+ * type-selection form instead of either. The absence is a fact about the render tree's SHAPE. Delete
+ * the guard this test is named after and it still passes.
+ *
+ * ── SECOND WRONG ANSWER: that asserting on the STORE fixes it ──
+ *
+ * It looks like it should. `search-keybindings.tsx:108` has a real guard —
+ * `if (!activePanelId || !findKind) return;` — so a component test could mount `SearchKeybindings`
+ * on an untyped layout, press Ctrl+F, and assert `getFindState().panelId` stays null.
+ *
+ * That test was written, it passed, and BOTH of its mutations passed too: removing the kind guard,
+ * and forcing every panel to `'editor'`. It was deleted rather than kept.
+ *
+ * ── WHY, AND THIS IS THE PART WORTH KEEPING ──
+ *
+ * Two lines down there is a second, independent guard:
+ *
+ *     const controller = getPanelSearch(activePanelId);
+ *     if (!controller) return;
+ *
+ * An untyped panel never registers a search controller, so the handler returns there whatever the
+ * kind guard does. The absence is OVER-DETERMINED, and isolating either guard means constructing an
+ * untyped panel that has a registered controller — a state the application cannot produce. A test
+ * that has to fabricate an impossible state is asserting about its own fixture.
+ *
+ * So this test stays as the weak thing it is, honestly labelled, rather than being replaced by a
+ * component test that would pass under its own mutation. What would genuinely improve it is a
+ * production change — one guard instead of two — and that is not this spec's to make.
+ */
 test('find is a no-op when no panel is active (spec Edge Cases)', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
@@ -316,7 +361,7 @@ test('find is a no-op when no panel is active (spec Edge Cases)', { tag: ['@exte
  * actually searching for one arbitrary row of the user's block.
  */
 
-test('a ONE-ROW block seeds the find input; a MULTI-ROW block seeds nothing (FR-025i)', { tag: ['@extended', '@editor'] }, async () => {
+test('a ONE-ROW block seeds the find input; a MULTI-ROW block seeds nothing (FR-025i)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
     /*

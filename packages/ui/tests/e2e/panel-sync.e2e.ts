@@ -73,7 +73,7 @@ async function subWorkspaceIds(win: Page): Promise<string[]> {
     );
 }
 
-test('the type-selection form syncs live across the project and sub-workspace windows', { tag: ['@extended', '@window'] }, async () => {
+test('the type-selection form syncs live across the project and sub-workspace windows', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const app = shared.app;
   const win = shared.win;
   await createProject(win, 'FormSync', 'C:/c/formsync');
@@ -108,7 +108,7 @@ test('the type-selection form syncs live across the project and sub-workspace wi
   }
 });
 
-test('confirming a Panel type in one window types the clone in the other', { tag: ['@extended', '@window'] }, async () => {
+test('confirming a Panel type in one window types the clone in the other', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const app = shared.app;
   const win = shared.win;
   // A real project root so the terminal can actually launch (else it reverts to the form).
@@ -152,7 +152,7 @@ test('confirming a Panel type in one window types the clone in the other', { tag
   }
 });
 
-test('panel selection is INDEPENDENT across windows (not mirrored)', { tag: ['@extended', '@window'] }, async () => {
+test('panel selection is INDEPENDENT across windows (not mirrored)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const app = shared.app;
   const win = shared.win;
   await createProject(win, 'ActiveSync', 'C:/c/activesync');

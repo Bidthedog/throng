@@ -18,7 +18,7 @@ import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
  * focus or layout change, no input typed at the shell, and safe to repeat (FR-043–046).
  */
 
-test('a redraw from either menu, and from Ctrl+F5 three times, loses nothing and types nothing', { tag: ['@extended', '@terminal'] }, async () => {
+test('a redraw from either menu, and from Ctrl+F5 three times, loses nothing and types nothing', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-redraw-'));
   const marker = basename(root);
   try {

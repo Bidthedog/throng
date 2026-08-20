@@ -79,7 +79,7 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('replaces Empty Panel with the type form; swaps inputs; Clear resets; Confirm types + launches', { tag: ['@extended', '@window'] }, async () => {
+test('replaces Empty Panel with the type form; swaps inputs; Clear resets; Confirm types + launches', { tag: ['@extended', '@window', '@reserve:pty'] }, async () => {
   const root = own(mkdtempSync(join(tmpdir(), 'throng-form-')));
   try {
     await runApp(async (_app, win) => {
@@ -137,7 +137,7 @@ test('replaces Empty Panel with the type form; swaps inputs; Clear resets; Confi
   }
 });
 
-test('the type form renders and confirms in a sub-workspace window (FR-008)', { tag: ['@extended', '@window'] }, async () => {
+test('the type form renders and confirms in a sub-workspace window (FR-008)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const root = own(mkdtempSync(join(tmpdir(), 'throng-form-sub-')));
   try {
     await runApp(async (app, win) => {

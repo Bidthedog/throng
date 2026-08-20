@@ -167,7 +167,7 @@ test.afterAll(async () => {
  * afterwards. Both are PTY fidelity, which Principle V reserves.
  */
 
-test('a USER-DEFINED flavour actually launches — the gap #113 records (FR-042)', { tag: ['@extended', '@terminal'] }, async () => {
+test('a USER-DEFINED flavour actually launches — the gap #113 records (FR-042)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = ownSeeded(mkdtempSync(join(tmpdir(), 'throng-025-userflav-')));
   try {
     await runSeeded(
@@ -192,7 +192,7 @@ test('a USER-DEFINED flavour actually launches — the gap #113 records (FR-042)
   }
 });
 
-test('a user-defined flavour launches WITH a startup command, via its own recipe (FR-043)', { tag: ['@extended', '@terminal'] }, async () => {
+test('a user-defined flavour launches WITH a startup command, via its own recipe (FR-043)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = ownSeeded(mkdtempSync(join(tmpdir(), 'throng-025-userflav-')));
   try {
     await runSeeded(
@@ -213,7 +213,7 @@ test('a user-defined flavour launches WITH a startup command, via its own recipe
   }
 });
 
-test('the empty-panel form pre-fills from what the panel remembered (FR-007a)', { tag: ['@extended', '@terminal'] }, async () => {
+test('the empty-panel form pre-fills from what the panel remembered (FR-007a)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-025-prefill-'));
   try {
   await runApp(async (_app, win) => {

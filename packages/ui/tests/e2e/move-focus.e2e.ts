@@ -68,66 +68,72 @@ async function expectActive(win: Page, pid: string): Promise<void> {
   await expect(win.locator('.panel-box--active')).toHaveCount(1);
 }
 
-test('directional keys move focus in layout order and stay put at the edge', { tag: ['@extended', '@window'] }, async () => {
+/**
+ * FR-015 — the directional chord reaches the mover, and the move is RENDERED.
+ *
+ * ── WHAT LEFT (035 T039) ──
+ *
+ * This walked p1 → p2 → p3, pressed again at the right edge, walked back to p1, pressed again at the
+ * left edge, and then pressed Up in a purely horizontal layout: eight keypresses, each about a second,
+ * re-deriving a pure function through an Electron window.
+ *
+ * Every one of those cases is in `packages/core/tests/unit/focus-move.test.ts` — the directional
+ * neighbour, the edge returning null with no wrap, the neighbour that overlaps on the perpendicular
+ * axis, and a stable depth-first order independent of focus history.
+ *
+ * ONE witness is what is left, and it is the only thing the unit tests cannot say: that
+ * `Control+Alt+ArrowRight` is bound, is delivered to the window, reaches the mover, and that the
+ * panel it names is the one that renders as active. A second press would prove nothing the first
+ * did not.
+ */
+test('the directional chord reaches the mover and the new panel renders active (FR-015)', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'MoveFocus', 'C:/c/mf');
     await addPanels(win, 2); // a row of three: p1 | p2 | p3
     await expect(win.locator('.panel-box')).toHaveCount(3);
-    const [p1, p2, p3] = await panelIds(win);
+    const [p1, p2] = await panelIds(win);
 
     await win.getByTestId(`panel-${p1}`).click();
     await expectActive(win, p1);
 
-    // Rightward moves walk p1 → p2 → p3.
     await win.keyboard.press('Control+Alt+ArrowRight');
     await expectActive(win, p2);
-    await win.keyboard.press('Control+Alt+ArrowRight');
-    await expectActive(win, p3);
-
-    // At the right edge there is nowhere to go — focus stays put (no wrap, no error).
-    await win.keyboard.press('Control+Alt+ArrowRight');
-    await expectActive(win, p3);
-
-    // Leftward walks back p3 → p2 → p1, then stays put at the left edge.
-    await win.keyboard.press('Control+Alt+ArrowLeft');
-    await expectActive(win, p2);
-    await win.keyboard.press('Control+Alt+ArrowLeft');
-    await expectActive(win, p1);
-    await win.keyboard.press('Control+Alt+ArrowLeft');
-    await expectActive(win, p1);
-
-    // A vertical move in a purely horizontal layout also stays put.
-    await win.keyboard.press('Control+Alt+ArrowUp');
-    await expectActive(win, p1);
   });
 });
 
-test('cycle forward/backward visits panels in layout order, wrapping the ring (SC-008a)', { tag: ['@extended', '@window'] }, async () => {
+/**
+ * SC-008a — the cycle chord reaches the ring, and the move is RENDERED.
+ *
+ * ── WHAT LEFT (035 T039) ──
+ *
+ * This pressed forward three times to prove the wrap, then backward twice to prove the reverse: five
+ * keypresses for a ring whose behaviour is `focus-move.test.ts`'s ("wraps forward and backward
+ * through the ring", and "forward then the same count backward returns to the start").
+ *
+ * Both chords are kept because they are two different bindings — `Control+Backquote` and
+ * `Control+Shift+Backquote`, the second of which produces a different key entirely — and a binding
+ * that is not delivered is exactly what a unit test cannot see. The WRAP is not re-proved here.
+ */
+test('both cycle chords reach the ring and the new panel renders active (SC-008a)', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'CycleFocus', 'C:/c/cf');
     await addPanels(win, 2); // p1 | p2 | p3
-    const [p1, p2, p3] = await panelIds(win);
+    const [p1, p2] = await panelIds(win);
 
     await win.getByTestId(`panel-${p1}`).click();
     await expectActive(win, p1);
 
-    // Forward cycle: p1 → p2 → p3 → wrap → p1.
     await win.keyboard.press('Control+Backquote');
     await expectActive(win, p2);
-    await win.keyboard.press('Control+Backquote');
-    await expectActive(win, p3);
-    await win.keyboard.press('Control+Backquote');
-    await expectActive(win, p1); // wrapped
 
-    // Backward cycle (Ctrl+Shift+backtick → produces `~`): p1 → wrap → p3 → p2.
+    // The reverse binding is a DIFFERENT chord, not the same one with a flag — hence a witness of
+    // its own. That it lands back on p1 is the mover's business, asserted in core.
     await win.keyboard.press('Control+Shift+Backquote');
-    await expectActive(win, p3);
-    await win.keyboard.press('Control+Shift+Backquote');
-    await expectActive(win, p2);
+    await expectActive(win, p1);
   });
 });
 
-test('move-focus works from a focused terminal and editor, and input routing follows (FR-003)', { tag: ['@extended', '@window'] }, async () => {
+test('move-focus works from a focused terminal and editor, and input routing follows (FR-003)', { tag: ['@extended', '@window', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-mf-io-'));
   try {
     await runApp(async (_app, win) => {

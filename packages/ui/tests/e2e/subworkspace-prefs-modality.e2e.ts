@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
-import { cleanupTemp, runApp } from './harness.js';
+import { NEW_WINDOW_TIMEOUT_MS, cleanupTemp, runApp } from './harness.js';
 
 /**
  * #263 — a sub-workspace opened while Preferences is open must still be interactive.
@@ -53,7 +53,7 @@ async function enabledStates(app: ElectronApplication): Promise<boolean[]> {
   );
 }
 
-test('a sub-workspace opened while Preferences is open is interactive (#263)', { tag: ['@extended', '@window'] }, async () => {
+test('a sub-workspace opened while Preferences is open is interactive (#263)', { tag: ['@extended', '@window', '@reserve:focus'] }, async () => {
   test.setTimeout(120_000);
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-cfg-263-'));
 
@@ -72,7 +72,7 @@ test('a sub-workspace opened while Preferences is open is interactive (#263)', {
         //    while Preferences is already open, which is the path that still disabled it.
         await win.getByTestId('title-bar-cog').click();
         const [prefs] = await Promise.all([
-          app.waitForEvent('window', { timeout: 15_000 }),
+          app.waitForEvent('window', { timeout: NEW_WINDOW_TIMEOUT_MS }),
           win.getByTestId('cog-menu-settings').click(),
         ]);
         await prefs.waitForLoadState('domcontentloaded', { timeout: 15_000 });
@@ -86,7 +86,7 @@ test('a sub-workspace opened while Preferences is open is interactive (#263)', {
 
         // ── Now open the sub-workspace, with Preferences still up.
         const [child] = await Promise.all([
-          app.waitForEvent('window', { timeout: 15_000 }),
+          app.waitForEvent('window', { timeout: NEW_WINDOW_TIMEOUT_MS }),
           win.getByTestId('subworkspace-open-sw1').click(),
         ]);
         await child.waitForLoadState('domcontentloaded', { timeout: 15_000 });

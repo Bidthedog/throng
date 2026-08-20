@@ -54,7 +54,6 @@ let projectSeq = 0;
 const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
-
 // Post-Delivery-E feedback (Session 2026-07-05b): New Editor menu target (FR-072),
 // panel-header Save + Revert (FR-075/076), visible out-of-tree save message
 // (FR-078), and the themeable editor monospace font (FR-074).
@@ -81,38 +80,52 @@ async function stubSaveDialog(app: ElectronApplication, picked: string): Promise
   }, picked);
 }
 
-test('a refused out-of-tree save shows a visible message and leaves the buffer unsaved', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  const outside = mkdtempSync(join(tmpdir(), 'throng-out-'));
-  try {
-    await runApp(async (app, win) => {
-      await createProject(win, 'FbProj', root);
-      const pid = await newEditor(win);
-      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-      await win.keyboard.type('data');
-
-      await stubSaveDialog(app, join(outside, 'escape.txt'));
-      await win.keyboard.press('Control+s');
-
-      /*
-       * A visible notice, not a silent no-op (FR-078).
-       *
-       * 030 US3 / T052 — LEFT ALONE. A REFUSED SAVE is not a missing file: it goes through
-       * `use-editor.ts`'s own `showEditorNotice`, which FR-035 does not touch. Only the per-tab
-       * missing-file batch moved to the consolidated notice.
-       */
-      await expect(win.getByTestId('editor-notice-dialog')).toBeVisible();
-      await expect(win.getByTestId('editor-notice-message')).toContainText('project');
-      await win.getByTestId('editor-notice-ok').click();
-      await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible();
-      expect(existsSync(join(outside, 'escape.txt'))).toBe(false);
-    });
-  } finally {
-    cleanupTemp(root);
-    cleanupTemp(outside);
-  }
-});
-
+/**
+ * ── THE ENABLE/DISABLE RULE MOVED (035 T055) ──
+ *
+ * Two of this test's three claims are `file-tree.tsx`'s `disabled: alreadyOpen || !activeTabId`,
+ * and they are now `packages/ui/tests/component/explorer-open-in-target.test.ts`: the item is
+ * ENABLED while the file is closed, and still OFFERED but disabled once it is open. That harness
+ * already stubs `editor.isOpen`, which is where `alreadyOpen` comes from, so both states are one
+ * line apart — where this test reached the second by really opening a file in a real editor panel.
+ *
+ * The component version also asserts the SCOPE of the refusal, which this could not: with the file
+ * open, "Last Active Editor" must stay enabled, because it reuses the buffer that already exists
+ * rather than making a second one. A fix that disabled the whole submenu would satisfy every
+ * assertion here and take away the one target that still makes sense. Red-proven by
+ * disables-siblings, which nothing else reddens.
+ *
+ * ── WHAT STAYS ──
+ *
+ * The middle claim: that clicking New Editor really does produce a second editor panel hosting the
+ * file. That is the editor's business, not the menu's, and it is what the rest of this test drives.
+ */
+/*
+ * ── ONE REMOVED (035 T056), AND A WHOLE FILE WITH IT ──
+ *
+ * `:84` "a refused out-of-tree save shows a visible message and leaves the buffer unsaved" →
+ * `packages/ui/tests/component/editor-notices.test.ts`, which also absorbed the entirety of
+ * `editor-external-change-named.e2e.ts` (one declaration, now deleted).
+ *
+ * ── IN BOTH CASES THE ENDS WERE PROVEN AND THE MIDDLE WAS NOT ──
+ *
+ * The out-of-tree REFUSAL, and that nothing is written outside the project, is
+ * `integration/editor-service-save.integration.test.ts:70`. `buildFileChangedNotice` is pure and is
+ * `unit/file-changed-notice.test.ts`. What neither reaches is the hop between them — that a refused
+ * save RAISES the notice rather than failing silently (FR-078), and that an `externalChange`
+ * broadcast fills the builder in with THIS panel's title, THIS tab's title and the path the document
+ * holds NOW.
+ *
+ * Three string arguments in a row is the shape a wiring mistake hides in best, and the component
+ * file catches two versions of it the E2E could not: the panel and tab swapped (`panel-and-tab-
+ * swapped`), and a path left behind by a move (`movedto-ignored`) — the migrated test opened one
+ * file and never moved it. It also asserts the SUB-WORKSPACE wording, which is the mirror image of
+ * the project one; a single test cannot tell a correct message from a hard-coded one.
+ *
+ * Red-proven against seven mutations: no-external-notice (2), notice-on-every-sync (1),
+ * panel-and-tab-swapped (1), notice-names-no-file (2), movedto-ignored (1), save-error-silent (2),
+ * one-message-for-both-owners (1).
+ */
 test('Open In offers "New Editor" (a second panel) and disables it once the file is open', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
@@ -180,7 +193,7 @@ test('panel-header Save saves; Revert discards changes after confirmation', { ta
   }
 });
 
-test('the editor renders in the themeable monospace font (Consolas default)', { tag: ['@extended', '@editor'] }, async () => {
+test('the editor renders in the themeable monospace font (Consolas default)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

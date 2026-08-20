@@ -59,7 +59,7 @@ async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
   return prefs;
 }
 
-test('every surface resolves to its consolidated token + the relabel renders', { tag: ['@extended', '@prefs'] }, async () => {
+test('every surface resolves to its consolidated token + the relabel renders', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(
     async (app, win) => {

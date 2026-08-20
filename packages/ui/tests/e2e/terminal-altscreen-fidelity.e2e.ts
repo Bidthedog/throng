@@ -79,7 +79,7 @@ const createProject = (win: OpenApp['win'], name: string, root: string): Promise
  * DEFECT 1 — clicking into a terminal running a full-screen program wipes its screen down to one
  * line, and only a wheel-up (which sends the program arrow keys, making it redraw) brings it back.
  */
-test('clicking into a terminal on the alternate screen does not wipe its screen', { tag: ['@extended', '@terminal'] }, async () => {
+test('clicking into a terminal on the alternate screen does not wipe its screen', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-altclick-'));
   const marker = basename(root);
   writeAltScreenProgram(root);
@@ -120,7 +120,7 @@ test('clicking into a terminal on the alternate screen does not wipe its screen'
  * The tail is the removable one: a program on the alternate screen has no scrollback worth
  * replaying, and painting it is a flash the user sees for nothing.
  */
-test('re-attaching to an alternate-screen program replays no scrollback', { tag: ['@extended', '@terminal'] }, async () => {
+test('re-attaching to an alternate-screen program replays no scrollback', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -173,7 +173,7 @@ test('re-attaching to an alternate-screen program replays no scrollback', { tag:
  * This drives the shape directly: put real scrollback above a program that repaints exactly like a
  * `cls` when the window changes, then ask for a redraw. The scrollback must survive.
  */
-test('a requested redraw is not mistaken for a screen clear', { tag: ['@extended', '@terminal'] }, async () => {
+test('a requested redraw is not mistaken for a screen clear', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-redrawclear-'));
   const marker = basename(root);
   // A NORMAL-buffer program: no alt screen, so the existing alt-screen guard cannot save it.

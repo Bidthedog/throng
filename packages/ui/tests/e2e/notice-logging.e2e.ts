@@ -121,7 +121,7 @@ async function ghostProject(win: Page, name: string): Promise<void> {
 /**
  * T015 — every accepted notice reaches the log, at the level its severity maps to.
  */
-test('a displayed error notice writes a record at ERROR carrying its severity and message', { tag: ['@extended', '@failure'] }, async () => {
+test('a displayed error notice writes a record at ERROR carrying its severity and message', { tag: ['@extended', '@failure', '@reserve:runtime'] }, async () => {
   const cfgRoot = seededCfgRoot({});
   await runApp(
     async (_app, win, ctx) => {

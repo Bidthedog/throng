@@ -195,18 +195,23 @@ test.afterAll(async () => {
   for (const dir of ownedTempDirs.splice(0)) cleanupTemp(dir);
 });
 
-test('shows each project’s path under its name (FR-032)', { tag: ['@extended', '@window'] }, async () => {
-  await createProject(win, 'Pathy', 'C:/code/some/deep/path');
-  // 034 FR-045 — scoped to THIS project's row. `project-path` is rendered once per project row in
-  // the sidebar, so the bare `getByTestId('project-path')` this replaces matched one node per
-  // project the moment a second one existed — a strict-mode violation, not a wrong value. The claim
-  // is unchanged and is now stated where it was always meant to hold: under Pathy's own name.
-  await expect(projectItem(win, 'Pathy').getByTestId('project-path')).toContainText(
-    'C:/code/some/deep/path',
-  );
-});
-
-test('uses a native folder picker for the project root (FR-034)', { tag: ['@extended', '@window'] }, async () => {
+/*
+ * ── ONE REMOVED (035 T055) ──
+ *
+ * `:198` "shows each project's path under its name (FR-032)" →
+ * `packages/ui/tests/component/projects-panel-form.test.ts`, "each project row carries its own path".
+ *
+ * One DOM assertion behind an Electron launch — and 034's own note on it points at what the
+ * replacement had to keep: a bare `getByTestId('project-path')` matched one node PER PROJECT the
+ * moment a second existed, so the query was scoped to Pathy's row. That scoping is the whole
+ * substance of "each project's".
+ *
+ * The replacement therefore uses TWO rows, not one, and asserts both directions: each row shows its
+ * own path, and neither shows the other's. A single row cannot tell a per-row path apart from one
+ * the panel renders once for everybody — measured: the mutation that gives every row the FIRST
+ * project's path reddens both tests, and would have reddened nothing written against one project.
+ */
+test('uses a native folder picker for the project root (FR-034)', { tag: ['@extended', '@window', '@reserve:native'] }, async () => {
   try {
     await app.evaluate(({ dialog }) => {
       // 034 FR-045 — keep the function being replaced, so the `finally` can put back exactly what
@@ -246,40 +251,7 @@ test('uses a native folder picker for the project root (FR-034)', { tag: ['@exte
   }
 });
 
-test('renames and closes Tabs via the right-click menu (FR-036)', { tag: ['@extended', '@window'] }, async () => {
-  await createProject(win, 'TabsMenu', 'C:/c/tm');
-  await win.getByTestId('tab-add').click();
-  await expect(win.locator('.tab-chip')).toHaveCount(2);
-
-  // Rename the first tab.
-  await win.locator('.tab-chip').first().click({ button: 'right' });
-  await expect(win.getByTestId('context-menu')).toBeVisible();
-  await win.getByTestId('menu-item-Rename').click();
-  const input = win.locator('[data-testid^="tab-rename-input-"]');
-  await input.fill('Renamed Tab');
-  await input.press('Enter');
-  await expect(win.locator('.tab-chip', { hasText: 'Renamed Tab' })).toBeVisible();
-
-  // Destroy other tabs → only the renamed one remains (double confirm).
-  await win.locator('.tab-chip', { hasText: 'Renamed Tab' }).click({ button: 'right' });
-  await win.getByTestId('menu-item-Destroy other tabs').click();
-  await win.getByTestId('confirm-accept').click(); // summary…
-  await win.getByTestId('confirm-accept').click(); // …then wry confirmation (FR-043)
-  await expect(win.locator('.tab-chip')).toHaveCount(1);
-});
-
-test('renames a Panel via the header right-click menu (FR-037)', { tag: ['@extended', '@window'] }, async () => {
-  await createProject(win, 'PanelMenu', 'C:/c/pm');
-  const id = (await panelIds(win))[0];
-  await win.getByTestId(`panel-handle-${id}`).click({ button: 'right' });
-  await win.getByTestId('menu-item-Rename').click();
-  const input = win.getByTestId(`panel-rename-input-${id}`);
-  await input.fill('Server Logs');
-  await input.press('Enter');
-  await expect(win.getByTestId(`panel-${id}`)).toContainText('Server Logs');
-});
-
-test('resizes split cells by dragging a divider (FR-038)', { tag: ['@extended', '@window'] }, async () => {
+test('resizes split cells by dragging a divider (FR-038)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await createProject(win, 'Resize', 'C:/c/rz');
   const first = (await panelIds(win))[0];
   await win.getByTestId(`panel-add-${first}`).click();
@@ -300,7 +272,37 @@ test('resizes split cells by dragging a divider (FR-038)', { tag: ['@extended', 
   expect(after).not.toBe(before);
 });
 
-test('renames a project, Tab, and Panel by double-clicking (FR-041)', { tag: ['@extended', '@window'] }, async () => {
+/*
+ * TWO TESTS REMOVED AND ONE NARROWED (035) — all three are now, in part or in whole,
+ * `packages/ui/tests/component/tab-strip.test.ts`.
+ *
+ * Every one of them opened throng's own context menu, which is an in-DOM React component and not a
+ * native `Menu`, then typed into an inline rename box. `TabGroup` mounts in jsdom under six
+ * providers and renders the strip AND — through `SplitTree` — every panel, so both the tab and the
+ * panel halves are reachable there.
+ *
+ * FIVE ASSERTIONS THE MIGRATED TESTS DID NOT MAKE, and each is a gap rather than a flourish:
+ *
+ *   - Escape DISCARDS a tab rename. All three only ever committed, so a box that ignored Escape
+ *     passed them and lost whatever name the user was backing out of changing.
+ *   - The rename box is GONE afterwards, not merely covered by the label — one left mounted
+ *     swallows the next keystroke meant for the workspace.
+ *   - A panel rename sets `titleIsCustom`. The E2E read the rendered text and stopped, so a rename
+ *     that displayed correctly while leaving the flag false would pass and then be overwritten by
+ *     the next file the panel opened.
+ *   - "Destroy other tabs" destroys NOTHING on the first accept. FR-043's second confirmation is a
+ *     second chance, and clicking accept twice cannot tell that from a formality.
+ *   - A SINGLE click activates a tab and opens no box. The first half of a double-click is an
+ *     ordinary click, and `:303`'s own comment records what that cost when it went unnoticed — the
+ *     click half switched the active PROJECT and sent the rest of the test into a workspace it never
+ *     set up.
+ *
+ * WHAT :303 KEEPS. Its first third renames a PROJECT by double-click. The sidebar is not in the
+ * workspace mount, and `component/projects-panel-form.test.ts` — which owns the project rename box —
+ * does not yet assert double-click as the route into it. So that third stays here, and the tab and
+ * panel thirds below it are gone.
+ */
+test('renames a project by double-clicking its row (FR-041)', { tag: ['@extended', '@window'] }, async () => {
   await createProject(win, 'DblClick', 'C:/c/dc');
 
   // Project: double-click the entry → inline rename.
@@ -315,30 +317,25 @@ test('renames a project, Tab, and Panel by double-clicking (FR-041)', { tag: ['@
   await projInput.fill('Renamed Project');
   await projInput.press('Enter');
   await expect(win.locator('.project-item', { hasText: 'Renamed Project' })).toBeVisible();
-  // …and it is still the ACTIVE project, so the Tab and Panel below are this test's own. Re-settling
-  // here rather than assuming it is what makes the rest of the test independent of what the
-  // double-click's click half did.
+  /*
+   * …and it is still the ACTIVE project.
+   *
+   * This used to be setup — the Tab and Panel renames that followed needed to land in the workspace
+   * this test had set up, and the first half of a double-click is an ordinary click on
+   * `project-switch-*`, which switches projects. Those two thirds are now
+   * `component/tab-strip.test.ts`, so nothing downstream depends on it any more.
+   *
+   * It stays as an ASSERTION rather than being deleted with them, because it is the claim that
+   * makes the double-click a rename at all: a gesture whose click half switched the active project
+   * AND whose second half opened a rename box has done two things where the user asked for one.
+   * Nothing else says so.
+   */
   const active = win.locator('.project-item[data-active="true"]');
   await expect(active).toHaveCount(1);
   await expect(active).toContainText('Renamed Project');
-
-  // Tab: double-click the chip → inline rename.
-  await win.locator('.tab-chip').first().dblclick();
-  const tabInput = win.locator('[data-testid^="tab-rename-input-"]');
-  await tabInput.fill('My Tab');
-  await tabInput.press('Enter');
-  await expect(win.locator('.tab-chip', { hasText: 'My Tab' })).toBeVisible();
-
-  // Panel: double-click the header → inline rename.
-  const id = (await panelIds(win))[0];
-  await win.getByTestId(`panel-handle-${id}`).dblclick();
-  const panelInput = win.getByTestId(`panel-rename-input-${id}`);
-  await panelInput.fill('My Panel');
-  await panelInput.press('Enter');
-  await expect(win.getByTestId(`panel-${id}`)).toContainText('My Panel');
 });
 
-test('resizes the sidebar horizontally by dragging its handle (FR-033)', { tag: ['@extended', '@window'] }, async () => {
+test('resizes the sidebar horizontally by dragging its handle (FR-033)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await createProject(win, 'Sized', 'C:/c/sz');
   const shell = win.getByTestId('throng-shell');
   const before = await shell.evaluate((el) => (el as HTMLElement).style.gridTemplateColumns);
@@ -355,7 +352,7 @@ test('resizes the sidebar horizontally by dragging its handle (FR-033)', { tag: 
   expect(after).not.toBe(before);
 });
 
-test('window title shows the active project + Tab · Panel, no path or totals (FR-040)', { tag: ['@extended', '@window'] }, async () => {
+test('window title shows the active project + Tab · Panel, no path or totals (FR-040)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   skipIfElevated(); // asserts no [ADMIN] marker; on an elevated runner the marker correctly appears
   await createProject(win, 'TitleA', 'C:/c/a');
   await createProject(win, 'TitleB', 'C:/c/b'); // the newly created project becomes active

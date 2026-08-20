@@ -71,7 +71,7 @@ function readSettings(cfgRoot: string): Record<string, unknown> | undefined {
   return JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
 }
 
-test('a bounded numeric renders a slider AND a field; each drives the other (FR-033)', { tag: ['@extended', '@prefs'] }, async () => {
+test('a bounded numeric renders a slider AND a field; each drives the other (FR-033)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   const cfgRoot = freshCfgRoot();
   await runApp(
     async (app, win) => {

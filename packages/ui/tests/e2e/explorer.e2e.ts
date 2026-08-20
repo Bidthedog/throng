@@ -165,7 +165,26 @@ function makeProjectFolder(): string {
  * per-project state surviving a real project switch.
  */
 
-test('collapsing the tree raises no error (no bogus internal-root path)', { tag: ['@extended', '@explorer'] }, async () => {
+/*
+ * ── ONE REMOVED (035 T055) ──
+ *
+ * `:474` "right-click Hide removes the item from this project view (US3 hide)". Hiding a file is a
+ * chain of three, and two links were already held:
+ *
+ *   the menu row calls `ops.hide` with the right path   → `unit/explorer-subtree-menu.test.ts` (new)
+ *   `hiddenPaths` filters the DERIVED tree data          → `component/file-tree.test.ts:488`
+ *   the hidden set persists, and can be undone           → `e2e/project-settings.e2e.ts:39`
+ *
+ * `ops.hide` appeared in three test files before this and was a `noop` in every one. So the row
+ * could have called it with the wrong path, with the SELECTION instead of the clicked node, or not
+ * at all — and only an Electron launch would have said so.
+ *
+ * The selection case is the one worth naming. This menu deliberately operates on the whole selection
+ * for the file operations (`context-menu-items.ts:83`), and hiding is not one of them: a Hide that
+ * followed the selection would vanish several files from a single click, with nothing on screen to
+ * say which. Red-proven as `hide-follows-the-selection`.
+ */
+test('collapsing the tree raises no error (no bogus internal-root path)', { tag: ['@extended', '@explorer', '@reserve:runtime'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -201,7 +220,7 @@ test('collapsing the tree raises no error (no bogus internal-root path)', { tag:
   }
 });
 
-test('reflects external filesystem changes live, preserving expansion (US2)', { tag: ['@extended', '@explorer'] }, async () => {
+test('reflects external filesystem changes live, preserving expansion (US2)', { tag: ['@extended', '@explorer', '@reserve:runtime'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -232,7 +251,7 @@ test('reflects external filesystem changes live, preserving expansion (US2)', { 
   }
 });
 
-test('file operations via context menu + toolbar (US3): delete, new folder, cut/paste, rename', { tag: ['@extended', '@explorer'] }, async () => {
+test('file operations via context menu + toolbar (US3): delete, new folder, cut/paste, rename', { tag: ['@extended', '@explorer', '@reserve:native'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -281,7 +300,7 @@ test('file operations via context menu + toolbar (US3): delete, new folder, cut/
   }
 });
 
-test('keyboard shortcuts operate on the tree: Del deletes, F2 renames (US3)', { tag: ['@extended', '@explorer'] }, async () => {
+test('keyboard shortcuts operate on the tree: Del deletes, F2 renames (US3)', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -361,7 +380,7 @@ test('copy/paste duplicates with a non-clobbering name; open-in-explorer raises 
   }
 });
 
-test('drag-and-drop moves a file into a folder (US3b)', { tag: ['@extended', '@explorer'] }, async () => {
+test('drag-and-drop moves a file into a folder (US3b)', { tag: ['@extended', '@explorer', '@reserve:osdrag'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -387,7 +406,7 @@ test('drag-and-drop moves a file into a folder (US3b)', { tag: ['@extended', '@e
   }
 });
 
-test('multi-select (Ctrl-click) then Delete removes all selected (US3b)', { tag: ['@extended', '@explorer'] }, async () => {
+test('multi-select (Ctrl-click) then Delete removes all selected (US3b)', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -411,7 +430,7 @@ test('multi-select (Ctrl-click) then Delete removes all selected (US3b)', { tag:
   }
 });
 
-test('delete confirmation can be cancelled; the toolbar Delete button works (US3 polish)', { tag: ['@extended', '@explorer'] }, async () => {
+test('delete confirmation can be cancelled; the toolbar Delete button works (US3 polish)', { tag: ['@extended', '@explorer', '@reserve:native'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -437,7 +456,7 @@ test('delete confirmation can be cancelled; the toolbar Delete button works (US3
   }
 });
 
-test('New folder in a collapsed folder expands it and overwrites the selected name (US3 polish)', { tag: ['@extended', '@explorer'] }, async () => {
+test('New folder in a collapsed folder expands it and overwrites the selected name (US3 polish)', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -471,28 +490,7 @@ test('New folder in a collapsed folder expands it and overwrites the selected na
   }
 });
 
-test('right-click Hide removes the item from this project view (US3 hide)', { tag: ['@extended', '@explorer'] }, async () => {
-  const projectRoot = makeProjectFolder();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Demo', projectRoot);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-      await expect(tree.getByText('a.txt', { exact: true })).toBeVisible();
-
-      // Hide a.txt → it disappears from the view (still on disk, just hidden).
-      await tree.getByText('a.txt', { exact: true }).click({ button: 'right' });
-      await win.locator('.context-menu__item', { hasText: 'Hide in this project' }).click();
-      await expect(tree.getByText('a.txt', { exact: true })).toHaveCount(0);
-      // Other entries are unaffected.
-      await expect(tree.getByText('README.md', { exact: true })).toBeVisible();
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
-
-test('a large folder stays responsive — virtualised rows (polish T061)', { tag: ['@extended', '@explorer'] }, async () => {
+test('a large folder stays responsive — virtualised rows (polish T061)', { tag: ['@extended', '@explorer', '@reserve:layout'] }, async () => {
   const projectRoot = mkdtempSync(join(tmpdir(), 'throng-big-'));
   mkdirSync(join(projectRoot, 'big'));
   for (let i = 0; i < 800; i += 1) {
@@ -520,7 +518,7 @@ test('a large folder stays responsive — virtualised rows (polish T061)', { tag
   }
 });
 
-test('remembers expansion + selection per project; root is selectable', { tag: ['@extended', '@explorer'] }, async () => {
+test('remembers expansion + selection per project; root is selectable', { tag: ['@extended', '@explorer', '@reserve:runtime'] }, async () => {
   const rootA = makeProjectFolder();
   const rootB = makeProjectFolder();
   try {

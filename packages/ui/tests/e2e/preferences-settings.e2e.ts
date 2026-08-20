@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { openApp, runApp as runOwnApp, settle, stubFolderDialog, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import { FILE_OP_TIMEOUT_MS, openApp, runApp as runOwnApp, settle, stubFolderDialog, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
 import {
   configRootSeeded,
   settleConfigRoot,
@@ -109,7 +109,7 @@ async function openSettings(app: ElectronApplication, win: Page): Promise<Page> 
   return prefs;
 }
 
-test('edits toggle / select / number / array controls and applies + persists each', { tag: ['@extended', '@prefs'] }, async () => {
+test('edits toggle / select / number / array controls and applies + persists each', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openSettings(app, win);
@@ -127,9 +127,9 @@ test('edits toggle / select / number / array controls and applies + persists eac
         await expect(prefs.getByTestId(`control-${key}`)).toBeChecked();
         await prefs.getByTestId(`control-${key}`).click();
       }
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.defaultWordWrap).toBe(false);
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.showStatusBar).toBe(false);
-      await expect.poll(() => readSettings(cfgRoot)?.terminals?.showStatusBar).toBe(false);
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.defaultWordWrap, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.showStatusBar, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
+      await expect.poll(() => readSettings(cfgRoot)?.terminals?.showStatusBar, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
 
       // Select (enum): confirmations.destroyProject double → none.
       await prefs.getByTestId('control-confirmations.destroyProject').selectOption('none');
@@ -157,11 +157,7 @@ test('edits toggle / select / number / array controls and applies + persists eac
   );
 });
 
-/** Rows currently rendered by the Settings form (non-matching rows are unmounted). */
-const rowCount = (prefs: Page, key: string): Promise<number> =>
-  prefs.getByTestId(`setting-${key}`).count();
-
-test('the Override start folder renders the shared folder picker (browse + typing) (011 FR-042/042a)', { tag: ['@extended', '@prefs'] }, async () => {
+test('the Override start folder renders the shared folder picker (browse + typing) (011 FR-042/042a)', { tag: ['@extended', '@prefs', '@reserve:native'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openSettings(app, win);
@@ -225,41 +221,40 @@ test('the Override start folder renders the shared folder picker (browse + typin
  * `data-testid={testId(descriptor.key)}` to anything else — all 7 fail on `getByTestId`.
  */
 
-test('the settings search box is wired to the filter, and empties the form when nothing matches (FR-049)', { tag: ['@extended', '@prefs'] }, async () => {
+/**
+ * FR-049 — the search box sits ABOVE the first group.
+ *
+ * ── WHAT LEFT, AND WHY THIS DID NOT (035 T037) ──
+ *
+ * This test used to assert the filtering too: that typing narrows the rendered form, that a group
+ * with no surviving rows goes rather than staying as an empty heading, and that a query matching
+ * nothing shows an empty state. All three are now asserted by name in
+ * `component/preferences-settings-search.test.ts`:
+ *
+ *   - "narrows the form once the debounce quiets, taking emptied groups with it"
+ *   - "shows an empty state, and no groups at all, when nothing matches"
+ *
+ * That file also covers the debounce edges this never reached — a keystroke still in flight when
+ * the query is cleared, and the field updating before the form does.
+ *
+ * What is left is the one assertion jsdom cannot make, and it is not a technicality: it reads two
+ * `boundingBox()` values from a real layout engine. jsdom reports zero for every box, so the
+ * comparison would pass no matter where the box sat — the failure mode where a test asserts its own
+ * fixture rather than the product (034 FR-049).
+ */
+test('the settings search box sits above the first group (FR-049)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openSettings(app, win);
       const search = prefs.getByTestId('settings-search');
-
-      // It sits at the top of the Settings section, above the first group.
       await expect(search).toBeVisible();
+
       const searchBox = await search.boundingBox();
       const firstGroup = await prefs.getByTestId('settings-group-Appearance').boundingBox();
+      // Both must be REAL boxes, or "y is less than y" is a comparison of two zeroes.
+      expect(searchBox!.height).toBeGreaterThan(0);
+      expect(firstGroup!.height).toBeGreaterThan(0);
       expect(searchBox!.y).toBeLessThan(firstGroup!.y);
-
-      /*
-       * ONE query, not five (034 FR-045).
-       *
-       * This used to type five: a name, a description word, a value, two words for the OR, and a
-       * miss. WHAT each of those matches on is `filterFields`, and `filterFields` is a pure
-       * function over the settings registry with twenty-three cases against it in
-       * `packages/core/tests/unit/settings-search.test.ts` — including the description-only word,
-       * the value, the OR, and the section names that used to have a whole test of their own here.
-       *
-       * What no unit test can see is that the BOX is wired to it: that typing narrows the rendered
-       * form and empties the groups that no longer have rows. That is one keystroke's worth of
-       * evidence, and it is what is left.
-       */
-      await search.fill('theme');
-      await expect(prefs.getByTestId('setting-appearance.theme')).toBeVisible();
-      await expect.poll(() => rowCount(prefs, 'behaviour.tabHoverActivateMs')).toBe(0);
-      // A group with no surviving rows goes with them, rather than staying as an empty heading.
-      await expect(prefs.getByTestId('settings-group-Confirmations')).toHaveCount(0);
-
-      // No match → an empty state, no groups.
-      await search.fill('nosuchsettinganywhere');
-      await expect(prefs.getByTestId('settings-search-empty')).toBeVisible();
-      await expect(prefs.getByTestId('settings-group-Appearance')).toHaveCount(0);
     },
   );
 });
@@ -321,7 +316,7 @@ test('the settings search box is wired to the filter, and empties the form when 
  * migration of a setting that works) and moves to the File Explorer group, where the inert
  * `explorer.openMode` used to sit.
  */
-test('open-on-click is one control, in the File Explorer group, offering none (#95, C2)', { tag: ['@extended', '@prefs'] }, async () => {
+test('open-on-click is one control, in the File Explorer group, offering none (#95, C2)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openSettings(app, win);
@@ -348,12 +343,12 @@ test('open-on-click is one control, in the File Explorer group, offering none (#
 
       // …and it still works where it always did.
       await control.selectOption('none');
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.openOnClick).toBe('none');
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.openOnClick, { timeout: FILE_OP_TIMEOUT_MS }).toBe('none');
     },
   );
 });
 
-test('a hand-written explorer.openMode changes nothing, warns nothing, and is stripped (#95, C1)', { tag: ['@extended', '@prefs'] }, async () => {
+test('a hand-written explorer.openMode changes nothing, warns nothing, and is stripped (#95, C1)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       // A user who set the inert control before the fix. FR-023: it is DROPPED, not migrated —
@@ -381,14 +376,14 @@ test('a hand-written explorer.openMode changes nothing, warns nothing, and is st
       // Stripped on the next write: no migration step, no rewrite pass — the key simply
       // does not survive a parse, so the first ordinary write drops it.
       await prefs.getByTestId('control-editor.openOnClick').selectOption('double');
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.openOnClick).toBe('double');
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.openOnClick, { timeout: FILE_OP_TIMEOUT_MS }).toBe('double');
       expect(readSettings(cfgRoot)?.explorer?.openMode).toBeUndefined();
       expect(readSettings(cfgRoot)?.explorer?.deleteMode).toBe('permanent');
     },
   );
 });
 
-test('an invalid number is not applied and is surfaced; last valid value stays', { tag: ['@extended', '@prefs'] }, async () => {
+test('an invalid number is not applied and is surfaced; last valid value stays', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openSettings(app, win);
@@ -402,7 +397,7 @@ test('an invalid number is not applied and is surfaced; last valid value stays',
   );
 });
 
-test('a malformed settings.json opens the defaults-merged form without crashing (FR-043)', { tag: ['@extended', '@prefs'] }, async () => {
+test('a malformed settings.json opens the defaults-merged form without crashing (FR-043)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   /*
    * ITS OWN APP (034 FR-045). The claim is that the application STARTS on a broken settings file —
    * which is the whole of FR-043 — so producing the malformed document after startup would prove

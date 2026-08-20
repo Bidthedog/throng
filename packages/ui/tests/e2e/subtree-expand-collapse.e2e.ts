@@ -22,16 +22,13 @@
 import { mkdtempSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test, expect, type ElectronApplication, type Locator, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { DEFAULT_EXCLUDE_GLOBS, compileExcluder } from '@throng/core';
 import {
-  openApp,
   runApp as runOwnApp,
   createProject,
   reloadWindow,
   cleanupTemp,
-  type AppOptions,
-  type OpenApp,
 } from './harness.js';
 
 /**
@@ -208,88 +205,6 @@ async function chooseOnRow(win: Page, relPath: string, label: string): Promise<v
   await expect(win.getByTestId(`menu-item-${label}`)).toHaveCount(0);
 }
 
-/** Open a folder the ordinary way — the chevron, which is the path both new actions must reuse. */
-async function chevron(win: Page, relPath: string): Promise<void> {
-  await tree(win).getByTestId(`tree-twisty-${relPath}`).click();
-  await expect(rowFor(win, relPath).locator('.tree-twisty')).toHaveAttribute('aria-expanded', 'true');
-}
-
-/**
- * ══ RECORDING EVERY DIRECTORY LISTING THE APP ISSUES ══
- *
- * D7's hidden-folder half has NO visible consequence, and the test must not pretend otherwise. The
- * per-project hidden set is applied in the `data` memo, not in `fetchChildren`, so a hidden folder is
- * absent from every rendered tree at every level whether `expandChildren` filters it or not:
- * `api.open` on a path with no node does nothing, and `snapshotOpen` walks nodes, so nothing is
- * persisted either. Deleting the filter costs exactly one wasted `files.list` — so that is what is
- * asserted, at the only place it can be seen.
- *
- * The listing channel is instrumented in the MAIN process rather than the renderer: the preload
- * bridge's objects are frozen proxies, and a renderer-side wrapper would be testing contextBridge's
- * mutability rather than the explorer. The handler is swapped for one that records and delegates, and
- * the swap FAILS LOUDLY if Electron's invoke table is not where it has always been — an instrument
- * that silently recorded nothing would turn a `not.toContain` into a green bar for any behaviour at
- * all, which is the exact vacuity this assertion exists to avoid. The positive half (`toContain` on
- * the folders that WERE expanded into) is the other guard on the same hazard.
- */
-async function recordListings(app: ElectronApplication): Promise<() => Promise<string[]>> {
-  await app.evaluate(({ ipcMain }) => {
-    const CHANNEL = 'throng:files:list';
-    type Handler = (...args: unknown[]) => unknown;
-    const table = (ipcMain as unknown as { _invokeHandlers?: Map<string, Handler> })._invokeHandlers;
-    const original = table?.get(CHANNEL);
-    if (!table || typeof original !== 'function') {
-      throw new Error(
-        `cannot instrument "${CHANNEL}": Electron's ipcMain invoke table is not where this helper ` +
-          'expects it, so no listing could be recorded (and a silent zero would pass vacuously)',
-      );
-    }
-    const store = globalThis as unknown as {
-      __listedDirs?: string[];
-      __listOriginal?: Handler;
-    };
-    store.__listedDirs = [];
-    // Kept so the swap can be UNDONE. Under one shared app the wrapper would otherwise stay on
-    // the channel for the rest of the file, recording every later listing into an array nobody
-    // resets — harmless to read, but an instrument left running is an instrument that will one
-    // day be believed.
-    store.__listOriginal = original;
-    table.set(CHANNEL, (...args: unknown[]) => {
-      store.__listedDirs?.push(String(args[1] ?? ''));
-      return original(...args);
-    });
-  });
-  return () =>
-    app.evaluate(() => (globalThis as unknown as { __listedDirs?: string[] }).__listedDirs ?? []);
-}
-
-/** Put the real `throng:files:list` handler back. A no-op when nothing was ever swapped. */
-async function stopRecordingListings(app: ElectronApplication): Promise<void> {
-  await app.evaluate(({ ipcMain }) => {
-    const CHANNEL = 'throng:files:list';
-    type Handler = (...args: unknown[]) => unknown;
-    const table = (ipcMain as unknown as { _invokeHandlers?: Map<string, Handler> })._invokeHandlers;
-    const store = globalThis as unknown as { __listOriginal?: Handler; __listedDirs?: string[] };
-    if (table && typeof store.__listOriginal === 'function') {
-      table.set(CHANNEL, store.__listOriginal);
-    }
-    delete store.__listOriginal;
-    delete store.__listedDirs;
-  });
-}
-
-/** Renderer errors, minus the CSP noise react-dnd's empty drag image produces harmlessly. */
-const realErrors = (errors: string[]): string[] =>
-  errors.filter((e) => !e.includes('Content Security Policy') && !e.includes('data:image'));
-
-function watchErrors(win: Page): string[] {
-  const errors: string[] = [];
-  win.on('pageerror', (e) => errors.push(String(e)));
-  win.on('console', (m) => {
-    if (m.type() === 'error') errors.push(m.text());
-  });
-  return errors;
-}
 
 /**
  * The id of the project that is ACTIVE right now — which, straight after `createProject`, is the
@@ -355,106 +270,26 @@ async function enterProject(win: Page, projectId: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /*
- * ONE app for the first three tests (034 FR-045, SC-027) — 4 launches -> 2.
+ * THE SHARED APP IS GONE, AND SO IS THE ipcMain INSTRUMENT (035).
  *
- * AS-10 keeps `runOwnApp`: it calls `reloadWindow` (and the reload is half its claim), which
- * under a shared app would reload the renderer for everything declared after it.
+ * This file used to open one app for three tests and keep AS-10 on its own, because AS-10 reloads
+ * the window. Those three tests are now component tests, so the sharing has nothing left to share
+ * and the one survivor launches its own app — which is what it always did.
  *
- * Three things had to change for the other three to share, and all three are named because each
- * would have produced a green run rather than a red one:
+ * Three pieces of machinery went with them, and each is worth naming because each was real work:
  *
- *  1. All three projects were called "Subtree". They are named apart now — a project row renders
- *     its root PATH beside its name and Playwright's hasText is a substring match, which is the
- *     trap `activeProjectId` below already documents.
- *  2. Each test deleted its project root in a `finally` while the explorer was still watching
- *     it. That moves to `afterAll`.
- *  3. D7/FR-044 SWAPS the `throng:files:list` ipcMain handler for a recording wrapper and never
- *     put it back. The afterEach restores it, so no later test runs against an instrumented
- *     channel — and it is an afterEach, not a `finally`, so it also runs when that test fails
- *     with the swap in place.
- *
- * What does NOT need returning: explorer open-state is persisted per PROJECT (localStorage keyed
- * by project id), and each test makes its own project, so no test inherits another's tree shape.
+ *   - `recordListings` swapped Electron's `throng:files:list` ipcMain handler for a recording
+ *     wrapper, reaching into `ipcMain._invokeHandlers` — a private table — and failing loudly if it
+ *     had moved. It existed because FR-044's hidden-folder half has NO visible consequence: the
+ *     requirement is that a folder is not expanded INTO, and only the calls that were not made are
+ *     evidence of that. `file-tree.test.ts`'s fake records every directory it is asked for as an
+ *     ordinary part of being a fake, so the same evidence is available without patching anything.
+ *   - `settledOpenFolders` polled until two consecutive reads agreed, because every negative
+ *     assertion in an expand test is TRUE at t=0. That hazard is real and did not go away; it is
+ *     answered in the component tests by waiting on the POSITIVE outcome first.
+ *   - `watchErrors` collected renderer console errors. It only ever guarded the three migrated
+ *     tests, and jsdom surfaces a throwing render as a failed test rather than as a console line.
  */
-test.describe.configure({ mode: 'serial' });
-
-const ownedRoots: string[] = [];
-/** Register a project root for removal in `afterAll`, once the shared app has closed. */
-function own(dir: string): string {
-  ownedRoots.push(dir);
-  return dir;
-}
-
-let shared: OpenApp;
-
-test.beforeAll(async () => {
-  shared = await openApp();
-});
-
-test.afterAll(async () => {
-  await shared?.close();
-  for (const dir of ownedRoots.splice(0)) cleanupTemp(dir);
-});
-
-test.afterEach(async () => {
-  if (shared) await stopRecordingListings(shared.app);
-});
-
-const runApp = (
-  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
-  opts?: AppOptions,
-): Promise<void> => {
-  if (opts) {
-    throw new Error(
-      'this file shares one app; a test needing launch options must call runOwnApp instead',
-    );
-  }
-  return fn(shared.app, shared.win);
-};
-
-test('AS-3/AS-4 — Collapse All Children closes every depth and leaves the anchor open', { tag: ['@extended', '@explorer'] }, async () => {
-  const projectRoot = own(makeProject('throng-subtree-collapse-'));
-  try {
-    await runApp(async (_app, win) => {
-      const errors = watchErrors(win);
-      await createProject(win, 'SubtreeCollapse', projectRoot);
-      await expect(tree(win)).toBeVisible();
-
-      // US4's own Independent Test: drill three levels down by hand, with the chevron.
-      await chevron(win, 'branch');
-      await chevron(win, 'branch/l1a');
-      await chevron(win, 'branch/l1a/l2a');
-      await chevron(win, 'branch/l1a/l2a/l3a');
-      await expect(tree(win).getByText('deep.txt', { exact: true })).toBeVisible();
-      expect(await openFolders(win)).toEqual([
-        '',
-        'branch',
-        'branch/l1a',
-        'branch/l1a/l2a',
-        'branch/l1a/l2a/l3a',
-      ]);
-
-      await chooseOnRow(win, 'branch', COLLAPSE);
-
-      // AS-4 / D1 — the anchor is STILL OPEN: its own children are on screen.
-      await expect(rowFor(win, 'branch').locator('.tree-twisty')).toHaveAttribute(
-        'aria-expanded',
-        'true',
-      );
-      await expect(rowFor(win, 'branch/l1a')).toBeVisible();
-      // AS-3 — and every descendant, at every depth, is closed.
-      await expect(rowFor(win, 'branch/l1a/l2a')).toHaveCount(0);
-      await expect(tree(win).getByText('deep.txt', { exact: true })).toHaveCount(0);
-      expect(await openFolders(win)).toEqual(['', 'branch']);
-
-      await expectNoOpenFolderLies(win, projectRoot);
-      expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
-    });
-  } finally {
-    // The roots are deleted in `afterAll`, once the shared app has CLOSED. Deleting one here
-    // would remove a folder the explorer is still watching.
-  }
-});
 
 /*
  * MOVED to `packages/core/tests/unit/explorer-subtree.test.ts` (034 FR-046a) — five tests:
@@ -473,86 +308,6 @@ test('AS-3/AS-4 — Collapse All Children closes every depth and leaves the anch
 // ---------------------------------------------------------------------------
 // Expand All Children (AS-6, AS-7, AS-8, AS-9 — contract D4–D7)
 // ---------------------------------------------------------------------------
-
-test('AS-6/AS-7/AS-8/AS-9 — Expand All Children opens one level, loaded, and never into an excluded folder', { tag: ['@extended', '@explorer'] }, async () => {
-  const projectRoot = own(makeProject('throng-subtree-expand-'));
-  try {
-    await runApp(async (_app, win) => {
-      const errors = watchErrors(win);
-      await createProject(win, 'SubtreeExpand', projectRoot);
-      await expect(tree(win)).toBeVisible();
-
-      // AS-7 / D5 / FR-042 — the anchor is CLOSED when the action is chosen.
-      await expect(rowFor(win, 'branch').locator('.tree-twisty')).toHaveAttribute(
-        'aria-expanded',
-        'false',
-      );
-      await chooseOnRow(win, 'branch', EXPAND);
-
-      // …so it opens ITSELF first, and then its immediate children.
-      await expect(rowFor(win, 'branch').locator('.tree-twisty')).toHaveAttribute(
-        'aria-expanded',
-        'true',
-      );
-      // AS-6 / D4 — every immediate child FOLDER is open; the immediate child FILE is untouched.
-      await expect(rowFor(win, 'branch/l1a').locator('.tree-twisty')).toHaveAttribute(
-        'aria-expanded',
-        'true',
-      );
-      await expect(rowFor(win, 'branch/l1b').locator('.tree-twisty')).toHaveAttribute(
-        'aria-expanded',
-        'true',
-      );
-      await expect(tree(win).getByText('branch.txt', { exact: true })).toBeVisible();
-
-      /*
-       * AS-6 / C4 — and NO GRANDCHILD is open. `l2a` and `empty` are drawn (their parents opened)
-       * but closed, so nothing inside them is on screen.
-       *
-       * Everything from here down is a NEGATIVE, and a negative is true before the work finishes, so
-       * the tree is allowed to come to rest FIRST. Without this, a recursive descent that eventually
-       * opened `l2a` would still be asserted closed on the first poll after the click.
-       */
-      const settled = await settledOpenFolders(win);
-      await expect(rowFor(win, 'branch/l1a/l2a')).toBeVisible();
-      await expect(rowFor(win, 'branch/l1a/l2a').locator('.tree-twisty')).toHaveAttribute(
-        'aria-expanded',
-        'false',
-      );
-      await expect(rowFor(win, 'branch/l1b/empty').locator('.tree-twisty')).toHaveAttribute(
-        'aria-expanded',
-        'false',
-      );
-      await expect(rowFor(win, 'branch/l1a/l2a/l3a')).toHaveCount(0);
-      await expect(tree(win).getByText('l2a.txt', { exact: true })).toHaveCount(0);
-      expect(settled).toEqual(['', 'branch', 'branch/l1a', 'branch/l1b']);
-
-      /*
-       * AS-9 / D7 — an EXCLUDED folder is not expanded into, and the mechanism is that it is not in
-       * the tree at all: `fetchChildren` filters by the shipped globs, so `node_modules` is never a
-       * target for anything. Asserted on the row AND on its contents, because a filtered parent that
-       * still leaked a child would be the same defect wearing a different face.
-       */
-      await expect(rowFor(win, 'branch/node_modules')).toHaveCount(0);
-      await expect(tree(win).getByText('node_modules', { exact: true })).toHaveCount(0);
-      await expect(tree(win).getByText('index.js', { exact: true })).toHaveCount(0);
-
-      /*
-       * AS-8 / SC-009 — the #120 assertion. Here it passes by SHORT-CIRCUIT: `empty` is drawn but
-       * closed (asserted above), so every folder the tree draws as open renders a child and nothing
-       * reaches the filesystem. That is the check doing its job — the desync it hunts is a folder
-       * open over an unloaded listing, and there is none — but it is not the check being exercised.
-       * The honest-empty branch, where `empty` is genuinely open and genuinely empty, is proved in
-       * AS-10 below, which is the only place in this file where the loop body runs.
-       */
-      await expectNoOpenFolderLies(win, projectRoot);
-      expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
-    });
-  } finally {
-    // The roots are deleted in `afterAll`, once the shared app has CLOSED. Deleting one here
-    // would remove a folder the explorer is still watching.
-  }
-});
 
 /**
  * D7's SECOND half — FR-044 for a folder hidden by **"Hide in this project"**, not by a glob.
@@ -574,62 +329,39 @@ test('AS-6/AS-7/AS-8/AS-9 — Expand All Children opens one level, loaded, and n
  * The anchor is opened by hand FIRST so `branch` is already in `childrenMap` complete with `veiled`,
  * which is the state the filter is written for — hidden AFTER the listing that named it.
  */
-test('D7/FR-044 — a folder HIDDEN in this project is not expanded into, and is never even listed', { tag: ['@extended', '@explorer'] }, async () => {
-  const projectRoot = own(makeProject('throng-subtree-hidden-'));
-  // Only this test's fixture carries it: every other test asserts `branch`'s exact expanded shape.
-  mkdirSync(join(projectRoot, 'branch', 'veiled', 'inner'), { recursive: true });
-  writeFileSync(join(projectRoot, 'branch', 'veiled', 'veiled.txt'), 'veiled\n');
-  try {
-    await runApp(async (app, win) => {
-      const errors = watchErrors(win);
-      await createProject(win, 'SubtreeHidden', projectRoot);
-      await expect(tree(win)).toBeVisible();
-
-      await chevron(win, 'branch');
-      await expect(rowFor(win, 'branch/veiled')).toBeVisible();
-
-      // Hidden through the route the user has — the tree's own context menu (004). The row going
-      // away is the acknowledgement that the write landed, so nothing below races the round trip.
-      await rowFor(win, 'branch/veiled').click({ button: 'right' });
-      await win.locator('.context-menu__item', { hasText: 'Hide in this project' }).click();
-      await expect(rowFor(win, 'branch/veiled')).toHaveCount(0);
-
-      // Instrumented only now, so the listings that built the tree are not in the recording and the
-      // positive assertions below can only be satisfied by `expandChildren` itself.
-      const listedDirs = await recordListings(app);
-
-      await chooseOnRow(win, 'branch', EXPAND);
-
-      // Settled first: "the hidden folder was not opened" is a negative, true at t=0 either way.
-      expect(await settledOpenFolders(win)).toEqual(['', 'branch', 'branch/l1a', 'branch/l1b']);
-      await expect(rowFor(win, 'branch/veiled')).toHaveCount(0);
-      await expect(rowFor(win, 'branch/veiled/inner')).toHaveCount(0);
-      await expect(tree(win).getByText('veiled.txt', { exact: true })).toHaveCount(0);
-
-      const listed = await listedDirs();
-      // The recorder is LIVE — proved by the two folders the action really did expand into. Without
-      // this, an instrument that recorded nothing would satisfy the assertion that follows.
-      expect(listed, 'the listing recorder saw nothing at all').toContain('branch/l1a');
-      expect(listed).toContain('branch/l1b');
-      expect(
-        listed,
-        'FR-044 — Expand All Children listed a folder the user hid in this project',
-      ).not.toContain('branch/veiled');
-
-      await expectNoOpenFolderLies(win, projectRoot);
-      expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
-    });
-  } finally {
-    // The roots are deleted in `afterAll`, once the shared app has CLOSED. Deleting one here
-    // would remove a folder the explorer is still watching.
-  }
-});
-
 // ---------------------------------------------------------------------------
 // Persistence (AS-10 — contract D8, FR-045)
 // ---------------------------------------------------------------------------
 
-test('AS-10/D8 — the resulting open state survives a project switch and a window reload', { tag: ['@extended', '@explorer'] }, async () => {
+/*
+ * THREE TESTS REMOVED (035 FR-007) — Collapse All Children, Expand All Children, and the hidden
+ * folder. All three are now `packages/ui/tests/component/file-tree.test.ts`.
+ *
+ * WHAT THEIR RESERVE TAG SAID, AND WHAT THEY ACTUALLY DROVE. Each was here because it walks a
+ * context menu. throng's context menu is an IN-DOM REACT COMPONENT (`ContextMenuProvider`) — the
+ * native-menu entry on the constitution's reserve is about `Menu`/`MenuItem` from Electron, and
+ * these never touched one. `context-menu-lifecycle.test.ts` and `file-tree.test.ts`'s Cut test
+ * already drive this menu in jsdom, so what these three actually needed was a folder tree, and a
+ * folder tree is a set of directory listings.
+ *
+ * THE #120 CHECK GOT STRONGER, NOT WEAKER. `expectNoOpenFolderLies` had to consult the real
+ * filesystem here, because an unloaded folder and an empty one render identically and the tree
+ * cannot tell them apart. In the component test the listings ARE the filesystem and the fake logs
+ * every directory the tree asked for, so "drawn open but never listed" is stated directly instead of
+ * being inferred from a `readdirSync`. FR-044's hidden folder is the same story: the requirement is
+ * that the folder is not expanded INTO, which has no visible consequence, and the listing log is
+ * evidence about a call that was not made.
+ *
+ * RED-PROVEN THREE WAYS, each hitting exactly one test: making one-level expand return DESCENDANTS
+ * (the recursive-descent defect FR-042 exists to prevent) reddens the expand and hidden tests;
+ * dropping the `hiddenSet` filter reddens the hidden test alone; adding the anchor to the collapse
+ * targets reddens the collapse test alone.
+ *
+ * WHAT STAYS. AS-10/D8 below — the open state surviving a project switch and a window RELOAD. That
+ * is `@reserve:window` and it is the one place in this file where `expectNoOpenFolderLies`'s
+ * filesystem branch genuinely runs against a real disk.
+ */
+test('AS-10/D8 — the resulting open state survives a project switch and a window reload', { tag: ['@extended', '@explorer', '@reserve:window'] }, async () => {
   const projectRoot = makeProject('throng-subtree-persist-');
   // A prefix that shares NOTHING with the first project's, belt to the id-based selection's braces:
   // the row renders this path, and a reader who later reaches for `hasText` should not find a

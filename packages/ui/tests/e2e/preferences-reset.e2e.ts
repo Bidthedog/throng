@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { openApp, runApp as runOwnApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
-import {
+import { FILE_OP_TIMEOUT_MS, openApp, runApp as runOwnApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import { settleAppConfig,
   configRootSeeded,
   settleConfigRoot,
   snapshotConfigRoot,
@@ -75,6 +75,24 @@ test.beforeAll(async () => {
 test.afterEach(async () => {
   await closePrefsWindow(shared.app);
   await settleConfigRoot(baseline);
+  /*
+   * …and then wait for the APP to have observed it — issue #284.
+   *
+   * `settleConfigRoot` settles the FILES, which is its whole contract. It cannot make the running
+   * application notice, and for this file that gap is the bug: `preferences-app.tsx` photographs an
+   * ON-ENTRY snapshot when it mounts, and Revert All restores THAT photograph. A window opened
+   * before the restore has landed photographs the previous test's values, so "revert to on-entry"
+   * faithfully restores them — and `:187` polls for `false` against an on-entry that says `true`.
+   *
+   * The failure was bimodal for exactly this reason: it passes in ~760 ms when the watcher has
+   * caught up and never when it has not, which is a wrong value rather than a slow one. Raising the
+   * poll budget from 15 s to 30 s changed nothing but the wait.
+   *
+   * `editor.autoSave` is the key every test in this file drives, so it is the one worth waiting on;
+   * a whole-document compare would fail on any key the app normalises at load and report that as a
+   * stale watcher.
+   */
+  await settleAppConfig(shared.win, { 'editor.autoSave': false });
 });
 
 test.afterAll(async () => {
@@ -142,19 +160,31 @@ async function openPrefs(
   return prefs!;
 }
 
-test('the per-tab reset restores the Settings editor from the shipped record (with confirm)', { tag: ['@extended', '@prefs'] }, async () => {
+test('the per-tab reset restores the Settings editor from the shipped record (with confirm)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'settings');
       await expect(prefs.getByTestId('settings-tab')).toBeVisible();
       // Change a setting away from default.
       await prefs.getByTestId('control-editor.autoSave').click();
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave).toBe(true);
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
+      /*
+       * The FILE says true; wait until the PREFERENCES WINDOW does too (issue #284).
+       *
+       * Every reset in this file is computed by the window from what it currently holds, so a reset
+       * issued while its view is still pre-toggle writes a document that does not contain the
+       * toggle — and the toggle's own write, already on disk, is what the later poll then reads
+       * back. The symptom is exactly what #284 records: a poll for `false` that returns `true` for
+       * its whole budget, in a test that otherwise finishes in under a second.
+       *
+       * `readSettings` cannot see this: it reads the disk, and the disk was never the laggard.
+       */
+      await settleAppConfig(prefs, { 'editor.autoSave': true });
       // Reset-current → confirm.
       await prefs.getByTestId('prefs-reset-current').click();
       await expect(prefs.getByTestId('prefs-reset-confirm')).toBeVisible();
       await prefs.getByTestId('prefs-reset-confirm-yes').click();
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave).toBe(false); // default
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false); // default
     },
   );
 });
@@ -184,14 +214,26 @@ test('the per-tab reset restores the Settings editor from the shipped record (wi
  * an atomic write and a reload is what those are for, and none of it is visible from jsdom.
  */
 
-test('reset-all reverts the session to on-entry; cancel is a no-op', { tag: ['@extended', '@prefs'] }, async () => {
+test('reset-all reverts the session to on-entry; cancel is a no-op', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'settings');
       await expect(prefs.getByTestId('settings-tab')).toBeVisible();
       // Edit a setting.
       await prefs.getByTestId('control-editor.autoSave').click();
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave).toBe(true);
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
+      /*
+       * The FILE says true; wait until the PREFERENCES WINDOW does too (issue #284).
+       *
+       * Every reset in this file is computed by the window from what it currently holds, so a reset
+       * issued while its view is still pre-toggle writes a document that does not contain the
+       * toggle — and the toggle's own write, already on disk, is what the later poll then reads
+       * back. The symptom is exactly what #284 records: a poll for `false` that returns `true` for
+       * its whole budget, in a test that otherwise finishes in under a second.
+       *
+       * `readSettings` cannot see this: it reads the disk, and the disk was never the laggard.
+       */
+      await settleAppConfig(prefs, { 'editor.autoSave': true });
       // Reset-all → cancel: no change.
       await prefs.getByTestId('prefs-revert-all').click();
       await prefs.getByTestId('prefs-reset-confirm-no').click();
@@ -199,7 +241,7 @@ test('reset-all reverts the session to on-entry; cancel is a no-op', { tag: ['@e
       // Reset-all → confirm: reverts to on-entry (autoSave false).
       await prefs.getByTestId('prefs-revert-all').click();
       await prefs.getByTestId('prefs-reset-confirm-yes').click();
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave).toBe(false);
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
     },
   );
 });
@@ -220,7 +262,7 @@ function readKeybindings(cfgRoot: string): any {
   }
 }
 
-test('US1: a key binding shows a reset icon only once overridden, and resetting it restores the shipped chords', { tag: ['@extended', '@prefs'] }, async () => {
+test('US1: a key binding shows a reset icon only once overridden, and resetting it restores the shipped chords', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'keybindings');
@@ -279,7 +321,7 @@ test('US1: a key binding shows a reset icon only once overridden, and resetting 
   );
 });
 
-test('US2: a setting shows a reset icon only once overridden, and resetting it leaves its siblings alone', { tag: ['@extended', '@prefs'] }, async () => {
+test('US2: a setting shows a reset icon only once overridden, and resetting it leaves its siblings alone', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'settings');
@@ -291,19 +333,31 @@ test('US2: a setting shows a reset icon only once overridden, and resetting it l
       // Change two leaves under the same section.
       await prefs.getByTestId('control-editor.autoSave').click();
       await expect(prefs.getByTestId('setting-reset-editor.autoSave')).toBeEnabled();
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave).toBe(true);
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
+      /*
+       * The FILE says true; wait until the PREFERENCES WINDOW does too (issue #284).
+       *
+       * Every reset in this file is computed by the window from what it currently holds, so a reset
+       * issued while its view is still pre-toggle writes a document that does not contain the
+       * toggle — and the toggle's own write, already on disk, is what the later poll then reads
+       * back. The symptom is exactly what #284 records: a poll for `false` that returns `true` for
+       * its whole budget, in a test that otherwise finishes in under a second.
+       *
+       * `readSettings` cannot see this: it reads the disk, and the disk was never the laggard.
+       */
+      await settleAppConfig(prefs, { 'editor.autoSave': true });
 
       const debounce = prefs.getByTestId('control-editor.autoSaveDebounceMs');
       await debounce.fill('900');
       await debounce.blur();
       await expect(prefs.getByTestId('setting-reset-editor.autoSaveDebounceMs')).toBeEnabled();
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSaveDebounceMs).toBe(900);
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSaveDebounceMs, { timeout: FILE_OP_TIMEOUT_MS }).toBe(900);
       // Both rows are now modified, and both say so.
       await expect(prefs.getByTestId('setting-reset-editor.autoSave')).toBeEnabled();
 
       // Reset one leaf — immediate, no confirmation.
       await prefs.getByTestId('setting-reset-editor.autoSave').click();
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave).toBe(false);
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
       await expect(prefs.getByTestId('setting-reset-editor.autoSave')).toBeDisabled();
 
       // The sibling leaf keeps the user's value and keeps its affordance.
@@ -313,7 +367,7 @@ test('US2: a setting shows a reset icon only once overridden, and resetting it l
   );
 });
 
-test('US3: Reset All Preferences restores settings + bindings, states both sides of its scope, and spares custom themes', { tag: ['@extended', '@prefs'] }, async () => {
+test('US3: Reset All Preferences restores settings + bindings, states both sides of its scope, and spares custom themes', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       seedTheme('MyUser', { name: 'MyUser', colours: { accent: '#abcdef' }, fonts: { family: 'x', baseSizePx: 13, weights: { normal: 400, bold: 600 } }, icons: {} });
@@ -322,7 +376,19 @@ test('US3: Reset All Preferences restores settings + bindings, states both sides
 
       // Customise a setting and a binding.
       await prefs.getByTestId('control-editor.autoSave').click();
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave).toBe(true);
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
+      /*
+       * The FILE says true; wait until the PREFERENCES WINDOW does too (issue #284).
+       *
+       * Every reset in this file is computed by the window from what it currently holds, so a reset
+       * issued while its view is still pre-toggle writes a document that does not contain the
+       * toggle — and the toggle's own write, already on disk, is what the later poll then reads
+       * back. The symptom is exactly what #284 records: a poll for `false` that returns `true` for
+       * its whole budget, in a test that otherwise finishes in under a second.
+       *
+       * `readSettings` cannot see this: it reads the disk, and the disk was never the laggard.
+       */
+      await settleAppConfig(prefs, { 'editor.autoSave': true });
       await prefs.getByTestId('prefs-tab-keybindings').click();
       const shippedZoomIn: string[] = readKeybindings(cfgRoot).bindings['zoom.in'];
       await prefs.getByTestId('binding-zoom.in-remove-0').click();
@@ -343,8 +409,8 @@ test('US3: Reset All Preferences restores settings + bindings, states both sides
       await prefs.getByTestId('prefs-reset-confirm-yes').click();
 
       // Settings and bindings are back to shipped …
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave).toBe(false);
-      await expect.poll(() => readKeybindings(cfgRoot)?.bindings?.['zoom.in']).toEqual(shippedZoomIn);
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
+      await expect.poll(() => readKeybindings(cfgRoot)?.bindings?.['zoom.in'], { timeout: FILE_OP_TIMEOUT_MS }).toEqual(shippedZoomIn);
       // … and the user's CUSTOM theme is still on disk, untouched.
       const custom = JSON.parse(readFileSync(join(cfgRoot, 'themes', 'MyUser.json'), 'utf8'));
       expect(custom.colours.accent).toBe('#abcdef');
@@ -375,7 +441,7 @@ test('JSON mode hides the row affordances but keeps the toolbar controls', { tag
   );
 });
 
-test('a reset that cannot be written says so, and says nothing changed (FR-006a, SC-012)', { tag: ['@extended', '@prefs'] }, async () => {
+test('a reset that cannot be written says so, and says nothing changed (FR-006a, SC-012)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   /*
    * ITS OWN APP (034 FR-045). This test replaces settings.json with a NON-EMPTY DIRECTORY so the
    * atomic commit's rename fails. That deliberately corrupts the one resource every other test in
@@ -389,7 +455,7 @@ test('a reset that cannot be written says so, and says nothing changed (FR-006a,
       await expect(prefs.getByTestId('settings-tab')).toBeVisible();
       await prefs.getByTestId('control-editor.autoSave').click();
       await expect(prefs.getByTestId('setting-reset-editor.autoSave')).toBeEnabled();
-      await expect.poll(() => readSettings(ownCfgRoot)?.editor?.autoSave).toBe(true);
+      await expect.poll(() => readSettings(ownCfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
 
       // Make settings.json unwritable the only way Windows reliably allows: replace it with a
       // NON-EMPTY directory, so the atomic commit's rename fails and feature 010 rolls back.
@@ -417,13 +483,25 @@ test('a reset that cannot be written says so, and says nothing changed (FR-006a,
   );
 });
 
-test('a reset performed in JSON mode refreshes the visible document (FR-013b)', { tag: ['@extended', '@prefs'] }, async () => {
+test('a reset performed in JSON mode refreshes the visible document (FR-013b)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'settings');
       await expect(prefs.getByTestId('settings-tab')).toBeVisible();
       await prefs.getByTestId('control-editor.autoSave').click();
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave).toBe(true);
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
+      /*
+       * The FILE says true; wait until the PREFERENCES WINDOW does too (issue #284).
+       *
+       * Every reset in this file is computed by the window from what it currently holds, so a reset
+       * issued while its view is still pre-toggle writes a document that does not contain the
+       * toggle — and the toggle's own write, already on disk, is what the later poll then reads
+       * back. The symptom is exactly what #284 records: a poll for `false` that returns `true` for
+       * its whole budget, in a test that otherwise finishes in under a second.
+       *
+       * `readSettings` cannot see this: it reads the disk, and the disk was never the laggard.
+       */
+      await settleAppConfig(prefs, { 'editor.autoSave': true });
 
       // Switch to JSON — the buffer is CLEAN (we have typed nothing into it).
       await prefs.getByTestId('prefs-mode-toggle').click();
@@ -436,13 +514,13 @@ test('a reset performed in JSON mode refreshes the visible document (FR-013b)', 
       await prefs.getByTestId('prefs-reset-confirm-yes').click();
 
       // The document the user is looking at follows the file — no stale text (FR-013b).
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave).toBe(false);
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
       await expect(json).toContainText('"autoSave": false');
     },
   );
 });
 
-test('resets are idempotent, and the four scopes are distinguishable (SC-003, SC-008, SC-011)', { tag: ['@extended', '@prefs'] }, async () => {
+test('resets are idempotent, and the four scopes are distinguishable (SC-003, SC-008, SC-011)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'settings');

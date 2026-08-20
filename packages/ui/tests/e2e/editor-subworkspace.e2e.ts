@@ -22,7 +22,7 @@ async function newEditor(win: Page): Promise<string> {
   return pid;
 }
 
-test('a synced project editor mirrors one document across both windows', { tag: ['@extended', '@editor'] }, async () => {
+test('a synced project editor mirrors one document across both windows', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-swed-'));
   try {
     await runApp(async (app, win) => {
@@ -84,7 +84,7 @@ test('a synced project editor mirrors one document across both windows', { tag: 
  * So: cut-line, a column paste whose block was copied in the OTHER window (the mode is app-global,
  * FR-015c), and the language picker — all driven in the child.
  */
-test('cut-line, a column paste and the language picker all work in a sub-workspace window', { tag: ['@extended', '@editor'] }, async () => {
+test('cut-line, a column paste and the language picker all work in a sub-workspace window', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-swpar-'));
   try {
     writeFileSync(join(root, 'grid.txt'), 'aaaa\nbbbb\ncccc\ndddd\n');

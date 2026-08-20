@@ -66,7 +66,7 @@ async function addTerminal(win: Page, root: string, existingPanelId: string): Pr
   await makeCmdTerminal(win, pid, basename(root));
 }
 
-test('switching to a tab of four terminals never blocks the main thread', { tag: ['@extended', '@terminal'] }, async () => {
+test('switching to a tab of four terminals never blocks the main thread', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(180_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-activation-'));
   try {

@@ -109,7 +109,7 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('(1) dragging an EXPANDED folder into another folder keeps it expanded, icon and all', { tag: ['@extended', '@explorer'] }, async () => {
+test('(1) dragging an EXPANDED folder into another folder keeps it expanded, icon and all', { tag: ['@extended', '@explorer', '@reserve:osdrag'] }, async () => {
   const projectRoot = own(makeProjectFolder());
   try {
     await runApp(async (_app, win) => {
@@ -171,7 +171,7 @@ test('(1) dragging an EXPANDED folder into another folder keeps it expanded, ico
  * true while nothing has loaded its children. This is the state the report
  * describes: "the folder collapses, but the expansion icon remains open".
  */
-test('(1b) dragging a folder BACK to a previously-expanded path: icon open, no children', { tag: ['@extended', '@explorer'] }, async () => {
+test('(1b) dragging a folder BACK to a previously-expanded path: icon open, no children', { tag: ['@extended', '@explorer', '@reserve:osdrag'] }, async () => {
   const projectRoot = own(makeProjectFolder());
   try {
     await runApp(async (_app, win) => {
@@ -259,7 +259,7 @@ test('(1b) dragging a folder BACK to a previously-expanded path: icon open, no c
  * localStorage. Lazy project loading (projects-store) reopens the project CLOSED, so
  * the only thing that can re-expand box/movable is what the move wrote to storage.
  */
-test('(5) a MOVE-migrated expansion is persisted immediately (survives an instant reload)', { tag: ['@extended', '@explorer'] }, async () => {
+test('(5) a MOVE-migrated expansion is persisted immediately (survives an instant reload)', { tag: ['@extended', '@explorer', '@reserve:window'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runOwnApp(async (_app, win) => {

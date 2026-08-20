@@ -144,7 +144,7 @@ function inspect(win: Page, pid: string, texts: string[]): Promise<Inspection> {
 const allAre = (colours: string[], want: string): boolean =>
   colours.length > 0 && colours.every((c) => c === want);
 
-test('a C# method name is coloured syntaxFunction, its locals stay syntaxVariable', { tag: ['@extended', '@editor'] }, async () => {
+test('a C# method name is coloured syntaxFunction, its locals stay syntaxVariable', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -177,7 +177,7 @@ test('a C# method name is coloured syntaxFunction, its locals stay syntaxVariabl
   }
 });
 
-test('a Ruby def name and call are coloured syntaxFunction, locals stay syntaxVariable', { tag: ['@extended', '@editor'] }, async () => {
+test('a Ruby def name and call are coloured syntaxFunction, locals stay syntaxVariable', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -208,7 +208,7 @@ test('a Ruby def name and call are coloured syntaxFunction, locals stay syntaxVa
   }
 });
 
-test('JavaScript still colours functions via the grammar, with NO overlay mounted (no regression)', { tag: ['@extended', '@editor'] }, async () => {
+test('JavaScript still colours functions via the grammar, with NO overlay mounted (no regression)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

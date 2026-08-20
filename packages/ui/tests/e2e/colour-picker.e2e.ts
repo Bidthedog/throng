@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import { FILE_OP_TIMEOUT_MS, openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
 import {
   configRootSeeded,
   settleConfigRoot,
@@ -109,7 +109,7 @@ function readTheme(cfgRoot: string, name = 'throng'): Record<string, string> | u
   return doc.colours;
 }
 
-test('the picker card takes its surface from the THEME, not a system colour (FR-020)', { tag: ['@extended', '@prefs'] }, async () => {
+test('the picker card takes its surface from the THEME, not a system colour (FR-020)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -168,7 +168,7 @@ test('the picker card takes its surface from the THEME, not a system colour (FR-
  * exactly that point. Also staying: the live-apply-and-persist test, including that rapid edits
  * compound into ONE write.
  */
-test('the picker is fully keyboard-operable, with a visible focus indicator (FR-024)', { tag: ['@extended', '@prefs'] }, async () => {
+test('the picker is fully keyboard-operable, with a visible focus indicator (FR-024)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -188,7 +188,7 @@ test('the picker is fully keyboard-operable, with a visible focus indicator (FR-
       const before = await readTheme(cfgRoot)?.accent;
       await prefs.keyboard.press('ArrowRight');
       await prefs.keyboard.press('ArrowUp');
-      await expect.poll(() => readTheme(cfgRoot)?.accent).not.toBe(before);
+      await expect.poll(() => readTheme(cfgRoot)?.accent, { timeout: FILE_OP_TIMEOUT_MS }).not.toBe(before);
 
       // Escape closes it and the last applied value stands.
       await prefs.keyboard.press('Escape');
@@ -207,7 +207,7 @@ async function expectWithinViewport(page: Page, box: { x: number; y: number; wid
   expect(box!.y + box!.height).toBeLessThanOrEqual(vp.height + 0.5);
 }
 
-test('the picker opens fully on-screen near the RIGHT edge (021/FR-036)', { tag: ['@extended', '@prefs'] }, async () => {
+test('the picker opens fully on-screen near the RIGHT edge (021/FR-036)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -225,7 +225,7 @@ test('the picker opens fully on-screen near the RIGHT edge (021/FR-036)', { tag:
   );
 });
 
-test('the picker opens fully on-screen near the BOTTOM edge (021/FR-036)', { tag: ['@extended', '@prefs'] }, async () => {
+test('the picker opens fully on-screen near the BOTTOM edge (021/FR-036)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -246,7 +246,7 @@ test('the picker opens fully on-screen near the BOTTOM edge (021/FR-036)', { tag
   );
 });
 
-test('the colour applies LIVE and persists — and rapid edits compound into one write (FR-022, FR-023)', { tag: ['@extended', '@prefs'] }, async () => {
+test('the colour applies LIVE and persists — and rapid edits compound into one write (FR-022, FR-023)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -261,7 +261,7 @@ test('the colour applies LIVE and persists — and rapid edits compound into one
         await hex.press('Enter');
       }
 
-      await expect.poll(() => readTheme(cfgRoot)?.accent).toBe('#abcdef');
+      await expect.poll(() => readTheme(cfgRoot)?.accent, { timeout: FILE_OP_TIMEOUT_MS }).toBe('#abcdef');
 
       // And it is live in the running application, not just on disk.
       await expect

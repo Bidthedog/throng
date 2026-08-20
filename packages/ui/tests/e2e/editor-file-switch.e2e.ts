@@ -56,7 +56,6 @@ let projectSeq = 0;
 const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
-
 /**
  * Opening a SECOND file into the same panel (016, FR-002a/FR-018a).
  *
@@ -108,15 +107,6 @@ async function open(win: Page, pid: string, name: string, contains: string): Pro
   });
 }
 
-const docText = (win: Page, pid: string): Promise<string> =>
-  win.evaluate(
-    (id) =>
-      [...document.querySelectorAll(`[data-testid="editor-${id}"] .cm-line`)]
-        .map((l) => (l.textContent === '​' ? '' : l.textContent))
-        .join('\n'),
-    pid,
-  );
-
 /**
  * The colour the active theme paints a given syntax token with.
  *
@@ -144,7 +134,34 @@ const colourOfWord = (win: Page, pid: string, word: string): Promise<string | nu
     { id: pid, w: word },
   );
 
-test('a .sql opened AFTER another file gets the SQL grammar — not the previous file’s', { tag: ['@extended', '@editor'] }, async () => {
+/*
+ * ── TWO REMOVED (035 T056) ──
+ *
+ * `:227` "the FILE's indentation wins when it is the SECOND file opened into the panel (FR-018a)"
+ * `:253` "…and the reverse: a SPACE-indented file opened after a tab-indented one"
+ *
+ * → `packages/ui/tests/component/editor-indent-on-switch.test.ts`.
+ *
+ * The DECISION was already proven and the RE-DECIDING was not. `inferIndent`/`effectiveIndent` are
+ * pure and covered in `integration/indent-infer.integration.test.ts:108`, which asks the question
+ * once, for one file. These two were about the second answer — that a panel already holding a file
+ * re-reads the incoming one rather than keeping the outgoing one's profile. That is `reinferIndent`,
+ * called from exactly two places in `use-editor.ts`, and nothing below E2E had exercised the
+ * replacement one.
+ *
+ * ── AND THE EDITOR MOUNTS IN JSDOM ──
+ *
+ * Nothing in this suite had ever constructed an `EditorView` with a DOM parent, which made "the
+ * editor needs a real window" an assumption nobody had tested. It is false: a real `EditorPanel`
+ * mounts, renders `.cm-content` and routes keydown through its own keymap. See
+ * `packages/ui/tests/component/helpers/mount-editor.ts`, which drives the second open through
+ * `getEditorActions(panelId).openFile` — the same route a tree click takes.
+ *
+ * What jsdom still cannot do is LAYOUT, which is why every REMAINING test in this file is tagged
+ * `@reserve:layout`: each one asserts on what the grammar PAINTED — the set of distinct token
+ * colours actually on screen — and that is a real cascade over a real render.
+ */
+test('a .sql opened AFTER another file gets the SQL grammar — not the previous file’s', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -170,7 +187,7 @@ test('a .sql opened AFTER another file gets the SQL grammar — not the previous
   }
 });
 
-test('…and it does not matter which file was open before it', { tag: ['@extended', '@editor'] }, async () => {
+test('…and it does not matter which file was open before it', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -200,7 +217,7 @@ test('…and it does not matter which file was open before it', { tag: ['@extend
   }
 });
 
-test('a PLAIN-TEXT file opened after a highlighted one is left plain', { tag: ['@extended', '@editor'] }, async () => {
+test('a PLAIN-TEXT file opened after a highlighted one is left plain', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   writeFileSync(join(root, 'notes'), 'SELECT this is not code\nfunction neither is this\n');
   try {
@@ -224,57 +241,7 @@ test('a PLAIN-TEXT file opened after a highlighted one is left plain', { tag: ['
   }
 });
 
-test('the FILE’s indentation wins when it is the SECOND file opened into the panel (FR-018a)', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'SwitchProj', root);
-      const pid = await newEditor(win);
-
-      // Open a SPACE-indented file first, so anything stale is "spaces"…
-      await open(win, pid, 'a-first.ts', 'export const value');
-      // …then a TAB-indented one. TypeScript's profile is spaces and so is the global default, so
-      // only the file's own style can produce a tab here.
-      await open(win, pid, 'd-tabs.ts', 'function a()');
-
-      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('Tab');
-
-      const text = await docText(win, pid);
-      expect(text.startsWith('\t')).toBe(true);
-      expect(text.startsWith('  ')).toBe(false);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('…and the reverse: a SPACE-indented file opened after a tab-indented one indents with spaces', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'SwitchProj', root);
-      const pid = await newEditor(win);
-
-      await open(win, pid, 'd-tabs.ts', 'function a()');
-      // Go's language profile is TABS — so only the file's own 2-space style can produce spaces.
-      await open(win, pid, 'e-spaces.go', 'package main');
-
-      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('Tab');
-
-      const text = await docText(win, pid);
-      expect(text.startsWith('\t')).toBe(false);
-      expect(text.startsWith(' ')).toBe(true);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('MARKDOWN is highlighted — headings, emphasis, links and inline code (FR-006)', { tag: ['@extended', '@editor'] }, async () => {
+test('MARKDOWN is highlighted — headings, emphasis, links and inline code (FR-006)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   writeFileSync(
     join(root, 'f-notes.md'),

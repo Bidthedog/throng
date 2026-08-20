@@ -77,7 +77,31 @@ async function openFile(win: Page, pid: string, name: string, expectText: string
   await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
 }
 
-test('replace-all rewrites every match in one undoable step, preserving CRLF (SC-004)', { tag: ['@extended', '@editor'] }, async () => {
+/*
+ * ── TWO MOVED (035 T055) ──
+ *
+ * `packages/ui/tests/component/editor-search-controller.test.ts`:
+ *
+ *   :128  replace-current changes only the current match and advances to the next
+ *   :157  editing the document while find is open does not misplace a later replace
+ *
+ * The second is the one worth the words. `replaceCurrent` calls `resync()` before it reads an
+ * offset, because a user who edits above the match while the bar is open has moved every remembered
+ * position — and a replace against a stale offset writes into whatever now occupies it, silently and
+ * mid-word. Deleting that `resync()` reddens exactly one test.
+ *
+ * It nearly reddened none. The component harness originally re-ran the query on every edit, on the
+ * reasoning that a real view's `updateListener` does, and with that in place the mutation passed
+ * 17/17: the harness had done the production code's job. The harness now dispatches the edit and
+ * nothing else, which is the condition the rule actually has to hold under.
+ *
+ * ── WHAT STAYS ──
+ *
+ * `:80` — replace-all over a CRLF file, asserting the BYTES on disk afterwards. One transaction is
+ * proven below; that the file comes back with its line endings intact is the save path, and it is
+ * the only claim here that reaches the filesystem.
+ */
+test('replace-all rewrites every match in one undoable step, preserving CRLF (SC-004)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-repl-'));
   const file = join(root, 'crlf.txt');
   try {
@@ -119,74 +143,6 @@ test('replace-all rewrites every match in one undoable step, preserving CRLF (SC
       await expect
         .poll(() => readFileSync(file, 'utf8'), { timeout: FILE_OP_TIMEOUT_MS })
         .toBe('alpha one\r\nalpha two\r\nbeta three\r\n');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('replace-current changes only the current match and advances to the next', { tag: ['@extended', '@editor'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-repl-'));
-  const file = join(root, 'one.txt');
-  try {
-    writeFileSync(file, 'dup\ndup\ndup\n', 'utf8');
-
-    await runApp(async (_app, win) => {
-      await createProject(win, 'ReplOne', root);
-      const pid = await newEditor(win);
-      await openFile(win, pid, 'one.txt', 'dup');
-
-      await win.keyboard.press('Control+h');
-      await win.getByTestId('find-input').fill('dup');
-      await expect(win.getByTestId('find-count')).toHaveText('1 of 3');
-      await win.getByTestId('replace-input').fill('X');
-
-      // One match replaced ⇒ two left, and the selection has moved on to the next.
-      await win.getByTestId('replace-current').click();
-      await expect(win.getByTestId('find-count')).toHaveText(/ of 2$/);
-
-      await win.keyboard.press('Escape');
-      await win.keyboard.press('Control+s');
-      await expect.poll(() => readFileSync(file, 'utf8'), { timeout: FILE_OP_TIMEOUT_MS }).toBe('X\ndup\ndup\n');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('editing the document while find is open does not misplace a later replace', { tag: ['@extended', '@editor'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-repl-'));
-  const file = join(root, 'shift.txt');
-  try {
-    writeFileSync(file, 'target one\ntarget two\n', 'utf8');
-
-    await runApp(async (_app, win) => {
-      await createProject(win, 'ReplShift', root);
-      const pid = await newEditor(win);
-      await openFile(win, pid, 'shift.txt', 'target one');
-
-      // Find the matches — their offsets are recorded now.
-      await win.keyboard.press('Control+h');
-      await win.getByTestId('find-input').fill('target');
-      await expect(win.getByTestId('find-count')).toHaveText('1 of 2');
-      await win.getByTestId('replace-input').fill('HIT');
-
-      // …then type a line ABOVE them, shifting every match along. Replacing at the offsets
-      // remembered a moment ago would now scribble over the wrong characters entirely.
-      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
-      await content.click();
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.type('PREFIX LINE\n');
-
-      await win.getByTestId('replace-all').click();
-
-      await win.keyboard.press('Escape');
-      await win.keyboard.press('Control+s');
-
-      // The replacement landed on the real matches, and the inserted line is intact.
-      await expect
-        .poll(() => readFileSync(file, 'utf8'), { timeout: FILE_OP_TIMEOUT_MS })
-        .toBe('PREFIX LINE\nHIT one\nHIT two\n');
     });
   } finally {
     cleanupTemp(root);

@@ -174,7 +174,7 @@ const coordsAt = (
  * the ten-row single-undo. None of those is a claim about a document alone.
  */
 
-test('Alt+drag makes a block, and cutting it takes ONLY the block’s characters (FR-025e)', { tag: ['@extended', '@editor'] }, async () => {
+test('Alt+drag makes a block, and cutting it takes ONLY the block’s characters (FR-025e)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -206,7 +206,7 @@ test('Alt+drag makes a block, and cutting it takes ONLY the block’s characters
   }
 });
 
-test('Delete on a block clears it per row and NEVER touches the clipboard (FR-025g)', { tag: ['@extended', '@editor'] }, async () => {
+test('Delete on a block clears it per row and NEVER touches the clipboard (FR-025g)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -233,7 +233,7 @@ test('Delete on a block clears it per row and NEVER touches the clipboard (FR-02
   }
 });
 
-test('a block copied in one panel pastes COLUMN-WISE in another — the mode is app-global', { tag: ['@extended', '@editor'] }, async () => {
+test('a block copied in one panel pastes COLUMN-WISE in another — the mode is app-global', { tag: ['@extended', '@editor', '@reserve:runtime'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -273,7 +273,7 @@ test('a block copied in one panel pastes COLUMN-WISE in another — the mode is 
   }
 });
 
-test('a column paste into a TAB-indented file pads with TABS, and lands on the column (FR-025c1)', { tag: ['@extended', '@editor'] }, async () => {
+test('a column paste into a TAB-indented file pads with TABS, and lands on the column (FR-025c1)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -312,7 +312,7 @@ test('a column paste into a TAB-indented file pads with TABS, and lands on the c
   }
 });
 
-test('ONE Undo reverts a ten-row column paste — a command is one undo entry (FR-026)', { tag: ['@extended', '@editor'] }, async () => {
+test('ONE Undo reverts a ten-row column paste — a command is one undo entry (FR-026)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

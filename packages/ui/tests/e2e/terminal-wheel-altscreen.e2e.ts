@@ -70,7 +70,7 @@ async function wheelOver(win: Page, panelId: string, deltaY: number, ctrl = fals
   await quiesced(term, { what: 'terminal after wheel gesture' });
 }
 
-test('a wheel notch moves an alternate-screen program that never asked for the mouse', { tag: ['@extended', '@terminal'] }, async () => {
+test('a wheel notch moves an alternate-screen program that never asked for the mouse', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -102,7 +102,7 @@ test('a wheel notch moves an alternate-screen program that never asked for the m
   }
 });
 
-test('a wheel at a SHELL prompt types nothing — it scrolls the viewport', { tag: ['@extended', '@terminal'] }, async () => {
+test('a wheel at a SHELL prompt types nothing — it scrolls the viewport', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-wheel-shell-'));
   try {
@@ -145,7 +145,7 @@ test('a wheel at a SHELL prompt types nothing — it scrolls the viewport', { ta
   }
 });
 
-test('Ctrl+wheel is left to zoom, not sent to the program', { tag: ['@extended', '@terminal'] }, async () => {
+test('Ctrl+wheel is left to zoom, not sent to the program', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-wheel-zoom-'));
   writeAltScreenProgram(root, { rows: 5 });

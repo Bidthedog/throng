@@ -100,7 +100,7 @@ function approxSame(a: { gap: number; y: number; w: number; h: number }, b: type
   expect(Math.abs(a.h - b.h)).toBeLessThan(2);
 }
 
-test('left pane: no rail strip when expanded; collapse keeps the button fixed', { tag: ['@extended', '@window'] }, async () => {
+test('left pane: no rail strip when expanded; collapse keeps the button fixed', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const win = shared.win;
   // POSITIVE settle first. The rail-absence check below is only meaningful once we
   // know the app has actually rendered — otherwise it passes against a blank page.
@@ -122,7 +122,7 @@ test('left pane: no rail strip when expanded; collapse keeps the button fixed', 
   await expect(win.getByTestId('pane-rail-left')).toHaveCount(0);
 });
 
-test('right pane: rail only while collapsed; expand reveals the explorer', { tag: ['@extended', '@window'] }, async () => {
+test('right pane: rail only while collapsed; expand reveals the explorer', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const win = shared.win;
   await settle(win);
   // No project → right pane defaults collapsed: rail shown, button present.
@@ -141,7 +141,7 @@ test('right pane: rail only while collapsed; expand reveals the explorer', { tag
   approxSame(collapsed, expanded);
 });
 
-test('a collapsed rail gives the button an equal margin on both sides (#1)', { tag: ['@extended', '@window'] }, async () => {
+test('a collapsed rail gives the button an equal margin on both sides (#1)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const win = shared.win;
   await settle(win);
   await win.getByTestId('pane-hide-left').click();
@@ -171,7 +171,7 @@ test('a collapsed rail gives the button an equal margin on both sides (#1)', { t
   }
 });
 
-test('the three pane headers share a bottom border line (#6)', { tag: ['@extended', '@window'] }, async () => {
+test('the three pane headers share a bottom border line (#6)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const win = shared.win;
   await settle(win);
   await createProject(win, 'Aligned', 'C:/c/aligned'); // opens a tab-strip; explorer auto-expands

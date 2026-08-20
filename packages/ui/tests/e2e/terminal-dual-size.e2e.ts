@@ -31,7 +31,7 @@ async function newTerminal(win: Page, root: string): Promise<string> {
   return pid;
 }
 
-test('one terminal in two different-sized windows renders legibly in both, stable across focus', { tag: ['@extended', '@terminal'] }, async () => {
+test('one terminal in two different-sized windows renders legibly in both, stable across focus', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-dualsize-'));
   try {
     await runApp(async (app, win, { pipeName }) => {

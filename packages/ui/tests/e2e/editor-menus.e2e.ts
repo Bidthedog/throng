@@ -25,42 +25,6 @@ async function newEditor(win: Page): Promise<string> {
 
 const item = (win: Page, label: string) => win.getByTestId(`menu-item-${label}`);
 
-test('Open In submenu holds editor targets; a top-level OS reveal; disables an open file', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'MenuProj', root);
-      const pid = await newEditor(win);
-      await win.getByTestId(`editor-${pid}`).click();
-
-      const tree = win.getByTestId('file-explorer-tree');
-      await tree.getByText('a.txt', { exact: true }).click({ button: 'right' });
-
-      // US5 (#158): the OS reveal is now the FIRST item INSIDE the "Open In" submenu, not top-level.
-      await expect(item(win, 'OS File Explorer')).toHaveCount(0); // no longer top-level
-      await item(win, 'Open In').click();
-      await expect(item(win, 'OS File Explorer')).toBeVisible(); // first item of the submenu
-      await expect(win.locator('.context-menu__item', { hasText: 'Last Active Editor' }).last()).toBeVisible();
-
-      // Choose This editor → the file opens into the editor.
-      await win.locator('.context-menu__item', { hasText: 'Last Active Editor' }).last().click();
-      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText('A-BODY', {
-        timeout: 8000,
-      });
-
-      // Re-open the menu → both targets are now disabled: "New Editor" because the
-      // file is open anywhere (FR-072), and "This editor" because it is open in the
-      // target editor itself (FR-082).
-      await tree.getByText('a.txt', { exact: true }).click({ button: 'right' });
-      await item(win, 'Open In').click();
-      await expect(item(win, 'New Editor')).toHaveClass(/context-menu__item--disabled/);
-      await expect(win.locator('.context-menu__item', { hasText: 'Last Active Editor' }).last()).toHaveClass(/context-menu__item--disabled/);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
 /*
  * MOVED (034 FR-045): "Send to Tab offers New Tab on the panel menu".
  *
@@ -95,6 +59,51 @@ test('Open In submenu holds editor targets; a top-level OS reveal; disables an o
  * the rest would not, so the tests stay whole.
  */
 
+/**
+ * ── THE DIALOG ITSELF MOVED (035 T055) ──
+ *
+ * `packages/ui/tests/component/dirty-close-dialog.test.ts` now owns what the prompt SAYS and what
+ * each answer resolves to. `dirty-close-store.ts` had no test of any kind before that.
+ *
+ * The rule most worth having was asserted nowhere, and `dirty-close-dialog.tsx` states it plainly:
+ *
+ *   > A dismissal (overlay click / Escape) is a CANCEL — the safe answer. It must never be read as
+ *   > consent to discard someone's unsaved work.
+ *
+ * That is the difference between a stray Escape closing a panel and a stray Escape doing nothing,
+ * and it comes down to one `?? 'cancel'`. Red-proven by flipping it to `'discard'`.
+ *
+ * Two more went with it: Discard is marked DANGEROUS (nothing else on screen separates "close and
+ * lose it" from "close and keep it"), and the file names are set APART rather than buried in the
+ * sentence — they are what the user has to read before answering.
+ *
+ * ── WHAT STAYS HERE ──
+ *
+ * That the panel-header Destroy actually RAISES this prompt for a dirty editor, that Cancel leaves
+ * the panel and its dirty state exactly as they were, and that Discard removes it. Those are the
+ * workspace's, reached through a real menu on a real dirty CodeMirror.
+ */
+/*
+ * ── ONE REMOVED (035 T056) ──
+ *
+ * `:28` "Open In submenu holds editor targets; a top-level OS reveal; disables an open file" — a
+ * strict duplicate, four times over. It launched Electron, a daemon and a real project to make four
+ * assertions that already had named homes:
+ *
+ *   the OS reveal is NOT top-level and leads the flyout
+ *     → `component/menu-section-rendering.test.ts:204`
+ *   "Last Active Editor" is offered, and names its panel
+ *     → `component/explorer-open-in-target.test.ts:292`
+ *   choosing it routes the file to the tab's last active editor
+ *     → `component/editor-open-routing.test.ts:291`
+ *   both targets then go quiet — New Editor by FR-011a, Last Active Editor by FR-082
+ *     → `component/explorer-open-in-target.test.ts:382` and `:468`
+ *
+ * Each was red-proven against a mutation of the rule it names before this was deleted:
+ * `fr082-never-disabled` (2 red), `fr011a-never-disabled` (1), `os-reveal-top-level` (3).
+ * The last reddens a THIRD test nobody had cited — the section-rule count for a file row — because
+ * moving the reveal out of the flyout changes where the dividers fall.
+ */
 test('destroying a dirty editor prompts save/discard/cancel; cancel is a no-op', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-cfg-menu-'));

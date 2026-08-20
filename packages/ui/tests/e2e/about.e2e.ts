@@ -202,7 +202,7 @@ async function openAboutViaCog(win: Page, app: ElectronApplication): Promise<Pag
   return aboutWin;
 }
 
-test('The cog menu has an "About throng" item that opens the About window (the discoverable entry point)', { tag: ['@extended', '@window'] }, async () => {
+test('The cog menu has an "About throng" item that opens the About window (the discoverable entry point)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const about = await openAboutViaCog(win, app);
   await expect(about.getByTestId('about-window')).toBeVisible();
   // It is the same About surface, showing the authoritative PRODUCT version (FR-001/FR-003) —
@@ -210,7 +210,7 @@ test('The cog menu has an "About throng" item that opens the About window (the d
   await expect(about.getByTestId('about-version')).toHaveText(PRODUCT_VERSION);
 });
 
-test('About shows the product version (not Electron\'s), the copyright holder, the new title, close-only chrome, and third-party licences', { tag: ['@extended', '@window'] }, async () => {
+test('About shows the product version (not Electron\'s), the copyright holder, the new title, close-only chrome, and third-party licences', { tag: ['@extended', '@window', '@reserve:runtime'] }, async () => {
   const about = await openAboutViaCog(win, app);
   await expect(about.getByTestId('about-window')).toBeVisible();
 
@@ -258,7 +258,7 @@ test('About shows the product version (not Electron\'s), the copyright holder, t
   );
 });
 
-test('About throng shows version + build id as selectable text, copyright, licence link and the full AGPL text', { tag: ['@extended', '@window'] }, async () => {
+test('About throng shows version + build id as selectable text, copyright, licence link and the full AGPL text', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const about = await openAboutViaMenu(app);
 
   // Positive settle: the About surface mounted.
@@ -288,7 +288,7 @@ test('About throng shows version + build id as selectable text, copyright, licen
   await expect(licence).toHaveCSS('overflow-y', 'auto');
 });
 
-test('Reopening About focuses the single window rather than opening a second', { tag: ['@extended', '@window'] }, async () => {
+test('Reopening About focuses the single window rather than opening a second', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const about = await openAboutViaMenu(app);
   await expect(about.getByTestId('about-window')).toBeVisible();
 
@@ -312,7 +312,7 @@ test('Reopening About focuses the single window rather than opening a second', {
   expect(app.windows().length).toBe(beforeCount);
 });
 
-test('The About Close button dismisses the window', { tag: ['@extended', '@window'] }, async () => {
+test('The About Close button dismisses the window', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const about = await openAboutViaMenu(app);
   await expect(about.getByTestId('about-window')).toBeVisible();
 

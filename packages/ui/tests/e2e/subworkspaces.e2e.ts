@@ -75,7 +75,7 @@ const seedTwo = `(() => window.throng.invoke('workspace.persistSubWorkspaces', {
     tabs: [{ id: 'tb', title: 'T', root: { type: 'panel', id: 'pb', originProjectId: 'x', title: 'P' } }] },
 ] }))()`;
 
-test('lists, renames and deletes sub-workspaces', { tag: ['@core', '@window'] }, async () => {
+test('lists, renames and deletes sub-workspaces', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
   const win = shared.win;
   // FIRST IN THE FILE, and it has to be: this asserts the empty state of a store nothing has
   // written to yet, before any seed. See the file header.
@@ -103,7 +103,7 @@ test('lists, renames and deletes sub-workspaces', { tag: ['@core', '@window'] },
 });
 
 // US7 feedback: deleting an OPEN sub-workspace closes its window too.
-test('deleting an open sub-workspace closes its window', { tag: ['@core', '@window'] }, async () => {
+test('deleting an open sub-workspace closes its window', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
   const app = shared.app;
   const win = shared.win;
   // The seed REPLACES the list, so this starts from exactly `[sw1]` whatever ran before.
@@ -130,7 +130,7 @@ test('deleting an open sub-workspace closes its window', { tag: ['@core', '@wind
 
 // US7 (T075/T078): clicking a listed sub-workspace opens a detached window that
 // renders its tabs/panels by reusing the workspace renderer (lazy reopen, FR-013).
-test('opens a sub-workspace window that renders its panels (lazy reopen)', { tag: ['@core', '@window'] }, async () => {
+test('opens a sub-workspace window that renders its panels (lazy reopen)', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
   const app = shared.app;
   const win = shared.win;
   await win.evaluate(seedSub);
@@ -197,7 +197,7 @@ test('opens a sub-workspace window that renders its panels (lazy reopen)', { tag
  */
 // US7 / T078 / Constitution XI: closing the main window closes every
 // sub-workspace window (the focus/raise group is also a lifecycle group).
-test('closing the main window closes all sub-workspace windows', { tag: ['@core', '@window'] }, async () => {
+test('closing the main window closes all sub-workspace windows', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
   await runOwnApp(async (app, win) => {
     await win.evaluate(seedSub);
     await reloadWindow(win);
@@ -219,7 +219,7 @@ test('closing the main window closes all sub-workspace windows', { tag: ['@core'
 
 // US7 / T079 / FR-017a: a sub-workspace window's bounds are persisted on
 // move/resize/close and restored (clamped onto a visible display) on reopen.
-test('persists and restores a sub-workspace window size on reopen', { tag: ['@core', '@window'] }, async () => {
+test('persists and restores a sub-workspace window size on reopen', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
   const app = shared.app;
   const win = shared.win;
   await win.evaluate(seedSub);
@@ -314,7 +314,7 @@ test('persists and restores a sub-workspace window size on reopen', { tag: ['@co
 
 // US7: the sub-workspace list reorders by dragging its grip (parity with the
 // project list), and the new order persists across a restart (position column).
-test('reorders sub-workspaces by dragging, and the order persists', { tag: ['@core', '@window'] }, async () => {
+test('reorders sub-workspaces by dragging, and the order persists', { tag: ['@core', '@window', '@reserve:layout'] }, async () => {
   const win = shared.win;
   // Replaces the list with exactly these two, so the exact-equality assertions below mean the same
   // thing they meant against a pristine app.

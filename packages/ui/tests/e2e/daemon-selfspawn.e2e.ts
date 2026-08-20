@@ -10,7 +10,7 @@ import { runApp, createProject, reloadWindow, cleanupTemp} from './harness.js';
 // not the Electron binary; otherwise it crashes on a NODE_MODULE_VERSION mismatch,
 // the UI reaches no daemon, and the project list is empty. This exercises that path.
 
-test('the app spawns its own working daemon (host Node) and projects persist', { tag: ['@extended', '@failure'] }, async () => {
+test('the app spawns its own working daemon (host Node) and projects persist', { tag: ['@extended', '@failure', '@reserve:process'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-selfspawn-'));
   try {
     await runApp(

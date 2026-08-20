@@ -66,7 +66,7 @@ const runApp = (
 
 const icoPath = fileURLToPath(new URL('../../assets/throng.ico', import.meta.url));
 
-test('the title bar carries the throng mark, left of the identity', { tag: ['@extended', '@window'] }, async () => {
+test('the title bar carries the throng mark, left of the identity', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (_app, win) => {
     const mark = win.getByTestId('throng-mark');
     await expect(mark).toBeVisible();
@@ -105,7 +105,7 @@ test.afterAll(() => {
     cleanupTemp(dir);
 });
 
-test('the mark is drawn in the active theme’s colours, not hardcoded black and white', { tag: ['@extended', '@window'] }, async () => {
+test('the mark is drawn in the active theme’s colours, not hardcoded black and white', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   // Distinctive colours, unlike any bundled theme and unlike each other.
   const cfgRoot = seedThemeColours('#ff00aa', '#00cc55');
   const TEXT_MUTED = 'rgb(255, 0, 170)';
@@ -133,7 +133,7 @@ test('the mark is drawn in the active theme’s colours, not hardcoded black and
   );
 });
 
-test('every window that draws a title bar carries the mark', { tag: ['@extended', '@window'] }, async () => {
+test('every window that draws a title bar carries the mark', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
     await expect(win.getByTestId('throng-mark')).toBeVisible();
 
@@ -149,7 +149,7 @@ test('every window that draws a title bar carries the mark', { tag: ['@extended'
   });
 });
 
-test('Electron can decode the bundled .ico the windows are given', { tag: ['@extended', '@window'] }, async () => {
+test('Electron can decode the bundled .ico the windows are given', { tag: ['@extended', '@window', '@reserve:native'] }, async () => {
   // The .ico is hand-packed (scripts/build-app-icons.mjs, no image dependency), so
   // the thing worth proving is that Chromium's decoder actually accepts it and finds
   // the sizes inside — a malformed container fails silently as a blank taskbar icon.

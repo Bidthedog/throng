@@ -228,7 +228,7 @@ async function clickLink(win: Page, text: string, opts: { ctrl: boolean }): Prom
   if (opts.ctrl) await win.keyboard.up('Control');
 }
 
-test('Ctrl+clicking an OSC 8 link whose text IS the url opens the browser exactly once', { tag: ['@extended', '@terminal'] }, async () => {
+test('Ctrl+clicking an OSC 8 link whose text IS the url opens the browser exactly once', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-link1-'));
   const url = 'https://example.com/osc8-same-text';
   try {
@@ -253,7 +253,7 @@ test('Ctrl+clicking an OSC 8 link whose text IS the url opens the browser exactl
   }
 });
 
-test('Ctrl+clicking a PLAIN-TEXT url opens exactly once', { tag: ['@extended', '@terminal'] }, async () => {
+test('Ctrl+clicking a PLAIN-TEXT url opens exactly once', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-link2-'));
   const url = 'https://example.com/plain-text-url';
   try {
@@ -277,7 +277,7 @@ test('Ctrl+clicking a PLAIN-TEXT url opens exactly once', { tag: ['@extended', '
   }
 });
 
-test('Ctrl+clicking an OSC 8 link with non-url text opens its TARGET, exactly once', { tag: ['@extended', '@terminal'] }, async () => {
+test('Ctrl+clicking an OSC 8 link with non-url text opens its TARGET, exactly once', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -307,7 +307,7 @@ test('Ctrl+clicking an OSC 8 link with non-url text opens its TARGET, exactly on
   }
 });
 
-test('a PLAIN click on a link opens nothing — it keeps its terminal meaning', { tag: ['@extended', '@terminal'] }, async () => {
+test('a PLAIN click on a link opens nothing — it keeps its terminal meaning', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-link4-'));
   const url = 'https://example.com/no-modifier';
   try {
@@ -347,7 +347,7 @@ test('a PLAIN click on a link opens nothing — it keeps its terminal meaning', 
  * an OSC 8 sequence at a prompt puts the URL in the echoed command line, and the test then clicks
  * the echo instead of the link.
  */
-test('Ctrl+clicking a link on the ALTERNATE screen opens exactly once', { tag: ['@extended', '@terminal'] }, async () => {
+test('Ctrl+clicking a link on the ALTERNATE screen opens exactly once', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
