@@ -98,6 +98,76 @@ past the budget **and** when it drops below it without the budget being re-seede
 second half is the one that does the work — it is what stops a migration quietly
 banking a reduction and then spending it again.
 
+## The third tag: which reserve entry makes this irreducible
+
+Spec 035 added a third class of tag. A significance tag says which lane a test runs in
+and a category says what area it covers; **neither can tell you whether a test still
+needs the running application at all.** 035's census read all 229 spec files (the suite as it then stood) and found
+that class repeatedly: `tree-drop-open.e2e.ts` justified all five of its tests by the OS
+drag-and-drop reserve while dispatching a synthetic in-page `CustomEvent` that jsdom
+reproduces identically, and `subtree-expand-collapse.e2e.ts` claimed the native-menu
+reserve for an in-document React menu. Both claims were true when written and rotted in
+silence, because nothing ever re-checked them.
+
+So every E2E test names the constitutional reserve entry it relies on, from a closed
+vocabulary:
+
+| Tag | The entry it names |
+| --- | --- |
+| `@reserve:window` | real window lifecycle and multi-window behaviour |
+| `@reserve:focus` | focus and z-order across windows |
+| `@reserve:native` | native menus and dialogs |
+| `@reserve:osdrag` | OS drag-and-drop |
+| `@reserve:pty` | PTY/ConPTY keyboard and rendering fidelity |
+| `@reserve:process` | process-tree hygiene |
+| `@reserve:layout` | real layout and rendered appearance — geometry, colour, cascade |
+| `@reserve:input` | real keyboard and input dispatch |
+| `@reserve:runtime` | real application-runtime identity |
+
+The identifier is stable and the constitution's prose is not — v5.3.0 reworded the layout
+entry to cover colour and cascaded style without touching a single test, which is the
+whole argument for a tag over a quoted sentence.
+
+**`reserve-tag-debt.json` is the migration ratchet**, the same both-ways shape as the
+budget. It records how many tests do not yet name an entry; the number may fall and must
+never rise. Tags are added **by reading the test**, never inferred: a codemod over the
+whole suite tagged 443 tests and put 205 under `@reserve:input`, because `.press(` and
+`.type(` appear in nearly every spec here. Restricting it to unambiguous APIs did no
+better — it read `process.execPath` out of a test's daemon *setup* and called the test a
+runtime-identity claim. The evidence for a test's **claim** is not lexically
+distinguishable from the evidence for its **setup**, so an automated tag is a
+confident-looking false justification: the exact defect the tag exists to remove.
+
+## The bridge parity guard
+
+`packages/ui/tests/unit/ipc-bridge-parity.test.ts` checks that both ends of the
+renderer↔main bridge name the same channels, for all ~98 of them, in milliseconds and
+without launching anything.
+
+It exists because "this proves the wiring is live" was the largest single reason 035's
+census found for keeping a test at E2E — and the wiring decomposes into three spans, two
+of which already had a home:
+
+| Span | Layer that owns it |
+| --- | --- |
+| renderer action → bridge call | component, against a fake bridge |
+| channel agrees across preload ↔ main | **this guard** — previously nothing |
+| main handler → real effect | contract (`config-write-patch.contract.test.ts`) |
+
+It scans channel **literals** per directory rather than `ipcMain.handle(...)` call sites.
+A first attempt did the latter and reported 34 one-way gaps, every one false: channels
+here are routinely registered through a named constant, a helper map, or a `send` inside
+a switch, so the call site holds an identifier rather than a string. A constant's
+definition is itself a literal in the same tree, so collecting literals needs no import
+graph and no parser. Comments are stripped first, because this codebase deliberately
+documents channels it has **removed** — and without stripping, those comments read as
+live one-way channels.
+
+It found one on the day it was written: `throng:terminal:flavourMissing` is forwarded to
+the renderer by `daemon-events.ts` and has no preload listener, so it reaches nobody. All
+five of its siblings are wired. `KNOWN_ONE_WAY` records it with the reason, and fails if
+an entry there is ever fixed without being removed.
+
 ## `npm run gate` — the one command that says the work is done
 
 ```
@@ -128,10 +198,14 @@ Three things worth knowing:
   while iterating; it is claiming *done* off the back of one of them that the gate exists to prevent.
 - **A green gate goes stale the moment you edit.** Quote the stage summary when you report done, and
   re-run if anything changed after it.
-- **The E2E stage is the expensive one** (~21 minutes locally — measured 2026-08-18 at 229 spec
-  files / 641 declarations, after spec 034's cut; the figures and their provenance are below). Never
-  skip it to make the gate finish sooner — that expense is exactly why it is inside the gate rather
-  than optional.
+- **The E2E stage is the expensive one** (**~18 minutes** locally — measured 2026-08-20 at 207 spec
+  files / 548 declarations, at the end of spec 035; the figures and their provenance are below).
+  Never skip it to make the gate finish sooner — that expense is exactly why it is inside the gate
+  rather than optional.
+
+  The gap that stood here is closed. Two earlier gate runs at the end of 035 stopped inside a tier
+  under fail-fast and timed nothing, and this file said so rather than restating a stale figure; the
+  third ran green end to end and is where the number above comes from.
 
 ## Type-checking covers the renderer too
 
@@ -278,8 +352,56 @@ around it.
 That table is the **pre-fix baseline**, taken on `origin/master` `d55054b` before spec 034 changed
 anything.
 
+**Measured 2026-08-20** on `feature/S035-e2e-layer-migration`, at the end of spec 035 —
+**207 spec files / 548 declarations**, same machine, non-elevated, as the E2E stage of a green
+`npm run gate` (all 8 stages, 22m 57s):
+
+| | tests run | time |
+| --- | --- | --- |
+| parallel tier, 6 workers | 200 (+15 skipped) | **2.4 min** |
+| serial tier, 1 worker | 347 | 15.7 min |
+| whole suite | 547 | **18.2 min** |
+
+The 15 skips are elevation-guarded (`skipIfElevated`), and a developer machine is not elevated —
+they are not failures and not omissions.
+
+**The serial tier is now 86% of the wall-clock**, up from 87% at the previous measurement and 68% at
+the pre-034 baseline. That ratio is the useful number rather than the total: it says the remaining
+cost is menus, preferences windows and real shells, which is the work that cannot move down a layer.
+035 took 141 declarations out and 3 minutes with them, and almost all of the time came off the
+serial tier — the parallel tier was already down to 2.4 minutes and had little left to give.
+
+**Against the pre-034 baseline that is 46.9 → 18.2 minutes, a 61% cut.**
+
+### The worker sweep (035 T065)
+
+**Measured 2026-08-20**, retries OFF, on the PARALLEL tier — 200 tests, 15 elevation-guarded skips:
+
+| workers | passed | failed | time |
+| ---: | ---: | ---: | ---: |
+| 6 | 200 | 0 | **2m 37s** |
+| 3 | 200 | 0 | 3m 30s |
+| 1 | 200 | 0 | 8m 56s |
+
+The point of the sweep is the PASS RATE, not the clock. 034's finding was that some specs starve as
+workers rise — which is why the serial tier exists at all — and with retries off a suite that
+degrades reports it as failures rather than absorbing it. Nothing here degrades: 200/200 at every
+width.
+
+Wall-clock scales 2.5× from 1→3 workers and only 1.34× from 3→6, so this tier is near its floor —
+most of what remains is per-test Electron startup, which more workers cannot amortise away.
+
+Swept on the parallel tier only, and deliberately: `run-e2e-local.mjs` pins the serial tier to one
+worker by construction, so sweeping "the suite" would run 347 of its 547 tests at one worker
+whatever the flag said, at 15.7 minutes a pass.
+
+### The 034 measurement, superseded and kept
+
 **Measured 2026-08-18** on `feature/S034-I251-e2e-harness-integrity` `53ff359`, after the whole
-suite had been examined — **229 spec files / 641 declarations**, same machine, non-elevated:
+suite had been examined — **229 spec files / 641 declarations**, same machine, non-elevated.
+
+A dated measurement does not go stale — it is evidence of what was true on that date — so the
+numbers below are left exactly as they were taken.
 
 | | tests run | time |
 | --- | --- | --- |
@@ -702,7 +824,7 @@ code for as long as you believe it. Hence the helpers above: they are not shorth
 call, they are the difference between a key that lands where you meant it and one that quietly edits
 your fixture.
 
-## Budgets — the five clocks, and why each is where it is
+## Budgets — the six clocks, and why each is where it is
 
 A test suite that runs six Electron apps at once creates its own load, and every
 timeout in it is really a claim about how slow things are allowed to get under that
@@ -716,6 +838,7 @@ quieter, and each only visible once the one above it was fixed.
 | app close (`APP_CLOSE_TIMEOUT_MS`) | 10–20 s | **30 s** | `shutdownApp`'s own allowance: 15 s graceful + 10 s `taskkill` = ~25 s, plus margin |
 | daemon ready (`DAEMON_READY_TIMEOUT_MS`) | 10 s | **30 s** | a cold Node start + pipe bind + SQLite open on a saturated box |
 | terminal output (`TERMINAL_OUTPUT_TIMEOUT_MS`) | 20 s | **30 s** | a 200-iteration `cmd` loop painting through a ConPTY under contention |
+| new window (`NEW_WINDOW_TIMEOUT_MS`) | 15 s | **30 s** | a whole second Electron window — renderer, preload and first paint — on a box that has been busy for a quarter of an hour |
 
 Two rules keep this from becoming a habit of enlarging numbers:
 
@@ -731,6 +854,46 @@ Two rules keep this from becoming a habit of enlarging numbers:
 
 **The measured effect**, on the sixteen files that were failing, at six workers with
 retries off: **20 passed / 14 failed** before, **38 / 0** after.
+
+### The filesystem-poll sweep FILE_OP_TIMEOUT_MS asked for (spec 035)
+
+`FILE_OP_TIMEOUT_MS`'s own docblock deferred a sweep and predicted its consequence:
+
+> roughly a dozen other spec files poll for a filesystem effect on the same 10s budget. They did not
+> flake in this run, which is not the same as being right.
+
+One of them then flaked. **32 polls across 13 spec files** now pass `{ timeout: FILE_OP_TIMEOUT_MS }`
+instead of inheriting the 15 s assertion budget. Only polls whose predicate calls a `read*(…)` helper
+were touched — a poll on a locator or on in-memory state is a different question and was left alone.
+
+**It fixes nothing on its own, and that is stated rather than discovered later.** The spec that
+prompted it, `preferences-reset.e2e.ts:187`, is issue #284, and the measurement there is what
+matters: it passes in **~760 ms** or exhausts the whole budget. A poll that is bimodal is not waiting
+on a slow disk, so the budget was never its problem — raising it changed the failure from 15 s to
+30 s and nothing else.
+
+The sweep is kept because it is right for the case the budget exists for — a real `rename` on a real
+disk with a watcher waking up behind it — not because it made a red go green.
+
+### The sixth clock, and the route the first five did not cover (spec 035)
+
+034 sized its five against **concurrency** — six Electron apps at once. The sixth was found by a
+different failure: `theme-flash.e2e.ts:92` failed a full-gate SERIAL tier, at one worker, on
+`app.waitForEvent('window', { timeout: 15_000 })`, and passed on retry.
+
+Measured with retries off, in isolation: **0 failures in 6 runs at one worker, and 0 in 6 at six.**
+It does not fail on a quiet box at any worker count. It failed once, seventeen minutes into a serial
+tier, on a machine that had already run the parallel tier — so the load that broke it was not
+concurrent, it was *cumulative*.
+
+The number itself had no derivation. Sixty-eight `waitForEvent('window')` calls in this suite pass
+no timeout and inherit the config's; **eight** pass one, and all eight pin 15 seconds — making them
+stricter than the suite's own default, and stricter than its 15 s assertion budget, for the single
+most expensive thing a test can ask for. A round number, copied across three files.
+
+Thirty seconds is the same answer `DAEMON_READY_TIMEOUT_MS` gives to the same question, and it is a
+hang detector on the same terms: a window that never opens still fails, still inside the 60 s test
+budget, and still says "no window appeared".
 
 ### Mechanism identifies candidates; measurement decides which need the tier
 

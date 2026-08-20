@@ -29,8 +29,8 @@ Three rules about using it:
   Fix that failure before anything else, using the **running-tests** skill to re-run only what failed
   and **throng-testing** when the failure is an E2E flake rather than a defect. Do not queue up more
   work on top of a red gate.
-- **Never bypass the E2E stage to make the gate finish sooner.** E2E is ~21 minutes locally (measured
-  2026-08-18 at 229 spec files / 641 declarations; see `docs/testing.md`), and that expense is
+- **Never bypass the E2E stage to make the gate finish sooner.** E2E is ~18 minutes locally (measured
+  2026-08-20 at 207 spec files / 548 declarations; see `docs/testing.md`), and that expense is
   exactly why it is inside the gate rather than optional:
   the cheap stages run first precisely so the expensive one is only ever reached by code that has
   already earned it. Running the individual `npm run test:*` scripts while iterating is fine and
@@ -113,14 +113,22 @@ routing table and how they defer to skills.
 
 ## E2E on CI
 
-**Run it locally before you push it.** The full local suite is about **21 minutes**
-(`npm run test:e2e`; measured 2026-08-18 at 229 spec files / 641 declarations, after 034's cut —
-parallel tier 2.7 min, serial tier 18.5 min). Against the pre-034 baseline of 46.9 minutes that is a
-**55% cut**, and nearly all of it came out of the parallel tier: the serial tier is now **87% of the
-runtime** and is menus, preferences windows and real shells, which is the work that cannot move down
-a layer. Every timing here names its measurement; see `docs/testing.md`. Pushing to find out whether
-something works spends other people's runner minutes to learn what one local command would have told
-you — and CI is slower to answer, not faster.
+**Run it locally before you push it.** The full local suite is about **18 minutes**
+(`npm run test:e2e`; measured 2026-08-20 at 207 spec files / 548 declarations, at the end of 035 —
+parallel tier 2.4 min at 6 workers, serial tier 15.7 min at 1). Against the pre-034 baseline of 46.9
+minutes that is a **61% cut**. The serial tier is **86% of the runtime** and is menus, preferences
+windows and real shells, which is the work that cannot move down a layer — so that ratio, rather than
+the total, is the number worth watching. Every timing here names its measurement; see
+`docs/testing.md`. Pushing to find out whether something works spends other people's runner minutes
+to learn what one local command would have told you — and CI is slower to answer, not faster.
+
+**One thing that measurement cost, and it is worth knowing the machine can do it.** The gate run
+before the green one failed on a scope column reading `Everywhere` where the source says
+`EDITOR_ONLY` — a STALE `packages/core/dist`, which `tsc -b`'s incremental buildinfo believed was
+current. It is invisible to every cheap rung by construction: **vitest resolves `@throng/core` to
+source, the Electron app loads `dist`**, so unit and component tests all agreed while every E2E ran
+against an app that did not. If an E2E disagrees with a unit test about a constant, check the emitted
+file before the code: `rm packages/core/tsconfig.tsbuildinfo`, `rm -rf packages/core/dist`, rebuild.
 
 CI does not run the full suite on a push. It runs the **`@core` lane** — capped at 50 tests, one
 job, one worker. The rest runs in the release lane before an installer is built. See *Two lanes* in
