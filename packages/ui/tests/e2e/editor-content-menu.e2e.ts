@@ -94,6 +94,35 @@ const docText = (win: Page, pid: string): Promise<string> =>
 const line = (win: Page, pid: string, text: string) =>
   win.getByTestId(`editor-${pid}`).locator('.cm-line').filter({ hasText: text }).first();
 
+/*
+ * ── THREE OF THE FOUR MOVED (035 T055) ──
+ *
+ * `packages/ui/tests/component/editor-content-menu.test.ts` now owns what the menu's items DO:
+ *
+ *   :123  right-clicking INSIDE a selection preserves it; outside collapses it (FR-012a)
+ *   :154  right-clicking OUTSIDE a selection moves the caret there (FR-012a)
+ *   :179  Undo from the content menu reaches the document authority (FR-026b)
+ *
+ * The menu had TWO unit tests already — `menu-icon-tokens.test.ts` and `menu-sections.test.ts` —
+ * asserting every label, icon, section and shortcut on it. Both build it with `{} as EditorView`,
+ * because neither ever calls an `onClick`. So the list was proven exhaustively and every handler
+ * behind it was proven NOWHERE, and these three E2Es were the only thing between a menu that reads
+ * correctly and a menu that does nothing.
+ *
+ * `placeCaretForContextMenu` had no test of any kind, including for the Shift+F10 trap it carries a
+ * guard against: a keyboard-opened menu supplies the focused element's corner as its coordinates,
+ * so moving the caret there destroys the selection the user opened the menu to act on, and Cut
+ * takes the whole line. Shipped and unguarded until now.
+ *
+ * ── WHY :97 STAYS ──
+ *
+ * The verdict said all four, and this is a deliberate partial decline. What no lower layer sees is
+ * the WIRING: that a right-click on a rendered `.cm-line` reaches `placeCaretForContextMenu` with
+ * coordinates `posAtCoords` can resolve, and that the item the user clicks is the CONTENT menu's
+ * rather than the panel header's. jsdom has no layout, so the component test stubs `posAtCoords`
+ * outright — which is correct for testing the decision and proves nothing about the measurement.
+ * One test buys that, so one test keeps it.
+ */
 test('mouse-only cut and paste — no selection cuts the whole line (FR-012b)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
@@ -120,111 +149,33 @@ test('mouse-only cut and paste — no selection cuts the whole line (FR-012b)', 
   }
 });
 
-test('right-clicking INSIDE a selection preserves it; outside collapses it (FR-012a)', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Menu', root);
-      const pid = await openEditorWithFile(win);
-      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
+/*
+ * ONE TEST REMOVED (035 T055) — "the CONTENT menu is distinct from the panel-HEADER menu (FR-014)",
+ * now `packages/ui/tests/unit/menu-icon-tokens.test.ts`.
+ *
+ * It launched Electron, created a project on a real temp directory, opened a file in an editor
+ * panel, right-clicked a rendered line, read the menu, pressed Escape, right-clicked the panel
+ * handle and read the other one — to compare two label lists.
+ *
+ * Both lists are produced by pure functions. `editorContentMenu` touches its `view` only inside the
+ * `onClick` closures, which is why that file's existing harness already builds it with
+ * `{} as EditorView`, and `panelHeaderMenu` takes a plain panel record. Neither needs a document, a
+ * selection, a project or a window to say what it contains.
+ *
+ * ── STRONGER THERE THAN HERE ──
+ *
+ * This test named four labels. The unit version keeps those four AND asserts that NO label appears
+ * in both menus — the rule rather than four examples of it. That is what catches an item added to
+ * the wrong builder, which is the regression FR-014 exists to prevent and precisely what four
+ * literals sail past.
+ *
+ * The disjointness check is paired with a positive control, because two EMPTY menus satisfy it.
+ *
+ * Red-proven against three mutations: save-in-content (3 red), cut-in-header (2 red, and note it is
+ * caught from BOTH directions), no-set-language (3 red).
+ */
 
-      // Select the whole first line.
-      await content.click();
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('Shift+End');
-
-      // Right-click INSIDE that selection and Copy. The selection must survive the right-click —
-      // collapsing it would destroy the very thing the user right-clicked to act on.
-      await line(win, pid, 'alpha').click({ button: 'right' });
-      await win.getByTestId('menu-item-Copy').click();
-
-      // Paste at the end: a VERBATIM copy of the selection (no trailing newline), so it appends to
-      // the line rather than inserting a new one — proving the selection was preserved, not
-      // collapsed to a caret (which would have copied the whole LINE and pasted it above).
-      await content.click();
-      await win.keyboard.press('Control+End');
-      await win.keyboard.press('Control+v');
-      await expect.poll(() => docText(win, pid)).toBe('alpha\nbeta\ngamma\nalpha');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('right-clicking OUTSIDE a selection moves the caret there (FR-012a)', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Menu', root);
-      const pid = await openEditorWithFile(win);
-      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
-
-      // Select line 1…
-      await content.click();
-      await win.keyboard.press('Control+Home');
-      await win.keyboard.press('Shift+End');
-
-      // …then right-click on line 3, which is OUTSIDE it. The selection collapses and the caret
-      // moves to the click, so Cut takes THAT line — not the one that was selected.
-      await line(win, pid, 'gamma').click({ button: 'right' });
-      await win.getByTestId('menu-item-Cut').click();
-
-      await expect.poll(() => docText(win, pid)).toBe('alpha\nbeta\n');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('Undo from the content menu reaches the document authority (FR-026b)', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Menu', root);
-      const pid = await openEditorWithFile(win);
-
-      await line(win, pid, 'beta').click({ button: 'right' });
-      await win.getByTestId('menu-item-Cut').click();
-      await expect.poll(() => docText(win, pid)).toBe('alpha\ngamma\n');
-
-      // The menu's Undo must go to the AUTHORITY. CodeMirror's own `undo` operates on the local
-      // `history()` that this feature deleted — a menu item bound to it would be a dead no-op that
-      // looks perfectly correct in the source.
-      await line(win, pid, 'alpha').click({ button: 'right' });
-      await win.getByTestId('menu-item-Undo').click();
-
-      await expect.poll(() => docText(win, pid)).toBe('alpha\nbeta\ngamma\n');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('the CONTENT menu is distinct from the panel-HEADER menu (FR-014)', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Menu', root);
-      const pid = await openEditorWithFile(win);
-
-      // The content menu acts on the TEXT.
-      await line(win, pid, 'alpha').click({ button: 'right' });
-      await expect(win.getByTestId('menu-item-Cut')).toBeVisible();
-      await expect(win.getByTestId('menu-item-Set Language…')).toBeVisible();
-      await expect(win.getByTestId('menu-item-Save')).toHaveCount(0); // …not on the panel
-      await win.keyboard.press('Escape');
-
-      // The panel-header menu acts on the PANEL, and is unchanged by this feature.
-      await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-      await expect(win.getByTestId('menu-item-Save')).toBeVisible();
-      await expect(win.getByTestId('menu-item-Cut')).toHaveCount(0); // …not on the text
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('a KEYBOARD-opened menu keeps the selection — Cut takes the selected word, not the line', { tag: ['@extended', '@editor'] }, async () => {
+test('a KEYBOARD-opened menu keeps the selection — Cut takes the selected word, not the line', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -251,37 +202,45 @@ test('a KEYBOARD-opened menu keeps the selection — Cut takes the selected word
   }
 });
 
-test('the Set Language item names the current language, and picking one returns focus to the editor', { tag: ['@extended', '@editor'] }, async () => {
+/**
+ * Choosing a language returns the caret to the DOCUMENT.
+ *
+ * ── WHAT LEFT (035 T055) ──
+ *
+ * This test also asserted that the menu item NAMES the current language ("Plain Text") and, after a
+ * change, names the new one ("JSON"). Both are `args.languageName` reaching a template in
+ * `content-menu.ts`, and both are now `unit/menu-icon-tokens.test.ts` — together with two branches
+ * this could not reach: a document with NO language, and the `Set Language… (undefined)` a template
+ * literal produces when nobody checks the optional. Red-proven by never-names (2 red) and
+ * undefined-leak (3 red).
+ *
+ * What is left needs a real editor. The picker takes focus to open, so a user who chose by keyboard
+ * would otherwise be left typing into nothing — and "the caret is back in the document" is
+ * `document.activeElement.closest('[data-testid="editor-…"]')` against a real CodeMirror.
+ * `component/language-picker-keyboard.test.ts` owns the picker's own keyboard behaviour; where the
+ * caret lands afterwards is not something that file can say.
+ */
+test('picking a language returns focus to the editor', { tag: ['@extended', '@editor', '@reserve:focus'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
       await createProject(win, 'Menu', root);
       const pid = await openEditorWithFile(win);
 
-      // lines.txt is plain text, and the menu says so rather than only offering to change it.
       await line(win, pid, 'alpha').click({ button: 'right' });
-      const item = win.getByTestId('menu-item-Set Language…');
-      await expect(item).toContainText('Plain Text');
-      await item.click();
+      await win.getByTestId('menu-item-Set Language…').click();
       await expect(win.getByTestId(`language-picker-${pid}`)).toBeVisible({ timeout: 5000 });
 
-      // Choosing puts the caret back in the document — the picker took focus to open, and a user
-      // who chose by keyboard would otherwise be left typing into nothing.
       await win.getByTestId('language-option-json').click();
       await expect(win.getByTestId(`language-picker-${pid}`)).toHaveCount(0);
       await expect
         .poll(() =>
           win.evaluate(
-            (id) =>
-              document.activeElement?.closest(`[data-testid="editor-${id}"]`) != null,
+            (id) => document.activeElement?.closest(`[data-testid="editor-${id}"]`) != null,
             pid,
           ),
         )
         .toBe(true);
-
-      // …and the menu now names the language that was chosen.
-      await line(win, pid, 'alpha').click({ button: 'right' });
-      await expect(win.getByTestId('menu-item-Set Language…')).toContainText('JSON');
     });
   } finally {
     cleanupTemp(root);

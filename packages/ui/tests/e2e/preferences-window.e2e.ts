@@ -111,7 +111,7 @@ test.describe('the preferences window itself', () => {
     await shared.win.bringToFront();
   });
 
-  test('Preferences title is suffix-form "Preferences — throng"', { tag: ['@extended', '@prefs'] }, async () => {
+  test('Preferences title is suffix-form "Preferences — throng"', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
     // In-app titlebar identity.
     await expect(prefs.getByTestId('title-bar-identity')).toHaveText('Preferences — throng');
     // OS window title — set by the main process, which is why this half needs a real window.
@@ -122,22 +122,32 @@ test.describe('the preferences window itself', () => {
     expect(osTitle).toBe('Preferences — throng');
   });
 
-  test('Preferences renders NO minimise control (renderer)', { tag: ['@extended', '@prefs'] }, async () => {
-    // Distinct from the OS-level assertion below: the affordance is simply not drawn.
-    await expect(prefs.getByTestId('window-min')).toHaveCount(0);
-    // Maximise + close remain.
-    await expect(prefs.getByTestId('window-max')).toBeVisible();
-    await expect(prefs.getByTestId('window-close')).toBeVisible();
-  });
-
-  test('Preferences window is non-minimizable at the OS level', { tag: ['@extended', '@prefs'] }, async () => {
+  /*
+   * ── ONE REMOVED (035 T055) ──
+   *
+   * `:125` "Preferences renders NO minimise control (renderer)" →
+   * `packages/ui/tests/component/preferences-app.test.ts`, "the preferences window offers no
+   * minimise".
+   *
+   * Its own comment already named the split it belongs to: *"Distinct from the OS-level assertion
+   * below: the affordance is simply not drawn."* Drawing is the renderer's, and the renderer mounts
+   * in jsdom.
+   *
+   * The OS half — the test immediately below — stays, and the two are genuinely different claims. A
+   * window that refuses to minimise while still showing the button is a control that does nothing;
+   * one that hides the button while allowing it is a window a taskbar click can lose. Neither test
+   * covers the other.
+   *
+   * The migrated version keeps the maximise/close pairing for the same reason this one had it: a
+   * title bar that failed to render AT ALL would satisfy "no minimise control" perfectly.
+   */
+  test('Preferences window is non-minimizable at the OS level', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
     // Distinct from the renderer assertion above: the BrowserWindow itself forbids minimise.
     expect(await lastWindowMinimizable(shared.app)).toBe(false);
   });
 });
 
-
-test('Main window keeps its minimise control and a suffix-form title', { tag: ['@extended', '@prefs'] }, async () => {
+test('Main window keeps its minimise control and a suffix-form title', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   skipIfElevated(); // an elevated runner folds [ADMIN] before the suffix; endsWith still holds
   await runApp(async (app, win) => {
     await createProject(win, 'Suffixer', 'C:/c/suffixer');
@@ -150,7 +160,7 @@ test('Main window keeps its minimise control and a suffix-form title', { tag: ['
   });
 });
 
-test('a sub-workspace window keeps its minimise control and a suffix-form title', { tag: ['@extended', '@prefs'] }, async () => {
+test('a sub-workspace window keeps its minimise control and a suffix-form title', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
     await createProject(win, 'Detacher', 'C:/c/detacher');
     await expect(win.getByTestId('tab-strip')).toBeVisible();

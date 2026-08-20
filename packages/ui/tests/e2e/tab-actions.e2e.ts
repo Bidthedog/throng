@@ -78,7 +78,7 @@ async function freshProject(): Promise<void> {
   await settle(shared.win);
 }
 
-test('T044 — the tab-actions group appears only once the strip overflows (T1)', { tag: ['@extended', '@window'] }, async () => {
+test('T044 — the tab-actions group appears only once the strip overflows (T1)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await freshProject();
 
   // PRESENT first, absent second. A bare `toHaveCount(0)` is satisfied by a DOM that has not
@@ -96,7 +96,7 @@ test('T044 — the tab-actions group appears only once the strip overflows (T1)'
   expect(expectedCounts(after).overflowing).toBe(true);
 });
 
-test('T044 — the group sits inside the pane, between the tabs and New Tab (T1)', { tag: ['@extended', '@window'] }, async () => {
+test('T044 — the group sits inside the pane, between the tabs and New Tab (T1)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await freshProject();
   await seedOverflowingTabs(shared.win, 'actions-place');
 
@@ -139,7 +139,7 @@ test('T044 — three themed icon controls, each with a hover title naming its ac
   }
 });
 
-test('T045 — the three counts are hidden-left, hidden-right and total, and follow a scroll (T3, S2)', { tag: ['@extended', '@window'] }, async () => {
+test('T045 — the three counts are hidden-left, hidden-right and total, and follow a scroll (T3, S2)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await freshProject();
   await seedOverflowingTabs(shared.win, 'actions-counts');
 
@@ -174,7 +174,7 @@ test('T045 — the three counts are hidden-left, hidden-right and total, and fol
   expect(wantRight.hiddenLeft + wantRight.hiddenRight).toBeLessThan(wantRight.total);
 });
 
-test('T045 — the counts follow an add and a destroy (S2)', { tag: ['@extended', '@window'] }, async () => {
+test('T045 — the counts follow an add and a destroy (S2)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await freshProject();
   await seedOverflowingTabs(shared.win, 'actions-add-destroy');
   await setScrollLeft(shared.win, 0);
@@ -203,7 +203,7 @@ test('T045 — the counts follow an add and a destroy (S2)', { tag: ['@extended'
   expect(destroyed.total, 'a destroyed tab stops being counted').toBe(start);
 });
 
-test('T045 — the counts follow a reorder and a window resize (S2)', { tag: ['@extended', '@window'] }, async () => {
+test('T045 — the counts follow a reorder and a window resize (S2)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await freshProject();
   await seedOverflowingTabs(shared.win, 'actions-reorder-resize');
   await setScrollLeft(shared.win, 0);
@@ -277,7 +277,7 @@ test('T045 — the counts follow a reorder and a window resize (S2)', { tag: ['@
   }
 });
 
-test('T046 — a step moves exactly one tab, landing it flush with the left edge (S3)', { tag: ['@extended', '@window'] }, async () => {
+test('T046 — a step moves exactly one tab, landing it flush with the left edge (S3)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await freshProject();
   await seedOverflowingTabs(shared.win, 'actions-step');
   await setScrollLeft(shared.win, 0);
@@ -302,7 +302,7 @@ test('T046 — a step moves exactly one tab, landing it flush with the left edge
   expect(Math.abs(back.scrollLeft - before.scrollLeft)).toBeLessThanOrEqual(1);
 });
 
-test('T046 — a step control is unavailable when nothing is hidden that way (S4)', { tag: ['@extended', '@window'] }, async () => {
+test('T046 — a step control is unavailable when nothing is hidden that way (S4)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await freshProject();
   await seedOverflowingTabs(shared.win, 'actions-unavailable');
 

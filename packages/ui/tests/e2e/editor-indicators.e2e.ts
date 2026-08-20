@@ -28,25 +28,29 @@ test('the unsaved dot lights on panel + tab + project and clears on save', { tag
     await runApp(async (app, win) => {
       await createProject(win, 'IndProj', root);
       const pid = await newEditor(win);
-      const tabId = await win
-        .locator('.tab-chip')
-        .first()
-        .evaluate((el) => (el as HTMLElement).dataset.testid?.replace('tab-', '') ?? '');
-
       await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
       await win.keyboard.type('dirty content');
 
-      // Dot appears on the Panel, the Tab, and the project row.
+      /*
+       * ── THE FOUR-DOT AGREEMENT MOVED (035 T055) ──
+       *
+       * That one dirty document lights the panel, the tab, the project row AND the tree row — and
+       * that one save clears all four — is `packages/ui/tests/component/editor-dirty-store.test.ts`.
+       * All four read `editor-state.ts`'s single `states` map through four selectors, so their
+       * agreement is a property of that store and not of any window; the store had no test of its
+       * own. That each of the four call sites RENDERS a dot from its selector is
+       * `packages/ui/tests/unit/unsaved-dot-call-sites.test.ts`.
+       *
+       * What is left here is the half neither can reach: the SAVE. One dot is still asserted, as the
+       * live witness that a real edit reaches the real store — the claim being about the round trip
+       * below it, not about the dot.
+       */
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible();
-      await expect(win.getByTestId(`tab-unsaved-${tabId}`)).toBeVisible();
-      await expect(win.locator('.project-item .throng-unsaved-dot').first()).toBeVisible();
 
       // Save → every dot clears.
       await stubSaveDialog(app, savePath);
       await win.keyboard.press('Control+s');
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toHaveCount(0, { timeout: 8000 });
-      await expect(win.getByTestId(`tab-unsaved-${tabId}`)).toHaveCount(0);
-      await expect(win.locator('.project-item .throng-unsaved-dot')).toHaveCount(0);
     });
   } finally {
     cleanupTemp(root);

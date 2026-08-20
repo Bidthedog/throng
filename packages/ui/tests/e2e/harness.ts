@@ -540,6 +540,64 @@ export const DAEMON_READY_TIMEOUT_MS = 30_000;
  * parallel worker and the tier mechanism applies to it — not that the number should grow again.
  */
 export const TERMINAL_OUTPUT_TIMEOUT_MS = 30_000;
+/**
+ * How long a SECOND window gets to appear after the click that opens it (spec 035).
+ *
+ * ══ THE MEASUREMENT ══
+ *
+ * `theme-flash.e2e.ts:92` failed a full-gate serial tier on
+ * `app.waitForEvent('window', { timeout: 15_000 })` — a sub-workspace window that had not opened
+ * within fifteen seconds — and passed on retry. Measured afterwards with retries OFF, in isolation:
+ * **0 failures in 6 runs at one worker, and 0 in 6 at six workers.** It does not fail on a quiet
+ * box at any worker count. It failed once, at the end of a seventeen-minute serial tier, on a
+ * machine that had already run the parallel tier.
+ *
+ * That is the shape `docs/testing.md` names starvation rather than a defect, and it arrives by a
+ * route the five 034 budgets did not cover: not concurrent workers, but a box that has been busy for
+ * a quarter of an hour.
+ *
+ * ══ WHY 15s WAS THE WRONG NUMBER, SPECIFICALLY ══
+ *
+ * Sixty-eight `waitForEvent('window')` calls in this suite pass no timeout at all and inherit the
+ * config's. Eight pass one, and every one of those eight pins **15 seconds** — which makes them
+ * STRICTER than the suite's own default and stricter than its 15s assertion budget, for the single
+ * most expensive thing a test can ask for: a whole second Electron BrowserWindow, its renderer, its
+ * preload and its first paint.
+ *
+ * There was no reasoning behind the 15; it is a round number copied across eight files. This
+ * replaces it with a named budget derived the way `DAEMON_READY_TIMEOUT_MS` is — a cold window on a
+ * saturated box — and 30s is the same answer for the same reason.
+ *
+ * ══ WHAT IT IS AND IS NOT ══
+ *
+ * A HANG DETECTOR. It still fails a window that never opens, and it fails well inside the 60s test
+ * budget, so the failure still reads as "no window appeared" rather than as an anonymous test
+ * timeout. It asserts nothing about how fast a window opens; no requirement here claims that, and
+ * `theme-flash` is about the COLOUR the window paints, not the speed it paints it.
+ *
+ * If a spec ever needs more than this, the answer is the tier mechanism rather than a fourth
+ * number — the rule `TERMINAL_OUTPUT_TIMEOUT_MS` states above, unchanged.
+ *
+ * ══ AND IT DID NOT FIX WHAT IT WAS INTRODUCED FOR — SAY SO ══
+ *
+ * This budget was added in response to `theme-flash.e2e.ts:92` timing out at 15s waiting for a
+ * sub-workspace window, on the reading that the cause was cumulative load: the spec measured 12/12
+ * clean in isolation at both 1 and 6 workers, so a full-run-only failure looked like a saturated box.
+ *
+ * **A later full run disproved that reading, and the evidence is unambiguous.** The same test failed
+ * at **33.0s** and its immediate retry — same process, same tier, same load, seconds later — passed
+ * in **3.4s**. A slow machine does not produce a tenfold difference between two consecutive attempts.
+ * Whatever this is, it is a RACE that a fresh app clears, not a duration that needs more room.
+ *
+ * So the number stays at 30s as a hang detector, which is all it was ever good for, and nobody should
+ * raise it again expecting that to help. The mechanism is most likely the one `closeNewest` in
+ * `theme-flash.e2e.ts` already documents for issue #75 — a child window's asynchronous teardown
+ * racing the next interaction, so a click lands while focus is mid-transfer and no window is ever
+ * created — reappearing one step further along, at the sub-workspace open. That is a HYPOTHESIS: it
+ * fits the timings and the prior art, and it has not been reproduced on demand.
+ */
+export const NEW_WINDOW_TIMEOUT_MS = 30_000;
+
 
 /**
  * How long to wait for a filesystem effect to become observable (spec 034).

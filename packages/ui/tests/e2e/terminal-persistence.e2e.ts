@@ -70,7 +70,7 @@ async function layoutPersisted(
     .toBe(true);
 }
 
-test('a Panel restored with a now-removed flavour surfaces unavailability, not a blank terminal', { tag: ['@extended', '@terminal'] }, async () => {
+test('a Panel restored with a now-removed flavour surfaces unavailability, not a blank terminal', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { openApp, createProject, firstPanelId, settle, type OpenApp } from './harness.js';
+import { openApp, createProject, settle, type OpenApp } from './harness.js';
 import { restOnTabForPopover } from './helpers/tab-settings.js';
 
 /**
@@ -29,7 +29,6 @@ import { restOnTabForPopover } from './helpers/tab-settings.js';
  * shared app is never driven by two tests at once.
  */
 
-const PANEL_INSTRUCTIONS = 'Click: Activate';
 const TAB_INSTRUCTIONS = 'Click: Switch';
 
 let shared: OpenApp;
@@ -46,42 +45,33 @@ test.afterAll(async () => {
   await shared?.close();
 });
 
-test('a panel header shows its TITLE on hover, not instructions', { tag: ['@extended', '@window'] }, async () => {
-  const id = await firstPanelId(win());
-  const header = win().getByTestId(`panel-handle-${id}`);
-  await expect(header).toBeVisible();
 
-  const title = await win().getByTestId(`panel-title-${id}`).textContent();
-  expect(title?.trim()).toBeTruthy();
 
-  await expect(header).toHaveAttribute('title', title!.trim());
-
-  const tooltip = await header.getAttribute('title');
-  expect(tooltip).not.toContain(PANEL_INSTRUCTIONS);
-});
-
-test('a renamed panel shows its NEW title on hover', { tag: ['@extended', '@window'] }, async () => {
-  const id = await firstPanelId(win());
-  const header = win().getByTestId(`panel-handle-${id}`);
-  await header.dblclick();
-
-  const input = win().getByTestId(`panel-rename-input-${id}`);
-  await expect(input).toBeFocused();
-  /*
-   * 031 — this fixture was 70 characters, and `tabs.maxNameLength` now defaults to 64, so the
-   * rename field capped the input and the header could never have shown all of it. Shortened to
-   * 60: still far wider than the header, so the ellipsis this test is about still happens, but
-   * within the limit, so the test goes on asking its own question instead of the name limit's.
-   * The limit has its own coverage in `tab-name-limit.e2e.ts`.
-   */
-  const long = 'A panel title too long to fit inside its header at all';
-  await input.fill(long);
-  await win().keyboard.press('Enter');
-
-  // The tooltip is the ONLY way to read this title — the header ellipsizes it.
-  await expect(header).toHaveAttribute('title', long);
-});
-
+/*
+ * THREE TESTS REMOVED (035 T055) — now `packages/ui/tests/component/panel-box.test.ts`:
+ *
+ *   - "a panel header shows its TITLE on hover, not instructions"
+ *   - "a renamed panel shows its NEW title on hover"
+ *   - "the tooltips that already showed CONTENT are untouched (FR-010)"
+ *
+ * Each asserted a `title` ATTRIBUTE on a rendered element, and two of the three compared it against
+ * the panel's own rendered title — a comparison between two things one component draws. They opened
+ * an app and created a project to read an attribute off it.
+ *
+ * STRONGER THERE THAN HERE: the component versions add a sweep over EVERY rendered `[title]` for the
+ * instruction strings, so a control that grew an instruction list would fail on the rule rather than
+ * on whichever three examples someone remembered to check.
+ *
+ * Red-proven against four mutations: instructions-back (3 red — #57 itself), stale-title (2 red — a
+ * tooltip captured once and no longer tracking the title), strip-add (2 red) and strip-all (1 red),
+ * the last two being the over-broad fix that removes the action controls' naming titles.
+ *
+ * ── WHAT STAYS, AND WHY THE FILE SURVIVES ──
+ *
+ * The tab-chip test below. Its "no native tooltip on the chip" half already moved to
+ * `unit/tooltip-instructions.test.ts`; what remains is that the popover appears only once the
+ * pointer RESTS on the chip (031 US7 / FR-058) — a gesture nothing below this layer drives.
+ */
 /*
  * 031 FR-051 — the tab hover is a POPOVER now, not a `title` attribute.
  *
@@ -112,29 +102,19 @@ test('a tab chip shows its TITLE on hover, not instructions', { tag: ['@extended
   await expect(popover).not.toContainText(TAB_INSTRUCTIONS);
 });
 
-test('the interaction instructions appear NOWHERE in the workspace chrome', { tag: ['@extended', '@window'] }, async () => {
-  // Not merely absent from the elements we changed — absent from every title attribute on the
-  // page. A guard shaped like the change would pass while the string survived somewhere else.
-  const titles = await win()
-    .locator('[title]')
-    .evaluateAll((els) => els.map((el) => el.getAttribute('title') ?? ''));
-  expect(titles.length).toBeGreaterThan(0);
-  expect(titles.filter((t) => t.includes(PANEL_INSTRUCTIONS))).toEqual([]);
-  expect(titles.filter((t) => t.includes(TAB_INSTRUCTIONS))).toEqual([]);
-});
+/*
+ * MOVED (035 FR-001) — "the interaction instructions appear NOWHERE in the workspace chrome" now
+ * lives at `packages/ui/tests/unit/tooltip-instructions.test.ts`, and is stronger there.
+ *
+ * It swept every `[title]` element ON THE PAGE, which could only ever mean the elements this one
+ * window had rendered: one project, one tab, one untyped panel — no terminal, no editor, no failure
+ * banner, no sub-workspace. An instruction list on a control that renders only for a terminal panel
+ * would have passed it every time. The unit guard reads the SOURCE, so it sees every tooltip the
+ * app can draw, and it strips comments first so `panel-placeholder.tsx:465` may keep explaining
+ * why the rule exists.
+ *
+ * The chip's "no native tooltip" half of `:95` moved with it. What stays here is that test's real
+ * remainder: the popover appears only once the pointer RESTS, which is a gesture nothing below this
+ * layer drives.
+ */
 
-test('the tooltips that already showed CONTENT are untouched (FR-010)', { tag: ['@extended', '@window'] }, async () => {
-  const id = await firstPanelId(win());
-  // The panel-type marker still names the type — it is an action/content tooltip, not an
-  // instruction list, and #57 does not touch it.
-  // Best-effort probe of the panel-type marker: bound it (issue #75). Without an explicit
-  // timeout a click on an absent testid auto-waits the whole per-test budget before the .catch
-  // swallows it — invisible at 60s, but at 30s it consumed the test before the real assertion
-  // below ever ran. A short bound keeps the probe best-effort and fast.
-  await win()
-    .getByTestId(`panel-type-terminal-${id}`)
-    .click({ timeout: 2000 })
-    .catch(() => {});
-  // The add/close buttons keep their action-naming titles (constitution: themeable icon controls).
-  await expect(win().getByTestId(`panel-add-${id}`)).toHaveAttribute('title', /.+/);
-});

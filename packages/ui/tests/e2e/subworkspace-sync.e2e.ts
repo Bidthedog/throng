@@ -105,7 +105,24 @@ const seedSub = `(() => window.throng.invoke('workspace.persistSubWorkspaces', {
  * all SIX of its tests fail.
  */
 
-test('syncs a Panel into a chosen Tab of an existing sub-workspace (third level)', { tag: ['@extended', '@window'] }, async () => {
+/*
+ * ── ONE REMOVED (035 T056) ──
+ *
+ * `:131` "a Panel cannot be synced to a sub-workspace twice (greyed out)" — a strict duplicate of
+ * `component/subworkspace-sync.test.ts:501`, which is strictly STRONGER. Both drive the same
+ * `alreadyHasPanel` branch after a real sync has landed; the component test additionally asserts
+ * that the greyed row drops its SUBMENU (a disabled row that still opened a flyout would offer
+ * "New Tab" behind a greyed label, and clicking it would sync the Panel a second time) and that
+ * clicking the row is INERT — no persist, and the menu stays open.
+ *
+ * Red-proven before deletion with `sync-twice-allowed`, which reddens exactly that test.
+ *
+ * ── WHAT STAYS ──
+ *
+ * `:108`, tagged `@reserve:layout`: it drives a THIRD level of nested flyout, whose reachability
+ * is a fact about where the submenus were actually laid out.
+ */
+test('syncs a Panel into a chosen Tab of an existing sub-workspace (third level)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (_app, win) => {
     await win.evaluate(seedSub);
     await reloadWindow(win);
@@ -125,29 +142,6 @@ test('syncs a Panel into a chosen Tab of an existing sub-workspace (third level)
     // The Panel is cloned into that Tab → still 1 Tab, now 2 Panels.
     await expect(win.getByTestId('subworkspace-counts-sw1')).toContainText('1T·2P');
     await expect(win.locator('.panel-box')).toHaveCount(1); // main project unchanged
-  });
-});
-
-test('a Panel cannot be synced to a sub-workspace twice (greyed out)', { tag: ['@extended', '@window'] }, async () => {
-  await runApp(async (_app, win) => {
-    await win.evaluate(seedSub);
-    await reloadWindow(win);
-    await createProject(win, 'OnceOnly', 'C:/c/onceonly');
-    const pid = await firstPanelId(win);
-
-    // Sync the Panel into Detached A as a new Tab.
-    await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-    await win.getByTestId('menu-item-Sync to').click();
-    await win.getByTestId('menu-item-Detached A').click();
-    await win.getByTestId('menu-item-New Tab').click();
-    await expect(win.getByTestId('subworkspace-counts-sw1')).toContainText('2P');
-
-    // Re-open the menu → Detached A is disabled (the Panel is already in it).
-    await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-    await win.getByTestId('menu-item-Sync to').click();
-    await expect(win.getByTestId('menu-item-Detached A')).toHaveClass(
-      /context-menu__item--disabled/,
-    );
   });
 });
 

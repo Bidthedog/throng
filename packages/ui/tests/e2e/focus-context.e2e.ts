@@ -73,7 +73,7 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('exactly one active panel; it dims on window blur and restores on focus, without changing', { tag: ['@extended', '@window'] }, async () => {
+test('exactly one active panel; it dims on window blur and restores on focus, without changing', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'Focus', 'C:/c/focus');
     await addPanels(win, 2); // → three panels total
@@ -111,7 +111,7 @@ test('exactly one active panel; it dims on window blur and restores on focus, wi
   });
 });
 
-test('changing which panel holds focus sends zero terminal resize messages (SC-004)', { tag: ['@extended', '@window'] }, async () => {
+test('changing which panel holds focus sends zero terminal resize messages (SC-004)', { tag: ['@extended', '@window', '@reserve:pty'] }, async () => {
   const root = own(mkdtempSync(join(tmpdir(), 'throng-focus-')));
   try {
     await runApp(async (app, win) => {

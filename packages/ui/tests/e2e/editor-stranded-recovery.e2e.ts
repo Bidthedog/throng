@@ -79,8 +79,6 @@ async function newEditor(win: Page): Promise<string> {
   return pid;
 }
 
-const item = (win: Page, label: string) => win.getByTestId(`menu-item-${label}`);
-
 /**
  * Wait until the project's layout has ACTUALLY reached the daemon's store as an EDITOR panel.
  *
@@ -130,59 +128,43 @@ async function openTheFile(win: Page, pid: string): Promise<void> {
   );
 }
 
-test('an editor recovers when its folder is renamed away and back WHILE throng is running', { tag: ['@extended', '@editor'] }, async () => {
-  // Two full watcher/restore cycles plus a deliberate negative assertion — past the 30s default.
-  test.setTimeout(120_000);
-  const root = makeProject('throng-strand-live-');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'StrandLive', root);
-      const pid = await newEditor(win);
-      await openTheFile(win, pid);
-
-      // Break the path from outside, and change the file while it is away. The changed content is
-      // what makes this test non-vacuous: if the assertion were merely "the original text is still
-      // shown", a throng that never noticed anything would pass it while being exactly as broken.
-      renameSync(join(root, 'src'), join(root, 'src-moved'));
-      /*
-       * A FENCE WAS TRIED HERE AND THE PREMISE WAS WRONG. Recorded, because it is a reasonable
-       * inference that happens to be false.
-       *
-       * The attempt asserted the shared panel-failure banner appears here —
-       * `expect(getByTestId('panel-failure-<pid>')).toBeVisible()` — reasoning that the folder watch
-       * sets `unloadable` and 027/#161's banner renders it, which would make "the break is seen" an
-       * observable rather than a duration. It failed every attempt at 15s each.
-       *
-       * The banner IS the right observable further down, after the panel is REOPENED (see the
-       * `restoredPid` assertions below, which pass). It does not appear for a live rename-away of an
-       * already-open editor, so the state the fence assumed simply is not reached at this point.
-       *
-       * sleep-justified: the folder watch has a debounce and raises nothing observable when it
-       * sleep-justified: notices a live rename-away — the panel keeps rendering its buffer, which is
-       * sleep-justified: precisely the defect this test exists to catch, so there is no signal to
-       * sleep-justified: wait on that is not also the thing under test.
-       */
-      await win.waitForTimeout(1000);
-      writeFileSync(join(root, 'src-moved', 'code.txt'), 'CHANGED-WHILE-AWAY\n');
-
-      // Rectify the cause — exactly what the user does, and the point at which the issue says
-      // nothing happens.
-      renameSync(join(root, 'src-moved'), join(root, 'src'));
-
-      // The path is readable again, so the editor loads the file's CURRENT content in place —
-      // same panel, same tab, same panel name. `markRestored()` already performs this exact
-      // re-read; nothing triggers it for an external restore.
-      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
-        'CHANGED-WHILE-AWAY',
-        { timeout: 20_000 },
-      );
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('an editor stranded across a restart recovers when the path is repaired', { tag: ['@extended', '@editor'] }, async () => {
+/*
+ * ── TWO REMOVED (035 T056) ──
+ *
+ * `:133` "an editor recovers when its folder is renamed away and back WHILE throng is running"
+ *        → `integration/editor-stranded-recovery.integration.test.ts`, "adopts the file again when
+ *        its whole FOLDER is renamed away and back under a live watch".
+ *
+ * `:261` "a Reload from disk action exists and re-reads the path on demand" → it was two claims,
+ *        and both were already covered by name. The ACTION's existence, its icon, its section and
+ *        its position beside `Revert` are `unit/menu-sections.test.ts:532`, which asserts the whole
+ *        Content group in order; the RE-READ is
+ *        `integration/editor-stranded-recovery.integration.test.ts:133`, which additionally proves
+ *        the thing this test could not — that `revert` REFUSES at the same moment, which is what
+ *        makes `Reload from disk` a distinct action rather than a rename.
+ *
+ * ── WHAT THE MIGRATION FOUND, AND IT CONTRADICTS THE HEADER ABOVE ──
+ *
+ * A live folder rename does NOT recover through the stranded-recovery path. Measured, by mutation:
+ * removing `pathCameBack` from `onDiskChange` reddens the two restart-shaped cases and leaves the
+ * folder case green; removing the CLEAN-EDITOR live reload (`editor-coordinator.ts:1182`) reddens
+ * the folder case and nothing else.
+ *
+ * The reason is that nothing ever tells the coordinator the folder went. The watch is on the
+ * DIRECTORY, the directory itself is what was renamed, and when it comes back the document is
+ * neither `unloadable` nor `fileMissing` — so the recovery it takes is FR-028's ordinary
+ * "clean editor adopts the new on-disk content", not #161's. That is also why the migrated test had
+ * no fence to wait on and slept a second instead: the state it assumed was reached never was.
+ *
+ * ── WHAT STAYS ──
+ *
+ * The RESTART case below, and it is tagged `@reserve:window` for the reason it needs: it reloads
+ * the renderer and re-enters the project, so the layout is genuinely restored from persisted state
+ * rather than re-derived in memory. Its assertions on the shared `panel-failure` banner — visible,
+ * naming the path, and saying in words that what is on screen is not the file — are rendered
+ * output from a window that has been through a real restore.
+ */
+test('an editor stranded across a restart recovers when the path is repaired', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
   test.setTimeout(120_000);
   const root = makeProject('throng-strand-restart-');
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-strand-data-'));
@@ -258,33 +240,3 @@ test('an editor stranded across a restart recovers when the path is repaired', {
   }
 });
 
-test('a "Reload from disk" action exists and re-reads the path on demand', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject('throng-strand-reload-');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'StrandReload', root);
-      const pid = await newEditor(win);
-      await openTheFile(win, pid);
-
-      // The fallback for everything auto-recovery cannot see — a network path, a watcher that
-      // missed the event, a move-away-and-back inside one watcher gap — and the explicit
-      // "just re-read it" escape hatch.
-      await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-      const reload = item(win, 'Reload from disk');
-      await expect(reload).toBeVisible();
-
-      // It is a DISTINCT action, not a rename of Revert: Revert keeps its FR-075 semantics.
-      await expect(item(win, 'Revert')).toBeVisible();
-
-      // Change the file underneath the editor, then re-read it on demand.
-      writeFileSync(join(root, 'src', 'code.txt'), 'CHANGED-ON-DISK\n');
-      await reload.click();
-      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
-        'CHANGED-ON-DISK',
-        { timeout: 15_000 },
-      );
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});

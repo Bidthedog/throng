@@ -126,7 +126,7 @@ function focusIsInTree(win: Page): Promise<boolean> {
  * nine tests in that file fail.
  */
 
-test('an editor keeps the caret when the tree re-highlights (issue #144 must not regress)', { tag: ['@extended', '@explorer'] }, async () => {
+test('an editor keeps the caret when the tree re-highlights (issue #144 must not regress)', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
   // The fence for the fix. #144's `select(id, { focus: false })` exists so the tree can highlight
   // the active file's row WITHOUT stealing the caret out of an editor — a rename-focus fix written
   // as "the tree takes focus" would undo it, and typing would start landing in the wrong place.

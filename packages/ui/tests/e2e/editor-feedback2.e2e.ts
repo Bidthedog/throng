@@ -79,34 +79,31 @@ test.afterAll(async () => {
   await shared?.close();
 });
 
-test('"This editor" is disabled when the file is already open in the target editor', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    const { win } = shared;
-    await createProject(win, 'Fb2Disabled', root);
-    const pid = await newEditor(win);
-    await win.getByTestId(`editor-${pid}`).click();
-
-    const tree = win.getByTestId('file-explorer-tree');
-    await tree.getByText('a.txt', { exact: true }).click({ button: 'right' });
-    await item(win, 'Open In').click();
-    // Renamed from "Editor Here" (FR-082), enabled while not open.
-    await expect(win.locator('.context-menu__item', { hasText: 'Last Active Editor' }).last()).toBeVisible();
-    await expect(win.locator('.context-menu__item', { hasText: 'Last Active Editor' }).last()).not.toHaveClass(/context-menu__item--disabled/);
-    await win.locator('.context-menu__item', { hasText: 'Last Active Editor' }).last().click();
-    await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText('A-BODY', {
-      timeout: 8000,
-    });
-
-    // Now the file is open in that editor → "This editor" is disabled (no-op).
-    await tree.getByText('a.txt', { exact: true }).click({ button: 'right' });
-    await item(win, 'Open In').click();
-    await expect(win.locator('.context-menu__item', { hasText: 'Last Active Editor' }).last()).toHaveClass(/context-menu__item--disabled/);
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
+/*
+ * ── ONE REMOVED (035 T055) ──
+ *
+ * `:82` '"This editor" is disabled when the file is already open in the target editor' →
+ * `packages/ui/tests/component/explorer-open-in-target.test.ts`, "Last Active Editor goes quiet when
+ * that editor holds the file".
+ *
+ * That file already drives this exact flyout and already covers the OTHER disabled flag on it. The
+ * two are independent and the file says so: `New Editor` is disabled by `alreadyOpen`, which is
+ * APP-WIDE, while this target is disabled by `openInTargetAlready`, which asks whether THIS panel
+ * holds THIS file (`file-tree.tsx:390`). One direction was proven — app-wide-open leaves this target
+ * alone — and the other, that it goes quiet when the panel really does hold the file, was proven
+ * nowhere. A build that never computed `openInTargetAlready` at all passed everything.
+ *
+ * Two cases came down that this test could not reach. The comparison NORMALISES both sides, because
+ * the tree composes its path from the project root while the editor store holds whatever spelling
+ * the file was opened with — a raw comparison leaves the row enabled, the user clicks it, and
+ * nothing happens, which is the exact no-op the disabling exists to prevent. And a scratch buffer
+ * holding NO file does not disable it, which `getEditorState(...) !== undefined` would.
+ *
+ * ── WHAT STAYS ──
+ *
+ * Clicking the target actually loading the file into that editor — the first half of what this test
+ * did, and the round trip the second half was set up by.
+ */
 test('the Files & Folders context menu has a New Folder action', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
@@ -126,7 +123,7 @@ test('the Files & Folders context menu has a New Folder action', { tag: ['@exten
   }
 });
 
-test('Save As writes the document to a newly chosen location', { tag: ['@extended', '@editor'] }, async () => {
+test('Save As writes the document to a newly chosen location', { tag: ['@extended', '@editor', '@reserve:native'] }, async () => {
   const root = makeProject();
   const first = join(root, 'first.txt');
   const second = join(root, 'second.txt');
@@ -156,7 +153,7 @@ test('Save As writes the document to a newly chosen location', { tag: ['@extende
   }
 });
 
-test('the save dialog defaults the file name to the Panel name (FR-083)', { tag: ['@extended', '@editor'] }, async () => {
+test('the save dialog defaults the file name to the Panel name (FR-083)', { tag: ['@extended', '@editor', '@reserve:native'] }, async () => {
   const root = makeProject();
   try {
     const { app, win } = shared;

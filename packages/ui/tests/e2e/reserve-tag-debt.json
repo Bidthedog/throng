@@ -1,0 +1,5 @@
+{
+  "untagged": 121,
+  "note": "E2E tests that do not yet name the reserve entry making them irreducible (035 FR-016, constitution v5.3.0 Principle V). This number may FALL and must never RISE. Re-seed it in the same commit that tags the tests, or the guard fails for being under budget - the same both-ways ratchet as e2e-budget.json.",
+  "why-not-a-codemod": "Measured, not assumed. A codemod over the whole suite tagged 443 tests and put 205 under @reserve:input because .press( and .type( appear in nearly every spec. Restricting it to unambiguous APIs still read process.execPath out of terminal-reattach's daemon setup and DataTransfer out of a test that actually drives the synthetic dropPaths() helper. The evidence for a test's CLAIM is not lexically distinguishable from the evidence for its SETUP, so every automated tag is a confident-looking false justification - the exact defect the tag exists to remove."
+}

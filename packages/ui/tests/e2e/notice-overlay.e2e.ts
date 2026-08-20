@@ -17,7 +17,7 @@ import { createProject, runApp } from './harness.js';
  * whatever the notice lands on top of, which is the actual requirement.
  */
 
-test('a persistent error notice does not win the hit-test; its dismiss control does (US6)', { tag: ['@extended', '@failure'] }, async () => {
+test('a persistent error notice does not win the hit-test; its dismiss control does (US6)', { tag: ['@extended', '@failure', '@reserve:layout'] }, async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'Alpha', 'C:/code/alpha');
 

@@ -96,7 +96,7 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('the Files & Folders root drops its hover background while Preferences is open (FR-035)', { tag: ['@extended', '@window'] }, async () => {
+test('the Files & Folders root drops its hover background while Preferences is open (FR-035)', { tag: ['@extended', '@window', '@reserve:focus'] }, async () => {
   const projectRoot = own(makeProjectFolder());
   try {
     await runApp(async (app, win) => {
@@ -131,7 +131,7 @@ test('the Files & Folders root drops its hover background while Preferences is o
   }
 });
 
-test('a stranded element keeps no hover background until a real pointermove refocuses it (FR-035)', { tag: ['@extended', '@window'] }, async () => {
+test('a stranded element keeps no hover background until a real pointermove refocuses it (FR-035)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (_app, win) => {
     // Any element with a gated hover background left under the pointer. The main window control is
     // always present and its hover paints `hoverSurface`.

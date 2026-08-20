@@ -3,7 +3,7 @@ import { createProject, firstPanelId, runApp } from './harness.js';
 
 // US7 / 003 clone-sync: renaming a Panel in a sub-workspace window renames the
 // same Panel (shared id) in the parent project in real time, and vice-versa.
-test('renaming a Panel in a sub-workspace renames it in the parent project (live)', { tag: ['@extended', '@window'] }, async () => {
+test('renaming a Panel in a sub-workspace renames it in the parent project (live)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
     await createProject(win, 'RenameSync', 'C:/c/renamesync');
     const pid = await firstPanelId(win);

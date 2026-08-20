@@ -15,7 +15,7 @@ async function requestClose(app: ElectronApplication): Promise<void> {
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
 }
 
-test('closing with a running terminal shows the three-choice warning; Cancel keeps it open', { tag: ['@extended', '@window'] }, async () => {
+test('closing with a running terminal shows the three-choice warning; Cancel keeps it open', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-close-'));
   try {
     await runApp(async (app, win) => {
@@ -54,7 +54,7 @@ test('closing with a running terminal shows the three-choice warning; Cancel kee
   }
 });
 
-test('“Terminate all” closes the app', { tag: ['@extended', '@window'] }, async () => {
+test('“Terminate all” closes the app', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-close2-'));
   try {
     await runApp(async (app, win) => {
@@ -81,7 +81,7 @@ test('“Terminate all” closes the app', { tag: ['@extended', '@window'] }, as
   }
 });
 
-test('warns with the right count when several terminals run (incl. a busy one)', { tag: ['@extended', '@window'] }, async () => {
+test('warns with the right count when several terminals run (incl. a busy one)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-close-many-'));
   try {
     await runApp(async (app, win) => {
@@ -131,7 +131,7 @@ test('warns with the right count when several terminals run (incl. a busy one)',
   }
 });
 
-test('closing with no running terminals shows a brief closing overlay, then quits', { tag: ['@extended', '@window'] }, async () => {
+test('closing with no running terminals shows a brief closing overlay, then quits', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
     await createProject(win, 'PlainClose', 'C:/c/plainclose');
     await expect(win.getByTestId('tab-strip')).toBeVisible();

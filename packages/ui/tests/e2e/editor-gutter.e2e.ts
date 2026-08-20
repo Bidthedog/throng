@@ -33,7 +33,7 @@ const bg = (win: Page, sel: string): Promise<string> =>
 const fg = (win: Page, sel: string): Promise<string> =>
   win.evaluate((s) => getComputedStyle(document.querySelector(s)!).color, sel);
 
-test('gutter tokens paint only the gutter, not the editor body', { tag: ['@extended', '@editor'] }, async () => {
+test('gutter tokens paint only the gutter, not the editor body', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
   const root = makeProject();
   try {
@@ -74,7 +74,7 @@ test('gutter tokens paint only the gutter, not the editor body', { tag: ['@exten
   }
 });
 
-test('a theme without gutter tokens inherits the default gutter colours (no migration)', { tag: ['@extended', '@editor'] }, async () => {
+test('a theme without gutter tokens inherits the default gutter colours (no migration)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
   const root = makeProject();
   try {

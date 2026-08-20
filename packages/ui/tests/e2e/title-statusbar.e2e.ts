@@ -26,7 +26,7 @@ const title = (app: ElectronApplication): Promise<string> =>
  * marker, and only one of them is what a user sees in the taskbar.
  */
 
-test('window title gains a [ADMIN] marker when elevated', { tag: ['@extended', '@window'] }, async () => {
+test('window title gains a [ADMIN] marker when elevated', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(
     async (app) => {
       await expect.poll(() => title(app), { timeout: 5000 }).toContain('[ADMIN]');

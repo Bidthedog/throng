@@ -23,7 +23,6 @@ import { closePrefsWindow } from './helpers/prefs-window.js';
 // descriptor; this proves the descriptors actually reach the user's editor and that one of
 // the new commands really can be rebound end-to-end.
 
-
 /*
  * ONE app for this file, not one per test (034 FR-045, SC-010) — 2 launches -> 1.
  *
@@ -89,25 +88,6 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-const SEARCH_ACTIONS = [
-  'search.find',
-  'search.findNext',
-  'search.findPrevious',
-  'search.close',
-  'search.replace',
-  'search.replaceCurrent',
-  'search.replaceAll',
-];
-
-const SCROLLBACK_ACTIONS = [
-  'terminal.scrollLineUp',
-  'terminal.scrollLineDown',
-  'terminal.scrollPageUp',
-  'terminal.scrollPageDown',
-  'terminal.scrollToTop',
-  'terminal.scrollToBottom',
-];
-
 async function openKeybindings(app: ElectronApplication, win: Page): Promise<Page> {
   await win.getByTestId('title-bar-cog').click();
   const [prefs] = await Promise.all([
@@ -119,21 +99,31 @@ async function openKeybindings(app: ElectronApplication, win: Page): Promise<Pag
   return prefs;
 }
 
-test('every search & scrollback command is listed in the Key Bindings editor (SC-006)', { tag: ['@extended', '@editor'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openKeybindings(app, win);
-
-      for (const action of [...SEARCH_ACTIONS, ...SCROLLBACK_ACTIONS]) {
-        await expect(
-          prefs.getByTestId(`binding-${action}`),
-          `${action} is not exposed in the Key Bindings editor`,
-        ).toBeVisible();
-      }
-    },
-  );
-});
-
+/*
+ * ── ONE REMOVED, AND THE CLAIM GOT WIDER (035 T055) ──
+ *
+ * `:122` "every search & scrollback command is listed in the Key Bindings editor (SC-006)" →
+ * `packages/ui/tests/component/preferences-keybindings-tab.test.ts`, "the tab lists every
+ * rebindable command".
+ *
+ * It opened a preferences window and looked for a row per action in the two hand-written arrays at
+ * the top of this file. A hand-written list is a snapshot of what somebody remembered on the day,
+ * and the failure it structurally cannot catch is the one that matters: a NEW command added to the
+ * registry and forgotten by the editor. It is not in the array, so nothing looks for it, and the
+ * user simply cannot rebind it.
+ *
+ * The replacement sweeps `KEYBINDINGS_METADATA` itself, so it covers every command that exists
+ * today and every one added tomorrow, with no maintenance. Truncating the tab's list to ten
+ * descriptors reddens fourteen tests in that file; dropping the search group reddens two.
+ *
+ * The registry's own completeness — that it describes every `ActionId` and no unknown keys — is
+ * `packages/core/tests/unit/keybindings-metadata.test.ts:9`, and was already proven. What was proven
+ * nowhere is the join: that the tab renders what the registry holds.
+ *
+ * Both hand-written arrays went with it. Nothing else read them — the surviving test drives
+ * `binding-search.find` by name — and a list of commands that no test consults is a list that
+ * quietly stops matching the registry, which is the failure this migration is about.
+ */
 test('a search command can actually be rebound (FR-017)', { tag: ['@extended', '@editor'] }, async () => {
   const cfgRoot = sharedCfg;
   await runApp(

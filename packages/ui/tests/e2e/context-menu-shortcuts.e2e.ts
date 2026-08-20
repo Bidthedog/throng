@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import { runApp, createProject, cleanupTemp} from './harness.js';
 
-test('a context-menu item shows its command’s first keyboard shortcut in brackets (#125)', { tag: ['@extended', '@window'] }, async () => {
+test('a context-menu item shows its command’s first keyboard shortcut in brackets (#125)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-sc-'));
   writeFileSync(join(root, 'a.txt'), 'a\n');
   try {

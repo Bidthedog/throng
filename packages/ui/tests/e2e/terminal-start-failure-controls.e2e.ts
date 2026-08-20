@@ -147,7 +147,7 @@ async function enterProject(win: Page, name: string): Promise<void> {
   await expect(win.locator('.panel-box').first()).toBeVisible({ timeout: 20_000 });
 }
 
-test('a terminal that could not start offers Try again and Clear, on the badge and in its menu', { tag: ['@extended', '@terminal'] }, async () => {
+test('a terminal that could not start offers Try again and Clear, on the badge and in its menu', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   // An elevated daemon routes terminals through the de-elevated agent — a different process tree
   // from the one these assertions describe.
   skipIfElevated();
@@ -311,7 +311,7 @@ test('a terminal that could not start offers Try again and Clear, on the badge a
  * asserted here, because getting any one of them wrong turns a helpful line into either noise or a
  * false alarm. `fallbackToReport` unit-tests WHEN to report; this is the half that reaches a user.
  */
-test('a remembered directory that has gone is reported in the panel, and is not an error', { tag: ['@extended', '@terminal'] }, async () => {
+test('a remembered directory that has gone is reported in the panel, and is not an error', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   skipIfElevated();
   test.setTimeout(300_000);
 
@@ -446,7 +446,7 @@ test('a remembered directory that has gone is reported in the panel, and is not 
  * renderer-local — it unmounts and remounts the panel — so it reaches the attach path with no daemon
  * needed to get there.
  */
-test('a terminal keeps its configuration when the daemon is gone, not just when a folder is', { tag: ['@extended', '@terminal'] }, async () => {
+test('a terminal keeps its configuration when the daemon is gone, not just when a folder is', { tag: ['@extended', '@terminal', '@reserve:runtime'] }, async () => {
   skipIfElevated();
   test.setTimeout(240_000);
 

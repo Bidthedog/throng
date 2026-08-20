@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import { openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import { FILE_OP_TIMEOUT_MS, openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
 import {
   configRootSeeded,
   settleConfigRoot,
@@ -121,28 +121,27 @@ function iconColourInApp(win: Page): Promise<string | null> {
   });
 }
 
-test('the icon colour has exactly ONE control, beside the icon-pack selector (FR-027)', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-
-      // It is a real colour token with a derived descriptor — which is what makes it editable at all,
-      // and what satisfies the constitution's configuration-editor-completeness rule. So the generic
-      // Colours loop would happily render a SECOND control for it.
-      //
-      // Two controls for one value is not cosmetic: edit one and the other silently disagrees until
-      // the round-trip lands, and neither tells you the other exists.
-      await expect(prefs.getByTestId('control-colours.iconColour-hex')).toHaveCount(1);
-
-      // And it is in the Icons section, where the user is standing when the icons look wrong.
-      await expect(
-        prefs.getByTestId('icon-colour-row').getByTestId('control-colours.iconColour-hex'),
-      ).toBeVisible();
-    },
-  );
-});
-
-test('UNSET, icons inherit their host’s colour — so no bundled theme changes (FR-029)', { tag: ['@extended', '@prefs'] }, async () => {
+/*
+ * ── ONE REMOVED (035 T055) ──
+ *
+ * `:124` "the icon colour has exactly ONE control, beside the icon-pack selector (FR-027)" →
+ * `packages/ui/tests/component/preferences-app.test.ts`, "the icon colour is edited in one place".
+ *
+ * The whole test was two DOM queries — a count and a containment — and it opened a preferences
+ * window to make them. The count is the assertion rather than a detail of it: `colours.iconColour`
+ * is a real colour token with a derived descriptor, so it is eligible for the generic Colours loop
+ * AND hand-placed in the Icons section, and the obvious failure is that both render it. Two controls
+ * for one value means editing one leaves the other silently disagreeing until the round trip lands.
+ *
+ * Both mutations redden: emptying `RENDERED_ELSEWHERE` (two controls) and moving the Icons row's
+ * test id (one control, wrong place). The pair is what separates the count from the placement.
+ *
+ * ── WHAT STAYS ──
+ *
+ * Everything that reads a COMPUTED colour off a rendered `.icon` against a real cascade — which is
+ * this file's subject and 034 FR-049's reserve.
+ */
+test('UNSET, icons inherit their host’s colour — so no bundled theme changes (FR-029)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -171,7 +170,7 @@ test('UNSET, icons inherit their host’s colour — so no bundled theme changes
   );
 });
 
-test('SET, every icon in every window adopts it (FR-030)', { tag: ['@extended', '@prefs'] }, async () => {
+test('SET, every icon in every window adopts it (FR-030)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -183,7 +182,7 @@ test('SET, every icon in every window adopts it (FR-030)', { tag: ['@extended', 
       await field.press('Enter');
 
       // It reaches the file…
-      await expect.poll(() => readTheme(cfgRoot)?.iconColour).toBe('#ff00aa');
+      await expect.poll(() => readTheme(cfgRoot)?.iconColour, { timeout: FILE_OP_TIMEOUT_MS }).toBe('#ff00aa');
 
       // …and the MAIN window, which is a different renderer process. The hot-reload carries it, and
       // the artwork rides `currentColor`, so colouring the host is what colours the art.

@@ -1,3 +1,4 @@
+import { expect, type Page } from '@playwright/test';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { ALL_DEFAULT_THEMES } from '@throng/core';
@@ -245,6 +246,67 @@ export async function settleConfigRoot(
     }
     for (const path of restoreConfigRoot(snapshot)) touched.add(path);
   }
+}
+
+/**
+ * Wait until the RUNNING APP has observed the settings on disk — issue #284.
+ *
+ * ══ THE HALF `settleConfigRoot` DOES NOT DO, AND WHY IT MATTERS ══
+ *
+ * `settleConfigRoot` settles the FILES: it rewrites them and loops until a re-read matches the
+ * baseline. That is the whole of its contract and it is correct. What it cannot do is make the
+ * running application notice — the config watcher delivers the change to main and on to every
+ * renderer on its own schedule, and on a loaded box that schedule is not the test's.
+ *
+ * For most specs the gap is harmless. For the PREFERENCES window it is not, and the mechanism is
+ * specific: `preferences-app.tsx` photographs an ON-ENTRY snapshot when it mounts, and Revert /
+ * Revert All restore THAT photograph. So a window opened before the restore has landed photographs
+ * the PREVIOUS test's values, and "revert to on-entry" faithfully restores them.
+ *
+ * That is issue #284's failure, exactly: `preferences-reset.e2e.ts:187` edits `editor.autoSave` to
+ * true, reverts all, and polls for false — and got true, for the whole budget, because on-entry WAS
+ * true. It passes in ~760 ms or never, which is the signature of a wrong value rather than a slow
+ * one, and no timeout could have fixed it.
+ *
+ * ══ WHAT IT READS ══
+ *
+ * `window.throng.config.get()` — the same call `ConfigProvider` makes, answered by MAIN from its own
+ * store. So this waits on the app's view rather than on the disk, which is the thing the next
+ * window's on-entry snapshot is taken from.
+ */
+export async function settleAppConfig(
+  win: Page,
+  expected: Record<string, unknown>,
+  timeoutMs = 15_000,
+): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const live = (await win
+          .evaluate(() => window.throng?.config?.get?.())
+          .catch(() => null)) as { settings?: unknown } | null;
+        if (!live?.settings) return null;
+        const settings = live.settings as Record<string, unknown>;
+        // Compare only the paths the caller named. A whole-document compare would fail on any key
+        // the app legitimately normalises on load, and would report that as a stale watcher.
+        const actual: Record<string, unknown> = {};
+        for (const path of Object.keys(expected)) {
+          let node: unknown = settings;
+          for (const seg of path.split('.')) {
+            node = node == null ? undefined : (node as Record<string, unknown>)[seg];
+          }
+          actual[path] = node;
+        }
+        return JSON.stringify(actual);
+      },
+      {
+        timeout: timeoutMs,
+        message:
+          'the running app never observed the restored settings — the next test would have opened ' +
+          'its preferences window on a stale on-entry snapshot (issue #284)',
+      },
+    )
+    .toBe(JSON.stringify(expected));
 }
 
 /** Every directory the snapshot implies, relative to the root. */

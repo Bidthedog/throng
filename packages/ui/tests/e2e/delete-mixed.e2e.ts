@@ -70,47 +70,34 @@ test.afterAll(async () => {
   for (const dir of ownedRoots.splice(0)) cleanupTemp(dir);
 });
 
-test('Ctrl-selecting files + folders and deleting removes ALL of them', { tag: ['@extended', '@explorer'] }, async () => {
-  const root = own(makeProject());
-  try {
-    await runSeeded(
-      async (_app, win) => {
-        await createProject(win, 'DelMixMenu', root);
-        const tree = win.getByTestId('file-explorer-tree');
-        await expect(tree).toBeVisible();
-
-        // Select all four with Ctrl held (multi-select).
-        await tree.getByText('dir1', { exact: true }).click();
-        await tree.getByText('file1.txt', { exact: true }).click({ modifiers: ['Control'] });
-        await tree.getByText('dir2', { exact: true }).click({ modifiers: ['Control'] });
-        await tree.getByText('file2.txt', { exact: true }).click({ modifiers: ['Control'] });
-        await expect(tree.locator('.tree-row--selected')).toHaveCount(4);
-
-        // Delete via the context menu (targets the whole selection).
-        await tree.getByText('file2.txt', { exact: true }).click({ button: 'right', modifiers: ['Control'] });
-        await win.getByTestId('menu-item-Delete').click();
-        // Confirm (double-confirm default → accept once, then the wry one if present).
-        await win.getByTestId('confirm-accept').click();
-        const wry = win.getByTestId('confirm-accept');
-        if (await wry.isVisible().catch(() => false)) await wry.click();
-
-        // ALL four are gone.
-        await expect
-          .poll(
-            () =>
-              ['file1.txt', 'file2.txt', 'dir1', 'dir2'].filter((n) => existsSync(join(root, n))),
-            { timeout: FILE_OP_TIMEOUT_MS },
-          )
-          .toEqual([]);
-      },
-    );
-  } finally {
-    // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would
-    // remove a folder the explorer is still watching.
-  }
-});
-
-test('recycle mode (default): mixed files + folders all get recycled via the real shell', { tag: ['@extended', '@explorer'] }, async () => {
+/*
+ * ── ONE REMOVED (035 T056) ──
+ *
+ * `:73` "Ctrl-selecting files + folders and deleting removes ALL of them" — split, and both halves
+ * already had, or now have, a home:
+ *
+ *   Delete is addressed to the SELECTION rather than to the row under the pointer
+ *     → `unit/explorer-subtree-menu.test.ts` (new)
+ *   all of them really go — files and folders, in any order, and an ENOENT part-way through does
+ *   not abort the rest
+ *     → `integration/files-delete-mixed.integration.test.ts:39-57`, four cases against a real
+ *       filesystem
+ *
+ * The TARGETING rule (`context-menu-items.ts:85`) had no test for either branch. This file used the
+ * multi-select shape for `Hide` — which deliberately does NOT take the selection — so the shape was
+ * present and the rule was not. The new tests pin both directions, and the second is the one that
+ * protects the user: right-clicking a row OUTSIDE the selection must not sweep the selection up
+ * with it. `always-the-selection` reddens exactly that and nothing else.
+ *
+ * Red-proven: row-only (2), always-the-selection (1).
+ *
+ * ── WHAT STAYS ──
+ *
+ * `:113` `@reserve:native` — it recycles through the REAL shell and reads the Recycle Bin back.
+ * `:146` `@reserve:input` — it presses a real Delete key with an editor open, which is a claim about
+ * where the keystroke lands rather than about what the menu targets.
+ */
+test('recycle mode (default): mixed files + folders all get recycled via the real shell', { tag: ['@extended', '@explorer', '@reserve:native'] }, async () => {
   const root = makeProject();
   try {
     await runOwnApp(async (_app, win) => {
@@ -143,7 +130,7 @@ test('recycle mode (default): mixed files + folders all get recycled via the rea
   }
 });
 
-test('file-first selection (opens an editor) then Delete key removes ALL selected', { tag: ['@extended', '@explorer'] }, async () => {
+test('file-first selection (opens an editor) then Delete key removes ALL selected', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
   const root = own(makeProject());
   try {
     await runSeeded(

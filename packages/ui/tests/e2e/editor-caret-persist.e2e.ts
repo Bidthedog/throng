@@ -100,7 +100,7 @@ const docLines = (win: Page, pid: string): Promise<string[]> =>
     pid,
   );
 
-test('the scroll position is restored and the editor re-focuses on switch back (issue 144)', { tag: ['@core', '@editor'] }, async () => {
+test('the scroll position is restored and the editor re-focuses on switch back (issue 144)', { tag: ['@core', '@editor', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-scroll-'));
   const rows = Array.from({ length: 200 }, (_, i) => `row-${String(i).padStart(3, '0')}`);
   // No trailing newline, so Ctrl+End lands at the end of "row-199", not an empty line after it.
@@ -170,7 +170,7 @@ async function switchToProject(win: Page, name: string): Promise<void> {
   await expect(win.locator('.project-item', { hasText: name })).toHaveClass(/project-item--active/);
 }
 
-test('the editor takes focus on switching to a project whose editor mounts fresh (issue 144)', { tag: ['@core', '@editor'] }, async () => {
+test('the editor takes focus on switching to a project whose editor mounts fresh (issue 144)', { tag: ['@core', '@editor', '@reserve:window'] }, async () => {
   // The remaining #144 defect: the mount-time focus is gated on saved SESSION view-state so a plain
   // file-open leaves the tree focusable (for F2-rename). But switching to a project whose active
   // editor has NOT been mounted this session — the common "reopen an existing project after a
@@ -219,7 +219,7 @@ test('the editor takes focus on switching to a project whose editor mounts fresh
   }
 });
 
-test('a terminal in the tab does NOT steal focus from the active editor on switch-back (issue 144)', { tag: ['@core', '@editor'] }, async () => {
+test('a terminal in the tab does NOT steal focus from the active editor on switch-back (issue 144)', { tag: ['@core', '@editor', '@reserve:pty'] }, async () => {
   // The user's exact report: if a tab contains a terminal, that terminal grabs keyboard focus on a
   // tab/project switch regardless of which panel is active — because a terminal `focus()`es itself
   // unconditionally on mount AND on its (late, async) attach. Here the ACTIVE panel is the editor, but
@@ -280,7 +280,7 @@ test('a terminal in the tab does NOT steal focus from the active editor on switc
   }
 });
 
-test('the caret survives a tab switch away and back (issue 144)', { tag: ['@core', '@editor'] }, async () => {
+test('the caret survives a tab switch away and back (issue 144)', { tag: ['@core', '@editor', '@reserve:input'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

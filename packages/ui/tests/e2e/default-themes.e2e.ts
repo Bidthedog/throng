@@ -105,7 +105,7 @@ async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
   return prefs;
 }
 
-test('a fresh install lists all 14 default themes plus throng (15) and restores after delete', { tag: ['@extended', '@prefs'] }, async () => {
+test('a fresh install lists all 14 default themes plus throng (15) and restores after delete', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -205,7 +205,7 @@ async function bannerColours(win: Page, panelId: string): Promise<BannerColours>
   });
 }
 
-test('the shared failure banner takes its colours from every shipped theme, and carries none of its own', { tag: ['@extended', '@prefs'] }, async () => {
+test('the shared failure banner takes its colours from every shipped theme, and carries none of its own', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   test.setTimeout(300_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-theme-banner-'));
   mkdirSync(join(root, 'src'));

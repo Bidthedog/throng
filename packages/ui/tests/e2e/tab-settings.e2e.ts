@@ -15,7 +15,7 @@ import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { openApp, settle, setSlider, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import { FILE_OP_TIMEOUT_MS, openApp, settle, setSlider, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
 import {
   configRootSeeded,
   settleConfigRoot,
@@ -215,7 +215,7 @@ test('T057 — each tab setting is editable by slider and by field, and persists
 
       // Drag the scroll duration to a value on its step grid.
       await setSlider(prefs.getByTestId('control-tabs.smoothScrollMs-slider'), '1500');
-      await expect.poll(() => readSettings(cfgRoot)?.tabs?.smoothScrollMs).toBe(1500);
+      await expect.poll(() => readSettings(cfgRoot)?.tabs?.smoothScrollMs, { timeout: FILE_OP_TIMEOUT_MS }).toBe(1500);
       // `1,500`, grouped — REVERSED since this test was written. 018 exempted values under five
       // digits, on the reasoning quoted here before: a four-digit millisecond delay rendered with a
       // separator reads as a typo rather than as a kindness. Constitution 4.5.0 drops that floor,
@@ -229,14 +229,14 @@ test('T057 — each tab setting is editable by slider and by field, and persists
       const arming = prefs.getByTestId('control-tabs.closeArmingDelayMs');
       await arming.fill('800');
       await arming.press('Enter');
-      await expect.poll(() => readSettings(cfgRoot)?.tabs?.closeArmingDelayMs).toBe(800);
+      await expect.poll(() => readSettings(cfgRoot)?.tabs?.closeArmingDelayMs, { timeout: FILE_OP_TIMEOUT_MS }).toBe(800);
       await expect.poll(() => prefs.getByTestId('control-tabs.closeArmingDelayMs-slider').inputValue()).toBe(
         '800',
       );
 
       // And the name limit, whose step of 2 exists so that 64 stays reachable from a minimum of 10.
       await setSlider(prefs.getByTestId('control-tabs.maxNameLength-slider'), '30');
-      await expect.poll(() => readSettings(cfgRoot)?.tabs?.maxNameLength).toBe(30);
+      await expect.poll(() => readSettings(cfgRoot)?.tabs?.maxNameLength, { timeout: FILE_OP_TIMEOUT_MS }).toBe(30);
     },
   );
 });
@@ -251,7 +251,7 @@ test('T057 — a value outside a declared range is refused, and the last valid o
       const field = prefs.getByTestId('control-tabs.smoothScrollMs');
       await field.fill('900');
       await field.press('Enter');
-      await expect.poll(() => readSettings(cfgRoot)?.tabs?.smoothScrollMs).toBe(900);
+      await expect.poll(() => readSettings(cfgRoot)?.tabs?.smoothScrollMs, { timeout: FILE_OP_TIMEOUT_MS }).toBe(900);
 
       // Above the declared maximum: refused, surfaced, not applied.
       await field.fill('9999');

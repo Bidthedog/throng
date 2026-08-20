@@ -78,7 +78,7 @@ const marks = (win: Page): Promise<{ rendered: number | null; highlighted: numbe
     longTasks: (window as any).__longTasks ?? [],
   }));
 
-test('the largest permitted file highlights within budget, and typing never drops a frame', { tag: ['@extended', '@editor'] }, async () => {
+test('the largest permitted file highlights within budget, and typing never drops a frame', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-perf-'));
   try {
     expect(makeHugeFile(root)).toBe(10 * 1024 * 1024);

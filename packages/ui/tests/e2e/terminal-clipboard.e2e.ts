@@ -80,7 +80,7 @@ const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import
 const EXPECTED = 'throngClip42';
 const B64 = 'dGhyb25nQ2xpcDQy';
 
-test('an OSC 52 sequence from inside the terminal writes to the system clipboard', { tag: ['@extended', '@terminal'] }, async () => {
+test('an OSC 52 sequence from inside the terminal writes to the system clipboard', { tag: ['@extended', '@terminal', '@reserve:native'] }, async () => {
   const pipe = `\\\\.\\pipe\\throng-clip-${process.pid}-${Date.now()}`;
   const dataDir = mkdtempSync(join(tmpdir(), 'clip-data-'));
   const cfg = mkdtempSync(join(tmpdir(), 'clip-cfg-'));
@@ -253,7 +253,7 @@ test.describe('the two tests that need the in-process clipboard seam', () => {
   // bug is fixed — the menu is now a DOM element drawn from the theme like every other
   // menu. We also drive Paste end-to-end (clipboard → terminal.write) to prove the two
   // actions survived the move off the native menu.
-  test('right-clicking the terminal opens the themed in-app menu, and Paste works', { tag: ['@extended', '@terminal'] }, async () => {
+  test('right-clicking the terminal opens the themed in-app menu, and Paste works', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
     const PASTE = 'throngPasteToken99';
     const root = mkdtempSync(join(tmpdir(), 'clipmenu-root-'));
 
@@ -314,7 +314,7 @@ test.describe('the two tests that need the in-process clipboard seam', () => {
   // the report.) We assert the fix at the pty boundary rather than by reading the buffer: intercept
   // the `throng:terminal:write` IPC in the main process and count how many writes carried the token.
   // Nothing pastes → 0 (the old bug); a correct single paste → exactly 1; a double paste → 2.
-  test('#142: Ctrl+V pastes the clipboard into the terminal exactly once', { tag: ['@extended', '@terminal'] }, async () => {
+  test('#142: Ctrl+V pastes the clipboard into the terminal exactly once', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
     const PASTE = 'throngCtrlVToken77';
     const root = mkdtempSync(join(tmpdir(), 'ctrlv-root-'));
 

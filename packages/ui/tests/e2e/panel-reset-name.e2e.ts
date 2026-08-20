@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 
-test('a rename overrides the live terminal title, and Reset Name restores it (#89)', { tag: ['@extended', '@window'] }, async () => {
+test('a rename overrides the live terminal title, and Reset Name restores it (#89)', { tag: ['@extended', '@window', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-reset-'));
   try {
     await runApp(async (_app, win) => {

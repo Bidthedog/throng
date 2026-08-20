@@ -33,7 +33,36 @@ const osTitle = (app: ElectronApplication): Promise<string> =>
 const barHeight = (win: Page): Promise<number> =>
   win.getByTestId('status-bar').evaluate((el) => el.getBoundingClientRect().height);
 
-test('the status bar keeps only the project root path; the title bar keeps the identity', { tag: ['@extended', '@window'] }, async () => {
+/*
+ * ── ONE REMOVED (035 T055) ──
+ *
+ * `:70` "when elevated, [ADMIN] is on the title bar only — the status bar has no pill" → two
+ * component tests against the same elevated daemon:
+ *
+ *   the STATUS bar has no pill  → `component/status-bar-content.test.ts:203` (already there)
+ *   the TITLE bar has the mark  → `component/app-title-bar-identity.test.ts` (new)
+ *
+ * The status-bar half was migrated earlier and stopped there deliberately; its own note says why —
+ * the marker is composed in `AppTitleBar` and reaches `TitleBar` as a plain `identity` prop, so
+ * proving it "would need that composition extracted; that is a production refactor, not a test
+ * migration, and the E2E keeps both halves until someone makes it."
+ *
+ * The refactor turned out to be one word: `AppTitleBar` is exported. Nothing else changed. Mounting
+ * it tests the composition rather than a copy of it, which matters here more than usual — the bug
+ * #166 is about is a marker reaching the WRONG bar, and only the real wiring can be wrong that way.
+ * A pure `identityOf(...)` helper would have been the weaker answer.
+ *
+ * Red-proven: never-marked (2 red), always-marked (1), marker-replaces-identity (1). The last is
+ * the one a single "is [ADMIN] there" test cannot see: an identity REPLACED by the marker rather
+ * than extended by it loses the project name — and `TitleManager` sends the same string to the OS
+ * taskbar, so it would be lost there too.
+ *
+ * ── WHAT STAYS ──
+ *
+ * `:36`, tagged `@reserve:window`: it is about the frameless window's own chrome and the
+ * relationship between two real bars in one real window.
+ */
+test('the status bar keeps only the project root path; the title bar keeps the identity', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   skipIfElevated(); // this case asserts NO admin pill; the elevated case is the test below
   const root = mkdtempSync(join(tmpdir(), 'throng-statusdedupe-'));
   try {
@@ -67,20 +96,3 @@ test('the status bar keeps only the project root path; the title bar keeps the i
   }
 });
 
-test('when elevated, [ADMIN] is on the title bar only — the status bar has no pill', { tag: ['@extended', '@window'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-statusdedupe-admin-'));
-  try {
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'ElevProj', root);
-        await expect(win.getByTestId('status-bar')).toBeVisible();
-        // The elevation marker is not lost — it moves nowhere, it was already on the title bar.
-        await expect(win.getByTestId('title-bar-identity')).toContainText('[ADMIN]');
-        await expect(win.getByTestId('status-admin-pill')).toHaveCount(0);
-      },
-      { env: { THRONG_FAKE_ELEVATED: '1' } },
-    );
-  } finally {
-    cleanupTemp(root);
-  }
-});

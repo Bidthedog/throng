@@ -58,7 +58,7 @@ async function ensureOverflowing(): Promise<void> {
   expect(isOverflowing(await stripGeometry(shared.win)), 'seeded enough tabs to overflow').toBe(true);
 }
 
-test('T004 — a tab keeps its height and vertical position when the strip overflows', { tag: ['@extended', '@window'] }, async () => {
+test('T004 — a tab keeps its height and vertical position when the strip overflows', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await project();
   const before = await stripGeometry(shared.win);
   expect(isOverflowing(before), 'strip should not overflow yet').toBe(false);
@@ -96,7 +96,7 @@ test('T004 — a tab keeps its height and vertical position when the strip overf
   );
 });
 
-test('T003 — an overflowing strip renders no native horizontal scrollbar', { tag: ['@extended', '@window'] }, async () => {
+test('T003 — an overflowing strip renders no native horizontal scrollbar', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   // Seeds its own overflow rather than inheriting T004's. Depending on what an earlier test left
   // behind makes the file order-dependent, and a single retry then shifts the ground under
   // everything after it — which is exactly how this spec first went flaky.
@@ -109,7 +109,7 @@ test('T003 — an overflowing strip renders no native horizontal scrollbar', { t
   ).toBe(false);
 });
 
-test('T005 — the New Tab button stays pinned, square and centred at every tab count', { tag: ['@extended', '@window'] }, async () => {
+test('T005 — the New Tab button stays pinned, square and centred at every tab count', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await ensureOverflowing();
   const add = shared.win.getByTestId('tab-add');
   await expect(add, 'New Tab is visible while the strip overflows').toBeVisible();
@@ -132,7 +132,7 @@ test('T005 — the New Tab button stays pinned, square and centred at every tab 
   expect(Math.abs(buttonMid - stripMid), 'New Tab is vertically centred').toBeLessThanOrEqual(3);
 });
 
-test('T007 — a fade never displaces a tab', { tag: ['@extended', '@window'] }, async () => {
+test('T007 — a fade never displaces a tab', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await ensureOverflowing();
   // Scroll so tabs are hidden to the left, which is when the leading fade shows.
   await shared.win.evaluate(() => {

@@ -95,36 +95,33 @@ async function dragPanelToEdge(win: Page, sourceId: string, targetId: string, ed
   await win.mouse.up();
 }
 
-test('adds Tabs and Panels, never showing a typed Panel', { tag: ['@extended', '@window'] }, async () => {
-  const h = await startHarness();
-  let app: ElectronApplication | undefined;
-  try {
-    app = await launchApp(h.pipeName);
-    const win = await app.firstWindow();
-    await createProjectAndOpen(win);
+/*
+ * TWO TESTS REMOVED (035) — now `packages/ui/tests/component/tab-strip.test.ts`.
+ *
+ * Each launched its OWN app — `startHarness`, `launchApp`, `shutdownApp`, `stopDaemon`, a temp data
+ * directory — to count `.panel-box` elements and look for `split-node`. Neither seeded anything
+ * before launch; the own-app was this file's convention rather than a requirement.
+ *
+ * FOUR ASSERTIONS THEY DID NOT MAKE:
+ *
+ *   - No split with ONE panel, asserted before the add — so the split appearing is a change rather
+ *     than a state that was always there.
+ *   - Both panels show the type-selection form, not just the first. The migrated test read
+ *     `.panel-box__body` with `.first()`.
+ *   - The panel that SURVIVES a close is the other one, not merely one of them. A count of 1 is
+ *     satisfied by destroying the wrong panel.
+ *   - Refusing to close the last panel asks NOTHING. The migrated test could not distinguish
+ *     "refused" from "confirmed and then refused", and a dialog for an action that cannot happen is
+ *     worse than no dialog.
+ *
+ * Red-proven three ways in core and the header: dropping the INV-3 collapse leaves a one-child
+ * split, dropping `removePanel`'s FR-016 guard empties the workspace, and typing a newly added
+ * panel as a terminal removes the selection form.
+ *
+ * What stays in this file drives a REAL DRAG (`@reserve:osdrag`) or reads a real layout.
+ */
 
-    // One tab to start; add another → two tab chips.
-    await win.getByTestId('tab-add').click();
-    await expect(win.locator('.tab-chip')).toHaveCount(2);
-
-    // Add a Panel into the active tab → two panels, split node present.
-    const firstPanel = (await panelIds(win))[0];
-    await win.getByTestId(`panel-add-${firstPanel}`).click();
-    await expect(win.locator('.panel-box')).toHaveCount(2);
-    await expect(win.getByTestId('split-node')).toBeVisible();
-
-    // An untyped Panel shows the extensible type-selection form (005 / FR-001) —
-    // its type is chosen via the Panel Type dropdown — not a live typed body.
-    await expect(win.locator('.panel-box__body').first()).toContainText(/panel type/i);
-    await expect(win.locator('[data-testid^="panel-terminal-"]')).toHaveCount(0);
-  } finally {
-    if (app) await shutdownApp(app);
-    await stopDaemon(h.daemon);
-    cleanupTemp(h.dataDir);
-  }
-});
-
-test('splits a Panel by dragging another onto its edge (no Panel lost)', { tag: ['@extended', '@window'] }, async () => {
+test('splits a Panel by dragging another onto its edge (no Panel lost)', { tag: ['@extended', '@window', '@reserve:osdrag'] }, async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
   try {
@@ -151,38 +148,8 @@ test('splits a Panel by dragging another onto its edge (no Panel lost)', { tag: 
   }
 });
 
-test('collapses a split when a Panel is closed and never empties the workspace', { tag: ['@extended', '@window'] }, async () => {
-  const h = await startHarness();
-  let app: ElectronApplication | undefined;
-  try {
-    app = await launchApp(h.pipeName);
-    const win = await app.firstWindow();
-    await createProjectAndOpen(win);
 
-    const first = (await panelIds(win))[0];
-    await win.getByTestId(`panel-add-${first}`).click();
-    await expect(win.locator('.panel-box')).toHaveCount(2);
-
-    // Close one → empty Panels destroy immediately (no terminal, no confirm) →
-    // the split collapses back to a single Panel.
-    const [a] = await panelIds(win);
-    await win.getByTestId(`panel-close-${a}`).click();
-    await expect(win.locator('.panel-box')).toHaveCount(1);
-    await expect(win.getByTestId('split-node')).toHaveCount(0);
-
-    // Closing the last Panel is refused — removal is a no-op (the workspace never
-    // empties), so the count stays at 1.
-    const lastId = (await panelIds(win))[0];
-    await win.getByTestId(`panel-close-${lastId}`).click();
-    await expect(win.locator('.panel-box')).toHaveCount(1);
-  } finally {
-    if (app) await shutdownApp(app);
-    await stopDaemon(h.daemon);
-    cleanupTemp(h.dataDir);
-  }
-});
-
-test('reorders Tabs by dragging', { tag: ['@extended', '@window'] }, async () => {
+test('reorders Tabs by dragging', { tag: ['@extended', '@window', '@reserve:osdrag'] }, async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
   try {

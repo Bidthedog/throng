@@ -97,7 +97,31 @@ const docText = (win: Page, pid: string): Promise<string> =>
     pid,
   );
 
-test('a TAB-indented file keeps taking TABS, though the setting says spaces (FR-018a)', { tag: ['@extended', '@editor'] }, async () => {
+/*
+ * ── ONE REMOVED (035 T056) ──
+ *
+ * `:195` "opening a file NEVER reindents it, and never marks it dirty (FR-018d)" — both halves
+ * already covered, at the layer that owns them:
+ *
+ *   the buffer holds the file byte for byte, and the FILE is untouched
+ *     → `integration/indent-infer.integration.test.ts:70`, with `:94` adding the mixed-indentation
+ *       case this test did not have
+ *   the document is CLEAN — reading a file's style is not an edit to it
+ *     → `integration/indent-infer.integration.test.ts:82`, which additionally asserts
+ *       `version === 0`, i.e. not one edit was applied — stronger than an absent dot, which a
+ *       dirty document with a broken indicator would also produce
+ *
+ * The RENDERED half — that what reaches the editor is the file's own text — is
+ * `component/editor-indent-on-switch.test.ts`, on a first open and on a replacement.
+ *
+ * Red-proven with `load-normalises-indent`, which rewrites leading tabs as it decodes: 2 red.
+ *
+ * ── WHAT STAYS ──
+ *
+ * The two tests above it, both `@reserve:input`: they press a real Tab through a real keyboard into
+ * a real ConPTY-adjacent window and read what landed. The claim is the KEY, not the profile.
+ */
+test('a TAB-indented file keeps taking TABS, though the setting says spaces (FR-018a)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -170,7 +194,7 @@ test('a TAB-indented file keeps taking TABS, though the setting says spaces (FR-
  *     that the panel’s unsaved dot therefore stays dark.
  */
 
-test('an unindented Go file takes a TAB — its LANGUAGE decides (FR-018)', { tag: ['@extended', '@editor'] }, async () => {
+test('an unindented Go file takes a TAB — its LANGUAGE decides (FR-018)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -192,21 +216,3 @@ test('an unindented Go file takes a TAB — its LANGUAGE decides (FR-018)', { ta
   }
 });
 
-test('opening a file NEVER reindents it, and never marks it dirty (FR-018d)', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Indent', root);
-      const pid = await openFile(win, 'tabs.ts', 'function a()');
-
-      // Byte for byte what was on disk — the editor adopted the file's style, it did not impose its
-      // own. And the unsaved dot never lights: reading a file's indentation is not an edit to it.
-      expect(await docText(win, pid)).toBe(
-        'function a() {\n\tif (x) {\n\t\treturn 1;\n\t}\n}\n',
-      );
-      await expect(win.getByTestId(`panel-unsaved-${pid}`)).toHaveCount(0);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});

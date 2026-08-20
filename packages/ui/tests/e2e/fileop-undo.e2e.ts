@@ -9,7 +9,7 @@
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { openApp,
   createProject as newProject,
   firstPanelId,
@@ -63,13 +63,6 @@ let projectSeq = 0;
 const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
-
-/** Right-click a row and read what the menu offers. */
-async function rowMenu(win: Page, name: string): Promise<void> {
-  await win.getByTestId('file-explorer-tree').getByText(name, { exact: true }).click({ button: 'right' });
-  await expect(win.getByTestId('context-menu')).toBeVisible();
-}
-
 test('Ctrl+Z reverses a rename, and Ctrl+Y puts it back', { tag: ['@extended', '@explorer'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-undo-'));
   writeFileSync(join(root, 'before.txt'), 'content\n');
@@ -79,12 +72,19 @@ test('Ctrl+Z reverses a rename, and Ctrl+Y puts it back', { tag: ['@extended', '
       const tree = win.getByTestId('file-explorer-tree');
       await expect(tree.getByText('before.txt', { exact: true })).toBeVisible({ timeout: 8000 });
 
-      // Undo is OFFERED but unavailable before anything has happened — the item teaches that undo
-      // exists, rather than appearing from nowhere after the first operation.
-      await rowMenu(win, 'before.txt');
-      await expect(win.getByTestId('menu-item-Undo')).toBeDisabled();
-      await expect(win.getByTestId('menu-item-Undo')).toContainText('Ctrl');
-      await win.keyboard.press('Escape');
+      /*
+       * ── THE MENU ASSERTIONS MOVED (035 T056) ──
+       *
+       * "Undo is OFFERED but unavailable before anything has happened, and carries its chord" is
+       * `unit/explorer-subtree-menu.test.ts`, which additionally pins the half this could not see:
+       * Redo follows its OWN flag, so a menu keying both off `canUndo` offers a Redo that does
+       * nothing. That the chord is `Ctrl+Z` and reaches the FILE undo in the tree — and nothing in
+       * an editor or a terminal — is `core/tests/unit/file-undo-redo-binding.test.ts:32`.
+       *
+       * What is left here is the round trip: a real rename, a real Ctrl+Z, and the file back under
+       * its old name ON DISK through the daemon-persisted stack. That is this test's subject, and
+       * opening a menu to read a label was never part of it.
+       */
 
       // Rename it.
       await tree.getByText('before.txt', { exact: true }).click();
@@ -114,6 +114,30 @@ test('Ctrl+Z reverses a rename, and Ctrl+Y puts it back', { tag: ['@extended', '
   }
 });
 
+/**
+ * ── THE ROUTING HALF OF THIS MOVED (035 T055) ──
+ *
+ * The claim in the title — that undo fires with focus on the PANE rather than on a tree row — is
+ * membership of one set: `WINDOW_HANDLED_ACTIONS` in `app.tsx`, intercepted in the capture phase so
+ * those actions fire wherever focus is. It is now
+ * `packages/ui/tests/component/window-handled-actions.test.ts`.
+ *
+ * That set was a `const` inside a `useEffect` until this migration, which is why the only way to
+ * ask the question was to launch the application. Hoisting it exported the rule and changed no
+ * behaviour — and the comment above it was corrected at the same time, because it claimed `file.*`
+ * was "left for the focused widget" while `file.undo` and `file.redo` were members of the very set
+ * it described.
+ *
+ * The component version also asserts what the window must NOT own — `editor.save`, and the
+ * explorer's other file actions, which belong to the tree's selection. Intercepting those would take
+ * `Ctrl+C` from a focused terminal. Red-proven: undo-not-window-handled, window-eats-save, empty-set.
+ *
+ * ── WHAT STAYS HERE ──
+ *
+ * Everything below the chord. This test still drives the real context menu, dismisses it with the
+ * mouse to leave focus off the rows, and asserts the file on DISK through the daemon — which is the
+ * half no set membership can promise.
+ */
 test('undo works from anywhere in the pane, not only with a row focused', { tag: ['@extended', '@explorer'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-undopane-'));
   writeFileSync(join(root, 'renamed.txt'), 'x\n');

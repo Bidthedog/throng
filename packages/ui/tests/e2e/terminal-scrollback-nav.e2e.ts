@@ -87,7 +87,7 @@ async function run(win: Page, pid: string, cmd: string, marker: string): Promise
   });
 }
 
-test('page / line / top / bottom move the viewport — and never reach the program', { tag: ['@extended', '@terminal'] }, async () => {
+test('page / line / top / bottom move the viewport — and never reach the program', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-nav-'));
   try {
     await runApp(async (_app, win) => {
@@ -135,7 +135,7 @@ test('page / line / top / bottom move the viewport — and never reach the progr
   }
 });
 
-test('at the live bottom, ordinary typing still reaches the program (FR-016)', { tag: ['@extended', '@terminal'] }, async () => {
+test('at the live bottom, ordinary typing still reaches the program (FR-016)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-nav-'));
   try {
     await runApp(async (_app, win) => {
@@ -157,7 +157,7 @@ test('at the live bottom, ordinary typing still reaches the program (FR-016)', {
   }
 });
 
-test('with find open, next/previous jump the viewport between matches (FR-015)', { tag: ['@extended', '@terminal'] }, async () => {
+test('with find open, next/previous jump the viewport between matches (FR-015)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-nav-'));
   try {
     await runApp(async (_app, win) => {

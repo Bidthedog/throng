@@ -110,57 +110,37 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('every bundled theme repaints every surface; nothing is left stale (SC-004)', { tag: ['@extended', '@prefs'] }, async () => {
-  const cfgRoot = sharedCfg;
-  await runApp(
-    async (_app, win) => {
-      await expect(win.getByTestId('projects-panel')).toBeVisible();
-
-      // Ask the APPLICATION which themes it ships. Not a list in this file.
-      const themes = await win.evaluate(async () => {
-        const w = window as unknown as {
-          throng?: { config?: { listThemes?: () => Promise<string[]> } };
-        };
-        return (await w.throng?.config?.listThemes?.()) ?? [];
-      });
-      expect(themes.length).toBeGreaterThanOrEqual(14);
-
-      const maps: Record<string, Record<string, string>> = {};
-      for (const name of themes) {
-        await activateTheme(win, cfgRoot, name);
-        const tokens = await emittedTokens(win);
-        maps[name] = tokens;
-
-        // The app is still painted — this theme resolved, it did not blank the surfaces.
-        for (const required of [
-          '--throng-colour-surface',
-          // 021 / FR-023 folded the menu/dropdown card onto `surfaceActive` (`menuSurface` is gone).
-          '--throng-colour-surfaceActive',
-          '--throng-colour-scrollbarThumb',
-          '--throng-colour-text',
-          '--throng-colour-accent',
-        ]) {
-          expect(tokens[required], `${name} left ${required} unset`).toMatch(/^#|rgb|hsl/);
-        }
-      }
-
-      // Every theme emits the SAME property set — because each is merged over the base theme before
-      // being emitted. A theme carrying a property no other theme has is a property left behind by the
-      // theme before it, which is exactly the staleness this criterion forbids.
-      const OPTIONAL = ['--throng-colour-iconColour', '--throng-colour-menuItemHoverSurface'];
-      const required = (name: string): string[] =>
-        Object.keys(maps[name]!)
-          .filter((k) => !OPTIONAL.includes(k))
-          .sort();
-      const baseline = required(themes[0]!);
-      for (const name of themes) {
-        expect(required(name), `${name} does not emit the same token set as ${themes[0]}`).toEqual(
-          baseline,
-        );
-      }
-    },
-  );
-});
+/*
+ * ONE TEST REMOVED (035 T055) — "every bundled theme repaints every surface; nothing is left stale
+ * (SC-004)", now `packages/core/tests/unit/theme-sweep.test.ts`.
+ *
+ * It activated each of the fifteen bundled themes in a real window — a config write, a watcher
+ * round-trip and a repaint apiece — then read the computed custom properties back off the document
+ * and compared the key sets. Every theme added since has paid that cost again.
+ *
+ * The property it checked is a property of `toCssVariables` over the theme DEFINITIONS: both pure,
+ * both in core, neither of which the window contributes anything to. The unit version enumerates
+ * `ALL_DEFAULT_THEMES` rather than naming any theme, so it keeps the thing that made this test worth
+ * having — a new theme is covered the moment it exists.
+ *
+ * ── WHAT THE RED STEP CHANGED ABOUT THE CLAIM ──
+ *
+ * Worth recording, because the first two mutations tried both PASSED and that was the test working
+ * rather than failing. Mutating `toCssVariables`'s merge changes nothing, because every bundled
+ * theme defines every token itself — the merge is `theme.test.ts`'s claim ("falls back to the throng
+ * default for a missing token"), not this one. Mutating the theme BUILDER moves every built theme
+ * together, so the key sets stay equal, which is precisely what the test says.
+ *
+ * The mutation that does fail it is one that makes ONE theme diverge from the others — `throng` is
+ * the only theme not produced by that builder — which is exactly the residue SC-004 describes:
+ * *"a theme carrying a property no other theme has is a property left behind by the theme before
+ * it"*. Three mutations, three reds: built-themes-diverge, unpainted-surface (14 red),
+ * emit-optional.
+ *
+ * The test BELOW stays. It writes a real theme file that DOES set the optional tokens, activates it,
+ * switches away, and reads the document to prove the property is gone — a claim about a live
+ * stylesheet being updated, which no pure function can make.
+ */
 
 test('an OPTIONAL token set by one theme is GONE after switching to one that does not set it (SC-004)', { tag: ['@extended', '@prefs'] }, async () => {
   const cfgRoot = sharedCfg;

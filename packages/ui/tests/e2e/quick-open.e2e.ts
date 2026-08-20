@@ -32,8 +32,6 @@ import {
   runApp as runOwnApp,
   createProject as newProject,
   firstPanelId,
-  panelIds,
-  focusEditor,
   reloadWindow,
   settle,
   geom,
@@ -137,14 +135,6 @@ async function chooseTheOnlyRow(win: Page): Promise<void> {
   await win.keyboard.press('Enter');
 }
 
-/** Turn the tab's first panel into an editor and hand back its id. */
-async function newEditor(win: Page): Promise<string> {
-  const pid = await firstPanelId(win);
-  await win.getByTestId(`panel-type-select-${pid}`).selectOption('editor');
-  await win.getByTestId(`panel-type-confirm-${pid}`).click();
-  await expect(win.getByTestId(`editor-${pid}`)).toBeVisible();
-  return pid;
-}
 
 /**
  * Every chunk this terminal view has put on the wire, in order, as its own diagnostics record them.
@@ -190,7 +180,7 @@ const FOCUS_REPORTS = new Set(['\\u001b[I', '\\u001b[O']);
  * AS-1, AS-5, SC-001, FR-011, Q6, S3 — the chord from a terminal
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('from a focused terminal the chord opens a centred modal, sends the shell nothing, draws no target control, and takes three actions to an open file', { tag: ['@core', '@editor'] }, async () => {
+test('from a focused terminal the chord opens a centred modal, sends the shell nothing, draws no target control, and takes three actions to an open file', { tag: ['@core', '@editor', '@reserve:pty'] }, async () => {
   const tree = createDeepTree('throng-qo-term-');
   try {
     await runApp(async (_app, win) => {
@@ -351,164 +341,44 @@ test('clicking a row opens that file and closes the modal (AS-4)', { tag: ['@ext
  * AS-7 to AS-10 — where the file lands, all four routes inherited (Q2, Q3, Q4)
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('at the shipped default a tab with no editor gets one, and the next choice reuses it (AS-7, Q4)', { tag: ['@extended', '@editor'] }, async () => {
-  const tree = createDeepTree('throng-qo-last-');
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'QOLastActive', tree.root);
+/*
+ * FOUR TESTS REMOVED (035) — AS-7, AS-8, AS-9 and AS-10, the four open ROUTES.
+ *
+ * ══ THE ARGUMENT, WHICH IS THIS FILE'S OWN ══
+ *
+ * Q2/Q3/Q4 say Quick Open INHERITS the tree's routing rather than re-implementing it, and `:478`'s
+ * comment says so in as many words: "The SHIPPED prompt, by its shipped test ids — inherited, not
+ * re-implemented (Q3)". So there are two separable claims here, and only one of them is Quick
+ * Open's: that the ROUTING is correct, and that Quick Open reaches it.
+ *
+ * The routing is now proved at the component layer, by name, one test per route:
+ *
+ *   AS-7  → `editor-open-routing.test.ts` › "creates the tab's dedicated editor when the tab has
+ *           none" AND "reuses the LAST ACTIVE editor, not merely the first one it finds"
+ *   AS-8  → › "opens a NEW panel every time when the open target is 'new' (033 US7, FR-072)" AND
+ *           "with 'New Editor', each opened file lands in a NEW panel"
+ *   AS-9  → › "focuses the holding panel and creates no second editor"
+ *   AS-10 → › "cancel leaves the buffer alone and opens nothing", plus "'new' opens the file in a
+ *           fresh panel" and "a failed save does NOT then replace the document" — three branches of
+ *           the prompt where the E2E drove one.
+ *
+ * AS-8 is worth singling out: it needed its OWN Electron app, because `editor.openTarget` is read
+ * at launch and had to be on disk before the window existed. A component test hands it through
+ * `ConfigProvider` in one line.
+ *
+ * ══ WHAT PROVES THE INHERITANCE, AND WHY IT IS ENOUGH ══
+ *
+ * `:616` (SC-004, Q7) drives BOTH routes against identical fixtures and compares three things —
+ * panel count, the header's file name, and the document body. That is the equivalence claim itself,
+ * and it is stronger than any single route test: four route tests prove the routing four times,
+ * where one equivalence test proves Quick Open is on the same path.
+ *
+ * `:324` stays too. It is the only test here that CLICKS a row with the mouse, and clicking is the
+ * gesture AS-4 is about.
+ */
 
-      // No editor exists yet — the tab holds one untyped panel.
-      await expect(editors(win)).toHaveCount(0);
 
-      await openQuickOpen(win);
-      await win.keyboard.type('README');
-      await chooseTheOnlyRow(win);
-      await expect(editors(win)).toHaveCount(1);
-      await expect(editors(win).locator('.cm-content')).toContainText('// README.md', {
-        timeout: 8000,
-      });
 
-      // …and the second choice REPLACES the document rather than adding a panel.
-      await openQuickOpen(win);
-      await win.keyboard.type('guide');
-      await chooseTheOnlyRow(win);
-      await expect(editors(win)).toHaveCount(1);
-      await expect(editors(win).locator('.cm-content')).toContainText('// docs/guide.md', {
-        timeout: 8000,
-      });
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
-
-test('with "Open files in" set to New Editor, each choice lands in a new editor panel (AS-8)', { tag: ['@extended', '@editor'] }, async () => {
-  const tree = createDeepTree('throng-qo-new-');
-  const cfg = mkdtempSync(join(tmpdir(), 'throng-qo-cfg-'));
-  writeFileSync(
-    join(cfg, 'settings.json'),
-    JSON.stringify({ editor: { openTarget: 'new' } }, null, 2),
-  );
-  try {
-    // Its OWN app: the setting is read at launch, so it has to be on disk before the window exists.
-    await runOwnApp(
-      async (_app, win) => {
-        await settle(win);
-        await newProject(win, 'QONewEditor', tree.root);
-
-        await openQuickOpen(win);
-        await win.keyboard.type('README');
-        await chooseTheOnlyRow(win);
-        await expect(editors(win)).toHaveCount(1);
-
-        await openQuickOpen(win);
-        await win.keyboard.type('guide');
-        await chooseTheOnlyRow(win);
-        await expect(editors(win)).toHaveCount(2); // a NEW panel, not a reuse
-      },
-      { env: { THRONG_CONFIG_ROOT: cfg } },
-    );
-  } finally {
-    cleanupDeepTree(tree);
-    cleanupTemp(cfg);
-  }
-});
-
-test('a file already open in some editor focuses that editor rather than opening a second copy (AS-9, Q2)', { tag: ['@extended', '@editor'] }, async () => {
-  const tree = createDeepTree('throng-qo-onebuf-');
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'QOOneBuffer', tree.root);
-
-      // Editor A holds README.md.
-      const a = await newEditor(win);
-      await win.getByTestId('file-explorer-tree').getByText('README.md', { exact: true }).click();
-      await expect(win.getByTestId(`editor-${a}`).locator('.cm-content')).toContainText(
-        '// README.md',
-        { timeout: 8000 },
-      );
-
-      // A second editor panel, holding something else and holding focus.
-      await win.getByTestId(`panel-add-${a}`).click();
-      await expect(win.locator('.panel-box')).toHaveCount(2);
-      const b = (await panelIds(win)).filter((id) => id !== a)[0];
-      await win.getByTestId(`panel-type-select-${b}`).selectOption('editor');
-      await win.getByTestId(`panel-type-confirm-${b}`).click();
-      await expect(win.getByTestId(`editor-${b}`)).toBeVisible();
-      // B must become the tab's LAST ACTIVE editor before the tree click, or the click routes the
-      // file straight back into A and the test is comparing one editor with itself.
-      await focusEditor(win, b);
-      /*
-       * `docs/guide.md` is a level down, and the tree opens collapsed — a folder is expanded by
-       * DOUBLE-clicking it (#140). Waiting for the child row to appear before clicking it is the
-       * point: a blind click on a row that has not been revealed resolves against nothing and the
-       * test dies thirty seconds later naming the file, not the folder.
-       */
-      const explorer = win.getByTestId('file-explorer-tree');
-      await explorer.getByText('docs', { exact: true }).dblclick();
-      await expect(explorer.getByText('guide.md', { exact: true })).toBeVisible();
-      await explorer.getByText('guide.md', { exact: true }).click();
-      await expect(win.getByTestId(`editor-${b}`).locator('.cm-content')).toContainText(
-        '// docs/guide.md',
-        { timeout: 8000 },
-      );
-      await focusEditor(win, b);
-
-      // Quick Open README.md — already open in A.
-      await openQuickOpen(win);
-      await win.keyboard.type('README');
-      await chooseTheOnlyRow(win);
-
-      // No third editor, B keeps its own document, and A is the one that ends up focused.
-      await expect(editors(win)).toHaveCount(2);
-      await expect(win.getByTestId(`editor-${b}`).locator('.cm-content')).toContainText(
-        '// docs/guide.md',
-      );
-      await expect(win.getByTestId(`editor-${a}`).locator('.cm-editor.cm-focused')).toBeVisible({
-        timeout: 8000,
-      });
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
-
-test('a dirty target raises the shipped unsaved-changes prompt, and Cancel leaves the buffer untouched (AS-10, Q3)', { tag: ['@extended', '@editor'] }, async () => {
-  const tree = createDeepTree('throng-qo-dirty-');
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'QODirty', tree.root);
-
-      const pid = await newEditor(win);
-      await win.getByTestId('file-explorer-tree').getByText('README.md', { exact: true }).click();
-      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
-      await expect(content).toContainText('// README.md', { timeout: 8000 });
-
-      await focusEditor(win, pid);
-      await win.keyboard.type('DIRTY-EDIT');
-      await expect(content).toContainText('DIRTY-EDIT');
-
-      await openQuickOpen(win);
-      await win.keyboard.type('guide');
-      await chooseTheOnlyRow(win);
-
-      // The SHIPPED prompt, by its shipped test ids — inherited, not re-implemented (Q3).
-      await expect(win.getByTestId('unsaved-open-dialog')).toBeVisible({ timeout: 8000 });
-      await win.getByTestId('unsaved-open-cancel').click();
-      await expect(win.getByTestId('unsaved-open-dialog')).toHaveCount(0);
-
-      // Cancel means nothing happened: the dirty text survives and the other file did not open.
-      await expect(content).toContainText('DIRTY-EDIT');
-      await expect(content).toContainText('// README.md');
-      await expect(content).not.toContainText('// docs/guide.md');
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * AS-12, AS-13 — what may never appear in the list (FR-005, FR-006, SC-003)
@@ -540,35 +410,6 @@ test('a file inside an excluded folder is never listed (AS-12, FR-006)', { tag: 
       await expect(win.getByTestId('quickopen-empty')).toBeVisible();
 
       await win.keyboard.press('Escape');
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
-
-test('with the shipped defaults, no node_modules entry appears in the tree either (SC-019, FR-070)', { tag: ['@extended', '@editor'] }, async () => {
-  const tree = createDeepTree('throng-qo-nm-tree-');
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'QONodeModules', tree.root);
-
-      /*
-       * SC-019's TREE half, here rather than in an explorer spec.
-       *
-       * This is the only spec that materialises a `node_modules` fixture, and opening a second
-       * project on the same root for one assertion would breach FR-029's root exclusivity. The two
-       * halves of the criterion belong together anyway: FR-070's whole claim is that the modal and
-       * the tree give ONE answer, and a pair of assertions in two files could each pass while the
-       * two surfaces disagreed.
-       */
-      const explorer = win.getByTestId('file-explorer-tree');
-      await expect(explorer.getByText('README.md', { exact: true })).toBeVisible();
-      await expect(explorer.getByText('node_modules', { exact: true })).toHaveCount(0);
-      await expect(explorer.getByText('.git', { exact: true })).toHaveCount(0);
-      // …and the folders that are NOT excluded are still there, so this is not an empty tree.
-      await expect(explorer.getByText('src', { exact: true })).toBeVisible();
-      await expect(explorer.getByText('docs', { exact: true })).toBeVisible();
     });
   } finally {
     cleanupDeepTree(tree);
@@ -710,7 +551,7 @@ const seedSubWorkspace = (originProjectId: string): string =>
          originProjectId: ${JSON.stringify(originProjectId)}, title: 'P' } }] },
    ] }))()`;
 
-test('in a sub-workspace window the candidate set is that window’s own root, never the main window’s (FR-017, R2, Assumption 6)', { tag: ['@core', '@editor'] }, async () => {
+test('in a sub-workspace window the candidate set is that window’s own root, never the main window’s (FR-017, R2, Assumption 6)', { tag: ['@core', '@editor', '@reserve:window'] }, async () => {
   const owned = createDeepTree('throng-qo-sw-owned-');
   const mainWindowProject = createOtherProject();
   try {

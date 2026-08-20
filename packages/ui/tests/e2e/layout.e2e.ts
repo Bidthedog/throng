@@ -62,7 +62,7 @@ const runApp = (
 // so the bottom status bar (fixed height) and the right pane (fixed width, on the
 // right) stay in place during window resizes — no smear/ghost.
 
-test('the side panes animate (grid-template-columns transition)', { tag: ['@extended', '@window'] }, async () => {
+test('the side panes animate (grid-template-columns transition)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (_app, win) => {
     await expect(win.getByTestId('throng-shell')).toBeVisible();
     const transition = await win.evaluate(
@@ -72,7 +72,7 @@ test('the side panes animate (grid-template-columns transition)', { tag: ['@exte
   });
 });
 
-test('status bar is fixed-height at the bottom and the right pane is pinned right, across resizes', { tag: ['@extended', '@window'] }, async () => {
+test('status bar is fixed-height at the bottom and the right pane is pinned right, across resizes', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (app: ElectronApplication, win) => {
     await expect(win.getByTestId('status-bar')).toBeVisible();
     await expect(win.getByTestId('file-explorer-pane')).toBeVisible();

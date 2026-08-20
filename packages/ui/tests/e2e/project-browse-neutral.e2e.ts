@@ -18,7 +18,7 @@ async function makeRedProject(win: import('@playwright/test').Page): Promise<voi
   await expect(win.locator('.project-item', { hasText: 'RedProj' })).toBeVisible();
 }
 
-test('the create-project Browse button is not tinted with the active project colour', { tag: ['@extended', '@window'] }, async () => {
+test('the create-project Browse button is not tinted with the active project colour', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (_app, win) => {
     // A bright-red project → --accent becomes red for the whole window.
     await makeRedProject(win);

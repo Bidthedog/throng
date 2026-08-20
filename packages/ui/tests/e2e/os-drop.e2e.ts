@@ -3,9 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import {
-  addPanels,
   createProject,
-  firstPanelId,
   openApp,
   cleanupTemp,
   type AppOptions,
@@ -27,17 +25,6 @@ import {
  * through the same custom-event seam the explorer already uses to ask for a file to be opened. The
  * confinement rule, the rejections, the cursor and the navigation guard are all real here.
  */
-
-function dropPaths(win: Page, panelId: string, paths: string[]): Promise<void> {
-  return win.evaluate(
-    ([id, list]) => {
-      window.dispatchEvent(
-        new CustomEvent('throng:os-drop', { detail: { panelId: id, paths: list } }),
-      );
-    },
-    [panelId, paths] as const,
-  );
-}
 
 /**
  * The id of the panel holding the editor.
@@ -147,50 +134,6 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('a file dropped on an editor panel in its own project opens (US9, FR-057)', { tag: ['@extended', '@explorer'] }, async () => {
-  const projectRoot = own(makeProjectFolder());
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'DropOpen', projectRoot);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-      // Open a.txt so there IS an editor panel to drop onto.
-      await tree.getByText('a.txt', { exact: true }).click();
-      await expect(win.locator('.editor-panel')).toBeVisible();
-      const panelId = await editorPanelId(win);
-
-      await dropPaths(win, panelId, [join(projectRoot, 'b.txt')]);
-      await expect(win.getByTestId(`editor-${panelId}`)).toContainText('beta');
-    });
-  } finally {
-    // Every root is deleted in `afterAll`, once the shared app has CLOSED. Deleting one here
-    // would remove a folder the explorer is still watching.
-  }
-});
-
-test('a file dropped on an UNTYPED panel makes it an editor showing the file (US9, FR-056)', { tag: ['@extended', '@explorer'] }, async () => {
-  const projectRoot = own(makeProjectFolder());
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'DropUntyped', projectRoot);
-      await expect(win.getByTestId('file-explorer-tree')).toBeVisible();
-      const panelId = await firstPanelId(win);
-      // The panel starts untyped: the type-selection form, no editor.
-      await expect(win.getByTestId(`panel-type-form-${panelId}`)).toBeVisible();
-
-      await dropPaths(win, panelId, [join(projectRoot, 'a.txt')]);
-
-      // It becomes an editor showing the file — with no detour through the type form.
-      await expect(win.getByTestId(`editor-${panelId}`)).toBeVisible();
-      await expect(win.getByTestId(`editor-${panelId}`)).toContainText('alpha');
-      await expect(win.getByTestId(`panel-type-form-${panelId}`)).toHaveCount(0);
-    });
-  } finally {
-    // Every root is deleted in `afterAll`, once the shared app has CLOSED. Deleting one here
-    // would remove a folder the explorer is still watching.
-  }
-});
-
 /*
  * MOVED to `packages/ui/tests/component/os-drop-refusal.test.ts` (034 FR-045) — two tests, and
  * the whole of what they proved is now made in three places instead of one.
@@ -280,84 +223,31 @@ test('a file dropped on an UNTYPED panel makes it an editor showing the file (US
  * symlink tests return early — which is why that file asserts on a REASON and not on a boolean.
  */
 
-test('a file over the openable size limit is visibly refused (US9, FR-061/T110a)', { tag: ['@extended', '@explorer'] }, async () => {
-  const projectRoot = own(makeProjectFolder());
-  try {
-    writeFileSync(join(projectRoot, 'big.txt'), 'x'.repeat(4096));
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'DropTooLarge', projectRoot);
-        const tree = win.getByTestId('file-explorer-tree');
-        await expect(tree).toBeVisible();
-        await tree.getByText('a.txt', { exact: true }).click();
-        await expect(win.locator('.editor-panel')).toBeVisible();
-        const panelId = await editorPanelId(win);
-
-        // Lower the limit under the file rather than writing a 10 MB fixture.
-        const { readFileSync } = await import('node:fs');
-        const file = join(sharedCfg, 'settings.json');
-        const settings = JSON.parse(readFileSync(file, 'utf8')) as {
-          editor: { maxOpenFileBytes: number };
-        };
-        const shippedLimit = settings.editor.maxOpenFileBytes;
-        settings.editor.maxOpenFileBytes = 1024;
-        writeFileSync(file, JSON.stringify(settings, null, 2));
-
-        try {
-          await expect
-            .poll(async () => {
-              await dropPaths(win, panelId, [join(projectRoot, 'big.txt')]);
-              return win.locator('[data-testid^="os-drop-error"]').first().isVisible();
-            })
-            .toBe(true);
-          await expect(win.locator('[data-testid^="os-drop-error"]').first()).toContainText(
-            /too large/i,
-          );
-        } finally {
-          // Put the shipped limit back. It is the one setting this file lowers, the config root
-          // now outlives the test, and a 1 KB ceiling left standing would silently refuse a file
-          // any later test tried to open. In a `finally` because the state exists from the write
-          // above onwards, whether the assertions pass or not.
-          settings.editor.maxOpenFileBytes = shippedLimit;
-          writeFileSync(file, JSON.stringify(settings, null, 2));
-        }
-      },
-    );
-  } finally {
-    // Every root is deleted in `afterAll`, once the shared app has CLOSED. Deleting one here
-    // would remove a folder the explorer is still watching.
-  }
-});
-
-test('a file already open elsewhere FOCUSES that editor, never a second copy (US9, FR-011a)', { tag: ['@extended', '@explorer'] }, async () => {
-  const projectRoot = own(makeProjectFolder());
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'DropAlreadyOpen', projectRoot);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-      await tree.getByText('a.txt', { exact: true }).click();
-      await expect(win.locator('.editor-panel')).toBeVisible();
-      const first = await editorPanelId(win);
-
-      // A second, untyped panel. Dropping the ALREADY-OPEN file on it must not make a second buffer.
-      await addPanels(win, 1);
-      const ids = await win.locator('[data-testid^="panel-"]').evaluateAll((els) =>
-        els.map((e) => e.getAttribute('data-testid') ?? '').filter((t) => t.startsWith('panel-')),
-      );
-      expect(ids.length).toBeGreaterThan(1);
-
-      await dropPaths(win, first, [join(projectRoot, 'a.txt')]);
-      // One editor holds a.txt — not two.
-      await expect(win.locator('.editor-panel')).toHaveCount(1);
-    });
-  } finally {
-    // Every root is deleted in `afterAll`, once the shared app has CLOSED. Deleting one here
-    // would remove a folder the explorer is still watching.
-  }
-});
-
-test('a stray drop does NOT navigate the window away (US9, FR-061a — the catastrophic one)', { tag: ['@extended', '@explorer'] }, async () => {
+/*
+ * THREE TESTS REMOVED (035 FR-007) — the synthetic-seam class.
+ *
+ * `dropPaths()` dispatched a `throng:os-drop` CustomEvent, which this file's own header already
+ * explains is NOT an OS drag: Electron 43 removed `File.path`, and a `File` synthesised in a
+ * renderer returns '' from `webUtils.getPathForFile`. So these three drove the same custom-event
+ * seam a component test drives, through an Electron process, a daemon and a real temp project.
+ *
+ *   - "dropped on an editor panel in its own project opens" → `component/os-drop-refusal.test.ts:276`
+ *     asserts the accepted branch opens the path MAIN RESOLVED — the same claim, and stronger, since
+ *     it distinguishes a symlink from its target.
+ *   - "dropped on an UNTYPED panel makes it an editor" → `component/editor-open-routing.test.ts`,
+ *     which asserts the conversion `openAsEditor` performs and the FR-006 rule that a typed panel is
+ *     NOT re-typed. One line remains unasserted and is named there: `panel-body.tsx:219` passing
+ *     `openAsEditor` as the `onOpen` prop.
+ *   - "a file over the openable size limit is visibly refused" → `drop-resolve.integration.test.ts:98`
+ *     refuses it as `too-large` at the source, and `os-drop-refusal.test.ts:188` renders MAIN's own
+ *     reason verbatim on a notice addressed by the refused path. It also lowered
+ *     `editor.maxOpenFileBytes` in the SHARED config root and put it back in a `finally` — a
+ *     1 KB ceiling that outlived a failure would silently refuse a file any later test opened.
+ *
+ * The two tests that remain do NOT use that seam. They build a real `DataTransfer` and read a real
+ * `dropEffect`, which is the OS drag-and-drop Principle V reserves.
+ */
+test('a stray drop does NOT navigate the window away (US9, FR-061a — the catastrophic one)', { tag: ['@extended', '@explorer', '@reserve:osdrag'] }, async () => {
   const projectRoot = own(makeProjectFolder());
   try {
     await runApp(async (_app, win) => {
@@ -396,7 +286,7 @@ test('a stray drop does NOT navigate the window away (US9, FR-061a — the catas
   }
 });
 
-test('an OS file drag shows a COPY cursor, not a MOVE one (US9, FR-063)', { tag: ['@extended', '@explorer'] }, async () => {
+test('an OS file drag shows a COPY cursor, not a MOVE one (US9, FR-063)', { tag: ['@extended', '@explorer', '@reserve:osdrag'] }, async () => {
   const projectRoot = own(makeProjectFolder());
   try {
     await runApp(async (_app, win) => {

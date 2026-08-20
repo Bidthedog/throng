@@ -73,10 +73,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { addPanels, cleanupTemp, createProject, daemonRpc, openApp, panelIds, settle, type OpenApp } from './harness.js';
-
-/** The em dash with spaces that `formatSubject` joins parts with (`SUBJECT_SEPARATOR`). */
-const SEP = ' — ';
+import { cleanupTemp, createProject, openApp, panelIds, settle, type OpenApp } from './harness.js';
 
 function explorerNotices(win: Page): Locator {
   return win.getByTestId('explorer-error');
@@ -92,16 +89,6 @@ async function renameInTree(win: Page, name: string, to: string): Promise<void> 
   await expect(input).toBeVisible();
   await input.fill(to);
   await input.press('Enter');
-}
-
-/** Rename a panel through its header — no context menu, so this spec steals no focus. */
-async function renamePanel(win: Page, panelId: string, to: string): Promise<void> {
-  await win.getByTestId(`panel-handle-${panelId}`).dblclick();
-  const input = win.getByTestId(`panel-rename-input-${panelId}`);
-  await expect(input).toBeVisible();
-  await input.fill(to);
-  await input.press('Enter');
-  await expect(input).toHaveCount(0);
 }
 
 /** A project root holding the named files. */
@@ -154,6 +141,37 @@ test.beforeEach(async () => {
  * in one sentence: it is accurate, it is unclassified — so 029 leaves it exactly as it is — and it
  * identifies nothing. Everything that tells the user WHICH file has to come from the subject.
  */
+/*
+ * ── THE RENDER SEAM MOVED (035 T055) ──
+ *
+ * `packages/ui/tests/component/notice-subject-rendering.test.ts` now owns that a composed heading
+ * reaches `.notice__title`, that the message beside it is left alone (FR-023), and that FR-058's
+ * generic stand-in is absent from the WHOLE card rather than only from the heading.
+ *
+ * ONE TEST REMOVED: `:199` "a panel failure names Project — Tab — Panel".
+ *
+ * ── WHY THE CLAIM WAS ALREADY COVERED, AND WHY THAT WAS NOT ENOUGH ──
+ *
+ * Both compositions have exact unit tests — `unit/notice-heading.test.ts:37` for the renamed file,
+ * `:52` for `'Alpha — Main — Build'` character for character, and
+ * `core/tests/unit/notice/subject.test.ts:65` for `formatSubject` over a full panel. So the panel
+ * test was polling the daemon's own `panelName.claim` RPC, through a debounced layout write, to
+ * re-assert three pure functions that were covered.
+ *
+ * What nothing covered was the JOIN: deleting the `heading` part from `noticeParts`, or making the
+ * card draw it as `null`, left every one of those unit tests green while the subject reached the
+ * screen nowhere — which is #195 exactly. Both are now red-proven.
+ *
+ * ── WHAT STAYS ──
+ *
+ * `:157` — a REAL rename collision against a real filesystem, whose message ("A file or folder with
+ * this name already exists.") is produced by the OS rather than composed by throng. The component
+ * test supplies that string; only this one proves it is the string the application actually
+ * receives, and that the collision path raises a notice at all.
+ *
+ * The panel side's equivalent wiring — a daemon name adjustment reaching a notice — is
+ * `panel-name-unique.e2e.ts`, which is where the `panelName.claim` round trip belongs.
+ */
 test('a file failure names the file, not "this item"', { tag: ['@extended', '@failure'] }, async () => {
   const win = shared.win;
   const root = seedRoot('throng-subj-file-', ['alpha.txt', 'beta.txt']);
@@ -196,55 +214,6 @@ test('a file failure names the file, not "this item"', { tag: ['@extended', '@fa
  * shared app: the daemon's name claim spans the store, so a literal here is only safe because the
  * name is this test's alone.
  */
-test('a panel failure names Project — Tab — Panel', { tag: ['@extended', '@failure'] }, async () => {
-  const win = shared.win;
-  const root = seedRoot('throng-subj-panel-', []);
-  try {
-    await settle(win);
-    await createProject(win, 'SubjPanel', root);
-    await addPanels(win, 1);
-    const ids = await panelIds(win);
-    expect(ids.length).toBeGreaterThanOrEqual(2);
-
-    await renamePanel(win, ids[0]!, 'Build');
-    /*
-     * The claim reads what has been SAVED, and the layout write is debounced — so ask the daemon's
-     * OWN name-claim RPC, read-only, with the exact params the second rename below is about to send
-     * it. That is the precise condition "has the write landed" means; polling it is a poll on daemon
-     * state (panelName.claim only reads persisted layouts, see panel-name-service.ts), not a guess
-     * at how long a 400ms debounce plus a round trip actually takes on a loaded machine.
-     */
-    await expect
-      .poll(
-        async () => {
-          const probe = (await daemonRpc(shared.pipeName, 'panelName.claim', {
-            panelId: ids[1]!,
-            desired: 'Build',
-          })) as { adjusted?: boolean } | null;
-          return probe?.adjusted === true;
-        },
-        {
-          timeout: 15_000,
-          message: 'the first panel\'s rename to "Build" never reached the persisted layout the daemon reads',
-        },
-      )
-      .toBe(true);
-    await renamePanel(win, ids[1]!, 'Build');
-
-    const notice = win.getByTestId('panel-name-adjusted');
-    await expect(notice).toBeVisible({ timeout: 15_000 });
-    const heading = notice.locator('.notice__title');
-
-    // RED — all three parts, in that order, joined by the one separator.
-    await expect(heading).toContainText('SubjPanel');
-    await expect(heading).toContainText('Build (2)');
-    expect(await heading.innerText(), 'the panel is not named Project — Tab — Panel').toMatch(
-      new RegExp(`SubjPanel${SEP}.+${SEP}Build \\(2\\)`),
-    );
-  } finally {
-    cleanupTemp(root);
-  }
-});
 
 /**
  * FR-026 — a terminal failure names the FLAVOUR involved.
@@ -254,7 +223,7 @@ test('a panel failure names Project — Tab — Panel', { tag: ['@extended', '@f
  * terminal itself is gone — so the flavour has to come from what the panel REMEMBERED, not from a
  * live session.
  */
-test('a terminal failure names its flavour', { tag: ['@extended', '@failure'] }, async () => {
+test('a terminal failure names its flavour', { tag: ['@extended', '@failure', '@reserve:pty'] }, async () => {
   const win = shared.win;
   const root = seedRoot('throng-subj-term-', []);
   try {
@@ -287,44 +256,28 @@ test('a terminal failure names its flavour', { tag: ['@extended', '@failure'] },
   }
 });
 
-/**
- * FR-021 — ONE formatter, so two notices about one thing name it identically.
+/*
+ * ONE TEST REMOVED (035 T030) — "two different failures about one file name it identically", now
+ * `packages/core/tests/unit/notice/subject.test.ts` ("two failures about one subject read
+ * identically (FR-021)").
  *
- * Two genuinely different failures about `alpha.txt`, raised minutes apart in the user's terms and
- * seconds apart here. If either call site were allowed to spell the subject itself, this is the test
- * that would catch it — and it is why the formatter is a function in core rather than a convention.
+ * The unit version is STRONGER, and the difference is instructive. This test raised two genuinely
+ * different failures about `alpha.txt` and compared the two headings — which proves the two call
+ * sites agree only if they had any chance of disagreeing. The unit version makes them differ the way
+ * two real call sites differ: one subject spelled from a path split, the other padded, as a string
+ * read back from a tab title or an input box would be. That is what FR-021 is actually about.
+ *
+ * ── AND WHAT WAS NOT NARROWED, DELIBERATELY (a declined verdict, FR-022) ──
+ *
+ * The backlog also said the truncation VALUE in the test below should go to the unit file, leaving
+ * only the layout assertions. It has not, and the reason is that the two lines in question —
+ * `headingText` containing an ellipsis and NOT containing 50 w's — are not a claim about the
+ * formatter. They are the claim that the TOAST RENDERS THE FORMATTER'S OUTPUT. The unit test proves
+ * `formatSubject` truncates; nothing else proves the notice shows what `formatSubject` returned,
+ * and a toast that spelled its own heading would satisfy every unit test in the repository.
+ *
+ * They also cost nothing: the locator is already fetched for the layout assertions on the next line.
  */
-test('two different failures about one file name it identically', { tag: ['@extended', '@failure'] }, async () => {
-  const win = shared.win;
-  const root = seedRoot('throng-subj-same-', ['alpha.txt', 'beta.txt']);
-  try {
-    await settle(win);
-    await createProject(win, 'SubjSame', root);
-    const tree = win.getByTestId('file-explorer-tree');
-    await expect(tree.getByText('alpha.txt', { exact: true }).first()).toBeVisible({
-      timeout: 15_000,
-    });
-
-    await renameInTree(win, 'alpha.txt', 'beta.txt'); // already exists
-    await expect(explorerNotices(win)).toHaveCount(1, { timeout: 15_000 });
-    await renameInTree(win, 'alpha.txt', 'sub/dir.txt'); // invalid name
-    await expect(explorerNotices(win)).toHaveCount(2, { timeout: 15_000 });
-
-    const first = explorerNotices(win).first();
-    const second = explorerNotices(win).last();
-    // Two DIFFERENT problems — the stacking rule (#178) still holds with subjects in play.
-    expect(await first.locator('.notice__message').innerText()).not.toBe(
-      await second.locator('.notice__message').innerText(),
-    );
-    // …named identically, character for character.
-    expect(await first.locator('.notice__title').innerText()).toBe(
-      await second.locator('.notice__title').innerText(),
-    );
-    expect(await first.locator('.notice__title').innerText()).toContain('alpha.txt');
-  } finally {
-    cleanupTemp(root);
-  }
-});
 
 /**
  * T029a / FR-028 — NAMING A SUBJECT CHANGES NOTHING ELSE.
@@ -335,7 +288,7 @@ test('two different failures about one file name it identically', { tag: ['@exte
  * consequence a unit test cannot see: the toast does not grow, does not scroll sideways, still
  * stacks, still carries its severity colour, and still dismisses one at a time.
  */
-test('a long subject is truncated and nothing else about the notice changes', { tag: ['@extended', '@failure'] }, async () => {
+test('a long subject is truncated and nothing else about the notice changes', { tag: ['@extended', '@failure', '@reserve:layout'] }, async () => {
   const win = shared.win;
   const long = `${'w'.repeat(70)}.txt`;
   const root = seedRoot('throng-subj-long-', ['alpha.txt', 'beta.txt', long]);

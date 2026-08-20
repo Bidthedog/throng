@@ -74,7 +74,7 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('baseSizePx rescales tab/panel/inner text; pinned roles stay; per-role override works', { tag: ['@extended', '@prefs'] }, async () => {
+test('baseSizePx rescales tab/panel/inner text; pinned roles stay; per-role override works', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (_app, win) => {
       await createProject(win, 'Fonts', 'C:/c/fonts'); // gives a tab + a panel
@@ -95,7 +95,7 @@ test('baseSizePx rescales tab/panel/inner text; pinned roles stay; per-role over
   );
 });
 
-test('project name and path use separate font roles (#5)', { tag: ['@extended', '@prefs'] }, async () => {
+test('project name and path use separate font roles (#5)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (_app, win) => {
       await createProject(win, 'Roomy', 'C:/c/roomy');
@@ -108,7 +108,7 @@ test('project name and path use separate font roles (#5)', { tag: ['@extended', 
   );
 });
 
-test('per-section case / italic / underline + family override apply', { tag: ['@extended', '@prefs'] }, async () => {
+test('per-section case / italic / underline + family override apply', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (_app, win) => {
       await createProject(win, 'Type', 'C:/c/type'); // a tab + a panel exist
@@ -140,7 +140,7 @@ test('per-section case / italic / underline + family override apply', { tag: ['@
   );
 });
 
-test('top-level fonts case/italic/underline apply app-wide and roles inherit', { tag: ['@extended', '@prefs'] }, async () => {
+test('top-level fonts case/italic/underline apply app-wide and roles inherit', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (_app, win) => {
       await createProject(win, 'Base', 'C:/c/base'); // a tab exists
@@ -167,7 +167,7 @@ test('top-level fonts case/italic/underline apply app-wide and roles inherit', {
   );
 });
 
-test('theme icons hot-reload in context menus (#9)', { tag: ['@extended', '@prefs'] }, async () => {
+test('theme icons hot-reload in context menus (#9)', { tag: ['@extended', '@prefs', '@reserve:runtime'] }, async () => {
   await runApp(
     async (_app, win) => {
       await createProject(win, 'Icons', 'C:/c/icons');

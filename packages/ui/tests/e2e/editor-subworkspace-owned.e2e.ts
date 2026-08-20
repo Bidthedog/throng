@@ -18,7 +18,7 @@ const seedSub = `(() => window.throng.invoke('workspace.persistSubWorkspaces', {
 const menu = (page: import('@playwright/test').Page, label: string) =>
   page.getByTestId(`menu-item-${label}`);
 
-test('a sub-workspace-owned editor saves outside projects and can be destroyed', { tag: ['@extended', '@editor'] }, async () => {
+test('a sub-workspace-owned editor saves outside projects and can be destroyed', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
   const projectRoot = mkdtempSync(join(tmpdir(), 'throng-swo-proj-'));
   const outside = mkdtempSync(join(tmpdir(), 'throng-swo-out-'));
   const savePath = join(outside, 'scratch.txt');

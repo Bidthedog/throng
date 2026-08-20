@@ -26,7 +26,7 @@ function xtermRows(win: Page, pid: string): Promise<number> {
     .evaluate((el) => el.querySelector('.xterm-rows')?.children.length ?? -1);
 }
 
-test('enlarging a Terminal Panel keeps its scrollback (does not clear on resize)', { tag: ['@extended', '@terminal'] }, async () => {
+test('enlarging a Terminal Panel keeps its scrollback (does not clear on resize)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-term-resize-'));
   try {
     await runApp(async (app, win) => {

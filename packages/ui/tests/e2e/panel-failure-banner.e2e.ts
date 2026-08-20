@@ -387,55 +387,31 @@ test.afterAll(async () => {
  * file failing in a file it is not about.
  */
 
-/**
- * T056b / T069bpre — ALL THREE banner commands are also COMMANDS IN THE PANEL'S OWN MENU (FR-042c).
+/*
+ * ONE TEST REMOVED (035 T055) — "Try again, Copy details and Clear panel type are in the panel menu,
+ * for both panel types", now `packages/ui/tests/unit/menu-icon-tokens.test.ts`.
  *
- * A discrete command acting on a Panel that exists only as an icon on a banner is unreachable from
- * where users look for panel commands; 029 FR-004d set the precedent for the terminal, and the
- * editor half is new work, which binds it in the same increment.
+ * It spent a 240-second budget driving a real editor into a real unreadable-file state and a real
+ * terminal into a real start failure, then right-clicked each and dismissed each menu — to check
+ * that three labels were present, twice.
  *
- * WHERE EACH MENU IS OPENED, and why they are different surfaces:
- *   • TERMINAL — a right-click on the panel BODY, the route `terminal-start-failure-controls.e2e.ts`
- *     established. The badge is a sibling with no handler of its own, so a right-click on it bubbles
- *     past and opens nothing.
- *   • EDITOR — a right-click on the panel HANDLE, which is where `Send to Tab` and `Destroy Panel`
- *     already live (`editor-menus.e2e.ts`). That is the editor panel's own menu.
+ * Both menus gate those rows on a plain boolean: `editorFailure` for the panel header,
+ * `startFailure` for the terminal content menu. Producing the failure was the expensive half, and it
+ * is not the claim.
  *
- * *Copy details* is not exempt for being "just a copy button": it is a discrete command acting on a
- * Panel, which is the whole test the rule applies, and a banner-only copy control is unreachable to
- * anyone who does not recognise the glyph.
+ * ── STRONGER THERE, AND THE REASON IS THE INTERESTING PART ──
+ *
+ * Every assertion this test made was a PRESENCE check against a panel it had deliberately broken
+ * first. A builder that emitted those three rows unconditionally would have passed it completely —
+ * while offering "Try again" to a panel with nothing wrong. The unit version asserts the negative
+ * for both panel types, and that is the case `editor-rows-always` reddens and nothing else does.
+ *
+ * It also asserts FR-042d directly: both surfaces name the commands IDENTICALLY. This test wrote the
+ * same three literals twice, which happens to check that without saying so.
+ *
+ * Red-proven: editor-rows-gone (2 red), editor-rows-always (1 red — the negative case),
+ * label-drift (2 red).
  */
-test('Try again, Copy details and Clear panel type are in the panel menu, for both panel types', { tag: ['@extended', '@window'] }, async () => {
-  test.setTimeout(240_000);
-  const win = h.win;
-  const menuItem = (label: string): Locator => win.getByTestId(`menu-item-${label}`);
-
-  // ── Editor ─────────────────────────────────────────────────────────────────────────────────
-  const editorPid = await editorPanel(win);
-  await inFailureState(win, editorPid, 'editor');
-  await expect(banner(win, editorPid)).toBeVisible();
-  await win.getByTestId(`panel-handle-${editorPid}`).click({ button: 'right' });
-  await expect(win.getByTestId('context-menu')).toBeVisible();
-  await expect(menuItem('Try again')).toBeVisible();
-  await expect(menuItem('Copy details')).toBeVisible();
-  await expect(menuItem('Clear panel type')).toBeVisible();
-  // Dismissed by clicking away, not by Escape — `context-menu.e2e.ts:113`'s pattern, and the one
-  // that measurably beat a 10s Escape budget in `terminal-start-failure-controls.e2e.ts`.
-  await win.getByTestId('tab-body').click({ position: { x: 5, y: 5 } });
-  await expect(win.getByTestId('context-menu')).toHaveCount(0);
-
-  // ── Terminal ───────────────────────────────────────────────────────────────────────────────
-  const termPid = await terminalPanel(win);
-  await inFailureState(win, termPid, 'terminal');
-  await expect(banner(win, termPid)).toBeVisible();
-  await win.locator('.panel-box').first().click({ button: 'right', position: { x: 20, y: 120 } });
-  await expect(win.getByTestId('context-menu')).toBeVisible();
-  await expect(menuItem('Try again')).toBeVisible();
-  await expect(menuItem('Copy details')).toBeVisible();
-  await expect(menuItem('Clear panel type')).toBeVisible();
-  await win.getByTestId('tab-body').click({ position: { x: 5, y: 5 } });
-  await expect(win.getByTestId('context-menu')).toHaveCount(0);
-});
 
 /**
  * FR-042c × FR-045 — A RETRY FROM THE **MENU** REPORTS ITS FAILURE, IN BOTH PANEL TYPES.

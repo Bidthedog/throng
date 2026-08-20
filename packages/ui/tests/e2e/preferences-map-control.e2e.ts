@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import { FILE_OP_TIMEOUT_MS, openApp, settle, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
 import {
   configRootSeeded,
   settleConfigRoot,
@@ -180,7 +180,7 @@ test('reset CLEARS the extension map and REPOPULATES the indentation map', { tag
       await prefs.getByTestId('prefs-reset-confirm-yes').click();
 
       // The extension map goes back to EMPTY — its shipped state.
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.languageByExtension ?? {}).toEqual({});
+      await expect.poll(() => readSettings(cfgRoot)?.editor?.languageByExtension ?? {}, { timeout: FILE_OP_TIMEOUT_MS }).toEqual({});
       // …and the indentation map comes BACK, because empty is not a valid state for it: it would
       // silently indent Go with spaces.
       await expect
@@ -198,47 +198,26 @@ test('reset CLEARS the extension map and REPOPULATES the indentation map', { tag
  * called. And adding a row meant TYPING one of those ids from memory into a free-text box that
  * accepted anything: get it wrong and you had silently mapped a language that does not exist.
  */
-test('the language map names its key column, shows real language names, and offers a picker', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPrefs(app, win);
-      const table = prefs.getByTestId('control-editor.indentByLanguage');
-
-      // The column says what a key IS.
-      await expect(table.locator('th').first()).toHaveText('Language');
-
-      // …and a row is labelled the way the language is actually spelled.
-      await expect(prefs.getByTestId('map-row-editor.indentByLanguage-csharp')).toContainText('C#');
-      await expect(prefs.getByTestId('map-row-editor.indentByLanguage-cpp')).toContainText('C++');
-      await expect(
-        prefs.getByTestId('map-row-editor.indentByLanguage-powershell'),
-      ).toContainText('PowerShell');
-      // The internal id must not be what the user reads.
-      await expect(prefs.getByTestId('map-row-editor.indentByLanguage-csharp')).not.toContainText(
-        'csharp',
-      );
-
-      // Adding a row is a CHOICE from the known languages, not a typed identifier.
-      const picker = prefs.getByTestId('map-new-key-editor.indentByLanguage');
-      await expect(picker).toHaveJSProperty('tagName', 'SELECT');
-
-      // …and it offers only what is NOT already in the table. A language that already has a row
-      // cannot be added twice, so it is not offered — the duplicate is prevented rather than
-      // refused after the fact.
-      const offered = await picker.locator('option').allTextContents();
-      expect(offered).not.toContain('SQL'); // …already mapped
-      expect(offered).toContain('Ruby'); // …not mapped
-
-      await picker.selectOption({ label: 'Ruby' });
-      await prefs.getByTestId('map-add-editor.indentByLanguage').click();
-
-      await expect(prefs.getByTestId('map-row-editor.indentByLanguage-ruby')).toContainText('Ruby');
-      await expect
-        .poll(() => readSettings(cfgRoot)?.editor?.indentByLanguage?.ruby)
-        .toBeDefined();
-    },
-  );
-});
+/*
+ * ONE TEST REMOVED (035 T055) — "the language map names its key column, shows real language names,
+ * and offers a picker", now `packages/ui/tests/component/preferences-map-control.test.ts`.
+ *
+ * It opened a preferences window to read a `<th>`.
+ *
+ * All three claims are `keyKind: 'language'` changing what `MapControl` renders: the key column's
+ * label, how a key is DISPLAYED (`C#`, not `csharp` — not a name anybody writes), and whether a new
+ * key is typed or CHOSEN from a filtered list. The component file already drove the other variant,
+ * `editor.languageByExtension`, whose keys the user types; this one was covered nowhere.
+ *
+ * The descriptor there is the SHIPPED one, pulled from `SETTINGS_METADATA` rather than written by
+ * hand, so "the column says Language" is a claim about what users see and not about a literal the
+ * test chose — a fixture would pass happily after someone relabelled the real setting.
+ *
+ * Red-proven: raw-id-shown, no-column-label, unfiltered-picker — one red each.
+ *
+ * The two tests that stay assert config-store writes reaching `settings.json` and a reset
+ * repopulating the map. Those are the store's, not the control's.
+ */
 
 /*
  * REMOVED for v1.0.0: the map TEXT-column test that drove `terminals.defaultShellArguments` (019, C14 —

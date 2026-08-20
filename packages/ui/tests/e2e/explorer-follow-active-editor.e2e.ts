@@ -13,7 +13,7 @@
  */
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, basename } from 'node:path';
+import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import {
   openApp,
@@ -167,7 +167,39 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('on by default: making an editor active selects its file and expands its ancestors (#188)', { tag: ['@extended', '@explorer'] }, async () => {
+/*
+ * ── ONE REMOVED, AND TWO SLEEPS WITH IT (035 T055) ──
+ *
+ * `:276` "a terminal or unsaved editor becoming active does not move the tree selection (#188)" →
+ * `packages/ui/tests/component/active-editor-file.test.ts`.
+ *
+ * It created a project on a real temp directory, opened an editor, expanded to a nested file,
+ * selected it, added a second panel, STARTED A REAL WINDOWS POWERSHELL, waited up to twenty seconds
+ * for the prompt to show the project's basename, clicked the terminal, and then waited 500 ms to see
+ * that the selection had not moved. Then a third panel, an unsaved editor, and another 500 ms.
+ *
+ * What it proved is `useActiveEditorFilePath` returning null. This file's reveal effect is one line
+ * — `if (!ready || !autoRevealActiveFile || !activeFileRel) return;` — so "the tree does not follow a
+ * terminal" IS "the hook says null", and the shell was scenery.
+ *
+ * The hook joins two stores that hold half the answer each and had no test at any layer. Nine now
+ * cover it, including one the E2E could not reach: a panel changed IN PLACE through the type picker
+ * keeps its id, so the layout says terminal while the editor store still holds its old file — and
+ * the kind check is the only thing between the tree and a reveal of a file the user closed. Without
+ * that case the check cannot be red-proven at all: every other negative is over-determined, because
+ * a terminal panel normally has no editor state to return.
+ *
+ * Both sleeps carried honest `sleep-justified` markers — a plain `useEffect` with no completion
+ * signal gives you nothing to wait ON for "it did not fire late". True behind an app; not true of a
+ * hook that answers synchronously.
+ *
+ * ── WHAT STAYS ──
+ *
+ * Everything that follows a real editor to a real ROW: the reveal itself, the expansion of collapsed
+ * ancestors, and the setting being honoured live. Those are `file-tree.tsx` driving react-arborist
+ * over a real filesystem, and no lower layer sees them.
+ */
+test('on by default: making an editor active selects its file and expands its ancestors (#188)', { tag: ['@extended', '@explorer', '@reserve:layout'] }, async () => {
   const root = own(makeProject());
   try {
     await runApp(async (_app, win) => {
@@ -189,7 +221,7 @@ test('on by default: making an editor active selects its file and expands its an
   }
 });
 
-test('the active editor’s file stays visibly marked while the EDITOR holds focus (#188)', { tag: ['@extended', '@explorer'] }, async () => {
+test('the active editor’s file stays visibly marked while the EDITOR holds focus (#188)', { tag: ['@extended', '@explorer', '@reserve:layout'] }, async () => {
   // The selection highlight is scoped to the active pane (explorer.css), which is right for "what
   // the next keystroke acts on" — but it means that while the user types in the editor, the tree
   // that has just followed along shows nothing at all. The active file therefore carries its own
@@ -222,7 +254,7 @@ test('the active editor’s file stays visibly marked while the EDITOR holds foc
   }
 });
 
-test('the auto-reveal never moves keyboard focus or the caret (#188, guards #144)', { tag: ['@extended', '@explorer'] }, async () => {
+test('the auto-reveal never moves keyboard focus or the caret (#188, guards #144)', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
   const root = own(makeProject());
   try {
     await runApp(async (_app, win) => {
@@ -273,60 +305,7 @@ test('the auto-reveal never moves keyboard focus or the caret (#188, guards #144
   }
 });
 
-test('a terminal or unsaved editor becoming active does not move the tree selection (#188)', { tag: ['@extended', '@explorer'] }, async () => {
-  const root = own(makeProject());
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'FollowTerminal', root);
-      const tree = win.getByTestId('file-explorer-tree');
-
-      const pidEditor = await firstPanelId(win);
-      await newEditor(win, pidEditor);
-      await focusEditor(win, pidEditor);
-      await expandToDeep(win);
-      await tree.getByText('deep.txt', { exact: true }).click();
-      await expect(tree.locator('.tree-row--selected')).toContainText('deep.txt');
-
-      // A real shell alongside it, then make the TERMINAL the active panel.
-      const pidTerm = await addPanel(win, pidEditor);
-      await win.getByTestId(`panel-type-select-${pidTerm}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
-      await win.getByTestId(`panel-type-confirm-${pidTerm}`).click();
-      await expect(win.getByTestId(`terminal-${pidTerm}`)).toContainText(basename(root), {
-        timeout: 20000,
-      });
-      await win.getByTestId(`terminal-${pidTerm}`).click();
-      await expect(win.getByTestId(`panel-${pidTerm}`)).toHaveAttribute('data-active', 'true');
-
-      // Nothing to reveal for a terminal: the selection neither moves nor blanks. Given a beat, so
-      // a reveal that fires late fails this rather than passing by being slow.
-      // sleep-justified: the auto-reveal effect (file-tree.tsx's `!activeFileRel` guard) either
-      // sleep-justified: calls revealInTree or does not, inside a plain useEffect with no debounce
-      // sleep-justified: and no exposed completion signal — there is nothing to wait ON for "it did
-      // sleep-justified: not fire late", only time for it to have had the chance to.
-      await win.waitForTimeout(500);
-      await expect(tree.locator('.tree-row--selected')).toHaveCount(1);
-      await expect(tree.locator('.tree-row--selected')).toContainText('deep.txt');
-
-      // An UNSAVED editor has no file to reveal either — the same "nothing to do" path a file from
-      // outside the project root takes — and must leave the selection alone, with no error notice.
-      const pidBlank = await addPanel(win, pidEditor);
-      await newEditor(win, pidBlank);
-      await focusEditor(win, pidBlank);
-      // sleep-justified: same as above — the auto-reveal effect's guard fires or does not with no
-      // sleep-justified: exposed completion signal, so there is nothing to wait ON for "it stayed
-      // sleep-justified: quiet", only time for a late fire to have shown itself.
-      await win.waitForTimeout(500);
-      await expect(tree.locator('.tree-row--selected')).toContainText('deep.txt');
-      await expect(win.getByTestId('explorer-error')).toHaveCount(0);
-    });
-  } finally {
-    // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would
-    // remove a folder the explorer is still watching.
-  }
-});
-
-test('off: the tree never moves on its own, and the setting re-applies with no restart (#188)', { tag: ['@extended', '@explorer'] }, async () => {
+test('off: the tree never moves on its own, and the setting re-applies with no restart (#188)', { tag: ['@extended', '@explorer', '@reserve:runtime'] }, async () => {
   const root = makeProject();
   const cfg = mkdtempSync(join(tmpdir(), 'throng-i188-cfg-'));
   const settings = join(cfg, 'settings.json');

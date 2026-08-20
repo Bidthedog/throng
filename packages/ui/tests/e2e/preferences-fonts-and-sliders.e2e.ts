@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { openApp, settle, setSlider, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
+import { FILE_OP_TIMEOUT_MS, openApp, settle, setSlider, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
 import {
   configRootSeeded,
   settleConfigRoot,
@@ -110,23 +110,27 @@ function readTheme(cfg: string, name: string): { typography?: Record<string, Rec
   return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as never) : {};
 }
 
-test('a menu opens with NOTHING highlighted (the first item is not chosen for you)', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(async (_app, win) => {
-    await win.getByTestId('title-bar-cog').click();
-    await expect(win.getByTestId('cog-menu')).toBeVisible();
-    // The menu holds focus so the arrows reach it — but no ITEM does, because a highlighted item is an
-    // answer to a question the user has not asked yet.
-    await expect(win.locator('.context-menu__item:focus')).toHaveCount(0);
-    await expect(win.locator('[data-testid="cog-menu"]:focus')).toHaveCount(1);
-
-    // Shared app: leave no menu standing. throng closes menus on blur, so one left open would be
-    // dismissed by the NEXT test's first click — silently swallowing it.
-    await win.keyboard.press('Escape');
-    await expect(win.getByTestId('cog-menu')).toHaveCount(0);
-  });
-});
-
-test('the max open file size is a slider that moves in 5 MB steps', { tag: ['@extended', '@prefs'] }, async () => {
+/*
+ * ── ONE REMOVED (035 T055) ──
+ *
+ * `:113` "a menu opens with NOTHING highlighted (the first item is not chosen for you)" →
+ * `packages/ui/tests/component/menu-keyboard.test.ts`, "opening a menu chooses nothing for you".
+ *
+ * It is a PAIR of claims and both halves matter in opposite directions: focus is on the MENU (or the
+ * arrows reach nothing and the menu is mouse-only) and on NO ITEM (or Enter is armed before a choice
+ * is made, and a user who opened the menu to look has run a command). `always-focus-first` reddens
+ * one direction, `nothing-takes-focus` the other.
+ *
+ * Two cases came down with it that this could not state: the first ArrowDown IS what selects an item
+ * — so the absence is a starting state rather than a menu no keyboard can drive — and Enter straight
+ * after an open fires nothing, which is the consequence the rule exists to prevent, asserted as
+ * itself rather than through a proxy for it.
+ *
+ * The Escape at the end went too. It existed because this file shares one app and a menu left
+ * standing would be dismissed by the NEXT test's first click, silently swallowing it. That hazard is
+ * a property of a shared app and does not exist one layer down.
+ */
+test('the max open file size is a slider that moves in 5 MB steps', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'settings');
@@ -139,7 +143,7 @@ test('the max open file size is a slider that moves in 5 MB steps', { tag: ['@ex
 
       // Drag it, and the value that lands on disk is a whole number of 5 MB steps.
       await setSlider(slider, String(25 * MiB));
-      await expect.poll(() => readSettings(cfg).editor.maxOpenFileBytes).toBe(25 * MiB);
+      await expect.poll(() => readSettings(cfg).editor.maxOpenFileBytes, { timeout: FILE_OP_TIMEOUT_MS }).toBe(25 * MiB);
     },
   );
 });
@@ -182,7 +186,7 @@ test('the max open file size is a slider that moves in 5 MB steps', { tag: ['@ex
  * `useConfirm()` throw, `ThemesTab` renders nothing, and ALL 11 tests fail. Run, and failing.
  */
 
-test('a role WEIGHT is a slider on the real 100-900 scale (021 follow-up)', { tag: ['@extended', '@prefs'] }, async () => {
+test('a role WEIGHT is a slider on the real 100-900 scale (021 follow-up)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemesTab(app, win);
@@ -195,7 +199,7 @@ test('a role WEIGHT is a slider on the real 100-900 scale (021 follow-up)', { ta
       // was a Bold CHECKBOX, which could render a role lighter than a sibling — and that dragging it
       // writes the weight into the theme file.
       await setSlider(weight, '700');
-      await expect.poll(() => readTheme(cfg, 'throng').typography?.tab?.weight).toBe(700);
+      await expect.poll(() => readTheme(cfg, 'throng').typography?.tab?.weight, { timeout: FILE_OP_TIMEOUT_MS }).toBe(700);
 
       // The base weights remain sliders on the same scale — what every unset role inherits.
       await expect(prefs.getByTestId('control-fonts.weights.bold-slider')).toHaveCount(1);
@@ -203,7 +207,7 @@ test('a role WEIGHT is a slider on the real 100-900 scale (021 follow-up)', { ta
   );
 });
 
-test('the preferences window inherits the BASE application font (no separate dialog font)', { tag: ['@extended', '@prefs'] }, async () => {
+test('the preferences window inherits the BASE application font (no separate dialog font)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemesTab(app, win);

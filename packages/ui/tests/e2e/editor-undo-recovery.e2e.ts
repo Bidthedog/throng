@@ -63,7 +63,7 @@ const docText = (win: Page, pid: string): Promise<string> =>
     pid,
   );
 
-test('undo past a SAVE re-dirties the document, and a revert clears the history', { tag: ['@extended', '@editor'] }, async () => {
+test('undo past a SAVE re-dirties the document, and a revert clears the history', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-undo-'));
   writeFileSync(join(root, 'doc.txt'), 'original\n');
   try {
@@ -100,7 +100,7 @@ test('undo past a SAVE re-dirties the document, and a revert clears the history'
   }
 });
 
-test('a crash restores the content AND its undo history — Ctrl+Z still reaches the past', { tag: ['@extended', '@editor'] }, async () => {
+test('a crash restores the content AND its undo history — Ctrl+Z still reaches the past', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-undorec-'));
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-undorec-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-undorec-ud-'));

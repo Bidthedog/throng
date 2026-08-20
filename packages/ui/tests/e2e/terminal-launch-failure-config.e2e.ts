@@ -122,7 +122,7 @@ async function renameWhenReleased(from: string, to: string): Promise<void> {
   expect(existsSync(to)).toBe(true);
 }
 
-test('a terminal that fails to launch keeps its configuration and comes back once the root returns', { tag: ['@extended', '@terminal'] }, async () => {
+test('a terminal that fails to launch keeps its configuration and comes back once the root returns', { tag: ['@extended', '@terminal', '@reserve:runtime'] }, async () => {
   // An elevated daemon routes terminals through the de-elevated agent — a different process tree
   // from the one these assertions describe. Same guard as `terminal-persistence.e2e.ts:39`.
   skipIfElevated();

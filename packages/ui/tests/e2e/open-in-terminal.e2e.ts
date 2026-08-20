@@ -25,7 +25,6 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 import {
   runApp,
   createProject,
-  firstPanelId,
   panelIds,
   reloadWindow,
   cleanupTemp,
@@ -135,50 +134,42 @@ async function expectLayout(
 // AS-1 / A1 / A2 / A6 — the submenu, and that it IS the type-picker's catalogue.
 // ---------------------------------------------------------------------------
 
-test('AS-1 — Open In holds a Terminal submenu whose flavours match the panel type-picker exactly', { tag: ['@extended', '@terminal'] }, async () => {
-  const root = makeProjectFolder('throng-oit-menu-');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'OpenInTerminal', root);
-
-      // The type-picker's list, read from the shipped Flavour dropdown.
-      const pid = await firstPanelId(win);
-      await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      const picker = win.getByTestId('terminal-flavour');
-      await expect(picker).toBeVisible();
-      const pickerLabels = (
-        await picker
-          .locator('option')
-          .evaluateAll((opts) => opts.map((o) => o.textContent ?? ''))
-      ).map((t) => t.trim());
-      expect(pickerLabels.length, 'the machine detected at least one flavour').toBeGreaterThan(0);
-
-      const tree = win.getByTestId('file-explorer-tree');
-
-      // A FOLDER (A1) — the submenu is the same catalogue, in the same order (A2, FR-030).
-      const folderLevel = await openTerminalSubmenu(win, tree.getByText('deep', { exact: true }));
-      expect(await labelsOf(folderLevel)).toEqual(pickerLabels);
-      // A6 — single-section levels, so NEITHER draws a divider. The sections themselves are
-      // asserted at the builder; what only the running app can show is that none was rendered.
-      await expect(win.getByTestId('submenu-Terminal').locator('.context-menu__separator')).toHaveCount(0);
-      await expect(win.getByTestId('submenu-Open In').locator('.context-menu__separator')).toHaveCount(0);
-      await closeMenu(win);
-
-      // A FILE gets one too, after the editor targets (A1, FR-029).
-      const fileLevel = await openTerminalSubmenu(win, tree.getByText('top.txt', { exact: true }));
-      expect(await labelsOf(fileLevel)).toEqual(pickerLabels);
-      await closeMenu(win);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
 // ---------------------------------------------------------------------------
 // AS-2 / AS-2a / B1–B4 / B9 / SC-008 / SC-015 — every enabled flavour on the machine.
 // ---------------------------------------------------------------------------
 
-test('AS-2/AS-2a — every enabled flavour opens an active, focused terminal in the right-clicked folder', { tag: ['@core', '@terminal'] }, async () => {
+/*
+ * ── ONE REMOVED, IN THREE PIECES (035 T055) ──
+ *
+ * `:138` "AS-1 — Open In holds a Terminal submenu whose flavours match the panel type-picker
+ * exactly" made three claims, and each already had — or now has — a cheaper home:
+ *
+ *   the submenu's children are EXACTLY the supplied catalogue, in order
+ *     → `unit/explorer-terminal-menu.test.ts:96` (already there, "no second copy of the list")
+ *   neither level draws a divider (A6)
+ *     → `unit/explorer-terminal-menu.test.ts:124` (already there)
+ *   the catalogue IS the panel type-picker's
+ *     → `unit/flavour-catalogue-single.test.ts` (new)
+ *
+ * ── WHY THE THIRD ONE GOT STRONGER ──
+ *
+ * The E2E compared two RENDERINGS: it switched a panel to `terminal` to read the shipped Flavour
+ * dropdown, then right-clicked a folder and a file and compared labels element by element. That can
+ * only ever say the two matched on the machine that ran it, at that instant — and the failure
+ * FR-030 names is a second copy of the list, which is correct at the moment it is taken and drifts
+ * afterwards.
+ *
+ * Asking what the two surfaces READ says they cannot diverge on any machine. The guard is an
+ * allow-list — only `use-flavours.ts` may reach the bridge, and only the picker and the tree may
+ * read the hook — because a second copy arrives as a new caller, and a ban on specific wrong ways of
+ * building a list says nothing about the next one invented.
+ *
+ * ── WHAT STAYS ──
+ *
+ * Everything about actually LAUNCHING a flavour in the right working directory, and AS-4's
+ * user-defined and disabled flavours, which reach settings and the machine's real shells.
+ */
+test('AS-2/AS-2a — every enabled flavour opens an active, focused terminal in the right-clicked folder', { tag: ['@core', '@terminal', '@reserve:pty'] }, async () => {
   /*
    * Measured for `terminal-directory-memory.e2e.ts` on CI run 30943045917 and the same reasoning
    * applies verbatim: an elevated daemon routes terminals through the de-elevated agent, a different
@@ -262,7 +253,7 @@ test('AS-2/AS-2a — every enabled flavour opens an active, focused terminal in 
 // AS-3 / B4 — a FILE starts its terminal in the file's parent folder.
 // ---------------------------------------------------------------------------
 
-test('AS-3 — a right-clicked file opens its terminal in the file’s parent folder', { tag: ['@extended', '@terminal'] }, async () => {
+test('AS-3 — a right-clicked file opens its terminal in the file’s parent folder', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   skipIfElevated();
   test.setTimeout(180_000);
   const root = makeProjectFolder('throng-oit-file-');
@@ -293,7 +284,7 @@ test('AS-3 — a right-clicked file opens its terminal in the file’s parent fo
 // B5 — the start directory is persisted, so a restored panel restarts where it was created.
 // ---------------------------------------------------------------------------
 
-test('B5 — the start directory is persisted, and the reopened project restarts the terminal there', { tag: ['@extended', '@terminal'] }, async () => {
+test('B5 — the start directory is persisted, and the reopened project restarts the terminal there', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   skipIfElevated();
   test.setTimeout(180_000);
   const root = makeProjectFolder('throng-oit-restore-');
@@ -444,7 +435,7 @@ test('AS-4 — a user-defined flavour appears with no further configuration; a d
 // AS-7 / A4 — three levels, by mouse, with no intermediate flyout collapsing.
 // ---------------------------------------------------------------------------
 
-test('AS-7 — the three-level path traverses by mouse without an intermediate submenu collapsing', { tag: ['@extended', '@terminal'] }, async () => {
+test('AS-7 — the three-level path traverses by mouse without an intermediate submenu collapsing', { tag: ['@extended', '@terminal', '@reserve:layout'] }, async () => {
   skipIfElevated();
   test.setTimeout(180_000);
   const root = makeProjectFolder('throng-oit-mouse-');

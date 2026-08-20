@@ -4,7 +4,7 @@
  * the dialog before the list resolves cancels the load (no orphaned work).
  */
 import { test, expect } from '@playwright/test';
-import { openApp, type AppOptions, type OpenApp } from './harness.js';
+import { NEW_WINDOW_TIMEOUT_MS, openApp, type AppOptions, type OpenApp } from './harness.js';
 
 /*
  * ONE app for this file, not one per test (034 FR-045, SC-027) — 2 launches -> 1.
@@ -60,11 +60,11 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('About paints static content, then loads the third-party list asynchronously (#139)', { tag: ['@extended', '@window'] }, async () => {
+test('About paints static content, then loads the third-party list asynchronously (#139)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
     await win.getByTestId('title-bar-cog').click();
     const [about] = await Promise.all([
-      app.waitForEvent('window', { timeout: 15_000 }),
+      app.waitForEvent('window', { timeout: NEW_WINDOW_TIMEOUT_MS }),
       win.getByTestId('cog-menu-about').click(),
     ]);
     await about.waitForLoadState('domcontentloaded', { timeout: 15_000 });
@@ -81,13 +81,13 @@ test('About paints static content, then loads the third-party list asynchronousl
   });
 });
 
-test('closing About before the list resolves cancels the load without error (#139)', { tag: ['@extended', '@window'] }, async () => {
+test('closing About before the list resolves cancels the load without error (#139)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const errors: string[] = [];
   await runApp(async (app, win) => {
     win.on('pageerror', (e) => errors.push(String(e)));
     await win.getByTestId('title-bar-cog').click();
     const [about] = await Promise.all([
-      app.waitForEvent('window', { timeout: 15_000 }),
+      app.waitForEvent('window', { timeout: NEW_WINDOW_TIMEOUT_MS }),
       win.getByTestId('cog-menu-about').click(),
     ]);
     about.on('pageerror', (e) => errors.push(String(e)));

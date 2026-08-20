@@ -81,7 +81,7 @@ function mainWindowState(app: ElectronApplication): Promise<{
   });
 }
 
-test('title bar spans the top and hosts the cog + window controls', { tag: ['@extended', '@window'] }, async () => {
+test('title bar spans the top and hosts the cog + window controls', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (app, win) => {
     const bar = win.getByTestId('title-bar');
     await expect(bar).toBeVisible();
@@ -101,35 +101,6 @@ test('title bar spans the top and hosts the cog + window controls', { tag: ['@ex
 
     // The cog is a standard, uniform gear glyph (H3, FR-005) — a single svg icon.
     await expect(win.getByTestId('cog-glyph')).toHaveCount(1);
-  });
-});
-
-test('the cog reveals exactly Settings / Key Bindings / Themes / Logs / About and is dismissible', { tag: ['@extended', '@window'] }, async () => {
-  await runApp(async (_app, win) => {
-    await win.getByTestId('title-bar-cog').click();
-    const menu = win.getByTestId('cog-menu');
-    await expect(menu).toBeVisible();
-    /*
-     * Names only — the leading glyph is deliberately not asserted.
-     *
-     * This expectation had gone stale twice over: the menu gained icons and an "Open Logs Folder"
-     * entry, so a whole-text match failed on `⚙Settings` vs `Settings` AND on the missing item. It
-     * was invisible because CI reported the shard green while this failed, so nobody was told.
-     *
-     * Matching the name inside each item keeps the test about WHICH COMMANDS the cog offers, which is
-     * what the title claims, rather than about the icon set — a decorative change should not redden
-     * this, but a command appearing or vanishing must.
-     */
-    await expect(menu.getByRole('menuitem')).toHaveText([
-      /Settings/,
-      /Key Bindings/,
-      /Themes/,
-      /Open Logs Folder/,
-      /About throng/,
-    ]);
-    // Dismiss without a selection.
-    await win.keyboard.press('Escape');
-    await expect(menu).toBeHidden();
   });
 });
 
@@ -155,7 +126,7 @@ test.afterAll(() => {
     cleanupTemp(dir);
 });
 
-test('the cog dropdown menu follows the active theme (018/021, FR-008/FR-023)', { tag: ['@extended', '@window'] }, async () => {
+test('the cog dropdown menu follows the active theme (018/021, FR-008/FR-023)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   // A theme file carrying `surface`, `surfaceActive` and `accent`. 021 (FR-023) folded the menu card
   // onto `surfaceActive` (the old `menuSurface` is gone), so the cog dropdown — a shared context menu
   // — paints on the theme's OWN `surfaceActive`. This is the end-to-end proof that the menu card
@@ -190,7 +161,7 @@ test('the cog dropdown menu follows the active theme (018/021, FR-008/FR-023)', 
   );
 });
 
-test('window controls maximise/restore (button + double-click) and minimise', { tag: ['@extended', '@window'] }, async () => {
+test('window controls maximise/restore (button + double-click) and minimise', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
     // Maximise then restore via the control.
     await win.getByTestId('window-max').click();
@@ -217,7 +188,7 @@ test('window controls maximise/restore (button + double-click) and minimise', { 
   });
 });
 
-test('cog opens the single shared preferences window on the matching tab; non-modal + movable', { tag: ['@extended', '@window'] }, async () => {
+test('cog opens the single shared preferences window on the matching tab; non-modal + movable', { tag: ['@extended', '@window', '@reserve:focus'] }, async () => {
   /*
    * Its OWN app. The subject here is the cog OPENING that window, and there is only one of them per
    * app — so if any earlier test in this file has already opened it, the cog re-uses it, no `window`

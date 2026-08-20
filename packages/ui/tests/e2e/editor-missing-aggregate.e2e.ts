@@ -75,6 +75,44 @@ async function reselectFirstTab(win: Page): Promise<void> {
   await win.locator('.tab-chip').first().click(); // back to the editors' tab
 }
 
+/*
+ * ── TWO REMOVED, AND TWO SLEEPS WITH THEM (035 T055) ──
+ *
+ * `packages/ui/tests/component/missing-file-watcher.test.ts` now owns `MissingFileWatcher`, which
+ * had no test of any kind:
+ *
+ *   :318  does NOT raise the notice on delete / remount while the tab stays active (FR-105)
+ *   :355  editor.warnOnMissingFile=false suppresses the report entirely
+ *
+ * Both carried a 700 ms `sleep-justified` wait, and both justifications were honest: with the
+ * setting off, or with the tab never re-selected, NOTHING observable separates "the scan ran and
+ * found nothing" from "the scan has not run yet". That is true when the scan sits behind an app.
+ * With a fake timer the distinction is exact, and the component test asserts the stronger version —
+ * that nothing is reported BEFORE the 300 ms delay elapses, and that leaving a tab early cancels
+ * its scan outright.
+ *
+ * Six more claims came down with them, none of which the E2Es asserted: only EDITOR panels are
+ * scanned, a healthy editor beside a missing one is left alone, an editor on an INACTIVE tab is not
+ * reported, and the `path-missing` cause key is present — the one that lets the notice supersede
+ * the file tree's report of the same absent folder, whose absence was measured in a real session as
+ * two notices 265 ms apart for one renamed folder.
+ *
+ * ── AND ONE DEFECT: #288 ──
+ *
+ * The effect's dependency list is `[activeTabId, warn]` under a hand-written exhaustive-deps
+ * disable, so `warn` is there on purpose. It is inert: the first line returns when the tab has not
+ * changed, so turning `editor.warnOnMissingFile` back ON does nothing until the user switches tabs.
+ * The component test asserts the behaviour as it IS, says so in its own name, and #288 carries the
+ * product decision. Turning it OFF works correctly, which is the direction that matters.
+ *
+ * ── WHAT STAYS ──
+ *
+ * `:78` — two real files deleted through a real context menu into the real recycle bin, and ONE
+ * consolidated notice listing both defeated panels. The merge is the notification model's rule
+ * rather than this watcher's (the watcher reports each casualty separately, which is what FR-035
+ * changed it to do), and the deletion round trip through the watcher is the wiring no lower layer
+ * sees.
+ */
 test('lists ALL missing files on a tab in one notice (FR-100 · 030 FR-029/FR-035)', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   try {
@@ -180,7 +218,7 @@ test('lists ALL missing files on a tab in one notice (FR-100 · 030 FR-029/FR-03
  * This raises it from one to two. That is a deliberate, named exception rather than a silent
  * breach — see the exception recorded against SC-026 in `specs/034-e2e-harness-integrity/spec.md`.
  */
-test('the file tree got there first, and ONE notice still stands (030 FR-029/FR-034a)', { tag: ['@quarantine', '@extended', '@editor'] }, async () => {
+test('the file tree got there first, and ONE notice still stands (030 FR-029/FR-034a)', { tag: ['@quarantine', '@extended', '@editor', '@reserve:window'] }, async () => {
   /*
    * REPORTED FROM A REAL SESSION, and the diagnostics log had both halves 265 ms apart:
    *
@@ -315,82 +353,3 @@ test('the file tree got there first, and ONE notice still stands (030 FR-029/FR-
   }
 });
 
-test('does NOT raise the notice on delete / remount while the tab stays active (FR-105)', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Agg', root);
-      const pid = await newEditor(win);
-      await win.getByTestId(`editor-${pid}`).click();
-      const tree = win.getByTestId('file-explorer-tree');
-      await tree.getByText('alpha.txt', { exact: true }).click();
-      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText('AAA', {
-        timeout: 8000,
-      });
-
-      // Delete the open file → the editor goes dirty, but NO popup (tab unchanged).
-      await tree.getByText('alpha.txt', { exact: true }).click({ button: 'right' });
-      await win.getByTestId('menu-item-Delete').click();
-      await win.getByTestId('confirm-accept').click();
-      const wry = win.getByTestId('confirm-accept');
-      if (await wry.isVisible().catch(() => false)) await wry.click();
-      await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible({ timeout: 8000 });
-
-      // sleep-justified: the tab was never re-selected, so the once-per-activation scan never fires
-      // sleep-justified: here on purpose — but the tab's ORIGINAL open (at test start) may still have
-      // sleep-justified: its own 300ms scan window in flight, and nothing marks that window's end
-      // sleep-justified: externally. Only outrunning the clock proves it did not catch this delete.
-      await win.waitForTimeout(700);
-      await expect(win.getByTestId('panel-failure-notice')).toHaveCount(0);
-
-      // Only a tab re-selection surfaces it.
-      await reselectFirstTab(win);
-      await expect(win.getByTestId('panel-failure-notice')).toBeVisible({ timeout: 15_000 });
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('editor.warnOnMissingFile=false suppresses the report entirely', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-agg-cfg-'));
-  writeFileSync(
-    join(cfgRoot, 'settings.json'),
-    JSON.stringify({ version: 1, editor: { warnOnMissingFile: false } }),
-  );
-  try {
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'Agg', root);
-        const pid = await newEditor(win);
-        await win.getByTestId(`editor-${pid}`).click();
-        const tree = win.getByTestId('file-explorer-tree');
-        await tree.getByText('alpha.txt', { exact: true }).click();
-        await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText('AAA', {
-          timeout: 8000,
-        });
-
-        await tree.getByText('alpha.txt', { exact: true }).click({ button: 'right' });
-        await win.getByTestId('menu-item-Delete').click();
-        await win.getByTestId('confirm-accept').click();
-        const wry = win.getByTestId('confirm-accept');
-        if (await wry.isVisible().catch(() => false)) await wry.click();
-        await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible({ timeout: 8000 });
-
-        // Re-select the tab — with the setting off, NO notice appears.
-        await reselectFirstTab(win);
-        // sleep-justified: the re-select just fired the once-per-activation scan, and with the
-        // sleep-justified: setting off it is asked to report nothing — so there is no notice to
-        // sleep-justified: become visible, and therefore nothing observable that marks "the scan
-        // sleep-justified: ran and found nothing" versus "the scan has not run yet".
-        await win.waitForTimeout(700);
-        await expect(win.getByTestId('panel-failure-notice')).toHaveCount(0);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-    );
-  } finally {
-    cleanupTemp(root);
-    cleanupTemp(cfgRoot);
-  }
-});

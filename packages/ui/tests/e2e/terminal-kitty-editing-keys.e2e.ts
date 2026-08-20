@@ -141,7 +141,7 @@ async function captured(root: string, left: string, right: string): Promise<stri
   return got.slice(got.indexOf(left) + 1, got.indexOf(right));
 }
 
-test('Ctrl+Backspace reaches a kitty program in the encoding its flags asked for', { tag: ['@extended', '@terminal'] }, async () => {
+test('Ctrl+Backspace reaches a kitty program in the encoding its flags asked for', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-kitty-bksp-'));
   copyFileSync(KITTY, join(root, 'k.mjs'));
@@ -175,7 +175,7 @@ test('Ctrl+Backspace reaches a kitty program in the encoding its flags asked for
   }
 });
 
-test('Ctrl+End reaches a kitty program instead of being taken for scrollback', { tag: ['@extended', '@terminal'] }, async () => {
+test('Ctrl+End reaches a kitty program instead of being taken for scrollback', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-kitty-end-'));
   copyFileSync(KITTY, join(root, 'k.mjs'));
@@ -211,7 +211,7 @@ test('Ctrl+End reaches a kitty program instead of being taken for scrollback', {
  * Worse since the replay was suppressed on the alternate screen (rightly — it was a flash): the
  * negotiation can no longer even be re-learned from the replayed tail.
  */
-test('a rebuilt view still knows the program negotiated the keyboard', { tag: ['@extended', '@terminal'] }, async () => {
+test('a rebuilt view still knows the program negotiated the keyboard', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-kitty-rebuild-'));
   // The ALTERNATE-screen variant deliberately: on the normal screen a rebuilt view re-learns the
@@ -246,7 +246,7 @@ test('a rebuilt view still knows the program negotiated the keyboard', { tag: ['
  * about the program. Ctrl+End is the one that turns on what throng believes, because throng only
  * yields the chord to a program it thinks owns the keyboard.
  */
-test('Ctrl+End still reaches the program after switching tabs and back', { tag: ['@extended', '@terminal'] }, async () => {
+test('Ctrl+End still reaches the program after switching tabs and back', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-kitty-end-rebuild-'));
   copyFileSync(KITTY_ALT, join(root, 'k.mjs'));
@@ -286,7 +286,7 @@ test('Ctrl+End still reaches the program after switching tabs and back', { tag: 
  * rebuilt a view. So the view believes it is on the normal buffer, takes Ctrl+End back for
  * scrollback, and the chord dies — after a tab switch, exactly as reported.
  */
-test('Ctrl+End survives a tab switch even when the program negotiated nothing', { tag: ['@extended', '@terminal'] }, async () => {
+test('Ctrl+End survives a tab switch even when the program negotiated nothing', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-alt-end-rebuild-'));
   copyFileSync(ALT_ONLY, join(root, 'k.mjs'));
@@ -331,7 +331,7 @@ test('Ctrl+End survives a tab switch even when the program negotiated nothing', 
  * The alternate-screen fixture deliberately: it is the combination the user is in — a full-screen
  * program that has ALSO negotiated the keyboard.
  */
-test('Escape reaches a kitty program as the bare byte every working terminal sends', { tag: ['@extended', '@terminal'] }, async () => {
+test('Escape reaches a kitty program as the bare byte every working terminal sends', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-kitty-esc-'));
   copyFileSync(KITTY_ALT, join(root, 'k.mjs'));
@@ -387,7 +387,7 @@ test('Escape reaches a kitty program as the bare byte every working terminal sen
  * which is why Escape worked "most of the time but not always" — the failing presses were the ones
  * landing after a screen switch and before the program next said anything.
  */
-test('a kitty negotiation survives the program leaving and re-entering the alternate screen', { tag: ['@extended', '@terminal'] }, async () => {
+test('a kitty negotiation survives the program leaving and re-entering the alternate screen', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-kitty-toggle-'));
   copyFileSync(KITTY_TOGGLE, join(root, 'k.mjs'));

@@ -288,23 +288,39 @@ for (const [a, b, c] of TRIPLES) {
  * The fourth overlay — one directional case (D1)
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('opening Quick Open dismisses the editor status strip’s language picker (FR-071)', { tag: ['@extended', '@window'] }, async () => {
-  const win = shared.win;
-  await prepare();
-
-  await win.getByTestId(`editor-language-${panelId}`).click();
-  await expect(win.getByTestId(`language-picker-${panelId}`)).toBeVisible();
-
-  await win.keyboard.press(QUICK_OPEN_CHORD);
-  await expect(win.getByTestId('quickopen')).toBeVisible();
-
-  await expect(
-    win.getByTestId(`language-picker-${panelId}`),
-    'the language picker stayed open under Quick Open',
-  ).toHaveCount(0);
-  await expect.poll(() => overlaysOnScreen(win)).toEqual(['quickopen']);
-  await expect(win.getByTestId('quickopen-input')).toBeFocused();
-});
+/*
+ * ONE TEST REMOVED (035 T056) — "opening Quick Open dismisses the editor status strip's language
+ * picker", now `packages/ui/tests/component/status-strip-picker-dismissal.test.ts`.
+ *
+ * ── THE REPLACEMENT IS NOT THE SAME TEST, DELIBERATELY ──
+ *
+ * This asserted a PAIR: open the picker, open Quick Open, watch the picker go. That is one ordered
+ * pair from a set that grows quadratically with every overlay added — and pairwise is the shape
+ * **FR-071a forbids**, since a feature must not import another feature's store to know whether to
+ * close.
+ *
+ * The rule is one shared slot. `unit/transient-overlay.test.ts` proves the slot's mechanics; what it
+ * cannot say is whether a given overlay is WIRED to it. The component version asks exactly that from
+ * the picker's own side — something claimed the slot, and the picker let go — and never mentions
+ * Quick Open. It would hold identically for an overlay written next year.
+ *
+ * Three claims there, because three things can each be wrong alone: the picker CLOSES on another
+ * claim, it TAKES the slot when it opens (or the next overlay finds nothing to displace and the two
+ * stack, which is the original defect), and it RELEASES on its own close (or the next overlay
+ * dismisses a corpse). Red-proven: no-participation (3 red), claims-but-ignores (1), never-claims (3).
+ *
+ * ── A GUARD DELIBERATELY NOT WRITTEN ──
+ *
+ * "Every component rendering a `.modal-overlay` must call `useTransientOverlay`" looks like the
+ * right sweep and is wrong: five files render that scrim and only three participate.
+ * `confirm-dialog.tsx`, `app-close-prompt.tsx` and `project-settings-dialog.tsx` are MODAL rather
+ * than transient, and a confirmation that dismissed itself because someone opened Quick Open would
+ * be worse than the defect FR-071 fixed. Nothing marks that distinction, so the guard would encode
+ * a guess.
+ *
+ * The test below stays: four real overlays in a chain, and the caret landing on the final survivor.
+ * Where focus ends up after three dismissals is not something the registry can answer.
+ */
 
 /*
  * All FOUR in one chain, and the fourth still holds the caret.

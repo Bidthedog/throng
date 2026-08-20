@@ -83,7 +83,7 @@ const runApp = (
  * a real focus path and a real document. Its title is rewritten to say so; the old one named the
  * menu, which is no longer here.
  */
-test('F2 opens the rename box on the active panel, and its Enter never reaches the document', { tag: ['@extended', '@window'] }, async () => {
+test('F2 opens the rename box on the active panel, and its Enter never reaches the document', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-f2-'));
   writeFileSync(join(root, 'a.txt'), 'x\n');
   try {
@@ -121,7 +121,7 @@ test('F2 opens the rename box on the active panel, and its Enter never reaches t
   }
 });
 
-test('F2 renames a terminal panel, and is not delivered to the shell', { tag: ['@extended', '@window'] }, async () => {
+test('F2 renames a terminal panel, and is not delivered to the shell', { tag: ['@extended', '@window', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-f2t-'));
   try {
     await runApp(async (_app, win) => {

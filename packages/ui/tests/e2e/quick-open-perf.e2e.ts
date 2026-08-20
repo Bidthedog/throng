@@ -21,7 +21,7 @@
  * carries Electron IPC, a React render and a paint. It is stated rather than omitted: a measurement
  * with no threshold asserts nothing at all, and would pass on an implementation that took a second.
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
@@ -33,7 +33,7 @@ import {
   type AppOptions,
   type OpenApp,
 } from './harness.js';
-import { openQuickOpen, quickOpenRows, quickOpenRowPaths } from './helpers/navigation.js';
+import { openQuickOpen, quickOpenRows } from './helpers/navigation.js';
 
 /*
  * ONE app for this file. No test here seeds state before launch — each builds its own project — and
@@ -76,6 +76,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await shared?.close();
   if (bigRoot !== '') cleanupTemp(bigRoot);
+  if (smallRoot !== '') cleanupTemp(smallRoot);
 });
 
 const runApp = (
@@ -96,6 +97,26 @@ const createProject = (win: Page, name: string, root: string): Promise<void> =>
 
 /** The name the big fixture's project is opened under, once, by the first test that needs it. */
 const BIG_PROJECT = 'QOPerfBig';
+
+/**
+ * A tiny second project, existing only to be SWITCHED TO.
+ *
+ * Leaving the big root drops its last subscriber and UI main disposes the index (S9), so coming back
+ * re-walks all twelve thousand files from nothing — which is the in-flight walk FR-015 is about.
+ *
+ * This used to be a side effect of the test that ran before the S3 one, and that test moved down a
+ * layer (035 T038). The dependency was never written down as a requirement of the S3 test; it was
+ * described in its header as a happy fact about its neighbour, and removing the neighbour broke it.
+ * Owning the precondition here is what stops that happening to the next person.
+ */
+const SMALL_PROJECT = 'QOPerfSmall';
+let smallRoot = '';
+
+function createSmallTree(): string {
+  const root = mkdtempSync(join(tmpdir(), 'throng-qop-small-'));
+  writeFileSync(join(root, 'anchor.txt'), '// anchor\n');
+  return root;
+}
 let bigProjectOpen = false;
 
 /**
@@ -231,7 +252,7 @@ async function quietThenReset(app: OpenApp['app']): Promise<void> {
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('typing performs no IPC at all — no files.* call and no fileIndex subscription on the keystroke path (SC-002, FR-013, R5)', { tag: ['@extended', '@editor'] }, async () => {
+test('typing performs no IPC at all — no files.* call and no fileIndex subscription on the keystroke path (SC-002, FR-013, R5)', { tag: ['@extended', '@editor', '@reserve:runtime'] }, async () => {
   // 12,000 files to write, a project to open and a walk to complete before the measurement starts.
   test.setTimeout(180_000);
   await runApp(async (app, win) => {
@@ -378,53 +399,33 @@ test('flipping the exclusion toggle on a large project SAYS it is still listing 
   });
 });
 
-test('a file created and then deleted OUTSIDE throng becomes, and stops being, choosable within two seconds (FR-016, SC-005)', { tag: ['@extended', '@editor'] }, async () => {
-  test.setTimeout(120_000);
-  const root = mkdtempSync(join(tmpdir(), 'throng-qop-live-'));
-  writeFileSync(join(root, 'anchor.txt'), '// anchor.txt\n');
-  const created = join(root, 'appeared-later.txt');
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'QOPerfLive', root);
-
-      await openQuickOpen(win);
-
-      /*
-       * The POSITIVE control first. `anchor.txt` being listed is what makes the next line — the new
-       * file being absent — a statement about the index rather than about a list that never
-       * rendered, which an unrendered DOM satisfies vacuously.
-       */
-      await win.keyboard.type('anchor');
-      await expect(quickOpenRows(win)).toHaveCount(1);
-      await win.getByTestId('quickopen-input').fill('appeared-later');
-      await expect(quickOpenRows(win)).toHaveCount(0);
-
-      // Created by something that is not throng — a terminal, an agent, another editor.
-      writeFileSync(created, '// appeared-later.txt\n');
-      await expect
-        .poll(() => quickOpenRowPaths(win), {
-          timeout: 2000,
-          message: 'a file created on disk was not choosable within two seconds (SC-005)',
-        })
-        .toEqual(['appeared-later.txt']);
-
-      // …and removed again. A delta that only ever adds is half an index.
-      rmSync(created);
-      await expect
-        .poll(() => quickOpenRowPaths(win), {
-          timeout: 2000,
-          message: 'a deleted file was still being offered two seconds later (SC-005)',
-        })
-        .toEqual([]);
-
-      await win.keyboard.press('Escape');
-      await expect(win.getByTestId('quickopen')).toHaveCount(0);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * ONE TEST REMOVED (035 T038) — "a file created and then deleted OUTSIDE throng becomes, and stops
+ * being, choosable within two seconds", now split across two files that already existed and one that
+ * did not:
+ *
+ *   - **the delta arrives within SC-005's two seconds** —
+ *     `integration/project-file-index.integration.test.ts`, against a real watcher and a real
+ *     filesystem ("a create, a rename and a delete each reach the subscriber as a delta within two
+ *     seconds");
+ *   - **the fold is applied correctly** — `core/tests/unit/file-index-view.test.ts`, ten cases;
+ *   - **the window MIRRORS the push** — `component/use-file-index.test.ts`, which did not exist.
+ *
+ * That third file is the reason this could not simply be deleted against the first two. Both sides
+ * of `useFileIndex` were well covered and the hook itself was covered by nothing, so every rule in
+ * its own comments — which pushes belong to this subscription, when a bare `building` is a walk
+ * starting rather than main disowning the index, whether a flag change may keep the list it has —
+ * was load-bearing and untested. The integration test proves the delta is SENT; nothing proved the
+ * window did anything with it.
+ *
+ * Red-proven against five mutations, each caught by the test that should catch it: ignore-flag,
+ * accept-any-root, always-blank, never-disown, keep-across-roots.
+ *
+ * The replacement is also broader. This test watched one file appear and disappear; the hook tests
+ * additionally pin the two-subscriptions-one-channel rule (FR-069) and the FR-005 root change, both
+ * of which produce a list that is silently WRONG rather than merely late — and neither of which this
+ * test could reach without a second project and a toggle.
+ */
 
 /*
  * LAST ON PURPOSE, and it depends on the test above having run.
@@ -443,6 +444,17 @@ test('a modal opened before enumeration finishes says it is still listing, then 
   test.setTimeout(180_000);
   await runApp(async (_app, win) => {
     await settle(win);
+
+    /*
+     * LEAVE the big project first, so that coming back is a fresh walk.
+     *
+     * This is the whole precondition, and it is done here rather than inherited: while the window is
+     * on the big root, its index is held and switching "back" to it re-walks nothing — which is
+     * exactly what happens if this step is missing, and `quickopen-building` then never appears.
+     */
+    smallRoot = createSmallTree();
+    await createProject(win, SMALL_PROJECT, smallRoot);
+    await expect(win.locator('.project-item[data-active="true"]')).toContainText(SMALL_PROJECT);
 
     // Back to the big fixture — a SWITCH, not a second project.
     await win

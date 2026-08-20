@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp as runOwnApp, openApp, cleanupTemp, type OpenApp } from './harness.js';
+import { FILE_OP_TIMEOUT_MS, runApp as runOwnApp, openApp, cleanupTemp, type OpenApp } from './harness.js';
 import { writeSettingsAtomic } from './helpers/config-write.js';
 
 /**
@@ -143,7 +143,7 @@ async function leaveJsonEditor(prefs: Page): Promise<void> {
   await prefs.getByTestId('prefs-mode-toggle').click();
 }
 
-test('the toggle flips all tabs to JSON and stays visible; valid JSON applies, invalid is surfaced', { tag: ['@extended', '@prefs'] }, async () => {
+test('the toggle flips all tabs to JSON and stays visible; valid JSON applies, invalid is surfaced', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await seedSettings({ appearance: { theme: 'throng' } });
   await sharedApp(
     async (app, win) => {
@@ -184,7 +184,7 @@ test('the toggle flips all tabs to JSON and stays visible; valid JSON applies, i
       await setEditorText(prefs, 'settings', '{"appearance":{"theme":"Matrix"}}');
       await leaveJsonEditor(prefs);
       await expect(prefs.getByTestId('settings-tab')).toBeVisible();
-      await expect.poll(() => readSettings(cfgRoot)?.appearance?.theme).toBe('Matrix');
+      await expect.poll(() => readSettings(cfgRoot)?.appearance?.theme, { timeout: FILE_OP_TIMEOUT_MS }).toBe('Matrix');
 
       // Invalid JSON → surfaced, not applied (theme stays Matrix), and the user cannot leave.
       await prefs.getByTestId('prefs-mode-toggle').click();
@@ -297,7 +297,7 @@ async function openSettingsJson(app: ElectronApplication, win: Page): Promise<Pa
  *
  * Stated as a suspicion because that is what it is until this test says otherwise.
  */
-test('closing the Preferences window applies the JSON buffer (FR-017)', { tag: ['@extended', '@prefs'] }, async () => {
+test('closing the Preferences window applies the JSON buffer (FR-017)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await seedSettings({ appearance: { theme: 'throng' } });
   await sharedApp(
     async (app, win) => {
@@ -357,37 +357,28 @@ test('closing the Preferences window applies the JSON buffer (FR-017)', { tag: [
  * buffer never blocks an exit either — there are no edits to lose, so there is nothing for the block
  * to protect.
  */
-test('a theme that does not exist is refused before it can trap the user', { tag: ['@extended', '@prefs'] }, async () => {
-  await seedSettings({ appearance: { theme: 'throng' } });
-  await sharedApp(
-    async (app, win) => {
-      const prefs = await openSettingsJson(app, win);
+/*
+ * ONE TEST REMOVED (035) — "a theme that does not exist is refused before it can trap the user", now
+ * `packages/ui/tests/component/preferences-app.test.ts`.
+ *
+ * The trap it prevents: the Themes tab renders the ACTIVE theme, so a name that exists nowhere leaves
+ * the user on a screen they cannot use and cannot correct from — correcting it means going back to a
+ * tab the broken name is what stopped them leaving. Refusing the name at the document is what keeps
+ * that from happening, and the notice listing the themes that DO exist is what makes the refusal
+ * actionable.
+ *
+ * All three of its assertions move together, because they are one requirement: WHICH setting, WHAT
+ * the user wrote, and what they may write instead. The component version adds that the name never
+ * reached the document at all — the trap needs it WRITTEN to spring, and "the tab did not open" is
+ * satisfied by a refusal that wrote it anyway.
+ *
+ * Red-proven by removing `checkActiveTheme` from `settings-validity.ts:210`: three fail.
+ *
+ * The test BELOW stays, and its own comment says why: it reaches the trap directly, because deleting
+ * or corrupting a theme FILE gets there without this validation ever being involved.
+ */
 
-      // The user types a theme name that names nothing.
-      await setEditorText(prefs, 'settings', '{"appearance":{"theme":"NoSuchTheme"}}');
-
-      // ── It is refused, and the notice lists the themes that DO exist.
-      const notice = prefs.getByTestId('json-invalid');
-      await expect(notice, 'a theme that does not exist must not be accepted').toBeVisible();
-      await expect(notice).toContainText('appearance.theme');
-      await expect(notice).toContainText('throng');
-      await expect(notice).toContainText('"NoSuchTheme"');
-
-      // ── So the Themes tab cannot be reached with it, which is what produced the trap.
-      await prefs.getByTestId('prefs-tab-themes').click();
-      await expect(prefs.getByTestId('json-tab-settings')).toBeVisible();
-      expect(readSettings(cfgRoot)?.appearance?.theme).not.toBe('NoSuchTheme');
-
-      // ── An existing theme is accepted, and the tab opens.
-      await setEditorText(prefs, 'settings', '{"appearance":{"theme":"throng"}}');
-      await expect(prefs.getByTestId('json-invalid')).toHaveCount(0);
-      await prefs.getByTestId('prefs-tab-themes').click();
-      await expect(prefs.getByTestId('json-tab-theme')).toBeVisible();
-    },
-  );
-});
-
-test('a document that is absent or unreadable through no edit of the user’s never traps them', { tag: ['@extended', '@prefs'] }, async () => {
+test('a document that is absent or unreadable through no edit of the user’s never traps them', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   // The trap itself, reached directly rather than through the theme name — because deleting a theme
   // file, or corrupting one, gets here without the validation above ever being involved.
   const cfgRoot = freshCfgRoot({
@@ -420,64 +411,36 @@ test('a document that is absent or unreadable through no edit of the user’s ne
   );
 });
 
-test('an invalid document blocks every exit, and says which values are wrong (FR-018/FR-019)', { tag: ['@extended', '@prefs'] }, async () => {
-  await seedSettings({ appearance: { theme: 'throng' } });
-  await sharedApp(
-    async (app, win) => {
-      const prefs = await openSettingsJson(app, win);
-
-      await setEditorText(prefs, 'settings', MID_EDIT);
-      await expect(prefs.getByTestId('json-invalid')).toBeVisible();
-
-      // ── Exit 1: switching tab is refused, and the JSON editor is still what is on screen.
-      await prefs.getByTestId('prefs-tab-keybindings').click();
-      await expect(
-        prefs.getByTestId('json-tab-settings'),
-        'switching tab must be refused while the document is invalid',
-      ).toBeVisible();
-      await expect(prefs.getByTestId('json-tab-keybindings')).toHaveCount(0);
-
-      // ── Exit 2: leaving the JSON view is refused too.
-      await leaveJsonEditor(prefs);
-      await expect(
-        prefs.getByTestId('json-tab-settings'),
-        'closing the JSON view must be refused while the document is invalid',
-      ).toBeVisible();
-      await expect(prefs.getByTestId('settings-tab')).toHaveCount(0);
-
-      /*
-       * ── And the refusal is VISIBLE, not silent (FR-018's second sentence) — through the ONE
-       *    notice, which flashes.
-       *
-       * There is deliberately no second surface to assert here. Refusing an exit used to raise a
-       * toast, and a refused CLOSE used to raise a third strip at the top of the window: one
-       * condition, three messages, two of them stating the user could not leave while a Discard
-       * button sat a few pixels away. `json-leave-blocked` and `json-close-blocked` are gone.
-       */
-      const notice = prefs.getByTestId('json-invalid');
-      await expect(notice).toBeVisible();
-      await expect(
-        notice,
-        'a refused exit must flash the notice rather than raise another one',
-      ).toHaveClass(/json-tab__error--flash/);
-      await expect(prefs.getByTestId('json-leave-blocked')).toHaveCount(0);
-
-      // ── It says what is WRONG, not what the user may not do: Discard means they always may.
-      await expect(notice).toContainText('This document is not valid:');
-      await expect(notice).not.toContainText('cannot leave');
-
-      // ── Nothing was written on the way (FR-017 still holds under a refused exit).
-      expect(readSettings(cfgRoot)?.appearance?.theme).toBe('throng');
-
-      // ── Fix it, and every exit opens again.
-      await setEditorText(prefs, 'settings', '{"appearance":{"theme":"Cyberpunk"}}');
-      await expect(prefs.getByTestId('json-invalid')).toHaveCount(0);
-      await leaveJsonEditor(prefs);
-      await expect(prefs.getByTestId('settings-tab')).toBeVisible();
-      await expect.poll(() => readSettings(cfgRoot)?.appearance?.theme).toBe('Cyberpunk');
-    },
-  );
-});
+/*
+ * ONE TEST REMOVED (035) — "an invalid document blocks every exit, and says which values are wrong",
+ * now `packages/ui/tests/component/preferences-app.test.ts`.
+ *
+ * ══ THE WINDOW MOUNTS WITH NO PROVIDERS AT ALL ══
+ *
+ * `PreferencesApp` IS the window's root: it mounts ThemeProvider, OnEntryProvider, ConfigProvider,
+ * NotificationProvider, ConfirmProvider and ResetNoticeProvider itself, so a component test supplies
+ * only `window.throng.config` — one seam, at the process boundary. Established by spike before
+ * anything was written, as with `PanelPlaceholder` and `TabGroup`.
+ *
+ * `StandaloneEditor` is stubbed with a textarea, the seam `preferences-json-tab.test.ts` already
+ * established and argues for: `.cm-content` is contenteditable and has no value setter, and
+ * everything this test is about is UPSTREAM of the widget. What the stub cannot see stays here —
+ * syntax colouring, the caret surviving a programmatic sync, the undo history not containing the
+ * document load.
+ *
+ * NINE TESTS REPLACE ONE, and three of them assert things it did not:
+ *
+ *   - the notice is NOT flashing before anything is refused, so the class arriving is a change
+ *     rather than a state that was always there;
+ *   - nothing is written on a REFUSED EXIT — a window that refused the exit and wrote the broken
+ *     document anyway would satisfy every "does it block?" assertion and leave the user's settings
+ *     file unparseable;
+ *   - and both exits RE-OPEN once the document parses, with the write asserted rather than just the
+ *     exit. A gate that never re-opens is not a gate, it is a trap, and an exit that opened without
+ *     writing would lose the edit silently.
+ *
+ * Red-proven three ways: dropping either `leaveJson()` guard, and dropping the `--flash` class.
+ */
 
 /*
  * MOVED to `packages/ui/tests/component/preferences-json-notice.test.ts` (034 FR-045):
@@ -502,7 +465,7 @@ test('an invalid document blocks every exit, and says which values are wrong (FR
  * test can watch a BrowserWindow decline to close.
  */
 
-test('a refused close is answered by Discard and close, from the notice (FR-018/FR-018a)', { tag: ['@extended', '@prefs'] }, async () => {
+test('a refused close is answered by Discard and close, from the notice (FR-018/FR-018a)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await seedSettings({ appearance: { theme: 'throng' } });
   await sharedApp(
     async (app, win) => {
@@ -536,7 +499,7 @@ test('a refused close is answered by Discard and close, from the notice (FR-018/
   );
 });
 
-test('a malformed settings.json shows its raw text in the JSON editor for repair (FR-043)', { tag: ['@extended', '@prefs'] }, async () => {
+test('a malformed settings.json shows its raw text in the JSON editor for repair (FR-043)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   const malformed = '{ "appearance": { "theme": "throng" }  <-- broken';
   const cfgRoot = freshCfgRoot({ 'settings.json': malformed });
   await runOwnApp(
@@ -553,7 +516,7 @@ test('a malformed settings.json shows its raw text in the JSON editor for repair
 // 016 FR-001a / T030: throng's OWN configuration files are JSON, and they are among the files a
 // user is most likely to be looking at. The preferences JSON tabs are a SECOND CodeMirror view —
 // exactly the place a feature added to "the editor" silently fails to arrive.
-test('the preferences JSON editors are syntax-highlighted (FR-001a)', { tag: ['@extended', '@prefs'] }, async () => {
+test('the preferences JSON editors are syntax-highlighted (FR-001a)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await seedSettings({ appearance: { theme: 'throng' } });
   await sharedApp(
     async (app, win) => {
@@ -779,7 +742,7 @@ test('Overwrite With These Changes keeps the buffer and puts it on disk', { tag:
       // merely a dismissal, which is why the two buttons are named for what they do.
       await prefs.getByTestId('json-external-overwrite').click();
       await expect(prefs.getByTestId('json-external-change')).toHaveCount(0);
-      await expect.poll(() => readSettings(cfgRoot)?.appearance?.theme).toBe('Mine');
+      await expect.poll(() => readSettings(cfgRoot)?.appearance?.theme, { timeout: FILE_OP_TIMEOUT_MS }).toBe('Mine');
     },
     { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );

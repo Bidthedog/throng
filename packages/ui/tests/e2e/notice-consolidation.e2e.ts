@@ -169,7 +169,7 @@ async function renamePanel(win: Page, panelId: string, to: string): Promise<void
  * workspace, and rebuilding it four times would cost four two-launch dances (~4 minutes) to observe
  * four facets of one state. What each block is proving is stated where it sits.
  */
-test('one cause across several tabs is one notice, listing every panel it defeated', { tag: ['@extended', '@failure'] }, async () => {
+test('one cause across several tabs is one notice, listing every panel it defeated', { tag: ['@extended', '@failure', '@reserve:window'] }, async () => {
   test.setTimeout(420_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-consol-root-'));
   const moved = `${root}-renamed`;
@@ -371,7 +371,7 @@ test('one cause across several tabs is one notice, listing every panel it defeat
  * The second half is the one that keeps that from becoming "everything is one notice": two project
  * opens are two actions, and two actions are two notices, each speaking only for its own casualties.
  */
-test('an unclassified multi-panel failure groups by operation, and two operations are two notices', { tag: ['@extended', '@failure'] }, async () => {
+test('an unclassified multi-panel failure groups by operation, and two operations are two notices', { tag: ['@extended', '@failure', '@reserve:window'] }, async () => {
   test.setTimeout(420_000);
   const rootA = mkdtempSync(join(tmpdir(), 'throng-consol-a-'));
   const rootB = mkdtempSync(join(tmpdir(), 'throng-consol-b-'));

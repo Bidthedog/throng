@@ -38,7 +38,7 @@ async function diagnosticsFor(win: Page, panelId: string): Promise<Diagnostics |
   ) as Promise<Diagnostics | undefined>;
 }
 
-test('a key pressed in the same beat as the click reaches the shell', { tag: ['@extended', '@terminal'] }, async () => {
+test('a key pressed in the same beat as the click reaches the shell', { tag: ['@extended', '@terminal', '@reserve:input'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-input-idle-'));
   try {
@@ -152,7 +152,7 @@ test('a key pressed in the same beat as the click reaches the shell', { tag: ['@
   }
 });
 
-test('the terminal keeps every character when a tab switch rebuilds it first', { tag: ['@extended', '@terminal'] }, async () => {
+test('the terminal keeps every character when a tab switch rebuilds it first', { tag: ['@extended', '@terminal', '@reserve:input'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-input-rebuild-'));
   try {

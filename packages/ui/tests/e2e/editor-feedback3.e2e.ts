@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
@@ -74,6 +74,29 @@ test.afterAll(async () => {
   await shared?.close();
 });
 
+/*
+ * TWO TESTS REMOVED (035) — the rename box's selection range, and blur-commit (FR-090). Both are
+ * now `packages/ui/tests/component/explorer-tree-interaction.test.ts`.
+ *
+ * The first read `selectionStart`/`selectionEnd` off an `<input>`, which is a jsdom question in
+ * the most literal sense: the property is set by the component, at mount, from the value it was
+ * given. The second typed a name, clicked another row, and called `existsSync` — but the
+ * filesystem half was never the claim. `files-service.test.ts:48` already proves `rename` moves
+ * the bytes; FR-090 says a BLUR commits at all, rather than discarding what the user typed the way
+ * Escape does, and that is the tree's decision.
+ *
+ * TWO THINGS CAME OUT OF MOVING THEM, and both are the point of the exercise:
+ *
+ *   - A DEFECT, filed as #283. The stem rule is applied to folders as well as files, so a folder
+ *     called `my.config` opens with `my` selected and renaming it to "settings" gives
+ *     `settings.config`. The E2E asserted `top.txt` only, so the folder case had never been
+ *     exercised at any layer. A characterisation test records it as it behaves, with the intended
+ *     value written down as the red step for whoever takes the issue.
+ *   - A VACUOUS TEST, caught by its own red step. A draft claimed Escape SUPPRESSES the blur-commit
+ *     that follows a cancel — a real rule, at `tree-node.tsx:151` — and deleting the suppression
+ *     left every test green, because jsdom does not fire `blur` when a focused element is
+ *     unmounted. The claim is narrowed to what actually runs and the gap is stated there.
+ */
 test('the editor pill shows the containing folder in brackets (subfolder + root)', { tag: ['@extended', '@editor'] }, async () => {
   skipIfElevated();
   const root = makeProject();
@@ -105,7 +128,7 @@ test('the editor pill shows the containing folder in brackets (subfolder + root)
   }
 });
 
-test('a context menu opened near the bottom-right edge stays fully on-screen (FR-089)', { tag: ['@extended', '@editor'] }, async () => {
+test('a context menu opened near the bottom-right edge stays fully on-screen (FR-089)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     const { win } = shared;
@@ -132,50 +155,3 @@ test('a context menu opened near the bottom-right edge stays fully on-screen (FR
   }
 });
 
-test('entering rename selects only the name, not the extension', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    const { win } = shared;
-    await createProject(win, 'Fb3RenameSel', root);
-    const tree = win.getByTestId('file-explorer-tree');
-    await tree.getByText('top.txt', { exact: true }).click();
-    await win.keyboard.press('F2');
-    const input = tree.locator('input.tree-rename');
-    await expect(input).toBeVisible();
-    // "top.txt" → the stem "top" (0..3) is selected, not ".txt".
-    const sel = await input.evaluate((el: HTMLInputElement) => ({
-      start: el.selectionStart,
-      end: el.selectionEnd,
-      value: el.value,
-    }));
-    expect(sel.value).toBe('top.txt');
-    expect(sel.start).toBe(0);
-    expect(sel.end).toBe(3);
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('clicking away from an inline rename commits it immediately (FR-090)', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    const { win } = shared;
-    await createProject(win, 'Fb3BlurCommit', root);
-    const tree = win.getByTestId('file-explorer-tree');
-    await tree.getByText('top.txt', { exact: true }).click();
-    await win.keyboard.press('F2');
-    const input = tree.locator('input.tree-rename');
-    await expect(input).toBeVisible();
-    await input.fill('renamed.txt');
-
-    // Click AWAY (onto another row) instead of pressing Enter → commit (FR-090).
-    await tree.getByTestId('tree-twisty-sub').click(); // #121: the NAME only selects; the twisty expands
-
-    await expect(tree.getByText('renamed.txt', { exact: true })).toBeVisible({ timeout: 6000 });
-    await expect(tree.getByText('top.txt', { exact: true })).toHaveCount(0);
-    expect(existsSync(join(root, 'renamed.txt'))).toBe(true);
-    expect(existsSync(join(root, 'top.txt'))).toBe(false);
-  } finally {
-    cleanupTemp(root);
-  }
-});

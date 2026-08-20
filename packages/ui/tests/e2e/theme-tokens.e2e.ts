@@ -1,11 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import {
   openApp,
-  runApp as runOwnApp,
   cleanupTemp,
   type AppOptions,
   type OpenApp,
@@ -33,12 +32,12 @@ const rootVar = (win: Page, name: string): Promise<string> =>
   win.evaluate((n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim(), name);
 
 /*
- * ONE app for the first two tests (034 FR-045, SC-027) — 3 launches -> 2.
+ * ONE app for this file (034 FR-045, SC-027; 035 T056) — 3 launches -> 1.
  *
- * Test 3 keeps `runOwnApp`: it writes `appearance.theme = Ghost` into settings.json BEFORE the
- * app starts and its claim is about what a NON-EXISTENT active theme does at boot — that the
- * app falls back to the hardcoded defaults and creates no stray themes/Ghost.json. There is no
- * way to ask a running app that question.
+ * The third test used to keep its OWN launch, because it seeded `appearance.theme = Ghost` before
+ * the app started and asked what a non-existent active theme does at boot. That question is
+ * answered without an app at all now — `integration/theme-name-fallback.integration.test.ts` puts
+ * it to `readConfigOnce` over a real config root — so the launch went with the test.
  *
  * Tests 1 and 2 write `themes/throng.json` THROUGH the running app and poll for the reload,
  * which is the behaviour under test rather than a precondition of it. Every write replaces the
@@ -73,7 +72,34 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('every theme colour token applies and hot-reloads', { tag: ['@extended', '@prefs'] }, async () => {
+/*
+ * ── ONE REMOVED (035 T056) ──
+ *
+ * `:137` "a non-existent settings theme falls back to defaults and writes no file (#6)" →
+ * `packages/ui/tests/integration/theme-name-fallback.integration.test.ts`.
+ *
+ * It was the one test in this file that was not about a rendered colour. It launched its OWN
+ * Electron app against a seeded config root to make two assertions — the default accent is on
+ * `<html>`, and no `themes/Ghost.json` was created. The second is a filesystem fact and never
+ * needed a window; the first was the end of a chain whose every other link is proven separately:
+ * the read falls back (that file), the payload reaches the renderer
+ * (`integration/config-broadcast-latency.test.ts`), and `ThemeProvider` writes the tokens onto
+ * `<html>` (`component/theme-provider.test.ts`).
+ *
+ * The integration file adds three cases this could not: the SETTING is left alone rather than
+ * corrected behind the user, a theme that DOES exist is still read (without which a resolver
+ * ignoring `appearance.theme` entirely would look correct), and a name that would traverse
+ * off-tree is refused — with a real theme planted outside the fence, because a version that pointed
+ * at an empty path fell back for the wrong reason and proved nothing.
+ *
+ * Red-proven: creates-the-missing-theme, name-not-confined, always-shipped — one red each.
+ *
+ * ── WHAT STAYS ──
+ *
+ * Both remaining tests, `@reserve:layout`: they sample COMPUTED styles across the whole running
+ * application to prove that every theme token reaches something real. jsdom computes no cascade.
+ */
+test('every theme colour token applies and hot-reloads', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   const themePath = join(sharedCfg, 'themes', 'throng.json');
   try {
     await runApp(
@@ -97,7 +123,7 @@ test('every theme colour token applies and hot-reloads', { tag: ['@extended', '@
   }
 });
 
-test('theme colours + fonts map to real rendered styles (whole-app)', { tag: ['@extended', '@prefs'] }, async () => {
+test('theme colours + fonts map to real rendered styles (whole-app)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   try {
     await runApp(
       async (_app, win) => {
@@ -134,25 +160,3 @@ test('theme colours + fonts map to real rendered styles (whole-app)', { tag: ['@
   }
 });
 
-test('a non-existent settings theme falls back to defaults and writes no file (#6)', { tag: ['@extended', '@prefs'] }, async () => {
-  const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
-  try {
-    mkdirSync(cfg, { recursive: true });
-    writeFileSync(
-      join(cfg, 'settings.json'),
-      JSON.stringify({ appearance: { theme: 'Ghost' } }, null, 2),
-      'utf8',
-    );
-    await runOwnApp(
-      async (_app, win) => {
-        // Default throng accent still applied (hardcoded fallback).
-        await expect.poll(() => rootVar(win, '--throng-colour-accent')).toBe('#6aa3ff');
-        // No stray themes/Ghost.json created.
-        expect(existsSync(join(cfg, 'themes', 'Ghost.json'))).toBe(false);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfg } },
-    );
-  } finally {
-    cleanupTemp(cfg);
-  }
-});

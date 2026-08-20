@@ -236,7 +236,7 @@ async function openShell(win: Page, root: string, flavour: Flavour): Promise<str
 }
 
 for (const flavour of FLAVOURS) {
-  test(`line-editing chords — ${flavour.label}`, { tag: ['@extended', '@terminal'] }, async () => {
+  test(`line-editing chords — ${flavour.label}`, { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
     test.setTimeout(240_000);
     const root = mkdtempSync(join(tmpdir(), `throng-chords-${flavour.id}-`));
     try {

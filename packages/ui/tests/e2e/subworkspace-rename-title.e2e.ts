@@ -71,7 +71,7 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('renaming a sub-workspace updates its open window title live', { tag: ['@extended', '@window'] }, async () => {
+test('renaming a sub-workspace updates its open window title live', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
     await createProject(win, 'RenameTitle', 'C:/c/renametitle');
     const pid = await firstPanelId(win);
@@ -105,7 +105,7 @@ test('renaming a sub-workspace updates its open window title live', { tag: ['@ex
   });
 });
 
-test('recolouring a sub-workspace updates its open window accent live', { tag: ['@extended', '@window'] }, async () => {
+test('recolouring a sub-workspace updates its open window accent live', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   // Revision (2026-07-02): colour must sync to an open sub-workspace window just
   // like the name does — the window's dominant accent (--accent) follows the swatch.
   await runApp(async (app, win) => {

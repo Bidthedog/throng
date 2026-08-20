@@ -87,7 +87,7 @@ async function enterProject(win: Page, name: string): Promise<void> {
   await expect(win.locator('.panel-box').first()).toBeVisible({ timeout: 20_000 });
 }
 
-test('an editor and the tree recover when the project folder is renamed back after a restart', { tag: ['@extended', '@editor'] }, async () => {
+test('an editor and the tree recover when the project folder is renamed back after a restart', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
   // Two full app launches plus two watcher cycles — past the 30s default.
   test.setTimeout(180_000);
   const root = makeProject();

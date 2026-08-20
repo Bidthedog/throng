@@ -120,7 +120,7 @@ async function closeApp(app: ElectronApplication): Promise<void> {
   await shutdownApp(app);
 }
 
-test('opens the two-Pane shell within 5 seconds (NFR-002)', { tag: ['@core', '@window'] }, async () => {
+test('opens the two-Pane shell within 5 seconds (NFR-002)', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
   const start = Date.now();
   const app = await launchApp();
   try {
@@ -149,7 +149,7 @@ test('opens the two-Pane shell within 5 seconds (NFR-002)', { tag: ['@core', '@w
   }
 });
 
-test('opens a resizable main window', { tag: ['@core', '@window'] }, async () => {
+test('opens a resizable main window', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
   const app = await launchApp();
   try {
     await app.firstWindow();
@@ -176,7 +176,7 @@ test('exposes only placeholder workspace content (no real product features)', { 
   }
 });
 
-test('closes cleanly', { tag: ['@core', '@window'] }, async () => {
+test('closes cleanly', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
   const app = await launchApp();
   await app.firstWindow();
 

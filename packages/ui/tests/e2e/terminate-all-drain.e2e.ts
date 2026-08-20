@@ -290,7 +290,7 @@ async function zoomInTwice(win: Page, pid: string): Promise<void> {
 // PASSES. The reported symptom does not reproduce; kept as the guard that says so.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 AC1/AC4: a language override set immediately before TERMINATE ALL survives the next launch', { tag: ['@extended', '@terminal'] }, async () => {
+test('#86 AC1/AC4: a language override set immediately before TERMINATE ALL survives the next launch', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-ta-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-ta-user-'));
@@ -371,7 +371,7 @@ test('#86 AC1/AC4: a language override set immediately before TERMINATE ALL surv
 // Both tests below FAIL, and they fail on the ORDINARY close — the exit the issue treats as safe.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 AC3: a layout change made immediately before an ORDINARY close survives the next launch', { tag: ['@extended', '@terminal'] }, async () => {
+test('#86 AC3: a layout change made immediately before an ORDINARY close survives the next launch', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-oc-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-oc-user-'));
@@ -424,7 +424,7 @@ test('#86 AC3: a layout change made immediately before an ORDINARY close survive
   }
 });
 
-test('#86 AC3: a per-panel zoom set immediately before an ORDINARY close survives the next launch', { tag: ['@extended', '@terminal'] }, async () => {
+test('#86 AC3: a per-panel zoom set immediately before an ORDINARY close survives the next launch', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-ocz-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-ocz-user-'));
@@ -521,7 +521,7 @@ async function storedSubPanels(win: Page): Promise<string[]> {
  */
 const PINNED_AUTOSAVE_MS = 600_000;
 
-test('#86 C6: a SUB-WORKSPACE rearrangement survives closing the MAIN window', { tag: ['@extended', '@terminal'] }, async () => {
+test('#86 C6: a SUB-WORKSPACE rearrangement survives closing the MAIN window', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-sw-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-sw-user-'));
   // Written by MAIN when the child's renderer dies; read once the app is gone.
@@ -667,7 +667,7 @@ test('#86 C6: a SUB-WORKSPACE rearrangement survives closing the MAIN window', {
 // one that actually outlives the close.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 C19: a THEME COLOUR edit inside its 150ms debounce survives closing the MAIN window', { tag: ['@extended', '@terminal'] }, async () => {
+test('#86 C19: a THEME COLOUR edit inside its 150ms debounce survives closing the MAIN window', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-thm-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-thm-user-'));
   // One config root: the theme file the edit under test lands in.
@@ -753,7 +753,7 @@ test('#86 C19: a THEME COLOUR edit inside its 150ms debounce survives closing th
 // write.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 FR-011: a layout change survives an ORDINARY close even at a 1ms drain budget', { tag: ['@extended', '@terminal'] }, async () => {
+test('#86 FR-011: a layout change survives an ORDINARY close even at a 1ms drain budget', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-bud-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-bud-user-'));
@@ -830,7 +830,7 @@ test('#86 FR-011: a layout change survives an ORDINARY close even at a 1ms drain
 // than unmounted, so it has no unmount flush either. Nothing but the drain can save this edit.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 C19: an un-applied JSON-tab edit survives closing the MAIN window (032 FR-017)', { tag: ['@extended', '@terminal'] }, async () => {
+test('#86 C19: an un-applied JSON-tab edit survives closing the MAIN window (032 FR-017)', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-jsn-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-jsn-user-'));
   const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-jsn-root-'));
@@ -926,7 +926,7 @@ async function dragPanelOnce(app: ElectronApplication, win: Page, pid: string): 
   await win.mouse.up();
 }
 
-test('#86 FR-011: an ORDINARY close after a DRAG still closes promptly — the ghost cannot ack', { tag: ['@extended', '@terminal'] }, async () => {
+test('#86 FR-011: an ORDINARY close after a DRAG still closes promptly — the ghost cannot ack', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-gst-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-gst-user-'));
@@ -998,7 +998,7 @@ test('#86 FR-011: an ORDINARY close after a DRAG still closes promptly — the g
 // after a drag, an ORDINARY close must let the process exit on its own.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#110: after a DRAG, an ordinary close lets the PROCESS exit — the hidden ghost must not keep it alive', { tag: ['@extended', '@terminal'] }, async () => {
+test('#110: after a DRAG, an ordinary close lets the PROCESS exit — the hidden ghost must not keep it alive', { tag: ['@extended', '@terminal', '@reserve:process'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-gex-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-gex-user-'));
@@ -1054,7 +1054,7 @@ test('#110: after a DRAG, an ordinary close lets the PROCESS exit — the hidden
 // says it cannot fail. If it is ever RED, #86 is wider than it was reproduced to be.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 AC4: a language override set immediately before an ORDINARY close survives the next launch', { tag: ['@extended', '@terminal'] }, async () => {
+test('#86 AC4: a language override set immediately before an ORDINARY close survives the next launch', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-ocl-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-ocl-user-'));
@@ -1140,7 +1140,7 @@ test('#86 AC4: a language override set immediately before an ORDINARY close surv
 // load-bearing for that reason, not for this one.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 C23: the WORKSPACE window\'s own config write survives an immediate ORDINARY close', { tag: ['@extended', '@terminal'] }, async () => {
+test('#86 C23: the WORKSPACE window\'s own config write survives an immediate ORDINARY close', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-cfg-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-cfg-user-'));
@@ -1181,7 +1181,7 @@ test('#86 C23: the WORKSPACE window\'s own config write survives an immediate OR
 // not the other cannot pass unnoticed.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 AC3/AC4: layout and per-panel zoom set immediately before TERMINATE ALL survive the next launch', { tag: ['@extended', '@terminal'] }, async () => {
+test('#86 AC3/AC4: layout and per-panel zoom set immediately before TERMINATE ALL survive the next launch', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-tal-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-tal-user-'));

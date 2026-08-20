@@ -143,7 +143,7 @@ test.describe('an eased strip', () => {
     await shared?.close();
   });
 
-  test('T048 — a newly created tab is brought into view (A1: created)', { tag: ['@extended', '@window'] }, async () => {
+  test('T048 — a newly created tab is brought into view (A1: created)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     await freshProject(shared.win);
     await seedOverflowingTabs(shared.win, 'scroll-created');
     await setScrollLeft(shared.win, 0);
@@ -168,7 +168,7 @@ test.describe('an eased strip', () => {
     await expectCountsInSync(shared.win);
   });
 
-  test('T048 — clicking a partly-visible tab brings it fully into view (A1: clicked)', { tag: ['@extended', '@window'] }, async () => {
+  test('T048 — clicking a partly-visible tab brings it fully into view (A1: clicked)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     await freshProject(shared.win);
     await seedOverflowingTabs(shared.win, 'scroll-clicked');
     await setScrollLeft(shared.win, 0);
@@ -193,7 +193,7 @@ test.describe('an eased strip', () => {
     expect(isFullyVisible(after, now), 'the clicked tab is brought fully into view').toBe(true);
   });
 
-  test('T048 — the picker chord brings a hidden tab into view (A1: chord, picker)', { tag: ['@extended', '@window'] }, async () => {
+  test('T048 — the picker chord brings a hidden tab into view (A1: chord, picker)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     await freshProject(shared.win);
     await seedOverflowingTabs(shared.win, 'scroll-chord');
     await setScrollLeft(shared.win, 0);
@@ -217,7 +217,7 @@ test.describe('an eased strip', () => {
     expect(isFullyVisible(after, now), 'the chosen tab is scrolled into view').toBe(true);
   });
 
-  test('T049 — an already-fully-visible tab causes no movement at all (A2)', { tag: ['@extended', '@window'] }, async () => {
+  test('T049 — an already-fully-visible tab causes no movement at all (A2)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     await freshProject(shared.win);
     // SHORT names on purpose: this test needs a fully visible tab that is not the active one, and a
     // 340px chip in a 546px track means at most one tab is ever fully visible at all.
@@ -256,7 +256,7 @@ test.describe('an eased strip', () => {
     }
   });
 
-  test('T050 — destroying the active tab brings its successor into view, leaving no gap (A3)', { tag: ['@extended', '@window'] }, async () => {
+  test('T050 — destroying the active tab brings its successor into view, leaving no gap (A3)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     await freshProject(shared.win);
     await seedOverflowingTabs(shared.win, 'scroll-destroy');
 
@@ -284,7 +284,7 @@ test.describe('an eased strip', () => {
     await expectCountsInSync(shared.win);
   });
 
-  test('T047 — two quick steps move TWO tabs and settle once (A6, A7, A8)', { tag: ['@extended', '@window'] }, async () => {
+  test('T047 — two quick steps move TWO tabs and settle once (A6, A7, A8)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     await freshProject(shared.win);
     await seedOverflowingTabs(shared.win, 'scroll-twostep');
     await setScrollLeft(shared.win, 0);
@@ -355,7 +355,7 @@ test.describe('a restored strip', () => {
     await shared?.close();
   });
 
-  test('T048 — a restored layout brings the active tab into view (A1: layout restore)', { tag: ['@extended', '@window'] }, async () => {
+  test('T048 — a restored layout brings the active tab into view (A1: layout restore)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     const name = await freshProject(shared.win);
     const ids = await seedOverflowingTabs(shared.win, 'scroll-restore');
     const wanted = ids[ids.length - 1]!;
@@ -461,7 +461,7 @@ test.describe('a slow strip', () => {
     return target;
   }
 
-  test('T052 — reduce motion forces an instant scroll, and does not rewrite the setting (A11, A12)', { tag: ['@extended', '@window'] }, async () => {
+  test('T052 — reduce motion forces an instant scroll, and does not rewrite the setting (A11, A12)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     await freshProject(shared.win);
     await seedOverflowingTabs(shared.win, 'scroll-reduce');
     await setScrollLeft(shared.win, 0);
@@ -496,7 +496,7 @@ test.describe('a slow strip', () => {
     ).toBe(SLOW_MS);
   });
 
-  test('T053 — reduce motion applied MID-FLIGHT settles the scroll immediately (A13)', { tag: ['@extended', '@window'] }, async () => {
+  test('T053 — reduce motion applied MID-FLIGHT settles the scroll immediately (A13)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     await freshProject(shared.win);
     await seedOverflowingTabs(shared.win, 'scroll-reduce-live');
     await setScrollLeft(shared.win, 0);
@@ -547,7 +547,7 @@ test.describe('a slow strip', () => {
     ).toBeLessThanOrEqual(1);
   });
 
-  test('T053 — an instant scroll reaches the same rest position, active tab and counts (A14)', { tag: ['@extended', '@window'] }, async () => {
+  test('T053 — an instant scroll reaches the same rest position, active tab and counts (A14)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     await freshProject(shared.win);
     await seedOverflowingTabs(shared.win, 'scroll-instant-outcome');
 
@@ -588,7 +588,7 @@ test.describe('a slow strip', () => {
     expect(instantCounts).toEqual(animatedCounts);
   });
 
-  test('T057a — a window resize mid-scroll settles the strip and recomputes the counts', { tag: ['@extended', '@window'] }, async () => {
+  test('T057a — a window resize mid-scroll settles the strip and recomputes the counts', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     await freshProject(shared.win);
     await seedOverflowingTabs(shared.win, 'scroll-resize-inflight');
     await setScrollLeft(shared.win, 0);
@@ -637,7 +637,7 @@ test.describe('a slow strip', () => {
       await expectCountsInSync(shared.win);
     }
   });
-  test('T051 — a tab destroyed mid-scroll leaves the strip at a valid position (A9)', { tag: ['@extended', '@window'] }, async () => {
+  test('T051 — a tab destroyed mid-scroll leaves the strip at a valid position (A9)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     await freshProject(shared.win);
     await seedOverflowingTabs(shared.win, 'scroll-destroy-inflight');
     await setScrollLeft(shared.win, 0);
@@ -715,7 +715,7 @@ test.describe('an unanimated strip', () => {
     await shared?.close();
   });
 
-  test('T052 — duration 0 is instant: no animation, no easing (A10)', { tag: ['@extended', '@window'] }, async () => {
+  test('T052 — duration 0 is instant: no animation, no easing (A10)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     await freshProject(shared.win);
     await seedOverflowingTabs(shared.win, 'scroll-zero');
     await setScrollLeft(shared.win, 0);

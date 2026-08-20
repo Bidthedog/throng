@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import { runApp, createProject, cleanupTemp} from './harness.js';
 
-test('arrowing to a row makes it the cut/paste target (024 US3 follow-up)', { tag: ['@extended', '@explorer'] }, async () => {
+test('arrowing to a row makes it the cut/paste target (024 US3 follow-up)', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-kbdsel-'));
   mkdirSync(join(root, 'sub'));
   writeFileSync(join(root, 'a.txt'), 'A\n');

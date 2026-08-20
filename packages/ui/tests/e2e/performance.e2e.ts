@@ -110,7 +110,7 @@ async function expectProjectSaved(dataDir: string, projectName: string): Promise
     .toBe(true);
 }
 
-test('restores a project workspace within the launch budget (NFR-002)', { tag: ['@extended', '@window'] }, async () => {
+test('restores a project workspace within the launch budget (NFR-002)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
   try {
@@ -148,7 +148,7 @@ test('restores a project workspace within the launch budget (NFR-002)', { tag: [
   }
 });
 
-test('shows drop-target feedback promptly once a Panel drag starts (NFR-001/SC-012)', { tag: ['@extended', '@window'] }, async () => {
+test('shows drop-target feedback promptly once a Panel drag starts (NFR-001/SC-012)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const h = await startHarness();
   let app: ElectronApplication | undefined;
   try {

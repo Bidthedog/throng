@@ -6,7 +6,7 @@ import { createProject, runApp } from './harness.js';
  * custom title bar as the main window — its own identity (name/colour) + window
  * controls — but NObar cog (the preferences entry point is main-window only, FR-007).
  */
-test('a sub-workspace window shows the custom title bar with identity + controls and NO cog', { tag: ['@extended', '@window'] }, async () => {
+test('a sub-workspace window shows the custom title bar with identity + controls and NO cog', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
     await createProject(win, 'Detacher', 'C:/c/detacher');
     await expect(win.getByTestId('tab-strip')).toBeVisible();

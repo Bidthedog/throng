@@ -87,7 +87,7 @@ async function subWorkspaceIds(win: Page): Promise<string[]> {
     );
 }
 
-test('a sub-workspace-owned Panel can open a terminal (launches at home, no project) — FR-028', { tag: ['@extended', '@window'] }, async () => {
+test('a sub-workspace-owned Panel can open a terminal (launches at home, no project) — FR-028', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const app = shared.app;
   const win = shared.win;
   // The project root is irrelevant to an owned Panel — it launches at home.
@@ -130,7 +130,7 @@ test('a sub-workspace-owned Panel can open a terminal (launches at home, no proj
   }
 });
 
-test('a sub-workspace-owned Panel cannot be dragged out; the ghost shows a warning — FR-030', { tag: ['@extended', '@window'] }, async () => {
+test('a sub-workspace-owned Panel cannot be dragged out; the ghost shows a warning — FR-030', { tag: ['@extended', '@window', '@reserve:osdrag'] }, async () => {
   const app = shared.app;
   const win = shared.win;
   await createProject(win, 'NoDragOut', 'C:/c/nodragout');
@@ -212,7 +212,7 @@ test('a sub-workspace-owned Panel cannot be dragged out; the ghost shows a warni
   }
 });
 
-test('closing the last Panel of a sub-workspace closes the sub-workspace — FR-029', { tag: ['@extended', '@window'] }, async () => {
+test('closing the last Panel of a sub-workspace closes the sub-workspace — FR-029', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const app = shared.app;
   const win = shared.win;
   /*

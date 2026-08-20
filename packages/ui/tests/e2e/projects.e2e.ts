@@ -208,7 +208,7 @@ test.describe('the two tests that only need an app', () => {
     await expect(win.locator('.panel-box')).toHaveCount(1);
   });
 
-  test('switches the active project and swaps the workspace + accent', { tag: ['@core', '@window'] }, async () => {
+  test('switches the active project and swaps the workspace + accent', { tag: ['@core', '@window', '@reserve:layout'] }, async () => {
     await createProject(win, 'Alpha', 'C:/code/alpha', '#ff0000');
     await createProject(win, 'Beta', 'C:/code/beta', '#00ff00');
 
@@ -270,7 +270,7 @@ test('edits and deletes a project, leaving a valid state', { tag: ['@core', '@wi
  * `C:/code/beta` also duplicate the shared test 2 exactly; FR-029 refuses identical roots, so even a
  * relaunch-free version of this test could not be folded in without renaming its fixtures.
  */
-test('restores the project list and active project after a restart', { tag: ['@core', '@window'] }, async () => {
+test('restores the project list and active project after a restart', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
   const harness = await startHarness();
   let app: ElectronApplication | undefined;
   try {

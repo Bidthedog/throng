@@ -90,7 +90,7 @@ async function acceptConfirmations(win: Page): Promise<void> {
   }
 }
 
-test('panel-destroy reaps the conhost for EVERY detected terminal flavour', { tag: ['@core', '@terminal'] }, async () => {
+test('panel-destroy reaps the conhost for EVERY detected terminal flavour', { tag: ['@core', '@terminal', '@reserve:process'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-orphan-destroy-'));
   try {
     await runApp(async (_app, win, { pipeName }) => {
@@ -134,7 +134,7 @@ test('panel-destroy reaps the conhost for EVERY detected terminal flavour', { ta
   }
 });
 
-test('deleting a project reaps its terminals’ conhosts', { tag: ['@core', '@terminal'] }, async () => {
+test('deleting a project reaps its terminals’ conhosts', { tag: ['@core', '@terminal', '@reserve:process'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-orphan-projdel-'));
   try {
     await runApp(async (_app, win, { pipeName }) => {
@@ -154,7 +154,7 @@ test('deleting a project reaps its terminals’ conhosts', { tag: ['@core', '@te
   }
 });
 
-test('app-close “Terminate all” reaps every terminal’s conhost', { tag: ['@core', '@terminal'] }, async () => {
+test('app-close “Terminate all” reaps every terminal’s conhost', { tag: ['@core', '@terminal', '@reserve:process'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-orphan-closeall-'));
   try {
     await runApp(async (_app, win, { pipeName }) => {

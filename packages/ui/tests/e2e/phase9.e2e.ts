@@ -70,7 +70,6 @@ async function createProject(win: Page, name: string): Promise<void> {
   await expect(win.locator('.project-item', { hasText: name })).toBeVisible();
 }
 
-const projectItem = (win: Page, name: string) => win.locator('.project-item', { hasText: name });
 
 async function run(fn: (win: Page, app: ElectronApplication, h: Harness) => Promise<void>): Promise<void> {
   const h = await startHarness();
@@ -87,24 +86,21 @@ async function run(fn: (win: Page, app: ElectronApplication, h: Harness) => Prom
   }
 }
 
-test('confirms before deleting a project (FR-042)', { tag: ['@extended', '@window'] }, async () => {
-  await run(async (win) => {
-    await createProject(win, 'Doomed');
-
-    // Cancel keeps the project.
-    await projectItem(win, 'Doomed').locator('[data-testid^="project-delete-"]').click();
-    await expect(win.getByTestId('confirm-dialog')).toBeVisible();
-    await win.getByTestId('confirm-cancel').click();
-    await expect(projectItem(win, 'Doomed')).toBeVisible();
-
-    // Confirm removes it (Destroy Project = double confirm: summary then wry).
-    await projectItem(win, 'Doomed').locator('[data-testid^="project-delete-"]').click();
-    await win.getByTestId('confirm-accept').click();
-    await win.getByTestId('confirm-accept').click();
-    await expect(win.getByTestId('projects-empty')).toBeVisible();
-  });
-});
-
+/*
+ * ── ONE REMOVED (035 T055) ──
+ *
+ * `:90` "confirms before deleting a project (FR-042)" → `packages/ui/tests/component/
+ * projects-panel-form.test.ts`, which drives the same double confirmation — summary, then the wry
+ * second — over the real `ConfirmProvider` and a fake daemon that really does unregister the
+ * project.
+ *
+ * This file's `run()` starts its OWN daemon and its own data directory, so the launch it was paying
+ * for is among the most expensive in the suite, and what it bought was: the dialog appears, Cancel
+ * keeps the row, Accept twice empties the list. All three are renderer decisions.
+ *
+ * What the component test cannot say is that the daemon really unregisters the project and really
+ * leaves its folder alone; `removal-verbs.e2e.ts` keeps that.
+ */
 test('shows the panel count on a Tab and confirms tab close (FR-045/043)', { tag: ['@extended', '@window'] }, async () => {
   await run(async (win) => {
     await createProject(win, 'Counter');
@@ -146,7 +142,7 @@ test('shows the panel count on a Tab and confirms tab close (FR-045/043)', { tag
   });
 });
 
-test('reorders projects by dragging the grip (FR-046)', { tag: ['@extended', '@window'] }, async () => {
+test('reorders projects by dragging the grip (FR-046)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await run(async (win) => {
     await createProject(win, 'Alpha');
     await createProject(win, 'Beta');
@@ -173,7 +169,7 @@ test('reorders projects by dragging the grip (FR-046)', { tag: ['@extended', '@w
   });
 });
 
-test('enforces a 600x560 minimum window size (FR-048)', { tag: ['@extended', '@window'] }, async () => {
+test('enforces a 600x560 minimum window size (FR-048)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await run(async (_win, app) => {
     const min = await app.evaluate(async ({ BrowserWindow }) =>
       BrowserWindow.getAllWindows()[0].getMinimumSize(),
@@ -185,7 +181,7 @@ test('enforces a 600x560 minimum window size (FR-048)', { tag: ['@extended', '@w
   });
 });
 
-test('restores window size and position across restarts (FR-047)', { tag: ['@extended', '@window'] }, async () => {
+test('restores window size and position across restarts (FR-047)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const h = await startHarness();
   const userData = tmpDir('throng-ud-shared-');
   let app: ElectronApplication | undefined;

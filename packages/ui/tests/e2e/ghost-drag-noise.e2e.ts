@@ -3,7 +3,7 @@ import { createProject, firstPanelId, runApp } from './harness.js';
 
 // Probe: dragging a Panel/Tab must not spew Chromium widget-rejection errors from
 // the drag-ghost OS window (`Message N rejected by interface blink.mojom.Widget`).
-test('dragging does not emit blink.mojom.Widget rejections', { tag: ['@extended', '@window'] }, async () => {
+test('dragging does not emit blink.mojom.Widget rejections', { tag: ['@extended', '@window', '@reserve:osdrag'] }, async () => {
   await runApp(async (app, win) => {
     const stderr: string[] = [];
     const proc = app.process();

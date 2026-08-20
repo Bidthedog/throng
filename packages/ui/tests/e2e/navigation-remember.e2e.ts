@@ -244,7 +244,7 @@ test.beforeEach(() => {
  * OFF — the shipped defaults (AS-18, AS-13, FR-057, M1, SC-014's first half)
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('at the shipped defaults BOTH modals reopen empty, even straight after a value was accepted (AS-18, AS-13, FR-057)', { tag: ['@extended', '@editor'] }, async () => {
+test('at the shipped defaults BOTH modals reopen empty, even straight after a value was accepted (AS-18, AS-13, FR-057)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
   const root = makeProject('throng-remember-off-');
   // Its own config root, holding both settings explicitly OFF. Explicit rather than absent on
   // purpose: an absent key and a `false` one must behave identically, and only one of the two is
@@ -313,7 +313,7 @@ test('at the shipped defaults BOTH modals reopen empty, even straight after a va
  * ON — Quick Open (AS-19, AS-20, AS-21, FR-060, FR-061, FR-062)
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('with rememberQuickOpenQuery on, the accepted query comes back selected with its own results — an abandoned one never does, and a project change discards it (AS-19, AS-20, AS-21)', { tag: ['@extended', '@editor'] }, async () => {
+test('with rememberQuickOpenQuery on, the accepted query comes back selected with its own results — an abandoned one never does, and a project change discards it (AS-19, AS-20, AS-21)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
   const root = makeProject('throng-remember-qo-');
   const other = makeOtherProject();
   const cfg = freshCfgRoot(true);
@@ -421,7 +421,7 @@ test('with rememberQuickOpenQuery on, the accepted query comes back selected wit
  * The preferences window — FR-059, FR-063, AS-15, SC-014
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('both toggles live in Editor · Navigation, ship off, and turning them off DISCARDS what is held (FR-059, FR-063, AS-15, SC-014)', { tag: ['@extended', '@editor'] }, async () => {
+test('both toggles live in Editor · Navigation, ship off, and turning them off DISCARDS what is held (FR-059, FR-063, AS-15, SC-014)', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
   const root = makeProject('throng-remember-prefs-');
   const cfg = freshCfgRoot(true);
   try {

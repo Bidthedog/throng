@@ -32,7 +32,7 @@ async function openWithFile(win: Page): Promise<string> {
   return pid;
 }
 
-test('a search match keeps the code beneath it syntax-coloured (FR-007a)', { tag: ['@extended', '@editor'] }, async () => {
+test('a search match keeps the code beneath it syntax-coloured (FR-007a)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {

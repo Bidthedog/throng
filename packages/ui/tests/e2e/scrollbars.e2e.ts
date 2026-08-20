@@ -74,7 +74,7 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('every scrollable surface gets a classic themed bar of the theme WIDTH (FR-010 / #130)', { tag: ['@extended', '@window'] }, async () => {
+test('every scrollable surface gets a classic themed bar of the theme WIDTH (FR-010 / #130)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (_app, win) => {
     // The provider writes the custom properties onto :root in an effect, so poll rather than
     // sampling the first frame. An UNDEFINED custom property resolves to the empty string — which
@@ -117,7 +117,7 @@ test('every scrollable surface gets a classic themed bar of the theme WIDTH (FR-
   });
 });
 
-test('the terminal keeps its classic, non-overlay bar — MEASURED, not read from the stylesheet (FR-011)', { tag: ['@extended', '@window'] }, async () => {
+test('the terminal keeps its classic, non-overlay bar — MEASURED, not read from the stylesheet (FR-011)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const root = own(mkdtempSync(join(tmpdir(), 'throng-sb-')));
   try {
     await runApp(async (_app, win) => {

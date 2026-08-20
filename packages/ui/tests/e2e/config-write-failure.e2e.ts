@@ -182,7 +182,7 @@ function obstruct(path: string): string {
   return saved;
 }
 
-test('a JSON edit that could not be saved says so, instead of silently not applying (#102)', { tag: ['@extended', '@prefs'] }, async () => {
+test('a JSON edit that could not be saved says so, instead of silently not applying (#102)', { tag: ['@extended', '@prefs', '@reserve:runtime'] }, async () => {
   test.setTimeout(180_000);
 
   await runApp(
@@ -282,7 +282,7 @@ test('a JSON edit that could not be saved says so, instead of silently not apply
  * chokepoint reporter was built. Keeping the specific-sounding one and deleting the general one
  * would re-open #102 for every text and number edit in preferences.
  */
-test('a failed settings write raises ONE notice, says why, and can be copied (#265)', { tag: ['@extended', '@prefs'] }, async () => {
+test('a failed settings write raises ONE notice, says why, and can be copied (#265)', { tag: ['@extended', '@prefs', '@reserve:runtime'] }, async () => {
   test.setTimeout(180_000);
 
   await runApp(
@@ -421,7 +421,7 @@ test('a failed settings write raises ONE notice, says why, and can be copied (#2
  *
  * RED until the subscriber is mounted in the main window (T039) and in sub-workspace windows (T040).
  */
-test('a config write that fails in the MAIN window says so (032 FR-010, G-09)', { tag: ['@extended', '@prefs'] }, async () => {
+test('a config write that fails in the MAIN window says so (032 FR-010, G-09)', { tag: ['@extended', '@prefs', '@reserve:runtime'] }, async () => {
   test.setTimeout(180_000);
   /*
    * DECLARED LAST on purpose (see the shared-app note at the top): the two projects this creates are

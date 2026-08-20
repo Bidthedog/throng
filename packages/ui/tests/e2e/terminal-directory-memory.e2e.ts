@@ -77,7 +77,7 @@ async function expectLayout(
 }
 
 for (const flavour of FLAVOURS) {
-  test(`[${flavour}] the working directory is remembered against the panel (FR-027)`, { tag: ['@extended', '@terminal'] }, async () => {
+  test(`[${flavour}] the working directory is remembered against the panel (FR-027)`, { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.
@@ -168,7 +168,7 @@ for (const flavour of FLAVOURS) {
   });
 }
 
-test('with "Reopen in the last directory" OFF, nothing is remembered (FR-027a)', { tag: ['@extended', '@terminal'] }, async () => {
+test('with "Reopen in the last directory" OFF, nothing is remembered (FR-027a)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
   // daemon routes terminals through the de-elevated agent, a different process tree these
   // assertions do not describe — the condition this guard exists for.

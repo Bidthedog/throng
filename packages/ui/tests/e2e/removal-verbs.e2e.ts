@@ -66,26 +66,6 @@ const seedOwnedSub = `(() => window.throng.invoke('workspace.persistSubWorkspace
 // terminal; the session-termination-vs-keeps-running rows are covered by the
 // destroy/destroy-cascade specs (behaviour unchanged) plus the assertions here.
 
-test('a project uses the Remove verb and states no files are deleted', { tag: ['@extended', '@explorer'] }, async () => {
-  await runApp(async (_app, win) => {
-    await createProject(win, 'Verbs', 'C:/c/verbs');
-
-    const del = win.locator('[data-testid^="project-delete-"]').first();
-    // Control tooltip/aria uses "Remove".
-    await expect(del).toHaveAttribute('title', /remove/i);
-
-    await del.click();
-    const dialog = win.getByTestId('confirm-dialog');
-    await expect(dialog).toBeVisible();
-    // Confirmation names the Remove verb AND states no files on disk are deleted.
-    await expect(dialog).toContainText(/remove/i);
-    await expect(dialog).toContainText(/no files/i);
-    // No forbidden verb leaks in.
-    await expect(dialog).not.toContainText(/destroy/i);
-    await win.getByTestId('confirm-cancel').click();
-  });
-});
-
 /*
  * DELETED, ALREADY COVERED (034 FR-045/FR-046a) — "a tab uses the Destroy verb".
  *
@@ -127,18 +107,44 @@ test('a project uses the Remove verb and states no files are deleted', { tag: ['
  * `withDividers(actions)` with `[]` in `context-menu.tsx` renders an empty <ul> and fails all six.
  */
 
-test('a project-owned panel in the MAIN window uses Destroy', { tag: ['@extended', '@explorer'] }, async () => {
-  await runApp(async (_app, win) => {
-    await createProject(win, 'PanelVerbs', 'C:/c/panelverbs');
-    const pid = await win
-      .locator('.panel-box')
-      .first()
-      .evaluate((el) => (el as HTMLElement).dataset.panelId ?? '');
-    await expect(win.getByTestId(`panel-close-${pid}`)).toHaveAttribute('title', /destroy/i);
-  });
-});
+/*
+ * ONE TEST REMOVED (035) — "a project-owned panel in the MAIN window uses Destroy", now
+ * `packages/ui/tests/component/panel-box.test.ts`. It launched Electron and created a project to
+ * read one `title` attribute.
+ *
+ * The rule is one line, `panel-placeholder.tsx:186`: a panel is CLOSED only when it is being
+ * viewed inside a sub-workspace window AND owned by a project — every other case Destroys. The
+ * main window has no sub-workspace, so this test was asserting the `else`.
+ *
+ * The test BELOW asserts the other branch and stays: it needs a second real window, which is the
+ * whole of what makes the two verbs different.
+ *
+ * The component test asserts the accessible name as well as the title, which this did not: both are
+ * a glyph whose meaning lives in an attribute, and `aria-label` is the one that decides what is read
+ * aloud (issue #282 is the same failure on the two buttons three lines above it in the source).
+ */
 
-test('a sub-workspace-OWNED panel uses Destroy in its sub-workspace window', { tag: ['@extended', '@explorer'] }, async () => {
+/*
+ * ── THE WORDING MOVED (035 T055) ──
+ *
+ * `packages/ui/tests/component/projects-panel-form.test.ts` now owns what the project control and
+ * its confirmation SAY: the tooltip reads Remove rather than Delete, the sentence carries the one
+ * promise that separates the two — no files on disk are deleted — and the forbidden verb does not
+ * leak into it.
+ *
+ * ONE TEST REMOVED: `:69` "a project uses the Remove verb and states no files are deleted".
+ *
+ * The verb is not decoration. A dialog saying Delete over an operation that deletes nothing teaches
+ * a user to fear a safe action, and — the direction that actually costs — teaches them that this
+ * app's "Delete" does not mean what it says, which is the sentence they will remember when a dialog
+ * does. `packages/core/tests/unit/removal-verbs.test.ts` proves which verb a PANEL gets; nothing
+ * proved what the project control said, and this test was launching an app to read a title
+ * attribute.
+ *
+ * The cancel-and-accept pair moved with it, so the wording tests are not asserting over a dialog
+ * that never removes anything.
+ */
+test('a sub-workspace-OWNED panel uses Destroy in its sub-workspace window', { tag: ['@extended', '@explorer', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
     await win.evaluate(seedOwnedSub);
     await reloadWindow(win);

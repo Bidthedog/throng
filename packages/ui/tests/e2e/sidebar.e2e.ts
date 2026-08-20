@@ -53,17 +53,31 @@ const runApp = (
 // panels — the Terminals panel was removed — and the Sub-workspaces panel is
 // pinned to the bottom of the pane (headers stay fixed-size; #2/#3).
 
-test('sidebar shows Projects + Sub-workspaces only (no Terminals panel)', { tag: ['@extended', '@window'] }, async () => {
-  await runApp(async (_app, win) => {
-    await expect(win.getByTestId('projects-panel')).toBeVisible();
-    await expect(win.locator('.sidebar-panel--subworkspaces')).toBeVisible();
-    // The Terminals panel is gone entirely.
-    await expect(win.locator('.sidebar-panel--terminals')).toHaveCount(0);
-    await expect(win.getByTestId('terminals-panel')).toHaveCount(0);
-  });
-});
+/*
+ * ONE TEST REMOVED (035) — "sidebar shows Projects + Sub-workspaces only (no Terminals panel)", now
+ * `packages/ui/tests/unit/sidebar-panels.test.ts`.
+ *
+ * It is the one migration in this branch that went to a SOURCE GUARD rather than to a render, and
+ * the reason is the shape of the claim. Two of its three assertions were ordinary rendering, and
+ * both are already made better elsewhere — `component/projects-panel-form.test.ts` and
+ * `component/subworkspace-sync.test.ts` each mount their panel against a real store, which is
+ * stronger evidence than a visibility check from a spec that created no projects.
+ *
+ * The third is what the test exists for: **the Terminals panel is gone entirely.** That is a claim
+ * about ABSENCE across the whole renderer, and a render test is at its weakest there —
+ * `queryByTestId('terminals-panel')` returning null is satisfied by the panel existing somewhere
+ * this mount did not reach, by the testid having been renamed, and by the tree failing to render at
+ * all. The guard walks the renderer instead and checks all three names the panel had, because a
+ * partial revert (a component restored without its testid) is the realistic failure.
+ *
+ * It also reads the sidebar's panel LIST out of `app.tsx` and asserts the order, which nothing did:
+ * a stack whose two members were swapped satisfied every assertion the E2E made.
+ *
+ * The two tests below stay. They read COMPUTED heights and a pinned position out of a real layout
+ * engine, which is `@reserve:layout`.
+ */
 
-test('pane headers are fixed-size and the Sub-workspaces panel has a min height', { tag: ['@extended', '@window'] }, async () => {
+test('pane headers are fixed-size and the Sub-workspaces panel has a min height', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (_app, win) => {
     await expect(win.locator('.sidebar-panel--subworkspaces')).toBeVisible();
     const m = await win.evaluate(() => {
@@ -87,7 +101,7 @@ test('pane headers are fixed-size and the Sub-workspaces panel has a min height'
   });
 });
 
-test('Sub-workspaces is pinned to the bottom of the sidebar body', { tag: ['@extended', '@window'] }, async () => {
+test('Sub-workspaces is pinned to the bottom of the sidebar body', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (_app, win) => {
     await expect(win.locator('.sidebar-panel--subworkspaces')).toBeVisible();
     const gap = await win.evaluate(() => {
@@ -99,7 +113,7 @@ test('Sub-workspaces is pinned to the bottom of the sidebar body', { tag: ['@ext
   });
 });
 
-test('the Projects / Sub-workspaces divider resizes them independently', { tag: ['@extended', '@window'] }, async () => {
+test('the Projects / Sub-workspaces divider resizes them independently', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (_app, win) => {
     // Two panels → exactly one divider (below Projects); the last panel has none.
     await expect(win.getByTestId('sidebar-vresize')).toBeVisible();
@@ -122,7 +136,7 @@ test('the Projects / Sub-workspaces divider resizes them independently', { tag: 
   });
 });
 
-test('on window resize only PROJECTS changes; Sub-workspaces stays pinned to the bottom', { tag: ['@extended', '@window'] }, async () => {
+test('on window resize only PROJECTS changes; Sub-workspaces stays pinned to the bottom', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(async (app: ElectronApplication, win) => {
     await expect(win.getByTestId('projects-panel')).toBeVisible();
     const measure = () =>

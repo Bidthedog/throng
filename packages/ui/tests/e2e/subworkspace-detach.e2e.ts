@@ -8,7 +8,7 @@ import { createProject, runApp } from './harness.js';
 // content, the main workspace is trimmed, and the sub-workspace is listed in the
 // sidebar with an auto name ("Sub-workspace 1").
 
-test('detaches a Tab into a new sub-workspace window', { tag: ['@extended', '@window'] }, async () => {
+test('detaches a Tab into a new sub-workspace window', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
     await createProject(win, 'Detacher', 'C:/c/detacher');
     await expect(win.getByTestId('tab-strip')).toBeVisible();

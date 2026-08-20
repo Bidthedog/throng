@@ -66,7 +66,7 @@ import {
  */
 test.describe.configure({ mode: 'serial' });
 
-test('with no project open the button is DRAWN AND DISABLED, its tooltip says why and names no chord, and the chord opens nothing — and all three come alive once a project is opened (FR-018, FR-018c, FR-074, V4, A5)', { tag: ['@extended', '@editor'] }, async () => {
+test('with no project open the button is DRAWN AND DISABLED, its tooltip says why and names no chord, and the chord opens nothing — and all three come alive once a project is opened (FR-018, FR-018c, FR-074, V4, A5)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
   const tree = createDeepTree('throng-qtb-noproject-');
   try {
     // Its OWN app, and this is the state that needs one: a shared app has had a project opened by

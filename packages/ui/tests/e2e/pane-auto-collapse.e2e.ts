@@ -67,7 +67,7 @@ test.afterAll(async () => {
 const resize = (app: ElectronApplication, w: number, h: number) =>
   app.evaluate(({ BrowserWindow }, [width, height]) => BrowserWindow.getAllWindows()[0].setSize(width, height), [w, h]);
 
-test('side panes auto-collapse on a narrow window and restore when widened', { tag: ['@extended', '@window'] }, async () => {
+test('side panes auto-collapse on a narrow window and restore when widened', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const app = shared.app;
   const win = shared.win;
   // Own name AND own root — FR-029 refuses a duplicate root, and all four tests used to share one.
@@ -96,7 +96,7 @@ test('side panes auto-collapse on a narrow window and restore when widened', { t
   await expect(win.getByTestId('pane-rail-right')).toHaveCount(0);
 });
 
-test('an auto-collapsed pane can be expanded at the minimum window size (and stays open)', { tag: ['@extended', '@window'] }, async () => {
+test('an auto-collapsed pane can be expanded at the minimum window size (and stays open)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const app = shared.app;
   const win = shared.win;
   await createProject(win, 'AutoCollapse2', 'C:/code/alpha2');
@@ -125,7 +125,7 @@ test('an auto-collapsed pane can be expanded at the minimum window size (and sta
   await expect(win.getByTestId('pane-hide-right')).toBeVisible();
 });
 
-test('a pane expands only to a sensible width when the window is too narrow, then restores', { tag: ['@extended', '@window'] }, async () => {
+test('a pane expands only to a sensible width when the window is too narrow, then restores', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const app = shared.app;
   const win = shared.win;
   /*
@@ -166,7 +166,7 @@ test('a pane expands only to a sensible width when the window is too narrow, the
   expect((await geom(win.locator('.pane--sidebar'))).w).toBeGreaterThanOrEqual(390);
 });
 
-test('a manually-collapsed pane is NOT auto-restored when the window widens', { tag: ['@extended', '@window'] }, async () => {
+test('a manually-collapsed pane is NOT auto-restored when the window widens', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const app = shared.app;
   const win = shared.win;
   await createProject(win, 'AutoCollapse4', 'C:/code/alpha4');

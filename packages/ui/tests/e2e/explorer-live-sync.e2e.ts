@@ -48,6 +48,33 @@ import { runApp, createProject, cleanupTemp, FILE_OP_TIMEOUT_MS } from './harnes
  * regression fence — the behaviour that must still hold once the debounce is bounded.
  */
 
+/*
+ * ALL FOUR VERDICTS DECLINED (035 T056 / FR-022) — and the decline is a correction, not a judgement
+ * call.
+ *
+ * The census marked each of these `integration` with the note "real fs-watcher chain already
+ * covered at integration layer per file's own docstring". The docstring says something different,
+ * and the difference is the whole point of these four.
+ *
+ * `file-watcher-liveness.integration.test.ts` has exactly two tests:
+ *
+ *     "reports a change WHILE a noisy directory is still churning"
+ *     "still COALESCES a burst — a max wait must not turn into an event per write"
+ *
+ * Both are about the DEBOUNCE under churn. Neither asserts that an external create reaches the
+ * TREE. That test reproduces the defect (#186); these four are the fence around the behaviour that
+ * must still hold once the debounce is bounded — which is what the paragraph above actually says.
+ *
+ * So the citation was real and pointed at the wrong claim, which is the failure this spec has now
+ * met several times: a covering test that covers something adjacent.
+ *
+ * ── AND THEY ARE NOT CHEAP TO REPLACE, EITHER ──
+ *
+ * Each asserts the DISK first and then the tree, deliberately: "a tree assertion alone cannot tell
+ * 'the tree did not update' from 'the operation did not happen', and those need different fixes."
+ * That pairing is the chain — NodeFileWatcher → ExplorerWatcher → `throng:files:changed` →
+ * `files.onChange` → `reloadDirs()` — and no layer below this one holds both ends of it.
+ */
 function makeProject(): string {
   const root = mkdtempSync(join(tmpdir(), 'throng-livesync-'));
   writeFileSync(join(root, 'seed.txt'), 'seed\n');

@@ -12,19 +12,6 @@ import { runApp, settle, createProject, cleanupTemp} from './harness.js';
  * sandboxed renderer needs no external resources. The pack-format README is seeded.
  */
 const cfgRoots: string[] = [];
-function freshCfgRoot(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'throng-cfg-icons-'));
-  cfgRoots.push(dir);
-  // Seed a glyph-only icon pack.
-  const packDir = join(dir, 'icon-packs', 'mypack');
-  mkdirSync(packDir, { recursive: true });
-  writeFileSync(
-    join(packDir, 'pack.json'),
-    JSON.stringify({ name: 'mypack', tokens: { folder: 'FF', add: 'AA' } }, null, 2),
-    'utf8',
-  );
-  return dir;
-}
 /** A truly empty config root so the app seeds the bundled packs on first run. */
 function bareCfgRoot(): string {
   const dir = mkdtempSync(join(tmpdir(), 'throng-cfg-icons-'));
@@ -46,42 +33,40 @@ async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
   return prefs;
 }
 
-test('a user pack is selectable, re-skins its tokens, and missing tokens fall back', { tag: ['@extended', '@prefs'] }, async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-      // The pack is discovered and selectable.
-      await expect(prefs.getByTestId('icon-pack-select').locator('option', { hasText: 'mypack' })).toHaveCount(1);
-      await prefs.getByTestId('icon-pack-select').selectOption('mypack');
-      // Pack tokens render the pack glyph; a token absent from the pack keeps the throng glyph.
-      await expect(prefs.getByTestId('icon-cell-folder')).toContainText('FF');
-      await expect(prefs.getByTestId('icon-cell-add')).toContainText('AA');
-      await expect(prefs.getByTestId('icon-cell-terminal')).toContainText('▣'); // throng fallback
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
+/*
+ * TWO TESTS REMOVED (035) — now `packages/ui/tests/component/preferences-themes-tab.test.ts`.
+ *
+ * Each seeded a pack on disk, launched Electron with THRONG_CONFIG_ROOT, clicked the cog menu,
+ * waited for a SECOND WINDOW, waited for it to load, chose the pack from a dropdown — and then read
+ * the text of three `<span>`s. The second window is how they REACHED the Themes tab, not what they
+ * asserted, and that file already renders the tab and its icon grid.
+ *
+ * THE MIGRATION FOUND THREE THINGS, in the order it hit them:
+ *
+ *   - `iconPacks` crosses the bridge as an ARRAY. `toPackMap` returns {} for anything else, so a
+ *     map reaches the grid as no packs at all.
+ *   - A `LoadedIconPack` needs BOTH `tokens` and `assets`, and `tokens` holds `IconValue` objects
+ *     rather than the bare strings a pack.json on disk carries — the loader normalises them.
+ *   - An override belongs in `theme.iconOverrides`, not `theme.icons`. Those are rungs 1 and 3 of
+ *     the same chain, and a draft that used the wrong one made both override tests pass through the
+ *     third rung, with the pack silently beating the override. A green bar for the opposite of the
+ *     requirement.
+ *
+ * And the red step found a fourth: written against the shipped theme, the FALLBACK test could not
+ * tell rung 3 (the active theme's glyph) from rung 4 (throng's default), because they are the same
+ * character when the active theme is throng's. It now gives the theme a glyph of its own.
+ *
+ * Four assertions are new: the dropdown offers a way BACK to the default glyphs; deselecting a pack
+ * restores them; an override applies with no pack selected; and the override leaves the pack's other
+ * tokens alone, which is the three-way precedence rather than a single cell.
+ *
+ * WHAT STAYS. `:167` — editing the pack in the preferences window re-skins the MAIN window live.
+ * Two real windows and an IPC broadcast between them, which one render cannot make. `:253` — a
+ * malformed pack.json ON DISK still lets the app start: the loader reading a real file.
+ */
 
-test('overriding a single token changes only that token', { tag: ['@extended', '@prefs'] }, async () => {
-  const cfgRoot = freshCfgRoot();
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-      await prefs.getByTestId('icon-pack-select').selectOption('mypack');
-      await expect(prefs.getByTestId('icon-pack-select')).toHaveValue('mypack'); // pack applied
-      const override = prefs.getByTestId('icon-override-add');
-      await override.fill('ZZ');
-      await override.blur();
-      await expect(prefs.getByTestId('icon-cell-add')).toContainText('ZZ');
-      // folder still from the pack
-      await expect(prefs.getByTestId('icon-cell-folder')).toContainText('FF');
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
 
-test('a fresh install seeds the throng glyph pack + an SVG image pack (H6, FR-040b)', { tag: ['@extended', '@prefs'] }, async () => {
+test('a fresh install seeds the throng glyph pack + an SVG image pack (H6, FR-040b)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   const cfgRoot = bareCfgRoot();
   await runApp(
     async (app, win) => {
@@ -192,7 +177,7 @@ test('selecting a pack changes the icons in the MAIN WINDOW, live, with no resta
   );
 });
 
-test('pack icons take their colour from the THEME, not a fixed black (FR-004)', { tag: ['@extended', '@prefs'] }, async () => {
+test('pack icons take their colour from the THEME, not a fixed black (FR-004)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   const cfgRoot = bareCfgRoot();
   await runApp(
     async (app, win) => {

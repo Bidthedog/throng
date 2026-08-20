@@ -69,7 +69,7 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('Ctrl+Alt+B toggles the Projects pane and Ctrl+Alt+N toggles the Files & Folders pane', { tag: ['@extended', '@window'] }, async () => {
+test('Ctrl+Alt+B toggles the Projects pane and Ctrl+Alt+N toggles the Files & Folders pane', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'Alpha', 'C:/code/alpha'); // makes the Explorer visible
     // createProject() already waited for `.throng-shell` to render, which is hidden until the
@@ -93,7 +93,7 @@ test('Ctrl+Alt+B toggles the Projects pane and Ctrl+Alt+N toggles the Files & Fo
   });
 });
 
-test('the shell keeps Ctrl+B and Ctrl+N — no pane responds to them', { tag: ['@extended', '@window'] }, async () => {
+test('the shell keeps Ctrl+B and Ctrl+N — no pane responds to them', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'Beta', 'C:/code/beta');
     // createProject() already waited on `.throng-shell` (and thus on keybindings loading —
@@ -117,7 +117,7 @@ test('the shell keeps Ctrl+B and Ctrl+N — no pane responds to them', { tag: ['
   });
 });
 
-test('the pane-toggle shortcuts are configurable in keybindings.json', { tag: ['@extended', '@window'] }, async () => {
+test('the pane-toggle shortcuts are configurable in keybindings.json', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgkb-'));
   writeFileSync(
     join(cfg, 'keybindings.json'),

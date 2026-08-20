@@ -119,7 +119,7 @@ export function skipWithoutInteractiveDesktop(): void {
  */
 export function adminTest(title: string, body: () => Promise<void>): void {
   /*
-   * Three tags, on independent axes (034 FR-052/FR-053).
+   * Four tags, on independent axes (034 FR-052/FR-053; 035 FR-016).
    *
    * `@admin` says WHERE it can run — an environment guard, routed to the elevated runner.
    * `@extended` says WHICH LANE wants it, and it is not `@core` for a reason worth stating: the
@@ -129,8 +129,14 @@ export function adminTest(title: string, body: () => Promise<void>): void {
    * `@terminal` is the category, hardcoded rather than passed in because elevation only ever matters
    * here for run-as-admin and de-elevation — both terminal. If a non-terminal @admin spec is ever
    * written, this signature grows a parameter rather than the spec acquiring a wrong tag.
+   * `@reserve:runtime` says WHY no lower layer can hold these, and it is hardcoded for the same
+   * reason `@terminal` is: what makes an elevated test irreducible is always the same fact. It
+   * asserts the integrity level a real process actually runs at under real elevation or
+   * de-elevation — a property of the running process that no substitute can hold, because a stand-in
+   * would report whatever integrity level the test runner itself has. Every other entry describes
+   * something an elevated test does INCIDENTALLY (it types, it renders); this is the one it is FOR.
    */
-  test(title, { tag: ['@admin', '@extended', '@terminal'] }, async () => {
+  test(title, { tag: ['@admin', '@extended', '@terminal', '@reserve:runtime'] }, async () => {
     test.skip(!isElevated(), 'requires elevated privileges — run `npm run test:e2e:admin`');
     await body();
   });

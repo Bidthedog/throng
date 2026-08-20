@@ -36,7 +36,7 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import {
+import { FILE_OP_TIMEOUT_MS,
   addPanels,
   cleanupTemp,
   createProject,
@@ -299,68 +299,38 @@ async function renamePanel(win: Page, panelId: string, to: string): Promise<void
   await expect(input).toHaveCount(0);
 }
 
-const SEVERITIES = ['error', 'warning', 'info', 'success'] as const;
-
-test('the Notifications category offers a mode and a bounded duration for all four severities', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openSettings(app, win);
-
-      // The category exists, and it holds one ROW PER SEVERITY of each kind — four modes and four
-      // durations. Eight leaves is the whole of the user-facing surface #224 asks for.
-      await expect(prefs.getByTestId('settings-group-Notifications')).toBeVisible();
-      for (const severity of SEVERITIES) {
-        const mode = prefs.getByTestId(`control-notifications.${severity}.mode`);
-        await expect(mode).toBeVisible();
-        /*
-         * Three modes, exhaustive by design — and each one CALLED WHAT FR-001 CALLS IT.
-         *
-         * The value assertion below was the whole of this test, and it passed for months while the
-         * dropdown read "Never / Timed / Dismiss": the stored token is what every other test in this
-         * file drives (`selectOption('never')`), so nothing anywhere ever looked at the words on the
-         * screen. The user does not read `never`. Asserting the visible text is the only thing that
-         * can tell the difference between the specified names and the generic Title-Case fallback.
-         */
-        for (const [value, text] of [
-          ['never', 'Never display'],
-          ['timed', 'Display for'],
-          ['dismiss', 'Dismiss only'],
-        ] as const) {
-          const option = mode.locator(`option[value="${value}"]`);
-          await expect(option).toHaveCount(1);
-          await expect(option, `the ${value} option is not called "${text}"`).toHaveText(text);
-        }
-        // A bounded numeric is a SLIDER in this app, and the bounds are the parse's own — a control
-        // offering a value the parser would silently replace is issue #227 all over again.
-        const slider = prefs.getByTestId(`control-notifications.${severity}.timeoutMs-slider`);
-        await expect(slider).toHaveAttribute('min', '3000');
-        await expect(slider).toHaveAttribute('max', '30000');
-        /*
-         * The STEP, and the shipped default sitting exactly on it.
-         *
-         * A slider whose grid steps past the value the app shipped with is a control the user cannot
-         * undo with the control itself — drag once and Reset (or the JSON file) is the only way back.
-         * 3000 + 4×500 = 5000 and 3000 + 14×500 = 10000, which is what the 3000/30000 range bought
-         * and what 1500/60000 made arithmetically impossible.
-         */
-        await expect(slider).toHaveAttribute('step', '500');
-        // The FIELD groups anything of five digits or more (`formatGrouped`), so `info`'s 10000 reads
-        // "10,000" and a bare `Number()` on it is NaN. Strip what the display added.
-        const shownMs = await prefs
-          .getByTestId(`control-notifications.${severity}.timeoutMs`)
-          .inputValue();
-        const shipped = Number(shownMs.replace(/[^0-9]/g, ''));
-        expect((shipped - 3000) % 500, `${severity} ships ${shipped} ms, between two stops`).toBe(0);
-      }
-
-      // The shipped defaults (FR-013): a failure waits to be acknowledged, a confirmation does not.
-      await expect(prefs.getByTestId('control-notifications.error.mode')).toHaveValue('dismiss');
-      await expect(prefs.getByTestId('control-notifications.warning.mode')).toHaveValue('dismiss');
-      await expect(prefs.getByTestId('control-notifications.info.mode')).toHaveValue('timed');
-      await expect(prefs.getByTestId('control-notifications.success.mode')).toHaveValue('timed');
-    },
-  );
-});
+/*
+ * TWO TESTS REMOVED (035) — now `packages/ui/tests/component/preferences-settings-search.test.ts`,
+ * which already mounts `SettingsTab` under its three providers. Both launched Electron and opened a
+ * SECOND WINDOW to read this tab's own markup and one confirmation.
+ *
+ * THE FIRST'S OWN COMMENT SAYS WHY IT MATTERS, and that half is kept verbatim in spirit: its value
+ * assertion "passed for months while the dropdown read Never / Timed / Dismiss", because every other
+ * test in this file drives the STORED TOKEN and nothing ever read the words on screen. The component
+ * version asserts the visible text, and adds the count — a fifth severity, or a severity with a mode
+ * and no duration, is the drift a per-severity surface accumulates and neither test could see.
+ *
+ * FOUR THINGS THE RED STEP CORRECTED, all of them mine and all worth recording:
+ *
+ *   - The duration leaf is `timeoutMs`, not `durationMs`, and it renders TWO controls (a slider and
+ *     a number field).
+ *   - That file runs on FAKE TIMERS for its debounce, so every `findBy*` await hung to the 5s test
+ *     timeout. The dialog is raised synchronously inside the change handler, so a sync query is both
+ *     correct and stronger.
+ *   - The consequence assertion `/report nothing|not be shown|never/i` against the whole dialog
+ *     proved nothing: the TITLE is "Never display error notices?", so the alternation matched before
+ *     the message was consulted. Replacing the entire message with "Are you sure?" left it green.
+ *   - "Declining leaves the setting unchanged" proved nothing either, because that mount has no
+ *     config bridge and the select could never change. The discriminating observable is the WRITE —
+ *     through `writePatch`, not `write`, which is a third thing a spy had to be told.
+ *
+ * And one assertion is new: SUCCESS is not asked about either. The migrated test checked `info`;
+ * `success` is the same bargain and had no test at all.
+ *
+ * WHAT STAYS. Everything below that needs a real clock or a real config file: a timed notice
+ * expiring, a dismiss-mode notice NOT expiring, a mode setting gating whether a raised notice
+ * renders, and a pre-030 settings file resolving to defaults.
+ */
 
 test('Never display shows nothing at all, and Dismiss only shows it again in the same session (FR-012, FR-016)', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
@@ -384,7 +354,7 @@ test('Never display shows nothing at all, and Dismiss only shows it again in the
       if (await confirmed.isVisible().catch(() => false)) {
         await confirmed.getByRole('button').last().click();
       }
-      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.mode).toBe('never');
+      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.mode, { timeout: FILE_OP_TIMEOUT_MS }).toBe('never');
       await appliedInMainWindow(win, (n) => n?.error?.mode, 'never');
 
       await raiseErrorNotice(win);
@@ -402,7 +372,7 @@ test('Never display shows nothing at all, and Dismiss only shows it again in the
       // ── FR-016 / T014a: the change applies to the NEXT notice raised in this SAME session.
       // Nothing is reloaded, relaunched or reopened between here and the notice below.
       await prefs.getByTestId('control-notifications.error.mode').selectOption('dismiss');
-      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.mode).toBe('dismiss');
+      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.mode, { timeout: FILE_OP_TIMEOUT_MS }).toBe('dismiss');
       await appliedInMainWindow(win, (n) => n?.error?.mode, 'dismiss');
 
       await raiseErrorNotice(win);
@@ -462,8 +432,8 @@ test('Display for N takes an ERROR notice away after N, and NOT before (FR-004, 
         prefs.getByTestId('control-notifications.error.timeoutMs-slider'),
         String(SHORT_MS),
       );
-      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.mode).toBe('timed');
-      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.timeoutMs).toBe(SHORT_MS);
+      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.mode, { timeout: FILE_OP_TIMEOUT_MS }).toBe('timed');
+      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.timeoutMs, { timeout: FILE_OP_TIMEOUT_MS }).toBe(SHORT_MS);
       await appliedInMainWindow(win, (n) => n?.error, { mode: 'timed', timeoutMs: SHORT_MS });
 
       const notices = win.getByTestId('explorer-error');
@@ -484,7 +454,7 @@ test('Display for N takes an ERROR notice away after N, and NOT before (FR-004, 
         prefs.getByTestId('control-notifications.error.timeoutMs-slider'),
         String(LONG_MS),
       );
-      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.timeoutMs).toBe(LONG_MS);
+      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.timeoutMs, { timeout: FILE_OP_TIMEOUT_MS }).toBe(LONG_MS);
       await appliedInMainWindow(win, (n) => n?.error, { mode: 'timed', timeoutMs: LONG_MS });
 
       await raiseErrorNotice(win);
@@ -651,38 +621,3 @@ test('Dismiss only outlives any timeout — asserted on a WARNING, which auto-va
  * This file was measured at 60.8 seconds, among the ten slowest in the suite. What remains is what
  * earns that: real notices appearing, surviving a dismissal, and vanishing on a real timer.
  */
-test('choosing Never display for an error asks first, and declining changes nothing (FR-008)', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openSettings(app, win);
-      const errorMode = prefs.getByTestId('control-notifications.error.mode');
-
-      await errorMode.selectOption('never');
-      const dialog = prefs.getByTestId('confirm-dialog');
-      await expect(dialog).toBeVisible();
-      // It names the CONSEQUENCE — "are you sure?" asks the user to confirm a word, not an outcome.
-      await expect(dialog).toContainText(/report nothing|not be shown|never/i);
-
-      await prefs.keyboard.press('Escape');
-      await expect(dialog).toHaveCount(0);
-      // Unchanged, on screen and on disk — and no wait is needed to say so. `commit()`
-      // (settings-tab.tsx) only calls `applyEdit` inside the confirm promise's
-      // `.then((accepted) => accepted && applyEdit(...))`, and Escape resolves that promise to
-      // `false`, so a decline never starts a write for a sleep to wait out. The dialog's own removal
-      // above is already proof the decision (and non-write) landed.
-      await expect(errorMode).toHaveValue('dismiss');
-      expect(readSettings(cfgRoot)?.notifications?.error?.mode ?? 'dismiss').toBe('dismiss');
-
-      // `warning` asks too — a partly-failed operation reporting nothing is the same bargain.
-      await prefs.getByTestId('control-notifications.warning.mode').selectOption('never');
-      await expect(prefs.getByTestId('confirm-dialog')).toBeVisible();
-      await prefs.keyboard.press('Escape');
-      await expect(prefs.getByTestId('confirm-dialog')).toHaveCount(0);
-
-      // `info` does NOT: there is no failure to miss, so a prompt would be nagging.
-      await prefs.getByTestId('control-notifications.info.mode').selectOption('never');
-      await expect.poll(() => readSettings(cfgRoot)?.notifications?.info?.mode).toBe('never');
-      await expect(prefs.getByTestId('confirm-dialog')).toHaveCount(0);
-    },
-  );
-});

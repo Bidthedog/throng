@@ -139,7 +139,7 @@ async function openFileNames(win: Page): Promise<string[]> {
   return win.locator('.panel-box__file-name').allTextContents();
 }
 
-test('switching to a second project restores ITS files, not the one the last project loaded (#228)', { tag: ['@extended', '@editor'] }, async () => {
+test('switching to a second project restores ITS files, not the one the last project loaded (#228)', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
   test.setTimeout(240_000);
   const rootA = makeProject('throng-x228-alpha-', {
     'alpha-one.txt': 'ALPHA-ONE\n',
@@ -255,7 +255,7 @@ test('switching to a second project restores ITS files, not the one the last pro
   }
 });
 
-test('a dirty buffer restored in another project keeps ITS OWN path (#228)', { tag: ['@extended', '@editor'] }, async () => {
+test('a dirty buffer restored in another project keeps ITS OWN path (#228)', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
   test.setTimeout(240_000);
   const rootA = makeProject('throng-x228d-alpha-', { 'alpha-only.txt': 'ALPHA-ONLY\n' });
   const rootB = makeProject('throng-x228d-beta-', { 'beta-only.txt': 'BETA-ONLY\n' });

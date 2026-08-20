@@ -10,7 +10,7 @@ import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
 // exit info, and can be re-typed: selecting Terminal again + Confirm starts a fresh
 // session. The Panel's type is fixed only while content is live.
 
-test('typing exit reverts the Panel to the form with exit info, then it re-types', { tag: ['@extended', '@terminal'] }, async () => {
+test('typing exit reverts the Panel to the form with exit info, then it re-types', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-revert-'));
   try {
     await runApp(async (_app, win) => {
