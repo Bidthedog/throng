@@ -48,7 +48,7 @@
  * empty document: each test asserts the picker PRESENT before asserting anything about it going
  * away, so a strip that rendered nothing fails on the positive half.
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -62,6 +62,10 @@ import { FileOpUndoClient } from '../../src/renderer/state/fileop-undo-client.js
 import { PanelNameClient } from '../../src/renderer/state/panel-name-client.js';
 import { ServicesProvider, type Services } from '../../src/renderer/composition-root.js';
 import { StatusStrip } from '../../src/renderer/editor/status-strip.js';
+import {
+  claimTransientOverlay,
+  transientOverlayOpen,
+} from '../../src/renderer/common/transient-overlay.js';
 import {
   removePanelLanguage,
   setPanelLanguage,
@@ -207,5 +211,91 @@ describe('dismissing it', () => {
     // responding to input at all.
     expect(screen.getByTestId('language-option-rust')).toBeVisible();
     expect(screen.queryByTestId('language-option-plaintext')).toBeNull();
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * The picker PARTICIPATES in the one-overlay rule
+ * (033 FR-071/FR-071a — migrated from transient-overlays.e2e.ts:291, 035 T056)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * ══ THE DEFECT FR-071 EXISTS FOR ══
+ *
+ * A user pressed `Ctrl+Alt+T` and then `Ctrl+Shift+T` and got two focus-trapped modals on screen at
+ * once. FR-066 had promised "exactly one modal" and scoped the promise to the two NEW modals, so
+ * every other overlay was outside it.
+ *
+ * ══ WHY THIS IS TESTED AGAINST THE REGISTRY AND NOT AGAINST QUICK OPEN ══
+ *
+ * The E2E asserted the pair: open the language picker, open Quick Open, watch the picker go. That is
+ * one ordered pair out of a set that grows quadratically with every overlay added — and testing it
+ * pairwise is exactly the coupling **FR-071a forbids**, which says a feature must not import another
+ * feature's store to know whether to close.
+ *
+ * The rule is one shared slot. `unit/transient-overlay.test.ts` proves the slot's mechanics — five
+ * tests, including an incumbent whose dismiss throws, and a superseded release being a no-op. What
+ * it cannot say is whether any given overlay is WIRED to it.
+ *
+ * So this claims exactly that, from the picker's own side: something else claimed the slot, and the
+ * picker let go. It never mentions Quick Open, needs no second feature mounted, and would hold
+ * identically for an overlay written next year.
+ *
+ * ── AND A GUARD THAT IS DELIBERATELY NOT HERE ──
+ *
+ * The obvious next step is a source guard: every component rendering a `.modal-overlay` must call
+ * `useTransientOverlay`. It was investigated and NOT written, because it would be wrong. Five files
+ * render that scrim and only three participate — `confirm-dialog.tsx`, `app-close-prompt.tsx` and
+ * `project-settings-dialog.tsx` are MODAL rather than transient, and a confirmation that dismissed
+ * itself because someone opened Quick Open would be a worse defect than the one FR-071 fixed. The
+ * codebase does not mark that distinction anywhere, so the guard would encode a guess about which
+ * kind each new overlay is.
+ */
+describe('the language picker holds the shared overlay slot (FR-071)', () => {
+  it('closes when ANOTHER overlay claims the slot', async () => {
+    const { user } = mount();
+    await openPicker(user);
+    expect(picker(), 'the picker must be open for this to be about closing it').toBeTruthy();
+
+    // Any other overlay opening. Deliberately anonymous: the picker must not care which.
+    let release: (() => void) | undefined;
+    act(() => {
+      release = claimTransientOverlay(() => {});
+    });
+
+    await waitFor(() => expect(picker()).toBeNull());
+    act(() => release?.());
+  });
+
+  it('takes the slot when it opens, so the NEXT overlay can displace it', async () => {
+    /*
+     * The other half, and the one that makes the first half non-trivial: a picker that closed on any
+     * claim but never claimed anything itself would pass the test above while leaving the slot empty
+     * — so the overlay after it would find nothing to dismiss and the two would stack, which is the
+     * original defect.
+     */
+    const { user } = mount();
+    expect(transientOverlayOpen(), 'nothing should hold the slot before the picker opens').toBe(
+      false,
+    );
+
+    await openPicker(user);
+
+    expect(transientOverlayOpen()).toBe(true);
+  });
+
+  it('releases the slot when it closes on its own, leaving nothing to dismiss', async () => {
+    /*
+     * A picker that kept the slot after closing would make the NEXT overlay dismiss a corpse — and
+     * `transient-overlay.test.ts` proves a stale release is a no-op, not that anyone releases.
+     */
+    const { user } = mount();
+    await openPicker(user);
+    expect(transientOverlayOpen()).toBe(true);
+
+    await user.click(screen.getByTestId('outside'));
+
+    await waitFor(() => expect(picker()).toBeNull());
+    expect(transientOverlayOpen()).toBe(false);
   });
 });

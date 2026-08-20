@@ -34,21 +34,31 @@ export const APP_TSX = fileURLToPath(new URL('../../src/renderer/app.tsx', impor
 export const E2E_DIR = fileURLToPath(new URL('../e2e/', import.meta.url));
 
 /**
- * The action ids in `app.tsx`'s `HANDLED` set.
+ * The action ids in `app.tsx`'s window allowlist.
  *
  * Half the entries are string literals and half are module constants (`TABS_OPEN_PICKER`,
  * `QUICK_OPEN`, `GOTO_LINE`), so the identifiers are resolved against their declarations in the same
  * file. Every failure mode here THROWS rather than returning a short list: a scanner that quietly
  * finds nothing reports a clean bill of health for an allowlist it never read, which is the same
  * defect as the vacuous guard that FR-053a is about.
+ *
+ * ══ IT IS `WINDOW_HANDLED_ACTIONS` NOW, AND THIS GUARD CAUGHT THE RENAME ══
+ *
+ * The set was a `const HANDLED` inside the keydown effect until 035 hoisted it to module scope and
+ * exported it, so its membership could be asserted without launching the app. This regex still said
+ * `const HANDLED:` and threw — with the message above, which named the cause exactly. That is the
+ * guard working, and it is worth leaving the mechanism recorded rather than silently retargeted.
+ *
+ * The constant is EXPORTED now, so a consumer in a DOM environment can import it instead of parsing
+ * it. This one cannot: it is a node-env unit guard, and `app.tsx` touches `window` at module scope.
  */
 export function handledActions(): string[] {
   const src = readFileSync(APP_TSX, 'utf8');
-  const block = /const HANDLED:[^=]*=\s*new Set\(\[([\s\S]*?)\]\)/.exec(src);
+  const block = /const WINDOW_HANDLED_ACTIONS:[^=]*=\s*new Set\(\[([\s\S]*?)\]\)/.exec(src);
   if (!block) {
     throw new Error(
-      `could not find the HANDLED set in ${APP_TSX} — the dispatcher was restructured, and this ` +
-        `guard is no longer reading the allowlist it claims to cover`,
+      `could not find the WINDOW_HANDLED_ACTIONS set in ${APP_TSX} — the dispatcher was ` +
+        `restructured, and this guard is no longer reading the allowlist it claims to cover`,
     );
   }
   const entries = (block[1] ?? '')

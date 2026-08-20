@@ -244,6 +244,37 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('offers exactly Settings / Key Bindings / Themes / Open Logs Folder / About throng', () => {
+    /*
+     * MIGRATED FROM `packages/ui/tests/e2e/titlebar-chrome.e2e.ts:107` (035 FR-001).
+     *
+     * The E2E asserted the same five NAMES off the rendered menu, and its own comment says why it
+     * asserted names rather than whole rows: *"keeps the test about WHICH COMMANDS the cog offers…
+     * a decorative change should not redden this, but a command appearing or vanishing must."*
+     *
+     * Everything it needed was already here except this. The rows are built by the REAL
+     * `cogMenuItems()` (see `cog()` above), rendered through the REAL `ContextMenu`, and the
+     * dismissal half is the Escape test directly above. What no test asserted anywhere — unit
+     * included — is the LABELS: `menu-sections.test.ts:562` pins the five `testId`s and
+     * `:556` pins the sections, but nothing pinned the words the user actually reads.
+     *
+     * So a rename to "Preferences", or a sixth command appearing, was invisible to the whole suite
+     * below E2E. Reading them off `role="menuitem"` is deliberate: that is what a screen reader and
+     * a user both see, and it is the assertion the E2E was making.
+     */
+    openCog();
+    const labels = screen
+      .getAllByRole('menuitem')
+      .map((el) => el.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+
+    expect(labels).toHaveLength(5);
+    expect(labels[0]).toMatch(/Settings/);
+    expect(labels[1]).toMatch(/Key Bindings/);
+    expect(labels[2]).toMatch(/Themes/);
+    expect(labels[3]).toMatch(/Open Logs Folder/);
+    expect(labels[4]).toMatch(/About throng/);
+  });
 });
 
 describe('a row draws what its builder gave it', () => {

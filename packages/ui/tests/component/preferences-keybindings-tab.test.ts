@@ -19,10 +19,15 @@
  *
  * ══ WHAT STAYED AN E2E, and none of it is a near miss ══
  *
- *  - **Every test that reads `keybindings.json`.** Capture-adds-a-chord, a single bare key binding,
- *    a pill removing just its own chord, and Reassign moving a chord between two actions all assert
- *    the FILE. The tab hands `writeConfig` a bindings map; whether that map survives the write path
- *    is the config store's claim, not this component's.
+ *  - **~~Every test that reads `keybindings.json`.~~ SUPERSEDED (035 T034).** This said that
+ *    capture-adds-a-chord, a bare single key, a pill removing its own chord and Reassign all assert
+ *    the FILE, and that *"whether that map survives the write path is the config store's claim, not
+ *    this component's"*. The decomposition was right; it just left the other half of the sentence
+ *    homeless. The store's half is now proven twice —
+ *    `contract/config-write-patch.contract.test.ts` for the write, and
+ *    `component/config-store-adoption.test.ts` for a written document being adopted — and the tab's
+ *    own half, that it hands the write path the right map at all, was asserted NOWHERE. All four
+ *    came down; see "the tab hands the write path the map it built" below.
  *  - **The two `user-select: none` assertions.** They read `getComputedStyle(el).userSelect` for a
  *    value INHERITED from the application stylesheet. jsdom applies no real cascade, so asserting it
  *    here would be asserting about jsdom — 034 FR-049 exactly.
@@ -35,7 +40,7 @@
  * ══ ANTI-VACUITY CONTROL ══
  *
  * Delete the `ResetNoticeProvider` from `mountTab` below. `useResetNotice()` throws outside its
- * provider (`reset-notice.tsx`), the tab fails to render, and **all 12 tests in this file fail**.
+ * provider (`reset-notice.tsx`), the tab fails to render, and **every test in this file fails**.
  * The same is true of `ContextMenuProvider` and `NotificationProvider`, which throw the same way —
  * three independent controls, one required render.
  *
@@ -46,7 +51,8 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { DEFAULT_KEYBINDINGS, KEYBINDINGS_METADATA } from '@throng/core';
 import { KeybindingsTab } from '../../src/renderer/preferences/keybindings-tab.js';
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
@@ -279,6 +285,273 @@ describe('an unbound action (FR-016)', () => {
     mountTab();
     for (const action of ['editor.cutLine', 'file.cut', 'focus.left', 'editor.save']) {
       expect(screen.getByTestId(`binding-clear-${action}`), action).toBeEnabled();
+    }
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * The TAB's wiring: the modal in, the write path out
+ * (007 FR-031/FR-033/FR-033b, migrated from preferences-keybindings.e2e.ts
+ *  :128, :143, :179, :210 — 035 T034/T062)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * ══ WHY THESE FOUR CAME DOWN, HAVING BEEN KEPT ══
+ *
+ * The header above says they stayed because they assert `keybindings.json`, and *"whether that map
+ * survives the write path is the config store's claim, not this component's"*. That was correct when
+ * it was written and it is the right decomposition — it just left the OTHER half of the sentence
+ * homeless. The store's claim is now proven twice over: `contract/config-write-patch.contract.test.ts`
+ * for the write itself, and `component/config-store-adoption.test.ts` for a written document being
+ * adopted (035 T060/T062). What was never asserted anywhere is the tab's own half: **that it hands
+ * the write path the right map at all.**
+ *
+ * So these do not assert the file, and they are not a weaker version of the tests that did. They
+ * assert the seam between two things that are each already proven, which is the only part the E2E
+ * was uniquely able to see — and it saw it by launching Electron, opening a second window, and
+ * reading a file back.
+ *
+ * `preferences-capture-modal.test.ts` owns the modal's own behaviour (ADD-not-replace, a bare single
+ * key, the conflict) against a hand-written two-action map. Nothing below re-asserts that. What is
+ * below is: does a double-click open the modal for the RIGHT action, and does what comes back reach
+ * `writeConfig` intact.
+ */
+
+/** The keybindings documents handed to the bridge, newest last. */
+function recordWrites(): { docs: Array<{ version: unknown; bindings: Record<string, string[]> }> } {
+  const docs: Array<{ version: unknown; bindings: Record<string, string[]> }> = [];
+  Reflect.set(window, 'throng', {
+    config: {
+      write: (id: { kind?: string }, json: string) => {
+        if (id?.kind === 'keybindings') docs.push(JSON.parse(json));
+        return Promise.resolve({ ok: true });
+      },
+      writePatch: () => Promise.resolve({ ok: true }),
+    },
+  });
+  return { docs };
+}
+
+/** The most recent bindings map the tab wrote, or null if it wrote nothing. */
+const lastMap = (docs: Array<{ bindings: Record<string, string[]> }>): Record<string, string[]> | null =>
+  docs.length === 0 ? null : docs[docs.length - 1].bindings;
+
+describe('the tab hands the write path the map it built (FR-033)', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'throng');
+  });
+
+  it('a double-click opens the capture modal for THAT action', async () => {
+    /*
+     * The wiring IN. The modal is shared by every row, so opening the wrong one is a real and
+     * invisible failure: the user rebinds a command they never chose and the chord still lands.
+     */
+    recordWrites();
+    const { user } = mountTab();
+
+    await user.dblClick(screen.getByTestId('binding-view.toggleProjects'));
+
+    const modal = await screen.findByTestId('capture-modal');
+    expect(modal).toBeVisible();
+    // The modal names the action it is capturing for — which is what makes it the right one.
+    expect(modal.textContent ?? '').toMatch(/projects/i);
+  });
+
+  it('a captured chord reaches writeConfig ADDED to what was bound, not replacing it', async () => {
+    /*
+     * Migrated from `:128`. The E2E polled `keybindings.json` for
+     * `['Ctrl+Alt+B', 'Ctrl+K']`; this asserts the same array at the moment the tab hands it over.
+     *
+     * The ADD is the load-bearing half either way: replacing would silently take away a binding the
+     * user never asked to lose, and both the old array and the new one contain `Ctrl+K`.
+     */
+    const { docs } = recordWrites();
+    const { user } = mountTab();
+
+    await user.dblClick(screen.getByTestId('binding-view.toggleProjects'));
+    await screen.findByTestId('capture-modal');
+    press('k', { ctrlKey: true });
+
+    await waitFor(() => expect(docs.length).toBeGreaterThan(0));
+    expect(lastMap(docs)?.['view.toggleProjects']).toEqual(['Ctrl+Alt+B', 'Ctrl+K']);
+  });
+
+  it('carries the document VERSION through, so the write is not a downgrade', async () => {
+    /*
+     * Not in the E2E, and reachable only from here: the E2E read `bindings` out of the file and
+     * never looked at the rest of the document. The tab composes `{ version, bindings }` by hand,
+     * so dropping the version is a one-character change that no assertion on `bindings` can see.
+     */
+    const { docs } = recordWrites();
+    const { user } = mountTab();
+
+    await user.dblClick(screen.getByTestId('binding-view.toggleProjects'));
+    await screen.findByTestId('capture-modal');
+    press('k', { ctrlKey: true });
+
+    await waitFor(() => expect(docs.length).toBeGreaterThan(0));
+    expect(docs[docs.length - 1].version).toBe(DEFAULT_KEYBINDINGS.version);
+  });
+
+  it('a bare single key binds, with no modifier required', async () => {
+    // Migrated from `:143`. F7 is unbound in the shipped table, so it adds cleanly.
+    const { docs } = recordWrites();
+    const { user } = mountTab();
+
+    await user.dblClick(screen.getByTestId('binding-view.toggleExplorer'));
+    await screen.findByTestId('capture-modal');
+    press('F7');
+
+    await waitFor(() => expect(docs.length).toBeGreaterThan(0));
+    expect(lastMap(docs)?.['view.toggleExplorer']).toEqual(['Ctrl+Alt+N', 'F7']);
+  });
+});
+
+describe('removing one chord removes only that chord (FR-033b)', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'throng');
+  });
+
+  it('writes the action WITHOUT the removed chord, and every other action untouched', async () => {
+    /*
+     * Migrated from `:179`. The E2E asserted the one action's array in the file; this asserts that
+     * array AND that nothing else in the document moved — which is the failure that would actually
+     * hurt (a remove that rebuilds the map from a stale copy takes other actions with it) and which
+     * reading one key out of a file cannot see.
+     */
+    const { docs } = recordWrites();
+    const { user } = mountTab();
+
+    // An action with two shipped chords, so removing one leaves something behind to check.
+    const target = Object.entries(DEFAULT_KEYBINDINGS.bindings).find(
+      ([, chords]) => (chords as string[]).length >= 2,
+    );
+    expect(target, 'the shipped table must have a multi-chord action for this test to mean anything')
+      .toBeTruthy();
+    const [action, chords] = target as [string, string[]];
+
+    await user.click(screen.getByTestId(`binding-${action}-remove-0`));
+
+    await waitFor(() => expect(docs.length).toBeGreaterThan(0));
+    const map = lastMap(docs) ?? {};
+    expect(map[action]).toEqual(chords.slice(1));
+
+    // Every OTHER action is byte-identical to the shipped table.
+    for (const [other, expected] of Object.entries(DEFAULT_KEYBINDINGS.bindings)) {
+      if (other === action) continue;
+      expect(map[other], `${other} must not have moved`).toEqual(expected);
+    }
+  });
+});
+
+describe('Reassign moves a chord between two actions (FR-033/034)', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'throng');
+  });
+
+  it('writes BOTH actions in one document — added to the new owner, gone from the old', async () => {
+    /*
+     * Migrated from `preferences-keybindings.e2e.ts:210`.
+     *
+     * The tests above this one already cover the WARNING (that a real clash is detected, and that it
+     * names the command it would take the chord from) and CANCEL (that neither binding moves). What
+     * had no home below E2E is the Reassign action itself, and it is the one with two halves that
+     * can fail independently:
+     *
+     *   - the chord is ADDED to the new owner rather than replacing what it already holds;
+     *   - the chord is REMOVED from the old one.
+     *
+     * A reassign that only adds leaves the chord bound twice, which is the state the conflict
+     * warning exists to prevent. A reassign that only removes silently unbinds a command. The E2E
+     * asserted both by polling the file twice; both are asserted here in ONE document, which is
+     * strictly stronger — the two file polls could each have read a different write.
+     *
+     * `Ctrl+Alt+B` is chosen because `view.toggleProjects` actually holds it. Using any other chord
+     * raises no conflict, the Reassign control never appears, and the test would quietly stop
+     * testing this path (026 / #165 records exactly that happening).
+     */
+    const { docs } = recordWrites();
+    const { user } = mountTab();
+
+    await user.dblClick(screen.getByTestId('binding-view.toggleExplorer'));
+    await screen.findByTestId('capture-modal');
+    press('b', { ctrlKey: true, altKey: true });
+
+    // The conflict must be real, or there is nothing to reassign — asserted, not assumed.
+    expect(await screen.findByTestId('capture-conflict')).toBeVisible();
+    await user.click(screen.getByTestId('capture-reassign'));
+
+    await waitFor(() => expect(docs.length).toBeGreaterThan(0));
+    const map = lastMap(docs) ?? {};
+    // Additive for the new owner: it keeps what it had.
+    expect(map['view.toggleExplorer']).toEqual(['Ctrl+Alt+N', 'Ctrl+Alt+B']);
+    // And the previous owner loses it.
+    expect(map['view.toggleProjects']).toEqual([]);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * search-keybindings-editor.e2e.ts — the tab lists EVERY command, not some
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Every rebindable command has a row (015 SC-006).
+ *
+ * MIGRATED FROM `packages/ui/tests/e2e/search-keybindings-editor.e2e.ts:122` (035 T055) —
+ * `test('every search & scrollback command is listed in the Key Bindings editor (SC-006)')`.
+ *
+ * ══ THE MIGRATION MAKES THE CLAIM STRONGER, WHICH IS THE REASON TO MAKE IT ══
+ *
+ * That test opened a preferences window and looked for a row per action in two hand-written arrays
+ * — thirteen search and scrollback commands, listed at the top of the spec file. A hand-written list
+ * is a snapshot of what someone remembered on the day, and the failure it cannot catch is the one
+ * that matters: a NEW command added to the registry and forgotten by the editor. It is not in the
+ * array, so nothing looks for it, and the user simply cannot rebind it.
+ *
+ * The version below sweeps `KEYBINDINGS_METADATA` itself, so it covers every command that exists
+ * today and every one added tomorrow, and it needs no maintenance to keep doing so.
+ *
+ * The registry's own completeness is `packages/core/tests/unit/keybindings-metadata.test.ts:9`
+ * ("describes every ActionId and no unknown keys"). That half was already proven; this is the join
+ * — that the tab actually renders what the registry holds — which was not.
+ */
+describe('the tab lists every rebindable command (SC-006)', () => {
+  it('renders a row for EVERY descriptor in the registry', () => {
+    mountTab();
+
+    const missing = KEYBINDINGS_METADATA.filter(
+      (d) => screen.queryByTestId(`binding-${d.key}`) === null,
+    ).map((d) => d.key);
+
+    expect(
+      missing,
+      'a command in the registry with no row cannot be rebound by anyone, and nothing else notices',
+    ).toEqual([]);
+  });
+
+  it('sweeps a registry that is not empty — the check above is not vacuous', () => {
+    // A `filter` over nothing returns nothing and passes. This is the guard on the guard.
+    expect(KEYBINDINGS_METADATA.length).toBeGreaterThan(20);
+  });
+
+  it('lists the search and scrollback commands the migrated test named, by name', () => {
+    /*
+     * The sweep above subsumes these, and they are still written out: SC-006 is a requirement about
+     * SEARCH being rebindable, and a sweep that went green because the registry had quietly lost
+     * them would satisfy "every descriptor has a row" perfectly.
+     *
+     * This is the half of the E2E's hand-written array that was worth keeping — as an assertion that
+     * these commands EXIST, which is a different claim from every existing command being listed.
+     */
+    mountTab();
+
+    for (const action of [
+      'search.find',
+      'search.findNext',
+      'search.findPrevious',
+      'search.close',
+    ]) {
+      expect(screen.queryByTestId(`binding-${action}`), `${action} is missing`).not.toBeNull();
     }
   });
 });

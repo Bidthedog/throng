@@ -248,3 +248,72 @@ describe('the same rule at THREE levels', () => {
     expect(document.activeElement).toHaveAttribute('data-testid', 'menu-item-Open In');
   });
 });
+
+/**
+ * A menu opens with NOTHING highlighted (021 FR-018b).
+ *
+ * MIGRATED FROM `packages/ui/tests/e2e/preferences-fonts-and-sliders.e2e.ts:113` (035 T055) —
+ * `test('a menu opens with NOTHING highlighted (the first item is not chosen for you)')`.
+ *
+ * ══ WHY THE ABSENCE IS THE REQUIREMENT ══
+ *
+ * The menu itself takes focus, so the arrow keys reach it — but no ITEM does, because a highlighted
+ * item is an answer to a question the user has not asked yet. Open a menu with the first item
+ * pre-selected and Enter fires it; the user who opened the menu to LOOK has now done something.
+ *
+ * That makes this a pair of claims, not one, and both halves matter in opposite directions: focus is
+ * on the menu (or the keyboard reaches nothing and the menu is mouse-only), and focus is on no item
+ * (or Enter is armed before a choice is made). The E2E asserted both, and so does this.
+ *
+ * ══ WHAT IT COST TO ASSERT ══
+ *
+ * An Electron launch, a click on the title-bar cog, and an Escape afterwards — with a comment
+ * explaining that a menu left standing would be dismissed by the NEXT test's first click, silently
+ * swallowing it. That hazard is a property of a shared app, and it does not exist here.
+ */
+describe('opening a menu chooses nothing for you (FR-018b)', () => {
+  it('focuses the MENU, so the arrows reach it', () => {
+    open();
+
+    const menu = screen.getByTestId('context-menu');
+    expect(document.activeElement).toBe(menu);
+  });
+
+  it('focuses NO ITEM, so Enter is not armed before a choice is made', () => {
+    open();
+
+    expect(document.querySelectorAll('.context-menu__item:focus')).toHaveLength(0);
+  });
+
+  it('and the first ArrowDown is what selects one — so the absence above is a starting state', async () => {
+    /*
+     * The anti-vacuity half. A menu whose items could never take focus at all would satisfy both
+     * assertions above perfectly, and would be a menu no keyboard user can operate.
+     */
+    const { user } = open();
+
+    await user.keyboard('{ArrowDown}');
+
+    expect(document.querySelectorAll('.context-menu__item:focus')).toHaveLength(1);
+  });
+
+  it('does not fire an item’s action on the Enter that follows an open', async () => {
+    // The consequence the rule exists to prevent, asserted as itself: a user who opens a menu and
+    // presses Enter to dismiss it must not have run the first command on the list.
+    const onCopy = vi.fn();
+    render(
+      createElement(ContextMenu, {
+        x: 10,
+        y: 10,
+        items: items(onCopy),
+        onClose: vi.fn(),
+        submenuDelayMs: 0,
+      }),
+    );
+    const user = userEvent.setup();
+
+    await user.keyboard('{Enter}');
+
+    expect(onCopy).not.toHaveBeenCalled();
+  });
+});

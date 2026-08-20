@@ -19,7 +19,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import type { FieldDescriptor } from '@throng/core';
+import { SETTINGS_METADATA, type FieldDescriptor } from '@throng/core';
 import { MapControl, validateKey } from '../../src/renderer/preferences/map-control.js';
 
 /** The extension map: keys must LOOK like extensions, which is the interesting validation. */
@@ -113,5 +113,82 @@ describe('validateKey, directly (it is exported and pure)', () => {
   it('requires an extension to start with a dot', () => {
     expect(validateKey('foo', [], byExtension)).toMatch(/dot/i);
     expect(validateKey('.foo', [], byExtension)).toBeNull();
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * The LANGUAGE map: real names, and a picker rather than a text box
+ * (FR-022 — migrated from preferences-map-control.e2e.ts:201, 035 T055)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * ══ WHY THIS VARIANT NEEDED ITS OWN TESTS ══
+ *
+ * Everything above drives `editor.languageByExtension`, whose keys the user TYPES. The other map,
+ * `editor.indentByLanguage`, is the same control with `keyKind: 'language'` — and that flag changes
+ * three visible things at once: the key column's label, how a key is displayed, and whether a new
+ * key is typed or CHOSEN. None of them were covered here, and the E2E that covered them opened a
+ * preferences window to read a `<th>`.
+ *
+ * ══ THE DESCRIPTOR IS THE SHIPPED ONE, NOT A FIXTURE ══
+ *
+ * Taken from `SETTINGS_METADATA` rather than written by hand, so "the column says Language" is a
+ * claim about what users see and not about a literal this file chose. A fixture would pass happily
+ * after someone relabelled the real setting.
+ */
+describe('a language-keyed map (FR-022)', () => {
+  /** The real `editor.indentByLanguage` descriptor, as shipped. */
+  const byLanguage = SETTINGS_METADATA.find(
+    (d) => d.key === 'editor.indentByLanguage',
+  ) as FieldDescriptor;
+
+  const langId = (suffix: string): string => `${suffix}-editor.indentByLanguage`;
+
+  it('is a real shipped descriptor, keyed by language', () => {
+    // Guards the three tests below against a rename that would otherwise make them vacuous.
+    expect(byLanguage, 'editor.indentByLanguage is missing from SETTINGS_METADATA').toBeTruthy();
+    expect((byLanguage as { keyKind?: string }).keyKind).toBe('language');
+  });
+
+  it('names the key column "Language", so a user knows what a row IS', () => {
+    renderMap(byLanguage, { csharp: { style: 'spaces', indentWidth: 4, tabWidth: 4 } });
+
+    const table = screen.getByTestId(langId('control'));
+    expect(table.querySelector('th')?.textContent).toBe('Language');
+  });
+
+  it('shows the language the way it is SPELLED, never its internal id', () => {
+    /*
+     * `csharp` is not a name anybody writes. The row must read "C#", and — the half that matters —
+     * must NOT also leak the id, because a table showing both is a table where the user cannot tell
+     * which one to type elsewhere.
+     */
+    renderMap(byLanguage, {
+      csharp: { style: 'spaces', indentWidth: 4, tabWidth: 4 },
+      cpp: { style: 'spaces', indentWidth: 2, tabWidth: 2 },
+    });
+
+    const csharp = screen.getByTestId(langId('map-row') + '-csharp');
+    expect(csharp).toHaveTextContent('C#');
+    expect(csharp).not.toHaveTextContent('csharp');
+    expect(screen.getByTestId(langId('map-row') + '-cpp')).toHaveTextContent('C++');
+  });
+
+  it('adds a row by CHOOSING, and offers only languages not already mapped', () => {
+    /*
+     * A `<select>` rather than a text box, and filtered — so a duplicate is PREVENTED rather than
+     * refused after the fact. The extension map above refuses duplicates with a message, which is
+     * the right answer when keys are typed and the wrong one when they are chosen from a list the
+     * control itself controls.
+     */
+    renderMap(byLanguage, { sql: { style: 'spaces', indentWidth: 2, tabWidth: 2 } });
+
+    const picker = screen.getByTestId(langId('map-new-key'));
+    expect(picker.tagName).toBe('SELECT');
+
+    const offered = [...picker.querySelectorAll('option')].map((o) => o.textContent ?? '');
+    expect(offered.length, 'an empty picker would satisfy the exclusion below').toBeGreaterThan(5);
+    expect(offered, 'SQL already has a row, so it must not be offered again').not.toContain('SQL');
+    expect(offered).toContain('Ruby');
   });
 });

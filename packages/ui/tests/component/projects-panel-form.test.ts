@@ -44,6 +44,12 @@
  *
  *   - `new-project-folder.e2e.ts` (all four) stays: the picker's `defaultPath` cascade is resolved in
  *     UI-main against a real filesystem, and the renderer contributes an empty `profileDir`.
+ *     **SUPERSEDED by 035.** True when written, and it stopped being true once the handler body was
+ *     lifted out of `main.ts` into `pick-folder.ts` behind injected dependencies: a contract test
+ *     now drives the real cascade against a real temp directory with a stub dialog
+ *     (`contract/pick-folder-ipc.contract.test.ts`), and the four E2E tests are deleted. Recorded
+ *     rather than quietly edited, because "a real filesystem" was never the obstacle — the obstacle
+ *     was that the code had no seam, and that is a fact about the code rather than about the layer.
  *   - `project-browse-neutral.e2e.ts` stays: three computed colours and a `:hover` (FR-049).
  *
  * ══ ANTI-VACUITY CONTROL ══
@@ -188,6 +194,19 @@ function fakeDaemon(seed: ProjectDto[] = []) {
         case 'projects.setActive':
           reply = { activeId: (params as { id: string }).id };
           break;
+
+        // 035 T055 — added for the removal-verb tests at the foot of this file. The daemon really
+        // does unregister the project and really does leave its folder alone, which is the promise
+        // the confirmation makes; `layouts` is untouched here for the same reason.
+        case 'projects.delete': {
+          const { id } = params as { id: string };
+          if (!projects.some((p) => p.id === id)) {
+            return Promise.reject(new Error(`no such project: ${id}`));
+          }
+          projects = projects.filter((p) => p.id !== id);
+          reply = { ok: true };
+          break;
+        }
 
         case 'workspace.load': {
           const { projectId } = params as { projectId: string };
@@ -611,5 +630,201 @@ describe('the inline rename box (FR-029, 120-character cap)', () => {
     fireEvent.keyDown(still, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByTestId('project-rename-input-p1')).toBeNull());
     expect(screen.getByTestId('project-item-p1').textContent ?? '').toContain('Proj');
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * removal-verbs.e2e.ts · phase9.e2e.ts — what the delete confirmation SAYS
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * The verb a project is removed with, and the promise made beside it (011 US2, FR-030..037, FR-042).
+ *
+ * MIGRATED FROM (035 T055):
+ *   - `packages/ui/tests/e2e/removal-verbs.e2e.ts:69`  — a project uses the Remove verb and states
+ *     no files are deleted
+ *   - `packages/ui/tests/e2e/phase9.e2e.ts:90`         — confirms before deleting a project (FR-042)
+ *
+ * ══ THE VERB MATTERS BECAUSE THE TWO OUTCOMES ARE NOT ALIKE ══
+ *
+ * Removing a project unregisters it and touches nothing on disk. Destroying a panel ends a process.
+ * Deleting a file is gone. A dialog that says "Delete" over an operation that deletes nothing
+ * teaches the user to fear a safe action, and — the direction that actually costs — teaches them
+ * that this app's "Delete" does not mean what it says, which is the sentence they will remember when
+ * a dialog does.
+ *
+ * `packages/core/tests/unit/removal-verbs.test.ts` proves which verb a PANEL gets. Nothing proved
+ * what the project control and its confirmation actually say, and the two E2Es above were launching
+ * an app — one of them with its own daemon and data directory — to read a title attribute and a
+ * sentence.
+ *
+ * ══ WHAT IS NOT HERE ══
+ *
+ * That the project is really unregistered from the daemon's store, and that its files survive. Both
+ * reach past the renderer, and `removal-verbs.e2e.ts` keeps them.
+ */
+describe('removing a project names the Remove verb, and promises no files are deleted', () => {
+  const deleteControl = (name: string): HTMLElement => {
+    const row = screen
+      .getAllByTestId(/^project-item-/)
+      .find((el) => (el.textContent ?? '').includes(name));
+    if (!row) throw new Error(`no project row named ${name}`);
+    return within(row).getByTestId(/^project-delete-/);
+  };
+
+  it('labels the control itself Remove, not Delete', async () => {
+    // The tooltip is the only wording a user sees before they commit to anything.
+    const { user } = await mount([], { picked: undefined });
+    await createProject(user, 'Verbs', 'C:/c/verbs');
+
+    expect(deleteControl('Verbs').getAttribute('title') ?? '').toMatch(/remove/i);
+  });
+
+  it('confirms first — the control alone never removes anything (FR-042)', async () => {
+    const { user } = await mount([], { picked: undefined });
+    await createProject(user, 'Verbs', 'C:/c/verbs');
+
+    await user.click(deleteControl('Verbs'));
+
+    await waitFor(() => expect(screen.getByTestId('confirm-dialog')).toBeVisible());
+  });
+
+  it('names the Remove verb in the confirmation, and says no files are deleted', async () => {
+    const { user } = await mount([], { picked: undefined });
+    await createProject(user, 'Verbs', 'C:/c/verbs');
+    await user.click(deleteControl('Verbs'));
+
+    const dialog = await screen.findByTestId('confirm-dialog');
+    expect(dialog.textContent ?? '').toMatch(/remove/i);
+    expect(
+      dialog.textContent ?? '',
+      'the one promise that makes Remove different from Delete',
+    ).toMatch(/no files/i);
+  });
+
+  it('lets NO forbidden verb leak into the sentence', async () => {
+    // "Destroy" belongs to a panel, where a process really does end. On a project it is simply
+    // false, and a user who reads it here has been told their files are at risk.
+    const { user } = await mount([], { picked: undefined });
+    await createProject(user, 'Verbs', 'C:/c/verbs');
+    await user.click(deleteControl('Verbs'));
+
+    const dialog = await screen.findByTestId('confirm-dialog');
+    expect(dialog.textContent ?? '').not.toMatch(/destroy/i);
+  });
+
+  it('CANCEL keeps the project — the row is still there', async () => {
+    const { user } = await mount([], { picked: undefined });
+    await createProject(user, 'Verbs', 'C:/c/verbs');
+    await user.click(deleteControl('Verbs'));
+    await screen.findByTestId('confirm-dialog');
+
+    await user.click(screen.getByTestId('confirm-cancel'));
+
+    await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
+    expect(deleteControl('Verbs')).toBeInTheDocument();
+  });
+
+  it('and accepting removes it — so the cancel above is not vacuous', async () => {
+    /*
+     * The anti-vacuity half, and the E2E's own shape: a dialog that never removed anything would
+     * satisfy every assertion above. Removing a project is a DOUBLE confirmation — the summary,
+     * then the wry second — which is itself the FR-042 behaviour worth keeping.
+     */
+    const { user } = await mount([], { picked: undefined });
+    await createProject(user, 'Doomed', 'C:/c/doomed');
+    await user.click(deleteControl('Doomed'));
+
+    await screen.findByTestId('confirm-dialog');
+    await user.click(screen.getByTestId('confirm-accept'));
+    const second = screen.queryByTestId('confirm-accept');
+    if (second) await user.click(second);
+
+    await waitFor(() =>
+      expect(
+        screen.queryAllByTestId(/^project-item-/).filter((el) =>
+          (el.textContent ?? '').includes('Doomed'),
+        ),
+      ).toHaveLength(0),
+    );
+  });
+});
+
+/**
+ * Each project row shows its path under its name (FR-032).
+ *
+ * MIGRATED FROM `packages/ui/tests/e2e/ux-refinements.e2e.ts:198` (035 T055) —
+ * `test('shows each project's path under its name (FR-032)')`.
+ *
+ * One DOM assertion behind an Electron launch. The claim is that a row carries its OWN path, which
+ * is what the E2E's own 034 note is about: a bare `getByTestId('project-path')` matched one node per
+ * project the moment a second existed, so the assertion was scoped to Pathy's row. That scoping is
+ * the whole substance, and it is a query over a rendered list.
+ *
+ * Two rows are used below rather than one, because "each project's path" is a claim about several —
+ * and a single row cannot tell a per-row path apart from one the panel renders once.
+ */
+describe('each project row carries its own path (FR-032)', () => {
+  const pathOf = (name: string): string => {
+    const row = screen
+      .getAllByTestId(/^project-item-/)
+      .find((el) => (el.textContent ?? '').includes(name));
+    if (!row) throw new Error(`no project row named ${name}`);
+    return within(row).getByTestId('project-path').textContent ?? '';
+  };
+
+  it('shows the path under the name, per row, with two projects on screen', async () => {
+    const { user } = await mount([], { picked: undefined });
+    await createProject(user, 'Pathy', 'C:/code/some/deep/path');
+    await createProject(user, 'Otherly', 'C:/code/elsewhere');
+
+    expect(pathOf('Pathy')).toContain('C:/code/some/deep/path');
+    expect(pathOf('Otherly')).toContain('C:/code/elsewhere');
+  });
+
+  it('does not put one project’s path on another’s row', async () => {
+    // The failure a single-row test cannot see, and the reason the E2E had to scope its query.
+    const { user } = await mount([], { picked: undefined });
+    await createProject(user, 'Pathy', 'C:/code/some/deep/path');
+    await createProject(user, 'Otherly', 'C:/code/elsewhere');
+
+    expect(pathOf('Pathy')).not.toContain('elsewhere');
+    expect(pathOf('Otherly')).not.toContain('deep/path');
+  });
+});
+
+/**
+ * The "new project" control is an icon, not a character (018 FR-014b, SC-002).
+ *
+ * MIGRATED FROM `packages/ui/tests/e2e/menus.e2e.ts:93` (035 T055) — the fifth of the five controls
+ * that test checked. The other four are the title bar's and are asserted in
+ * `packages/ui/tests/component/title-bar.test.ts`, "the chrome draws icons, not characters".
+ *
+ * It was a literal ＋ character, which is the failure this claim is about: a glyph that cannot take
+ * a theme token, cannot be swapped by an icon pack, and renders in whatever font the surrounding
+ * text happens to use. SC-002's ban on inline `<svg>` (`unit/no-inline-artwork.test.ts:60`) does not
+ * catch it, because a character is not artwork — which is precisely why the positive assertion is
+ * needed beside the negative one.
+ */
+describe('the new-project control is drawn from the icon pack (FR-014b, SC-002)', () => {
+  it('renders exactly one icon, and no bare plus character', async () => {
+    await mount([], { picked: undefined });
+
+    const control = screen.getByTestId('project-new');
+    const icons = control.querySelectorAll('.icon');
+    expect(icons).toHaveLength(1);
+
+    /*
+     * The glyph must come from INSIDE the icon, not from a text node beside it.
+     *
+     * A first draft asserted the control contained no ＋ at all, and it failed: the shipped pack's
+     * `add` token IS a ＋ character. That is not the defect — a character supplied BY the pack is
+     * themed and swappable, which is the whole point. The literal this replaced was a ＋ written
+     * into the JSX, outside the theming system, and the two look identical in `textContent`.
+     *
+     * So the assertion is about WHERE the glyph lives: everything the control renders is accounted
+     * for by its icon, and nothing is left over.
+     */
+    expect(control.textContent ?? '').toBe(icons[0].textContent ?? '');
   });
 });
