@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /**
  * 030 FR-057 / SC-013 — A NOTICE THAT STATES NO SUBJECT MUST NOT COMPILE.
@@ -36,6 +36,62 @@ const GUARD = join(HERE, '..', '.tsc-notice-guard');
 const TSC = fileURLToPath(new URL('../../../../node_modules/typescript/bin/tsc', import.meta.url));
 
 afterAll(() => rmSync(GUARD, { recursive: true, force: true }));
+
+/** The workspace root, four levels up from `packages/ui/tests/unit/`. */
+const REPO = fileURLToPath(new URL('../../../../', import.meta.url));
+
+/**
+ * Bring `@throng/core`'s BUILD up to date before compiling anything.
+ *
+ * ══ WHY A UNIT TEST BUILDS A PACKAGE ══
+ *
+ * The fixtures below import the renderer's `notification.js`, and tsc follows that graph into
+ * `config-store.tsx` and `write-config.ts`, both of which import from `@throng/core` — which the
+ * renderer's tsconfig resolves through **`packages/core/dist`**, not through its source.
+ *
+ * So this guard's result depended on a build artifact it neither produced nor checked, and the
+ * failure mode was the worst kind: the CONTROL case goes red, the message blames a "fresh tree", and
+ * the real cause is anything at all that left `dist` behind `src` — a rebase, a branch switch, an
+ * interrupted build, another session's `tsc -b`. Reported symptom: *"returns different errors every
+ * time I run it"*, which is exactly right, because the errors are whatever that stale barrel happens
+ * to be missing.
+ *
+ * Reproduced deliberately before this was written: deleting `applyConfigPatch` and `ConfigChange`
+ * from the built barrel fails the control with two `TS2305`s and nothing else changed; restoring it
+ * passes. That is the whole mechanism.
+ *
+ * ══ WHY BUILD RATHER THAN DETECT ══
+ *
+ * A staleness CHECK still ends in "…so this test cannot run", which is a red bar for something the
+ * test could simply have fixed. A test that establishes its own precondition is worth a few seconds;
+ * one that fails on somebody else's build state is worth less than nothing, because it teaches
+ * people to disbelieve it.
+ *
+ * ══ WHY INCREMENTAL FIRST AND FORCED ONLY ON FAILURE ══
+ *
+ * Measured here, on this tree: `tsc -b` when `dist` is already current costs **1079 ms**, and
+ * `--force` costs **3284 ms**. The incremental build is what fixes the real staleness mode — `src`
+ * newer than `dist`, after a rebase or a branch switch — because `tsbuildinfo` sees the inputs move.
+ *
+ * It does NOT fix a `dist` that is wrong while `src` is untouched, and that was learnt the hard way:
+ * the first version of this fix was verified by hand-editing the built barrel, `tsc -b` decided the
+ * project was up to date, nothing was rebuilt, and the "fix" failed its own verification while
+ * leaving the tree broken. So the control below force-rebuilds and retries ONCE before it is allowed
+ * to fail. The common path stays at ~1 s and the pathological path repairs itself, which means the
+ * message that reaches a developer is only ever about a real type error.
+ */
+function buildCore(force: boolean): void {
+  const args = [TSC, '-b', join(REPO, 'packages', 'core')];
+  if (force) args.push('--force');
+  try {
+    execFileSync(process.execPath, args, { encoding: 'utf8', stdio: 'pipe', cwd: REPO });
+  } catch {
+    // A core that will not build is its own failure and `typecheck` reports it far more clearly than
+    // this guard could. Let the fixtures below run and say what tsc actually found.
+  }
+}
+
+beforeAll(() => buildCore(false), 180_000);
 
 /**
  * Compile one fixture on its own, and report what tsc said.
@@ -110,12 +166,23 @@ describe('FR-057 — the type system rejects a notice that names nothing', () =>
   it(
     'the SAME raise compiles cleanly once it says { kind: "none" }',
     () => {
-      const { code, output } = compile('explicit-none', WITH_EXPLICIT_NONE);
+      let { code, output } = compile('explicit-none', WITH_EXPLICIT_NONE);
+
+      /*
+       * One forced rebuild before believing a red. See the header: a `dist` that is wrong while
+       * `src` is untouched is invisible to `tsc -b`, and that state produces `TS2305`s about members
+       * the source plainly exports — which reads as a broken requirement and is nothing of the kind.
+       */
+      if (code !== 0) {
+        buildCore(true);
+        ({ code, output } = compile('explicit-none-after-rebuild', WITH_EXPLICIT_NONE));
+      }
+
       expect(
         code,
         'the control fixture does not compile, so the test above proves nothing. ' +
-          'If this is a fresh tree, run `npm run build` first — the renderer resolves ' +
-          '@throng/core through packages/core/dist.\n' +
+          'This is NOT a stale `packages/core/dist`: it was rebuilt, forcibly, and the fixture ' +
+          'was compiled again. These diagnostics are real:\n' +
           output,
       ).toBe(0);
     },

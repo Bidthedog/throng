@@ -6,9 +6,23 @@ import { describe, expect, it } from 'vitest';
 /**
  * 017 / #54 — structural guards for the icon system.
  *
- * There is no jsdom/component-test layer in this repo, so a React component's rendered output
- * cannot be asserted in a unit test. What CAN be asserted, cheaply and exhaustively, is the shape
- * of the source — and for these two requirements that is actually the stronger test.
+ * What can be asserted here, cheaply and exhaustively, is the shape of the SOURCE — and for these
+ * requirements that is the stronger test, because they are claims about every file rather than
+ * about any rendered tree.
+ *
+ * ══ ONE SENTENCE OF THIS HEADER WAS TRUE AND IS NOT (035) ══
+ *
+ * It used to open *"There is no jsdom/component-test layer in this repo, so a React component's
+ * rendered output cannot be asserted in a unit test."* Spec 034 added that layer, and it now holds
+ * 48 files. Left standing, the sentence tells the next author that a whole layer does not exist —
+ * and the layer it denies is the one most of these tests belong at, so the sentence would keep
+ * pushing coverage up to E2E, which is the drift 035 exists to reverse.
+ *
+ * The source guards below still earn their place, and the reason is not the missing layer: a
+ * component test renders ONE tree, and these ask about EVERY file. `:97` in particular asserts that
+ * `<Icon>` is decorative by reading the source; `component/icon-button.test.ts` now asserts the same
+ * property on a real rendered node. Neither replaces the other — one proves the rule holds where it
+ * is written, the other that it survives being rendered.
  *
  * The first guard is the highest-value test in the feature. #54 survived precisely because a
  * pack-aware resolver existed and *almost nothing called it*: one screen did, and thirteen other
