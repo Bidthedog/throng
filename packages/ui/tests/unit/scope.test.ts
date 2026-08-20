@@ -65,6 +65,64 @@ describe('which scope are we in', () => {
   });
 });
 
+/**
+ * 033 AS-9 / A4 — Go To Line is dead without an editor, and alive with one.
+ *
+ * MIGRATED FROM `packages/ui/tests/e2e/goto-line.e2e.ts:601` (035 T055) — `test('with no editor
+ * active the chord does nothing — and the same chord opens the modal once one is')`.
+ *
+ * The E2E's shape is worth keeping, because a negative on its own proves very little. It pressed the
+ * chord over an untyped placeholder panel, saw no modal, and then made the SAME panel an editor and
+ * pressed the SAME chord in the SAME window and saw one — so "nothing happened" was the scope gate
+ * refusing rather than a chord that had never been bound (#244's shape). Both halves are below, and
+ * the positive one is the reason to trust the negative.
+ */
+describe('a panel-scoped chord resolves only in the scope it belongs to (AS-9, A4)', () => {
+  const gotoLine = { key: 'g', ctrl: true };
+  const quiet = { transientFocus: false, overlayOpen: false };
+  const over = (kind: string): { tabs: Tab[]; activeTabId: string } => ({
+    tabs: [tabWith(kind)],
+    activeTabId: 't1',
+  });
+
+  it('does NOT resolve over an untyped placeholder panel', () => {
+    // The panel a new tab starts with, before the user picks a type. It is not a text surface.
+    expect(resolveScoped(DEFAULT_KEYBINDINGS, gotoLine, over('placeholder'), quiet)).toBeNull();
+  });
+
+  it('does NOT resolve over a terminal', () => {
+    expect(resolveScoped(DEFAULT_KEYBINDINGS, gotoLine, over('terminal'), quiet)).toBeNull();
+  });
+
+  it('DOES resolve over an editor — so the two negatives above are not vacuous', () => {
+    expect(resolveScoped(DEFAULT_KEYBINDINGS, gotoLine, over('editor'), quiet)).toBe(
+      'navigate.gotoLine',
+    );
+  });
+
+  it('does not resolve when there is no tab at all', () => {
+    expect(
+      resolveScoped(DEFAULT_KEYBINDINGS, gotoLine, { tabs: [], activeTabId: null }, quiet),
+    ).toBeNull();
+  });
+
+  it('and a WINDOW command is unaffected by any of it — Quick Open stays live', () => {
+    /*
+     * The distinction AS-9 rests on. Both live under `navigate.`, and only one is panel-scoped: Go
+     * To Line acts on a document, Quick Open acts on the window. A gate that took the namespace
+     * rather than the exact id would kill Quick Open over a terminal, where it is one of the two
+     * places the story is about.
+     */
+    // Ctrl+Shift+T, not Ctrl+P: scoped EVERYWHERE, it had to pick a chord no line editor wanted.
+    const quickOpen = { key: 'T', ctrl: true, shift: true };
+    for (const kind of ['placeholder', 'terminal', 'editor']) {
+      expect(resolveScoped(DEFAULT_KEYBINDINGS, quickOpen, over(kind), quiet)).toBe(
+        'navigate.quickOpen',
+      );
+    }
+  });
+});
+
 describe('the focus guard (FR-017f)', () => {
   it('holds while a TRANSIENT input surface has focus — 013’s find bar above all', () => {
     expect(transientInputFocused(docWith({ within: '[data-find-bar]' }))).toBe(true);

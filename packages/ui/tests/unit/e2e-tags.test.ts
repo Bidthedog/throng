@@ -43,6 +43,40 @@ const CATEGORIES = [
   '@failure',
 ] as const;
 
+/**
+ * One per entry in the constitution's enumerated E2E reserve (v5.3.0 Principle V, 035 FR-016).
+ *
+ * ══ WHY A TEST NAMES THE ENTRY IT RELIES ON ══
+ *
+ * The significance tag says which lane a test runs in; the category says what area it covers.
+ * Neither can detect a test whose JUSTIFICATION has decayed — and 035's census found that class
+ * repeatedly. `tree-drop-open.e2e.ts` justified all five of its tests by the OS drag-and-drop
+ * reserve while dispatching a synthetic in-page `throng:tree-drop` CustomEvent, which jsdom
+ * reproduces identically. `subtree-expand-collapse.e2e.ts` claimed the native-menu reserve for an
+ * in-document React menu. Both claims were true when written and rotted in silence.
+ *
+ * Naming the entry does not by itself prove the claim — a reviewer still has to check it against
+ * what the test drives. What it does is make that check take seconds instead of requiring the
+ * whole file to be read, and make the drifted claim a visible string rather than an absence.
+ *
+ * ══ WHY THE IDENTIFIER IS STABLE AND THE PROSE IS NOT ══
+ *
+ * These identifiers never change; the constitution's descriptions of them can. v5.3.0 reworded the
+ * layout entry to cover resolved colour and cascaded style, and not one test needed editing —
+ * which is the entire argument for a tag over a quoted sentence.
+ */
+const RESERVE = [
+  '@reserve:window', // real window lifecycle and multi-window behaviour
+  '@reserve:focus', // focus and z-order across windows
+  '@reserve:native', // native menus and dialogs
+  '@reserve:osdrag', // OS drag-and-drop
+  '@reserve:pty', // PTY/ConPTY keyboard and rendering fidelity
+  '@reserve:process', // process-tree hygiene
+  '@reserve:layout', // real layout and rendered appearance (geometry, colour, cascade)
+  '@reserve:input', // real keyboard and input dispatch
+  '@reserve:runtime', // real application-runtime identity
+] as const;
+
 /** The constitutional ceiling on the lane that gates every push. */
 const CORE_CAP = 50;
 
@@ -74,10 +108,13 @@ function declarations(): Declared[] {
       if (!decl) return;
       const [, fn, s1, s2, s3, opts] = decl;
       const title = s1 ?? s2 ?? s3 ?? '(untitled)';
+      // The colon in `@reserve:layout` is why this is not `/'(@[a-z]+)'/g`. With the narrower
+      // pattern every reserve tag is INVISIBLE to the guard that exists to enforce it — the
+      // assertions below would pass on a suite where nobody had tagged anything.
       const tags =
         fn === 'adminTest'
           ? adminTags
-          : [...(opts ?? '').matchAll(/'(@[a-z]+)'/g)].map((m) => m[1] as string);
+          : [...(opts ?? '').matchAll(/'(@[a-z][a-z:]*)'/g)].map((m) => m[1] as string);
       out.push({ file, line: i + 1, title, tags });
     });
   }
@@ -117,8 +154,73 @@ describe('E2E significance and category tags', () => {
     ).toEqual([]);
   });
 
+  it('reads a colon-bearing tag at all', () => {
+    // The regex above is the single point of failure for everything below: narrow it and the
+    // reserve assertions pass vacuously on an untagged suite. This proves it can see one.
+    const sample = [...`{ tag: ['@core', '@reserve:layout'] }`.matchAll(/'(@[a-z][a-z:]*)'/g)].map((m) => m[1]);
+    expect(sample).toContain('@reserve:layout');
+  });
+
+  it('never gives a test more than one reserve entry', () => {
+    // Unconditional from day one: a test naming two entries is asserting two things and should be
+    // split. Nothing has to be migrated first for this to hold.
+    const offenders = all
+      .map((d) => ({ ...d, res: d.tags.filter((t) => (RESERVE as readonly string[]).includes(t)) }))
+      .filter((d) => d.res.length > 1)
+      .map((d) => `${d.file}:${d.line} "${d.title}" names ${d.res.join(' + ')}`);
+    expect(
+      offenders,
+      `a test that appears to need two reserve entries is asserting two things (035 FR-016b). ` +
+        `Split it rather than tagging it twice.\n  ${offenders.join('\n  ')}`,
+    ).toEqual([]);
+  });
+
+  it('drives the untagged count down and never lets it rise', () => {
+    /**
+     * ══ WHY A RATCHET AND NOT A FLAT REQUIREMENT ══
+     *
+     * FR-016 requires every E2E test to name its reserve entry. 687 of them do not yet, and the
+     * honest way to close that is by READING each test — not by inferring the tag from its source.
+     *
+     * That is not a preference; it was measured. A codemod over the whole suite tagged 443 tests
+     * and put 205 under `@reserve:input`, because `.press(` and `.type(` appear in nearly every
+     * spec here — a test that types into an editor to check what lands on disk makes no claim
+     * about input dispatch. Restricting it to "unambiguous" APIs did no better: it read
+     * `process.execPath` out of `terminal-reattach.e2e.ts`'s daemon SETUP and called the test a
+     * runtime-identity claim, and it read `DataTransfer` out of a body whose test actually drives
+     * the synthetic `dropPaths()` helper.
+     *
+     * The reason is general, and it is why no smarter regex would fix it: **the evidence for a
+     * test's CLAIM is not lexically distinguishable from the evidence for its SETUP.** An
+     * automated tag is therefore a confident-looking false justification — the precise defect this
+     * tag exists to eliminate, reintroduced by the tool meant to prevent it.
+     *
+     * So the count falls as tests are read, and this ratchet makes sure it only ever falls. It
+     * fails BOTH ways, exactly like `e2e-budget.json`: over the recorded debt, and under it without
+     * the record being re-seeded, so progress cannot be quietly banked or quietly lost.
+     */
+    const untagged = all.filter((d) => !d.tags.some((t) => (RESERVE as readonly string[]).includes(t)));
+    const recorded = JSON.parse(
+      readFileSync(join(E2E_DIR, 'reserve-tag-debt.json'), 'utf8'),
+    ) as { untagged: number };
+
+    expect(
+      untagged.length,
+      `${untagged.length} E2E tests do not name a reserve entry, against a recorded debt of ` +
+        `${recorded.untagged}. This number may fall and MUST NOT rise: a new E2E test names its ` +
+        `entry, and one that cannot is a test that should not be at this layer.`,
+    ).toBeLessThanOrEqual(recorded.untagged);
+
+    expect(
+      untagged.length,
+      `the recorded debt is ${recorded.untagged} but only ${untagged.length} tests are untagged. ` +
+        `Re-seed reserve-tag-debt.json in the commit that tagged them, or the ratchet silently ` +
+        `stops ratcheting.`,
+    ).toEqual(recorded.untagged);
+  });
+
   it('uses no category outside the vocabulary', () => {
-    const known = new Set<string>([...SIGNIFICANCE, ...CATEGORIES, '@admin', '@quarantine']);
+    const known = new Set<string>([...SIGNIFICANCE, ...CATEGORIES, ...RESERVE, '@admin', '@quarantine']);
     const offenders = all
       .flatMap((d) => d.tags.filter((t) => !known.has(t)).map((t) => `${d.file}:${d.line} ${t}`))
       .sort();

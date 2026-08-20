@@ -37,6 +37,7 @@ import { buildContextMenuItems } from '../../src/renderer/explorer/context-menu-
 import { editorContentMenu } from '../../src/renderer/editor/content-menu.js';
 import { terminalContentMenu } from '../../src/renderer/terminal/terminal-content-menu.js';
 import { cogMenuItems } from '../../src/renderer/title-bar/cog-menu-items.js';
+import { panelHeaderMenu } from '../../src/renderer/workspace/panel-header-menu.js';
 
 const noop = (): void => {};
 
@@ -245,5 +246,280 @@ describe('the fixed native chords are advertised on the row (FR-017c)', () => {
 
   it('the terminal menu advertises Ctrl+V on Paste', () => {
     expect(row(terminalMenu(), 'Paste').shortcut).toBe('Ctrl+V');
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * The CONTENT menu and the panel-HEADER menu are different menus
+ * (016 FR-014 — migrated from editor-content-menu.e2e.ts:203, 035 T055)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * ══ WHAT THE E2E WAS ASSERTING ══
+ *
+ * That right-clicking the TEXT offers Cut and Set Language and NOT Save, and right-clicking the
+ * panel HANDLE offers Save and NOT Cut. Two menus, four claims, all about which labels each builder
+ * produces.
+ *
+ * It reached them by launching Electron, creating a project on a real temp directory, opening a file
+ * in an editor panel, right-clicking a rendered line, reading the menu, pressing Escape, then
+ * right-clicking the panel handle and reading the other one.
+ *
+ * Every one of those claims is a property of two PURE FUNCTIONS. `editorContentMenu` touches its
+ * `view` only inside the `onClick` closures — which is why the harness above can already build it
+ * with `{} as EditorView` — and `panelHeaderMenu` takes a plain panel record. Neither needs a
+ * document, a selection, a project or a window to say what it contains.
+ *
+ * ══ WHY IT IS ASSERTED AS A DISJOINTNESS AND NOT AS FOUR LABELS ══
+ *
+ * FR-014's claim is that these are *distinct* menus — the content menu acts on the text, the header
+ * menu acts on the panel. Four hand-picked labels test four examples of that; the overlap check
+ * below tests the rule. It is what would catch a future item added to the wrong builder, which is
+ * the actual regression FR-014 exists to prevent and the one four literals would sail past.
+ *
+ * The four original labels are kept as well, because a disjointness assertion is satisfied by two
+ * EMPTY menus and would then prove nothing at all.
+ */
+describe('FR-014 — the content menu and the panel-header menu are distinct', () => {
+  const headerMenu = (): MenuAction[] =>
+    panelHeaderMenu({
+      panel: {
+        id: 'p1',
+        kind: 'editor',
+        title: 'app.ts',
+        titleIsCustom: false,
+      } as unknown as Parameters<typeof panelHeaderMenu>[0]['panel'],
+      panelVerb: 'Destroy',
+      keybindings: DEFAULT_KEYBINDINGS,
+      otherTabs: [],
+      editor: { filePath: 'D:/project/src/app.ts', dirty: false } as unknown as Parameters<
+        typeof panelHeaderMenu
+      >[0]['editor'],
+      editorFailure: false,
+      detach: null,
+      actions: new Proxy({}, { get: () => noop }) as Parameters<
+        typeof panelHeaderMenu
+      >[0]['actions'],
+    });
+
+  const labelsOf = (items: MenuAction[]): string[] =>
+    flatten(items)
+      .map((i) => i.label)
+      .filter((l): l is string => typeof l === 'string' && l.length > 0);
+
+  it('both menus actually have items — otherwise the disjointness below proves nothing', () => {
+    expect(labelsOf(editorMenu()).length).toBeGreaterThan(3);
+    expect(labelsOf(headerMenu()).length).toBeGreaterThan(3);
+  });
+
+  it('the CONTENT menu acts on the text: Cut and Set Language, and no Save', () => {
+    const labels = labelsOf(editorMenu());
+    expect(labels).toContain('Cut');
+    expect(labels.some((l) => l.startsWith('Set Language'))).toBe(true);
+    expect(labels).not.toContain('Save');
+  });
+
+  it('the HEADER menu acts on the panel: Save, and no Cut', () => {
+    const labels = labelsOf(headerMenu());
+    expect(labels).toContain('Save');
+    expect(labels).not.toContain('Cut');
+  });
+
+  it('and no label appears in BOTH — the rule, not four examples of it', () => {
+    /*
+     * The assertion the E2E could not afford to make. It checked four labels; this checks every
+     * label in both menus, so an item added to the wrong builder fails here rather than being
+     * discovered by a user wondering why Save is in the text menu.
+     */
+    const content = new Set(labelsOf(editorMenu()));
+    const header = labelsOf(headerMenu());
+    const shared = header.filter((l) => content.has(l));
+    expect(shared, `these labels appear in BOTH menus: ${shared.join(', ')}`).toEqual([]);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * The Set Language item NAMES the current language
+ * (016 — migrated from editor-content-menu.e2e.ts:256, 035 T055)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * ══ WHY A MENU THAT ONLY OFFERS TO CHANGE SOMETHING IS WORSE THAN ONE THAT STATES IT ══
+ *
+ * `content-menu.ts` puts it plainly: the item carries the document's effective language "so the menu
+ * states the" language rather than only offering to change it. A user who wants to know what throng
+ * thinks a file is has nowhere else to look — the strip shows it, but the menu is the panel's index
+ * of what it can do, and an item reading only "Set Language…" answers the question with a question.
+ *
+ * ══ WHAT MOVED, AND WHAT DID NOT ══
+ *
+ * The E2E made three claims. Two are these — the item names the CURRENT language, and after a change
+ * it names the NEW one — and both are `args.languageName` reaching a label, which is a pure input to
+ * a pure function.
+ *
+ * The third is that choosing a language returns the caret to the DOCUMENT, and it stays end-to-end
+ * for now: it asserts `document.activeElement.closest('[data-testid="editor-…"]')` after the picker
+ * closes, which needs the real editor to have taken focus. `component/language-picker-keyboard.test.ts`
+ * owns the picker's own keyboard behaviour; where the caret lands in a real CodeMirror afterwards is
+ * not something that file can currently say.
+ */
+describe('the Set Language item states the language, not just the offer', () => {
+  const setLanguageLabel = (languageName?: string): string | undefined => {
+    const items = editorContentMenu({
+      view: {} as EditorView,
+      panelId: 'p1',
+      viewId: 'v1',
+      lineEnding: () => 'lf',
+      wordWrap: { on: true, toggle: noop, chord: 'Alt+Z' },
+      gotoLine: { open: noop, chord: 'Ctrl+G' },
+      languageName,
+    } as Parameters<typeof editorContentMenu>[0]);
+    return flatten(items).find((i) => i.testId === 'menu-item-Set Language…')?.label;
+  };
+
+  it('names a plain-text document as Plain Text — the E2E’s opening assertion', () => {
+    expect(setLanguageLabel('Plain Text')).toBe('Set Language… (Plain Text)');
+  });
+
+  it('names the NEW language once one has been chosen — its closing assertion', () => {
+    expect(setLanguageLabel('JSON')).toBe('Set Language… (JSON)');
+  });
+
+  it('falls back to the bare offer when there is no language to state', () => {
+    /*
+     * Not in the E2E, and the branch that would otherwise go untested: `languageName` is optional,
+     * so an implementation that interpolated regardless would render "Set Language… (undefined)" —
+     * which is worse than saying nothing and is exactly the shape a template literal produces when
+     * nobody checks.
+     */
+    expect(setLanguageLabel(undefined)).toBe('Set Language…');
+  });
+
+  it('never renders the word "undefined" for any input the type allows', () => {
+    for (const name of [undefined, '', 'JSON']) {
+      expect(setLanguageLabel(name) ?? '').not.toContain('undefined');
+    }
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * A failing panel offers its three recovery commands IN THE MENU
+ * (FR-042c/FR-042d — migrated from panel-failure-banner.e2e.ts:408, 035 T055)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * ══ WHY THE MENU AND NOT ONLY THE BANNER ══
+ *
+ * `panel-header-menu.ts` states the rule it is keeping: the constitution binds a feature that adds a
+ * panel action to add its menu item in the same increment, because *"an action reachable only as an
+ * icon on a banner is unreachable from where users look for panel commands, and undiscoverable by
+ * anyone who does not recognise the glyph."*
+ *
+ * And the LABELS are the banner's, unchanged (FR-042d) — that is what makes them the same command
+ * rather than a second one that looks like it.
+ *
+ * ══ WHAT THE E2E PAID TO ASSERT THIS ══
+ *
+ * A 240-second budget, a real editor driven into a real unreadable-file state, a real terminal
+ * driven into a real start failure, two right-clicks and two menu dismissals — to check that three
+ * labels are present twice.
+ *
+ * Both menus gate those rows on a plain boolean: `editorFailure` for the panel header,
+ * `startFailure` for the terminal content menu. Neither needs a broken file or a dead shell to say
+ * what it contains; producing the failure was the expensive half, and it is not the claim.
+ *
+ * The NEGATIVE case below is the one the E2E never made, and it is the one that matters most: these
+ * rows must be absent from a healthy panel. Offering "Try again" to a terminal that is running is
+ * noise, and a builder that always emitted them would satisfy every assertion the E2E made.
+ */
+describe('the failure rows appear only while there is a failure (FR-042c)', () => {
+  const FAILURE_ROWS = ['Try again', 'Copy details', 'Clear panel type'];
+
+  const headerLabels = (editorFailure: boolean): string[] =>
+    flatten(
+      panelHeaderMenu({
+        panel: {
+          id: 'p1',
+          kind: 'editor',
+          title: 'app.ts',
+          titleIsCustom: false,
+        } as unknown as Parameters<typeof panelHeaderMenu>[0]['panel'],
+        panelVerb: 'Destroy',
+        keybindings: DEFAULT_KEYBINDINGS,
+        otherTabs: [],
+        editor: { filePath: 'D:/project/src/app.ts', dirty: false } as unknown as Parameters<
+          typeof panelHeaderMenu
+        >[0]['editor'],
+        editorFailure,
+        detach: null,
+        actions: new Proxy({}, { get: () => noop }) as Parameters<
+          typeof panelHeaderMenu
+        >[0]['actions'],
+      }),
+    )
+      .map((i) => i.label)
+      .filter((l): l is string => typeof l === 'string');
+
+  const terminalLabels = (startFailure: boolean): string[] =>
+    flatten(
+      terminalContentMenu({
+        link: null,
+        selection: '',
+        redrawChord: 'Ctrl+Shift+R',
+        startFailure,
+        actions: {
+          openLink: noop,
+          copyLinkAddress: noop,
+          copySelection: noop,
+          paste: noop,
+          redraw: noop,
+          tryAgain: noop,
+          copyDetails: noop,
+          clearPanelType: noop,
+        },
+      }),
+    )
+      .map((i) => i.label)
+      .filter((l): l is string => typeof l === 'string');
+
+  it('the EDITOR panel menu offers all three while it is failing', () => {
+    const labels = headerLabels(true);
+    for (const row of FAILURE_ROWS) expect(labels).toContain(row);
+  });
+
+  it('the TERMINAL content menu offers all three while it is failing', () => {
+    const labels = terminalLabels(true);
+    for (const row of FAILURE_ROWS) expect(labels).toContain(row);
+  });
+
+  it('a HEALTHY editor panel offers none of them', () => {
+    /*
+     * The assertion the E2E never made. Every one of its checks was a presence check against a panel
+     * it had deliberately broken first, so a builder that emitted these rows unconditionally would
+     * have passed it — while offering "Try again" to a panel with nothing wrong.
+     */
+    const labels = headerLabels(false);
+    expect(labels.length, 'a healthy menu must still have rows, or this proves nothing')
+      .toBeGreaterThan(3);
+    for (const row of FAILURE_ROWS) expect(labels).not.toContain(row);
+  });
+
+  it('a HEALTHY terminal offers none of them either', () => {
+    const labels = terminalLabels(false);
+    expect(labels.length).toBeGreaterThan(2);
+    for (const row of FAILURE_ROWS) expect(labels).not.toContain(row);
+  });
+
+  it('both panel types name the commands IDENTICALLY (FR-042d)', () => {
+    /*
+     * The labels are the banner's, unchanged, and both menus must use the same words — otherwise
+     * they are two commands that look alike rather than one command with two surfaces. The E2E
+     * asserted the same three literals twice, which happens to test this and does not say so; here
+     * it is the claim.
+     */
+    const editor = headerLabels(true).filter((l) => FAILURE_ROWS.includes(l)).sort();
+    const terminal = terminalLabels(true).filter((l) => FAILURE_ROWS.includes(l)).sort();
+    expect(editor).toEqual(terminal);
+    expect(editor).toHaveLength(FAILURE_ROWS.length);
   });
 });
