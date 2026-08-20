@@ -1,6 +1,96 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 5.2.0 → 5.3.0
+Bump rationale: MINOR, three changes to Principle V, all additive to the rule set.
+
+                (1) The enumerated E2E reserve gains a NINTH entry — real application-runtime
+                identity. (2) The "real layout and text rendering" entry is REWORDED to cover
+                resolved colour and cascaded style. (3) Every E2E test MUST now name the reserve
+                entry that makes it irreducible.
+
+                All three come out of spec 035's census, which read every one of the 229 E2E spec
+                files and 687 tagged tests — the first time the whole suite has been assessed for
+                LAYER rather than for cost. Each is argued from what that census measured, not from
+                a principle applied forward.
+
+                ── (1) THE NINTH ENTRY ──
+
+                Three of the five independent assessors proposed the same new entry in different
+                words: "real end-to-end wiring through the app's own backend". It was the single
+                largest keep-at-E2E bucket in the census, and it does NOT survive measurement, so
+                it is NOT what is being added here. 98 channels are registered in the main process;
+                every one is reachable from the preload; and `config-write-patch.contract.test.ts`
+                already drives a real registered handler against real state on disk. The wiring is
+                provable below E2E today — the contract layer had simply been built exactly once.
+
+                What DOES survive is narrower and is genuinely unreachable from any lower layer:
+                behaviour whose correctness depends on a true property of the real runtime that a
+                substitute either lacks or satisfies by coincidence. Two worked examples, both from
+                the census:
+
+                  - `quick-open-perf.e2e.ts:234` asserts that typing performs no IPC. The renderer's
+                    bridge object is frozen by `contextBridge`, so a page-level instrument
+                    literally cannot install itself to count calls. A fake bridge would be
+                    instrumentable, which is precisely why it cannot make this assertion.
+                  - `daemon-selfspawn.e2e.ts:13` asserts the app spawns its daemon via the host Node
+                    runtime rather than `process.execPath`. `daemon-lifecycle.test.ts` runs AS host
+                    Node, so the two paths coincide and the regression is invisible there BY
+                    CONSTRUCTION — not for want of effort.
+
+                The distinction that keeps this entry narrow: it is about a property of the running
+                process being unfakeable, never about a chain of components being connected. The
+                latter is what the contract and component layers are for, and conflating them is
+                what produced the rejected broad entry above.
+
+                ── (2) THE REWORDING ──
+
+                The layout entry named only geometry — a caret against a gutter, what is scrolled
+                into view, a wrapped line's height, a measured rectangle. Four assessors
+                independently proposed a COLOUR entry, and three separate test files
+                (`colour-field.test.ts:25-26`, `projects-panel-form.test.ts:47`, and the FR-049
+                sites throughout the explorer and preferences specs) had each re-derived the same
+                justification from scratch because the enumeration did not cover it.
+
+                Three authors re-deriving one justification is the tell that an entry is worded too
+                narrowly, not that a new entry is needed — so this is a REWORD rather than a tenth
+                item. Adding it as its own entry would have inflated the reserve while leaving the
+                original entry still wrong.
+
+                ── (3) NAMING THE ENTRY ──
+
+                This is the one that changes daily practice. The constitution already required a
+                significance tag, a category tag, and a downward-only budget; NONE of those can
+                detect a test whose JUSTIFICATION has decayed, and the census found that class
+                repeatedly. `tree-drop-open.e2e.ts` justified all five of its tests by the OS
+                drag-and-drop reserve while dispatching a synthetic in-page CustomEvent — a
+                mechanism jsdom reproduces identically. `subtree-expand-collapse.e2e.ts` claimed the
+                native-menu reserve for an in-document React menu. In both the justification was
+                true when written and rotted in silence, because nothing ever re-checked it.
+
+                Naming the entry per test makes the claim checkable by a reviewer in seconds and by
+                a guard in milliseconds. The identifier is stable rather than prose, which is what
+                makes change (2) possible without invalidating every test that named the entry.
+
+                DELIBERATELY NOT ADDED: a test-count ceiling. The E2E budget ratchet below already
+                requires exactly that and has since 5.0.0. Writing it again would have duplicated a
+                shipped rule — the failure mode this project has already paid for once, when a new
+                requirement was reasoned forward without checking which existing one governed the
+                same behaviour.
+
+                On the bump: a new MUST does make every existing test non-compliant until it is
+                tagged, which reads at first like a strengthening rather than an addition. It is
+                MINOR on the precedent set at v3.14.0 and v4.2.0, both of which strengthened
+                Principle V with an additive rule — and the repository is brought into compliance in
+                the same change, so no commit leaves a test in violation.
+
+Templates requiring updates: none — `docs/testing.md` restates the reserve and the tag vocabulary
+                and is updated in the same commit.
+Follow-up TODOs: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 5.1.0 → 5.2.0
 Bump rationale: MINOR. Principle V’s enumerated E2E reserve gains a SEVENTH entry — real keyboard
                 and input dispatch. Additive: nothing is removed or redefined, and no previously-
@@ -1189,19 +1279,42 @@ Red-Green-Refactor cycle.
   qualifies is what genuinely needs the running application: real window lifecycle
   and multi-window behaviour, focus and z-order across windows, native menus and
   dialogs, OS drag-and-drop, PTY/ConPTY keyboard and rendering fidelity,
-  process-tree hygiene, and **real layout and text rendering** — anything whose truth
-  depends on how the engine actually laid the text out: a caret's position against a
-  drawn gutter, what is scrolled into view, the height of a wrapped line, a measured
-  rectangle. The component layer renders into a document with no layout engine, so it
-  can say what the markup is and not where it ended up. Also **real keyboard and input
+  process-tree hygiene, and **real layout and rendered appearance** — anything whose
+  truth depends on what the engine actually produced rather than on what the markup
+  said. That covers where things ended up — a caret's position against a drawn gutter,
+  what is scrolled into view, the height of a wrapped line, a measured rectangle — and
+  equally what they ended up LOOKING like: a resolved colour, a cascaded style, a
+  computed font size, a `::before` that only exists once a stylesheet has been applied.
+  The component layer renders into a document with no layout engine and no real cascade,
+  so it can say what the markup is and neither where it landed nor how it was painted.
+  Also **real keyboard and input
   dispatch** — what a real engine reports for a chord and whether a real keystroke
   reaches the real handler. A synthesised event asserts the shape the test chose; only
   a real one asserts what the browser decides, and the difference is where modifier
-  handling, dead keys and layout-dependent chords actually go wrong. An existing E2E test whose
+  handling, dead keys and layout-dependent chords actually go wrong. And **real
+  application-runtime identity** — behaviour whose correctness depends on a true
+  property of the running process that a substitute either lacks or satisfies by
+  coincidence: an object frozen by the real bridge that no page-level instrument can
+  install into, the true identity of the executable used to spawn a child, a failure
+  that has genuinely crossed a real process boundary. The test is that the SUBSTITUTE
+  cannot hold the property, not that a chain of components is connected end to end —
+  connection is what the contract and component layers prove, and conflating the two
+  reserves at E2E almost everything that touches disk or IPC. An existing E2E test whose
   assertion a lower layer can make
   MUST be moved down — the replacement written and observed failing against a broken
   implementation FIRST, then the E2E deleted. Coverage is never dropped without a
   named replacement.
+- **Every E2E test MUST name the reserve entry that makes it irreducible**, and the
+  build MUST fail on a test that names none, names more than one, or names an entry
+  that does not exist. The name is a stable identifier rather than prose, so that
+  rewording an entry does not invalidate the tests that cite it. A significance tag
+  says which lane a test runs in and a category tag says what area it covers; neither
+  can detect a test whose JUSTIFICATION has decayed — a test claiming the
+  drag-and-drop reserve while dispatching a synthetic in-page event, or the
+  native-menu reserve while driving an in-document control. Both were true when
+  written and rotted silently, and a claim nobody re-checks is how an expensive suite
+  fills with tests that no longer need to be expensive. A test that appears to need
+  two entries is asserting two things and SHOULD be split.
 - **The E2E suite MUST carry a declared budget, and the build MUST fail when it is
   exceeded.** The budget is a ratchet: it may fall and MUST NOT rise. Without an
   enforced ceiling the suite grows by one test per feature forever, and the cost is
@@ -1761,7 +1874,7 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 5.2.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-08-18
+**Version**: 5.3.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-08-18
 
 <!--
   5.0.0 — MAJOR. Principle V no longer mandates an E2E per user-facing UI change. Full rationale is
