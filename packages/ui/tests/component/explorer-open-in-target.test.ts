@@ -82,6 +82,11 @@ import {
   forgetEditor,
   setLastActiveEditor,
 } from '../../src/renderer/editor/last-active-editor.js';
+// 035 T055 — the Open In target is disabled by what the TARGET PANEL already holds, which lives here.
+import {
+  removeEditorState,
+  setEditorState,
+} from '../../src/renderer/editor/editor-state.js';
 import type { FileTreeEntry } from '../../src/renderer/global.js';
 
 /* ────────────────────────────────────────────────────────────────────────── *
@@ -321,5 +326,176 @@ describe('the Open In target names the tab’s last active editor (FR-098)', () 
 
     expect(within(flyout).getByTestId('menu-item-Last Active Editor (Right)')).toBeVisible();
     expect(within(flyout).queryByTestId('menu-item-Last Active Editor (Left)')).toBeNull();
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * One buffer per file, enforced on the menu
+ * (FR-011a/FR-072 — migrated from editor-feedback.e2e.ts:116, 035 T055)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * ══ WHY THE ITEM IS DISABLED RATHER THAN ABSENT ══
+ *
+ * throng keeps ONE buffer per file, app-wide. "New Editor" would make a second, so it is refused
+ * once the file is open — but it stays on the menu, greyed, because a row that vanishes teaches
+ * nobody why. The user who wants a second view of a file needs to learn that the answer is no, not
+ * that the command was never there.
+ *
+ * ══ WHAT MOVED, AND WHAT DID NOT ══
+ *
+ * The E2E asserted three things: the item is enabled while the file is closed, clicking it opens a
+ * second editor panel holding the file, and re-opening the menu afterwards shows it disabled.
+ *
+ * The first and third are the RULE — `disabled: alreadyOpen || !activeTabId` in `file-tree.tsx`,
+ * where `alreadyOpen` comes from `editor.isOpen` over the bridge. This harness already stubs that
+ * bridge, so both states are reachable by answering it differently; the E2E reached the second state
+ * by really opening a file in a real editor panel.
+ *
+ * The middle claim stays end-to-end: that clicking actually produces a second editor panel hosting
+ * the file is the editor's, not the menu's.
+ */
+describe('New Editor is refused once the file is open (FR-011a)', () => {
+  /** The same mount, with `editor.isOpen` answering as the caller chooses. */
+  async function mountWithOpenState(alreadyOpen: boolean) {
+    const mounted = await mount(oneNamedPanel('Scratch'));
+    // Re-point only `editor.isOpen`; everything else the tree reaches stays as `mount` left it.
+    const bridge = Reflect.get(window, 'throng') as { editor: { isOpen: () => Promise<boolean> } };
+    bridge.editor.isOpen = () => Promise.resolve(alreadyOpen);
+    return mounted;
+  }
+
+  const isDisabled = (el: HTMLElement): boolean =>
+    el.className.includes('context-menu__item--disabled') ||
+    el.getAttribute('aria-disabled') === 'true';
+
+  it('is offered, and ENABLED, while the file is not open anywhere', async () => {
+    const { user, tree } = await mountWithOpenState(false);
+
+    const flyout = await openInFlyout(user, tree);
+
+    const item = within(flyout).getByTestId('menu-item-New Editor');
+    expect(item).toBeVisible();
+    expect(isDisabled(item), 'a closed file must be openable in a new editor').toBe(false);
+  });
+
+  it('is still OFFERED but disabled once the file is open — not removed', async () => {
+    /*
+     * Both halves in one assertion pair, deliberately. "Disabled" alone would pass against an item
+     * that had disappeared (`getByTestId` would throw, but a `queryByTestId`-shaped test would not),
+     * and "present" alone is what the broken build did.
+     */
+    const { user, tree } = await mountWithOpenState(true);
+
+    const flyout = await openInFlyout(user, tree);
+
+    const item = within(flyout).getByTestId('menu-item-New Editor');
+    expect(item, 'the row must stay on the menu — a vanished row teaches nobody why').toBeVisible();
+    expect(isDisabled(item)).toBe(true);
+  });
+
+  it('leaves the OTHER Open In targets alone in both states', async () => {
+    /*
+     * The scope of the refusal. FR-011a is about a SECOND buffer, so "Last Active Editor" — which
+     * reuses the buffer that already exists — must stay available exactly when it otherwise would.
+     * A fix that disabled the whole submenu would satisfy the test above and take away the one
+     * target that still makes sense.
+     */
+    setLastActiveEditor(TAB_ID, 'p1');
+    const { user, tree } = await mountWithOpenState(true);
+
+    const flyout = await openInFlyout(user, tree);
+
+    /*
+     * Enabled, not merely present — and the two flags really are independent: `alreadyOpen` is
+     * app-wide, while this target is disabled only by `openInTargetAlready`, which asks whether THIS
+     * panel already holds THIS file. It does not, so the target stands.
+     */
+    const lastActive = within(flyout).getByTestId('menu-item-Last Active Editor (Scratch)');
+    expect(lastActive).toBeVisible();
+    expect(isDisabled(lastActive)).toBe(false);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * editor-feedback2.e2e.ts:82 — the target that already holds the file
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * "Last Active Editor" is disabled when that editor ALREADY holds this file (FR-082/FR-098).
+ *
+ * MIGRATED FROM `packages/ui/tests/e2e/editor-feedback2.e2e.ts:82` (035 T055) — `test('"This editor"
+ * is disabled when the file is already open in the target editor')`.
+ *
+ * ══ WHY THIS BELONGS BESIDE THE NEW EDITOR TESTS ══
+ *
+ * The two disabled flags above this block are independent, and the file already says so: `New
+ * Editor` is disabled by `alreadyOpen`, which is APP-WIDE, while this target is disabled by
+ * `openInTargetAlready`, which asks whether THIS panel holds THIS file (`file-tree.tsx:390`).
+ *
+ * The existing test at "leaves the OTHER Open In targets alone in both states" proves one direction
+ * — app-wide-open does not disable this target. Nothing proved the other: that when the panel really
+ * does hold the file, the target goes quiet. A build that never computed `openInTargetAlready` at
+ * all would pass everything in this file up to here.
+ *
+ * ══ WHAT IT REPLACES ══
+ *
+ * The E2E created a project, opened an editor, right-clicked the file, opened the flyout, clicked
+ * the target, waited for the document to load, then right-clicked and opened the flyout AGAIN to see
+ * the row had gone quiet. The second half is this component's; the first is the click actually
+ * loading the file, which `editor-feedback2.e2e.ts` keeps.
+ */
+describe('Last Active Editor goes quiet when that editor holds the file (FR-082)', () => {
+  // The editor store is module state and outlives a render. Left behind, `p1`'s file would decide
+  // the NEXT test's answer — which is the shape of leak that makes a suite order-dependent.
+  afterEach(() => removeEditorState('p1'));
+
+  const isDisabled = (el: HTMLElement): boolean =>
+    el.className.includes('context-menu__item--disabled') ||
+    el.getAttribute('aria-disabled') === 'true';
+
+  const target = (flyout: HTMLElement): HTMLElement =>
+    within(flyout).getByTestId('menu-item-Last Active Editor (Scratch)');
+
+  it('is ENABLED while that editor holds something else', async () => {
+    setLastActiveEditor(TAB_ID, 'p1');
+    setEditorState('p1', { filePath: 'C:/projects/demo/other.txt' });
+    const { user, tree } = await mount(oneNamedPanel('Scratch'));
+
+    expect(isDisabled(target(await openInFlyout(user, tree)))).toBe(false);
+  });
+
+  it('is DISABLED once that editor holds THIS file — opening it again would do nothing', async () => {
+    setLastActiveEditor(TAB_ID, 'p1');
+    setEditorState('p1', { filePath: 'C:/projects/demo/note.txt' });
+    const { user, tree } = await mount(oneNamedPanel('Scratch'));
+
+    const item = target(await openInFlyout(user, tree));
+    expect(item, 'the row stays on the menu — a vanished row teaches nobody why').toBeVisible();
+    expect(isDisabled(item)).toBe(true);
+  });
+
+  it('compares the PATHS, not the spellings — Windows calls those the same file', async () => {
+    /*
+     * `file-tree.tsx:390` normalises both sides before comparing, and it has to: the tree composes
+     * its path from the project root while the editor store holds whatever spelling the file was
+     * opened with. A raw comparison leaves the row enabled, the user clicks it, and nothing happens —
+     * the exact no-op the disabling exists to prevent.
+     */
+    setLastActiveEditor(TAB_ID, 'p1');
+    setEditorState('p1', { filePath: 'C:\\Projects\\Demo\\Note.txt' });
+    const { user, tree } = await mount(oneNamedPanel('Scratch'));
+
+    expect(isDisabled(target(await openInFlyout(user, tree)))).toBe(true);
+  });
+
+  it('is ENABLED when the editor holds NO file at all', async () => {
+    // A never-saved scratch buffer. There is nothing for this file to already be, so the target is
+    // exactly as available as it would be with no editor state at all.
+    setLastActiveEditor(TAB_ID, 'p1');
+    setEditorState('p1', { filePath: null });
+    const { user, tree } = await mount(oneNamedPanel('Scratch'));
+
+    expect(isDisabled(target(await openInFlyout(user, tree)))).toBe(false);
   });
 });

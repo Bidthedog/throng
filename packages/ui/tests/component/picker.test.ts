@@ -203,3 +203,102 @@ describe('a seeded query (FR-060)', () => {
     expect(screen.getByTestId('quickopen-row-docs/guide.md')).toBeVisible();
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * Dismissing gives focus BACK to whatever opened it
+ * (migrated from tab-picker.e2e.ts:215 — 035 T055)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * ══ THE DEFECT, AND WHY jsdom IS THE RIGHT PLACE FOR IT ══
+ *
+ * Measured before the fix: `document.activeElement` after dismissal was `BODY`. Focus was not
+ * returned to the control it came from and was not left on the picker either — it was simply lost,
+ * so the next keystroke went nowhere and the keyboard user was stranded.
+ *
+ * The mechanism is a React phase-ordering one, and it is entirely a DOM story. `Picker` recorded
+ * where focus was in a `useEffect`, but the query input carries `autoFocus`, which React applies
+ * during the COMMIT phase — before passive effects run. So the element recorded as "where focus was"
+ * was already the picker's own input; on unmount that element is gone, `document.contains(previous)`
+ * is false, and the restore was skipped. The capture happens during RENDER now, which is the only
+ * phase early enough.
+ *
+ * Nothing in that involves a window, an OS or a real application. jsdom tracks `activeElement`,
+ * `document.contains` and React's phases exactly as a browser does, which is precisely what the
+ * claim is about — and the E2E paid for an Electron launch, a project and a tab strip to reach it.
+ */
+describe('focus, when the picker goes away', () => {
+  /** A host with a real control to focus, and a picker that can be mounted and unmounted. */
+  function hostWith(open: boolean) {
+    return createElement(
+      'div',
+      null,
+      createElement('button', { 'data-testid': 'opener', type: 'button' }, 'Open'),
+      open
+        ? createElement(Picker, {
+            title: 'Tabs',
+            testId: 'tabpicker',
+            entries: FILES,
+            onChoose: () => undefined,
+            onDismiss: () => undefined,
+            emptyMessage: 'none',
+          } as Parameters<typeof Picker>[0])
+        : null,
+    );
+  }
+
+  it('takes focus into its own query input while it is open', async () => {
+    /*
+     * The positive control, and it is load-bearing rather than a formality: "focus returned to the
+     * opener" is trivially satisfied by a picker that never took focus in the first place, which
+     * would be a different and worse bug.
+     */
+    const { rerender } = render(hostWith(false));
+    const opener = screen.getByTestId('opener');
+    opener.focus();
+    expect(document.activeElement).toBe(opener);
+
+    rerender(hostWith(true));
+
+    expect(document.activeElement).toBe(screen.getByTestId('tabpicker-input'));
+  });
+
+  it('gives it back to the control that had it, not to BODY', async () => {
+    const { rerender } = render(hostWith(false));
+    const opener = screen.getByTestId('opener');
+    opener.focus();
+
+    rerender(hostWith(true));
+    expect(document.activeElement).toBe(screen.getByTestId('tabpicker-input'));
+
+    rerender(hostWith(false));
+
+    // BODY is what the defect produced, and it is asserted by name so a regression says so plainly
+    // rather than as "expected <button> received <body>".
+    expect(document.activeElement, 'focus was lost rather than returned').not.toBe(document.body);
+    expect(document.activeElement).toBe(opener);
+  });
+
+  /*
+   * ══ A TEST THAT IS NOT HERE, AND THE MEASUREMENT THAT REMOVED IT ══
+   *
+   * There was a third test here: the picker opened from a control that is itself removed while the
+   * picker is up — a tab closing underneath it — asserting the restore does not throw. It was
+   * written, it passed, and its own red step removed it.
+   *
+   * The restore is guarded twice, and NEITHER guard is observable from this layer:
+   *
+   *   - `document.contains(previous)` — removing it makes the code call `.focus()` on a detached
+   *     element, which in a DOM is a silent no-op, not a throw;
+   *   - `previous !== document.body` — removing it makes the code call `document.body.focus()`,
+   *     which is also a no-op.
+   *
+   * Both mutations leave all the assertions green, because in each case `activeElement` ends up at
+   * `body` either way. A test that passes under its own mutation is decoration, so it went rather
+   * than being kept for the shape of the thing. The guards stay in the source: they are cheap, and
+   * "no-op" is a fact about today's DOM rather than a promise.
+   *
+   * The two tests above DO discriminate — see the commit's red step: captures-its-own-input and
+   * no-restore.
+   */
+});

@@ -51,7 +51,7 @@
  * positive assertion in the SAME test (a surviving row, the empty-state paragraph, a restored row),
  * so a form that rendered nothing fails them rather than passing them.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
@@ -203,5 +203,172 @@ describe('the reset restores every row AT ONCE (clearSearch cancels the pending 
     settleDebounce();
     expect(box().value, 'the cleared box was refilled').toBe('');
     expect(rowCount(UNMATCHED), 'a cancelled keystroke landed after the reset').toBe(1);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * The Notifications category, and the confirmation on silencing a severity
+ * (030 FR-001/FR-008, migrated from notification-prefs.e2e.ts:304 and :654)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Both migrated tests launched Electron, opened a SECOND WINDOW and drove the Settings tab. What
+ * they assert is the tab's own markup and one confirmation — neither needs an application.
+ *
+ * ══ WHAT :304 IS REALLY FOR, WHICH ITS TITLE UNDERSTATES ══
+ *
+ * Its own comment records the defect: the value assertion "was the whole of this test, and it
+ * passed for months while the dropdown read Never / Timed / Dismiss". Every other test in that file
+ * drives the STORED TOKEN (`selectOption('never')`), so nothing anywhere ever read the words on the
+ * screen, and the generic Title-Case fallback was indistinguishable from the specified names.
+ *
+ * That makes the visible TEXT the assertion, and it is kept as such below.
+ */
+
+const SEVERITIES = ['error', 'warning', 'info', 'success'] as const;
+
+/** The mode `<select>` for one severity. */
+const modeFor = (severity: string): HTMLSelectElement =>
+  screen.getByTestId(`control-notifications.${severity}.mode`) as HTMLSelectElement;
+
+describe('the Notifications category (migrated from notification-prefs.e2e.ts:304)', () => {
+  it('offers a mode and a duration for every severity — eight leaves, no more', () => {
+    mount();
+
+    expect(screen.getByTestId('settings-group-Notifications')).toBeVisible();
+    for (const severity of SEVERITIES) {
+      expect(modeFor(severity)).toBeVisible();
+      // `timeoutMs`, and it renders TWO controls — a slider and a number field, which the E2E's
+      // `durationMs` guess would have missed even had the name been right.
+      expect(screen.getByTestId(`control-notifications.${severity}.timeoutMs`)).toBeVisible();
+      expect(screen.getByTestId(`control-notifications.${severity}.timeoutMs-slider`)).toBeVisible();
+    }
+    // "No more" is the half the migrated test could not state: it looked up four names it already
+    // knew. A fifth severity added without a duration, or a stray control in the group, is exactly
+    // the drift a per-severity surface accumulates.
+    const modes = screen.getAllByTestId(/^control-notifications\.[a-z]+\.mode$/);
+    const durations = screen.getAllByTestId(/^control-notifications\.[a-z]+\.timeoutMs$/);
+    expect(modes).toHaveLength(SEVERITIES.length);
+    expect(durations).toHaveLength(SEVERITIES.length);
+  });
+
+  it('names each mode as FR-001 names it — the words, not the stored token', () => {
+    /*
+     * The assertion the migrated test was rewritten to add, and the reason is worth keeping: the
+     * stored token is what every other test drives, so a dropdown reading "Never / Timed / Dismiss"
+     * passed for months. A user does not read `never`.
+     */
+    mount();
+
+    for (const severity of SEVERITIES) {
+      const options = [...modeFor(severity).querySelectorAll('option')];
+      expect(options.map((o) => o.value)).toEqual(['never', 'timed', 'dismiss']);
+      expect(options.map((o) => o.textContent?.trim())).toEqual([
+        'Never display',
+        'Display for',
+        'Dismiss only',
+      ]);
+    }
+  });
+});
+
+describe('silencing a FAILURE severity is confirmed (FR-008, migrated from notification-prefs.e2e.ts:654)', () => {
+  /** Choose a mode the way the tab's own `commit()` is reached — a change event on the select. */
+  const choose = (severity: string, value: string): void => {
+    fireEvent.change(modeFor(severity), { target: { value } });
+  };
+
+  it('asks before an ERROR is silenced, and names the consequence rather than the word', () => {
+    mount();
+
+    choose('error', 'never');
+
+    /*
+     * SYNCHRONOUS, and it has to be: this file runs on fake timers for its debounce, and
+     * `findBy*` polls on a real interval that never advances — every await here hung to the 5s
+     * test timeout. `commit()` calls `confirm()` in the change handler, so the dialog is in the
+     * DOM by the time `fireEvent.change` returns, and asserting that directly is stronger than
+     * waiting for it.
+     */
+    /*
+     * The MESSAGE element, not the dialog — and without the word "never".
+     *
+     * The migrated assertion was `/report nothing|not be shown|never/i` against the whole dialog,
+     * and its red step showed it proved nothing: the TITLE is "Never display error notices?", so
+     * the alternation matched before the message was ever consulted. Replacing the entire message
+     * with "Are you sure?" left it green — which is the exact thing the assertion exists to forbid.
+     */
+    const message = within(screen.getByTestId('confirm-dialog')).getByTestId('confirm-message');
+    expect(message.textContent ?? '').toMatch(/report nothing/i);
+    expect(message.textContent ?? '').toMatch(/diagnostic log/i);
+  });
+
+  it('leaves the setting alone when the dialog is declined — and writes NOTHING', async () => {
+    /*
+     * The select's VALUE proves nothing here, and its red step said so: this mount has no config
+     * bridge, so the control reads the shipped document and could not change whatever `applyEdit`
+     * did. Making the change apply on decline left all twelve green.
+     *
+     * The observable that does discriminate is the WRITE. `commit()` calls `applyEdit` only inside
+     * the confirm promise's `.then((accepted) => accepted && …)`, so a decline must reach the bridge
+     * not at all — and a write spy is the only thing in this mount that can tell.
+     */
+    const writes: string[] = [];
+    Reflect.set(window, 'throng', {
+      config: {
+        // writePatch, NOT write. applyChange goes through writeConfigPatch (write-config.ts
+        // :164), which reads window.throng.config.writePatch and returns an unavailable result if it
+        // is absent - so a spy on write() observes nothing and the assertion is vacuous, which is
+        // what its red step reported.
+        writePatch: (_id: unknown, changes: unknown) => {
+          writes.push(JSON.stringify(changes));
+          return Promise.resolve({ ok: true });
+        },
+      },
+    });
+    mount();
+    expect(modeFor('error').value).toBe('dismiss');
+
+    choose('error', 'never');
+    expect(screen.getByTestId('confirm-dialog')).toBeVisible();
+    // Nothing yet: the question is asked BEFORE anything is written, which is what makes it a
+    // question rather than a notification.
+    expect(writes).toEqual([]);
+
+    fireEvent.click(screen.getByTestId('confirm-cancel'));
+
+    // No wait is needed and the migrated test explains why: `commit()` only calls `applyEdit` inside
+    // the confirm promise's `.then((accepted) => accepted && …)`, so a decline never starts a write.
+    // The dialog's removal is proof the decision landed. It settles on a microtask (the confirm
+    // promise's `.then`), which `act` flushes — no timer is involved, so fake timers are no
+    // obstacle here.
+    await act(async () => {});
+    expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+    expect(writes, 'a declined confirmation wrote to the settings document').toEqual([]);
+    expect(modeFor('error').value).toBe('dismiss');
+    Reflect.deleteProperty(window, 'throng');
+  });
+
+  it('asks for a WARNING too — a partly-failed operation reporting nothing is the same bargain', () => {
+    mount();
+
+    choose('warning', 'never');
+
+    expect(screen.getByTestId('confirm-dialog')).toBeVisible();
+  });
+
+  it('does NOT ask for INFO or SUCCESS — there is no failure to miss, so a prompt would nag', () => {
+    /*
+     * The discriminating half, and the one an "asks first" test cannot make on its own: a dialog on
+     * every severity would satisfy all three assertions above. The migrated test checked `info`;
+     * `success` is the same bargain and had no test at all.
+     */
+    mount();
+
+    choose('info', 'never');
+    expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+
+    choose('success', 'never');
+    expect(screen.queryByTestId('confirm-dialog')).toBeNull();
   });
 });

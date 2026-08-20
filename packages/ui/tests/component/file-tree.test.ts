@@ -64,7 +64,7 @@
  *     their hooks THROW without them. `useConfirm` is called unconditionally at
  *     `use-explorer-data.ts:218` even though nothing here confirms anything.
  */
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -82,6 +82,11 @@ import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { ConfigProvider } from '../../src/renderer/config/config-store.js';
 import { FileTree } from '../../src/renderer/explorer/file-tree.js';
+import {
+  setEditorState,
+  removeEditorState,
+  allEditorStates,
+} from '../../src/renderer/editor/editor-state.js';
 import type { FileTreeEntry } from '../../src/renderer/global.js';
 
 /* ────────────────────────────────────────────────────────────────────────── *
@@ -297,12 +302,9 @@ async function mount(options: MountOptions = {}) {
   }
   Reflect.set(window, 'throng', throng);
 
-  const subject = createElement(FileTree, {
-    rootFolder: ROOT_FOLDER,
-    projectId,
-    hiddenPaths: options.hiddenPaths ?? [],
-    onHide,
-  });
+  const treeWith = (hiddenPaths: string[]): ReactElement =>
+    createElement(FileTree, { rootFolder: ROOT_FOLDER, projectId, hiddenPaths, onHide });
+  const subject = treeWith(options.hiddenPaths ?? []);
 
   // ONE services object, shared: `WorkspaceProvider` must be handed the SAME `WorkspaceClient` the
   // rest of the tree resolves through `useServices`, or a test that later reads the store would be
@@ -326,13 +328,27 @@ async function mount(options: MountOptions = {}) {
       ),
     );
 
-  render(options.settings ? createElement(ConfigProvider, null, wrap(subject)) : wrap(subject));
+  const shell = (child: ReactElement): ReactElement =>
+    options.settings ? createElement(ConfigProvider, null, wrap(child)) : wrap(child);
+  const { rerender } = render(shell(subject));
+  /**
+   * Change which paths are hidden, WITHOUT remounting (035 T056).
+   *
+   * `hiddenPaths` is a prop, and applying it to the derived data rather than to the fetch is what
+   * makes hiding instant. A remount would re-read the folder and prove nothing about that — the
+   * point of the un-hide case is that the file comes back with NO restart and no second listing.
+   */
+  const setHidden = async (hiddenPaths: string[]): Promise<void> => {
+    await act(async () => {
+      rerender(shell(treeWith(hiddenPaths)));
+    });
+  };
 
   // The tree mounts only once `ready` is true AND the stubbed size has landed. Waiting for the
   // role rather than for a timeout means a regression that stops the tree mounting fails HERE,
   // with "unable to find role=tree", instead of silently satisfying every absence assertion below.
   const tree = await screen.findByRole('tree');
-  return { user, tree, files, listed, onHide, projectId };
+  return { user, tree, files, listed, onHide, projectId, setHidden };
 }
 
 /**
@@ -411,6 +427,52 @@ describe('the rows the tree draws (004 FR-004/005/016, migrated from explorer.e2
     expect(listed).not.toContain('.git');
   });
 
+  it('excludes node_modules too, and leaves everything else in place (SC-019, FR-070)', async () => {
+    /*
+     * MIGRATED FROM `packages/ui/tests/e2e/quick-open.e2e.ts:549` (035 FR-007) — the TREE half of
+     * SC-019, which lived in a Quick Open spec because that spec was the only one that
+     * materialised a `node_modules` fixture on disk, and opening a second project on the same root
+     * would have breached FR-029's root exclusivity.
+     *
+     * Neither constraint exists here: the listing is a value, so a fixture costs a line rather than
+     * a temp tree, and there is no project root to be exclusive about.
+     *
+     * `node_modules` is a SEPARATE case from `.git` above rather than a second name in the same
+     * assertion. 033 added it to `DEFAULT_EXCLUDE_GLOBS` (`exclude.ts:33`) two years after the
+     * VS Code defaults went in, so it is the entry most likely to be dropped by a future edit to
+     * that list — and the one whose absence costs the most, since walking a real `node_modules` is
+     * the difference between a tree that opens and one that hangs.
+     *
+     * THE SECOND HALF IS THE CONTROL, and it is why this is not just a longer `not.toContain`. An
+     * exclusion rule that matched EVERYTHING would satisfy every assertion above: no `.git` row, no
+     * `node_modules` row, nothing listed. Asserting that the ordinary folders survived is what
+     * separates "excluded the right things" from "excluded".
+     */
+    const listing: Record<string, FileTreeEntry[]> = {
+      '': [
+        entry('src', 'folder'),
+        entry('docs', 'folder'),
+        entry('node_modules', 'folder'),
+        entry('README.md', 'file'),
+      ],
+      // Present so a tree that DID descend finds something and fails loudly on the row count,
+      // rather than passing because the folder happened to be empty — same reason as `.git` above.
+      node_modules: [entry('left-pad', 'folder')],
+      src: [entry('index.ts', 'file')],
+      docs: [entry('guide.md', 'file')],
+    };
+
+    const { tree, listed } = await mount({ listing });
+
+    expect(rowLabels(tree)).not.toContain('node_modules');
+    expect(listed).not.toContain('node_modules');
+
+    // …and this is not an empty tree.
+    expect(rowLabels(tree)).toContain('src');
+    expect(rowLabels(tree)).toContain('docs');
+    expect(rowLabels(tree)).toContain('README.md');
+  });
+
   it('does not list a subfolder until its chevron is clicked (lazy load)', async () => {
     /*
      * The lazy half of FR-070. On mount only the root is read; `src`'s listing is fetched by
@@ -444,6 +506,37 @@ describe('the rows the tree draws (004 FR-004/005/016, migrated from explorer.e2
 
     expect(rowLabels(tree)).toEqual(['demo', 'src', 'README.md']);
     expect(listed).toEqual(['']);
+  });
+  it('brings a path BACK when it stops being hidden, with no second listing (US8 FR-043)', async () => {
+    /*
+     * MIGRATED FROM `project-settings.e2e.ts:39` (035 T056) — the half the dialog's own tests cannot
+     * make. `component/project-settings-dialog.test.ts:223` proves the list draws every hidden path
+     * and `:233` proves removing one writes the whole list minus that path (keeping the other two
+     * hidden, which is the data-loss guard); neither of them can say what the TREE then does.
+     *
+     * "With no restart" is the claim, and the call log is what makes it checkable: un-hiding must
+     * cost nothing, because `hiddenPaths` filters the DERIVED data. A tree that re-listed the folder
+     * would still show the file and would still look correct.
+     */
+    const { tree, listed, setHidden } = await mount({ hiddenPaths: ['a.txt'] });
+    expect(rowLabels(tree)).toEqual(['demo', 'src', 'README.md']);
+
+    await setHidden([]);
+
+    expect(rowLabels(tree)).toEqual(['demo', 'src', 'a.txt', 'README.md']);
+    expect(listed, 'no restart, and no re-read either').toEqual(['']);
+  });
+
+  it('keeps the OTHERS hidden when one is un-hidden', async () => {
+    // The tree's half of the data-loss guard. A filter that treated the list as a single flag would
+    // bring all three back, and the dialog's write would be the only thing standing between the user
+    // and two paths they had deliberately hidden.
+    const { tree, setHidden } = await mount({ hiddenPaths: ['a.txt', 'README.md'] });
+    expect(rowLabels(tree)).toEqual(['demo', 'src']);
+
+    await setHidden(['README.md']);
+
+    expect(rowLabels(tree)).toEqual(['demo', 'src', 'a.txt']);
   });
 });
 
@@ -686,5 +779,391 @@ describe('an empty project folder (migrated from explorer.e2e.ts:605)', () => {
     expect(rowLabels(tree)).toEqual(['demo']);
     expect(within(tree).getAllByRole('treeitem')).toHaveLength(1);
     expect(screen.queryByTestId('explorer-error')).toBeNull();
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * The shared unsaved dot, on the FILE
+ * (024 follow-up / 006 US8, migrated from tree-unsaved-dot.e2e.ts:29)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * ══ WHAT THE E2E DID, AND WHAT IT WAS ACTUALLY ASKING ══
+ *
+ * It launched Electron, started a daemon, made a real temp folder with two real files, created a
+ * real project, opened an editor, CLICKED a row, waited for CodeMirror to show the file's text,
+ * typed into it, then read one `<span>` out of a tree row — and afterwards added a real `cmd`
+ * terminal and answered the close prompt so teardown would not force-kill a live shell.
+ *
+ * Every one of those steps is a way of getting `setEditorState` called with `dirty: true` and a
+ * file path. The claim is what the TREE does with that: `file-tree.tsx:515-522` turns the dirty
+ * store's absolute paths into root-relative ones, and `tree-node.tsx:32` marks a row whose
+ * `relPath` is in that set. Driving the store directly asserts the same rule one process cheaper,
+ * and asserts it on the RULE rather than on a side effect of typing — so a regression says which
+ * half broke.
+ *
+ * ══ WHAT THIS CAN ASK THAT THE E2E COULD NOT ══
+ *
+ * The path normalisation. `dirtyPathKey()` lower-cases and forward-slashes every path precisely
+ * because Windows calls `C:/Proj/A.txt` and `C:\\proj\\a.txt` the same file, and the tree
+ * composes its keys from a project root it was handed rather than from the editor. The E2E used one
+ * spelling throughout — a real editor opens the file the tree gave it — so it could never have
+ * caught a normalisation that was dropped. Two of the tests below are that, and they are new
+ * coverage rather than a migration.
+ *
+ * ══ WHAT DID NOT COME DOWN WITH IT ══
+ *
+ * The E2E's middle section asserted that a TERMINAL panel never wears the editor's unsaved dot —
+ * a claim about the panel HEADER (`panel-placeholder.tsx:690`), not the tree, and about editor
+ * state outliving an editor's unmount. It is not asserted here and it is not asserted anywhere; it
+ * is recorded in the backlog against `panel-placeholder`, whose header this file does not render.
+ */
+describe('the unsaved dot on a file row (migrated from tree-unsaved-dot.e2e.ts:29)', () => {
+  // The dirty store is a module-level Map shared by every test in the process. A test that leaves
+  // an entry behind marks a row in the NEXT file to render a tree, which is the kind of failure
+  // that gets blamed on the tree.
+  afterEach(() => {
+    for (const s of allEditorStates()) removeEditorState(s.panelId);
+  });
+
+  /** Mark `absPath` dirty (or clean) as panel `id`, the way an editor does. */
+  const dirty = (id: string, absPath: string, isDirty: boolean): void => {
+    act(() => {
+      setEditorState(id, { filePath: absPath, dirty: isDirty });
+    });
+  };
+
+  it('marks the edited file and no other, and unmarks it when saved', async () => {
+    const { tree } = await mount();
+
+    // Clean: no mark anywhere. Asserted BEFORE the dirty step so a dot that is always drawn cannot
+    // pass the next assertion by having been there all along.
+    expect(within(tree).queryByTestId('tree-unsaved-a.txt')).toBeNull();
+    expect(within(tree).queryByTestId('tree-unsaved-README.md')).toBeNull();
+
+    dirty('p1', `${ROOT_FOLDER}/a.txt`, true);
+
+    expect(within(tree).getByTestId('tree-unsaved-a.txt')).toBeVisible();
+    expect(within(tree).queryByTestId('tree-unsaved-README.md')).toBeNull();
+
+    // Saved: the mark goes with the dirtiness it was reporting.
+    dirty('p1', `${ROOT_FOLDER}/a.txt`, false);
+
+    expect(within(tree).queryByTestId('tree-unsaved-a.txt')).toBeNull();
+  });
+
+  it('carries the accessible name rather than leaving the dot to speak for itself', async () => {
+    const { tree } = await mount();
+    dirty('p1', `${ROOT_FOLDER}/a.txt`, true);
+
+    // FR-006d: the mark's entire job is to say "unsaved", so it may not be a bare decorative glyph.
+    // The E2E asserted the testid and stopped there.
+    const dot = within(tree).getByTestId('tree-unsaved-a.txt');
+    expect(dot).toHaveAttribute('aria-label', 'Unsaved changes');
+    expect(dot).toHaveAttribute('title', 'Unsaved changes');
+  });
+
+  it('marks a file inside a folder once that folder is open', async () => {
+    const { user, tree } = await mount();
+    dirty('p1', `${ROOT_FOLDER}/src/index.ts`, true);
+
+    // Not rendered while the folder is shut — the row does not exist, which is the tree's business
+    // and not a failure of the mark.
+    expect(within(tree).queryByTestId('tree-unsaved-src/index.ts')).toBeNull();
+
+    await user.click(twisty(tree, 'src'));
+    await waitFor(() => expect(rowLabels(tree)).toContain('index.ts'));
+
+    // The row's key is root-RELATIVE and keeps its separator, which is the join the E2E's
+    // single-file fixture never exercised.
+    expect(within(tree).getByTestId('tree-unsaved-src/index.ts')).toBeVisible();
+  });
+
+  it('marks the row when the editor spells the path with backslashes and different case', async () => {
+    const { tree } = await mount();
+
+    // What an editor on Windows actually holds: the OS's own spelling, which is neither the tree's
+    // separator nor its case. `dirtyPathKey()` normalises both, and the E2E could not have caught
+    // that being dropped because a real editor is handed the tree's own string.
+    dirty('p1', 'C:\\Projects\\DEMO\\A.TXT', true);
+
+    expect(within(tree).getByTestId('tree-unsaved-a.txt')).toBeVisible();
+  });
+
+  it('ignores a dirty file belonging to another project', async () => {
+    const { tree } = await mount();
+
+    // Another project's unsaved work is another project's business — the prefix test at
+    // `file-tree.tsx:518` is the whole of that rule, and a tree that dropped it would mark rows
+    // by basename.
+    dirty('p1', 'C:/projects/other/a.txt', true);
+
+    expect(within(tree).queryByTestId('tree-unsaved-a.txt')).toBeNull();
+  });
+
+  it('marks two files at once, each from its own editor panel', async () => {
+    const { tree } = await mount();
+
+    dirty('p1', `${ROOT_FOLDER}/a.txt`, true);
+    dirty('p2', `${ROOT_FOLDER}/README.md`, true);
+
+    expect(within(tree).getByTestId('tree-unsaved-a.txt')).toBeVisible();
+    expect(within(tree).getByTestId('tree-unsaved-README.md')).toBeVisible();
+
+    // One saved, one not: the store is keyed by panel, so a save must clear exactly one mark.
+    dirty('p1', `${ROOT_FOLDER}/a.txt`, false);
+
+    expect(within(tree).queryByTestId('tree-unsaved-a.txt')).toBeNull();
+    expect(within(tree).getByTestId('tree-unsaved-README.md')).toBeVisible();
+  });
+
+  it('never marks a FOLDER row, whatever the dirty store says', async () => {
+    const { tree } = await mount();
+
+    // `tree-node.tsx:32` gates on `data.kind === 'file'`. Without that gate a folder whose
+    // relPath collided with a dirty file's would wear a mark the user cannot act on.
+    dirty('p1', `${ROOT_FOLDER}/src`, true);
+
+    expect(within(tree).queryByTestId('tree-unsaved-src')).toBeNull();
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * Expand / Collapse All Children
+ * (029 US4, AS-3/4/6/7/8/9, FR-042/044; migrated from
+ *  subtree-expand-collapse.e2e.ts:415, :477 and :577)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * ══ WHAT THE THREE MIGRATED TESTS DROVE ══
+ *
+ * Each made a five-level folder tree on a real disk, launched Electron, started a daemon, created a
+ * project, and then right-clicked a row and chose an item from throng's context menu. That menu is
+ * an in-DOM React component (`ContextMenuProvider`), not a native `Menu` — `context-menu-lifecycle
+ * .test.ts` and the Cut test above already drive it in jsdom — so the native-menu entry on the
+ * constitution's reserve never applied to any of them. What was left was a folder tree, and a folder
+ * tree is a set of directory listings.
+ *
+ * The pure half went to `core/tests/unit/explorer-subtree.test.ts` under 034:
+ * `immediateChildFolders` and `descendantOpenFolders` over an `ExpandNode`. What that cannot show
+ * is the TREE applying those answers — which rows end up drawn, which chevrons end up open, and
+ * which folders got listed on the way. That is this.
+ *
+ * ══ THE ASSERTION THE FAKE MAKES BETTER, NOT WORSE ══
+ *
+ * The migrated file's most valuable check is `expectNoOpenFolderLies` (#120): no folder may be drawn
+ * OPEN over children it never loaded. It had to consult the real filesystem, because an unloaded
+ * folder and an empty one render identically and the tree alone cannot tell them apart.
+ *
+ * Here the listings ARE the filesystem and `listed` records every directory the tree asked for, so
+ * the two are directly distinguishable: a folder drawn open whose path is absent from `listed` is
+ * the #120 desync, stated as itself rather than inferred from a `readdirSync`.
+ *
+ * ══ AND THE ONE THE FAKE MAKES EASIER ══
+ *
+ * `settledOpenFolders` polled until two consecutive reads agreed, because `expandChildren` is a
+ * fire-and-forget `void (async () => {…})()` and every negative assertion here ("no grandchild
+ * opened") is TRUE at t=0. That hazard is real and does not go away: it is answered by `waitFor` on
+ * the POSITIVE outcome first, so the tree has demonstrably finished before any absence is read.
+ */
+
+/** The five-level fixture from the migrated file, as listings. */
+const SUBTREE: Record<string, FileTreeEntry[]> = {
+  '': [entry('branch', 'folder'), entry('other', 'folder'), entry('root.txt', 'file')],
+  branch: [
+    entry('l1a', 'folder'),
+    entry('l1b', 'folder'),
+    entry('node_modules', 'folder'),
+    entry('branch.txt', 'file'),
+  ],
+  'branch/l1a': [entry('l2a', 'folder'), entry('l1a.txt', 'file')],
+  'branch/l1a/l2a': [entry('l3a', 'folder'), entry('l2a.txt', 'file')],
+  'branch/l1a/l2a/l3a': [entry('deep.txt', 'file')],
+  // Genuinely empty, and drawn as a folder — the case #120's check has to acquit rather than fail.
+  'branch/l1b': [entry('empty', 'folder'), entry('l1b.txt', 'file')],
+  'branch/l1b/empty': [],
+  // Present so that a tree which DID descend into an excluded folder would find something.
+  'branch/node_modules': [entry('pkg', 'folder')],
+  'branch/node_modules/pkg': [entry('index.js', 'file')],
+  other: [entry('other.txt', 'file')],
+};
+
+const COLLAPSE = 'Collapse All Children';
+const EXPAND = 'Expand All Children';
+
+const rowFor = (tree: HTMLElement, relPath: string): HTMLElement | null =>
+  tree.querySelector(`.tree-row[data-rel-path="${CSS.escape(relPath)}"]`);
+
+/** Every folder the tree is currently DRAWING as open, sorted — the migrated `openFolders`. */
+const openFolders = (tree: HTMLElement): string[] =>
+  [...tree.querySelectorAll('.tree-row')]
+    .filter((el) => el.getAttribute('data-kind') === 'folder')
+    .filter(
+      (el) =>
+        el.classList.contains('tree-row--root') ||
+        el.querySelector('.tree-twisty')?.getAttribute('aria-expanded') === 'true',
+    )
+    .map((el) => el.getAttribute('data-rel-path') ?? '')
+    .sort();
+
+const isOpen = (tree: HTMLElement, relPath: string): string | null | undefined =>
+  rowFor(tree, relPath)?.querySelector('.tree-twisty')?.getAttribute('aria-expanded');
+
+/**
+ * SC-009 / AS-8 — no folder is drawn OPEN over children it never loaded (#120).
+ *
+ * Returns the folders that had to be acquitted by consulting the listings, so a caller can assert
+ * the branch actually RAN rather than short-circuiting on every folder rendering a child. The
+ * migrated file makes exactly that point about its own version.
+ */
+function expectNoOpenFolderLies(tree: HTMLElement, listed: string[]): string[] {
+  const rows = [...tree.querySelectorAll('.tree-row')];
+  const rendered = rows.map((el) => el.getAttribute('data-rel-path') ?? '');
+  const parentOf = (rel: string): string =>
+    rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
+  const acquitted: string[] = [];
+  for (const rel of openFolders(tree)) {
+    if (rendered.some((r) => r !== rel && parentOf(r) === rel)) continue;
+    // Drawn open, renders nothing. Legitimate only if the tree ASKED for the listing and it was
+    // empty; if it never asked, the chevron is advertising children nobody fetched.
+    expect(
+      listed,
+      `folder "${rel || '<root>'}" is drawn OPEN but renders no children and was never listed — #120 desync`,
+    ).toContain(rel);
+    expect(
+      SUBTREE[rel] ?? [],
+      `folder "${rel}" is drawn OPEN, renders nothing, but is not empty`,
+    ).toHaveLength(0);
+    acquitted.push(rel);
+  }
+  return acquitted;
+}
+
+describe('Collapse All Children (AS-3/AS-4, migrated from subtree-expand-collapse.e2e.ts:415)', () => {
+  it('closes every depth and leaves the anchor itself open', async () => {
+    const { tree, user, listed } = await mount({ listing: SUBTREE });
+
+    // US4's own Independent Test: drill three levels down by hand, with the chevron.
+    for (const rel of ['branch', 'branch/l1a', 'branch/l1a/l2a', 'branch/l1a/l2a/l3a']) {
+      await user.click(twisty(tree, rel));
+      await waitFor(() => expect(isOpen(tree, rel)).toBe('true'));
+    }
+    await waitFor(() => expect(rowLabels(tree)).toContain('deep.txt'));
+    expect(openFolders(tree)).toEqual([
+      '',
+      'branch',
+      'branch/l1a',
+      'branch/l1a/l2a',
+      'branch/l1a/l2a/l3a',
+    ]);
+
+    await user.pointer({ keys: '[MouseRight]', target: rowFor(tree, 'branch') as HTMLElement });
+    await user.click(await screen.findByTestId(`menu-item-${COLLAPSE}`));
+
+    // AS-4 / D1 — the anchor is STILL OPEN: its own children are on screen. The disappearance of a
+    // grandchild row is waited for FIRST, as the positive outcome, so the absences below are read
+    // from a tree that has demonstrably moved rather than from one that has not started.
+    await waitFor(() => expect(rowFor(tree, 'branch/l1a/l2a')).toBeNull());
+    expect(isOpen(tree, 'branch')).toBe('true');
+    expect(rowFor(tree, 'branch/l1a')).not.toBeNull();
+    // AS-3 — and every descendant, at every depth, is closed.
+    expect(rowLabels(tree)).not.toContain('deep.txt');
+    expect(openFolders(tree)).toEqual(['', 'branch']);
+
+    expectNoOpenFolderLies(tree, listed);
+  });
+});
+
+describe('Expand All Children (AS-6/7/8/9, migrated from subtree-expand-collapse.e2e.ts:477)', () => {
+  it('opens itself and its immediate child folders, and no grandchild', async () => {
+    const { tree, user, listed } = await mount({ listing: SUBTREE });
+
+    // AS-7 / D5 / FR-042 — the anchor is CLOSED when the action is chosen.
+    expect(isOpen(tree, 'branch')).toBe('false');
+
+    await user.pointer({ keys: '[MouseRight]', target: rowFor(tree, 'branch') as HTMLElement });
+    await user.click(await screen.findByTestId(`menu-item-${EXPAND}`));
+
+    // …so it opens ITSELF first, and then its immediate children. AS-6 / D4.
+    await waitFor(() => expect(isOpen(tree, 'branch/l1b')).toBe('true'));
+    expect(isOpen(tree, 'branch')).toBe('true');
+    expect(isOpen(tree, 'branch/l1a')).toBe('true');
+    // The immediate child FILE is untouched — it is drawn because its parent opened, not expanded.
+    expect(rowLabels(tree)).toContain('branch.txt');
+
+    /*
+     * AS-6 / C4 — and NO GRANDCHILD is open. The two grandchildren are DRAWN (their parents opened)
+     * but closed, so nothing inside them is on screen. Every assertion from here is a negative, and
+     * a negative is true before the work finishes — which is why the positive above is waited for
+     * first. A recursive descent that eventually opened the grandchildren fails here rather than
+     * beating the read.
+     */
+    expect(rowFor(tree, 'branch/l1a/l2a')).not.toBeNull();
+    expect(isOpen(tree, 'branch/l1a/l2a')).toBe('false');
+    expect(isOpen(tree, 'branch/l1b/empty')).toBe('false');
+    expect(rowFor(tree, 'branch/l1a/l2a/l3a')).toBeNull();
+    expect(rowLabels(tree)).not.toContain('l2a.txt');
+    expect(openFolders(tree)).toEqual(['', 'branch', 'branch/l1a', 'branch/l1b']);
+
+    /*
+     * AS-9 / D7 — an EXCLUDED folder is not expanded into, and the mechanism is that it is not in
+     * the tree at all: `fetchChildren` filters by the shipped globs, so `node_modules` is never a
+     * target for anything. Asserted on the row AND on its contents, because a filtered parent that
+     * still leaked a child is the same defect wearing a different face.
+     */
+    expect(rowFor(tree, 'branch/node_modules')).toBeNull();
+    expect(rowLabels(tree)).not.toContain('node_modules');
+    expect(rowLabels(tree)).not.toContain('index.js');
+    // …and the tree never even ASKED for it. The E2E could only assert the absence of rows; the
+    // listing log is evidence about the call that was not made.
+    expect(listed).not.toContain('branch/node_modules');
+
+    // AS-8 / SC-009 — passes by SHORT-CIRCUIT here (the empty folder is drawn but closed), exactly
+    // as the migrated test notes about itself. The honest-empty branch runs in the test below.
+    expect(expectNoOpenFolderLies(tree, listed)).toEqual([]);
+  });
+
+  it('acquits a folder that is genuinely open and genuinely empty (#120, the branch that usually short-circuits)', async () => {
+    const { tree, user, listed } = await mount({ listing: SUBTREE });
+
+    // Open the empty folder for real: it renders no rows, and must NOT be reported as a desync.
+    for (const rel of ['branch', 'branch/l1b', 'branch/l1b/empty']) {
+      await user.click(twisty(tree, rel));
+      await waitFor(() => expect(isOpen(tree, rel)).toBe('true'));
+    }
+
+    // The loop body RUNS this time — that is the point of returning the acquitted list rather than
+    // merely calling the function, which is a green bar for a body that never executed.
+    expect(expectNoOpenFolderLies(tree, listed)).toEqual(['branch/l1b/empty']);
+  });
+});
+
+describe('a HIDDEN folder is never expanded into (FR-044, migrated from subtree-expand-collapse.e2e.ts:577)', () => {
+  it('is not listed, not drawn, and not asked for', async () => {
+    /*
+     * D7's SECOND half: hidden by "Hide in this project", not by a shipped glob. Same requirement,
+     * different mechanism — `hiddenPaths` is per-project state rather than a compiled excluder — and
+     * the migrated test existed because the two could diverge.
+     */
+    const { tree, user, listed } = await mount({
+      listing: SUBTREE,
+      hiddenPaths: ['branch/l1a'],
+    });
+
+    await user.pointer({ keys: '[MouseRight]', target: rowFor(tree, 'branch') as HTMLElement });
+    await user.click(await screen.findByTestId(`menu-item-${EXPAND}`));
+
+    await waitFor(() => expect(isOpen(tree, 'branch/l1b')).toBe('true'));
+
+    // Not drawn, and nothing from inside it leaked either.
+    expect(rowFor(tree, 'branch/l1a')).toBeNull();
+    expect(rowLabels(tree)).not.toContain('l1a');
+    expect(rowLabels(tree)).not.toContain('l1a.txt');
+    // The hidden half has NO visible consequence beyond that, which is why the migrated file
+    // recorded every directory listing the app issued: the requirement is that the folder is not
+    // expanded INTO, and a tree that drew no row while still listing it would satisfy every
+    // assertion above while doing the work FR-044 forbids.
+    expect(listed).not.toContain('branch/l1a');
+    expect(openFolders(tree)).toEqual(['', 'branch', 'branch/l1b']);
   });
 });

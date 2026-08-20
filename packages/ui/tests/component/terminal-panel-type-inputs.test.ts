@@ -43,7 +43,7 @@
  * single assertion of their own runs. None of them can pass against a form that never received
  * its flavours.
  */
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -129,6 +129,13 @@ async function renderForm(initial: PanelTypeValues = {}): Promise<{ user: Return
 
 const control = (id: string): HTMLInputElement => screen.getByTestId(id) as HTMLInputElement;
 
+/** The flavour ids the dropdown is currently offering, in order. */
+const flavourIds = (): string[] =>
+  [...screen.getByTestId('terminal-flavour').querySelectorAll('option')].map(
+    (o) => (o as HTMLOptionElement).value,
+  );
+
+
 describe('the Terminal type form offers its three configuration controls (025 FR-001/FR-002)', () => {
   it('shows Shell Arguments and Startup Command as two DISTINCT fields', async () => {
     stubBridge();
@@ -195,5 +202,138 @@ describe('"Reopen in the last directory" is offered only by a shell that can rep
     // And the reason is on the control itself rather than somewhere the user has to go looking:
     // one condition, one notice, with the remedy named.
     expect(remember.closest('label')?.title).toMatch(/Shell integration/i);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * The dropdown, and what a flavour brings with it
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * MIGRATED FROM `terminal-flavours.e2e.ts` (035 T056) — two declarations:
+ *
+ *   `:94`  the Flavour dropdown is populated from the machine and Shell Arguments follows the
+ *          flavour
+ *   `:121` a user-defined flavour added to settings.json appears in the dropdown (hot-reload,
+ *          FR-010a)
+ *
+ * ══ THE REAL-MACHINE HALF IS ALREADY PROVEN, AT CONTRACT ══
+ *
+ * `:94` asserted that `cmd` is among the options because Command Prompt is always present on
+ * Windows. That is a claim about the HOST, and it belongs to the detector:
+ * `platform-windows/tests/contract/windows-shell-detection.contract.test.ts:22` — "detects Command
+ * Prompt, which is always present on Windows" — with `:15` adding that nothing is listed whose
+ * executable does not exist. Launching an app to re-observe it through a `<select>` proved nothing
+ * the contract had not.
+ *
+ * What it also asserted, and nothing else did, is what the FORM does with the list: that choosing a
+ * flavour fills Shell Arguments with that flavour's default, and that choosing a DIFFERENT one
+ * fills it again (FR-011/FR-012). The second is the half that matters — a form that filled the
+ * field once at mount would satisfy a single selection perfectly, and would hand PowerShell cmd's
+ * `/K`.
+ *
+ * ══ AND THE HOT-RELOAD IS ONE LINE OF THE HOOK ══
+ *
+ * `use-flavours.ts:31` re-fetches on `config.onChange`, which is the whole of FR-010a from the
+ * renderer's side. The E2E wrote `settings.json` atomically and waited for the watcher — and its
+ * own comment explains at length why the write had to be atomic, which is a fact about the WATCHER
+ * rather than about the dropdown. That path is `integration/config-store.integration.test.ts` and
+ * `integration/prefs-external-change.test.ts`; what was untested is that the dropdown listens at all.
+ */
+describe('choosing a flavour brings its defaults with it (FR-011/FR-012, migrated from terminal-flavours.e2e.ts:94)', () => {
+  it('fills Shell Arguments with the chosen flavour’s default', async () => {
+    stubBridge();
+    const { user } = await renderForm();
+
+    await user.selectOptions(screen.getByTestId('terminal-flavour'), 'cmd');
+
+    expect(control('terminal-shell-arguments').value).toBe('/K');
+  });
+
+  it('fills it AGAIN when the flavour changes — not once at mount', async () => {
+    stubBridge();
+    const { user } = await renderForm();
+    await user.selectOptions(screen.getByTestId('terminal-flavour'), 'cmd');
+    expect(control('terminal-shell-arguments').value).toBe('/K');
+
+    await user.selectOptions(screen.getByTestId('terminal-flavour'), 'windows-powershell');
+
+    expect(control('terminal-shell-arguments').value).toBe('-NoLogo');
+  });
+
+  it('offers every flavour it was given, by id', async () => {
+    // The list itself. What is IN it on a real machine is the detector's claim
+    // (`windows-shell-detection.contract.test.ts:22`); that the form draws all of it is this one's.
+    stubBridge();
+    await renderForm();
+
+    expect(flavourIds()).toEqual(['cmd', 'windows-powershell']);
+  });
+});
+
+describe('a flavour added to settings appears without a restart (FR-010a, migrated from terminal-flavours.e2e.ts:121)', () => {
+  /** The bridge, with a config channel the test can broadcast on — as main does after a reload. */
+  function stubHotReloadBridge(): { push: () => void } {
+    let list: typeof FLAVOURS = [...FLAVOURS];
+    const listeners: (() => void)[] = [];
+    Reflect.set(window, 'throng', {
+      terminal: { listFlavours: () => Promise.resolve(list) },
+      config: {
+        onChange: (fn: () => void) => {
+          listeners.push(fn);
+          return () => {};
+        },
+      },
+    });
+    return {
+      push: () => {
+        list = [
+          ...FLAVOURS,
+          {
+            id: 'my-wsl',
+            label: 'WSL: Ubuntu',
+            file: 'C:\\Windows\\System32\\wsl.exe',
+            args: ['-d', 'Ubuntu'],
+            source: 'builtin' as const,
+            defaultShellArguments: '--cd ~',
+            reportsDirectory: false,
+          },
+        ];
+        for (const fn of [...listeners]) fn();
+      },
+    };
+  }
+
+  it('is absent until the config changes, and present afterwards', async () => {
+    const bridge = stubHotReloadBridge();
+    await renderForm();
+    expect(flavourIds(), 'not there until the user adds it').not.toContain('my-wsl');
+
+    act(() => bridge.push());
+
+    await waitFor(() => expect(flavourIds()).toContain('my-wsl'));
+  });
+
+  it('brings its own default Shell Arguments with it', async () => {
+    // A hot-reloaded flavour is a flavour, not a label: choosing it must behave like any other.
+    const bridge = stubHotReloadBridge();
+    const { user } = await renderForm();
+    act(() => bridge.push());
+    await waitFor(() => expect(flavourIds()).toContain('my-wsl'));
+
+    await user.selectOptions(screen.getByTestId('terminal-flavour'), 'my-wsl');
+
+    expect(control('terminal-shell-arguments').value).toBe('--cd ~');
+  });
+
+  it('keeps the flavours it already had', async () => {
+    // A re-fetch REPLACES the list, so "the new one appears" and "the old ones survive" are two
+    // claims. A hook that set the state to just the delta would satisfy the first.
+    const bridge = stubHotReloadBridge();
+    await renderForm();
+
+    act(() => bridge.push());
+
+    await waitFor(() => expect(flavourIds()).toEqual(['cmd', 'windows-powershell', 'my-wsl']));
   });
 });

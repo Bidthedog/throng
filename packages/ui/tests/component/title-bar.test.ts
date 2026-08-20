@@ -186,3 +186,62 @@ describe('the drag zone toggles maximise on double-click (FR-004)', () => {
     expect(bridge.maximize).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Every control is drawn from the theme's icon pack (018 FR-014b, SC-002).
+ *
+ * MIGRATED FROM `packages/ui/tests/e2e/menus.e2e.ts:93` (035 T055) — `test('the cog gear comes from
+ * the theme's icon pack — no inline vector')`.
+ *
+ * ══ THE NEGATIVE WAS ALREADY PROVEN, REPO-WIDE ══
+ *
+ * SC-002's ban on inline artwork is `packages/ui/tests/unit/no-inline-artwork.test.ts:60` — "no
+ * component draws an inline `<svg>`, except the brand mark" — which sweeps every component rather
+ * than the four this test happened to name. It is one of the guards `guards-are-live.test.ts` exists
+ * to keep un-skipped.
+ *
+ * So the E2E's remaining half is the POSITIVE, and it is the one that can fail quietly: a control
+ * that stopped drawing anything at all satisfies "no inline vector" perfectly. That is why the
+ * migrated test counts `.icon` elements rather than asserting their absence.
+ *
+ * ══ WHY THIS IS THE RIGHT FILE ══
+ *
+ * `Icon` resolves its glyph through `ConfigContext`, whose default is the shipped theme — the fact
+ * this file's own header already records. So the pack really is consulted here; nothing is stubbed
+ * into place to make the icons appear.
+ *
+ * The fifth control the E2E checked, the Projects pane's "new project" button, is not this
+ * component's. It is asserted in `projects-panel-form.test.ts` alongside the panel it belongs to.
+ */
+describe('the chrome draws icons, not characters (FR-014b, SC-002)', () => {
+  const iconsIn = (testId: string): number =>
+    screen.getByTestId(testId).querySelectorAll('.icon').length;
+
+  it('gives each window control exactly one icon', () => {
+    /*
+     * Exactly one, not at-least-one. Two would mean a glyph rendered twice — which is what a control
+     * that keeps its old literal AND gains an Icon looks like, and it is the shape of a half-finished
+     * migration rather than an invented failure.
+     */
+    stubWindowBridge();
+    render(createElement(TitleBar, { identity: 'throng' }));
+
+    expect(iconsIn('window-min')).toBe(1);
+    expect(iconsIn('window-max')).toBe(1);
+    expect(iconsIn('window-close')).toBe(1);
+  });
+
+  it('draws the cog gear from the pack too', () => {
+    // The gear used to come from a hard-coded path, because the theme had no settings glyph to
+    // resolve. 018 added the token; the same one serves the project-settings options icon.
+    stubWindowBridge();
+    render(
+      createElement(ContextMenuProvider, {
+        children: createElement(TitleBar, { identity: 'throng', showCog: true }),
+      }),
+    );
+
+    const glyph = screen.getByTestId('cog-glyph');
+    expect(glyph.querySelectorAll('.icon')).toHaveLength(1);
+  });
+});

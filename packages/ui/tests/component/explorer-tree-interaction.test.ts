@@ -556,3 +556,188 @@ describe('a rename leaves the keyboard in the tree (026)', () => {
     expect(await renameInput()).toBeInstanceOf(HTMLInputElement);
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * The rename BOX itself — what it selects, and what leaving it does
+ * (024 FR-090, migrated from editor-feedback3.e2e.ts:135 and :159)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Both migrated tests made a real project on a real disk and launched Electron. The first read
+ * `selectionStart`/`selectionEnd` off an `<input>`; the second typed a name, clicked another row,
+ * and called `existsSync`.
+ *
+ * The first is a jsdom question in the most literal sense — `selectionStart` is a DOM property, and
+ * it is set by the component, at mount, from the value it was given.
+ *
+ * The second has a real filesystem in it, and that half genuinely does not belong here — but it is
+ * not the half the test was for. `files-service.test.ts:48` already proves `rename` moves the bytes;
+ * FR-090's claim is that a BLUR commits at all, rather than discarding what the user typed the way
+ * Escape does. That is the tree's decision, and it is what these assert.
+ */
+describe('the rename box selects the STEM, not the extension (migrated from editor-feedback3.e2e.ts:135)', () => {
+  it('selects "top" out of "top.txt", leaving the dot and extension unselected', async () => {
+    const { tree, user } = await mount();
+
+    await user.click(within(tree).getByText('a.txt'));
+    pressF2();
+    const input = await renameInput();
+
+    // The point of the rule: typing immediately replaces the NAME and keeps the extension, which is
+    // what a user renaming a file almost always wants. A select-all would eat `.txt` on the first
+    // keystroke.
+    expect(input.value).toBe('a.txt');
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(1);
+  });
+
+  it('selects the WHOLE name when there is no extension to protect', async () => {
+    // The other side of the same rule, which the migrated test did not check: a dotless name has no
+    // extension, so stopping short of the end would leave a character the user has to delete.
+    const { tree, user } = await mount({ '': [entry('Docs', 'folder'), entry('README', 'file')] });
+
+    await user.click(within(tree).getByText('README'));
+    pressF2();
+    const input = await renameInput();
+
+    expect(input.value).toBe('README');
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe('README'.length);
+  });
+
+  /**
+   * A FOLDER with a dot in its name selects the WHOLE name (#283).
+   *
+   * A folder has no extension: the dot is part of its name. The stem rule used to be applied to
+   * every row, so a folder called `my.config` opened with `my` selected and the first character
+   * typed left `.config` behind — renaming it to "settings" gave `settings.config`.
+   *
+   * The same code already handled the neighbouring case: `.github` selects everything, because a
+   * leading dot means a dotfile with no extension. This is that reasoning one step further, and the
+   * fix is the same shape — one condition, over `data.kind`, which was already in scope.
+   *
+   * Written first as a CHARACTERISATION test recording the defect, with this value written down as
+   * the red step. That is what it now is.
+   */
+  it('selects the WHOLE name for a folder, dot and all (#283)', async () => {
+    const { tree, user } = await mount({ '': [entry('my.config', 'folder')], 'my.config': [] });
+
+    await user.click(within(tree).getByText('my.config'));
+    pressF2();
+    const input = await renameInput();
+
+    expect(input.value).toBe('my.config');
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe('my.config'.length);
+  });
+
+  it('still selects only the stem for a FILE with the same name shape', async () => {
+    /*
+     * The other side of the fix, and the one that makes it a fix rather than a removal: a FILE
+     * called `my.config` does have an extension, and typing must still replace `my` while keeping
+     * `.config`. A change that simply deleted the stem rule passes the test above and fails this.
+     */
+    const { tree, user } = await mount({ '': [entry('my.config', 'file')] });
+
+    await user.click(within(tree).getByText('my.config'));
+    pressF2();
+    const input = await renameInput();
+
+    expect(input.value).toBe('my.config');
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(2);
+  });
+
+  it('selects the whole name for a DOTFOLDER, which has no extension either way', async () => {
+    // `.github` — the leading-dot case, which was already right, asserted for a FOLDER so the two
+    // conditions cannot be collapsed into one that only happens to work for files.
+    const { tree, user } = await mount({ '': [entry('.github', 'folder')], '.github': [] });
+
+    await user.click(within(tree).getByText('.github'));
+    pressF2();
+    const input = await renameInput();
+
+    expect(input.value).toBe('.github');
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe('.github'.length);
+  });
+});
+
+describe('clicking away from a rename COMMITS it (FR-090, migrated from editor-feedback3.e2e.ts:159)', () => {
+  it('renames on blur rather than discarding what was typed', async () => {
+    /*
+     * FR-090 exists because the opposite is a defensible design and the wrong one here: a rename box
+     * that a user types into and then clicks out of has been ANSWERED, and throwing the answer away
+     * is a silent loss. Escape is the discard, and it is asserted separately below.
+     */
+    const { tree, user, renames } = await mount();
+
+    await user.click(within(tree).getByText('a.txt'));
+    pressF2();
+    const input = await renameInput();
+    fireEvent.change(input, { target: { value: 'renamed.txt' } });
+
+    // Blur by clicking another row — the migrated test's gesture exactly.
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(rowLabels(tree)).toContain('renamed.txt'));
+    expect(renames).toEqual([{ relPath: 'a.txt', newName: 'renamed.txt' }]);
+    expect(rowLabels(tree)).not.toContain('a.txt');
+    expect(screen.queryByTestId('explorer-error')).toBeNull();
+  });
+
+  /**
+   * Escape DISCARDS the edit — and a note about the half of this jsdom cannot reach.
+   *
+   * ══ THIS TEST WAS WRITTEN VACUOUS FIRST, AND THE RED STEP CAUGHT IT ══
+   *
+   * The first version claimed something better: that Escape SUPPRESSES the blur-commit that follows.
+   * That rule is real and `tree-node.tsx:151-154` implements it with an `escapedRef` — cancelling
+   * removes the input, removing a focused element fires `blur`, and a blur handler that committed
+   * unconditionally would turn every cancel into a rename.
+   *
+   * But deleting that suppression entirely left all fifteen tests here GREEN. **jsdom does not fire
+   * `blur` when a focused element is unmounted**, so the sequence the rule guards never occurs: the
+   * explicit `fireEvent.blur` in that draft landed on a node React had already detached, and did
+   * nothing at all. A passing test measuring nothing is worse than no test, because it reads as
+   * coverage.
+   *
+   * So the claim is narrowed to what actually runs — Escape discards — which IS red-proven: making
+   * Escape call `submit` instead of `reset` fails this test. The suppression stays covered by
+   * `editor-feedback3.e2e.ts`'s sibling only in the sense that a real browser exercises the path
+   * incidentally; nothing asserts it deliberately, at any layer. That is recorded here rather than
+   * papered over, because the next person to touch `escapedRef` will find this comment and not a
+   * green bar.
+   */
+  it('discards the edit on Escape, renaming nothing', async () => {
+    const { tree, renames } = await mount();
+
+    await userEvent.click(within(tree).getByText('a.txt'));
+    pressF2();
+    const input = await renameInput();
+    fireEvent.change(input, { target: { value: 'renamed.txt' } });
+
+    fireEvent.keyDown(input, { key: 'Escape' });
+
+    await waitFor(() => expect(pane().querySelector('input.tree-rename')).toBeNull());
+    expect(renames).toEqual([]);
+    expect(rowLabels(tree)).toContain('a.txt');
+    expect(rowLabels(tree)).not.toContain('renamed.txt');
+  });
+
+  it('asks the filesystem for nothing when the blur follows no edit', async () => {
+    // The same guard clause FR-070 states for Enter, reached by the other exit. Clicking away from a
+    // box you never typed in is not a rename, and a rename attempted here would be a write nobody
+    // asked for.
+    const { tree, user, files } = await mount();
+
+    await user.click(within(tree).getByText('a.txt'));
+    pressF2();
+    const input = await renameInput();
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(pane().querySelector('input.tree-rename')).toBeNull());
+    expect(files.rename).not.toHaveBeenCalled();
+    expect(rowLabels(tree)).toContain('a.txt');
+  });
+});

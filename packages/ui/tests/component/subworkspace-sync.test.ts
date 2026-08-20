@@ -84,6 +84,9 @@ import {
 } from '../../src/renderer/state/subworkspaces-store.js';
 import { ServicesProvider, type Services } from '../../src/renderer/composition-root.js';
 import { DetachProvider, useDetach } from '../../src/renderer/workspace/detach-context.js';
+import { SubworkspacesPanel } from '../../src/renderer/sidebar/subworkspaces-panel.js';
+import { NotificationProvider } from '../../src/renderer/common/notification.js';
+import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { ContextMenu, type MenuAction } from '../../src/renderer/workspace/context-menu.js';
 import { panelHeaderMenu } from '../../src/renderer/workspace/panel-header-menu.js';
 import { tabContextMenu } from '../../src/renderer/workspace/tab-menu.js';
@@ -113,7 +116,14 @@ function seedSub(): SubWorkspace {
  * NOT legitimately call is rejected loudly: a silently-resolved unexpected RPC is how a test starts
  * passing against a behaviour that no longer exists.
  */
-function fakeDaemon(layout: WorkspaceLayout, initial: SubWorkspace[]) {
+function fakeDaemon(
+  layout: WorkspaceLayout,
+  initial: SubWorkspace[],
+  // The one RPC that must reject, and what the daemon says when it does. The migrated E2E arranged
+  // this by seeding a SQLite trigger that aborted every INSERT into sub_workspaces; the renderer
+  // cannot tell that apart from any other rejected persist, and it is the renderer under test.
+  failing?: { method: string; message: string },
+) {
   let subs = initial;
   const persists: SubWorkspace[][] = [];
   const saved: WorkspaceLayout[] = [];
@@ -128,6 +138,7 @@ function fakeDaemon(layout: WorkspaceLayout, initial: SubWorkspace[]) {
 
   const bridge: ThrongBridge = {
     invoke<TResult>(method: string, params?: unknown): Promise<TResult> {
+      if (failing && method === failing.method) return Promise.reject(new Error(failing.message));
       let reply: unknown;
       switch (method) {
         case 'workspace.load':
@@ -202,7 +213,7 @@ const mainPanel: Panel = {
  * build them — including `alreadyHasPanel`, whose derivation is the one thing here that mirrors a
  * call site rather than running it (see the header).
  */
-function Host(): ReactElement {
+function Host({ sidebar = false }: { sidebar?: boolean } = {}): ReactElement {
   const detach = useDetach();
   const { subWorkspaces } = useSubWorkspaces();
   const ws = useWorkspace();
@@ -288,14 +299,18 @@ function Host(): ReactElement {
         .map((t) => `${t.id}[${collectPanels(t.root).map((p) => p.id).join(',')}]`)
         .join('|'),
     ),
-    // The sidebar's row, reduced to the one thing the migrated spec read off it.
-    ...subWorkspaces.map((s: SubWorkspaceMetaDto) =>
-      createElement(
-        'span',
-        { key: s.id, 'data-testid': `subworkspace-counts-${s.id}` },
-        `${s.tabCount}T·${s.panelCount}P`,
-      ),
-    ),
+    // The sidebar's row, reduced to the one thing the migrated spec read off it — UNLESS the real
+    // `SubworkspacesPanel` is mounted beside us, which emits the same testid for real. Two elements
+    // under one testid is a `getByTestId` that throws, so exactly one of them draws it.
+    ...(sidebar
+      ? [createElement(SubworkspacesPanel, { key: 'sidebar' })]
+      : subWorkspaces.map((s: SubWorkspaceMetaDto) =>
+          createElement(
+            'span',
+            { key: s.id, 'data-testid': `subworkspace-counts-${s.id}` },
+            `${s.tabCount}T·${s.panelCount}P`,
+          ),
+        )),
     createElement(
       'span',
       { 'data-testid': 'subworkspace-names' },
@@ -360,9 +375,12 @@ afterEach(() => {
   delete window.throng;
 });
 
-async function mount(initial: SubWorkspace[] = [seedSub()]) {
+async function mount(
+  initial: SubWorkspace[] = [seedSub()],
+  options: { sidebar?: boolean; failing?: { method: string; message: string } } = {},
+) {
   const layout = createDefaultLayout(PROJECT, { tab: 't1', panel: 'p1' });
-  const daemon = fakeDaemon(layout, initial);
+  const daemon = fakeDaemon(layout, initial, options.failing);
   const windowApi = stubSubWorkspaceBridge();
   const services = servicesOver(daemon.bridge);
   const user = userEvent.setup();
@@ -375,7 +393,15 @@ async function mount(initial: SubWorkspace[] = [seedSub()]) {
         activeProjectId: PROJECT,
         children: createElement(SubWorkspacesProvider, {
           client: services.subWorkspaces,
-          children: createElement(DetachProvider, { children: createElement(Host) }),
+          children: createElement(DetachProvider, {
+            // `SubworkspacesPanel` calls `useErrorNotice` and `useConfirm` unconditionally, so both
+            // providers are required the moment `sidebar` is on — and harmless when it is not.
+            children: createElement(NotificationProvider, {
+              children: createElement(ConfirmProvider, {
+                children: createElement(Host, { sidebar: options.sidebar ?? false }),
+              }),
+            }),
+          }),
         }),
       }),
     }),
@@ -541,5 +567,104 @@ describe('detaching into a NEW sub-workspace (FR-012/FR-018)', () => {
     expect(screen.getByTestId('main-layout')).toHaveTextContent('t1[p1]');
     expect(daemon.saved).toEqual([]);
     expect(windowApi.open).toHaveBeenCalledWith(created.id);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * A persist that fails must not fail SILENTLY
+ * (030 FR-019, migrated from subworkspace-persist-error.e2e.ts:15)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * ══ WHAT THE E2E BOUGHT, AND WHAT IT COST ══
+ *
+ * It seeded a SQLite trigger into a real database — `BEFORE INSERT ON sub_workspaces … RAISE(ABORT)`
+ * — launched Electron against that data directory, started a daemon, created a project, right-clicked
+ * a real tab, walked a real context menu, and then asserted that a notice appeared.
+ *
+ * The defect it was filed for is on the RENDERER side of that: `detach-context.tsx:158` used to
+ * swallow the rejection in a fire-and-forget async block, so the user saw nothing at all. What
+ * reaches the renderer from a failed persist is a rejected `workspace.persistSubWorkspaces` — and a
+ * rejection raised by an aborting trigger is not distinguishable, there, from any other. So the
+ * trigger is an elaborate way of arranging one rejected promise, and the rest of the launch is the
+ * cost of arranging it.
+ *
+ * What does NOT come down with it: that the daemon actually rejects when the write fails. That is
+ * the daemon's contract and it is asserted against a real database in the persistence tests, not by
+ * reading a notice in a renderer.
+ *
+ * ══ WHY THE REAL SIDEBAR PANEL AND NOT THE STORE'S `error` ══
+ *
+ * The store holding an error string is not the requirement — the user SEEING it is, and 032's "one
+ * condition, one notice" rule is about exactly that gap. `SubworkspacesPanel` is what turns the
+ * store's error into the addressable `subworkspace-error` notice (`subworkspaces-panel.tsx:52`), so
+ * these tests mount it and read the notice the E2E read.
+ */
+describe('a failed create surfaces, and leaves nothing behind (migrated from subworkspace-persist-error.e2e.ts:15)', () => {
+  const FAILING = {
+    method: 'workspace.persistSubWorkspaces',
+    message: 'simulated persist failure',
+  };
+
+  it('shows the error notice instead of silence, and lists no phantom sub-workspace', async () => {
+    const { user, daemon, windowApi } = await mount([seedSub()], { sidebar: true, failing: FAILING });
+    await openSyncTo(user, 'tab');
+
+    await user.click(screen.getByTestId('menu-item-New Sub-workspace'));
+
+    const notice = await screen.findByTestId('subworkspace-error');
+    expect(notice).toBeVisible();
+    // The E2E matched /fail/i against whatever the daemon said. The renderer's job is to carry that
+    // message through rather than to replace it with a house phrase, so the assertion is on the
+    // daemon's own words.
+    expect(notice).toHaveTextContent(/simulated persist failure/i);
+
+    // No phantom. The set is unchanged, and the sidebar lists only what was there before.
+    expect(daemon.current()).toHaveLength(1);
+    expect(daemon.current()[0].id).toBe('sw1');
+    expect(screen.queryByTestId('subworkspace-names')).toHaveTextContent('Detached A');
+    expect(screen.getByTestId('subworkspace-names')).not.toHaveTextContent('Sub-workspace 1');
+
+    // And no window for a sub-workspace that does not exist — the half the E2E could not have
+    // asserted, because a window that never opens leaves nothing to look for.
+    expect(windowApi.open).not.toHaveBeenCalled();
+  });
+
+  it('leaves the MAIN workspace exactly as it was', async () => {
+    const { user, daemon } = await mount([seedSub()], { sidebar: true, failing: FAILING });
+    await openSyncTo(user, 'tab');
+
+    await user.click(screen.getByTestId('menu-item-New Sub-workspace'));
+    await screen.findByTestId('subworkspace-error');
+
+    // Detach-to-new is a CLONE, so a failure has nothing to roll back — but only because the main
+    // layout was never touched. A future "move" semantics would have to say so here.
+    expect(screen.getByTestId('main-layout')).toHaveTextContent('t1[p1]');
+    expect(daemon.saved).toEqual([]);
+  });
+
+  it('names the sub-workspace that failed to appear, not just the failure', async () => {
+    const { user } = await mount([seedSub()], { sidebar: true, failing: FAILING });
+    await openSyncTo(user, 'tab');
+
+    await user.click(screen.getByTestId('menu-item-New Sub-workspace'));
+
+    // 030 FR-019: the notice completes "An error occurred when you tried to …", and the subject is
+    // named BEFORE the persist precisely so a window that never existed can still be identified.
+    // The E2E only ever matched /fail/i, so it would have passed on a bare message.
+    const notice = await screen.findByTestId('subworkspace-error');
+    expect(notice).toHaveTextContent(/create the sub-workspace/i);
+    expect(notice).toHaveTextContent(/Sub-workspace 1/);
+  });
+
+  it('clears the error once a later create succeeds', async () => {
+    const { user, daemon } = await mount([seedSub()], { sidebar: true });
+    await openSyncTo(user, 'tab');
+    await user.click(screen.getByTestId('menu-item-New Sub-workspace'));
+
+    // The happy path calls `clearError()` before it refreshes. Nothing asserted that, and a store
+    // that only ever accumulates errors shows the user a stale failure for the rest of the session.
+    await waitFor(() => expect(daemon.current()).toHaveLength(2));
+    expect(screen.queryByTestId('subworkspace-error')).toBeNull();
   });
 });
