@@ -185,4 +185,104 @@ describe('a stranded editor recovers when its path comes back (027 / #161)', () 
     await coord.verifyPath('p1');
     expect(coord.getContent('p1')).toMatchObject({ text: 'V1\n', unloadable: false, dirty: false });
   });
+
+  /**
+   * MIGRATED FROM `editor-stranded-recovery.e2e.ts:133` (035 T056) — "an editor recovers when its
+   * folder is renamed away and back WHILE throng is running".
+   *
+   * ══ WHY IT WAS NOT ALREADY COVERED HERE ══
+   *
+   * The two cases above are the OTHER two shapes, and the difference matters:
+   *
+   *   `:81`  the RESTART case — the folder went while throng was closed, so the document is
+   *          registered `unloadable` and has never held the file.
+   *   `:107` the FILE case — one file deleted under live edits, announced via `markDeleted`.
+   *
+   * This is the third: a document that LOADED cleanly, whose containing FOLDER then goes away
+   * underneath it with nothing telling the coordinator so. Nothing calls `markDeleted`; the folder
+   * watch is the only thing that can notice, and the panel keeps rendering its buffer meanwhile —
+   * which the migrated test's own comment records as the reason it could find no fence to wait on
+   * and had to sleep a second instead. Here there is no debounce to sleep through: the wait is for
+   * the sync message that carries the new text, which cannot arrive at the old value.
+   *
+   * The content CHANGES while the folder is away, deliberately. If the assertion were "the original
+   * text is still shown", a throng that noticed nothing at all would pass it while being exactly as
+   * broken — the same non-vacuity argument the migrated test made, kept.
+   */
+  it('adopts the file again when its whole FOLDER is renamed away and back under a live watch', async () => {
+    const dir = join(root, 'src');
+    const file = join(dir, 'code.txt');
+    await mkdir(dir);
+    await writeFile(file, 'ORIGINAL\n');
+    await coord.load({ ...meta('p1', file) });
+    expect(coord.getContent('p1')).toMatchObject({ text: 'ORIGINAL\n', unloadable: false });
+
+    // Break the path from outside — a folder rename, which is what the reporter did — and move the
+    // file on while it is away.
+    await rename(dir, join(root, 'src-moved'));
+    await writeFile(join(root, 'src-moved', 'code.txt'), 'CHANGED-WHILE-AWAY\n');
+
+    // Rectify the cause, exactly as the user does.
+    await rename(join(root, 'src-moved'), dir);
+
+    const reset = await until(() =>
+      synced.find((m) => m.panelId === 'p1' && m.reset?.text === 'CHANGED-WHILE-AWAY\n'),
+    );
+    expect(reset, 'the folder came back and the document never re-read its path').toBeDefined();
+    expect(coord.getContent('p1')).toMatchObject({
+      text: 'CHANGED-WHILE-AWAY\n',
+      dirty: false,
+      unloadable: false,
+    });
+  });
+
+  it('says NOTHING to a document whose own file did not move, when a sibling changes', async () => {
+    /*
+     * The control for the case above, and it took two attempts to make it discriminate.
+     *
+     * The watch is on the DIRECTORY — it has to be, or a delete could never be noticed — so every
+     * write in the folder wakes every open document in it. The first draft asserted a dirty buffer
+     * was not overwritten, which is true and which a coordinator that "recovered" on every event
+     * would ALSO satisfy: `pathCameBack` keeps genuine unsaved work (`:107`), so the assertion
+     * could not tell a correct coordinator from one that ran recovery constantly.
+     *
+     * So the observable is the SYNC TRAFFIC, on a CLEAN document. A spurious `reset` is not
+     * harmless — it replaces the document and clears the undo history with it (FR-026d) — and it is
+     * exactly what the old FR-028 bug produced: saving one file announced "changed on disk" on
+     * every other file in the folder.
+     */
+    const dir = join(root, 'src');
+    const file = join(dir, 'code.txt');
+    await mkdir(dir);
+    await writeFile(file, 'MINE\n');
+    await coord.load({ ...meta('p1', file) });
+    synced.length = 0;
+
+    await writeFile(join(dir, 'sibling.txt'), 'SOMETHING-ELSE\n');
+    await new Promise((r) => setTimeout(r, 250));
+
+    expect(
+      synced.filter((m) => m.panelId === 'p1' && m.reset),
+      'a sibling write is not news about this document',
+    ).toEqual([]);
+    expect(synced.filter((m) => m.panelId === 'p1' && m.externalChange)).toEqual([]);
+    expect(coord.getContent('p1')?.text).toBe('MINE\n');
+  });
+
+  it('keeps an unsaved buffer when a sibling changes', async () => {
+    // The same event against a DIRTY document. Separate from the case above because the branches
+    // are different — clean adopts, dirty warns — and a coordinator can get one right and the
+    // other wrong.
+    const dir = join(root, 'src');
+    const file = join(dir, 'code.txt');
+    await mkdir(dir);
+    await writeFile(file, 'MINE\n');
+    await coord.load({ ...meta('p1', file) });
+    editDocument(coord, meta('p1', file), 'MY-UNSAVED-WORK\n');
+
+    await writeFile(join(dir, 'sibling.txt'), 'SOMETHING-ELSE\n');
+    await new Promise((r) => setTimeout(r, 250));
+
+    expect(coord.getContent('p1')?.text).toBe('MY-UNSAVED-WORK\n');
+  });
 });
