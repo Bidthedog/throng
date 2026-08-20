@@ -293,3 +293,101 @@ describe('the move bracket (FR-004) opens and closes exactly', () => {
     expect(snapshot).toBe('body\n');
   });
 });
+
+/**
+ * MIGRATED FROM `editor-move-repoint.e2e.ts:374` (035 T056) — `test('AC7 (guard) — a file moved by
+ * ANOTHER program still keeps its buffer, dirty and recoverable')`.
+ *
+ * ══ THE GUARD ON EVERYTHING ABOVE ══
+ *
+ * Every test in this file is about a move THRONG performed, where `markMoved` says where the file
+ * went. This is the other case, and it is the one that must NOT behave the same: nothing told the
+ * app anything, so following the file is impossible and pretending to would be a guess. FR-099 says
+ * what happens instead — the buffer survives, it is force-dirtied so a save can re-create the file,
+ * and the document stays pointed at the path throng last knew it by.
+ *
+ * It is a guard rather than a feature: a coordinator that "helpfully" re-pointed on an external
+ * rename would pass a plausible-looking test and lose the user's only copy the first time two files
+ * were renamed at once.
+ */
+describe('a file moved by ANOTHER program is not followed (FR-099/AC7)', () => {
+  it('keeps the buffer, force-dirties it, and leaves the path where throng last knew it', async () => {
+    const from = join(root, 'note.txt');
+    const away = join(root, 'dest', 'note.txt');
+    await mkdir(join(root, 'dest'), { recursive: true });
+    await writeFile(from, 'MOVE-ME-BODY' + String.fromCharCode(10));
+    await coord.load(meta('p1', from));
+    expect(coord.getContent('p1')).toMatchObject({ dirty: false, fileMissing: false });
+
+    // Not throng: a rename performed behind the app's back, with no bracket and no `markMoved`.
+    await rename(from, away);
+
+    const dirtied = await until(() => (coord.getContent('p1')?.fileMissing ? true : undefined));
+    expect(dirtied, 'the watch never noticed the file leave').toBe(true);
+    const state = coord.getContent('p1');
+    // The buffer is the only copy of what was on screen, so it survives…
+    expect(state?.text).toBe('MOVE-ME-BODY' + String.fromCharCode(10));
+    // …force-dirtied, because it can no longer be said to match any file (FR-099).
+    expect(state?.dirty).toBe(true);
+    // …and still pointed at the path it was opened by. It did NOT follow the file, because nothing
+    // told it where the file went — that is the point of the test.
+    expect(state?.absPath).toBe(from);
+  });
+
+  it('and a save RE-CREATES the file at that original path', async () => {
+    /*
+     * The half that makes the state above recoverable rather than merely preserved. Without it,
+     * "the buffer survives" is a claim about memory that the user can do nothing with.
+     */
+    const from = join(root, 'note.txt');
+    const away = join(root, 'dest', 'note.txt');
+    await mkdir(join(root, 'dest'), { recursive: true });
+    await writeFile(from, 'MOVE-ME-BODY' + String.fromCharCode(10));
+    await coord.load(meta('p1', from));
+    await rename(from, away);
+    await until(() => (coord.getContent('p1')?.fileMissing ? true : undefined));
+    expect(existsSync(from), 'precondition: the original path is empty').toBe(false);
+
+    const res = await coord.save({ panelId: 'p1' });
+
+    expect(res.ok).toBe(true);
+    expect(await readFile(from, 'utf8')).toBe('MOVE-ME-BODY' + String.fromCharCode(10));
+    expect(coord.getContent('p1')?.dirty, 'and the document is clean again').toBe(false);
+  });
+
+  it('does not touch the file the external move created', async () => {
+    // The other side of "it did not follow": the copy at the new path is somebody else's now, and
+    // a save must not reach it. A coordinator that re-pointed would overwrite it instead.
+    const from = join(root, 'note.txt');
+    const away = join(root, 'dest', 'note.txt');
+    await mkdir(join(root, 'dest'), { recursive: true });
+    await writeFile(from, 'MOVE-ME-BODY' + String.fromCharCode(10));
+    await coord.load(meta('p1', from));
+    await rename(from, away);
+    await until(() => (coord.getContent('p1')?.fileMissing ? true : undefined));
+    /*
+     * The other program carries on with the file it took. The two paths now hold DIFFERENT text,
+     * which is what makes "the save went to the original path" falsifiable at all — with both
+     * holding the same bytes, a save to either would satisfy the assertion below.
+     *
+     * Written to disk rather than typed into the buffer — which reads better here anyway, because
+     * it is the OTHER program continuing rather than the user.
+     *
+     * It started as a workaround, and that is worth recording. An edit arms the recovery debounce,
+     * and the snapshot it fires was rejecting — so this test was changed to avoid arming it. That
+     * was treating a production race as a test problem: the rejection was
+     * `EditorRecovery.write`'s fixed temp path colliding with itself, which is now fixed and
+     * reproduced by `integration/editor-recovery-concurrent-write.integration.test.ts`.
+     */
+    await writeFile(away, 'THEIRS-NOW' + String.fromCharCode(10));
+
+    await coord.save({ panelId: 'p1' });
+
+    expect(await readFile(from, 'utf8'), 'the save re-created the ORIGINAL path').toBe(
+      'MOVE-ME-BODY' + String.fromCharCode(10),
+    );
+    expect(await readFile(away, 'utf8'), 'and never reached the copy the move created').toBe(
+      'THEIRS-NOW' + String.fromCharCode(10),
+    );
+  });
+});
