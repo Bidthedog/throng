@@ -115,6 +115,9 @@ declare global {
         close: (id: string) => void;
         notifyChanged: (id: string) => void;
         onChanged: (cb: (id: string) => void) => () => void;
+        /** An open that could not complete (#287). `open` is fire-and-forget, so this is the only
+         *  way the renderer learns a request failed rather than leaving an inert button. */
+        onOpenFailed?: (cb: (failure: { id: string; reason: string }) => void) => () => void;
       };
       // Cross-window Panel identity sync (003): rename the same Panel everywhere.
       panel?: {

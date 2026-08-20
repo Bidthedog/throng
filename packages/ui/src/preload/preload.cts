@@ -177,6 +177,19 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.on('throng:subworkspace:changed:push', handler);
       return () => ipcRenderer.removeListener('throng:subworkspace:changed:push', handler);
     },
+    /*
+     * An open that could not complete (#287).
+     *
+     * `open` is fire-and-forget — `send`, not `invoke` — so before this there was no way for the
+     * renderer to learn that a request had failed, even in principle. A throw in the main-side path
+     * left the user with no window, no error and a button that appeared inert.
+     */
+    onOpenFailed: (cb: (failure: { id: string; reason: string }) => void) => {
+      const handler = (_event: unknown, failure: { id: string; reason: string }): void =>
+        cb(failure);
+      ipcRenderer.on('throng:subworkspace:openFailed', handler);
+      return () => ipcRenderer.removeListener('throng:subworkspace:openFailed', handler);
+    },
   },
   // Cross-window projects sync: notify every window a project changed (create /
   // rename / recolour / delete), so their projects lists refresh live.

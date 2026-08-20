@@ -138,10 +138,20 @@ export function TreeRow({
           autoFocus
           defaultValue={data.name}
           onFocus={(e) => {
-            // Select only the name, not the extension, so a rename edits the stem
-            // (a leading dot = a dotfile with no extension → select all).
+            /*
+             * Select only the name, not the extension, so a rename edits the stem.
+             *
+             * TWO things have no extension, and both select the whole name:
+             *
+             *   - a DOTFILE (`.gitignore`) — the leading dot is the name, not a separator, which is
+             *     what `dot > 0` has always said; and
+             *   - a FOLDER (#283). `my.config`, `v1.0`, `github.io` are names that happen to
+             *     contain a dot, and treating the tail as an extension meant renaming the folder to
+             *     "settings" produced `settings.config`. That was the same reasoning as the dotfile
+             *     case, one step short.
+             */
             const v = e.currentTarget.value;
-            const dot = v.lastIndexOf('.');
+            const dot = data.kind === 'folder' ? -1 : v.lastIndexOf('.');
             if (dot > 0) e.currentTarget.setSelectionRange(0, dot);
             else e.currentTarget.select();
           }}

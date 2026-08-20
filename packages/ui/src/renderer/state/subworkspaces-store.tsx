@@ -104,6 +104,29 @@ export function SubWorkspacesProvider({
     void refresh();
   }, [refresh]);
 
+  /*
+   * An open that could not complete says so (#287).
+   *
+   * `subWorkspace.open` is fire-and-forget, so a failure in the main process used to reach nobody:
+   * no window appeared, nothing was reported, and pressing Open again did the same. This subscribes
+   * to the failure the main process now broadcasts and routes it to the SAME notice surface every
+   * other sub-workspace failure uses — one condition, one notice, on the list that owns the state.
+   *
+   * The user is told what happened and which sub-workspace, not the raw reason: that goes to the
+   * diagnostics log, where it is useful, rather than into a sentence nobody can act on.
+   */
+  useEffect(() => {
+    const off = window.throng?.subWorkspace?.onOpenFailed?.(({ id }) => {
+      const name = subWorkspaces.find((s) => s.id === id)?.name;
+      reportError(
+        'This sub-workspace could not be opened. The details are in the diagnostics log.',
+        'open',
+        name ? { kind: 'subWorkspace', name } : { kind: 'none' },
+      );
+    });
+    return off;
+  }, [reportError, subWorkspaces]);
+
   const value = useMemo<SubWorkspacesContextValue>(
     () => ({
       subWorkspaces,

@@ -24,6 +24,7 @@
  */
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { boundHistory, type SerialisedHistory } from '@throng/core';
 
 /** Encode a panelId into a safe flat filename (panelIds are opaque tokens). */
@@ -123,6 +124,26 @@ function parseSnapshot(raw: string): RecoverySnapshot | null {
 export class EditorRecovery {
   constructor(private readonly dir: string) {}
 
+  /**
+   * One write at a time PER PANEL (035, found by a full gate run).
+   *
+   * `write` is atomic by writing a temp and renaming it over the real file, and it used to use a
+   * FIXED temp path per panel — `${target}.tmp`. Two writes for the same panel therefore did not
+   * queue, they collided: the second `writeFile` truncated the first's temp under it, and then one
+   * `rename` hit `EPERM` (the other still held the handle) or `ENOENT` (the other had already
+   * renamed it away). The rejection is unhandled — `EditorCoordinator.snapshot` calls this from a
+   * debounce timer with no catch — so the snapshot was simply lost, on the path that exists to
+   * protect unsaved work, in exactly the case that produces overlapping writes: a user typing.
+   *
+   * It was seen twice for real during 035, in two integration files that are not about recovery,
+   * with the two different error codes. `integration/editor-recovery-concurrent-write.integration.test.ts`
+   * reproduces it on demand.
+   *
+   * Keyed by PANEL rather than globally, which is the same shape `write-config.ts` uses for the
+   * other deferred write in this application: one slow document must not make another wait.
+   */
+  private readonly writeChains = new Map<string, Promise<void>>();
+
   private async ensureDir(): Promise<void> {
     await mkdir(this.dir, { recursive: true });
   }
@@ -134,6 +155,24 @@ export class EditorRecovery {
    * path and forgotten on another — this is the only place a history reaches the disk.
    */
   async write(panelId: string, snapshot: RecoverySnapshot): Promise<void> {
+    // Queue behind this panel's previous write, whatever became of it — a failed snapshot must not
+    // wedge the next one, so the chain is joined on settle rather than on success.
+    const previous = this.writeChains.get(panelId) ?? Promise.resolve();
+    const mine = previous.catch(() => undefined).then(() => this.writeOnce(panelId, snapshot));
+    this.writeChains.set(
+      panelId,
+      mine.catch(() => undefined),
+    );
+    try {
+      await mine;
+    } finally {
+      // Drop the chain once this write is the last one in it, so a panel closed long ago does not
+      // keep a resolved promise alive for the life of the process.
+      if (this.writeChains.get(panelId) === undefined) this.writeChains.delete(panelId);
+    }
+  }
+
+  private async writeOnce(panelId: string, snapshot: RecoverySnapshot): Promise<void> {
     await this.ensureDir();
     const payload = {
       [MARKER]: FORMAT,
@@ -150,9 +189,19 @@ export class EditorRecovery {
     // directory is atomic on both NTFS and POSIX, so the reader sees either the previous snapshot or
     // the new one, and never half of either.
     const target = join(this.dir, safeName(panelId));
-    const temp = `${target}.tmp`;
-    await writeFile(temp, JSON.stringify(payload), 'utf8');
-    await rename(temp, target);
+    // UNIQUE per attempt, belt to the chain's braces. The chain already stops two writes for one
+    // panel overlapping; this stops a temp surviving a crash from being adopted by the next write,
+    // and makes an orphan traceable to the attempt that left it.
+    const temp = `${target}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temp, JSON.stringify(payload), 'utf8');
+      await rename(temp, target);
+    } catch (e) {
+      // A failed write leaves nothing behind. `list()` skips `.tmp` already, but an orphan that
+      // accumulates once per failure is a directory that grows for as long as the failure lasts.
+      await rm(temp, { force: true }).catch(() => undefined);
+      throw e;
+    }
   }
 
   /** Remove a panel's recovery temp — content AND history, in one act (full save / close). */
