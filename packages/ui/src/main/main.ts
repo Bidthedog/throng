@@ -41,6 +41,7 @@ import {
 } from './config-watcher.js';
 import { registerConfigWriteIpc, registerConfigManagementIpc } from './config-write-ipc.js';
 import { FileConfigStore } from './config-store.js';
+import { openLogsFolder } from './open-logs.js';
 import { FontCache } from './font-cache.js';
 import { IconPackService } from './icon-pack-service.js';
 import { registerWindowControlsIpc, wireWindowMaximizeEvents } from './window-controls-ipc.js';
@@ -69,7 +70,8 @@ import { revealWhenPainted } from './reveal-when-painted.js';
 import { WindowManager } from './window-manager.js';
 import { NodeFileSystem } from './node-file-system.js';
 import { restoreFromRecycleBin } from './recycle-bin-restore.js';
-import { resolvePickerDefaultPath } from './pick-folder.js';
+import { pickFolder } from './pick-folder.js';
+import { openSubWorkspace } from './subworkspace-open.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { ElectronShellIntegration } from './electron-shell-integration.js';
 import { FilesService } from './files-service.js';
@@ -908,11 +910,9 @@ if (isPrimaryInstance)
   // them one over a bug report is how "please send your logs" becomes an unanswered question. The
   // folder opens in the OS file manager; nothing is read, uploaded or displayed in throng (the
   // issue rules out an in-app viewer explicitly).
-  ipcMain.handle('throng:diagnostics:openLogs', async () => {
-    diagnostics.log.info('opening the logs folder at the user request');
-    const error = await shell.openPath(diagnostics.logDir);
-    return error === '' ? { ok: true as const, path: diagnostics.logDir } : { ok: false as const, error };
-  });
+  ipcMain.handle('throng:diagnostics:openLogs', () =>
+    openLogsFolder(diagnostics, (p) => shell.openPath(p)),
+  );
 
   // Renderer asks for the daemon health.ping outcome through the preload bridge.
   ipcMain.handle('throng:getDaemonStatus', () => daemonClient.getStatus());
@@ -934,15 +934,14 @@ if (isPrimaryInstance)
     'throng:pickFolder',
     async (event, opts?: { defaultPath?: string | string[] }): Promise<string | null> => {
       const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;
-      const defaultPath = resolvePickerDefaultPath(
-        opts?.defaultPath,
-        app.getPath('home'),
-        (p) => existsSync(p) && statSync(p).isDirectory(),
-      );
-      const result = owner
-        ? await dialog.showOpenDialog(owner, { properties: ['openDirectory'], defaultPath })
-        : await dialog.showOpenDialog({ properties: ['openDirectory'], defaultPath });
-      return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
+      return pickFolder(opts?.defaultPath, {
+        home: app.getPath('home'),
+        existsAsDir: (p) => existsSync(p) && statSync(p).isDirectory(),
+        showOpenDialog: (options) =>
+          owner
+            ? dialog.showOpenDialog(owner, options as Electron.OpenDialogOptions)
+            : dialog.showOpenDialog(options as Electron.OpenDialogOptions),
+      });
     },
   );
 
@@ -1508,61 +1507,80 @@ if (isPrimaryInstance)
   ipcMain.on('throng:subworkspace:open', (_event, id: unknown) => {
     if (typeof id !== 'string' || id.length === 0) return;
     void (async () => {
-      const existing = windowManager.getChild(id);
-      if (existing && !existing.isDestroyed()) {
-        const win = existing as BrowserWindow;
-        if (win.isMinimized()) win.restore();
-        win.focus();
-        return;
-      }
+      const outcome = await openSubWorkspace<BrowserWindow>(id, {
+        getChild: (childId) => windowManager.getChild(childId) as BrowserWindow | undefined,
 
-      // Restore the persisted window bounds, clamped onto a currently-visible
-      // display so a window saved on an unplugged monitor still appears (FR-017a).
-      let restored: WindowBounds | undefined;
-      try {
-        const { subWorkspaces } = await daemonClient.call<{
-          subWorkspaces: Array<{ id: string; bounds?: WindowBounds }>;
-        }>('workspace.loadSubWorkspaces', {});
-        const saved = subWorkspaces.find((s) => s.id === id)?.bounds;
-        if (saved) {
-          restored = displayInfo.clampToVisible({
-            x: saved.x,
-            y: saved.y,
-            width: Math.max(saved.width, MIN_WIDTH),
-            height: Math.max(saved.height, MIN_HEIGHT),
+        /*
+         * Best-effort, and clamped onto a currently-visible display so a window saved on an
+         * unplugged monitor still appears (FR-017a). Resolving `undefined` rather than rejecting is
+         * the contract: a sub-workspace that cannot recall where it was must still open.
+         */
+        loadBounds: async (childId) => {
+          try {
+            const { subWorkspaces } = await daemonClient.call<{
+              subWorkspaces: Array<{ id: string; bounds?: WindowBounds }>;
+            }>('workspace.loadSubWorkspaces', {});
+            const saved = subWorkspaces.find((s) => s.id === childId)?.bounds;
+            if (!saved) return undefined;
+            return displayInfo.clampToVisible({
+              x: saved.x,
+              y: saved.y,
+              width: Math.max(saved.width, MIN_WIDTH),
+              height: Math.max(saved.height, MIN_HEIGHT),
+            });
+          } catch {
+            return undefined;
+          }
+        },
+
+        createWindow: (childId, bounds) =>
+          createSubWorkspaceWindow(childId, themeBackground(), bounds),
+
+        registerChild: (childId, win) => windowManager.registerChild(childId, win),
+
+        // Persist bounds on move/resize (debounced) and on close (FR-017a).
+        watchBounds: (childId, win) => {
+          let timer: ReturnType<typeof setTimeout> | null = null;
+          const persistBounds = (): void => {
+            if (win.isDestroyed()) return;
+            const b = win.getNormalBounds();
+            void daemonClient
+              .call('subworkspace.updateBounds', {
+                id: childId,
+                bounds: { x: b.x, y: b.y, width: b.width, height: b.height },
+              })
+              .catch(() => {
+                /* best-effort; bounds restore is non-critical */
+              });
+          };
+          const schedulePersist = (): void => {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(persistBounds, 300);
+          };
+          win.on('move', schedulePersist);
+          win.on('resize', schedulePersist);
+          win.on('close', () => {
+            if (timer) clearTimeout(timer);
+            persistBounds();
           });
-        }
-      } catch {
-        /* fall back to the default size if the bounds can't be read */
-      }
-
-      const win = createSubWorkspaceWindow(id, themeBackground(), restored);
-      windowManager.registerChild(id, win);
-
-      // Persist bounds on move/resize (debounced) and on close (FR-017a).
-      let timer: ReturnType<typeof setTimeout> | null = null;
-      const persistBounds = (): void => {
-        if (win.isDestroyed()) return;
-        const b = win.getNormalBounds();
-        void daemonClient
-          .call('subworkspace.updateBounds', {
-            id,
-            bounds: { x: b.x, y: b.y, width: b.width, height: b.height },
-          })
-          .catch(() => {
-            /* best-effort; bounds restore is non-critical */
-          });
-      };
-      const schedulePersist = (): void => {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(persistBounds, 300);
-      };
-      win.on('move', schedulePersist);
-      win.on('resize', schedulePersist);
-      win.on('close', () => {
-        if (timer) clearTimeout(timer);
-        persistBounds();
+        },
       });
+
+      /*
+       * #287 — a failure the user can see.
+       *
+       * This handler used to be a floating promise with one `try` in it, so anything else that threw
+       * became an unhandled rejection: no window, no error, no notice, and a button that appeared
+       * inert. The outcome is a value now, and a failure is broadcast so the sub-workspaces list can
+       * say so through the notice surface it already has.
+       */
+      if (outcome.kind === 'failed') {
+        diagnostics.log.error(`[subworkspace] open failed for ${id}: ${outcome.reason}`);
+        broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:subworkspace:openFailed', {
+          id,
+          reason: outcome.reason,
+        });
+      }
     })();
   });
 

@@ -6,6 +6,7 @@ import {
   defaultPanelTypeRegistry,
   editorPathParts,
   panelDisplayTitle,
+  panelRemovalVerb,
   toDisplayPath,
   effectiveActivePanelId,
   panelZoomLevel,
@@ -177,13 +178,14 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const effectiveTitle = panelDisplayTitle(panel, titleSources, maxNameLength);
   const titleTruncated = effectiveTitle !== fullTitle;
 
-  // Removal verb per ownership + location (011, FR-030/031). Inside a sub-workspace a
-  // Panel backed by a real project (`originProject` resolved above) is a mirrored VIEW:
-  // removing it here is a **Close** (it leaves this sub-workspace only; the project keeps
-  // the Panel and its running terminal). A Panel the sub-workspace itself owns (no backing
-  // project, so `originProject` is null) — and every Panel in the main window — is a
-  // **Destroy** (gone, session terminated). This mirrors the owner-label logic above.
-  const panelVerb = subWin !== null && originProject !== null ? 'Close' : 'Destroy';
+  // Removal verb per ownership + location (011, FR-030/031). The rule itself lives in core
+  // (`panelRemovalVerb`) with the reasoning and all four combinations asserted there — it is
+  // two booleans in, one of two verbs out, and as a ternary here it could only be read by
+  // launching the app and hovering a tooltip. This mirrors the owner-label logic above.
+  const panelVerb = panelRemovalVerb({
+    inSubWorkspace: subWin !== null,
+    hasOriginProject: originProject !== null,
+  });
 
   // The F2 chord (`panel.rename`) starts the rename. The header owns the box; the window-level
   // keybinding handler owns the chord and knows only which panel is active — so it asks, here.

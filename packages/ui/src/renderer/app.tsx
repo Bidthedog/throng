@@ -159,6 +159,52 @@ const QUICK_OPEN: ActionId = 'navigate.quickOpen';
 const GOTO_LINE: ActionId = 'navigate.gotoLine';
 
 /**
+ * The actions the WINDOW owns — intercepted and stopped in the capture phase, so they fire wherever
+ * DOM focus happens to be.
+ *
+ * Everything not listed is left for the focused widget, which is why `Ctrl+S` in an editor and
+ * `Ctrl+C` in a terminal still work.
+ *
+ * ══ WHY `file.undo` AND `file.redo` ARE HERE ══
+ *
+ * Because the explorer's undo must work from anywhere in the Files & Folders pane, not only with a
+ * tree ROW focused. Rename through the context menu and dismiss it with the mouse, and focus is on
+ * the pane rather than on a row — at which point a scoped handler would hand `Ctrl+Z` to whatever
+ * widget had focus, and the user's rename would stand. That is the defect
+ * `fileop-undo.e2e.ts:117` was written for.
+ *
+ * A previous version of the comment here said `file.*` was "left for the focused widget", which was
+ * true of every file action EXCEPT the two that are actually in this set — a description that
+ * contradicted the code beside it.
+ *
+ * Exported so the membership can be asserted without launching the application (035 T055).
+ */
+export const WINDOW_HANDLED_ACTIONS: ReadonlySet<string> = new Set([
+      'zoom.in',
+      'zoom.out',
+      'zoom.reset',
+      'panel.zoomIn',
+      'panel.zoomOut',
+      'panel.zoomReset',
+      'focus.left',
+      'focus.right',
+      'focus.up',
+      'focus.down',
+      'focus.cycle',
+      'focus.cycleBack',
+      'view.fullscreen',
+      'view.toggleProjects',
+      'view.toggleExplorer',
+      'menu.open',
+      'panel.rename',
+      'file.undo',
+      'file.redo',
+      TABS_OPEN_PICKER,
+      QUICK_OPEN,
+      GOTO_LINE,
+]);
+
+/**
  * Resolves keyboard accelerators (zoom / fullscreen / pane toggles) from the user's
  * live keybindings (FR-033) on real DOM keydown events. Zoom/fullscreen dispatch
  * over the preload bridge; the pane toggles call back into the App. Shift is ignored
@@ -225,33 +271,6 @@ function KeybindingsHandler({
       const target = nextInCycle(cycleOrder(f.root), f.activeId, step);
       if (target !== f.activeId) goToPanel(f.tabId, target);
     };
-    // Actions this handler owns. Only these are intercepted (and stopped) in the
-    // capture phase; anything else (editor.save, file.*, plain typing) is left for
-    // the focused widget — so Ctrl+S in an editor and Ctrl+C in a terminal still work.
-    const HANDLED: ReadonlySet<string> = new Set([
-      'zoom.in',
-      'zoom.out',
-      'zoom.reset',
-      'panel.zoomIn',
-      'panel.zoomOut',
-      'panel.zoomReset',
-      'focus.left',
-      'focus.right',
-      'focus.up',
-      'focus.down',
-      'focus.cycle',
-      'focus.cycleBack',
-      'view.fullscreen',
-      'view.toggleProjects',
-      'view.toggleExplorer',
-      'menu.open',
-      'panel.rename',
-      'file.undo',
-      'file.redo',
-      TABS_OPEN_PICKER,
-      QUICK_OPEN,
-      GOTO_LINE,
-    ]);
     const onKeyDown = (e: KeyboardEvent): void => {
       /*
        * Shift is deliberately dropped for most keys (the produced character already encodes it,
@@ -286,7 +305,7 @@ function KeybindingsHandler({
         },
         scopeInput(),
       );
-      if (!action || !HANDLED.has(action)) return;
+      if (!action || !WINDOW_HANDLED_ACTIONS.has(action)) return;
       // Capture phase: stop the focused terminal/editor from ALSO acting on the chord
       // (e.g. Git Bash turning Ctrl+Alt+Arrow into an escape sequence), then handle it.
       e.preventDefault();
@@ -488,7 +507,7 @@ function PanelFocusSync(): null {
  * taskbar) plus the dominant project colour, and the cog (main window only). The
  * OS title bar is gone (frameless window); this bar is its replacement.
  */
-function AppTitleBar(): ReactElement {
+export function AppTitleBar(): ReactElement {
   const { activeProject } = useProjects();
   const { layout } = useWorkspace();
   const { elevated } = useCapabilities();
