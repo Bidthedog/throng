@@ -6,11 +6,11 @@
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { connect } from 'node:net';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
+import { copyFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expect, _electron as electron } from '@playwright/test';
+import { expect, test, _electron as electron } from '@playwright/test';
 import type { ElectronApplication, Locator, Page } from '@playwright/test';
 import { openDatabase, runMigrations, type ThrongDatabase } from '@throng/persistence';
 import { quiesceSampler } from './quiesce-sampler.js';
@@ -280,6 +280,139 @@ export async function runApp(
   }
 }
 
+/*
+ * TRACES, for the failures only CI can produce (#298, #299).
+ *
+ * `use: { trace: 'retain-on-failure' }` in playwright.config.ts is the obvious implementation and it
+ * would be INERT — while looking exactly like it worked. That fixture only covers a context
+ * Playwright created itself; this harness calls `electron.launch()`, so the trace fixture never sees
+ * the app and every run would produce a config nobody could tell was doing nothing. Tracing has to
+ * be started on the ElectronApplication's OWN context, which is what these two do.
+ *
+ * OFF unless THRONG_E2E_TRACE is set. A trace captures a DOM snapshot per action, which is real
+ * overhead across a 500-test suite; the runs that need it are the ones nobody can reproduce, so the
+ * release lane sets it (`.github/workflows/release.yml`) and an ordinary local run is untouched.
+ *
+ * SAVED ONLY ON FAILURE, discarded otherwise — what `retain-on-failure` means. Note what a shared
+ * app costs here: files using `openApp()` in `beforeAll` tear down in an `afterAll` hook, where no
+ * individual test is current, so their trace is kept when the hook itself reports a failure and
+ * covers the whole file rather than one test. That is the best a shared context can do, and it is
+ * still the difference between a stack trace and a timeline.
+ */
+const tracingApps = new WeakSet<ElectronApplication>();
+let traceSeq = 0;
+/** Traces stopped to a scratch path, awaiting a settled test status to keep or discard them. */
+const pendingTraces: string[] = [];
+/** Set by the afterEach below; the only failure signal a shared-app `afterAll` can still see. */
+let workerSawFailure = false;
+
+async function startTracing(app: ElectronApplication): Promise<void> {
+  if (process.env.THRONG_E2E_TRACE === undefined) return;
+  try {
+    await app.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
+    tracingApps.add(app);
+  } catch (err) {
+    // Diagnostics, never an assertion: a context that will not trace must not redden a run whose
+    // every assertion was green. But it MUST say so — a silent catch here is how this seam spent
+    // its first revision doing nothing at all while looking perfectly installed.
+    console.warn(`[trace] could not start: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/*
+ * Stopped to a SCRATCH path, always — the keep/discard decision cannot be made here.
+ *
+ * This is the part that cost a probe to find, and it is worth stating precisely because every
+ * obvious implementation of it silently keeps nothing. `runApp` tears down in a `finally` INSIDE
+ * the test body, so at this point the test function has not yet rejected and Playwright has
+ * recorded nothing: `testInfo.status` still reads `passed` and `testInfo.errors` is still EMPTY.
+ * There is no signal here to branch on. A `status` check discards the trace of every failure it
+ * exists to capture, and so does an `errors` check.
+ *
+ * But the trace must be stopped before the app closes, so stopping cannot wait for the status.
+ * Hence: stop to scratch now, decide in the hooks below, where the status is settled.
+ */
+async function stopTracing(app: ElectronApplication): Promise<void> {
+  if (!tracingApps.has(app)) return;
+  tracingApps.delete(app);
+  try {
+    const scratch = join(tmpdir(), `throng-trace-${process.pid}-${(traceSeq += 1)}.zip`);
+    await app.context().tracing.stop({ path: scratch });
+    pendingTraces.push(scratch);
+  } catch (err) {
+    console.warn(`[trace] could not stop: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/** Keep the pending traces under the test's own output dir, or delete them. */
+async function flushTraces(info: ReturnType<typeof test.info>, keep: boolean): Promise<void> {
+  const taken = pendingTraces.splice(0, pendingTraces.length);
+  for (const scratch of taken) {
+    try {
+      if (keep) {
+        // `outputPath` lands it under test-results/, which the release lane already uploads.
+        const kept = info.outputPath(basename(scratch));
+        // copy+delete, not rename: %TEMP% and the repo are routinely on different drives here,
+        // and rename across them is EXDEV.
+        await copyFile(scratch, kept);
+        await rm(scratch, { force: true });
+        console.warn(`[trace] kept ${kept}`);
+      } else {
+        await rm(scratch, { force: true });
+      }
+    } catch (err) {
+      console.warn(`[trace] could not flush: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+}
+
+/*
+ * Two hooks, because the suite has two app lifetimes.
+ *
+ * A `runApp` spec tears its app down inside the test, so its trace is pending by the time
+ * `afterEach` runs and that hook's `testInfo` carries the settled status — the ordinary case.
+ *
+ * A shared-app file (`openApp()` in `beforeAll`) tears down in `afterAll`, long after every
+ * `afterEach` has fired, and an `afterAll` hook's own status says nothing about the tests that ran
+ * under it. So `afterEach` records whether anything in this worker failed, and `afterAll` keeps the
+ * file's trace on that. It is coarser — one trace for the file rather than the test — which is the
+ * price of sharing one context across a file, and still the difference between a stack trace and a
+ * timeline.
+ */
+/*
+ * Registered ONLY when tracing is on, and defensively.
+ *
+ * `test.afterEach` throws unless it is called while Playwright is collecting a test file, and this
+ * module is imported outside that runner: `packages/ui/tests/unit/harness-fence.test.ts` pulls
+ * `stayedAbsent` from here under vitest, where a top-level hook registration takes the whole unit
+ * project down. Gating on the env var keeps an ordinary vitest run clear of it, and the try/catch
+ * covers the case where the variable is set in a shell that then runs something other than
+ * Playwright — a diagnostic must never be the reason a suite cannot start.
+ */
+if (process.env.THRONG_E2E_TRACE !== undefined) {
+  try {
+    /*
+     * `{}` and not a named parameter, with the rule disabled rather than worked around: Playwright
+     * VALIDATES the shape of a hook's first argument and rejects anything that is not an object
+     * destructuring pattern — "First argument must use the object destructuring pattern" — at
+     * COLLECTION time, so renaming it to satisfy no-empty-pattern stops the whole file loading.
+     */
+    // eslint-disable-next-line no-empty-pattern
+    test.afterEach(async ({}, info) => {
+      if (info.status !== info.expectedStatus) workerSawFailure = true;
+      if (pendingTraces.length > 0) await flushTraces(info, info.status !== info.expectedStatus);
+    });
+    // eslint-disable-next-line no-empty-pattern
+    test.afterAll(async ({}, info) => {
+      if (pendingTraces.length > 0) await flushTraces(info, workerSawFailure);
+    });
+  } catch (err) {
+    console.warn(
+      `[trace] hooks not registered (not a Playwright run?): ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
 /** The shared launch + teardown both entry points are built from. */
 async function launchApp(opts: AppOptions): Promise<{
   app: ElectronApplication;
@@ -320,6 +453,7 @@ async function launchApp(opts: AppOptions): Promise<{
       },
     });
     const win = await app.firstWindow();
+    await startTracing(app); // #299: a CI-only failure is undiagnosable without one
     endSuddenDeathWatch = watchForSuddenDeath(app); // #240: say WHY, if this app goes away mid-test
     await stubFolderDialog(app); // cancel by default
     await stubShellOpen(app); // never leave a real Explorer window behind (and never steal focus)
@@ -339,6 +473,7 @@ async function launchApp(opts: AppOptions): Promise<{
 
   async function teardownApp(started: ElectronApplication | undefined): Promise<void> {
     endSuddenDeathWatch(); // from here on, the app going away is the intent, not a fault (#240)
+    if (started) await stopTracing(started);
     // Kill an app-spawned detached daemon BEFORE closing the app: Playwright's
     // app.close() waits for the Electron process's child tree, and the detached
     // daemon (which by design outlives the UI) would otherwise hang teardown.

@@ -60,6 +60,12 @@ jobs:
       THRONG_E2E_WORKERS: 1
       THRONG_E2E_RETRIES: 3
       THRONG_E2E_JSON_OUT: e2e-report.json
+      # This lane is the ONLY place some failures happen, so it is the only place a trace can be
+      # taken of them. #299 was filed with nothing but an `error-context.md` — an assertion message
+      # and no timeline — because the artifact upload had nothing else to collect. See the tracing
+      # block in packages/ui/tests/e2e/harness.ts for why this cannot be a `use: { trace }` in the
+      # Playwright config: the harness launches Electron itself, so that fixture never sees the app.
+      THRONG_E2E_TRACE: 1
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
