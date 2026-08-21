@@ -259,7 +259,8 @@ export async function openApp(opts: AppOptions = {}): Promise<OpenApp> {
     win: started.win,
     pipeName: started.pipeName,
     userDataDir: started.userDataDir,
-    close: started.teardown,
+    // `true`: a shared app is torn down in an afterAll, where the flush cannot wait for a hook.
+    close: () => started.teardown(true),
   };
 }
 
@@ -306,8 +307,31 @@ const pendingTraces: string[] = [];
 /** Set by the afterEach below; the only failure signal a shared-app `afterAll` can still see. */
 let workerSawFailure = false;
 
+/**
+ * `test.info()` THROWS when nothing is running — a teardown can legitimately reach here from
+ * outside a test or hook, and that must not be an error.
+ */
+function currentTestInfo(): ReturnType<typeof test.info> | undefined {
+  try {
+    return test.info();
+  } catch {
+    return undefined;
+  }
+}
+
 async function startTracing(app: ElectronApplication): Promise<void> {
   if (process.env.THRONG_E2E_TRACE === undefined) return;
+  /*
+   * NEVER trace a spec that measures time — you cannot measure frame timing under a profiler.
+   *
+   * A trace captures a DOM snapshot per action, and `editor-highlight-perf.e2e.ts` asserts that
+   * typing drops NO frames. With tracing on it failed 4/4 on the release lane reporting a single
+   * 59ms frame, which is the snapshot, not the product. The suite already names these files
+   * `*perf*.e2e.ts` (editor-highlight-perf, quick-open-perf, performance), and that convention is
+   * what this reads — a perf spec opts out by being named like one.
+   */
+  const spec = currentTestInfo()?.file ?? '';
+  if (/perf/i.test(spec.replace(/^.*[\\/]/, ''))) return;
   try {
     await app.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
     tracingApps.add(app);
@@ -332,13 +356,28 @@ async function startTracing(app: ElectronApplication): Promise<void> {
  * But the trace must be stopped before the app closes, so stopping cannot wait for the status.
  * Hence: stop to scratch now, decide in the hooks below, where the status is settled.
  */
-async function stopTracing(app: ElectronApplication): Promise<void> {
+async function stopTracing(app: ElectronApplication, flushNow = false): Promise<void> {
   if (!tracingApps.has(app)) return;
   tracingApps.delete(app);
   try {
     const scratch = join(tmpdir(), `throng-trace-${process.pid}-${(traceSeq += 1)}.zip`);
     await app.context().tracing.stop({ path: scratch });
     pendingTraces.push(scratch);
+    /*
+     * A SHARED app flushes here, not in the afterAll hook below, because hook ORDER decided whether
+     * it worked at all — and it did not. `openApp()` files close in their own `afterAll`, and the
+     * harness's flush hook is registered first (this module is imported before the spec body runs),
+     * so it fired BEFORE the app had been torn down and found nothing pending. The result was that
+     * traces landed for every `runApp` spec and for none of the shared-app ones — which is exactly
+     * the set #298 lives in, so the one test the tracing was built for produced nothing.
+     *
+     * By this point every `afterEach` has already run, so `workerSawFailure` is settled and the
+     * decision needs no hook of its own.
+     */
+    if (flushNow) {
+      const info = currentTestInfo();
+      if (info !== undefined) await flushTraces(info, workerSawFailure);
+    }
   } catch (err) {
     console.warn(`[trace] could not stop: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -463,7 +502,7 @@ async function launchApp(opts: AppOptions): Promise<{
       win,
       pipeName,
       userDataDir: userData,
-      teardown: () => teardownApp(launched),
+      teardown: (flushNow = false) => teardownApp(launched, flushNow),
     };
   } catch (error) {
     // The launch itself failed, so nobody holds a handle to tear down — do it here.
@@ -471,9 +510,12 @@ async function launchApp(opts: AppOptions): Promise<{
     throw error;
   }
 
-  async function teardownApp(started: ElectronApplication | undefined): Promise<void> {
+  async function teardownApp(
+    started: ElectronApplication | undefined,
+    flushNow = false,
+  ): Promise<void> {
     endSuddenDeathWatch(); // from here on, the app going away is the intent, not a fault (#240)
-    if (started) await stopTracing(started);
+    if (started) await stopTracing(started, flushNow);
     // Kill an app-spawned detached daemon BEFORE closing the app: Playwright's
     // app.close() waits for the Electron process's child tree, and the detached
     // daemon (which by design outlives the UI) would otherwise hang teardown.
