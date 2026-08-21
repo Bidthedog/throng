@@ -116,7 +116,7 @@ function taskkill(pid: number): void {
   }
 }
 
-/** The pids of headless `conhost.exe` hosts owned by `parentPid` (one per live ConPTY). */
+/** The pids of headless `conhost.exe` / `OpenConsole.exe` hosts owned by `parentPid` (one per live ConPTY). */
 function conhostChildren(parentPid: number): number[] {
   try {
     const out = execFileSync(
@@ -125,7 +125,7 @@ function conhostChildren(parentPid: number): number[] {
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        `Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'conhost.exe' -and $_.ParentProcessId -eq ${parentPid} } | ForEach-Object { $_.ProcessId }`,
+        `Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'conhost.exe' -or $_.Name -eq 'OpenConsole.exe') -and $_.ParentProcessId -eq ${parentPid} } | ForEach-Object { $_.ProcessId }`,
       ],
       { encoding: 'utf8', timeout: 5000, windowsHide: true },
     );
