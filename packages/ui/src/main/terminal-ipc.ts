@@ -144,6 +144,33 @@ export function registerTerminalIpc(deps: {
   // the same RPC timeout while the daemon is still busy with the earlier ones. The
   // queue gives each terminal its own timeout window, starting when its load starts.
   const serializeAttach = createSerializer();
+  /*
+   * #300 — ONE WRITE QUEUE PER PANEL, because nothing else in this path preserves typed order.
+   *
+   * `DaemonClient.call` opens a short-lived pipe connection PER CALL and writes its payload only
+   * once that socket emits `connect`. The renderer fires `void bridge.write(...)` per keystroke
+   * (`use-terminal.ts`), so two characters typed in quick succession race two independent
+   * connection handshakes and arrive in whichever order those complete. Delivery order was decided
+   * by connect latency, which is why it showed up under CI load and almost never on an idle
+   * machine: measured, typing "throng" arrived as "hrongt" with one handshake stalled 40ms
+   * (`terminal-write-ordering.integration.test.ts`).
+   *
+   * PER PANEL rather than global: two terminals have no ordering relationship with each other, and
+   * a shared queue would make a slow write to one panel hold up every other panel's keystrokes.
+   *
+   * The added latency is one already-in-flight RPC per keystroke over a local named pipe, and a
+   * paste arrives as a single `onData` chunk rather than one call per character, so this does not
+   * turn a large paste into a queue of thousands.
+   */
+  const writeQueues = new Map<string, ReturnType<typeof createSerializer>>();
+  const serializeWrite = (panelId: string): ReturnType<typeof createSerializer> => {
+    let queue = writeQueues.get(panelId);
+    if (queue === undefined) {
+      queue = createSerializer();
+      writeQueues.set(panelId, queue);
+    }
+    return queue;
+  };
 
   const doAttach = async (req: AttachRequest): Promise<AttachEnvelope> => {
     try {
@@ -306,7 +333,9 @@ export function registerTerminalIpc(deps: {
   });
 
   ipcMain.handle('throng:terminal:write', (_e, panelId: string, data: string) =>
-    daemonClient.call('terminal.write', { panelId, data }).catch(() => ({ ok: false })),
+    serializeWrite(panelId)(() =>
+      daemonClient.call('terminal.write', { panelId, data }).catch(() => ({ ok: false })),
+    ),
   );
   ipcMain.handle(
     'throng:terminal:resize',
@@ -326,9 +355,10 @@ export function registerTerminalIpc(deps: {
   ipcMain.handle('throng:terminal:repaint', (_e, panelId: string) =>
     daemonClient.call('terminal.repaint', { panelId }).catch(() => ({ ok: false })),
   );
-  ipcMain.handle('throng:terminal:kill', (_e, panelId: string) =>
-    daemonClient.call('terminal.kill', { panelId }).catch(() => ({ ok: false })),
-  );
+  ipcMain.handle('throng:terminal:kill', (_e, panelId: string) => {
+    writeQueues.delete(panelId); // the panel is gone; its queue must not outlive it
+    return daemonClient.call('terminal.kill', { panelId }).catch(() => ({ ok: false }));
+  });
   ipcMain.handle('throng:terminal:list', (_e, projectId?: string) =>
     daemonClient.call('terminal.list', { projectId }).catch(() => ({ sessions: [] })),
   );
