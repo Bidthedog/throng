@@ -134,6 +134,42 @@ function findPanelTitle(node: LayoutPanelNode, panelId: string): string | undefi
   return undefined;
 }
 
+/** One project's persisted layout document, or undefined if it has not been written yet. */
+function readLayoutJson(dataDir: string, projectName: string): string | undefined {
+  let db: InstanceType<typeof Database> | undefined;
+  try {
+    db = new Database(dbPath(dataDir), { readonly: true });
+    const row = db
+      .prepare(
+        `SELECT w.layout_json AS json
+             FROM workspace_layout w
+             JOIN projects p ON p.id = w.project_id
+            WHERE p.name = ?`,
+      )
+      .get(projectName) as { json?: string } | undefined;
+    return row?.json;
+  } catch {
+    return undefined;
+  } finally {
+    db?.close();
+  }
+}
+
+/** Every persisted panel title in a layout document. */
+function panelTitlesInLayout(layoutJson: string): string[] {
+  const layout = JSON.parse(layoutJson) as { tabs?: { root: LayoutPanelNode }[] };
+  const out: string[] = [];
+  const walk = (node: LayoutPanelNode): void => {
+    if (node.type === 'panel') {
+      if (node.title !== undefined) out.push(node.title);
+      return;
+    }
+    for (const child of node.children ?? []) walk(child);
+  };
+  for (const tab of layout.tabs ?? []) walk(tab.root);
+  return out;
+}
+
 /** The persisted title of one panel, found by id across every tab in a layout document. */
 function panelTitleInLayout(layoutJson: string, panelId: string): string | undefined {
   const layout = JSON.parse(layoutJson) as { tabs?: { root: LayoutPanelNode }[] };
@@ -248,22 +284,47 @@ test('an adjustment landing under an OPEN rename box is not a rename either (#21
 
         // The header `+` opens the new panel straight into its rename box, seeded with the generated
         // name. The claim for that name resolves a beat later and moves it — under the open box.
+        // The generator counts the panels in B's OWN layout (core/workspace/operations.ts:
+        // `Panel ${totalPanels(layout) + 1}`), so the count taken HERE, before the click, is the
+        // number it will use. Reading it from the database instead does not work: B's layout has
+        // not been written yet at this point.
+        const betaPanelsBefore = await win.locator('.panel-box').count();
         await win.getByTestId(`panel-add-${b}`).click();
         await expect(win.locator('.panel-box')).toHaveCount(2);
         const added = (await panelIds(win)).find((id) => id !== b) ?? '';
         expect(added).not.toBe('');
         const renameInput = win.getByTestId(`panel-rename-input-${added}`);
         await expect(renameInput).toBeVisible();
-        // The box is uncontrolled (that's defect A2): it will keep showing this seed even once the
-        // daemon's adjustment lands on the panel underneath it. That is the real condition to wait
-        // on — not a duration — because the box itself never shows the change (see the file header).
-        const seed = await renameInput.inputValue();
+        /*
+         * #299 — DO NOT re-derive this wait from `renameInput.inputValue()`.
+         *
+         * It used to read the box's value as `seed` and wait for the persisted title to differ from
+         * it. That is a race with the very adjustment it is waiting for: the box is UNCONTROLLED, so
+         * it shows whatever the name was when it first rendered, and on a loaded machine the daemon's
+         * claim can land BEFORE that first paint. The box then already shows the ADJUSTED name, seed
+         * equals the persisted title, and the predicate can never become true — 15 seconds of polling
+         * for a change that had already happened. It failed 8/8 on CI, then passed, then flaked,
+         * which is the signature of a race and not of a defect, and it never reproduced locally.
+         *
+         * The contract does not need that value. A2 is: B's generated name COLLIDES with one of A's,
+         * the daemon moves it, and moving it is not a manual rename. So state the collision as an
+         * explicit precondition, and wait for the outcome — a persisted title that is no longer one
+         * of A's names. Neither depends on when anything was painted.
+         */
+        const alphaNames = panelTitlesInLayout(readLayoutJson(dataDir, 'BoxAlpha') ?? '{}');
+        const generated = `Panel ${betaPanelsBefore + 1}`;
+        // THE PRECONDITION, ASSERTED. Without this the wait below could be satisfied by a name that
+        // never collided — a green bar proving nothing, which is exactly what this test is about.
+        expect(
+          alphaNames,
+          `A2 needs B's generated name (${generated}) to collide with one of A's (${alphaNames.join(', ')})`,
+        ).toContain(generated);
         await expectLayoutSaved(
           dataDir,
           'BoxBeta',
           (json) => {
             const title = panelTitleInLayout(json, added);
-            return title !== undefined && title !== seed;
+            return title !== undefined && !alphaNames.includes(title);
           },
         );
 

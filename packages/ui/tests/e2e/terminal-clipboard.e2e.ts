@@ -109,10 +109,21 @@ test('an OSC 52 sequence from inside the terminal writes to the system clipboard
     await win.getByTestId('project-root-input').fill(root);
     await win.getByTestId('project-name-input').fill('Clip');
     await win.getByTestId('project-save').click();
-    const pid = await win
-      .locator('.panel-box')
-      .first()
-      .evaluate((el) => (el as HTMLElement).dataset.panelId ?? '');
+    /*
+     * The id is read from the TYPE SELECT, not from `.panel-box` (#299 sweep).
+     *
+     * A new project's panel is UNTYPED and shows a type select; the previous test's terminal
+     * panel does not. `.panel-box` .first() cannot tell them apart, and settling on the
+     * project item does not mean the panel has been swapped yet — so the read could return the
+     * OUTGOING panel's id, after which every `panel-type-select-<id>` call waits out its full
+     * budget against an element that will never exist. Measured as a 30s `selectOption`
+     * timeout on CI, passing on retry.
+     */
+    const typeSelect = win.locator('[data-testid^="panel-type-select-"]');
+    await expect(typeSelect).toHaveCount(1);
+    const pid =
+      (await typeSelect.getAttribute('data-testid'))?.slice('panel-type-select-'.length) ?? '';
+    expect(pid).not.toBe('');
     await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
     await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
     await win.getByTestId(`panel-type-confirm-${pid}`).click();
@@ -274,10 +285,21 @@ test.describe('the two tests that need the in-process clipboard seam', () => {
       const activeProject = win.locator('.project-item[data-active="true"]');
       await expect(activeProject).toHaveCount(1);
       await expect(activeProject).toContainText('ClipMenu');
-      const pid = await win
-        .locator('.panel-box')
-        .first()
-        .evaluate((el) => (el as HTMLElement).dataset.panelId ?? '');
+      /*
+       * The id is read from the TYPE SELECT, not from `.panel-box` (#299 sweep).
+       *
+       * A new project's panel is UNTYPED and shows a type select; the previous test's terminal
+       * panel does not. `.panel-box` .first() cannot tell them apart, and settling on the
+       * project item does not mean the panel has been swapped yet — so the read could return the
+       * OUTGOING panel's id, after which every `panel-type-select-<id>` call waits out its full
+       * budget against an element that will never exist. Measured as a 30s `selectOption`
+       * timeout on CI, passing on retry.
+       */
+      const typeSelect = win.locator('[data-testid^="panel-type-select-"]');
+      await expect(typeSelect).toHaveCount(1);
+      const pid =
+        (await typeSelect.getAttribute('data-testid'))?.slice('panel-type-select-'.length) ?? '';
+      expect(pid).not.toBe('');
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
       await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
@@ -329,10 +351,21 @@ test.describe('the two tests that need the in-process clipboard seam', () => {
       const activeProject = win.locator('.project-item[data-active="true"]');
       await expect(activeProject).toHaveCount(1);
       await expect(activeProject).toContainText('CtrlV');
-      const pid = await win
-        .locator('.panel-box')
-        .first()
-        .evaluate((el) => (el as HTMLElement).dataset.panelId ?? '');
+      /*
+       * The id is read from the TYPE SELECT, not from `.panel-box` (#299 sweep).
+       *
+       * A new project's panel is UNTYPED and shows a type select; the previous test's terminal
+       * panel does not. `.panel-box` .first() cannot tell them apart, and settling on the
+       * project item does not mean the panel has been swapped yet — so the read could return the
+       * OUTGOING panel's id, after which every `panel-type-select-<id>` call waits out its full
+       * budget against an element that will never exist. Measured as a 30s `selectOption`
+       * timeout on CI, passing on retry.
+       */
+      const typeSelect = win.locator('[data-testid^="panel-type-select-"]');
+      await expect(typeSelect).toHaveCount(1);
+      const pid =
+        (await typeSelect.getAttribute('data-testid'))?.slice('panel-type-select-'.length) ?? '';
+      expect(pid).not.toBe('');
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
       await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
