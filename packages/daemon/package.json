@@ -1,6 +1,6 @@
 {
   "name": "@throng/daemon",
-  "version": "1.0.0-alpha1",
+  "version": "1.0.0-alpha2",
   "private": true,
   "type": "module",
   "main": "dist/main.js",
