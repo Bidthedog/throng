@@ -1364,7 +1364,7 @@ export async function daemonPid(pipeName: string): Promise<number> {
 }
 
 /**
- * The pids of `conhost.exe --headless` hosts owned by `parentPid` (the daemon) — one
+ * The pids of `conhost.exe` / `OpenConsole.exe` `--headless` hosts owned by `parentPid` — one
  * per live ConPTY. A terminal that has fully released its OS resources leaves none
  * behind, so this is the orphan-leak probe for the no-orphans E2E.
  */
@@ -1393,7 +1393,7 @@ export function probeConhostChildren(parentPid: number): ConhostProbe {
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        `Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'conhost.exe' -and $_.ParentProcessId -eq ${parentPid} -and $_.CommandLine -match '--headless' } | ForEach-Object { $_.ProcessId }`,
+        `Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'conhost.exe' -or $_.Name -eq 'OpenConsole.exe') -and $_.ParentProcessId -eq ${parentPid} -and $_.CommandLine -match '--headless' } | ForEach-Object { $_.ProcessId }`,
       ],
       { encoding: 'utf8', timeout: 8000, windowsHide: true },
     );

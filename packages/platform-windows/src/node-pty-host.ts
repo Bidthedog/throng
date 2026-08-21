@@ -39,7 +39,15 @@ interface NodePtyModule {
   spawn(
     file: string,
     args: string[] | string,
-    options: { cwd: string; cols: number; rows: number; env?: NodeJS.ProcessEnv; name?: string },
+    options: {
+      cwd: string;
+      cols: number;
+      rows: number;
+      env?: NodeJS.ProcessEnv;
+      name?: string;
+      /** #298 — use the conpty.dll node-pty ships rather than the host Windows build's. */
+      useConptyDll?: boolean;
+    },
   ): NodePty;
 }
 
@@ -116,6 +124,29 @@ export class NodePtyHost implements IPtyHost {
         ...(opts.env ?? {}),
       },
       name: 'xterm-256color',
+      /*
+       * #298 — the ConPTY throng SHIPS, not the one the OS happens to have.
+       *
+       * Without this, node-pty uses the system ConPTY, so a terminal's behaviour is whatever the
+       * host Windows build shipped. Measured, same commit and same fixture: on Windows 11
+       * (26200) the renderer observes DEC private modes 9001, 1004, 25 and 1049; on
+       * windows-2022 (20348) it observes ONLY 25. The application's alternate-screen switch
+       * never arrives, because that ConPTY handles the alt screen itself and synthesises its
+       * own output rather than forwarding the app's.
+       *
+       * throng reads that switch to decide who owns the keyboard
+       * (`use-terminal.ts`: `programOwnsKeyboard = kittyKeyboardActive(kitty) || altBuffer`), so on
+       * an older host a full-screen program that negotiates nothing silently loses Ctrl+End and
+       * Ctrl+Home to throng's scrollback. That is a USER-FACING gap on those machines, not merely
+       * a CI one — CI is just the only place we had a machine old enough to show it.
+       *
+       * node-pty bundles conpty 1.23.251008001 and electron-builder already ships and signs it, so
+       * this makes the packaged app's terminals behave the same everywhere instead of tracking the
+       * OS. node-pty marks the option EXPERIMENTAL and defaults it to false; the divergence it
+       * removes is worse than the risk it carries, and `conhostChildren` below is widened in the
+       * same change because the bundled host is named differently.
+       */
+      useConptyDll: true,
     });
     const session: Session = { proc, seq: this.seqCounter++, conhostPid: null };
     this.sessions.set(proc.pid, session);
@@ -249,7 +280,7 @@ export class NodePtyHost implements IPtyHost {
 }
 
 /**
- * The pids of `conhost.exe --headless` processes that are direct children of
+ * The pids of `conhost.exe` / `OpenConsole.exe` `--headless` processes that are direct children of
  * `parentPid`, in creation order. Each corresponds to one ConPTY the process owns.
  */
 function conhostChildren(parentPid: number): number[] {
@@ -260,7 +291,7 @@ function conhostChildren(parentPid: number): number[] {
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        `Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'conhost.exe' -and $_.ParentProcessId -eq ${parentPid} -and $_.CommandLine -match '--headless' } | Sort-Object CreationDate | ForEach-Object { $_.ProcessId }`,
+        `Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'conhost.exe' -or $_.Name -eq 'OpenConsole.exe') -and $_.ParentProcessId -eq ${parentPid} -and $_.CommandLine -match '--headless' } | Sort-Object CreationDate | ForEach-Object { $_.ProcessId }`,
       ],
       { encoding: 'utf8', timeout: 5000, windowsHide: true },
     );
