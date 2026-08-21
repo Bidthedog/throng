@@ -5,7 +5,7 @@
  */
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { connect } from 'node:net';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { copyFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -304,6 +304,16 @@ const tracingApps = new WeakSet<ElectronApplication>();
 let traceSeq = 0;
 /** Traces stopped to a scratch path, awaiting a settled test status to keep or discard them. */
 const pendingTraces: string[] = [];
+/**
+ * Terminal diagnostics captured at teardown, kept or dropped with the trace.
+ *
+ * A trace shows what the TEST did; for #298 the open question is what THRONG DECIDED — specifically
+ * whether `term.buffer.active.type === 'alternate'` held at the moment Ctrl+End was pressed, since
+ * a program that negotiates nothing has no other way to own the keyboard
+ * (`use-terminal.ts`: `programOwnsKeyboard = kittyKeyboardActive(kitty) || altBuffer`). throng
+ * already records that per keypress; nothing was collecting it on a CI failure.
+ */
+const pendingDiagnostics: { name: string; body: string }[] = [];
 /** Set by the afterEach below; the only failure signal a shared-app `afterAll` can still see. */
 let workerSawFailure = false;
 
@@ -316,6 +326,32 @@ function currentTestInfo(): ReturnType<typeof test.info> | undefined {
     return test.info();
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * Snapshot `__throngTerminalDiagnostics()` while the window still exists.
+ *
+ * Best-effort in every direction: the page may be gone, the helper may not be installed (it is a
+ * renderer global), and neither is a reason to fail a test. Gated with tracing so an ordinary run
+ * pays nothing.
+ */
+async function captureTerminalDiagnostics(app: ElectronApplication): Promise<void> {
+  if (process.env.THRONG_E2E_TRACE === undefined) return;
+  try {
+    const win = app.windows()[0];
+    if (win === undefined) return;
+    const body = await win.evaluate(() => {
+      const fn = (window as unknown as { __throngTerminalDiagnostics?: () => unknown })
+        .__throngTerminalDiagnostics;
+      return fn === undefined ? null : JSON.stringify(fn(), null, 2);
+    });
+    if (typeof body === 'string' && body.length > 0) {
+      pendingDiagnostics.push({ name: `throng-terminal-diagnostics-${traceSeq}.json`, body });
+    }
+  } catch {
+    // The window is already gone, or the page refused to evaluate. Diagnostics are never a reason
+    // to redden a run.
   }
 }
 
@@ -385,6 +421,17 @@ async function stopTracing(app: ElectronApplication, flushNow = false): Promise<
 
 /** Keep the pending traces under the test's own output dir, or delete them. */
 async function flushTraces(info: ReturnType<typeof test.info>, keep: boolean): Promise<void> {
+  const diags = pendingDiagnostics.splice(0, pendingDiagnostics.length);
+  if (keep) {
+    for (const d of diags) {
+      try {
+        writeFileSync(info.outputPath(d.name), d.body);
+        console.warn(`[trace] kept ${d.name}`);
+      } catch {
+        /* best effort */
+      }
+    }
+  }
   const taken = pendingTraces.splice(0, pendingTraces.length);
   for (const scratch of taken) {
     try {
@@ -515,6 +562,7 @@ async function launchApp(opts: AppOptions): Promise<{
     flushNow = false,
   ): Promise<void> {
     endSuddenDeathWatch(); // from here on, the app going away is the intent, not a fault (#240)
+    if (started) await captureTerminalDiagnostics(started);
     if (started) await stopTracing(started, flushNow);
     // Kill an app-spawned detached daemon BEFORE closing the app: Playwright's
     // app.close() waits for the Electron process's child tree, and the detached
