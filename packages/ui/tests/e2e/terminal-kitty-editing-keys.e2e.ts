@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
+import { skipIfConsoleHidesAltScreen } from './admin.js';
 import { openApp,
   createProject as newProject,
   firstPanelId,
@@ -287,6 +288,9 @@ test('Ctrl+End still reaches the program after switching tabs and back', { tag: 
  * scrollback, and the chord dies — after a tab switch, exactly as reported.
  */
 test('Ctrl+End survives a tab switch even when the program negotiated nothing', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
+  // The ONLY test here whose signal is the alternate screen alone; every sibling also has the
+  // kitty negotiation, which older console hosts DO forward. See the guard for the measurement.
+  skipIfConsoleHidesAltScreen();
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-alt-end-rebuild-'));
   copyFileSync(ALT_ONLY, join(root, 'k.mjs'));

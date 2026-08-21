@@ -9,6 +9,7 @@
  * collected as a test.
  */
 import { execFileSync } from 'node:child_process';
+import { release } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 import { test } from '@playwright/test';
@@ -140,4 +141,42 @@ export function adminTest(title: string, body: () => Promise<void>): void {
     test.skip(!isElevated(), 'requires elevated privileges — run `npm run test:e2e:admin`');
     await body();
   });
+}
+
+/**
+ * Skip a test that needs the running program's ALTERNATE-SCREEN switch to reach the renderer.
+ *
+ * An ENVIRONMENT GUARD, in the same sense as {@link skipIfElevated}: the behaviour cannot be
+ * verified on this host, so the coverage moves rather than being lost. It is NOT a quarantine —
+ * the assertion is real and it passes on a supported host.
+ *
+ * WHAT IS MISSING, MEASURED (#298). throng decides who owns the keyboard from the alt-screen
+ * switch when a program negotiates nothing (`use-terminal.ts`:
+ * `programOwnsKeyboard = kittyKeyboardActive(kitty) || altBuffer`). Older console hosts manage the
+ * alternate screen THEMSELVES and never forward the application's switch, so there is no signal to
+ * read. From the terminal diagnostics captured on a CI failure, same commit and same fixture:
+ *
+ *   Windows 11 (26200)     private modes observed: 9001, 1004, 25, 1049   altBuffer=true
+ *   windows-2022 (20348)   private modes observed: 25                     altBuffer=false
+ *
+ * Mode 25 there is ConPTY's own cursor-visibility, not the program's — which is why the kitty
+ * negotiation (a `CSI > u` sequence, not a private mode) still arrives and its sibling tests still
+ * pass on the same host.
+ *
+ * WHY NOT JUST SHIP A NEWER CONPTY. Tried, measured, rejected — see the long comment in
+ * `platform-windows/src/node-pty-host.ts`. `useConptyDll: true` fixes this and takes terminal
+ * auto-naming and reattach with it (`panel-auto-naming`: 5 passed → 4 failed, both A/B orders).
+ * The bug it fixes bites only on older hosts; the regression it causes would hit everyone.
+ *
+ * The line is drawn at the Windows 11 / Server 2022 boundary (build 22000) rather than on a probe
+ * of the behaviour itself, deliberately: a guard that skips when it cannot see the signal would
+ * also skip silently if throng ever REGRESSED and stopped seeing it, which is the one outcome this
+ * test exists to catch.
+ */
+export function skipIfConsoleHidesAltScreen(): void {
+  const build = Number(release().split('.')[2] ?? '0');
+  test.skip(
+    build > 0 && build < 22000,
+    `this host's console does not forward the alternate-screen switch (build ${build} < 22000); see #298`,
+  );
 }

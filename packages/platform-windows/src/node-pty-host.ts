@@ -125,28 +125,40 @@ export class NodePtyHost implements IPtyHost {
       },
       name: 'xterm-256color',
       /*
-       * #298 — the ConPTY throng SHIPS, not the one the OS happens to have.
+       * #298 — `useConptyDll` WAS TRIED HERE AND REJECTED. Do not re-enable it without reading this.
        *
-       * Without this, node-pty uses the system ConPTY, so a terminal's behaviour is whatever the
-       * host Windows build shipped. Measured, same commit and same fixture: on Windows 11
-       * (26200) the renderer observes DEC private modes 9001, 1004, 25 and 1049; on
-       * windows-2022 (20348) it observes ONLY 25. The application's alternate-screen switch
-       * never arrives, because that ConPTY handles the alt screen itself and synthesises its
-       * own output rather than forwarding the app's.
+       * node-pty defaults it to false, so throng uses the SYSTEM ConPTY and a terminal's behaviour
+       * tracks the host Windows build. That is a real defect and it has a real cost. Measured, same
+       * commit and fixture, from the terminal diagnostics captured on a CI failure:
        *
-       * throng reads that switch to decide who owns the keyboard
-       * (`use-terminal.ts`: `programOwnsKeyboard = kittyKeyboardActive(kitty) || altBuffer`), so on
-       * an older host a full-screen program that negotiates nothing silently loses Ctrl+End and
-       * Ctrl+Home to throng's scrollback. That is a USER-FACING gap on those machines, not merely
-       * a CI one — CI is just the only place we had a machine old enough to show it.
+       *   Windows 11 (26200)     private modes observed: 9001, 1004, 25, 1049   altBuffer=true
+       *   windows-2022 (20348)   private modes observed: 25                     altBuffer=false
        *
-       * node-pty bundles conpty 1.23.251008001 and electron-builder already ships and signs it, so
-       * this makes the packaged app's terminals behave the same everywhere instead of tracking the
-       * OS. node-pty marks the option EXPERIMENTAL and defaults it to false; the divergence it
-       * removes is worse than the risk it carries, and `conhostChildren` below is widened in the
-       * same change because the bundled host is named differently.
+       * The application's alternate-screen switch never arrives on the older host — that ConPTY
+       * manages the alt screen itself and synthesises its own output. throng reads that switch to
+       * decide who owns the keyboard (`use-terminal.ts`), so on such a host a full-screen program
+       * that negotiates nothing loses Ctrl+End and Ctrl+Home to throng's scrollback. Mode 25 is
+       * ConPTY's own cursor-visibility, not the program's, which is why this is not "modes are
+       * stripped" and why the kitty negotiation (a CSI > u sequence) still gets through.
+       *
+       * Switching to the bundled conpty 1.23.251008001 fixes that and BREAKS MORE THAN IT FIXES.
+       * A/B on `panel-auto-naming.e2e.ts`, one worker, no retries, run in BOTH orders to rule out
+       * cold cache:
+       *
+       *   useConptyDll: false    5 passed (20.4s)
+       *   useConptyDll: true     4 failed, 1 passed (1.3 min)
+       *
+       * Terminal auto-naming and reattach go with it, and the whole file slows by roughly 4x. The
+       * OSC title itself still arrives (probed directly: `C:\WINDOWS\system32\cmd.exe` at rest,
+       * and `title ZZPROBE` updates it live), so the failures are timing, not a lost signal — but
+       * they are failures either way, and they would hit EVERY user, where the bug they fix only
+       * bites on older hosts.
+       *
+       * If this is revisited: `conhostChildren` below and the two test-side copies already match
+       * `OpenConsole.exe` as well as `conhost.exe`, which the bundled host needs — without that the
+       * reaper leaks one host process per terminal, and `terminal-no-orphans` catches it at three
+       * @core tests.
        */
-      useConptyDll: true,
     });
     const session: Session = { proc, seq: this.seqCounter++, conhostPid: null };
     this.sessions.set(proc.pid, session);
