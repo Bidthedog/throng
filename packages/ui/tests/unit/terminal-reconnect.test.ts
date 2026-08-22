@@ -111,14 +111,24 @@ describe('TerminalReconnect — releasing (039 FR-030/FR-032/FR-033/FR-037)', ()
    * directory. Without the project filter, restoring one would start the other's terminals.
    */
   it('does not cross projects, even sharing one watched directory (FR-037)', () => {
-    const existing = new Set(['C:/dev', 'C:/dev/a/src']);
+    // BOTH targets are missing at arm time — which is the only way a panel gets here, and what the
+    // first version of this test got wrong: it pre-created project A's directory, so A watched its
+    // own folder rather than the shared parent and the event under test never reached it.
+    const existing = new Set(['C:/dev']);
     const h = harness(existing);
     h.reconnect.arm('a1', 'A', 'C:/dev/a/src');
-    h.reconnect.arm('b1', 'B', 'C:/dev/b/src'); // still missing
+    h.reconnect.arm('b1', 'B', 'C:/dev/b/src');
+    expect(h.watchedDirs()).toEqual(['C:/dev']); // one watch, shared by two projects
+
+    // Only project A's folder comes back.
+    existing.add('C:/dev/a/src');
     h.fire('C:/dev');
+
     const released = h.notify.mock.calls.flatMap((c) => c[0]);
     expect(released).toContain('a1');
     expect(released).not.toContain('b1');
+    // B is still waiting, so the shared watch must survive its neighbour's recovery.
+    expect(h.watchedDirs()).toEqual(['C:/dev']);
   });
 
   it('does not release when the ancestor changed but the target is still missing (FR-035)', () => {

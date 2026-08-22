@@ -397,6 +397,27 @@ contextBridge.exposeInMainWorld('throng', {
     listFlavours: () => ipcRenderer.invoke('throng:terminal:listFlavours'),
     // The detected built-ins, with nothing subtracted — the settings picker's catalogue (019).
     listDetectedFlavours: () => ipcRenderer.invoke('throng:terminal:listDetectedFlavours'),
+    /*
+     * 039 US3 (#237) — reconnect when a missing working directory comes back.
+     *
+     * `arm` is called by the panel that failed to START on an unresolvable cwd, and only then:
+     * `shouldWatchForRecovery` in core decides which failures qualify (FR-035 — never a permission
+     * refusal or a bad shell binary). `disarm` is called when the terminal starts by any route, and
+     * on unmount, so a watch never outlives the panel that wanted it (FR-042).
+     *
+     * `onPathBack` delivers ONE message listing EVERY released panel, rather than one per panel.
+     * That shape is what makes FR-033 — no notice per recovered panel — achievable rather than a
+     * matter of the consumer remembering to batch.
+     */
+    armReconnect: (panelId: string, projectId: string, target: string) =>
+      ipcRenderer.invoke('throng:terminal:armReconnect', panelId, projectId, target),
+    disarmReconnect: (panelId: string) =>
+      ipcRenderer.invoke('throng:terminal:disarmReconnect', panelId),
+    onPathBack: (cb: (evt: { panelIds: string[] }) => void) => {
+      const handler = (_e: unknown, evt: { panelIds: string[] }): void => cb(evt);
+      ipcRenderer.on('throng:terminal:pathBack', handler);
+      return () => ipcRenderer.removeListener('throng:terminal:pathBack', handler);
+    },
     // Phase C — session commands (request/response → daemon) and push streams.
     attach: (req: unknown) => ipcRenderer.invoke('throng:terminal:attach', req),
     write: (panelId: string, data: string) => ipcRenderer.invoke('throng:terminal:write', panelId, data),
