@@ -1,10 +1,11 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import {
   cleanupTemp,
   conhostChildren,
+  expectNoOrphanConhosts,
   createProject,
   daemonPid,
   firstPanelId,
@@ -84,8 +85,10 @@ test(
         const pid = await makeTerminal(win);
 
         await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible();
-        // A real shell, in the project's directory — not merely a rendered surface.
-        await expect(win.getByTestId(`panel-cwd-${pid}`)).toContainText('throng-reloadmode', {
+        // A real shell, in the project's directory — not merely a rendered surface. `basename`
+        // rather than the whole path, matching the idiom the other terminal specs use: the status
+        // bar shows a display path, not necessarily the absolute one.
+        await expect(win.getByTestId(`panel-cwd-${pid}`)).toContainText(basename(root), {
           timeout: 30_000,
         });
 
@@ -124,7 +127,19 @@ test(
 
         // ── Leave the project and come back. THAT is the project open the preference governs.
         await createProject(win, 'Elsewhere', other);
-        await win.getByTestId('project-list').getByText('ManualReload').click();
+        await win.locator('.project-item').filter({ hasText: 'ManualReload' }).first().click();
+        /*
+         * Wait for it to be ACTIVE, not merely clicked — `createProject`'s own comment records that
+         * reading a panel id before the swap completes cost four of six failures in one full-suite
+         * run. The same hazard applies here: the dormant placeholder belongs to the project being
+         * opened, and asserting on it too early can catch the outgoing project's panels instead.
+         *
+         * Keyed on `data-active` rather than the name, for the reason the harness gives: `hasText`
+         * is a substring match over the whole row and can resolve to more than one project.
+         */
+        const active = win.locator('.project-item[data-active="true"]');
+        await expect(active).toHaveCount(1);
+        await expect(active).toContainText('ManualReload');
 
         // The panel is dormant: it keeps its place and its type, says so, and offers Reload.
         await expect(win.getByTestId(`terminal-dormant-${pid}`)).toBeVisible({ timeout: 30_000 });
@@ -132,10 +147,21 @@ test(
         // Not a failure (FR-029) — dormancy must never reach the failure surfaces.
         await expect(win.getByTestId('panel-failure-notice')).toHaveCount(0);
 
-        // ── FR-026, the reason this test exists at all. No shell, no conhost.
-        await expect
-          .poll(() => conhostChildren(daemon).length, { timeout: 30_000 })
-          .toBeLessThan(baseline.length + 1);
+        /*
+         * ── FR-026, the reason this test exists at all. Opening the project started NO shell.
+         *
+         * Compared against the BASELINE PIDS rather than against zero, and the distinction is
+         * deliberate. The claim under test is "the project open started nothing", not "the daemon
+         * has no terminals" — a session held from before the switch is the daemon's business and
+         * would make a `toBe(0)` assertion flaky for a reason that has nothing to do with this
+         * feature. `expectNoOrphanConhosts` asks the right question: is there a conhost here that
+         * was not here before?
+         *
+         * It also treats a FAILED probe as "not yet known" rather than as "nothing there", which
+         * matters more here than usual: an assertion that exists to catch leaked OS processes must
+         * never pass because the query broke.
+         */
+        await expectNoOrphanConhosts(daemon, baseline);
 
         // ── And Reload starts it, after which it is an ordinary terminal (FR-025).
         await win.getByTestId('terminal-dormant-reload').click();

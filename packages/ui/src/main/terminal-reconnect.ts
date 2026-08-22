@@ -48,6 +48,26 @@ import {
  * broken, and **no test would catch it**: the wiring test asserts the argument is passed, not that
  * its value is fresh. This comment is the only guard that will exist.
  */
+/**
+ * What arming produced. A VALUE, never an exception — 039 US3's whole premise is that recovery
+ * happens without the user asking, so there is no gesture to report a throw against.
+ *
+ * This is the shape `subworkspace-open.contract.test.ts` was written to establish, and the reasoning
+ * transfers exactly: its handler was `ipcMain.on(…, () => { void (async () => { … })(); })`, so
+ * anything that threw became an unhandled rejection — no window, no error, no notice, and the user
+ * left pressing a button that did nothing. Here it is worse, because there is no button: a throw
+ * from `arm` would leave the terminal permanently unrecoverable with nothing on screen to say so,
+ * and nobody would even know an attempt had been made.
+ */
+export type ArmResult =
+  | { ok: true; watching: string }
+  /** Nothing in the path's chain exists — an unmounted drive, a disconnected share. */
+  | { ok: false; reason: 'no-existing-ancestor' }
+  /** The filesystem probe itself failed: a path too long, an ACL on an ancestor, a vanished drive. */
+  | { ok: false; reason: 'probe-failed' }
+  /** The directory exists but the watcher would not attach to it. */
+  | { ok: false; reason: 'watch-failed' };
+
 export interface TerminalReconnectDeps {
   fileWatcher: IFileWatcher;
   /** Does this path exist and resolve to a directory? Injected so the class stays testable. */
@@ -75,19 +95,33 @@ export class TerminalReconnect {
    * so a panel that fails, is retried by hand, and fails again does not end up with two watches and
    * two retries.
    */
-  arm(panelId: string, projectId: string, target: string): void {
+  arm(panelId: string, projectId: string, target: string): ArmResult {
     this.disarm(panelId);
-    const watching = watchTargetFor(target, this.deps.exists, this.deps.parentOf);
+    let watching: string | null;
+    try {
+      watching = watchTargetFor(target, this.deps.exists, this.deps.parentOf);
+    } catch {
+      // `exists` is a filesystem call and CAN throw — a path too long, a permission refusal on an
+      // ancestor, a drive that disappeared between two calls.
+      return { ok: false, reason: 'probe-failed' };
+    }
     // Nothing in the chain exists — an unmounted drive, a disconnected share. There is nowhere to
     // put a watch, so this panel cannot self-recover and ↻ Retry stays its route back (FR-039).
-    if (watching === null) return;
-    this.pending.push({ panelId, projectId, target, watching });
+    if (watching === null) return { ok: false, reason: 'no-existing-ancestor' };
     if (!this.watches.has(watching)) {
-      this.watches.set(
-        watching,
-        this.deps.fileWatcher.watch(watching, () => this.onChanged(watching)),
-      );
+      let handle: Disposable;
+      try {
+        handle = this.deps.fileWatcher.watch(watching, () => this.onChanged(watching!));
+      } catch {
+        return { ok: false, reason: 'watch-failed' };
+      }
+      this.watches.set(watching, handle);
     }
+    // Recorded only once a watch genuinely exists for it. Pushing first and failing to watch would
+    // leave a panel waiting on an event that can never arrive — indistinguishable, from the outside,
+    // from a panel that is being watched properly.
+    this.pending.push({ panelId, projectId, target, watching });
+    return { ok: true, watching };
   }
 
   /**
@@ -128,26 +162,48 @@ export class TerminalReconnect {
      * projects under one parent (a monorepo) legitimately watch the same directory and FR-037 says a
      * path event in one must never start the other's terminals.
      */
-    const projects = new Set(
-      this.pending.filter((p) => p.watching === watching).map((p) => p.projectId),
-    );
-    const released: PendingReconnect[] = [];
-    for (const projectId of projects) {
-      released.push(
-        ...reconnectsReleasedBy(this.pending, { projectId, path: watching }, this.deps.exists),
+    let released: PendingReconnect[];
+    try {
+      const projects = new Set(
+        this.pending.filter((p) => p.watching === watching).map((p) => p.projectId),
       );
+      released = [];
+      for (const projectId of projects) {
+        released.push(
+          ...reconnectsReleasedBy(this.pending, { projectId, path: watching }, this.deps.exists),
+        );
+      }
+    } catch {
+      /*
+       * `exists` touches the filesystem and can throw — and this runs inside a WATCHER CALLBACK, so
+       * a throw here is an unhandled exception in the main process rather than something a caller
+       * sees. Swallowing it leaves every pending panel armed, which is the right failure: the next
+       * event re-asks the same question, and ↻ Retry was never taken away.
+       */
+      return;
     }
     if (released.length === 0) return;
     // Disarm BEFORE notifying. The retry is bounded to one attempt per failure (FR-030), and a
     // notify that synchronously drove a restart which failed again would otherwise re-enter here
     // against entries still in the list.
     for (const p of released) this.disarm(p.panelId);
-    this.deps.notify(released.map((p) => p.panelId));
+    try {
+      this.deps.notify(released.map((p) => p.panelId));
+    } catch {
+      // Broadcasting to a window that is being destroyed can throw. The panels are already
+      // disarmed, so there is nothing to unwind — and a throw escaping a watcher callback would
+      // take down more than this feature.
+    }
   }
 
   private releaseWatchIfUnused(dir: string): void {
     if (this.pending.some((p) => p.watching === dir)) return;
-    this.watches.get(dir)?.dispose();
+    try {
+      this.watches.get(dir)?.dispose();
+    } catch {
+      // A watcher that fails to close is not worth propagating out of a disarm — the entry is
+      // dropped either way, so the alternative is a leaked map entry AND an exception.
+    }
     this.watches.delete(dir);
   }
 }

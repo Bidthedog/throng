@@ -153,8 +153,16 @@ export function WorkspaceProvider({
    * project the instant a user touched the setting, which is both surprising and a way to start
    * twenty shells from a Preferences window.
    *
-   * `ConfigProvider` wraps `App`, and `App` renders this provider, so the settings are reachable
-   * here.
+   * `ConfigProvider` wraps `App` (`composition-root.tsx`), and `App` renders this provider, so the
+   * settings are reachable here in every window kind.
+   *
+   * **This ALSO leans on `ConfigContext` having a real default rather than `undefined`**
+   * (`config/config-store.tsx` — `createContext<ConfigState>(DEFAULT_STATE)`). If the nesting ever
+   * changed, a consumer outside the provider gets the SHIPPED settings instead of throwing, so the
+   * worst case here is `reloadMode: 'automatic'` — today's behaviour, and the safest possible wrong
+   * answer. A tidy-up that switched that context to `undefined`-by-default would turn a benign
+   * fallback into a startup crash in one window kind, which is the kind of change that passes every
+   * unit test.
    */
   const reloadMode = useAppSettings().terminals.reloadMode;
   const reloadModeRef = useRef(reloadMode);
