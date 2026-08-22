@@ -35,6 +35,13 @@ describe('panel-type form reducer', () => {
     expect(confirmConfig(s, d)).toBeNull();
   });
 
+  /*
+   * 039 FR-004 — `rememberCommand` seeds 'false' below, where it seeded 'true' before.
+   *
+   * These deps build a context with no `terminalDefaults`, so the descriptor falls back to the
+   * SHIPPED preference, which is off (039 FR-002, restoring 025 FR-015). The change is the point
+   * of #223, not a side effect of it: the real form passes the user's actual preferences.
+   */
   it('selecting Terminal seeds the descriptor defaults and enables Confirm', () => {
     const d = deps();
     const s = selectKind(initialFormState(), 'terminal', d);
@@ -43,7 +50,7 @@ describe('panel-type form reducer', () => {
       flavourId: 'pwsh',
       shellArguments: '-NoLogo',
       startupCommand: '',
-      rememberCommand: 'true',
+      rememberCommand: 'false',
       rememberDirectory: 'true',
       runAsAdmin: 'false',
     });
@@ -60,7 +67,7 @@ describe('panel-type form reducer', () => {
         flavourLabel: 'PowerShell 7',
         shellArguments: '-NoLogo',
         startupCommand: '',
-        rememberCommand: true,
+        rememberCommand: false,
         rememberDirectory: true,
         runAsAdmin: false,
       },
@@ -86,7 +93,7 @@ describe('panel-type form reducer', () => {
         flavourLabel: 'PowerShell 7',
         shellArguments: '-NoLogo -NoProfile',
         startupCommand: '',
-        rememberCommand: true,
+        rememberCommand: false,
         rememberDirectory: true,
         runAsAdmin: false,
       },

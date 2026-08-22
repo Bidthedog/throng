@@ -53,6 +53,21 @@ export interface TerminalMemory {
 }
 
 /**
+ * The global preferences that seed a FRESH terminal Panel, and that an ABSENT per-Panel value
+ * resolves to (039 FR-004/FR-005a). Mirrors `terminals.default*` in `TerminalSettings`.
+ *
+ * Kept here for the same reason {@link TerminalMemory} is — `panel-type/` stays decoupled from the
+ * terminal domain, and this is the shape the generic context carries. It is deliberately three
+ * booleans rather than the settings tree: the descriptor layer has no business reading anything
+ * else, and a narrow shape is what stops it growing one.
+ */
+export interface TerminalPanelDefaults {
+  rememberCommand: boolean;
+  rememberDirectory: boolean;
+  runAsAdmin: boolean;
+}
+
+/**
  * Context passed to a descriptor's `defaults`/`validate`/`buildConfig`. Carries
  * the active project's root (null when no project is active — blocks confirming a
  * Terminal, FR no-project edge) and the available flavour options (stub in Phase
@@ -70,6 +85,16 @@ export interface PanelTypeContext {
   /** What this Panel remembered from its previous terminal, used to pre-fill the
    *  form so the empty state doubles as the edit screen (025 FR-007a). */
   terminalMemory?: TerminalMemory;
+  /**
+   * 039 FR-004 (#223) — the global preferences that seed a FRESH terminal Panel's checkboxes.
+   * {@link terminalMemory} wins over these (FR-005); they win over nothing.
+   *
+   * Optional so a context with no access to the settings still typechecks, but a caller that omits
+   * it gets `SHIPPED_TERMINAL_PANEL_DEFAULTS` rather than the user's actual preferences — so every
+   * real call site should pass it. It is deliberately the narrow three-boolean shape rather than
+   * the whole settings tree: the descriptor layer has no business reading anything else.
+   */
+  terminalDefaults?: TerminalPanelDefaults;
 }
 
 /** Outcome of a descriptor's validation: ok, or per-input error messages. */

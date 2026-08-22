@@ -36,12 +36,20 @@ describe('Terminal descriptor — metadata', () => {
 });
 
 describe('Terminal descriptor — defaults', () => {
+  /*
+   * 039 FR-004. `rememberCommand` reads 'false' here, where it read 'true' before.
+   *
+   * These contexts carry no `terminalDefaults`, so the descriptor falls back to
+   * SHIPPED_TERMINAL_PANEL_DEFAULTS — deliberately the SHIPPED values rather than the old
+   * literals, so a call site that forgets to pass the preferences still gets the correct default
+   * instead of quietly reinstating the behaviour 039 exists to fix. Shipped off is 025 FR-015.
+   */
   it('seeds the first flavour and its default shell arguments', () => {
     expect(terminalPanelType.defaults(ctx())).toEqual({
       flavourId: 'pwsh',
       shellArguments: '-NoLogo',
       startupCommand: '',
-      rememberCommand: 'true',
+      rememberCommand: 'false',
       rememberDirectory: 'true',
       runAsAdmin: 'false',
     });
@@ -52,10 +60,66 @@ describe('Terminal descriptor — defaults', () => {
       flavourId: '',
       shellArguments: '',
       startupCommand: '',
-      rememberCommand: 'true',
+      rememberCommand: 'false',
       rememberDirectory: 'true',
       runAsAdmin: 'false',
     });
+  });
+});
+
+/*
+ * 039 FR-004/FR-005 (#223) — the three New Panel checkboxes seed from Preferences → Terminal.
+ *
+ * The precedence being asserted, highest first:
+ *   1. what the Panel REMEMBERED     (025 FR-007a — the empty state is the edit screen)
+ *   2. the global preference          (039 FR-004 — new)
+ *   3. nothing
+ *
+ * Step 2 used to be a hard-coded literal, which is the whole of #223.
+ */
+describe('Terminal descriptor — defaults seed from the preferences (039 FR-004)', () => {
+  const ALL_ON = { rememberCommand: true, rememberDirectory: true, runAsAdmin: true };
+  const ALL_OFF = { rememberCommand: false, rememberDirectory: false, runAsAdmin: false };
+
+  it('takes each checkbox from the preference when the Panel has no memory', () => {
+    const on = terminalPanelType.defaults(ctx({ terminalDefaults: ALL_ON }));
+    expect(on.rememberCommand).toBe('true');
+    expect(on.rememberDirectory).toBe('true');
+    expect(on.runAsAdmin).toBe('true');
+
+    const off = terminalPanelType.defaults(ctx({ terminalDefaults: ALL_OFF }));
+    expect(off.rememberCommand).toBe('false');
+    expect(off.rememberDirectory).toBe('false');
+    expect(off.runAsAdmin).toBe('false');
+  });
+
+  it("what the Panel remembered still WINS over the preference (FR-005, 025 FR-007a)", () => {
+    // Preferences say on; this Panel was explicitly switched off. The Panel wins, in both
+    // directions — a preference is a seed and a fallback, never an override.
+    const seeded = terminalPanelType.defaults(
+      ctx({ terminalDefaults: ALL_ON, terminalMemory: { rememberCommand: false } }),
+    );
+    expect(seeded.rememberCommand).toBe('false');
+    // …and the field it said nothing about still takes the preference.
+    expect(seeded.rememberDirectory).toBe('true');
+
+    const opposite = terminalPanelType.defaults(
+      ctx({ terminalDefaults: ALL_OFF, terminalMemory: { rememberCommand: true } }),
+    );
+    expect(opposite.rememberCommand).toBe('true');
+  });
+
+  // FR-003: one set of defaults for every flavour. Flavours own shell arguments and recipes, not
+  // these three, and a per-flavour path here would be a bug rather than a feature.
+  it('seeds identically for every flavour (FR-003)', () => {
+    const pwsh = terminalPanelType.defaults(ctx({ terminalDefaults: ALL_ON }));
+    const bash = terminalPanelType.defaults(
+      ctx({ terminalDefaults: ALL_ON, flavours: [FLAVOURS[1]!, FLAVOURS[0]!] }),
+    );
+    expect(bash.flavourId).toBe('bash'); // proves the two really are different flavours
+    for (const key of ['rememberCommand', 'rememberDirectory', 'runAsAdmin'] as const) {
+      expect(bash[key], `${key} differed between flavours`).toBe(pwsh[key]);
+    }
   });
 });
 

@@ -61,6 +61,35 @@ A Panel of terminal type that has not started a shell because the reload mode is
 Dormancy is persisted with the Panel rather than held in memory, because FR-027 requires it to
 survive a restart.
 
+### Where it is stored, and where it is decided
+
+**Stored** as an optional `dormant?: boolean` on the Panel — beside `terminalMemory`, not inside
+`Panel.config`, for the same reason 025 gave: `clearPanelType` deletes `config` when a terminal's
+content ends, and dormancy has to outlive that. **Absent means not dormant**, so a workspace written
+before this feature loads correctly and Automatic mode never writes the field at all (FR-021: the
+default path must be observably identical to today, and a layout write nobody asked for is not).
+
+**Rendered** at `packages/ui/src/renderer/workspace/panel-body.tsx:77`, where `panel.kind ===
+'terminal'` already chooses between a loading placeholder and `<TerminalPanel>`. A dormant Panel
+returns the dormant placeholder from that same branch, **before** `<TerminalPanel>` is constructed.
+
+That seam is load-bearing rather than convenient. `TerminalPanel` calls `useTerminal()`
+unconditionally at `terminal-panel.tsx:680`, and React forbids a conditional hook — so "render the
+panel but don't start the shell" cannot be expressed inside `TerminalPanel` without restructuring
+it. Choosing a different component one level up costs nothing and leaves `TerminalPanel` untouched,
+which also keeps FR-026 (no PTY, no shell, no `conhost`) true by construction rather than by careful
+gating: the code that starts a terminal is never mounted.
+
+### The decision, on project open
+
+| Preference | Panels with `dormant` absent | Panels with `dormant: true` |
+|---|---|---|
+| `automatic` | start, exactly as today | clear the flag and start (FR-029a — the switch back takes effect here) |
+| `manual` | set `dormant: true`, start nothing | leave dormant (FR-028: a switch away and back must not wake them) |
+
+The only layout write in the `automatic` row is for Panels that are already dormant, which today can
+never exist — so an existing install's behaviour is unchanged, which is what FR-021 asks for.
+
 ## 4. Path-availability watch
 
 Armed when a terminal's start fails **because its working directory could not be resolved** — and only

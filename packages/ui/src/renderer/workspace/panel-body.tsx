@@ -5,6 +5,7 @@ import { useWorkspace } from '../state/workspace-store.js';
 import { useSubWorkspaceWindow } from './subworkspace-window-context.js';
 import { PanelTypeForm } from '../panel-type/panel-type-form.js';
 import { TerminalPanel } from '../terminal/terminal-panel.js';
+import { DormantTerminal } from '../terminal/dormant-terminal.js';
 import { EditorPanel } from '../editor/editor-panel.js';
 import { PanelDropTarget, type DropContext } from '../editor/drop-target.js';
 import { TreeDropTarget } from '../editor/tree-drop-target.js';
@@ -85,6 +86,28 @@ export function PanelBody({ panel, tabId }: { panel: Panel; tabId: string }): Re
         >
           Resolving project…
         </div>
+      );
+    }
+    /*
+     * 039 FR-022/FR-023 (#293) — a dormant Panel renders the placeholder INSTEAD OF the terminal.
+     *
+     * This branch is where FR-026 (no PTY, no shell, no `conhost`) is satisfied, and it is
+     * satisfied by construction rather than by gating: `TerminalPanel` calls `useTerminal()`
+     * unconditionally at `terminal-panel.tsx:680`, and React forbids a conditional hook, so the
+     * only way to have a terminal Panel that starts nothing is to not mount `TerminalPanel` at all.
+     *
+     * It sits BEFORE the meta/`TerminalPanel` block for the same reason, and after
+     * `ownershipPending` because ownership decides which project's preference applies.
+     *
+     * Dormancy is a state, not a failure (FR-029) — nothing here touches the notice surfaces.
+     */
+    if (panel.dormant === true) {
+      return (
+        <DormantTerminal
+          panelId={panel.id}
+          panelName={panel.title}
+          onReload={() => ws.setPanelDormant(panel.id, false)}
+        />
       );
     }
     // Display labels for the app-close warning details (FR-015). A sub-workspace-

@@ -316,7 +316,15 @@ export function TerminalPanel({
 
   // 025 FR-002d: read through the migrating reader so a Panel persisted before this feature
   // (which spelled it `params`) still launches with its shell arguments intact.
-  const rawConfig = readTerminalPanelConfig(config as Record<string, unknown>);
+  //
+  // 039 FR-005a: the reader also needs the global preferences, because an ABSENT `rememberCommand`
+  // or `rememberDirectory` now resolves to them rather than to a hard-coded literal. A Panel that
+  // holds an explicit value still wins.
+  const rawConfig = readTerminalPanelConfig(config as Record<string, unknown>, {
+    rememberCommand: terminalSettings.defaultRememberCommand,
+    rememberDirectory: terminalSettings.defaultRememberDirectory,
+    runAsAdmin: terminalSettings.defaultRunAsAdmin,
+  });
 
   // 025 FR-019 — resolve a STRANDED observation during render, before the launch reads it.
   //

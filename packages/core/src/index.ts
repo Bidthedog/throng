@@ -524,6 +524,7 @@ export type {
   PanelTypeValues,
   ValidationResult,
   TerminalMemory,
+  TerminalPanelDefaults,
   FlavourOption,
   PanelTypeRegistry,
 } from './panel-type/index.js';
@@ -533,6 +534,7 @@ export {
   setPanelType,
   clearPanelType,
   setTerminalMemory,
+  setPanelDormant,
   convertPanelToProject,
   updatePanelConfig,
 } from './panel-type/index.js';
@@ -561,6 +563,12 @@ export {
   flavourReportsDirectory,
   BUILTIN_SHELL_INTEGRATION,
   readTerminalPanelConfig,
+  SHIPPED_TERMINAL_PANEL_DEFAULTS,
+  // 039 (#293) — what opening a project does to a terminal Panel.
+  terminalReloadAction,
+  startsTerminal,
+  changesDormancy,
+  type TerminalReloadAction,
   captureDecision,
   foregroundCommand,
   normaliseCommand,

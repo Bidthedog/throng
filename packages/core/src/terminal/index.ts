@@ -3,6 +3,7 @@ export {
   TERMINAL_KIND,
   terminalPanelType,
   readTerminalPanelConfig,
+  SHIPPED_TERMINAL_PANEL_DEFAULTS,
   type TerminalPanelConfig,
   type TerminalValues,
 } from './panel-type.js';
@@ -93,3 +94,9 @@ export {
 } from './wheel-decision.js';
 export { trackAltScreen } from './alt-screen.js';
 export { encodeModifiedKey, kittyReportsAllKeys, KITTY_REPORT_ALL_KEYS } from './kitty-keyboard.js';
+export {
+  terminalReloadAction,
+  startsTerminal,
+  changesDormancy,
+  type TerminalReloadAction,
+} from './reload-mode.js';
