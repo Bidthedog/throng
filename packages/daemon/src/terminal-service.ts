@@ -95,6 +95,12 @@ interface Session {
    */
   readonly shellImage: string;
   /**
+   * When this session's shell was spawned, epoch ms (#280). Command capture uses it to reject a
+   * candidate that started BEFORE the shell — which cannot be its child, and is the signature of
+   * a recycled pid still named by some unrelated process's stale `ParentProcessId`.
+   */
+  readonly shellStartedAt: number;
+  /**
    * Every attached view's measured dimensions, keyed by `viewId` (008 FR-009). The
    * daemon — the only component that observes every window — sizes the single PTY to
    * the minimum columns and rows across this set, so two different-sized windows can
@@ -273,7 +279,12 @@ export class TerminalService {
     } catch {
       return; // FR-019e: keep the last known value rather than clearing it.
     }
-    const command = foregroundCommand(session.handle.pid, children, session.shellImage);
+    const command = foregroundCommand(
+      session.handle.pid,
+      children,
+      session.shellImage,
+      session.shellStartedAt,
+    );
     if (this.lastCommand.get(session.panelId) === command) return;
     this.lastCommand.set(session.panelId, command);
     this.events.publishCommand(session.panelId, command);
@@ -461,6 +472,14 @@ export class TerminalService {
     const startCols = params.cols > 0 ? params.cols : 80;
     const startRows = params.rows > 0 ? params.rows : 24;
     let handle: PtyHandle;
+    /*
+     * Read BEFORE the spawn, deliberately (#280). This is the floor command capture compares
+     * candidate start times against, so it must not be LATER than the shell's own OS creation
+     * time — a value read after `start()` returns includes however long the spawn took, and a
+     * genuine early child could then fall below it and be discarded as an impostor. Read first
+     * and the floor is guaranteed no later than the shell, which is the safe direction to err.
+     */
+    const shellStartedAt = Date.now();
     try {
       handle = host.start({
         file: launch.file,
@@ -497,6 +516,7 @@ export class TerminalService {
       host,
       handle,
       shellImage: launch.file,
+      shellStartedAt,
       views: new Map([[viewId, { cols: params.cols, rows: params.rows }]]),
       grid: { cols: startCols, rows: startRows },
       scrollback: '',
