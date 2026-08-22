@@ -5,7 +5,7 @@
  * test (`settings-metadata.test.ts`) asserts every leaf except the internal
  * `version` marker has exactly one descriptor (FR-047). Pure; zero OS/DOM.
  */
-import { DEFAULT_APP_SETTINGS } from './app-settings.js';
+import { DEFAULT_APP_SETTINGS, TERMINAL_RELOAD_MODES } from './app-settings.js';
 import { LOG_LEVELS } from '../diagnostics/log-level.js';
 import {
   DISPLAY_MODES,
@@ -566,6 +566,45 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Shell integration',
     description:
       "Ask shells that cannot be observed from outside to report their working directory, so terminals reopen where you left them. PowerShell needs this: its `cd` never moves the process's real working directory. Installs a prompt function that defers to any prompt you already have — switch it off if it disagrees with a custom prompt.",
+    group: 'Terminal',
+    control: 'toggle',
+  },
+  {
+    // 039 FR-020 (#293). A `select` rather than a toggle so BOTH states are named (039 D-4): the
+    // dormant placeholder has to describe itself in the same words the preference uses, and
+    // "Reload terminals automatically: off" does not give it any.
+    key: 'terminals.reloadMode',
+    label: 'Reload terminals when a project opens',
+    description:
+      'Automatic reloads every terminal in every tab as soon as a project opens — today’s behaviour. Manual starts none of them: each terminal panel waits, showing a Reload action, so a project with many terminals costs nothing until you ask for the ones you want.',
+    group: 'Terminal',
+    control: 'select',
+    allowedValues: TERMINAL_RELOAD_MODES,
+  },
+  {
+    // 039 FR-001 (#223). These three seed the New Panel dialog for a FRESH terminal Panel. A Panel
+    // that remembers its own value still wins (FR-005); an ABSENT value now resolves to these
+    // rather than to a literal (FR-005a), which is what puts 025 FR-015 back in force.
+    key: 'terminals.defaultRememberCommand',
+    label: 'Remember the last running command by default',
+    description:
+      'Tick “Remember the last running command” on new terminal panels. When a terminal is closed while a command is running, that command is saved and runs again next time the panel opens — so this ships off, and a panel you switch it on for keeps its own setting.',
+    group: 'Terminal',
+    control: 'toggle',
+  },
+  {
+    key: 'terminals.defaultRememberDirectory',
+    label: 'Reopen in the last directory by default',
+    description:
+      'Tick “Reopen in the last directory” on new terminal panels, so a terminal comes back where you left it rather than at the project root. A remembered directory that has gone away falls back to the project root without complaint.',
+    group: 'Terminal',
+    control: 'toggle',
+  },
+  {
+    key: 'terminals.defaultRunAsAdmin',
+    label: 'Run as administrator by default',
+    description:
+      'Tick “Run as administrator” on new terminal panels. This only sets what the checkbox starts as — whether a terminal can be elevated at all still depends on throng itself running elevated, and turning this on never elevates anything on its own.',
     group: 'Terminal',
     control: 'toggle',
   },

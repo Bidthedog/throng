@@ -88,7 +88,42 @@ export interface TerminalSettings {
   /** 024 US7 (#159 follow-up): how long the pointer must rest on a terminal link before the
    *  "Ctrl+Click to open…" hover tip appears, in milliseconds. Default 500. */
   linkHoverDelayMs: number;
+  /**
+   * 039 FR-001/FR-002 (#223): seeds the New Panel dialog's "Remember the last running command"
+   * checkbox for a FRESH Panel, and resolves an ABSENT per-Panel value (FR-005a). A Panel that
+   * holds its own explicit value still wins (FR-005).
+   *
+   * Ships **OFF**, which RESTORES 025 FR-015 ("a per-Panel opt-in control … MUST default to off").
+   * The code had shipped absent-means-on since an undocumented change, which quietly removed the
+   * safeguard 025 FR-047a leans on when it permits a captured command to re-run with no prompt.
+   * What 039 supersedes is that code-level default, not FR-015 — see the 039 spec's Supersessions.
+   */
+  defaultRememberCommand: boolean;
+  /** 039 FR-001/FR-002 (#223): seeds "Reopen in the last directory". Ships **ON**, unchanged —
+   *  025 FR-027b really does say absent-means-on for the DIRECTORY, and a remembered directory
+   *  cannot execute anything, which is why it differs from the field above. */
+  defaultRememberDirectory: boolean;
+  /** 039 FR-001/FR-002 (#223): seeds "Run as administrator". Ships **OFF**. A seed only —
+   *  `canRunAsAdmin()` remains the sole elevation gate, so a preference of `true` never forces,
+   *  implies or grants elevation (FR-008). */
+  defaultRunAsAdmin: boolean;
+  /**
+   * 039 FR-020 (#293): whether opening a project reloads its terminals.
+   *
+   * `'automatic'` is today's behaviour and the shipped default — every terminal in every tab
+   * reloads at once. `'manual'` starts none of them; each panel shows a dormant placeholder with a
+   * Reload action (FR-023). Dormancy is a designed STATE, not a failure, and never reaches the
+   * notice surfaces (FR-029).
+   */
+  reloadMode: TerminalReloadMode;
 }
+
+/** 039 FR-020 (#293). A closed set, rendered as a `select` so both states are named (039 D-4). */
+export type TerminalReloadMode = 'automatic' | 'manual';
+
+/** The values `terminals.reloadMode` accepts, shared by the parser and the descriptor so the two
+ *  cannot drift. */
+export const TERMINAL_RELOAD_MODES: readonly TerminalReloadMode[] = ['automatic', 'manual'];
 
 /** File-tree click that opens a file into the last active editor (006, FR-009). */
 export type EditorOpenOnClick = 'single' | 'double' | 'none';
@@ -409,6 +444,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     shellIntegration: true,
     showStatusBar: true,
     linkHoverDelayMs: 500,
+    // 039 FR-002. OFF restores 025 FR-015; ON for the directory is 025 FR-027b and is unchanged.
+    defaultRememberCommand: false,
+    defaultRememberDirectory: true,
+    defaultRunAsAdmin: false,
+    // 039 FR-021: the default is exactly what throng does today, so this setting is a no-op until
+    // a user goes looking for it.
+    reloadMode: 'automatic',
   },
   editor: {
     openOnClick: 'single',
@@ -663,6 +705,24 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
   const showStatusBar =
     typeof v.showStatusBar === 'boolean' ? v.showStatusBar : fallback.showStatusBar;
   const linkHoverDelayMs = wholeNumber(v.linkHoverDelayMs, fallback.linkHoverDelayMs);
+  // 039 FR-002. Per-field fallback, like every setting above: a config that sets one of these must
+  // not reset the other three by omission.
+  const defaultRememberCommand =
+    typeof v.defaultRememberCommand === 'boolean'
+      ? v.defaultRememberCommand
+      : fallback.defaultRememberCommand;
+  const defaultRememberDirectory =
+    typeof v.defaultRememberDirectory === 'boolean'
+      ? v.defaultRememberDirectory
+      : fallback.defaultRememberDirectory;
+  const defaultRunAsAdmin =
+    typeof v.defaultRunAsAdmin === 'boolean' ? v.defaultRunAsAdmin : fallback.defaultRunAsAdmin;
+  // A value outside the closed set falls back rather than throwing, which is this parser's contract
+  // everywhere else. Checked against TERMINAL_RELOAD_MODES so the parser and the descriptor cannot
+  // disagree about what is accepted.
+  const reloadMode = TERMINAL_RELOAD_MODES.includes(v.reloadMode as TerminalReloadMode)
+    ? (v.reloadMode as TerminalReloadMode)
+    : fallback.reloadMode;
   return {
     flavours,
     disabledBuiltins,
@@ -672,6 +732,10 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
     shellIntegration,
     showStatusBar,
     linkHoverDelayMs,
+    defaultRememberCommand,
+    defaultRememberDirectory,
+    defaultRunAsAdmin,
+    reloadMode,
   };
 }
 
@@ -691,6 +755,12 @@ function cloneTerminals(t: TerminalSettings): TerminalSettings {
     shellIntegration: t.shellIntegration,
     showStatusBar: t.showStatusBar,
     linkHoverDelayMs: t.linkHoverDelayMs,
+    // 039 FR-002. A field missing HERE is silently dropped on a settings write (032), which no
+    // assertion about parsing would catch — hence the dedicated test.
+    defaultRememberCommand: t.defaultRememberCommand,
+    defaultRememberDirectory: t.defaultRememberDirectory,
+    defaultRunAsAdmin: t.defaultRunAsAdmin,
+    reloadMode: t.reloadMode,
   };
 }
 
