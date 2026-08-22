@@ -569,6 +569,11 @@ export {
   startsTerminal,
   changesDormancy,
   applyReloadMode,
+  // 039 US3 (#237) — terminals reconnect when their working directory returns.
+  shouldWatchForRecovery,
+  watchTargetFor,
+  reconnectsReleasedBy,
+  type PendingReconnect,
   type TerminalReloadAction,
   captureDecision,
   foregroundCommand,
