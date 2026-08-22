@@ -69,6 +69,84 @@ async function closeNewest(app: ElectronApplication): Promise<void> {
     })
     .catch(() => {});
   await expect.poll(() => app.windows().length, { timeout: 10_000 }).toBeLessThan(before);
+  /*
+   * ══ WHAT #286 IS NOT, MEASURED RATHER THAN ARGUED ══
+   *
+   * The obvious theory for #286 is that this wait returns too early: `app.windows()` is the
+   * DEBUGGER's view, so it drops when the target detaches, while Electron finishes tearing the
+   * `BrowserWindow` down afterwards — leaving a gap for the next click to land in. A wait on the
+   * main process's `BrowserWindow.getAllWindows()` was written on that basis.
+   *
+   * It is wrong, and a probe says so. Destroying the preferences window and sampling both counts:
+   *
+   *     debugger dropped at 32ms, main dropped at 30ms  →  gap = -2ms
+   *
+   * The main process releases the window FIRST. This poll is already the later of the two signals,
+   * so waiting on `getAllWindows()` as well would be satisfied before this line even returns and
+   * cannot fix anything. The extra wait was removed rather than left in looking prudent.
+   *
+   * Sampling resolution is one `app.evaluate` round trip (~15-30ms) and main had already dropped by
+   * the first sample, so the -2ms figure is not meaningful. The DIRECTION is what survives: the main
+   * process is not the laggard, so "teardown is still in flight when this returns" is not the
+   * mechanism. Recorded here so the next person does not spend the same afternoon on it.
+   */
+}
+
+/**
+ * Open a child window by doing `trigger`, and wait for it by POLLING rather than on an event.
+ *
+ * `app.waitForEvent('window')` is armed around the click and catches the event only if it fires
+ * while the listener is attached — so a window created outside that span is missed and the wait runs
+ * out its whole budget with no diagnosis beyond "Timeout … waiting for event". Polling the window
+ * list asks the question the test actually means (is there a new window?), and it cannot miss a
+ * transition it was not listening for.
+ *
+ * ══ HOW MUCH THIS IS CLAIMED TO FIX, WHICH IS LESS THAN IT LOOKS ══
+ *
+ * This is a genuine fragility and the failure it produces is exactly #286's signature — a 30s wait
+ * ending in an undiagnosable event timeout. It has NOT been shown to be #286's cause, and TWO
+ * candidate mechanisms were measured and refuted rather than argued away:
+ *
+ *   1. MAIN-PROCESS TEARDOWN LAG — that `closeNewest` returned while Electron was still tearing the
+ *      previous window down. Refuted: the main process releases a destroyed window BEFORE
+ *      Playwright's view does (main 30ms, debugger 32ms), so that wait was already the later of the
+ *      two signals. See `closeNewest`.
+ *
+ *   2. THE WINDOW ALREADY EXISTED — that the reload before this step RESTORES the persisted
+ *      sub-workspace window, so it is present before any listener attaches, the click merely focuses
+ *      it, and no creation event ever fires. This one predicted every symptom, which is what made it
+ *      worth testing. Refuted too, and cleanly: measured immediately before and after the click,
+ *
+ *          BEFORE click: debugger=1 main=1
+ *          AFTER  click: debugger=2 main=2, new window seen after 106ms
+ *
+ *      No window is restored, the click creates it, and Playwright observes it in 106ms.
+ *
+ * (An earlier run of that same probe reported `main=2 debugger=1` — the window existing while
+ * Playwright could not see it — which would have confirmed mechanism 2 outright. It was an artefact:
+ * the probe's wait loop was a synchronous spin over `app.windows()`, which starves the event loop
+ * that delivers the CDP window event. The corrected loop, which awaits a timer, gives the numbers
+ * above. Recorded because the false result was far more convincing than the true one.)
+ *
+ * So this change stands only on its own merits — an evented wait that can miss its event is worse
+ * than a retrying one that cannot — and #286 stays OPEN. What the next person inherits is a narrowed
+ * search: it is not teardown lag and it is not a pre-existing window.
+ */
+async function openChildWindow(
+  app: ElectronApplication,
+  trigger: () => Promise<void>,
+): Promise<Page> {
+  const before = new Set(app.windows());
+  await trigger();
+  await expect
+    .poll(() => app.windows().filter((w) => !before.has(w)).length, {
+      timeout: NEW_WINDOW_TIMEOUT_MS,
+      message: 'no new window was created',
+    })
+    .toBeGreaterThan(0);
+  const opened = app.windows().find((w) => !before.has(w));
+  if (!opened) throw new Error('a new window was counted but could not be identified');
+  return opened;
 }
 
 /**
@@ -133,10 +211,7 @@ test('every window kind follows the saved LIGHT theme — no dark canvas flash (
 
         // ABOUT window (a fresh app-modal BrowserWindow): same three invariants on cold open.
         await win.getByTestId('title-bar-cog').click();
-        const [about] = await Promise.all([
-          app.waitForEvent('window', { timeout: NEW_WINDOW_TIMEOUT_MS }),
-          win.getByTestId('cog-menu-about').click(),
-        ]);
+        const about = await openChildWindow(app, () => win.getByTestId('cog-menu-about').click());
         // Bound every child-window readiness wait (issue #75). A bare waitForLoadState defaults to
         // the whole test timeout, so a child window that opens but stalls before domcontentloaded
         // hung the full 30s as an unnamed timeout — the exact non-diagnosable shape run 29909576080
@@ -150,10 +225,7 @@ test('every window kind follows the saved LIGHT theme — no dark canvas flash (
 
         // PREFERENCES window.
         await win.getByTestId('title-bar-cog').click();
-        const [prefs] = await Promise.all([
-          app.waitForEvent('window', { timeout: NEW_WINDOW_TIMEOUT_MS }),
-          win.getByTestId('cog-menu-themes').click(),
-        ]);
+        const prefs = await openChildWindow(app, () => win.getByTestId('cog-menu-themes').click());
         await prefs.waitForLoadState('domcontentloaded', { timeout: 15_000 });
         await expect(prefs.getByTestId('themes-tab')).toBeVisible();
         expect(await colorScheme(prefs)).toBe('light');
@@ -164,10 +236,10 @@ test('every window kind follows the saved LIGHT theme — no dark canvas flash (
         await win.evaluate(seedSub);
         await reloadWindow(win);
         await expect(win.getByTestId('subworkspace-name-sw1')).toHaveText('Detached A');
-        const [child] = await Promise.all([
-          app.waitForEvent('window', { timeout: NEW_WINDOW_TIMEOUT_MS }),
+        // Polled, not evented — this is the open #286 was about; see `openChildWindow`.
+        const child = await openChildWindow(app, () =>
           win.getByTestId('subworkspace-open-sw1').click(),
-        ]);
+        );
         await child.waitForLoadState('domcontentloaded', { timeout: 15_000 });
         await child.waitForSelector('.throng-shell', { timeout: 8000 });
         expect(await colorScheme(child)).toBe('light');
