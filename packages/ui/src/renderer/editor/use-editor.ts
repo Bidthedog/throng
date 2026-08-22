@@ -1274,7 +1274,12 @@ export function useEditor(params: UseEditorParams): void {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
       unregisterPanelFocus(panelId);
       unregisterPanelSearch(panelId);
-      removePanelLanguage(panelId);
+      // NB: the panel's LANGUAGE is not removed here (#295). A language the user picked is their
+      // decision, not a property of this view — and in a rootless panel it is not persisted
+      // either (`language-override.ts` skips the write with no projectId/relPath to key a row
+      // against), so dropping it on unmount destroyed the only copy and the document silently
+      // reverted to whatever its filename implied. Removed in `disposeEditor` instead, with the
+      // rest of the explicit teardown.
       unregisterEditorView(panelId);
       replicaRef.current = null;
       view.destroy();
@@ -1290,6 +1295,9 @@ export function useEditor(params: UseEditorParams): void {
 export function disposeEditor(panelId: string): void {
   removeEditorState(panelId);
   unregisterEditorActions(panelId);
+  // The panel is gone, so the language chosen for it goes too — otherwise a recycled panel id
+  // would inherit a dead document's language (#295: moved here from the unmount cleanup).
+  removePanelLanguage(panelId);
   // The document is gone — don't leak its saved caret (issue 144).
   clearEditorViewState(panelId);
   win()?.editor?.destroy(panelId);
