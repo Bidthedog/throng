@@ -436,10 +436,14 @@ treat 2.1 minutes as a floor rather than a prediction — but the headroom again
 ceiling is large enough that the conclusion survives the difference.
 
 Two honest caveats on that run, because a figure without them is the kind this section exists to
-stop. The serial tier excluded ONE test — `editor-missing-aggregate.e2e.ts:155`, which
-`origin/master` is also red on (CI run 31956697834, 2026-08-16), so it is not 034's and its ~36
-seconds × 3 retries are not in the total. And 802 of 804 declarations ran; the remainder are
-elevation-guarded skips.
+stop. The serial tier excluded ONE test — `editor-missing-aggregate.e2e.ts` (declared at :221; the
+line was cited as 155 before 035's migration moved it), which `origin/master` was also red on (CI
+run 31956697834, 2026-08-16), so it was not 034's and its ~36 seconds × 3 retries are not in the
+total. And 802 of 804 declarations ran; the remainder are elevation-guarded skips.
+
+That exclusion no longer applies: #277 is fixed, the test is un-quarantined, and it now passes in
+about six seconds — so a serial tier measured today runs it. The figures above are left as measured
+rather than re-stated, because they are a record of that run.
 
 **Against the pre-fix baseline that is 46.9 → 21.2 minutes, a 55% cut** — 28.4 at the previous
 measurement, so a further 25% came out of the final pass alone. The parallel tier fell
