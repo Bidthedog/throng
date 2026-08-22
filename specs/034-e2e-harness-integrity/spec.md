@@ -1209,8 +1209,10 @@ Every percentage below reduces from [baseline.md](./baseline.md), measured on `o
   `subworkspace-sync` said six in a file of five). They are recorded because a control count is part
   of the claim, and an unchecked one is the same failure as an unchecked citation.*
 
-  *The two count clauses are SC-026’s, and carry its bounded exception: elevation-skipped unchanged,
-  quarantined 1 → 2 for a defect provably not this feature’s.*
+  *The two count clauses are SC-026’s, and carried its bounded exception: elevation-skipped
+  unchanged, quarantined 1 → 2 for a defect provably not this feature’s. **That exception is
+  discharged as of 2026-08-22** — #277 is fixed, `editor-missing-aggregate.e2e.ts` is
+  un-quarantined, and the quarantined count is back to 1. See SC-026 below for the full record.*
 
   *One deletion was **overturned** on evidence rather than completed, which is the clause working
   rather than a lapse: the recorded plan had `alt-echo.mjs` down as a duplicate fixture, and it
@@ -1325,6 +1327,26 @@ Every percentage below reduces from [baseline.md](./baseline.md), measured on `o
   only change to that file is its tags. The exception is bounded — it names one test, one issue and
   one piece of evidence, and it lapses when #277 closes. Had the count risen for a test 034 broke,
   the answer would have been to fix 034.*
+
+  ***EXCEPTION DISCHARGED 2026-08-22.*** *#277 is fixed and `editor-missing-aggregate.e2e.ts` is
+  un-quarantined, so the quarantined count returns to **one** (`terminal-altscreen-parity.e2e.ts`,
+  the pre-existing one) and SC-026 is met with no exception outstanding. The grant above is left
+  standing deliberately: that it was asked for, bounded and justified is part of this feature's
+  record, and deleting it would leave the next reader unable to tell a discharged exception from one
+  that was never needed.*
+
+  *Two citation corrections, because a stale line number is how the wrong requirement gets read —
+  and this one test has now been cited at four different lines. The exception above says `:183`; the
+  issue said `:155`; after 035's migration the declaration is **:221** and the failing assertion was
+  **:319**. `docs/testing.md` carried the same stale `155` and is corrected in the same change.*
+
+  *What #277 turned out to be is worth recording here too, since this criterion is the reason it
+  stayed visible: not the missing cause key its issue body assumed — that was the original 030 defect
+  and was already fixed — but that the consolidated notice was never RAISED at all. A panel restored
+  from a persisted layout never attempts a load of its own, so `fileMissing` stayed false while the
+  authority's verdict landed on `unloadable`, and the tab-open scan read only the first. The
+  quarantine held the coverage gap open long enough for that to be found rather than forgotten,
+  which is the outcome the criterion is for.*
 
   ***VERDICT: MET, with the bounded exception recorded above.*** *Restated here because the
   paragraph above records the exception without ever stating the outcome, and a criterion whose
