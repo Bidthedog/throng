@@ -239,7 +239,15 @@ test('the empty-panel form pre-fills from what the panel remembered (FR-007a)', 
     await expect(form).toBeVisible({ timeout: 30_000 });
     await form.selectOption('terminal');
 
-    // Pre-filled from memory rather than reset to defaults.
+    /*
+     * Pre-filled from memory rather than reset to defaults.
+     *
+     * 039 (#223) made this assertion strictly stronger without touching it. The shipped preference
+     * for command memory is now OFF, and this Panel explicitly checked the box before confirming —
+     * so a ticked box here can ONLY have come from what the Panel remembered, and it is now a direct
+     * test of FR-005 ("what the Panel remembered wins over the preference"). Before, the preference
+     * and the memory agreed and the assertion could not tell them apart.
+     */
     await expect(win.getByTestId('terminal-startup-command')).toHaveValue('echo PREFILL_MARKER');
     await expect(win.getByTestId('terminal-remember-command')).toBeChecked();
   });
