@@ -10,11 +10,25 @@ red before the implementation is written.
 this feature is settings resolution and is a unit test; the placeholder is a component test; only
 what genuinely needs a window and a real shell reaches E2E.
 
+
+## Status (updated as work lands)
+
+**Verified green** — Phase 1, Phase 2 and Phase 3. `npm run typecheck` clean; `vitest --project unit`
+305 files / 2914 tests; `vitest --project component` 76 files / 841 tests. **#223 is complete.**
+
+**Written, NOT yet verified** — Phase 4 (#293) in full, and the pure half of Phase 5 (#237).
+Committed deliberately under a machine-wide hold on test/lint/typecheck/build commands while
+another session's full gate runs. Nothing in `0fe9757a` or later has been compiled or run. The
+ticks below stop where the evidence stops.
+
+**Not started** — T036 (the one E2E #293 earns), T044/T045/T047/T048, and Phase 5's renderer and
+main-process wiring (T050–T054). Phase 6 untouched.
+
 ---
 
 ## Phase 1: Setup
 
-- [ ] **T001** Confirm the worktree typechecks and the unit layer is green before adding anything, so
+- [x] **T001** Confirm the worktree typechecks and the unit layer is green before adding anything, so
       any red from here is ours. `npm run typecheck && npm run test:unit`. Requires the test baton.
 
 ---
@@ -24,18 +38,18 @@ what genuinely needs a window and a real shell reaches E2E.
 All four settings land in one pass across five touchpoints. Every story depends on this phase; doing
 it per story would edit `app-settings.ts` three times and conflict with itself.
 
-- [ ] **T010** Unit (Red): `DEFAULTS.terminals` exposes `defaultRememberCommand: false`,
+- [x] **T010** Unit (Red): `DEFAULTS.terminals` exposes `defaultRememberCommand: false`,
       `defaultRememberDirectory: true`, `defaultRunAsAdmin: false`, `reloadMode: 'automatic'`.
       → `packages/core/tests/unit/app-settings.test.ts`
-- [ ] **T011** Unit (Red): `terminalSettings()` falls back **per field** — a config supplying only
+- [x] **T011** Unit (Red): `terminalSettings()` falls back **per field** — a config supplying only
       `reloadMode` keeps the other three at their shipped values; a bad type falls back rather than
       throwing.
-- [ ] **T012** Unit (Red): `cloneTerminals()` copies all four. *(A field missing here is dropped on a
+- [x] **T012** Unit (Red): `cloneTerminals()` copies all four. *(A field missing here is dropped on a
       settings write — spec 032's territory.)*
-- [ ] **T013** [P] Unit (Red): each of the four has a descriptor in `settings-metadata.ts` under
+- [x] **T013** [P] Unit (Red): each of the four has a descriptor in `settings-metadata.ts` under
       `group: 'Terminal'`, with a label and a non-empty description; the FR-047 completeness test
       still passes.
-- [ ] **T014** Implement T010–T013: `TerminalSettings` (`app-settings.ts:61`), `DEFAULTS.terminals`
+- [x] **T014** Implement T010–T013: `TerminalSettings` (`app-settings.ts:61`), `DEFAULTS.terminals`
       (`:~409`), `terminalSettings()` (`:622`), `cloneTerminals()` (`:678`), and four descriptors in
       `settings-metadata.ts` (`:558+`). Green T010–T013.
 - [x] **T015** ~~Resolve OQ-2~~ — **decided (spec D-4)**: `reloadMode` is
@@ -54,37 +68,37 @@ preference; 025 FR-015's safeguard is real again.
 
 ### Tests (Red first)
 
-- [ ] **T020** Unit (Red): `readTerminalPanelConfig(raw, defaults)` resolves an **absent**
+- [x] **T020** Unit (Red): `readTerminalPanelConfig(raw, defaults)` resolves an **absent**
       `rememberCommand` to `defaults.defaultRememberCommand` — **not** to `true`. Explicit `true` and
       explicit `false` are both unchanged. (FR-005a, D-2)
       → `packages/core/tests/unit/terminal-memory.test.ts`
-- [ ] **T021** Unit (Red): the same for `rememberDirectory` and `runAsAdmin` — resolution changes,
+- [x] **T021** Unit (Red): the same for `rememberDirectory` and `runAsAdmin` — resolution changes,
       observable behaviour does not, because their shipped defaults match today's literals.
-- [ ] **T022** Unit (Red): **the FR-047a safeguard is in force.** On a clean config, a fresh terminal
+- [x] **T022** Unit (Red): **the FR-047a safeguard is in force.** On a clean config, a fresh terminal
       Panel with no memory resolves `rememberCommand` to `false`. 025 FR-047a permits a captured
       command to re-run with no prompt *only* while FR-015 is real, so this asserts the safeguard
       rather than trusting the requirement. **Explicitly requested; do not fold into T020.**
-- [ ] **T023** Unit (Red): `terminalPanelType.defaults(ctx)` seeds the three form values from the
+- [x] **T023** Unit (Red): `terminalPanelType.defaults(ctx)` seeds the three form values from the
       preferences when `ctx.terminalMemory` is absent, and from the memory when it is present
       (FR-005, 025 FR-007a unchanged).
       → `packages/core/tests/unit/panel-type-descriptor.test.ts`
-- [ ] **T024** [P] Unit (Red): the seeds are identical for every flavour — no per-flavour path
+- [x] **T024** [P] Unit (Red): the seeds are identical for every flavour — no per-flavour path
       (FR-003).
-- [ ] **T025** [P] Component (Red): with the daemon unelevated and `defaultRunAsAdmin: true`, the New
+- [x] **T025** [P] Component (Red): with the daemon unelevated and `defaultRunAsAdmin: true`, the New
       Panel admin control is still **disabled** (FR-008).
       → `packages/ui/tests/component/terminal-panel-type-inputs.test.ts`
 
 ### Implementation
 
-- [ ] **T026** Change `readTerminalPanelConfig(raw)` → `readTerminalPanelConfig(raw, defaults)` and
+- [x] **T026** Change `readTerminalPanelConfig(raw)` → `readTerminalPanelConfig(raw, defaults)` and
       resolve absent values against the preferences. Update every call site to pass the settings.
-- [ ] **T027** `terminalPanelType.defaults()` reads the preferences instead of the literals
+- [x] **T027** `terminalPanelType.defaults()` reads the preferences instead of the literals
       `'true'` / `'true'` / `'false'` (`panel-type.ts:139-143`).
-- [ ] **T028** **Update the tests that pin the old default**, in the same commit as the supersession
+- [x] **T028** **Update the tests that pin the old default**, in the same commit as the supersession
       and citing it: `terminal-memory.test.ts:152`, `panel-type-descriptor.test.ts` (44, 55, 111, 119),
       `panel-type-form.test.ts` (46, 63, 89). These are the record of the behaviour being changed, not
       collateral.
-- [ ] **T029** Delete the stale citation at `panel-type.ts:83` / `:139` — `parseTerminalConfig` does
+- [x] **T029** Delete the stale citation at `panel-type.ts:83` / `:139` — `parseTerminalConfig` does
       not exist. Replace with the real reason and a pointer to 039 FR-005a. (Spec *Supersessions*, and
       it is half of #307.)
 

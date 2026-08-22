@@ -101,3 +101,9 @@ export {
   applyReloadMode,
   type TerminalReloadAction,
 } from './reload-mode.js';
+export {
+  shouldWatchForRecovery,
+  watchTargetFor,
+  reconnectsReleasedBy,
+  type PendingReconnect,
+} from './reconnect.js';

@@ -27,8 +27,10 @@ life.
 
 - **Before it exists** (#223) — the New Panel dialog's three checkboxes start from values baked into
   the panel-type descriptor, so a user who always wants the opposite re-ticks the same box forever.
-- **When a project opens** (#293) — every terminal in every tab reloads at once, and there is no way
-  to say "bring these back when I ask for them".
+- **When a project opens** (#293) — every terminal in the tab that opens starts at once, and every
+  terminal in another tab starts the moment that tab is first shown. There is no way to say "bring
+  these back when I ask for them". *(#293 says "every tab, all at once"; that is not what happens —
+  see Finding 4.)*
 - **After it has failed** (#237) — a terminal whose working directory went missing stays failed until
   the user finds every one of them and clicks ↻, while the editors beside it heal themselves.
 
@@ -121,6 +123,70 @@ subsystem produce a merge nobody can review. It is filed as a follow-up (see *Fo
 cross-referenced to #272, which is the same consolidation for the explorer and file-index watches and
 is where this eventually belongs.
 
+### Finding 3 — "tabs never rendered in this session" describes something that cannot happen
+
+#237's hardest-looking acceptance criterion required recovery *"across every tab in the project,
+including tabs that have never been rendered in this session"*. It was the criterion the whole watch
+design was argued from — it is why a push mechanism is needed rather than the editors' mount-time
+pull.
+
+**Only the active tab's panels are mounted.** `packages/ui/src/renderer/workspace/tab-group.tsx:1538`:
+
+```tsx
+{activeTab ? <SplitTree node={activeTab.root} tabId={activeTab.id} path={[]} /> : null}
+```
+
+This is known and documented elsewhere in the repository, in a comment about the same class of
+problem — `packages/ui/src/renderer/editor/moved-path-sync.tsx:16`:
+
+> only the ACTIVE tab's `SplitTree` is mounted (`tab-group.tsx`). So a panel sitting in a background
+> tab has already run `offSync()` and never hears `movedTo` at all … **A per-panel listener is
+> STRUCTURALLY INCAPABLE of covering FR-008.**
+
+So a terminal in a never-rendered tab **never started**, and therefore **never failed**. There is no
+failed state to recover, no banner, and nothing waiting. When the user first opens that tab the panel
+mounts and starts — and if the path is back by then, it simply works. The same is true of a tab
+switched away from and back to: unmounting and remounting *is* a retry.
+
+The criterion is therefore satisfied **vacuously but genuinely**, and the feature is smaller than the
+issue implied. The only case that needs a watch is the one that mattered most anyway: the tab is on
+screen and the user is looking at a failed terminal that would otherwise sit there until clicked.
+
+FR-032 is restated to say that, rather than leaving a clause that sends the next reader hunting for
+cross-tab machinery that does not exist. The alternative reading — that a path event should *start*
+terminals in tabs the user is not looking at — is a different and much larger feature, and it
+contradicts #293's premise two stories up this same spec, which is that shells should not be spent on
+panels nobody is going to look at.
+
+### Finding 4 — #293's own problem statement is overstated, in the same way
+
+Finding 3 has a knock-on that reaches back up this spec. #293 says:
+
+> When a project is opened, **every** terminal in it reloads — every tab, every panel, all at once …
+> reloading the rest spends startup time, shells and CPU on panels nobody is going to look at.
+
+By the same structural fact, that is not what happens. Only the active tab's panels mount, so only
+its terminals start with the project. Terminals in other tabs start **when the user first opens that
+tab** — later, one tab at a time, and never at all for a tab they do not visit.
+
+**The feature is still worth having, and the control is still the right one** — a tab holding six
+split terminals is a real cost paid in one go, and it is paid again on every project switch. But the
+saving is differently shaped than the issue claims, and it is worth being exact about where it comes
+from:
+
+| | Today | Manual mode |
+|---|---|---|
+| Opening a project | the opening tab's terminals start | none start |
+| First opening another tab | its terminals start | none start; each shows a Reload |
+| A tab never visited | nothing starts | nothing starts *(no saving here — there was never a cost)* |
+
+So Manual saves shells **at tab-open time** as much as at project-open time. `applyReloadMode` marks
+every terminal in every tab dormant precisely because of this: the flag is persisted, so a tab opened
+an hour later still honours the decision rather than starting because nobody was there to mark it.
+
+Recorded because the user filed #293 believing terminals in every tab were burning shells on project
+open. They are not, and they should know that before they read the PR rather than after.
+
 ---
 
 ## User Scenarios & Testing *(mandatory)*
@@ -164,7 +230,9 @@ behaviour or recovery.
 
 ### User Story 2 - Twenty terminals, and I reload the two I need (Priority: P2)
 
-A user opens a project with twenty terminals across six tabs. Today all twenty shells start at once.
+A user opens a project with twenty terminals across six tabs. Today the tab that opens starts its
+terminals immediately, and each other tab starts its own the moment the user first clicks it — so by
+mid-morning all twenty are running, none of them asked for.
 With the reload preference set to **Manual**, none of them start: each terminal panel shows a dormant
 placeholder naming the panel and offering **Reload**. The user reloads the two they came for, works,
 and leaves the other eighteen dormant — no shells, no CPU, no startup wait.
@@ -219,8 +287,11 @@ per-panel notice.
    **When** that path exists again, **Then** the terminal starts by itself, with no user action.
 2. **Given** such a recovery, **When** the terminal comes up, **Then** it is in the directory it was
    configured for — not a fallback root.
-3. **Given** four affected terminals across two tabs, **When** the path returns, **Then** all four
-   recover, **including those in tabs that have never been rendered in this session**.
+3. **Given** affected terminals in the tab on screen, **When** the path returns, **Then** they all
+   recover together, with no user action.
+3a. **Given** terminals in a tab **not** on screen, **When** the path returns and the user later
+   opens that tab, **Then** its terminals start normally — they never failed, because they never
+   started (Finding 3). No terminal in the project is left broken either way.
 4. **Given** several terminals recovering at once, **When** they succeed, **Then** **no** per-panel
    notice is raised.
 5. **Given** a recovered terminal, **When** it starts, **Then** it uses the Panel's remembered type
@@ -302,9 +373,14 @@ per-panel notice.
 
 - **FR-020**: One global setting MUST exist in the **Terminal** preferences group offering
   **Automatic** and **Manual**, shipping as **Automatic**.
-- **FR-021**: With **Automatic**, opening a project MUST reload every terminal exactly as it does
-  today. This is a no-op path and MUST be observably identical.
-- **FR-022**: With **Manual**, opening a project MUST start **no** terminal.
+- **FR-021**: With **Automatic**, terminals MUST start exactly as they do today — the opening tab's
+  with the project, every other tab's when that tab is first shown (Finding 4). This is a no-op path
+  and MUST be observably identical, **including in the workspace file**: no dormancy is written, so
+  nothing is saved that would not have been saved today.
+- **FR-022**: With **Manual**, **no** terminal MUST start — not when the project opens, and not when
+  a tab is first shown either. Dormancy is decided for every tab when the layout loads and is
+  persisted, so a tab opened an hour later still honours it rather than starting because nothing was
+  there to mark it.
 - **FR-023**: A terminal that has not been reloaded MUST present a **dormant placeholder** that names
   the panel and offers a **Reload** action on the panel itself.
 - **FR-024**: The reload action MUST also be reachable from a **menu item** — the repository's rule
@@ -341,8 +417,20 @@ per-panel notice.
   subscribing to a shared signal, because no shared signal exists.)*
 - **FR-031**: A recovered terminal MUST start in the directory it was configured for, subject to the
   existing fallback rule (025 FR-030).
-- **FR-032**: Every affected terminal in the project MUST recover, across every tab, including tabs
-  never rendered in this session.
+- **FR-032**: Every terminal in the project MUST come back without user action once the path returns.
+  Concretely, and stated this way because the original wording asked for something that cannot
+  happen:
+  - a terminal in the tab **on screen** that failed on an unresolvable working directory reconnects
+    when the path returns;
+  - a terminal in a tab **not on screen** never started, so it starts normally when that tab is
+    first opened.
+
+  **Neither case leaves a broken terminal behind, which is the whole of what #237 asks for.**
+
+  *Rewritten from "across every tab, including tabs never rendered in this session" — see Finding 3.
+  That clause reads as a requirement for cross-tab recovery infrastructure, and building against it
+  would mean eagerly starting shells in tabs the user is not looking at, which contradicts #293's
+  entire premise two stories up this same spec.*
 - **FR-033**: Recovery MUST NOT raise a notice per recovered panel.
 - **FR-034**: Recovery MUST reuse the Panel's remembered type and configuration (029 FR-004a / #204).
 - **FR-035**: A start that failed for a reason **unrelated** to the path MUST NOT arm a watch and
@@ -391,8 +479,9 @@ per-panel notice.
 
 - **SC-001**: On a clean config, Preferences → Terminal shows the four new controls, and the three
   #223 toggles read off / on / off.
-- **SC-002**: With Automatic selected, opening a project with N terminals starts N shells — byte-for-byte
-  today's behaviour, with no test in the existing suite changing its expectations.
+- **SC-002**: With Automatic selected, behaviour is byte-for-byte today's — the opening tab's
+  terminals start with the project, each other tab's start when that tab is first shown, and no test
+  in the existing suite changes its expectations.
 - **SC-003**: With Manual selected, opening a project with N terminals starts **zero** shells and
   zero `conhost` processes, and presents N dormant placeholders.
 - **SC-004**: A user can open a project with twenty terminals, reload two, and leave eighteen
