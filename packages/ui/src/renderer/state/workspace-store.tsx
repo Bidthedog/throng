@@ -37,6 +37,8 @@ import {
   clearPanelType as opClearPanelType,
   setTerminalMemory as opSetTerminalMemory,
   setPanelDormant as opSetPanelDormant,
+  // 039 (#293) — decides every terminal Panel's reload state when a project's layout loads.
+  applyReloadMode,
   updatePanelConfig as opUpdatePanelConfig,
   type Edge,
   type PanelConfig,
@@ -142,6 +144,21 @@ export function WorkspaceProvider({
 }): ReactElement {
   const [layout, setLayout] = useState<WorkspaceLayout | null>(null);
   const [loading, setLoading] = useState(false);
+  /*
+   * 039 FR-029a (#293) — the reload mode, held in a REF rather than read as a dependency.
+   *
+   * A ref is the requirement, not an optimisation. FR-029a says a change to this preference takes
+   * effect "on the next project open, without a restart" — so the load effect must NOT re-run when
+   * the setting changes. Putting `reloadMode` in that effect's dependency array would reload the
+   * project the instant a user touched the setting, which is both surprising and a way to start
+   * twenty shells from a Preferences window.
+   *
+   * `ConfigProvider` wraps `App`, and `App` renders this provider, so the settings are reachable
+   * here.
+   */
+  const reloadMode = useAppSettings().terminals.reloadMode;
+  const reloadModeRef = useRef(reloadMode);
+  reloadModeRef.current = reloadMode;
   const [restoreFailed, setRestoreFailed] = useState(false);
   const [lastAddedPanelId, setLastAddedPanelId] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -252,7 +269,24 @@ export function WorkspaceProvider({
       .load(activeProjectId)
       .then((result) => {
         if (cancelled) return;
-        setLayout(result.layout);
+        /*
+         * 039 FR-022/FR-028/FR-029a/FR-032 (#293) — decide every terminal Panel's reload state HERE.
+         *
+         * This effect is already documented above as "the one place every project open passes
+         * through" — sidebar click, createProject, and the restore that happens on launch with no
+         * user involved. That is exactly the property the reload mode needs: dormancy is decided
+         * when a project's layout LOADS, across every tab, including tabs never rendered in this
+         * session (FR-032). Deciding it per panel at render time would make dormancy depend on what
+         * the user happened to click.
+         *
+         * `applyReloadMode` returns its INPUT unchanged when nothing transitions — which is every
+         * install today, since Automatic is the shipped default and no Panel has ever been dormant.
+         * The identity check below is therefore what keeps FR-021's "no observable change" true of
+         * the workspace FILE and not merely the screen: no transition, no save queued, no rewrite.
+         */
+        const withReload = applyReloadMode(result.layout, reloadModeRef.current);
+        setLayout(withReload);
+        if (withReload !== result.layout) scheduleSave(withReload);
         setRestoreFailed(result.restored === false && result.reason === 'corrupt');
         // A layout that was not restored was SYNTHESISED by the repository just now — a default
         // whose panel ids were generated on the spot. Persist it immediately, because until it is

@@ -60,6 +60,8 @@ export interface PanelHeaderMenuActions {
   saveAs: () => void;
   revert: () => void;
   reloadFromDisk: () => void;
+  /** 039 FR-024 (#293): start a terminal Panel the user left dormant under Manual reload. */
+  reloadTerminal: () => void;
   revealInTree: () => void;
   openInOsExplorer: () => void;
   /** The failure banner's OWN retry, so FR-045 holds on the menu as well as on the button. */
@@ -213,6 +215,26 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
      * beside *Reload from disk* while a file is unreadable: they run the same re-read, and the
      * duplication is the price of each surface naming its own command consistently.
      */
+    /*
+     * 039 FR-024 (#293) — Reload, for a terminal Panel left dormant by Manual reload mode.
+     *
+     * The constitution binds a feature that adds a panel action to add its menu item in the same
+     * increment, and the placeholder's button is exactly such an action. The LABEL is the
+     * placeholder's, unchanged, so the two surfaces name one command rather than two that resemble
+     * each other — the same rule *Try again* follows below.
+     *
+     * Shown only while the Panel is dormant, because that is the only state in which it means
+     * anything. It is deliberately NOT grouped with the failure items: a dormant Panel has not
+     * failed (FR-029), and putting Reload beside *Try again* and *Copy details* would imply it had.
+     */
+    if (panel.dormant === true) {
+      items.push({
+        label: 'Reload',
+        icon: 'retry',
+        section: 'viewState',
+        onClick: () => actions.reloadTerminal(),
+      });
+    }
     if (editorFailure) {
       items.push({
         label: 'Try again',

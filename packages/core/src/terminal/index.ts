@@ -98,5 +98,6 @@ export {
   terminalReloadAction,
   startsTerminal,
   changesDormancy,
+  applyReloadMode,
   type TerminalReloadAction,
 } from './reload-mode.js';

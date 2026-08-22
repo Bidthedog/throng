@@ -568,6 +568,7 @@ export {
   terminalReloadAction,
   startsTerminal,
   changesDormancy,
+  applyReloadMode,
   type TerminalReloadAction,
   captureDecision,
   foregroundCommand,

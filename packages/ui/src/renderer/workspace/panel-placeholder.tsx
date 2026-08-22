@@ -596,6 +596,12 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 tryAgain: () => {
                   retryPanelFailure(panel.id);
                 },
+                // 039 FR-024/FR-025 (#293). The SAME action the dormant placeholder's button runs —
+                // clearing the flag is what mounts `TerminalPanel`, so both routes go through the
+                // one start path rather than the menu having a shortcut of its own.
+                reloadTerminal: () => {
+                  ws.setPanelDormant(panel.id, false);
+                },
                 copyDetails: () => {
                   if (editorFailure) {
                     copyToClipboard(panelFailureText(editorFailure), editorFailure.subject);
