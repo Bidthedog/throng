@@ -929,6 +929,12 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // The program is gone: forget what IT negotiated, so the next one to run in this panel does
       // not inherit a protocol it never asked for (the same bug, pointing the other way).
       clearKeyboardMode(panelId);
+      // And forget the title it announced, for the same reason and on the same event (#295). This
+      // used to live in the effect's CLEANUP, which conflated "this view went away" with "the
+      // program ended" — a tab switch threw away a title the program had announced once at
+      // startup and had no reason to repeat, so the header fell back to the flavour label for the
+      // life of the session and Reset Name could not bring it back.
+      clearTerminalTitle(panelId);
       if (!disposed) onExitRef.current({ code: e.code, unexpected: e.unexpected });
     });
     /*
@@ -1199,7 +1205,9 @@ export function useTerminal(opts: UseTerminalOptions): void {
         offsetFromBottom: Math.max(0, activeBuffer.baseY - activeBuffer.viewportY),
         selection: term.getSelectionPosition() ?? undefined,
       });
-      clearTerminalTitle(panelId); // US10 (#89): the header falls back to the panel name
+      // NB: the live title is NOT cleared here (#295). It belongs to the SESSION, like the scroll
+      // offset saved two lines above and the keyboard mode next to it — not to this view of it.
+      // It is dropped when the program actually exits, in the `onExit` handler.
       forgetDiagnostics(panelId); // 028 FR-009 — counters are per live view, not a growing ledger
       unregisterTerminalFocus(panelId);
       unregisterRefresh();
