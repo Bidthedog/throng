@@ -507,7 +507,43 @@ test('a reset performed in JSON mode refreshes the visible document (FR-013b)', 
       await prefs.getByTestId('prefs-mode-toggle').click();
       const json = prefs.getByTestId('json-editor-settings');
       await expect(json).toBeVisible();
-      await expect(json).toContainText('"autoSave": true');
+
+      /*
+       * CodeMirror VIRTUALISES: only the lines in view exist in the DOM, so `toContainText` can
+       * only see the rendered window. `editor.autoSave` sits below `terminals` in the document, and
+       * this assertion was therefore silently dependent on how many settings happen to precede it.
+       *
+       * Spec 039 added four keys to `terminals` and broke it — the failure showed 54 rendered lines
+       * ending mid-`editor`, with `autoSave` a few lines past the fold. Nothing about the behaviour
+       * under test changed; the assertion had simply been reading a viewport and calling it a
+       * document.
+       *
+       * `seesInDocument` pages through the document until the line appears, which makes the
+       * assertion independent of BOTH the document's length and where in it the setting sits.
+       * Scrolling to the end is not enough — `editor.autoSave` is mid-document, roughly line 56 of
+       * 193, so the tail overshoots it just as the head fell short.
+       *
+       * It scrolls rather than typing, so the buffer stays CLEAN, which the comment above depends on.
+       */
+      const seesInDocument = async (needle: string): Promise<void> => {
+        await expect
+          .poll(
+            async () => {
+              const text = (await json.textContent()) ?? '';
+              if (text.includes(needle)) return text;
+              // Not in the rendered window — page down, wrapping at the end, and look again.
+              await json.locator('.cm-scroller').evaluate((el) => {
+                const next = el.scrollTop + el.clientHeight * 0.8;
+                el.scrollTop = next >= el.scrollHeight ? 0 : next;
+              });
+              return await json.textContent();
+            },
+            { timeout: FILE_OP_TIMEOUT_MS },
+          )
+          .toContain(needle);
+      };
+
+      await seesInDocument('"autoSave": true');
 
       // Reset the whole editor from the toolbar while JSON mode is showing.
       await prefs.getByTestId('prefs-reset-current').click();
@@ -515,7 +551,8 @@ test('a reset performed in JSON mode refreshes the visible document (FR-013b)', 
 
       // The document the user is looking at follows the file — no stale text (FR-013b).
       await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
-      await expect(json).toContainText('"autoSave": false');
+      // The reset reloads the document and returns the view to the top, so scan again.
+      await seesInDocument('"autoSave": false');
     },
   );
 });
