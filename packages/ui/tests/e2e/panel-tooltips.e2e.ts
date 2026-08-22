@@ -98,7 +98,10 @@ test('a tab chip shows its TITLE on hover, not instructions', { tag: ['@extended
   // the tab" rather than "move onto it once". See `restOnTabForPopover`.
   const popover = await restOnTabForPopover(win(), chip);
   await expect(popover).toBeVisible();
-  await expect(win().getByTestId('tabstrip-popover-name')).toHaveText(label!.trim());
+  // #296 — this tab's name fits on its chip, which the pointer is resting on, so the popover does
+  // not repeat it. `label` is still read above because the assertion that the chip HAS a visible
+  // name is the part this test cares about; where that name is NOT shown again is the tweak.
+  await expect(win().getByTestId('tabstrip-popover-name')).toHaveCount(0);
   await expect(popover).not.toContainText(TAB_INSTRUCTIONS);
 });
 

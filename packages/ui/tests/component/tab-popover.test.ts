@@ -55,7 +55,8 @@
 import { render, screen } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { TabPopover } from '../../src/renderer/workspace/tab-popover.js';
+import { TabPopover, popoverTabName } from '../../src/renderer/workspace/tab-popover.js';
+import type { PanelListEntry } from '../../src/renderer/workspace/use-panel-display-names.js';
 
 /** Anchors created for a test, removed afterwards — the popover portals to `document.body`. */
 const anchors: HTMLElement[] = [];
@@ -71,16 +72,36 @@ afterEach(() => {
  * `anchor.getBoundingClientRect()`, and a detached node or a bare object would throw inside the
  * layout effect rather than fail an assertion.
  */
-function mount(tabId: string, name: string, panelNames: string[]): void {
+/**
+ * Panel rows are `{ name, icon, typeLabel }` since #304. The helper still takes bare strings so the
+ * assertions above stay about what the surface SAYS; `typed()` is for the tests that are about the
+ * type icon itself.
+ */
+function untyped(name: string): PanelListEntry {
+  return { name, icon: null, typeLabel: null };
+}
+
+function typed(name: string, icon: string, typeLabel: string): PanelListEntry {
+  return { name, icon, typeLabel };
+}
+
+function mount(tabId: string, name: string | null, panelNames: (string | PanelListEntry)[]): void {
   const host = document.createElement('div');
   document.body.appendChild(host);
   anchors.push(host);
-  render(createElement(TabPopover, { tabId, name, panelNames, anchor: host }));
+  const rows = panelNames.map((p) => (typeof p === 'string' ? untyped(p) : p));
+  render(createElement(TabPopover, { tabId, name, panelNames: rows, anchor: host }));
 }
 
-/** The panel rows, in the order the surface is showing them. */
+/**
+ * The panel NAMES, in the order the surface is showing them.
+ *
+ * Reads the name span rather than the whole row since #304: the row also holds the type icon, and
+ * with a glyph icon pack that glyph is a character in `textContent` — so a row-level read would
+ * assert on `▣ISSUE MANAGEMENT` and turn every one of these into a test of the icon pack.
+ */
 function panelRows(): string[] {
-  return Array.from(document.querySelectorAll('.tabstrip-popover__panel')).map((el) =>
+  return Array.from(document.querySelectorAll('.tabstrip-popover__panel-name')).map((el) =>
     (el.textContent ?? '').trim(),
   );
 }
@@ -177,5 +198,121 @@ describe('the tab hover popover (FR-051)', () => {
 
     const popover = screen.getByTestId('tabstrip-popover');
     expect(popover.parentElement).toBe(document.body);
+  });
+});
+
+/**
+ * #304 — the panel's TYPE, as an icon standing where the bullet used to.
+ *
+ * The information is the type, and an icon carries it only for someone who can both see it and
+ * resolve the glyph. So the assertions below are as much about the `title` as about the icon: a
+ * marker nothing can name is decoration, and this row replaced a `list-style: disc` bullet that at
+ * least cost nobody anything.
+ */
+describe('the panel type in each row (#304)', () => {
+  it('marks a row with its type icon', () => {
+    mount('t-1', null, [typed('ISSUE MANAGEMENT', 'terminal', 'Terminal')]);
+
+    // `Icon` resolves to inline SVG or to a glyph depending on the active pack, and both arrive as
+    // a `.icon` span — so this asserts the icon was RENDERED without pinning which form it took.
+    const marker = screen.getByTestId('tabstrip-popover-panel-kind-0');
+    expect(marker.querySelector('.icon'), 'the icon itself is rendered').not.toBeNull();
+  });
+
+  it('NAMES the type on the icon, so the glyph is not the only way to read it', () => {
+    mount('t-1', null, [typed('composition-root', 'editorPanel', 'Editor Panel')]);
+
+    expect(screen.getByTestId('tabstrip-popover-panel-kind-0')).toHaveAttribute(
+      'title',
+      'Editor Panel',
+    );
+  });
+
+  it('keeps the name as the row text, with no type spelled out beside it', () => {
+    // The icon replaced a `(Terminal)` suffix. Both at once would say it twice.
+    mount('t-1', null, [typed('ISSUE MANAGEMENT', 'terminal', 'Terminal')]);
+
+    expect(panelRows()).toEqual(['ISSUE MANAGEMENT']);
+  });
+
+  it('gives an untyped panel a plain BULLET, and no type to read', () => {
+    // It has no type yet, so there is nothing to name — and the bullet is what the whole list wore
+    // before the icons arrived, which is the honest marker for "a panel, kind not yet chosen".
+    mount('t-1', null, [untyped('Panel 4')]);
+
+    expect(screen.queryByTestId('tabstrip-popover-panel-kind-0'), 'no type marker').toBeNull();
+    expect(document.querySelector('.tabstrip-popover__panel-icon')?.textContent).toBe('•');
+    expect(panelRows()).toEqual(['Panel 4']);
+  });
+
+  it('keeps every row on the same marker slot, typed or not', () => {
+    // A row that omitted the span would start one glyph left of its neighbours.
+    mount('t-1', null, [untyped('Panel 4'), typed('build', 'terminal', 'Terminal')]);
+
+    const icons = document.querySelectorAll('.tabstrip-popover__panel-icon');
+    expect(icons, 'one slot per row, bullet or icon').toHaveLength(2);
+    expect(icons[0]?.textContent, 'the untyped row wears the bullet').toBe('•');
+  });
+
+  it('marks each row with its OWN type', () => {
+    mount('t-1', null, [
+      typed('ISSUE MANAGEMENT', 'terminal', 'Terminal'),
+      typed('composition-root', 'editorPanel', 'Editor Panel'),
+    ]);
+
+    expect(screen.getByTestId('tabstrip-popover-panel-kind-0')).toHaveAttribute('title', 'Terminal');
+    expect(screen.getByTestId('tabstrip-popover-panel-kind-1')).toHaveAttribute(
+      'title',
+      'Editor Panel',
+    );
+  });
+});
+
+/**
+ * #296 — the name line, and when it earns its place.
+ *
+ * Split in two on purpose. The DECISION is `popoverTabName`, which is pure and asserted exhaustively
+ * here; the rendering is the component. What is deliberately NOT here is the measurement that feeds
+ * `ellipsised`: whether `tabs.maxWidth` actually ellipsised the chip depends on the rendered font,
+ * so it needs a real layout engine and stays at the E2E layer (constitution v5.1.0's real-layout
+ * reserve). Splitting it this way means only the measurement costs an application launch, rather
+ * than all three acceptance criteria.
+ */
+describe('whether the popover repeats the tab name (#296)', () => {
+  it('omits it when the chip is already showing the name in full', () => {
+    mount('t-1', popoverTabName('Build', false, false), ['Panel 1', 'Panel 2']);
+
+    expect(screen.queryByTestId('tabstrip-popover-name')).toBeNull();
+  });
+
+  it('makes the panel list the first thing in the surface when the name is omitted', () => {
+    // The point of the tweak: the list the popover exists to reveal starts a line higher.
+    mount('t-1', popoverTabName('Build', false, false), ['Panel 1']);
+
+    const popover = screen.getByTestId('tabstrip-popover');
+    expect(popover.firstElementChild).toBe(screen.getByTestId('tabstrip-popover-count'));
+  });
+
+  it('keeps the FULL name when tabs.maxNameLength shortened it (FR-037)', () => {
+    const long = 'A very long tab name indeed';
+    mount('t-1', popoverTabName(long, true, false), ['Panel 1']);
+
+    expect(screen.getByTestId('tabstrip-popover-name')).toHaveTextContent(long);
+  });
+
+  it('keeps the FULL name when tabs.maxWidth ellipsised the chip — FR-050b holds', () => {
+    const long = 'A very long tab name indeed';
+    mount('t-1', popoverTabName(long, false, true), ['Panel 1']);
+
+    expect(screen.getByTestId('tabstrip-popover-name')).toHaveTextContent(long);
+  });
+
+  it('is decided by EITHER mechanism, not both at once', () => {
+    // Stated because the two are independent: a name can be shortened without the chip ellipsising
+    // and vice versa, and requiring both would drop the name in exactly the cases it is needed.
+    expect(popoverTabName('Build', true, false)).toBe('Build');
+    expect(popoverTabName('Build', false, true)).toBe('Build');
+    expect(popoverTabName('Build', true, true)).toBe('Build');
+    expect(popoverTabName('Build', false, false)).toBeNull();
   });
 });

@@ -14,7 +14,6 @@ import {
 import {
   collectPanels,
   countPanels,
-  panelDisplayTitle,
   planConfirmations,
   revealTarget,
   stepTarget,
@@ -29,7 +28,8 @@ import {
 import { IconButton } from '../common/icon-button.js';
 import { NameLimitField } from '../common/name-limit-field.js';
 import { useTransientOverlay } from '../common/transient-overlay.js';
-import { TabPopover } from './tab-popover.js';
+import { TabPopover, popoverTabName } from './tab-popover.js';
+import { usePanelDisplayNames } from './use-panel-display-names.js';
 import { useTabScroll } from './tab-scroll.js';
 import { TabPicker, registerTabPicker } from './tab-picker.js';
 import { useWorkspace } from '../state/workspace-store.js';
@@ -271,7 +271,16 @@ function TabChip({
    * over the drop targets the user is actually aiming at.
    */
   const panels = collectPanels(tab.root);
-  const panelNames = panels.map((panel) => panelDisplayTitle(panel, undefined, maxNameLength));
+  /*
+   * #294 — named with the SAME sources the panel's own header uses, not with none.
+   *
+   * This was `panels.map((panel) => panelDisplayTitle(panel, undefined, maxNameLength))`. The rule
+   * was right and shared; the arguments were missing, so every automatically named panel fell
+   * through to its placeholder and the popover disagreed with the strip and the header about what
+   * a panel is called. See `usePanelDisplayNames` for why the sources cannot be read with the
+   * per-panel hooks the header uses.
+   */
+  const panelNames = usePanelDisplayNames(panels, maxNameLength);
   /*
    * The chip the popover anchors to, held in a REF and never in state.
    *
@@ -289,6 +298,29 @@ function TabChip({
   const holdChip = useCallback((node: HTMLElement | null): void => {
     chipRef.current = node;
   }, []);
+
+  /*
+   * #296 — the tab's name goes in the popover only when the chip cannot show it in full.
+   *
+   * The chip the pointer is resting on is already displaying the name, so repeating it pushes the
+   * panel list down a line for nothing. FR-050b is untouched: it exists because a wide tab is
+   * ELLIPSISED in the strip, and in exactly that case the popover is still the only place the full
+   * name can be read, so the name is passed.
+   *
+   * Two different mechanisms can hide part of the name, and both have to be asked:
+   *   - `tabs.maxNameLength` SHORTENS the string (FR-037), which `titleTruncated` already knows;
+   *   - `tabs.maxWidth` ellipsises what remains in CSS (FR-050a), which only the DOM knows.
+   *
+   * The second is measured rather than derived — there is no string comparison that can answer it,
+   * because it depends on the rendered font. Reading layout during render is safe here for the same
+   * reason `chipRef` is: a popover only ever renders on a hover, and a hover arrives after the chip
+   * has been committed.
+   */
+  const popoverName = (): string | null => {
+    const label = chipRef.current?.querySelector('.tab-chip__label');
+    const ellipsised = label instanceof HTMLElement && label.scrollWidth > label.clientWidth + 1;
+    return popoverTabName(tab.title, titleTruncated, ellipsised);
+  };
 
   /*
    * FR-058 — the popover WAITS for `tabs.popoverDelayMs` with the pointer at rest.
@@ -478,7 +510,7 @@ function TabChip({
       {showPopover ? (
         <TabPopover
           tabId={tab.id}
-          name={tab.title}
+          name={popoverName()}
           panelNames={panelNames}
           anchor={chipRef.current}
         />

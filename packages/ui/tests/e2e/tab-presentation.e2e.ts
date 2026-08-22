@@ -166,25 +166,44 @@ test.describe('at the shipped arming delay', () => {
       tab,
     );
 
-    const label = (await win.getByTestId(`tab-title-${tab}`).textContent()) ?? '';
+    /*
+     * #296 — these tab names FIT on their chips, so the popover does not repeat them. The chip
+     * under the pointer is already showing the name, and the panel list is what the surface is
+     * being opened for.
+     *
+     * FR-050b is asserted below instead, in the case it was written for: a name the chip cannot
+     * show in full. This is the only layer that can tell the two apart, because whether
+     * `tabs.maxWidth` ellipsised a chip depends on the rendered font.
+     */
     await expect(
       win.getByTestId('tabstrip-popover-name'),
-      'P2: the tab names itself first',
-    ).toHaveText(label);
+      '#296: a name the chip already shows in full is not repeated',
+    ).toHaveCount(0);
     await expect(
       win.getByTestId('tabstrip-popover-count'),
-      'P2: then how many panels it holds',
+      'P2: it opens with how many panels it holds',
     ).toHaveText('2 panels');
+    /*
+     * P2: then each panel's name.
+     *
+     * Read from the NAME span rather than the row (#304): a row now also holds the panel's type
+     * icon, and under a glyph icon pack that glyph is a character in `textContent` — so a row-level
+     * read would compare `▣Panel 1` against `Panel 1` and fail for a reason that has nothing to do
+     * with P2. The icon itself is asserted in `component/tab-popover.test.ts`, where every panel
+     * kind can be driven without an application.
+     */
     expect(
       await win
         .getByTestId('tabstrip-popover-panels')
-        .locator('.tabstrip-popover__panel')
+        .locator('.tabstrip-popover__panel-name')
         .evaluateAll((els) => els.map((el) => (el.textContent ?? '').trim())),
       "P2: then each panel's name",
     ).toEqual(panelNames);
 
     // FR-051's own claim — the panels are INDENTED under the tab, not a flat run of peers.
-    const nameLeft = (await geom(win.getByTestId('tabstrip-popover-name'))).x;
+    // Measured against the COUNT line now that the name is omitted here (#296); both are the
+    // surface's own top-level rows, so either establishes the outer edge the panels sit inside.
+    const nameLeft = (await geom(win.getByTestId('tabstrip-popover-count'))).x;
     const firstPanelLeft = (await geom(popover.locator('.tabstrip-popover__panel').first())).x;
     expect(firstPanelLeft, 'FR-051: the panels sit inside the tab, and are drawn that way').toBeGreaterThan(
       nameLeft,
