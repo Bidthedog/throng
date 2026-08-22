@@ -84,11 +84,22 @@ async function withTerminal(
         if (opts.startupCommand !== undefined) {
           await win.getByTestId('terminal-startup-command').fill(opts.startupCommand);
         }
-        // Command memory now ships ON, so the OFF case must actively UNCHECK it. Asserting the
-        // shipped state here rather than ticking blindly means a silently flipped default fails.
+        /*
+         * 039 (#223) — command memory ships OFF again, so the ON case must actively CHECK it.
+         *
+         * This assertion was `toBeChecked()`, and its comment said it existed so that "a silently
+         * flipped default fails". It did exactly that: 039 flips the default back and this test
+         * went red, which is the test working rather than the test being wrong.
+         *
+         * What it was guarding was the DRIFTED value. 025 FR-015 requires this control to be
+         * opt-in and to default OFF, and `panel-type.ts` had shipped the opposite since an
+         * undocumented change — so for two releases this E2E was pinning production behaviour
+         * against its own spec. Restored, with the assertion kept the same shape: assert the
+         * shipped state, then change it, so the next flip is caught too.
+         */
         const remember = win.getByTestId('terminal-remember-command');
-        await expect(remember).toBeChecked();
-        if (!opts.remember) await remember.uncheck();
+        await expect(remember).not.toBeChecked();
+        if (opts.remember) await remember.check();
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
 
         const term = win.getByTestId(`terminal-${pid}`);
@@ -269,7 +280,17 @@ test('a command that takes over REPLACES the startup command the user typed (US2
         await expect(win.getByTestId('terminal-flavour')).toBeVisible();
         await win.getByTestId('terminal-flavour').selectOption('cmd');
         await win.getByTestId('terminal-startup-command').fill(LONG_RUNNING);
-        await expect(win.getByTestId('terminal-remember-command')).toBeChecked();
+        /*
+         * 039 (#223) — this scenario is ABOUT command memory, so it must now switch it on: the
+         * shipped default is OFF again (025 FR-015, restored). The assertion before the click keeps
+         * the guard the original `toBeChecked()` provided — if the default ever flips back, ticking
+         * an already-ticked box would silently turn memory OFF and this test would fail somewhere
+         * far away and much harder to read.
+         */
+        const remember = win.getByTestId('terminal-remember-command');
+        await expect(remember).not.toBeChecked();
+        await remember.check();
+        await expect(remember).toBeChecked();
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
 
         const term = win.getByTestId(`terminal-${pid}`);
