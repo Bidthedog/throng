@@ -15,7 +15,25 @@ import { RpcRouter } from '../../src/rpc-router.js';
  * poll that never fires looks exactly like a terminal with nothing running.
  */
 
-const CHILD: ChildProcess = { pid: 2001, ppid: 1000, commandLine: 'npm run dev', startedAt: 10 };
+/**
+ * A running command in the terminal, stamped when it is handed to the fake host.
+ *
+ * `startedAt` used to be the literal `10` — epoch ms, so 1 January 1970 — which was harmless while
+ * nothing compared it to anything. #280 gave it a meaning: command capture now rejects a candidate
+ * that started BEFORE its shell, because that is the signature of a recycled pid still named by
+ * some unrelated process's stale `ParentProcessId`. A child stamped 1970 against a shell spawned
+ * today is exactly that shape, so the fixture read as an impostor and these tests went red.
+ *
+ * The fixture was never realistic; it simply never had to be. Stamping it at the moment the test
+ * hands it over keeps it after the shell `attach` just spawned, which is what a real observation
+ * would report.
+ */
+const child = (): ChildProcess => ({
+  pid: 2001,
+  ppid: 1000,
+  commandLine: 'npm run dev',
+  startedAt: Date.now(),
+});
 
 class FakeHost implements IPtyHost {
   /** What the next observation will report. Mutated by the tests. */
@@ -85,7 +103,7 @@ describe('the shared command observation (025 FR-019 / T024)', () => {
     s.events.addSink(s.sink);
     await s.attach({ panelId: 'p1', projectId: 'proj', launch, cols: 80, rows: 24 });
 
-    s.host.children = [CHILD];
+    s.host.children = [child()];
     await sleep(200);
     expect(s.published.filter((p) => p.command === 'npm run dev').length).toBe(1);
 
@@ -100,7 +118,7 @@ describe('the shared command observation (025 FR-019 / T024)', () => {
     s.events.addSink(s.sink);
     await s.attach({ panelId: 'p1', projectId: 'proj', launch, cols: 80, rows: 24 });
 
-    s.host.children = [CHILD];
+    s.host.children = [child()];
     await sleep(200);
     s.host.children = [];
     await sleep(200);
@@ -112,7 +130,7 @@ describe('the shared command observation (025 FR-019 / T024)', () => {
     const s = makeService(30);
     // No sink yet — deliberately.
     await s.attach({ panelId: 'p1', projectId: 'proj', launch, cols: 80, rows: 24 });
-    s.host.children = [CHILD];
+    s.host.children = [child()];
     await sleep(200);
     expect(s.published).toHaveLength(0);
 
@@ -127,7 +145,7 @@ describe('the shared command observation (025 FR-019 / T024)', () => {
     const slow = makeService(5000);
     slow.events.addSink(slow.sink);
     await slow.attach({ panelId: 'p1', projectId: 'proj', launch, cols: 80, rows: 24 });
-    slow.host.children = [CHILD];
+    slow.host.children = [child()];
     await sleep(300);
     expect(slow.published).toHaveLength(0);
   });

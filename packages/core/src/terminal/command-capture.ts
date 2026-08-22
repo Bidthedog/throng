@@ -42,16 +42,46 @@ export function isCapturableCommand(commandLine: string): boolean {
  *
  * Returns null when nothing qualifies, which the caller must treat as "leave the saved command
  * alone" — never as "clear it" (FR-017).
+ *
+ * `shellStartedAt` — when the shell was spawned — rejects a **pid-reuse impostor** (#280). Windows
+ * recycles pids briskly and leaves a dead parent's `ParentProcessId` stale on anything that
+ * outlives it, so a long-running process whose real parent has gone can end up advertising a
+ * `ppid` that now names this terminal's shell. `ppid` alone cannot tell that apart from a genuine
+ * child; start time can, decisively, because a process that began BEFORE the shell cannot be its
+ * child. Without it a `cmd.exe` terminal captured the `bash.exe` command line of the build that
+ * launched the test run.
+ *
+ * This is the same test `findOrphans` (`daemon/src/reap-orphans.ts`) already applies to the same
+ * problem — there, a parent that started after its supposed child is the impostor; here, a child
+ * that started before its supposed parent is. One pattern, two directions.
+ *
+ * Optional, so a caller that cannot know the spawn time keeps exactly the old behaviour rather
+ * than losing capture altogether.
  */
 export function foregroundCommand(
   shellPid: number,
   children: readonly ChildProcess[],
   shellImage?: string,
+  shellStartedAt?: number,
 ): string | null {
   const effectiveShell = resolveShellPid(shellPid, children, shellImage);
+  /*
+   * Compare candidates against the EFFECTIVE shell, not the pid throng launched. Where
+   * `resolveShellPid` followed a re-exec chain (Git for Windows' bash launcher does it twice) the
+   * innermost shell is a genuine descendant that started LATER, so it is the tighter and the
+   * correct floor — using the outer pid's time would admit anything started in between. Its start
+   * time is in `children` precisely because it is a descendant; only when the chain was not
+   * followed at all does the caller's value apply.
+   */
+  const floor =
+    effectiveShell === shellPid
+      ? shellStartedAt
+      : children.find((c) => c.pid === effectiveShell)?.startedAt ?? shellStartedAt;
   let best: ChildProcess | null = null;
   for (const child of children) {
     if (child.ppid !== effectiveShell) continue;
+    // A child cannot predate its parent: the ppid is stale and names a recycled pid (#280).
+    if (floor !== undefined && child.startedAt < floor) continue;
     if (!isCapturableCommand(child.commandLine)) continue;
     if (best === null || child.startedAt >= best.startedAt) best = child;
   }
