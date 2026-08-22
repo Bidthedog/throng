@@ -159,16 +159,19 @@ export class EditorRecovery {
     // wedge the next one, so the chain is joined on settle rather than on success.
     const previous = this.writeChains.get(panelId) ?? Promise.resolve();
     const mine = previous.catch(() => undefined).then(() => this.writeOnce(panelId, snapshot));
-    this.writeChains.set(
-      panelId,
-      mine.catch(() => undefined),
-    );
+    // Held in a local so the cleanup below can recognise it. Comparing against
+    // `writeChains.get(panelId)` alone cannot: it returns whatever is stored, which right after
+    // this line is always THIS promise, so the old `=== undefined` test never fired and the map
+    // grew one entry per panel for the life of the process (#305).
+    const settled = mine.catch(() => undefined);
+    this.writeChains.set(panelId, settled);
     try {
       await mine;
     } finally {
       // Drop the chain once this write is the last one in it, so a panel closed long ago does not
-      // keep a resolved promise alive for the life of the process.
-      if (this.writeChains.get(panelId) === undefined) this.writeChains.delete(panelId);
+      // keep a resolved promise alive for the life of the process. A LATER write for the same
+      // panel will have replaced the entry, and that one owns the cleanup instead.
+      if (this.writeChains.get(panelId) === settled) this.writeChains.delete(panelId);
     }
   }
 

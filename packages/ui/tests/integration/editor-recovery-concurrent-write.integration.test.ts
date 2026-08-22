@@ -1,9 +1,14 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { DEFAULT_APP_SETTINGS } from '@throng/core';
 import { EditorRecovery } from '../../src/main/editor-recovery.js';
+import { EditorCoordinator, type DocMeta } from '../../src/main/editor-coordinator.js';
+import { EditorService } from '../../src/main/editor-service.js';
+import { NodeFileSystem } from '../../src/main/node-file-system.js';
+import { editDocument } from './helpers/edit-document.js';
 
 /**
  * Two snapshots of ONE document, overlapping (024 FR-042).
@@ -120,5 +125,138 @@ describe('two overlapping snapshots of one document (FR-042)', () => {
     expect(held[0]!.text).toMatch(/^v\d$/);
     const raw = await readFile(join(dir, 'p1'), 'utf8');
     expect(() => JSON.parse(raw) as unknown).not.toThrow();
+  });
+});
+
+/**
+ * #305 — the write chain is released once it is done with.
+ *
+ * The chain that fixed the race above is a `Map<panelId, Promise>`, and its own comment says the
+ * entry is dropped "once this write is the last one in it". It was not: the condition asked whether
+ * `writeChains.get(panelId)` was `undefined`, which right after storing this write's promise is
+ * never true. So the map kept one settled promise per panel for the life of the main process —
+ * small, permanent, and exactly what the comment claimed to prevent.
+ *
+ * Reaching into the private field is deliberate. The leak has no observable behaviour to assert
+ * through the public surface — that is what made it survive review — so the choice is between
+ * testing the field and not testing it at all.
+ */
+function chainCount(r: EditorRecovery): number {
+  return (r as unknown as { writeChains: Map<string, unknown> }).writeChains.size;
+}
+
+describe('the write chain does not outlive its writes (#305)', () => {
+  it('releases a panel once its write settles', async () => {
+    await recovery.write('p1', snapshot('one', 1));
+
+    expect(chainCount(recovery), 'nothing is in flight, so nothing is held').toBe(0);
+  });
+
+  it('releases every panel after a burst across several of them', async () => {
+    await Promise.all([
+      recovery.write('p1', snapshot('a', 1)),
+      recovery.write('p2', snapshot('b', 1)),
+      recovery.write('p3', snapshot('c', 1)),
+      recovery.write('p1', snapshot('d', 2)),
+    ]);
+
+    expect(chainCount(recovery)).toBe(0);
+  });
+
+  it('holds an entry only while a write is actually in flight', async () => {
+    const inFlight = recovery.write('p1', snapshot('one', 1));
+    expect(chainCount(recovery), 'held while it runs').toBe(1);
+
+    await inFlight;
+    expect(chainCount(recovery), 'released once it settles').toBe(0);
+  });
+
+  it('releases the chain even when the write FAILED', async () => {
+    /*
+     * The case that matters most: a failure must not wedge the panel. The chain is joined on
+     * settle rather than on success precisely so the next write still runs, and the entry must be
+     * let go on that path too — otherwise the one panel whose disk is misbehaving is also the one
+     * that leaks.
+     */
+    /*
+     * The directory is made UNCREATABLE rather than merely deleted: `writeOnce` calls `ensureDir()`
+     * first, so a deleted directory is simply recreated and the write succeeds — a test written
+     * that way would assert nothing while looking as though it asserted everything. Rooting the
+     * recovery directory beneath a regular FILE cannot be resolved by creating it (ENOTDIR).
+     */
+    const blocker = join(dir, 'not-a-directory');
+    await writeFile(blocker, 'this is a file', 'utf8');
+    const doomed = new EditorRecovery(join(blocker, 'recovery'));
+
+    await expect(doomed.write('p1', snapshot('one', 1))).rejects.toThrow();
+    expect(chainCount(doomed), 'a failed write releases its chain too').toBe(0);
+  });
+});
+
+/**
+ * #305 — and a snapshot that cannot be written is REPORTED, not thrown into the void.
+ *
+ * `EditorCoordinator` fires snapshots and walks away — `void this.snapshot(doc)`, once from the
+ * debounce timer and once when a file goes missing — so a rejection escaping `snapshot` is an
+ * unhandled rejection in the Electron MAIN process. That is a disproportionate answer to a failed
+ * snapshot: recovery is best-effort, the document it protects is still open and unharmed, and the
+ * next keystroke schedules another attempt.
+ *
+ * This is the defect that reddened a full gate, out of a test that has nothing to do with recovery
+ * (`editor-file-deleted`): its debounced snapshot fired after the temp directory had gone, every
+ * one of its 524 tests passed, and the stage failed on the rejection alone. The file above
+ * PREDICTED it in prose — "the rejection is unhandled … with no catch" — and nothing acted on it.
+ */
+describe('a snapshot that cannot be written (#305)', () => {
+  it('is logged and dropped, rather than escaping as an unhandled rejection', async () => {
+    const blocker = join(dir, 'blocker-file');
+    await writeFile(blocker, 'not a directory', 'utf8');
+
+    const root = await mkdtemp(join(tmpdir(), 'throng-rec-swallow-'));
+    const fs = new NodeFileSystem(async () => {});
+    const coordinator = new EditorCoordinator(
+      new EditorService(fs, () => DEFAULT_APP_SETTINGS),
+      new EditorRecovery(join(blocker, 'recovery')), // uncreatable: ENOTDIR, every time
+      { recoveryDebounceMs: 1, relaySync: () => {}, persistUndoHistory: () => true },
+    );
+
+    const errors: unknown[][] = [];
+    const realError = console.error;
+    console.error = (...args: unknown[]) => errors.push(args);
+
+    try {
+      const file = join(root, 'doc.txt');
+      await writeFile(file, 'hello\n', 'utf8');
+      const docMeta: DocMeta = {
+        panelId: 'p1',
+        windowId: 'w1',
+        ownerKind: 'project',
+        ownerProjectId: 'A',
+        ownerRoot: root,
+        allProjectRoots: [root],
+        tabId: 't1',
+        absPath: file,
+        encoding: 'utf8',
+        hasBom: false,
+        lineEnding: 'lf',
+      };
+      coordinator.register(docMeta, 'hello\n');
+
+      // Typing is what arms the debounce, and the debounce is what fires the snapshot.
+      editDocument(coordinator, docMeta, 'hello world\n');
+
+      // Long enough for the 1ms debounce to fire and its write to fail. If the rejection escaped,
+      // vitest reports an unhandled error and fails this file's run — which is precisely how the
+      // gate found it.
+      await new Promise((r) => setTimeout(r, 150));
+
+      expect(
+        errors.some((a) => String(a[0]).includes('[editor-recovery]')),
+        'the failure is reported, so it is not silently swallowed either',
+      ).toBe(true);
+    } finally {
+      console.error = realError;
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    }
   });
 });

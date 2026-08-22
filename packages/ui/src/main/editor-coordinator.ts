@@ -1200,11 +1200,26 @@ export class EditorCoordinator {
    */
   private async snapshot(doc: CoordDoc): Promise<void> {
     const withHistory = this.deps.persistUndoHistory();
-    await this.recovery.write(doc.panelId, {
-      version: doc.authority.version,
-      text: doc.authority.text,
-      ...(withHistory ? { history: doc.authority.serialiseHistory() } : {}),
-    });
+    try {
+      await this.recovery.write(doc.panelId, {
+        version: doc.authority.version,
+        text: doc.authority.text,
+        ...(withHistory ? { history: doc.authority.serialiseHistory() } : {}),
+      });
+    } catch (err) {
+      /*
+       * Reported and dropped, never re-thrown (#305).
+       *
+       * Both callers fire this and walk away (`void this.snapshot(doc)`) — the debounced one from a
+       * timer, the immediate one from a file going missing — so a rejection escaping here is an
+       * unhandled rejection in the MAIN process. That is a disproportionate answer to a failed
+       * snapshot: recovery is best-effort by construction, the document it protects is still open
+       * and unharmed in the editor, and the next keystroke schedules another attempt 400ms later.
+       *
+       * Catching HERE rather than at the two call sites so a third one cannot reintroduce it.
+       */
+      console.error(`[editor-recovery] could not snapshot panel ${doc.panelId}:`, err);
+    }
   }
 
   private scheduleRecovery(doc: CoordDoc): void {
