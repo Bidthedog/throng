@@ -139,6 +139,29 @@ describe('the shared command observation (025 FR-019 / T024)', () => {
     expect(s.published.at(-1)?.command).toBe('npm run dev');
   });
 
+  it('passes the shell’s spawn time to capture, so a pre-dating process is never published (#280)', async () => {
+    /*
+     * A WIRING test, not a rule test. `foregroundCommand`'s guard has its own unit tests in
+     * `command-capture-pid-reuse.test.ts`; what those cannot see is whether the real call path
+     * actually SUPPLIES the spawn time. `shellStartedAt` is optional — deliberately, so a caller
+     * that cannot know it keeps capture instead of losing it — and that means dropping the
+     * argument reintroduces #280 in full while every rule test stays green.
+     *
+     * This is the assertion that goes red if it is ever dropped: a child stamped before the shell
+     * reaches the service through the ordinary observation, and nothing is published.
+     */
+    const s = makeService(30);
+    s.events.addSink(s.sink);
+    await s.attach({ panelId: 'p1', projectId: 'proj', launch, cols: 80, rows: 24 });
+
+    // The signature of a recycled pid: a live process naming this shell as its parent, which
+    // started long before the shell existed. It is not this terminal's command.
+    s.host.children = [{ ...child(), startedAt: Date.now() - 600_000 }];
+    await sleep(200);
+
+    expect(s.published.filter((p) => p.command !== null)).toHaveLength(0);
+  });
+
   it('uses the INJECTED interval, not a constant — a slow one has not fired yet', async () => {
     // If the interval were hardcoded at 1000ms this test would be indistinguishable from the one
     // above; the point is that the value passed in is the value used.

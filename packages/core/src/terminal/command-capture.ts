@@ -56,7 +56,9 @@ export function isCapturableCommand(commandLine: string): boolean {
  * that started before its supposed parent is. One pattern, two directions.
  *
  * Optional, so a caller that cannot know the spawn time keeps exactly the old behaviour rather
- * than losing capture altogether.
+ * than losing capture altogether — which also means OMITTING IT REINTRODUCES #280 for that caller.
+ * Leave it out only deliberately, and know that no rule test here will notice; the wiring is held
+ * by `daemon/tests/unit/terminal-command-poll.test.ts` instead.
  */
 export function foregroundCommand(
   shellPid: number,
