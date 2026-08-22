@@ -61,6 +61,7 @@ import { useReportPanelFailure } from '../workspace/panel-failure-notice.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import { clearPanelExit, setPanelExit } from './exit-store.js';
 import { useTerminal, type TerminalApi } from './use-terminal.js';
+import { useTerminalReconnect } from './use-terminal-reconnect.js';
 import { FindBar } from '../search/find-bar.js';
 import { PanelSkeleton, useDelayedFlag } from '../common/loading.js';
 import { reservedByTerminal } from '../search/search-actions.js';
@@ -676,6 +677,32 @@ export function TerminalPanel({
       retryWaiterRef.current = resolve;
     });
   }, []);
+
+  /*
+   * 039 US3 (#237) — a terminal that failed because its working directory was unavailable starts
+   * itself when that directory comes back.
+   *
+   * The target is what the terminal ASKED for: its remembered directory when it has one and is set
+   * to use it, then the folder it was opened from, then the project root. Watching the resolved
+   * fallback would be wrong — 025 FR-030 falls back to the project root when a remembered directory
+   * is gone, so a resolved value would point at a directory that never went missing.
+   *
+   * `retryStart` is deliberately the same callback ↻ Retry uses: FR-041 requires the reconnect to be
+   * driven exactly as a start is, and FR-039 requires ↻ to keep working unchanged. One start path,
+   * pressed by two things.
+   */
+  useTerminalReconnect({
+    panelId: panel.id,
+    projectId: panel.originProjectId,
+    target:
+      (terminalConfig.rememberDirectory ? panel.terminalMemory?.lastCwd : undefined) ??
+      config.startDirectory ??
+      projectRoot,
+    failure: startFailure?.cause ?? null,
+    onRetry: () => {
+      void retryStart();
+    },
+  });
 
   useTerminal({
     panelId: panel.id,

@@ -29,6 +29,24 @@ import {
  * what FR-033 asks for when it says recovery raises no per-panel notice, and what makes the issue's
  * "one path-availability event" true as an observable even though no such event exists in the system
  * (Finding 2).
+ *
+ * ══ THIS CLASS SPAWNS NOTHING, AND THAT MUST STAY TRUE — OR ONE THING MUST CHANGE WITH IT ══
+ *
+ * All it does is tell the renderer "these panels may start again". The renderer starts them by the
+ * ORDINARY route, which lands on `terminal.attach`'s cold-start path, where the daemon stamps
+ * `session.shellStartedAt` immediately before `host.start()`.
+ *
+ * That matters to code outside this feature. Spec 038's #280 fix uses `shellStartedAt` as the floor
+ * for a pid-reuse guard — a command observed on a pid older than the shell cannot belong to that
+ * shell. Because every reconnect here is a cold start, the floor is refreshed each time, which is
+ * exactly what the guard needs.
+ *
+ * **If this is ever changed to respawn a shell while REUSING an existing session record,
+ * `shellStartedAt` MUST be re-stamped at the same moment.** Left alone it would describe the
+ * PREVIOUS shell — older than the live one — and the guard would silently stop bounding what it was
+ * written to bound. It would still err toward admitting rather than rejecting, so nothing would look
+ * broken, and **no test would catch it**: the wiring test asserts the argument is passed, not that
+ * its value is fresh. This comment is the only guard that will exist.
  */
 export interface TerminalReconnectDeps {
   fileWatcher: IFileWatcher;

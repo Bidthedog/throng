@@ -110,10 +110,21 @@ describe('TerminalReconnect — releasing (039 FR-030/FR-032/FR-033/FR-037)', ()
    * FR-037 / Principle I. Two projects under one parent — a monorepo, `C:/dev/*` — watch the SAME
    * directory. Without the project filter, restoring one would start the other's terminals.
    */
+  /*
+   * BOTH targets are missing at arm time, which is the only way a panel ever reaches the arming
+   * path. The first version of this test pre-created project A's directory — so A watched its own
+   * folder rather than the shared parent, and the event under test never reached it.
+   *
+   * It passed. It would have kept passing however broken the project isolation was, because the
+   * assertion was never reached by the code it was aimed at.
+   *
+   *   A FIXTURE DESCRIBING AN IMPOSSIBLE STATE IS A TEST THAT CANNOT FAIL, AND IT LOOKS IDENTICAL
+   *   TO A PASSING ONE FROM EVERY ANGLE EXCEPT THE FIXTURE.
+   *
+   * Which is the part nobody re-reads. Worth remembering next time an assertion looks right and the
+   * setup looks boring.
+   */
   it('does not cross projects, even sharing one watched directory (FR-037)', () => {
-    // BOTH targets are missing at arm time — which is the only way a panel gets here, and what the
-    // first version of this test got wrong: it pre-created project A's directory, so A watched its
-    // own folder rather than the shared parent and the event under test never reached it.
     const existing = new Set(['C:/dev']);
     const h = harness(existing);
     h.reconnect.arm('a1', 'A', 'C:/dev/a/src');
