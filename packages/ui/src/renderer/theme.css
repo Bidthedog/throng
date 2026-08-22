@@ -1794,14 +1794,59 @@ textarea,
  * nothing about that — which is precisely what the native `title` attribute could not express and
  * why this surface exists at all.
  */
+/*
+ * #304 — the panel's TYPE ICON stands where the bullet used to.
+ *
+ * `list-style` goes off and the left padding with it: a disc plus an icon is two markers for one
+ * row, and the icon is the one carrying information. The indentation FR-051 is about is kept by
+ * the row's own padding, so the panels still read as contained BY the tab rather than as peers of
+ * it — that claim is measured in `tab-presentation.e2e.ts`.
+ */
 .tabstrip-popover__panels {
   margin: 4px 0 0;
-  padding-left: 18px;
-  list-style: disc;
+  /*
+   * The indent stays on the LIST, not on the row, and that is load-bearing rather than stylistic.
+   * FR-051's claim that the panels sit INSIDE the tab is measured in `tab-presentation.e2e.ts` by
+   * comparing the row's `x` against the surface's own rows — and padding on the row would leave its
+   * border box at the same `x` while merely moving the text, so the measurement would read as "not
+   * indented" while it plainly looked indented.
+   */
+  padding-left: 12px;
+  list-style: none;
 }
 
 .tabstrip-popover__panel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Fixed size whether or not it holds an icon. An untyped panel renders this empty, so its name
+ * still starts where every other name does instead of hanging one glyph to the left of them.
+ */
+.tabstrip-popover__panel-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+}
+
+/* `Icon` renders a `.icon` span holding either inline SVG or a glyph — size both the same way. */
+.tabstrip-popover__panel-icon .icon,
+.tabstrip-popover__panel-icon svg {
+  width: 12px;
+  height: 12px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.tabstrip-popover__panel-name {
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 

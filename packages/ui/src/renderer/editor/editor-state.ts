@@ -42,7 +42,19 @@ export interface EditorUiState {
 const states = new Map<string, EditorUiState>();
 const listeners = new Set<() => void>();
 
+/**
+ * Bumped on every change, so a surface naming MANY panels can subscribe once (#294).
+ *
+ * `useEditorState` is per-panel, which is right for a panel's own header and useless to the tab
+ * popover: it lists whatever panels a tab happens to hold, and a hook cannot be called in a `.map`
+ * over a list whose length varies. A number is the snapshot rather than the Map because
+ * `useSyncExternalStore` compares snapshots with `Object.is` — the Map's identity never changes, so
+ * returning it would subscribe to nothing.
+ */
+let version = 0;
+
 function emit(): void {
+  version += 1;
   for (const l of listeners) l();
 }
 
@@ -67,6 +79,15 @@ export function removeEditorState(panelId: string): void {
 
 export function getEditorState(panelId: string): EditorUiState | undefined {
   return states.get(panelId);
+}
+
+/** Re-render when ANY editor state changes; read the values with {@link getEditorState}. */
+export function useEditorStateVersion(): number {
+  return useSyncExternalStore(
+    subscribe,
+    () => version,
+    () => version,
+  );
 }
 
 export function allEditorStates(): EditorUiState[] {

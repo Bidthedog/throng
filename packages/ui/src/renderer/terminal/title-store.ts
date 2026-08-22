@@ -15,7 +15,14 @@ const MAX_TITLE_LEN = 256;
 const titles = new Map<string, string>();
 const listeners = new Set<() => void>();
 
+/**
+ * Bumped on every change, so a surface naming MANY panels can subscribe once (#294) — see the
+ * matching note in `editor-state.ts` for why the snapshot is a number and not the Map.
+ */
+let version = 0;
+
 function emit(): void {
+  version += 1;
   for (const l of listeners) l();
 }
 
@@ -31,9 +38,23 @@ export function setTerminalTitle(panelId: string, raw: string): void {
   emit();
 }
 
-/** Drop a panel's title when its terminal is disposed. */
+/** Drop a panel's title when its SESSION ends — not when a view of it unmounts (#295). */
 export function clearTerminalTitle(panelId: string): void {
   if (titles.delete(panelId)) emit();
+}
+
+/** This panel's live title, read without subscribing — for callers naming several panels at once. */
+export function getTerminalTitle(panelId: string): string | undefined {
+  return titles.get(panelId);
+}
+
+/** Re-render when ANY title changes; read the values with {@link getTerminalTitle}. */
+export function useTerminalTitleVersion(): number {
+  return useSyncExternalStore(
+    subscribe,
+    () => version,
+    () => version,
+  );
 }
 
 function subscribe(notify: () => void): () => void {
