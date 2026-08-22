@@ -72,10 +72,14 @@ async function makeTerminal(win: import('@playwright/test').Page): Promise<strin
   return pid;
 }
 
-test(
-  'Automatic starts a real shell — the control that proves this test can SEE one (039 FR-021)',
-  { tag: ['@extended', '@terminal', '@reserve:pty'] },
-  async () => {
+/*
+ * The title and tag stay on ONE line, and that is a requirement rather than a style choice.
+ * `e2e-budget.test.ts`'s parser is line-based — `/^\s*test\(\s*(?:'|"|`)…\{ tag: \[([^\]]*)\] \}/` —
+ * so a declaration split across lines is counted in the TOTAL but in no CATEGORY. The category
+ * ratchet then silently under-counts, which is the one thing a ratchet must not do. Caught by the
+ * gate: 99 @terminal against a budget of 101.
+ */
+test('Automatic starts a real shell — the control that proves this test can SEE one (039 FR-021)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
     test.setTimeout(120_000);
     const cfg = freshCfgRoot({ terminals: { reloadMode: 'automatic' } });
     const root = freshRoot();
@@ -101,13 +105,9 @@ test(
       },
       { env: { ...process.env, THRONG_CONFIG_ROOT: cfg } },
     );
-  },
-);
+});
 
-test(
-  'Manual starts NO shell and no conhost, and offers Reload on each panel (039 FR-022/FR-023/FR-026)',
-  { tag: ['@extended', '@terminal', '@reserve:pty'] },
-  async () => {
+test('Manual starts NO shell and no conhost, and offers Reload on each panel (039 FR-022/FR-023/FR-026)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
     test.setTimeout(120_000);
     const cfg = freshCfgRoot({ terminals: { reloadMode: 'manual' } });
     const root = freshRoot();
@@ -169,5 +169,4 @@ test(
       },
       { env: { ...process.env, THRONG_CONFIG_ROOT: cfg } },
     );
-  },
-);
+});
