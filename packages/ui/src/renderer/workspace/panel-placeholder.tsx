@@ -12,6 +12,7 @@ import {
   panelZoomLevel,
   findPanelLocations,
   planConfirmations,
+  renameCommit,
   type Edge,
   type Panel,
 } from '@throng/core';
@@ -237,7 +238,18 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
    * symptom that was reported. A user who typed nothing has renamed nothing.
    */
   const commit = (trimmed: string, seed: string): void => {
-    if (trimmed.length > 0 && trimmed !== seed.trim()) {
+    /*
+     * #297 — the decision moved to `renameCommit` in core, unchanged in every case that existed
+     * before and with one added: a BLANK box on an already-renamed panel clears the override, so
+     * the panel names itself again. It is the same route Reset Name takes rather than a second
+     * implementation of it, and it is gated on `titleIsCustom` precisely so the click-away path
+     * #176 closed stays closed. The rule's own file carries that reasoning.
+     */
+    const action = renameCommit(trimmed, seed, panel.titleIsCustom ?? false);
+
+    if (action.kind === 'reset') {
+      ws.resetPanelName(panel.id);
+    } else if (action.kind === 'rename') {
       /*
        * A panel's name is unique across the WHOLE application (024 follow-up) — every project and
        * every sub-workspace — because the name is how a user refers to a panel: in the tab strip, in
@@ -248,7 +260,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
        * than refused — the rename always goes through — and the user is told, once, in a warning
        * that dismisses itself: nothing was lost and there is nothing to decide.
        */
-      void services.panelNames.claim(panel.id, trimmed).then(({ granted, adjusted }) => {
+      void services.panelNames.claim(panel.id, action.name).then(({ granted, adjusted }) => {
         ws.renamePanel(panel.id, granted);
         // Clone-sync (003): rename the same Panel in every other window it appears in
         // (its project + any sub-workspaces) in real time.
@@ -267,7 +279,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
              * ASKED for stays, because that is a different fact and the only one left to explain.
              */
             subject: { kind: 'panel', name: granted, tab: place?.tab, project: place?.project },
-            message: `Another panel is already called “${trimmed}”, so this one was renamed.`,
+            message: `Another panel is already called “${action.name}”, so this one was renamed.`,
             testId: 'panel-name-adjusted',
           });
         }

@@ -648,6 +648,8 @@ export {
 export type { Edge, NewTabIds } from './workspace/operations.js';
 export { panelDisplayTitle } from './workspace/panel-title.js';
 export type { PanelTitleSources } from './workspace/panel-title.js';
+export { renameCommit } from './workspace/rename-commit.js';
+export type { RenameCommit } from './workspace/rename-commit.js';
 // 011 FR-030/031 — which verb a Panel's own removal controls wear. Extracted from a ternary inside
 // the panel header (035 T058), where it could only be read by launching the app.
 export { panelRemovalVerb } from './workspace/removal-verbs.js';
