@@ -191,34 +191,41 @@ test('lists ALL missing files on a tab in one notice (FR-100 · 030 FR-029/FR-03
 });
 
 /*
- * ══ QUARANTINED — issue #277, and it is a REAL BUG, not a timing gap ══
+ * ══ WAS QUARANTINED — issue #277, FIXED. Kept as the record of a bug that was real ══
  *
- * The consolidated notice never appears when the tree reports first. The assertion below at
- * `panel-failure-notice` times out at 30s, three retries deep, every time.
+ * This test was quarantined because it failed every time: the consolidated notice never appeared
+ * when the tree reported first, and the assertion below at `panel-failure-notice` timed out at 30s,
+ * three retries deep. It now passes in ~6s.
  *
- * WHY THIS IS NOT SPEC 034's, established before quarantining rather than assumed:
- *   - `origin/master`'s OWN CI fails it, at this same line, with the same three retries —
- *     run 31956697834 (2026-08-16), job `E2E (shard 1/3)`. All five of master's recent runs are red.
- *   - It reproduces LOCALLY IN ISOLATION (1 failed, 3 passed running this file alone), so it is not
- *     worker contention and not the tier boundary.
- *   - 034's only change to this file is the `@extended @editor` tags in `b5753d5`. Its seven `src`
- *     changes were reviewed one by one and none is in the notice path.
+ * WHY IT WAS NOT SPEC 034's, established before quarantining rather than assumed. Kept because it
+ * is the reasoning that stopped the bug being written off as harness noise, which is what would
+ * have buried it:
+ *   - `origin/master`'s OWN CI failed it, at the same assertion, with the same three retries —
+ *     run 31956697834 (2026-08-16), job `E2E (shard 1/3)`; five of master's runs were red.
+ *   - It reproduced LOCALLY IN ISOLATION (1 failed, 3 passed running this file alone), so it was
+ *     not worker contention and not the tier boundary.
+ *   - 034's only change to this file was the `@extended @editor` tags in `b5753d5`. Its seven `src`
+ *     changes were reviewed one by one and none was in the notice path.
  *
- * WHY NOT WEAKEN THE ASSERTION: the whole point of this test is the LOSING ORDER — the tree's
- * notice standing while the consolidated one is in flight. The sibling at :78 already covers the
- * winning order and passes. Relaxing this one would leave 030 FR-034a's supersede-on-cause rule
- * asserted only where it was never broken, which is how a bug gets permanently forgotten.
+ * WHY THE ASSERTION WAS NOT WEAKENED, which is the part worth carrying forward: the whole point of
+ * this test is the LOSING ORDER — the tree's notice standing while the consolidated one is in
+ * flight. The sibling at :116 already covers the winning order. Relaxing this one would have left
+ * 030 FR-034a's supersede-on-cause rule asserted only where it was never broken, which is how a bug
+ * gets permanently forgotten. Quarantining it was the honest admission that FR-034a's coverage then
+ * lived nowhere, and it is why #277 existed as an issue rather than a note in a commit message.
  *
- * Quarantine means the coverage of FR-034a now lives NOWHERE. That is the admission, and it is why
- * #277 exists rather than a note in a commit message. It must be un-quarantined by the fix.
- *
- *   THRONG_E2E_INCLUDE_QUARANTINE=1 npx playwright test --grep @quarantine --list
+ * WHAT IT TURNED OUT TO BE, and it was not what #277's body assumed. The body blamed a missing cause
+ * key; that was the original 030 defect and it was already fixed. The notice was never RAISED. A
+ * panel restored from a persisted layout never attempts a load of its own, so `fileMissing` stayed
+ * false while the authority's verdict landed on `unloadable`, and the tab-open scan — which read
+ * only `fileMissing` — skipped every casualty. Probed against the real app: two panels, both
+ * `hasState: true`, both `unloadable: true`, both `fileMissing: false`, zero reports.
  *
  * NOTE FOR 034's OWN RECORD: SC-017 and SC-026 require that the quarantined count does not rise.
- * This raises it from one to two. That is a deliberate, named exception rather than a silent
- * breach — see the exception recorded against SC-026 in `specs/034-e2e-harness-integrity/spec.md`.
+ * It rose from one to two under a named exception while this stood; that exception is now
+ * DISCHARGED and the count is back to one — see `specs/034-e2e-harness-integrity/spec.md`.
  */
-test('the file tree got there first, and ONE notice still stands (030 FR-029/FR-034a)', { tag: ['@quarantine', '@extended', '@editor', '@reserve:window'] }, async () => {
+test('the file tree got there first, and ONE notice still stands (030 FR-029/FR-034a)', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
   /*
    * REPORTED FROM A REAL SESSION, and the diagnostics log had both halves 265 ms apart:
    *

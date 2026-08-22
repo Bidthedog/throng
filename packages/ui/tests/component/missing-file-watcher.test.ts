@@ -66,6 +66,8 @@ interface PanelSpec {
   id: string;
   kind?: string;
   missing?: boolean;
+  /** The AUTHORITY's verdict on the path, as a restored panel receives it (#277). */
+  unloadable?: boolean;
 }
 
 /** A tab holding `panels` side by side, and the editor states they publish. */
@@ -75,6 +77,7 @@ function tab(id: string, panels: PanelSpec[]): Record<string, unknown> {
       filePath: `C:/proj/${p.id}.txt`,
       displayName: `${p.id}.txt`,
       fileMissing: p.missing ?? false,
+      unloadable: p.unloadable ?? false,
     });
   }
   return {
@@ -166,6 +169,40 @@ describe('activating a tab reports EVERY editor whose file is gone (FR-100)', ()
     runScan();
 
     expect(reported.calls).toEqual([]);
+  });
+
+  it('reports a panel the AUTHORITY judged unreadable, not only one that failed its own load (#277)', () => {
+    /*
+     * ══ ISSUE #277 — WHY THE CONSOLIDATED NOTICE NEVER APPEARED ══
+     *
+     * Two flags can say a panel is defeated by its path, and they are deliberately distinct:
+     *
+     *   `fileMissing` — a view ATTEMPTED A LOAD and was refused.
+     *   `unloadable`  — the AUTHORITY decided the path is unreadable, and broadcast it.
+     *
+     * Restoring a persisted panel after a restart takes neither of the load paths. It adopts the
+     * authority's state through `getContent` — where `fileMissing` is still false, because nothing
+     * has touched the disk yet — and returns. The verification it then requests comes back on the
+     * sync channel as `unloadable: true`, which raises the in-panel banner, and nothing ever writes
+     * `fileMissing`.
+     *
+     * So on a cold open into a project whose root had been renamed away, this scan skipped every
+     * panel. Measured with a probe against the real app: two panels, both `hasState: true`, both
+     * `unloadable: true`, both `fileMissing: false`, zero reports — while the user was looking at
+     * two per-panel banners saying the files could not be read.
+     *
+     * That is the whole of #277: FR-034a's consolidated notice cannot supersede the file tree's
+     * report of the same absent folder if it is never raised.
+     *
+     * The E2E `editor-missing-aggregate.e2e.ts` covers the same defect over a real restart and a
+     * real rename; this is the same claim at the layer that actually decides it.
+     */
+    setLayout([seed('t1', [{ id: 'restored', unloadable: true }])], 't1');
+    mount();
+    runScan();
+
+    expect(reported.calls.map((c) => c.panelId)).toEqual(['restored']);
+    expect(reported.calls[0].causeKind).toBe('path-missing');
   });
 
   it('scans only EDITOR panels — a terminal has no file to be missing', () => {
@@ -296,27 +333,27 @@ describe('editor.warnOnMissingFile turns the whole thing off', () => {
     expect(reported.calls).toEqual([]);
   });
 
-  it('does NOT start reporting when the setting is turned back on mid-tab — the `warn` dep is dead', () => {
+  it('starts reporting when the setting is turned back on mid-tab (#288)', () => {
     /*
-     * ══ A FINDING, RECORDED AS THE BEHAVIOUR IT IS RATHER THAN THE ONE INTENDED ══
+     * ══ ISSUE #288 — THE `warn` DEPENDENCY WAS INERT, AND THIS IS THE REPRODUCTION ══
      *
      * The effect's dependency list is `[activeTabId, warn]`, hand-written under an
      * `eslint-disable exhaustive-deps` — so `warn` is there deliberately, and the only reason to put
      * it there is for the effect to re-run when the setting changes.
      *
-     * It cannot. The effect's FIRST line is `if (activeTabId === prev.current) return;`, and on a
-     * `warn`-only change the tab has not moved, so it returns before `warn` is ever consulted. The
-     * dependency is inert: the setting takes effect the next time the user switches tabs, and not
-     * before.
+     * It could not. The effect's FIRST line was `if (activeTabId === prev.current) return;`, and on
+     * a `warn`-only change the tab has not moved, so it returned before `warn` was ever consulted.
+     * The dependency was dead: the setting took effect the next time the user switched tabs, and
+     * not before.
      *
-     * This test asserts what the code DOES, and says so in its name, because the alternative is the
-     * shape spec 035 has hit twice already — a test written to the intent, quietly passing against
-     * behaviour that does not match it. Whether a settings change should apply immediately here is a
-     * product decision, and reversing it would change shipped behaviour, so it is reported rather
-     * than fixed under cover of a test migration.
+     * 035 recorded that as a characterisation test — asserting the behaviour the code HAD, with a
+     * note saying the product decision was owed. #288 is that decision, and it went the way the
+     * dependency list always implied: a user who turns the warning back on while looking at a tab
+     * is asking about the tab they are looking at.
      *
-     * The direction that DOES work is the important one: turning the warning OFF is honoured on the
-     * next activation, which the test above proves.
+     * The guard itself is still required, and the test above is what protects it: a layout rebuild
+     * on an unchanged tab must NOT re-report. So the fix cannot be "delete the early return" — it
+     * has to distinguish a tab that did not move from a setting that did.
      */
     settings.warnOnMissingFile = false;
     setLayout([seed('t1', [{ id: 'a', missing: true }])], 't1');
@@ -329,9 +366,9 @@ describe('editor.warnOnMissingFile turns the whole thing off', () => {
     runScan();
 
     expect(
-      reported.calls,
-      'if this now reports, the early return was fixed — update the test and the note above',
-    ).toEqual([]);
+      reported.calls.map((c) => c.panelId),
+      'turning the warning back on scans the tab the user is looking at',
+    ).toEqual(['a']);
   });
 
   it('…and honours the setting from the next activation onward', () => {

@@ -33,14 +33,34 @@ export function MissingFileWatcher(): null {
   const warn = useAppSettings().editor.warnOnMissingFile;
   const activeTabId = ws.layout?.activeTabId;
   const prev = useRef<string | undefined>(undefined);
+  const prevWarn = useRef(warn);
   const report = useReportPanelFailure();
   const reportRef = useRef(report);
   reportRef.current = report;
 
   useEffect(() => {
-    // Only react to an actual tab CHANGE (open / re-select) — not every re-render.
-    if (activeTabId === prev.current) return;
+    /*
+     * Two things may have moved, and only one of them used to count (#288).
+     *
+     * The rule this effect exists for is FR-105: react to an actual tab CHANGE — open or re-select
+     * — and not to every re-render, because dragging or moving a panel rebuilds the layout without
+     * changing the active tab, and a warning fired from each editor's own mount effect would
+     * re-warn on every such move.
+     *
+     * But the guard that enforced it compared ONLY the tab, so `warn` — the second entry in this
+     * effect's hand-written dependency list — was inert. Turning `editor.warnOnMissingFile` back on
+     * while looking at a tab returned here before the setting was ever read, and the user got
+     * silence until they switched tabs and came back. The dependency was deliberate; the guard
+     * simply never let it through.
+     *
+     * So both are tracked. A rebuild on an unchanged tab with an unchanged setting still returns —
+     * which is the case `missing-file-watcher.test.ts:197` pins, and it must stay pinned.
+     */
+    const tabChanged = activeTabId !== prev.current;
+    const warnChanged = warn !== prevWarn.current;
     prev.current = activeTabId;
+    prevWarn.current = warn;
+    if (!tabChanged && !warnChanged) return;
     if (!activeTabId || !warn) return;
     const tab = ws.layout?.tabs.find((t) => t.id === activeTabId);
     if (!tab) return;
@@ -49,7 +69,33 @@ export function MissingFileWatcher(): null {
     const timer = setTimeout(() => {
       const os = window.throng?.osName ?? 'windows';
       for (const { p, st } of panels.map((p) => ({ p, st: getEditorState(p.id) }))) {
-        if (!st?.fileMissing) continue;
+        /*
+         * DEFEATED BY THE PATH — on either of the two flags that can say so (#277).
+         *
+         * `fileMissing` is set by a view that ATTEMPTED A LOAD and was refused. `unloadable` is the
+         * AUTHORITY's verdict on the path, broadcast to every view of the document. They are
+         * deliberately distinct (see `EditorUiState`), and reading only the first is what made the
+         * consolidated notice never appear on a cold restart into a project whose root had been
+         * renamed away:
+         *
+         *   - restoring a persisted panel takes the `getContent` branch, which adopts the
+         *     authority's `fileMissing` — still FALSE, because nothing has read the disk yet — and
+         *     returns without ever attempting a load of its own;
+         *   - it then asks for a verification, and the verdict comes back on the sync channel as
+         *     `unloadable: true`, which sets the banner the user can see;
+         *   - `fileMissing` is never written by that path, so it stays false forever, and this scan
+         *     skipped every panel. Measured with a probe: two panels, both `hasState: true`, both
+         *     `unloadable: true`, both `fileMissing: false`, nothing reported.
+         *
+         * So the user saw two per-panel banners and the file tree's notice, and the consolidated
+         * notice that FR-034a requires to supersede the tree's — the one naming which panels the
+         * absent folder defeated — was never raised at all.
+         *
+         * This does NOT weaken FR-105. That rule is about not warning from an editor's own mount
+         * effect; the guard enforcing it is this effect's once-per-activation gate above, which is
+         * untouched.
+         */
+        if (!st?.fileMissing && !st?.unloadable) continue;
         reportRef.current({
           panelId: p.id,
           message: missingFileMessage('missing'),
