@@ -12,8 +12,11 @@
 import type {
   PanelTypeContext,
   PanelTypeDescriptor,
+  TerminalPanelDefaults,
   ValidationResult,
 } from '../panel-type/descriptor.js';
+
+export type { TerminalPanelDefaults };
 
 /** The Terminal panel type's id. */
 export const TERMINAL_KIND = 'terminal';
@@ -63,7 +66,27 @@ export type TerminalPanelConfig = {
  * failed config write cannot lose the original value (FR-002e), and re-reading an
  * already-migrated config never sees the old key, which makes it idempotent.
  */
-export function readTerminalPanelConfig(raw: Record<string, unknown> | undefined): {
+/**
+ * What a clean config ships (039 FR-002), duplicated here as the last-resort fallback for a
+ * context that cannot reach the settings. It must stay in step with `DEFAULT_APP_SETTINGS.terminals`
+ * — `panel-type-defaults-match-settings.test.ts` fails the build if it drifts, which is the same
+ * class of divergence #307 is about.
+ */
+export const SHIPPED_TERMINAL_PANEL_DEFAULTS: TerminalPanelDefaults = {
+  rememberCommand: false,
+  rememberDirectory: true,
+  runAsAdmin: false,
+};
+
+/** A form value is a string; `undefined` memory means "not remembered", so take the seed. */
+function boolValue(remembered: boolean | undefined, seed: boolean): string {
+  return (typeof remembered === 'boolean' ? remembered : seed) ? 'true' : 'false';
+}
+
+export function readTerminalPanelConfig(
+  raw: Record<string, unknown> | undefined,
+  defaults: TerminalPanelDefaults,
+): {
   shellArguments: string;
   startupCommand: string;
   rememberCommand: boolean;
@@ -78,14 +101,32 @@ export function readTerminalPanelConfig(raw: Record<string, unknown> | undefined
   return {
     shellArguments,
     startupCommand: typeof raw?.startupCommand === 'string' ? raw.startupCommand : '',
-    // Defaults ON, like the directory beside it. Reported from real use: a command that takes
-    // over a terminal is the one you want back next launch, and an opt-in a user has to discover
-    // first means the feature silently does nothing for everyone who never found the checkbox.
-    // Only an explicit `false` turns it off, so an existing Panel's choice still wins.
-    rememberCommand: raw?.rememberCommand !== false,
-    // Defaults ON: absent (a pre-025 panel, or one confirmed before this control existed) means
-    // remember. Only an explicit `false` turns it off.
-    rememberDirectory: raw?.rememberDirectory !== false,
+    /*
+     * 039 FR-005a. An absent value resolves to the GLOBAL PREFERENCE; an explicit boolean is the
+     * Panel's own answer and still wins (FR-005).
+     *
+     * This replaces `raw?.rememberCommand !== false`, which resolved absent to a hard-coded `true`.
+     * That literal contradicted 025 FR-015 ("a per-Panel OPT-IN control … MUST default to off") for
+     * two releases, and 025 FR-047a leans on FR-015 by name as one of exactly two safeguards that
+     * make a captured command re-running with no prompt acceptable. The old comment here argued the
+     * change was right because an opt-in a user must discover on a per-panel form silently does
+     * nothing — a fair objection, which 039 answers by making the default a visible preference
+     * (`terminals.defaultRememberCommand`) rather than by leaving the requirement unhonoured.
+     *
+     * The directory beside it is NOT the same case: 025 FR-027b really does specify absent-means-on
+     * for the directory, and its preference ships `true`, so nothing observable changes there. The
+     * two differ deliberately — a remembered directory cannot execute anything, and a remembered
+     * command can. Losing that distinction is the most likely account of how the drift happened.
+     *
+     * A non-boolean is not an explicit value, so it resolves to the preference too rather than
+     * being coerced to "on" by a `!== false` test.
+     */
+    rememberCommand:
+      typeof raw?.rememberCommand === 'boolean' ? raw.rememberCommand : defaults.rememberCommand,
+    rememberDirectory:
+      typeof raw?.rememberDirectory === 'boolean'
+        ? raw.rememberDirectory
+        : defaults.rememberDirectory,
   };
 }
 
@@ -127,6 +168,10 @@ export const terminalPanelType: PanelTypeDescriptor<TerminalValues> = {
   ],
   defaults: (ctx: PanelTypeContext): TerminalValues => {
     const first = ctx.flavours[0];
+    // 039 FR-004. A context that cannot reach the settings falls back to what a clean config
+    // SHIPS — never to the pre-039 literals, so a missed call site yields the correct default
+    // rather than quietly reinstating the behaviour this feature exists to fix.
+    const seeds = ctx.terminalDefaults ?? SHIPPED_TERMINAL_PANEL_DEFAULTS;
     // 025 FR-007a: a Panel whose terminal has been closed pre-fills from what it remembered,
     // so the empty state doubles as the edit screen. With no memory this is today's behaviour.
     const memory = ctx.terminalMemory;
@@ -136,11 +181,19 @@ export const terminalPanelType: PanelTypeDescriptor<TerminalValues> = {
       flavourId,
       shellArguments: memory?.shellArguments ?? chosen?.defaultShellArguments ?? '',
       startupCommand: memory?.startupCommand ?? '',
-      // Defaults ON (amended — see parseTerminalConfig): only an explicit false turns it off.
-      rememberCommand: memory?.rememberCommand === false ? 'false' : 'true',
-      // Defaults ON (FR-027a): only an explicit false turns it off.
-      rememberDirectory: memory?.rememberDirectory === false ? 'false' : 'true',
-      runAsAdmin: 'false',
+      /*
+       * 039 FR-004/FR-005. The three seeds come from the preferences; what the Panel REMEMBERED
+       * still wins (025 FR-007a — the empty state doubles as the edit screen).
+       *
+       * These lines previously read `memory?.x === false ? 'false' : 'true'`, i.e. a hard-coded
+       * literal for a fresh Panel. The `rememberCommand` literal was `'true'`, which is what
+       * contradicted 025 FR-015; its comment cited `parseTerminalConfig`, a function that does not
+       * exist in this repository and never appears in any spec. See 039's Supersessions, and #307
+       * for the governance gap that let a stale citation stand in for an amendment.
+       */
+      rememberCommand: boolValue(memory?.rememberCommand, seeds.rememberCommand),
+      rememberDirectory: boolValue(memory?.rememberDirectory, seeds.rememberDirectory),
+      runAsAdmin: boolValue(undefined, seeds.runAsAdmin),
     };
   },
   validate: (values: TerminalValues, ctx: PanelTypeContext): ValidationResult => {

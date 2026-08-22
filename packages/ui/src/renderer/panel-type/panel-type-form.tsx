@@ -5,6 +5,7 @@ import {
   type TerminalMemory,
 } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
+import { useAppSettings } from '../config/config-store.js';
 import {
   selectKind,
   canConfirm,
@@ -61,9 +62,25 @@ export function PanelTypeForm({
   const flavours = useFlavours();
   const { elevated } = useCapabilities();
   const registry = defaultPanelTypeRegistry;
+  // 039 FR-001/FR-004 (#223) — the three New Panel checkboxes seed from Preferences → Terminal
+  // for a FRESH Panel. `terminalMemory` still wins over these (FR-005), which is what keeps 025
+  // FR-007a's "the empty state is the edit screen" true.
+  const settings = useAppSettings();
+  const terminalDefaults = useMemo(
+    () => ({
+      rememberCommand: settings.terminals.defaultRememberCommand,
+      rememberDirectory: settings.terminals.defaultRememberDirectory,
+      runAsAdmin: settings.terminals.defaultRunAsAdmin,
+    }),
+    [
+      settings.terminals.defaultRememberCommand,
+      settings.terminals.defaultRememberDirectory,
+      settings.terminals.defaultRunAsAdmin,
+    ],
+  );
   const ctx = useMemo<PanelTypeContext>(
-    () => ({ projectRoot, flavours, rootless, terminalMemory }),
-    [projectRoot, flavours, rootless, terminalMemory],
+    () => ({ projectRoot, flavours, rootless, terminalMemory, terminalDefaults }),
+    [projectRoot, flavours, rootless, terminalMemory, terminalDefaults],
   );
   const deps = useMemo<FormDeps>(() => ({ registry, ctx }), [registry, ctx]);
   // The draft lives in a cross-window store keyed by panelId, so a cloned Panel's

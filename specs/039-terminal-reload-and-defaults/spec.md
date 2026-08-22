@@ -312,6 +312,16 @@ per-panel notice.
 - **FR-025**: Reloading a dormant terminal MUST go through the same path an automatic reload uses. A
   reloaded terminal MUST be indistinguishable from an automatically reloaded one.
 - **FR-026**: A dormant terminal MUST hold **no** PTY, **no** shell process and **no** `conhost`.
+
+  **This is satisfied by construction, and the construction is not an accident — do not "simplify"
+  it away.** `TerminalPanel` calls `useTerminal()` unconditionally, and React forbids a conditional
+  hook, so "render the panel but start no shell" cannot be expressed *inside* `TerminalPanel`
+  without restructuring it. A dormant Panel therefore renders a **different component**, chosen one
+  level up in `panel-body.tsx`'s existing `panel.kind === 'terminal'` branch, before
+  `<TerminalPanel>` is ever constructed. The code that starts a terminal is never mounted, so no PTY
+  can leak even if someone later adds a new start path inside `TerminalPanel`. Folding the dormant
+  check back into `TerminalPanel` would replace a guarantee with a gate that a future edit can
+  quietly break.
 - **FR-027**: A dormant Panel MUST keep its name, its type and its place in the layout, and MUST keep
   them across an application restart.
 - **FR-028**: In Manual mode, switching a project away and back MUST NOT reload a terminal the user

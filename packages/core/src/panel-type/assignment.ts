@@ -116,3 +116,26 @@ export function setTerminalMemory(
     terminalMemory: { ...(p.terminalMemory ?? {}), ...memory },
   }));
 }
+
+/**
+ * 039 FR-022/FR-027 (#293) — mark a Terminal Panel dormant, or wake it.
+ *
+ * Setting `false` DELETES the key rather than storing it, so "not dormant" has exactly one
+ * representation in a persisted layout instead of two. A layout written before 039 has no key at
+ * all, and waking a panel must return it to that same shape — otherwise every workspace slowly
+ * accumulates `dormant: false` entries that mean nothing, and a diff of two equivalent layouts
+ * stops being empty.
+ */
+export function setPanelDormant(
+  layout: WorkspaceLayout,
+  panelId: string,
+  dormant: boolean,
+): WorkspaceLayout {
+  return updatePanel(layout, panelId, (p) => {
+    if (!dormant) {
+      const { dormant: _drop, ...rest } = p;
+      return rest;
+    }
+    return { ...p, dormant: true };
+  });
+}

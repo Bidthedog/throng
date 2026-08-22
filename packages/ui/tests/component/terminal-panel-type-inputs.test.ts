@@ -153,20 +153,46 @@ describe('the Terminal type form offers its three configuration controls (025 FR
     expect(command.title).toMatch(/the shell runs/i);
   });
 
-  it('ships "Remember the last running command" ON (FR-015)', async () => {
+  /*
+   * 039 (#223) — THIS TEST ASSERTED THE OPPOSITE OF THE REQUIREMENT IT CITED.
+   *
+   * It was titled 'ships "Remember the last running command" ON (FR-015)'. 025 FR-015 says the
+   * control is opt-in and "MUST default to off". The test was correct about the CODE and wrong
+   * about the SPEC, and its name pointed at the requirement it contradicted — which is how a
+   * two-release drift stayed invisible to everyone reading the suite for reassurance. It is the
+   * clearest single artefact of the problem #307 tracks, and it is preserved here in the
+   * correction rather than quietly deleted.
+   *
+   * What is asserted now: a FRESH panel does not remember, and a panel whose user (or preference)
+   * turned it on does. The values are explicit in both cases because the descriptor's `defaults()`
+   * always supplies them — this form is never handed a bare `{}` in production.
+   */
+  it('ships "Remember the last running command" OFF (025 FR-015, restored by 039)', async () => {
     stubBridge();
-    await renderForm();
+    await renderForm({ rememberCommand: 'false' });
 
-    /*
-     * Asserted rather than assumed, which is what the E2E did too and for the same reason: an
-     * opt-in a user has to discover first does nothing at all for everyone who never found the
-     * checkbox. A silently flipped default fails here.
-     *
-     * The value is ABSENT from `values`, deliberately. `rememberCommand` is read as
-     * `values.rememberCommand !== 'false'`, so "no stored preference" and "explicitly on" must
-     * both render checked — and a fresh panel is the first of those.
-     */
+    expect(control('terminal-remember-command')).not.toBeChecked();
+  });
+
+  it('shows it ticked when the preference or the panel says so', async () => {
+    stubBridge();
+    await renderForm({ rememberCommand: 'true' });
+
     expect(control('terminal-remember-command')).toBeChecked();
+  });
+
+  /*
+   * 039 FR-008 — the elevation gate is NOT a preference.
+   *
+   * `terminals.defaultRunAsAdmin` seeds the checkbox, and #223 is explicit that a seed of "on"
+   * must never force, imply or appear to grant elevation. `elevated: false` is the unelevated
+   * daemon, and the control must stay disabled regardless of what the value says.
+   */
+  it('leaves "Run as administrator" DISABLED when unelevated, even seeded on (039 FR-008)', async () => {
+    stubBridge();
+    await renderForm({ runAsAdmin: 'true' });
+
+    expect(control('terminal-admin')).toBeDisabled();
   });
 });
 

@@ -24,9 +24,18 @@ export function TerminalInputs({
     onChange({ ...values, flavourId: value, shellArguments: flavour?.defaultShellArguments ?? '' });
   };
   const runAsAdmin = values.runAsAdmin === 'true';
-  // Absent means ON, like the directory beside it — only an explicit 'false' turns it off.
-  const rememberCommand = values.rememberCommand !== 'false';
-  // Absent means ON (FR-027a) — only an explicit 'false' turns it off.
+  /*
+   * 039 FR-002. Absent means OFF for the command, which is 025 FR-015 ("opt-in … MUST default to
+   * off") being honoured again. This read `!== 'false'` — absent means ON — which is the renderer's
+   * copy of the same drift `panel-type.ts` carried.
+   *
+   * In practice the descriptor's `defaults()` always supplies an explicit value now, so this
+   * fallback should never decide anything. It is written to agree with the shipped default anyway,
+   * because a fallback that disagrees with it is exactly how the two got out of step before.
+   */
+  const rememberCommand = values.rememberCommand === 'true';
+  // Absent means ON (025 FR-027b) — only an explicit 'false' turns it off. UNCHANGED by 039: a
+  // remembered directory cannot execute anything, which is why it differs from the command above.
   const rememberDirectory = values.rememberDirectory !== 'false';
   // Some shells (PowerShell) cannot be observed from outside and only report their directory while
   // shell integration is on. Offering the control anyway would be a lie: it would look enabled and

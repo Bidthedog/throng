@@ -101,6 +101,24 @@ export interface Panel {
    */
   terminalMemory?: TerminalMemory;
   /**
+   * 039 FR-022/FR-027 (#293) — this Terminal Panel has NOT been reloaded, and is waiting to be.
+   *
+   * Set when a project is opened while `terminals.reloadMode` is `'manual'`; cleared when the user
+   * reloads the panel, or when a project is opened while the mode is back to `'automatic'`
+   * (FR-029a). While set, the panel renders a placeholder offering **Reload** and holds no PTY,
+   * no shell and no `conhost` (FR-026).
+   *
+   * **Absent means not dormant.** A layout written before 039 therefore loads unchanged, and
+   * Automatic mode never writes this field at all — which is what keeps FR-021's "no observable
+   * change" true even of the workspace file.
+   *
+   * Beside `terminalMemory` and NOT inside `config`, for the reason given above it: `clearPanelType`
+   * deletes `config` when a terminal's content ends, and dormancy has to survive that. It is also
+   * not view state — a dormant panel has no shell anywhere, in any window — so Principle XI's
+   * "only view state may differ per Panel" does not make it per-view.
+   */
+  dormant?: boolean;
+  /**
    * This panel's own text-zoom level (012, revised to per-instance). An integer
    * step in the shared zoom range (see config/zoom.ts); absent / 0 = inherited (no
    * adjustment). Every panel zooms independently of every other — terminals and
