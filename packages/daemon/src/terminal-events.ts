@@ -3,7 +3,6 @@ import { injectable } from 'inversify';
 import {
   TERMINAL_OUTPUT_NOTIFICATION,
   TERMINAL_EXIT_NOTIFICATION,
-  TERMINAL_FLAVOUR_MISSING_NOTIFICATION,
   TERMINAL_GRID_NOTIFICATION,
   TERMINAL_CWD_NOTIFICATION,
   TERMINAL_COMMAND_NOTIFICATION,
@@ -51,10 +50,6 @@ export class TerminalEvents {
     unexpected: boolean,
   ): void {
     this.emit(TERMINAL_EXIT_NOTIFICATION, { panelId, code, signal, unexpected });
-  }
-
-  publishFlavourMissing(panelId: string, flavourId: string): void {
-    this.emit(TERMINAL_FLAVOUR_MISSING_NOTIFICATION, { panelId, flavourId });
   }
 
   /**

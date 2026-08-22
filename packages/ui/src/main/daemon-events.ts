@@ -5,7 +5,6 @@ import {
   TERMINAL_SUBSCRIBE_METHOD,
   TERMINAL_OUTPUT_NOTIFICATION,
   TERMINAL_EXIT_NOTIFICATION,
-  TERMINAL_FLAVOUR_MISSING_NOTIFICATION,
   TERMINAL_GRID_NOTIFICATION,
   TERMINAL_CWD_NOTIFICATION,
   TERMINAL_COMMAND_NOTIFICATION,
@@ -13,8 +12,10 @@ import {
 
 /**
  * Long-lived daemon→UI events channel (005 Phase C). Holds one subscribed socket
- * to the daemon and forwards `terminal.output`/`terminal.exit`/`flavourMissing`
- * notifications to **every** renderer window via `webContents.send`. Broadcasting
+ * to the daemon and forwards `terminal.output`/`terminal.exit`/`terminal.grid`/
+ * `terminal.cwd`/`terminal.command` notifications to **every** renderer window via
+ * `webContents.send`. Every channel named here has a preload listener, and
+ * `ipc-bridge-parity.test.ts` is what keeps that true (#279). Broadcasting
  * to all windows (each filters by panelId) is what makes a mirrored panel show one
  * session in many views (FR-021). Reconnects if the socket drops (e.g. a daemon
  * restart) so streaming resumes.
@@ -94,15 +95,13 @@ export class DaemonEvents {
         ? 'throng:terminal:output'
         : msg.method === TERMINAL_EXIT_NOTIFICATION
           ? 'throng:terminal:exit'
-          : msg.method === TERMINAL_FLAVOUR_MISSING_NOTIFICATION
-            ? 'throng:terminal:flavourMissing'
-            : msg.method === TERMINAL_GRID_NOTIFICATION
-              ? 'throng:terminal:grid'
-              : msg.method === TERMINAL_CWD_NOTIFICATION
-                ? 'throng:terminal:cwd'
-                : msg.method === TERMINAL_COMMAND_NOTIFICATION
-                  ? 'throng:terminal:command'
-                  : null;
+          : msg.method === TERMINAL_GRID_NOTIFICATION
+            ? 'throng:terminal:grid'
+            : msg.method === TERMINAL_CWD_NOTIFICATION
+              ? 'throng:terminal:cwd'
+              : msg.method === TERMINAL_COMMAND_NOTIFICATION
+                ? 'throng:terminal:command'
+                : null;
     if (!channel) return;
     broadcastToWindows(BrowserWindow.getAllWindows(), channel, msg.params);
   }
