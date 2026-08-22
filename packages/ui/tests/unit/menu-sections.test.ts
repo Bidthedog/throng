@@ -254,6 +254,7 @@ const panelActions = {
   revealInTree: noop,
   openInOsExplorer: noop,
   tryAgain: noop,
+  reloadTerminal: noop,
   copyDetails: noop,
   clearPanelType: noop,
   redraw: noop,
@@ -312,6 +313,7 @@ const terminalMenu = (over: { link?: string | null; selection?: string; startFai
       paste: noop,
       redraw: noop,
       tryAgain: noop,
+      reloadTerminal: noop,
       copyDetails: noop,
       clearPanelType: noop,
     },
@@ -718,5 +720,45 @@ describe('Send to Tab offers New Tab first, then every other Tab (005 FR-027)', 
     // The empty-`otherTabs` case the E2E never reached: with no other Tab, a submenu built purely
     // by mapping `otherTabs` would be empty, and an empty flyout is a dead row.
     expect(sendToTabRow(withTabs([])).submenu?.map((i) => i.label)).toEqual(['New Tab']);
+  });
+});
+
+
+/*
+ * 039 FR-024/FR-029 (#293) — Reload, for a dormant terminal Panel.
+ *
+ * Two things are being pinned. That the action HAS a menu item at all, which the constitution
+ * requires of any panel action in the same increment that adds it — the placeholder's button is
+ * such an action. And that it appears only while the Panel is dormant, because a command that is
+ * always present but only sometimes meaningful is worse than one that comes and goes.
+ */
+describe('the dormant terminal Reload item (039 FR-024)', () => {
+  const labels = (p: Parameters<typeof panel>[0]): string[] =>
+    panelHeader({ panel: panel(p) }).map((i) => i.label);
+
+  it('offers Reload while the Panel is dormant', () => {
+    expect(labels({ kind: 'terminal', dormant: true })).toContain('Reload');
+  });
+
+  it('does NOT offer it on a running terminal', () => {
+    expect(labels({ kind: 'terminal' })).not.toContain('Reload');
+  });
+
+  it('does NOT offer it on an untyped or editor Panel', () => {
+    expect(labels({})).not.toContain('Reload');
+    expect(labels({ kind: 'editor' })).not.toContain('Reload');
+  });
+
+  /*
+   * FR-029 — dormancy is a state, not a failure. The failure items (Try again / Copy details /
+   * Clear panel type) appear only for `editorFailure`, so a dormant Panel must show Reload
+   * WITHOUT them. If Reload ever arrives beside them, dormancy has been routed through the failure
+   * surfaces and the 'one condition, one notice' rule has been broken.
+   */
+  it('shows Reload without any failure item beside it (FR-029)', () => {
+    const l = labels({ kind: 'terminal', dormant: true });
+    expect(l).toContain('Reload');
+    expect(l).not.toContain('Try again');
+    expect(l).not.toContain('Copy details');
   });
 });

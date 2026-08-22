@@ -213,6 +213,7 @@ const resetOnlyActions = {
   revealInTree: noop,
   openInOsExplorer: noop,
   tryAgain: noop,
+  reloadTerminal: noop,
   copyDetails: noop,
   clearPanelType: noop,
   redraw: noop,

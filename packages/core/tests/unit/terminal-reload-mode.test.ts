@@ -3,6 +3,7 @@ import {
   terminalReloadAction,
   startsTerminal,
   changesDormancy,
+  applyReloadMode,
   type TerminalReloadAction,
 } from '@throng/core';
 
@@ -80,5 +81,77 @@ describe('what an action implies', () => {
     expect(changesDormancy('wake-and-start')).toBe(true);
     expect(changesDormancy('start')).toBe(false);
     expect(changesDormancy('stay-dormant')).toBe(false);
+  });
+});
+
+
+/*
+ * 039 FR-032 (#293) — the whole layout, every tab, at project-open time.
+ *
+ * The identity assertions below are the load-bearing ones. "Automatic mode changes nothing" has to
+ * be true of the workspace FILE and not only the screen: if this returned a fresh object every time,
+ * the caller would queue a save on every project open and every install would start rewriting its
+ * layout for no reason. Object identity is how the caller can tell, so it is asserted rather than
+ * assumed.
+ */
+describe('applyReloadMode over a whole layout (039 FR-032)', () => {
+  const panel = (id: string, extra: Record<string, unknown> = {}) => ({
+    type: 'panel' as const,
+    id,
+    originProjectId: 'proj',
+    title: id,
+    kind: 'terminal',
+    ...extra,
+  });
+
+  const layoutOf = (...roots: unknown[]) =>
+    ({
+      tabs: roots.map((root, i) => ({ id: `t${i}`, name: `Tab ${i}`, root })),
+      activeTabId: 't0',
+    }) as never;
+
+  const dormantIds = (l: never): string[] =>
+    (l as { tabs: { root: { id: string; dormant?: boolean } }[] }).tabs
+      .filter((t) => t.root.dormant === true)
+      .map((t) => t.root.id);
+
+  it('automatic over a fresh layout returns the SAME object — no write is queued (FR-021)', () => {
+    const l = layoutOf(panel('p1'), panel('p2'));
+    expect(applyReloadMode(l, 'automatic')).toBe(l);
+  });
+
+  it('manual over a fresh layout marks every terminal, in every tab (FR-022, FR-032)', () => {
+    const l = layoutOf(panel('p1'), panel('p2'), panel('p3'));
+    const next = applyReloadMode(l, 'manual');
+    expect(next).not.toBe(l);
+    // Tab 2 has never been rendered in any session. It is decided here all the same, which is the
+    // point: dormancy is decided when the layout LOADS, not when a tab is first looked at.
+    expect(dormantIds(next).sort()).toEqual(['p1', 'p2', 'p3']);
+  });
+
+  it('manual over an already-dormant layout returns the SAME object (FR-028)', () => {
+    const l = layoutOf(panel('p1', { dormant: true }), panel('p2', { dormant: true }));
+    expect(applyReloadMode(l, 'manual')).toBe(l);
+  });
+
+  it('automatic wakes what manual left dormant (FR-029a)', () => {
+    const l = layoutOf(panel('p1', { dormant: true }), panel('p2', { dormant: true }));
+    const next = applyReloadMode(l, 'automatic');
+    expect(next).not.toBe(l);
+    expect(dormantIds(next)).toEqual([]);
+  });
+
+  it('leaves non-terminal panels alone', () => {
+    const l = layoutOf(panel('e1', { kind: 'editor' }), panel('u1', { kind: undefined }));
+    expect(applyReloadMode(l, 'manual')).toBe(l);
+  });
+
+  it('round-trips: manual then automatic returns to the original shape (FR-027, FR-029a)', () => {
+    const l = layoutOf(panel('p1'), panel('p2'));
+    const back = applyReloadMode(applyReloadMode(l, 'manual'), 'automatic');
+    // Deep-equal, not identity: the key must be DELETED on wake rather than set to false, or a
+    // layout would slowly accumulate meaningless `dormant: false` entries and two equivalent
+    // workspaces would stop comparing equal.
+    expect(back).toEqual(l);
   });
 });
