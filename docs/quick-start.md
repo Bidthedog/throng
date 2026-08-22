@@ -144,10 +144,54 @@ Choose **Terminal** as a panel's type and you get these fields:
 - **Reopen in the last directory** — when ticked, the panel reopens in the directory it was last
   working in rather than the project root. **On by default.** It is disabled for a shell that
   cannot report its directory — see *Shell integration* below.
-- **Run as administrator** — only available if throng itself is running elevated.
+- **Run as administrator** — only available if throng itself is running elevated. Off by default.
+
+All three of those checkboxes start from a **preference**, so if you always want the opposite you
+can set it once instead of re-ticking it on every panel. They live under **Terminal** in
+Preferences — *Remember the last running command by default*, *Reopen in the last directory by
+default*, *Run as administrator by default*. A panel that has its own saved value keeps it: the
+preference is what a **new** panel starts from, not an override.
+
+"Run as administrator by default" only decides what the checkbox starts as. Whether a terminal can
+be elevated at all still depends on throng itself running elevated, and turning the preference on
+never elevates anything on its own.
 
 Confirm, and you have a live shell **at the project root** — or back in the directory this panel
 was last working in, if it has one.
+
+### Reloading terminals
+
+By default, opening a project brings its terminals back: the tab you land on starts its terminals
+immediately, and every other tab starts its own the moment you first click it.
+
+**Reload terminals when a project opens** (Preferences → Terminal) lets you change that:
+
+- **Automatic** — the default, and exactly the behaviour above.
+- **Manual** — nothing starts on its own. Each terminal panel keeps its name, its type and its place
+  in the layout, and shows a **Reload** button. Reload the ones you want and leave the rest alone;
+  a dormant panel holds no shell at all, so it costs nothing.
+
+A panel left dormant stays dormant across a project switch and across a restart — throng will not
+quietly start something you deliberately left closed. Reload is also on the panel's menu, not only
+on the panel. Switching back to Automatic takes effect the next time you open a project.
+
+A dormant terminal is not an error, and throng does not report it as one.
+
+### When a folder goes missing and comes back
+
+If a project's folder is renamed, moved, or sits on a share that blinks, its terminals cannot start
+and say so on the panel. **Put the folder back and they start themselves** — in the directory they
+were configured for, with the panel's own settings intact, and without a notice per panel.
+
+Only terminals that failed *because of the path* do this. A terminal that failed for another reason —
+a shell that is not installed, a permission refusal — does not retry in a loop, because nothing about
+the folder returning would fix it. **↻ Retry** is still there for those, and works exactly as before.
+
+Terminals in a tab you have not opened were never started, so there is nothing for them to recover
+from: they start normally the first time you open that tab.
+
+This is not session resurrection. It is a fresh shell in a directory that came back — scrollback and
+whatever was running are gone.
 
 ### Shell integration
 
