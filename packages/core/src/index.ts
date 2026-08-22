@@ -152,6 +152,8 @@ export type {
   DeleteMode,
   TerminalSettings,
   TerminalFlavourConfig,
+  // 039 FR-020 (#293) — automatic vs manual terminal reload.
+  TerminalReloadMode,
   EditorSettings,
   EditorNavigationSettings,
   EditorOpenOnClick,
@@ -162,7 +164,12 @@ export type {
   NewProjectSettings,
   StartingFolderMode,
 } from './config/app-settings.js';
-export { DEFAULT_APP_SETTINGS, parseAppSettings } from './config/app-settings.js';
+export {
+  DEFAULT_APP_SETTINGS,
+  parseAppSettings,
+  // 039 D-4 — the closed value set, shared by the parser and the descriptor so the two cannot drift.
+  TERMINAL_RELOAD_MODES,
+} from './config/app-settings.js';
 // 031 (#227) — the declared-bounds guard, and the guarded read every settings reader should use.
 export {
   applyDeclaredBounds,
