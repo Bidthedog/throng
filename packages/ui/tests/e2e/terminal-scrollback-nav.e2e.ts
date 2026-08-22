@@ -198,3 +198,126 @@ test('with find open, next/previous jump the viewport between matches (FR-015)',
     cleanupTemp(root);
   }
 });
+
+test('scrollback still scrolls after a project switch and back (#290)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
+  /*
+   * #290 — "Terminal scrolling dies after a project switch until the window is resized."
+   *
+   * Every scroll route dies at once: wheel, PageUp/PageDown, and Ctrl+Home/Ctrl+End. The terminal
+   * is otherwise alive — it accepts input and paints new output — so it is specifically the
+   * VIEWPORT that will not move. A window resize recovers it every time; `Ctrl+F5`
+   * (`terminal.redraw`) does not, and the reporter flagged that second fact as the one that
+   * identifies the fault.
+   *
+   * They are right, and reading xterm 6.0.0 says why. `Terminal.refresh()` is
+   * `this._renderService?.refreshRows(e,t)` and nothing else, while the viewport's scroll area is
+   * synced from exactly two places: `_bufferService.onResize` and the input handler's `onScroll`.
+   * So a redraw cannot restore it, a resize always can, and more output sometimes does — which is
+   * the reporter's three observations, in order. `Terminal.resize()` also early-returns when the
+   * dimensions are unchanged, so the same-grid branch in `use-terminal.ts` has no public route to
+   * a sync at all.
+   *
+   * WHY THIS TEST IS AT E2E, WHICH IS NOT THE CHEAP ANSWER. The defect is a scroll area computed
+   * from real layout during a real render. jsdom has no layout, so a component test would assert
+   * against dimensions that are zero whatever the code does — it would pass with the bug present,
+   * which is the worst outcome a cheaper layer can produce. This is the constitution's E2E reserve
+   * as written: compositing and hardware rendering.
+   *
+   * The control assertion before the switch is deliberate. Without it a red here could equally mean
+   * "the keys never worked in this file", and the whole value of the test is telling those apart.
+   */
+  const rootA = mkdtempSync(join(tmpdir(), 'throng-nav-a-'));
+  const rootB = mkdtempSync(join(tmpdir(), 'throng-nav-b-'));
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'NavSwitchA', rootA);
+      const nameA = (
+        await win.locator('.project-item[data-active="true"]').evaluate((el) => el.textContent ?? '')
+      ).trim();
+      const pid = await newTerminal(win, rootA);
+
+      await run(win, pid, 'echo TOP_OF_HISTORY', 'TOP_OF_HISTORY');
+      await run(win, pid, 'for /l %i in (1,1,200) do @echo filler %i', 'filler 200');
+      await expect(win.getByTestId(`terminal-${pid}`)).not.toContainText('TOP_OF_HISTORY');
+
+      // CONTROL: the viewport moves before any project switch, so a failure after one is about
+      // the switch and not about these keys.
+      await win.getByTestId(`terminal-${pid}`).click();
+      await win.keyboard.press('Control+Home');
+      await expect(win.getByTestId(`terminal-${pid}`)).toContainText('TOP_OF_HISTORY');
+      await win.keyboard.press('Control+End');
+      await expect(win.getByTestId(`terminal-${pid}`)).toContainText('filler 200');
+
+      // Away to another project and back. Creating one opens it, which unmounts A's panels;
+      // clicking A's row remounts them against the session the daemon still holds.
+      await createProject(win, 'NavSwitchB', rootB);
+      const nameB = (
+        await win.locator('.project-item[data-active="true"]').evaluate((el) => el.textContent ?? '')
+      ).trim();
+      await win.locator('.project-item').filter({ hasText: nameA }).first().click();
+      await expect(win.locator('.project-item[data-active="true"]')).toContainText(nameA);
+
+      // The terminal is back and still holds its history…
+      const back = await firstPanelId(win);
+      const term2 = win.getByTestId(`terminal-${back}`);
+      await expect(term2).toBeVisible();
+      await expect(term2).toContainText('filler 200', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
+
+      // …and the viewport must still move. This is the assertion #290 breaks: the panel paints,
+      // accepts input and shows live output, while every scroll route does nothing at all.
+      await term2.click();
+      await win.keyboard.press('Control+Home');
+      await expect(term2).toContainText('TOP_OF_HISTORY');
+      await win.keyboard.press('Control+End');
+      await expect(term2).toContainText('filler 200');
+
+      /*
+       * SEVERAL MORE ROUND TRIPS, because one was not enough to reproduce it.
+       *
+       * The report opens with "After throng has been running for a while", and the recovery it
+       * describes is inconsistent — sometimes more output frees it, sometimes an arrow key does.
+       * That is the shape of a race, and a race needs its window hit rather than merely approached.
+       * Each switch is a fresh unmount and remount of the panel, which is the moment the viewport
+       * either gets its scroll area or does not, so repeating the trip is sampling the window a
+       * handful of times instead of once.
+       *
+       * This is a SCENARIO, not a statistical re-run: the same assertion, deterministic in shape,
+       * inside one test. It is not "run the suite until it goes red", which would be gambling and
+       * would prove nothing when it eventually did.
+       *
+       * ══ HOW A GREEN HERE MAY BE READ, AND HOW IT MAY NOT ══
+       *
+       * This test passing does NOT mean #290 is absent. It means six samples did not hit it. The
+       * difference matters to whoever reads this next: "we tested it and it was fine" would say the
+       * area was investigated and found clear, and that is the opposite of what is known. What is
+       * known is that the defect is real, reported with recovery behaviour consistent enough to
+       * identify the mechanism, and that these particular conditions do not trigger it.
+       *
+       * A RED on any trip is a different matter entirely — that is a reproduction, and the fix
+       * follows from it directly.
+       */
+      for (let trip = 0; trip < 5; trip++) {
+        await win.locator('.project-item').filter({ hasText: nameB }).first().click();
+        await expect(win.locator('.project-item[data-active="true"]')).toContainText(nameB);
+        await win.locator('.project-item').filter({ hasText: nameA }).first().click();
+        await expect(win.locator('.project-item[data-active="true"]')).toContainText(nameA);
+
+        const pidN = await firstPanelId(win);
+        const termN = win.getByTestId(`terminal-${pidN}`);
+        await expect(termN).toBeVisible();
+        await expect(termN).toContainText('filler 200', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
+
+        await termN.click();
+        await win.keyboard.press('Control+Home');
+        await expect(termN, `scroll died on round trip ${trip + 1} (#290)`).toContainText(
+          'TOP_OF_HISTORY',
+        );
+        await win.keyboard.press('Control+End');
+        await expect(termN).toContainText('filler 200');
+      }
+    });
+  } finally {
+    cleanupTemp(rootA);
+    cleanupTemp(rootB);
+  }
+});
