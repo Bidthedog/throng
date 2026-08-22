@@ -42,7 +42,18 @@ export const TERMINAL_SUBSCRIBE_METHOD = 'terminal.subscribe';
 // --- Notification methods (daemon → UI, no id) ---
 export const TERMINAL_OUTPUT_NOTIFICATION = 'terminal.output';
 export const TERMINAL_EXIT_NOTIFICATION = 'terminal.exit';
-export const TERMINAL_FLAVOUR_MISSING_NOTIFICATION = 'terminal.flavourMissing';
+/*
+ * `terminal.flavourMissing` used to sit here (#279). It was declared, published by
+ * `TerminalEvents.publishFlavourMissing`, and forwarded by the main process to a renderer channel
+ * that nothing subscribed to — and it had NO producer either: `publishFlavourMissing` was never
+ * called, from its introduction to its removal. An entire notification path, inert at both ends.
+ *
+ * It is gone rather than connected because the condition it described already has a report. A
+ * launch failure that cannot be classified — a missing flavour is the worked example — reverts the
+ * panel (see `terminal-service.ts`, asserted by `terminal-persistence.e2e.ts`). Giving it a second
+ * notice would breach "one condition, one notice"; the fix for a message nobody hears is to stop
+ * sending it, not to find it an audience.
+ */
 /**
  * The shared character grid for a panel changed (008 FR-009/FR-013). The daemon sizes
  * one PTY to the minimum across every attached view; every view MUST render its xterm at

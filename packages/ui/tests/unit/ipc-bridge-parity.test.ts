@@ -50,12 +50,22 @@ const SRC = join(process.cwd(), 'packages', 'ui', 'src');
  * longer one-way fails too, so a fixed channel cannot sit here forever pretending to be broken.
  */
 const KNOWN_ONE_WAY: Record<string, string> = {
-  'throng:terminal:flavourMissing':
-    'Found by this guard on the day it was written. daemon-events.ts:98 forwards the daemon\'s ' +
-    'flavour-missing notification to the renderer, but no preload listener exists for it, so the ' +
-    'message reaches nobody. Its five siblings (output, exit, grid, cwd, command) are all wired. ' +
-    'Filed as a defect; wiring a terminal feature is outside 035\'s scope, and deleting the send ' +
-    'without knowing whether the notice is wanted would be the wrong half to remove.',
+  /*
+   * EMPTY, and worth saying why rather than leaving a bare `{}`.
+   *
+   * It held exactly one entry, `throng:terminal:flavourMissing`, found by this guard on the day it
+   * was written and deliberately parked: 035 could see the channel reached nobody but could not
+   * tell whether the right answer was to wire it or to delete it, and said so — "deleting the send
+   * without knowing whether the notice is wanted would be the wrong half to remove."
+   *
+   * #279 answered it. The chain had no PRODUCER either — `publishFlavourMissing` was never called
+   * from its introduction to its removal — and no spec asked for it, while the condition it
+   * described already reports itself by reverting the panel. So the send was the wrong half to
+   * KEEP, and the whole chain is gone.
+   *
+   * The list staying empty is the good outcome. A new entry is a defect being tolerated, and the
+   * stale-entry test below is what stops one being tolerated forever.
+   */
 };
 
 /** InversifyJS injection tokens share the `throng:` prefix. They are not channels. */
