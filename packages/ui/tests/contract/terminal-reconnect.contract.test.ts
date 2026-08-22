@@ -204,16 +204,25 @@ describe('the watcher callback never throws into the main process (039 FR-030)',
    * Swallowing leaves every pending panel ARMED, which is the right failure: the next event asks
    * the same question again, and ↻ Retry was never taken away.
    */
+  /*
+   * The first version of this test counted `exists` calls and threw after the first — which threw
+   * during ARMING, not during the event, so nothing was ever armed and `fire()` reported "nothing
+   * armed a watch". The anti-vacuity guard caught the fixture rather than the code, which is
+   * precisely what it is for: `watchTargetFor` calls `exists` once per ancestor while walking up,
+   * so "the second call" is still arming.
+   *
+   * A flag flipped between the two phases says what is meant, and cannot drift when the walk
+   * changes length.
+   */
   it('an exists() that throws mid-event does not escape', () => {
-    let calls = 0;
+    let arming = true;
     const { fire } = armed({
       exists: (p) => {
-        calls += 1;
-        // Succeed while arming, throw once the event arrives.
-        if (calls > 1) throw new Error('EIO: i/o error, stat');
+        if (!arming) throw new Error('EIO: i/o error, stat');
         return p === 'C:/dev';
       },
     });
+    arming = false;
     expect(() => fire()).not.toThrow();
   });
 

@@ -144,10 +144,27 @@ export class TerminalReconnect {
     for (const p of this.pending.filter((x) => x.projectId === projectId)) this.disarm(p.panelId);
   }
 
-  /** Everything, for shutdown. */
+  /**
+   * Everything, for shutdown.
+   *
+   * Each `dispose` is guarded INDIVIDUALLY, not the loop as a whole. This runs from
+   * `app.on('will-quit')`, so one watcher that throws on close must not prevent the rest from being
+   * released — a `try` around the loop would abandon every watch after the first bad one, which is
+   * the opposite of what a shutdown path is for.
+   *
+   * The un-guarded version of this was caught by `terminal-reconnect.contract.test.ts`, not by
+   * review: `releaseWatchIfUnused` had the guard and this did not, and the two are easy to read as
+   * one because they do the same thing.
+   */
   dispose(): void {
     this.pending.length = 0;
-    for (const [, w] of this.watches) w.dispose();
+    for (const [, w] of this.watches) {
+      try {
+        w.dispose();
+      } catch {
+        // Nothing to unwind — the map is cleared below regardless.
+      }
+    }
     this.watches.clear();
   }
 
