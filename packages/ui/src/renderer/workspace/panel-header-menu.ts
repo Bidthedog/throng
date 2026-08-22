@@ -215,26 +215,6 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
      * beside *Reload from disk* while a file is unreadable: they run the same re-read, and the
      * duplication is the price of each surface naming its own command consistently.
      */
-    /*
-     * 039 FR-024 (#293) — Reload, for a terminal Panel left dormant by Manual reload mode.
-     *
-     * The constitution binds a feature that adds a panel action to add its menu item in the same
-     * increment, and the placeholder's button is exactly such an action. The LABEL is the
-     * placeholder's, unchanged, so the two surfaces name one command rather than two that resemble
-     * each other — the same rule *Try again* follows below.
-     *
-     * Shown only while the Panel is dormant, because that is the only state in which it means
-     * anything. It is deliberately NOT grouped with the failure items: a dormant Panel has not
-     * failed (FR-029), and putting Reload beside *Try again* and *Copy details* would imply it had.
-     */
-    if (panel.dormant === true) {
-      items.push({
-        label: 'Reload',
-        icon: 'retry',
-        section: 'viewState',
-        onClick: () => actions.reloadTerminal(),
-      });
-    }
     if (editorFailure) {
       items.push({
         label: 'Try again',
@@ -269,6 +249,27 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
    * selection, cursor, focus or the layout changes, and nothing is typed at the shell.
    */
   if (panel.kind === 'terminal') {
+    /*
+     * 039 FR-024 (#293) — Reload, for a terminal Panel left dormant by Manual reload mode.
+     *
+     * The constitution binds a feature that adds a panel action to add its menu item in the same
+     * increment, and the placeholder's button is exactly such an action. The LABEL is the
+     * placeholder's, unchanged, so the two surfaces name one command rather than two that resemble
+     * each other — the same rule *Try again* follows above.
+     *
+     * Deliberately NOT with the failure items in the editor block above: a dormant Panel has not
+     * failed (FR-029), and sitting Reload beside *Try again* and *Copy details* would imply it had.
+     * It was first written there by mistake and the tests caught it — inside `panel.kind ===
+     * 'editor'` it could never fire for a terminal at all.
+     */
+    if (panel.dormant === true) {
+      items.push({
+        label: 'Reload',
+        icon: 'retry',
+        section: 'viewState',
+        onClick: () => actions.reloadTerminal(),
+      });
+    }
     items.push({
       label: 'Refresh / redraw terminal',
       icon: 'retry',

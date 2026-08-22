@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -73,6 +73,7 @@ import { restoreFromRecycleBin } from './recycle-bin-restore.js';
 import { pickFolder } from './pick-folder.js';
 import { openSubWorkspace } from './subworkspace-open.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
+import { TerminalReconnect } from './terminal-reconnect.js';
 import { ElectronShellIntegration } from './electron-shell-integration.js';
 import { FilesService } from './files-service.js';
 import { resolveThrongHolder } from './throng-holder.js';
@@ -1287,6 +1288,50 @@ if (isPrimaryInstance)
     configStore,
   });
   ipcMain.handle('throng:terminal:listFlavours', () => shellDetectionService.listFlavours());
+
+  /*
+   * 039 US3 (#237) — a terminal whose working directory was unavailable starts itself when the
+   * directory comes back.
+   *
+   * In main because the renderer cannot watch it: `files.*` is confined to the ACTIVE PROJECT ROOT,
+   * which is exactly the directory that has gone missing here — so the watch that would report its
+   * return is the one that could not be established. `IFileWatcher` is the same seam
+   * `EditorCoordinator` uses per document for 027 / #161.
+   *
+   * A separate watcher instance rather than a shared signal, deliberately: see spec 039 Finding 2
+   * and decision D-1, and #306 for the consolidation this defers.
+   */
+  const terminalReconnect = new TerminalReconnect({
+    fileWatcher: new NodeFileWatcher(150),
+    exists: (p) => {
+      try {
+        return statSync(p).isDirectory();
+      } catch {
+        return false;
+      }
+    },
+    parentOf: (p) => {
+      const up = dirname(p);
+      // `dirname` returns its input at a filesystem root, which would otherwise walk forever.
+      return up === p ? null : up;
+    },
+    // ONE message carrying every released panel, so the renderer cannot accidentally raise a notice
+    // per panel (FR-033). Broadcast to every window because a Panel may be torn off into a
+    // sub-workspace, and the window that owns it is not necessarily the one that armed the watch.
+    notify: (panelIds) => {
+      broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:terminal:pathBack', { panelIds });
+    },
+  });
+  app.on('will-quit', () => terminalReconnect.dispose());
+  ipcMain.handle(
+    'throng:terminal:armReconnect',
+    (_e, panelId: string, projectId: string, target: string) => {
+      terminalReconnect.arm(panelId, projectId, target);
+    },
+  );
+  ipcMain.handle('throng:terminal:disarmReconnect', (_e, panelId: string) => {
+    terminalReconnect.disarm(panelId);
+  });
   // The RAW detected built-ins — what this machine HAS, not what it will offer to launch (019,
   // C10). The settings editor's picker is built from this; the panel's Flavour dropdown never is.
   ipcMain.handle('throng:terminal:listDetectedFlavours', () =>
