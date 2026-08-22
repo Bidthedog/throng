@@ -459,6 +459,20 @@ requirement which genuinely should change is a supersession naming what it repla
 - **D-3 — the 025 FR-015 conflict is a supersession stated from this spec, not an in-place amendment
   of 025.** Amending 025 would erase the fact that it was contradicted for two releases; that fact is
   worth keeping. See *Supersessions*.
+- **D-4 — the reload mode is a `select`, not a toggle.** `control: 'select'` with
+  `allowedValues: ['automatic', 'manual']`. Taken because it **names both states**, which a toggle
+  labelled "Reload terminals automatically" does not — and the dormant placeholder's wording has to
+  agree with whatever the preference is called. It is also the established pattern rather than a new
+  one: `select` is used 15 times in `settings-metadata.ts` against 12 toggles, several with an
+  explicit `allowedValues` list.
+- **D-5 — dormancy persists across a restart, and is re-evaluated on the next project open.** FR-027
+  requires a dormant Panel to keep its name, type and position across a restart, and to still be
+  dormant. The two candidate rules — "dormancy is persisted" and "dormancy is session-local, with the
+  preference re-applied from scratch" — agree for as long as the preference stays Manual, and differ
+  the moment it is switched back to Automatic. Persisted dormancy is taken because the alternative
+  silently starts twenty shells the user had deliberately left dormant, the moment they flip a
+  preference for an unrelated reason. FR-029a covers the switch back: the new mode applies at the
+  **next project open**, which is where a dormant Panel gets its chance to start.
 
 ## Follow-ups filed
 
@@ -477,11 +491,4 @@ Work this spec deliberately does **not** do, filed so the reasoning survives:
 
 ## Open Questions
 
-- **OQ-2 — how the reload mode is presented.** A two-value setting can be a toggle ("Reload terminals
-  automatically", on/off) or a dropdown (Automatic / Manual). The dropdown names both states, which
-  reads better against a dormant placeholder that says "not reloaded"; the toggle is one fewer control
-  type in the group. [NEEDS CLARIFICATION: maintainer preference]
-- **OQ-3 — whether a dormant terminal survives as dormant across a restart, or re-evaluates.** FR-027
-  requires dormancy to persist. Confirm this is wanted rather than "dormant is a session-local state
-  and a restart re-applies the preference from scratch" — the two agree while the preference is
-  Manual and differ the moment it is switched back to Automatic. [NEEDS CLARIFICATION]
+None outstanding. All five decisions are recorded above.
