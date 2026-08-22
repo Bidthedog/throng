@@ -13,16 +13,23 @@ what genuinely needs a window and a real shell reaches E2E.
 
 ## Status (updated as work lands)
 
-**Verified green** — Phase 1, Phase 2 and Phase 3. `npm run typecheck` clean; `vitest --project unit`
-305 files / 2914 tests; `vitest --project component` 76 files / 841 tests. **#223 is complete.**
+**Legend** — `[x]` verified green. `[~]` written and committed but NOT yet run. `[ ]` not started.
+The ticks stop where the evidence stops; a tick that means "I typed it" is worse than no tick.
 
-**Written, NOT yet verified** — Phase 4 (#293) in full, and the pure half of Phase 5 (#237).
-Committed deliberately under a machine-wide hold on test/lint/typecheck/build commands while
-another session's full gate runs. Nothing in `0fe9757a` or later has been compiled or run. The
-ticks below stop where the evidence stops.
+**Verified green** (typecheck clean; unit 307 files / 2949 tests; component 77 / 846):
+Phases 1–4 and the pure + main-process halves of Phase 5. **#223 and #293 are complete**, except
+#293's one E2E, which is written but unrun.
 
-**Not started** — T036 (the one E2E #293 earns), T044/T045/T047/T048, and Phase 5's renderer and
-main-process wiring (T050–T054). Phase 6 untouched.
+**Written, NOT yet run** — #237's renderer wiring and IPC, the #293 E2E, the two suite tests that
+pinned the old command-memory default, the E2E budget re-seed, and the docs. Committed under a
+machine-wide hold on test/lint/typecheck/build while another session's gate runs.
+
+**Two real defects were found by the last verified run**, both invisible to typecheck and to
+re-reading: the dormant Reload menu item was inside `if (panel.kind === 'editor')` where it could
+never fire for a terminal, and an FR-037 test used a fixture describing a state that cannot occur,
+so it could not have failed. Both fixed in `6fb2a813`.
+
+**Remaining** — the full `npm run gate`, then the PR.
 
 ---
 
@@ -112,20 +119,20 @@ preference; 025 FR-015's safeguard is real again.
 
 ### Tests (Red first)
 
-- [ ] **T030** Unit (Red): with `reloadMode: 'automatic'`, the decision function says "start" for
+- [x] **T030** Unit (Red): with `reloadMode: 'automatic'`, the decision function says "start" for
       every terminal on project open — today's behaviour, asserted so US2 cannot regress it (FR-021).
-- [ ] **T031** Unit (Red): with `reloadMode: 'manual'`, it says "dormant" for every terminal
+- [x] **T031** Unit (Red): with `reloadMode: 'manual'`, it says "dormant" for every terminal
       (FR-022), and dormancy is **not** a failure state (FR-029).
-- [ ] **T032** [P] Component (Red): a dormant terminal panel renders a placeholder naming the panel
+- [x] **T032** [P] Component (Red): a dormant terminal panel renders a placeholder naming the panel
       with a **Reload** affordance, and renders **no** failure banner (FR-023, FR-029).
       → `packages/ui/tests/component/`
-- [ ] **T033** [P] Unit (Red): the Reload action is registered as a **command**, so it has a menu item
+- [x] **T033** [P] Unit (Red): the Reload action is registered as a **command**, so it has a menu item
       as well as the button (FR-024).
-- [ ] **T034** Unit (Red): reloading a dormant terminal goes through the **same** start path an
+- [x] **T034** Unit (Red): reloading a dormant terminal goes through the **same** start path an
       automatic reload uses (FR-025).
-- [ ] **T035** Unit (Red): a dormant Panel serialises with its name, type and layout position, and
+- [~] **T035** Unit (Red): a dormant Panel serialises with its name, type and layout position, and
       still dormant, across a save/load round trip (FR-027). Resolve **OQ-3** first.
-- [ ] **T036** E2E (Red) — **the only E2E US2 earns**: with Manual selected, opening a project starts
+- [~] **T036** E2E (Red) — **the only E2E US2 earns**: with Manual selected, opening a project starts
       **zero** shells and zero `conhost` processes (FR-026). Nothing below this layer can observe a
       real process table. Tag `@extended @terminal`; add to `parallel-plan.json` only if it does not
       drive a real long-running shell.
@@ -148,20 +155,20 @@ preference; 025 FR-015's safeguard is real again.
 
 ### Tests (Red first)
 
-- [ ] **T040** Unit (Red): a start that fails because the cwd could not be resolved arms a watch on
+- [x] **T040** Unit (Red): a start that fails because the cwd could not be resolved arms a watch on
       that directory, or its nearest existing ancestor (FR-030).
-- [ ] **T041** Unit (Red): a start that fails for **any other** reason — missing shell binary,
+- [x] **T041** Unit (Red): a start that fails for **any other** reason — missing shell binary,
       permission denied — arms **no** watch and never retries (FR-035). *The anti-thrash assertion.*
-- [ ] **T042** Unit (Red): the watch fires **at most one** retry (FR-030, bounded).
-- [ ] **T043** Unit (Red): the watch is disposed when the terminal starts by any route, when the Panel
+- [x] **T042** Unit (Red): the watch fires **at most one** retry (FR-030, bounded).
+- [x] **T043** Unit (Red): the watch is disposed when the terminal starts by any route, when the Panel
       is destroyed, and when the project closes (FR-042). *No leaked watches.*
-- [ ] **T044** Unit (Red): recovery reuses the Panel's remembered type and configuration — no
+- [~] **T044** Unit (Red): recovery reuses the Panel's remembered type and configuration — no
       regression to #204 / 029 FR-004a (FR-034).
-- [ ] **T045** Unit (Red): a **dormant** terminal is not started by a path-availability event
+- [~] **T045** Unit (Red): a **dormant** terminal is not started by a path-availability event
       (FR-036). *The US2 × US3 interaction; neither issue could have stated it alone.*
-- [ ] **T046** Unit (Red): a path event in project A starts no terminal in project B (FR-037,
+- [x] **T046** Unit (Red): a path event in project A starts no terminal in project B (FR-037,
       Principle I).
-- [ ] **T047** Unit (Red): recovery raises **no** per-panel notice (FR-033), and the failure banner
+- [~] **T047** Unit (Red): recovery raises **no** per-panel notice (FR-033), and the failure banner
       clears when it succeeds (FR-038).
 - [ ] **T048** Integration (Red): terminals in tabs **never rendered in this session** recover
       (FR-032). This is the criterion that rules out the mount-time pull route, so it must be asserted
@@ -173,12 +180,12 @@ preference; 025 FR-015's safeguard is real again.
 
 ### Implementation
 
-- [ ] **T050** Arm the watch on a cwd-resolution failure only; nearest existing ancestor when the
+- [~] **T050** Arm the watch on a cwd-resolution failure only; nearest existing ancestor when the
       directory itself is absent (FR-030, FR-035).
-- [ ] **T051** One bounded retry through the ordinary start path — not a shortcut through the daemon
+- [~] **T051** One bounded retry through the ordinary start path — not a shortcut through the daemon
       (FR-041); reuse the remembered config (FR-034).
-- [ ] **T052** Dispose on start, destroy and project close (FR-042).
-- [ ] **T053** Quiet: no per-panel notice; banner clears on success (FR-033, FR-038). ↻ Retry
+- [~] **T052** Dispose on start, destroy and project close (FR-042).
+- [~] **T053** Quiet: no per-panel notice; banner clears on success (FR-033, FR-038). ↻ Retry
       unchanged (FR-039).
 - [ ] **T054** Say in the UI that this is a fresh shell, not a resumed session, where that is not
       self-evident (FR-040).
@@ -189,14 +196,14 @@ preference; 025 FR-015's safeguard is real again.
 
 ## Phase 6: Polish & cross-cutting
 
-- [ ] **T060** Confirm no new setting is inert — each has a reader outside the config layer (FR-051,
+- [~] **T060** Confirm no new setting is inert — each has a reader outside the config layer (FR-051,
       and do not hand #108 a counter-example).
-- [ ] **T061** E2E tag audit: every new E2E test carries a significance tag (`@core` / `@extended`)
+- [~] **T061** E2E tag audit: every new E2E test carries a significance tag (`@core` / `@extended`)
       **and** a category tag, or `e2e-tags.test.ts` fails the build. Re-seed
       `packages/ui/tests/e2e/e2e-budget.json` in the same commit if the count moves.
-- [ ] **T062** Add any preferences-window or context-menu spec to
+- [~] **T062** Add any preferences-window or context-menu spec to
       `packages/ui/tests/e2e/parallel-plan.json`, or `tier-plan.test.ts` fails the build.
-- [ ] **T063** Update `docs/` for the four new settings and the dormant state.
+- [~] **T063** Update `docs/` for the four new settings and the dormant state.
 - [ ] **T064** **Rebase onto spec 038** (#290 / #279 / #280) once it lands, before opening the PR.
       Expect conflicts in `settings-metadata.ts` and the terminal panel lifecycle.
 - [ ] **T065** `npm run gate` — the only thing that establishes done-ness. **Ask the supervisor for
