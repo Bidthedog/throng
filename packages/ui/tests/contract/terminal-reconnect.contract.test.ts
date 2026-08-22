@@ -32,6 +32,19 @@ import { TerminalReconnect, type TerminalReconnectDeps } from '../../src/main/te
  *
  * The two paths that run inside a WATCHER CALLBACK — where a throw is an unhandled exception in the
  * main process rather than something any caller sees — are covered at the foot of this file.
+ *
+ * ══ AND THE SHAPE FOUND A REAL DEFECT BEFORE THIS FILE EVER RAN ══
+ *
+ * `arm` used to push its pending entry BEFORE establishing the watch. If `fileWatcher.watch` threw —
+ * ENOSPC on watcher limits being the realistic case — the panel was recorded as pending with no
+ * watch behind it: waiting for an event that can never arrive, and from outside indistinguishable
+ * from a healthy entry. The terminal never comes back, quietly, for ever. **That is #237's own
+ * failure mode, reproduced by #237's implementation**, and it would have shipped.
+ *
+ * It was not found by reading. **It came out of asking "what does this RETURN when the watcher
+ * refuses" — which is a question you can only ask of a function that returns something.** That is
+ * the argument for the value-not-exception shape, and it is why the ordering is now pinned by a test
+ * rather than left to whoever edits this next.
  */
 
 function fakeWatcher(over: Partial<IFileWatcher> = {}): IFileWatcher {
