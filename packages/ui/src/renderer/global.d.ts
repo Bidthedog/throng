@@ -179,6 +179,19 @@ declare global {
          * dropdown must never be built from this: it would offer the flavours the user hid.
          */
         listDetectedFlavours?: () => Promise<DetectedFlavourDto[]>;
+        /**
+         * 039 US3 (#237) — watch for a terminal's missing working directory to come back.
+         *
+         * `armReconnect` is called only by a panel whose START FAILED on an unresolvable cwd
+         * (`shouldWatchForRecovery` decides which failures qualify — FR-035). `disarmReconnect` is
+         * called when the terminal starts by any route and on unmount, so a watch never outlives its
+         * panel (FR-042). `onPathBack` delivers ONE message naming EVERY released panel, which is
+         * what makes "no notice per recovered panel" (FR-033) a property of the contract rather than
+         * of the consumer remembering to batch.
+         */
+        armReconnect?: (panelId: string, projectId: string, target: string) => Promise<void>;
+        disarmReconnect?: (panelId: string) => Promise<void>;
+        onPathBack?: (cb: (evt: { panelIds: string[] }) => void) => () => void;
         attach: (req: {
           panelId: string;
           projectId: string;
