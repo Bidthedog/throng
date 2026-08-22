@@ -88,9 +88,16 @@ finds "file find.txt" as readily as "find any file.md". Choosing a tab scrolls t
 makes it active; **Escape** dismisses without moving anything.
 
 **On each tab.** The number of panels shows as a pill. Resting the pointer on a tab brings up a
-popover naming the tab and listing its panels one per line — resting, not merely crossing, so it
-stays out of your way while you traverse the strip. Right-clicking hides the popover so it cannot sit
-on top of the menu it just opened.
+popover listing its panels one per line — resting, not merely crossing, so it stays out of your way
+while you traverse the strip. Right-clicking hides the popover so it cannot sit on top of the menu it
+just opened.
+
+Each panel is listed by the name it actually wears — a terminal by the title the program running in
+it announced, an editor by its file — and is marked with its type's icon. A panel you have not given
+a type yet gets a plain bullet, because there is nothing to say about it until you choose one.
+
+The tab's own name appears above that list **only when the strip could not show it in full**. When it
+fits on the tab you are pointing at, repeating it here would just push the panels down a line.
 
 Each tab also carries a **×** that runs the ordinary **Destroy Tab** action, with the same
 confirmations. It is inert for a moment after appearing, so a click cannot land on a tab the pointer
