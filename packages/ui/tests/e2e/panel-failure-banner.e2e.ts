@@ -206,7 +206,27 @@ async function editorOn(win: Page, panelId: string): Promise<void> {
 async function failingTerminalOn(win: Page, panelId: string): Promise<void> {
   await win.getByTestId(`panel-type-select-${panelId}`).selectOption('terminal');
   await win.getByTestId('terminal-flavour').selectOption('cmd');
-  await win.getByTestId(`panel-type-confirm-${panelId}`).click();
+  /*
+   * CONFIRMED BY KEYBOARD, NOT BY CLICK, AND DELIBERATELY (#313).
+   *
+   * Every caller reaches here with a failure notice already on screen — the shared setup raises one
+   * by creating `Ghost` on a root that never existed, one line before the first call. Since #313 a
+   * notice takes pointer events, and `.panel-type-form__actions` puts Confirm at the bottom-right of
+   * the panel while the notice column is pinned to the bottom-right of the window, so they overlap.
+   * Pressing the focused button is the honest route past a covered control and the one a user has.
+   *
+   * NOT dismissal, which is the remedy #313 names and the one `terminal-revert.e2e.ts` uses: there
+   * the notice IS the subject of the assertion immediately above it, so dismissing is the next
+   * honest gesture. Here it is incidental setup noise, no claim rests on it, and there are three
+   * call sites (the shared setup, and two tests) each of which may have a DIFFERENT notice up — so
+   * a dismissal keyed on any one test id would work here and be a latent failure there.
+   *
+   * And NOT `force: true`, which dispatches at the button's own coordinates: it would land on the
+   * notice and hide the very interception this file now has to work with.
+   */
+  const confirm = win.getByTestId(`panel-type-confirm-${panelId}`);
+  await confirm.focus();
+  await confirm.press('Enter');
   await inFailureState(win, panelId, 'terminal');
 }
 

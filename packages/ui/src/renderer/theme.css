@@ -2423,6 +2423,11 @@ textarea,
   overflow: hidden;
   gap: var(--throng-notice-gap);
   width: var(--throng-notice-width);
+  /* THE COLUMN, not the cards (#313). This strip is a fixed 520px-wide, full-height region pinned to
+     the right of the window, and it is mostly EMPTY — one card at the bottom leaves the other 90% of
+     it over live application chrome. That empty space must stay transparent, so the column keeps
+     `none` and each `.notice` takes it back for its own bounds. Removing this line would make the
+     whole strip a dead zone, which is a far larger obstruction than the one #313 is about. */
   pointer-events: none;
 }
 
@@ -2442,15 +2447,22 @@ textarea,
   font-size: var(--throng-notice-font-size);
   line-height: var(--throng-notice-line-height);
 
-  /* The CARD DOES NOT SWALLOW CLICKS.
+  /* THE CARD TAKES THE CLICK (#313, superseding 030 FR-032b).
    *
-   * An error notice PERSISTS until dismissed — that is the model, and it is the right model. But the
-   * notices sit in a fixed layer over the bottom-right of the window, which in the preferences window is
-   * squarely on top of the settings rows. A card that took pointer events would therefore park itself
-   * over the very controls the user needs in order to FIX the failure it is reporting, and every click
-   * would land on the message instead. The notice is something to READ; only its dismiss control is
-   * something to press, so only its dismiss control accepts a click. */
-  pointer-events: none;
+   * This rule used to be `none`, and the reasoning above it was: an error notice PERSISTS until
+   * dismissed, the notices sit in a fixed layer over the bottom-right of the window — which in the
+   * preferences window is squarely on top of the settings rows — so a card that took pointer events
+   * would park itself over the very controls the user needs in order to FIX what it reports.
+   *
+   * That collision is real and it has not gone away. What was wrong was the remedy. Click-through
+   * does not remove an obstruction, it makes it INVISIBLE: the click reaches a control the user
+   * cannot see and did not aim at, and nothing tells them it happened, because the notice is drawn
+   * over the result. A notice that visibly absorbs a click is legible — the thing on top took it —
+   * and the way past it is to dismiss it, which is one deliberate action away and always available.
+   *
+   * The full measurement, and why it argues for dismissal rather than for click-through, is kept at
+   * `.notice__affected` below. */
+  pointer-events: auto;
 }
 
 .notice__copy,
@@ -2517,18 +2529,37 @@ textarea,
  * user counting twelve toasts. So it renders, grouped by tab — and it is BOUNDED, because a project
  * with forty broken panels must not produce a notice taller than the window.
  *
- * ══ IT DOES NOT TAKE POINTER EVENTS, AND THAT IS DELIBERATE ══
+ * ══ THE MEASUREMENT THAT ONCE MADE THIS LIST INERT, AND WHAT IT ACTUALLY SHOWS (#313) ══
  *
  * A scrollable region wants the wheel, so `pointer-events: auto` here is the obvious thing to write.
- * It was, and it broke something immediately: the card is `pointer-events: none` precisely so a
- * notice never parks itself over the controls a user needs in order to FIX what it is reporting, and
- * this list is the tallest thing in the tallest notice in the application. Measured — a notice
- * listing two panels sat over the panel-type form's Confirm button and swallowed 60 retried clicks.
+ * It was, and it broke something immediately. Measured, and still true: a notice listing two panels
+ * sat over the panel-type form's Confirm button and swallowed 60 retried clicks. That number is
+ * worth keeping — it is the sharpest evidence anyone has that this list is the tallest thing in the
+ * tallest notice in the application, and that it lands exactly where a panel's own actions live.
+ * `.panel-type-form__actions` is `justify-content: flex-end; margin-top: auto`, so Confirm sits at
+ * the bottom-right of its panel, and the notice column is pinned to the bottom-right of the window.
+ * They are not near each other by accident; they are competing for the same corner.
  *
- * So the list is reached by KEYBOARD (`tabindex="0"`; a focused overflow container scrolls with the
- * arrow keys), which is what FR-032b asks for anyway. The rows themselves are inert whichever way
- * you arrive — no cursor change, no handler — because a row that looked clickable and did nothing is
- * a worse promise than a row that never made one. */
+ * 030 FR-032b concluded from that measurement that the card should be transparent and the list
+ * keyboard-only. #313 supersedes the conclusion while keeping the measurement, for two reasons.
+ *
+ * FIRST, the measurement is evidence about PLACEMENT, not about hit-testing. What it demonstrates is
+ * that a notice can cover a control the user needs. Transparency does not uncover that control — it
+ * lets the user operate it blind, with the notice still drawn over whatever happens next. The 60
+ * swallowed clicks became 60 clicks that each did something invisible, which is worse.
+ *
+ * SECOND, and this is what the original reasoning missed: the panel-type form is NOT a modal. It is
+ * ordinary panel content. So "a notice must not obscure a dialog" was never the rule that case
+ * needed, and no amount of z-ordering answers it. The remedy that fits the measurement is the one a
+ * user reaches for anyway — DISMISS the notice, then use the control. That is one action, it is
+ * always available (the dismiss control is on every notice), and its effect is visible.
+ *
+ * So the list takes the wheel now, and it KEEPS the keyboard route it was given: `tabindex="0"`, a
+ * focused overflow container scrolling with the arrow keys, and nothing focusable inside it, so Tab
+ * still leaves. That half of FR-032b is preserved, not replaced — mouse support is added beside it.
+ * (Nothing yet MOVES focus here; that is #314.) The rows themselves stay inert whichever way you
+ * arrive — no cursor change, no handler — because a row that looked clickable and did nothing is a
+ * worse promise than a row that never made one. */
 .notice__affected {
   --throng-notice-affected-max-height: 12rem;
 
@@ -2584,9 +2615,12 @@ textarea,
 }
 
 /* The notice's two controls — copy and dismiss — share one treatment: they sit at the top-right of
-   the card, muted until pointed at, and they are the ONLY parts of a notice that take a click (the
-   card itself is `pointer-events: none` so it never covers the controls a user needs in order to fix
-   what it is reporting). */
+   the card, muted until pointed at.
+   They used to be the ONLY parts of a notice that took a click, the card itself being
+   `pointer-events: none`. Since #313 the whole card takes clicks, so these declarations no longer
+   RESTORE anything — they are kept because they state the intent locally, and because a future
+   change to the card must not silently take the dismiss control offline with it: dismissal is the
+   remedy the supersession rests on, so it is the one thing here that must never stop working. */
 .notice__copy,
 .notice__dismiss {
   flex: 0 0 auto;

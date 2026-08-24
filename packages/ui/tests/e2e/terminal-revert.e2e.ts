@@ -51,6 +51,22 @@ test('typing exit reverts the Panel to the form with exit info, then it re-types
       await expect(win.getByTestId(`panel-type-form-${pid}`)).toBeVisible({ timeout: 15000 });
       await expect(win.getByTestId(`panel-exit-${pid}`)).toBeVisible();
 
+      /*
+       * DISMISS IT BEFORE RE-TYPING (#313).
+       *
+       * The claim above — a non-zero exit is surfaced, Principle III — is complete the moment the
+       * notice is visible. What follows needs the Confirm button underneath it, and since #313 a
+       * notice takes pointer events: `.panel-type-form__actions` puts Confirm at the bottom-right of
+       * the panel while the notice column is pinned to the bottom-right of the window, so the two
+       * overlap. Dismissal is the remedy #313 names and the one a user has — and here it is also the
+       * honest gesture, because the notice has already told them what it exists to tell them.
+       *
+       * This is a `dismiss`-mode notice, so waiting it out is not an option: `noticeSeverityForExit`
+       * maps a non-zero exit to `error`, and an error never times out.
+       */
+      await win.getByTestId(`exit-dismiss-${pid}`).click();
+      await expect(win.getByTestId(`panel-exit-${pid}`)).toHaveCount(0);
+
       // Re-type the Panel: Terminal again → a fresh live session starts.
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
       await win.getByTestId('terminal-flavour').selectOption('cmd');

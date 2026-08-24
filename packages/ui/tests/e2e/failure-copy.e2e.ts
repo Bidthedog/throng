@@ -110,7 +110,24 @@ function expectRenderedIsCopied(rendered: string[], copied: string[]): void {
 async function failingTerminalOn(win: Page, panelId: string): Promise<void> {
   await win.getByTestId(`panel-type-select-${panelId}`).selectOption('terminal');
   await win.getByTestId('terminal-flavour').selectOption('cmd');
-  await win.getByTestId(`panel-type-confirm-${panelId}`).click();
+  /*
+   * CONFIRMED BY KEYBOARD, NOT BY CLICK, AND DELIBERATELY (#313).
+   *
+   * This helper is called four times, and from the second call onwards the consolidated notice
+   * raised by the first is already on screen — over the bottom-right panel, which is where
+   * `.panel-type-form__actions` puts Confirm. Since #313 a notice takes pointer events, so that
+   * click is intercepted, exactly as a user's would be.
+   *
+   * Dismissing the notice is the remedy #313 names, and it is not available here: this test's
+   * subject is a notice that has ACCUMULATED all four casualties (FR-037), and dismissing it
+   * between failures would restart that list. Pressing the focused button is the other honest
+   * route past a covered control, and it is the one a user has. `force: true` is NOT — it
+   * dispatches at the button's coordinates, so it would land on the notice and silently hide the
+   * very interception this test now has to work with.
+   */
+  const confirm = win.getByTestId(`panel-type-confirm-${panelId}`);
+  await confirm.focus();
+  await confirm.press('Enter');
   await expect(banner(win, panelId)).toBeVisible({ timeout: 90_000 });
 }
 
