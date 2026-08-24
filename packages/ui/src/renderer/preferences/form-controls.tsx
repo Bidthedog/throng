@@ -104,7 +104,12 @@ function humanizeOptionLabel(value: string): string {
     .join(' ');
 }
 
-function ToggleControl({ descriptor, value, onCommit }: SettingControlProps): ReactElement {
+function ToggleControl({
+  descriptor,
+  value,
+  disabled,
+  onCommit,
+}: SettingControlProps): ReactElement {
   /**
    * The click shows AT ONCE; the stored value catches up.
    *
@@ -124,9 +129,15 @@ function ToggleControl({ descriptor, value, onCommit }: SettingControlProps): Re
 
   return (
     <label className="ctl ctl--toggle">
+      {/* 039 FR-008a — an inert toggle honours `disabled`, which this control used to ignore.
+          The doc-comment on `SettingControlProps.disabled` warned in as many words that a
+          dependency aimed at another control kind means honouring it there too, and that an
+          ignored `disabled` is the same silent degradation the `default:` arm warns about. This
+          is the first such dependency, and the warning was right. */}
       <input
         type="checkbox"
         data-testid={testId(descriptor.key)}
+        disabled={disabled}
         checked={checked}
         onChange={(e) => {
           setOptimistic(e.target.checked);

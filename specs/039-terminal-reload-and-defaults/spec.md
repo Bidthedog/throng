@@ -368,6 +368,30 @@ per-panel notice.
 - **FR-008**: A "Run as administrator" preference of **on** MUST NOT force, imply, or appear to grant
   elevation. `canRunAsAdmin()` remains the sole gate; with the daemon unelevated the control stays
   disabled and the terminal launches unelevated.
+- **FR-008a**: FR-008 binds at **three** places, and they are three different rules. With the daemon
+  **unelevated**:
+  - **Seed** — the value the New Panel dialog starts with MUST resolve to **off**, whatever the
+    preference holds. The gate belongs in `terminalPanelType.defaults()`, alongside the other seeds,
+    so a call site added later inherits it rather than having to remember it.
+  - **Display** — no "Run as administrator" control anywhere MUST render **ticked**. That includes
+    the preference's own toggle in Preferences, which MUST be **disabled with a stated reason** —
+    not hidden — in the same words the per-panel checkbox already uses.
+  - **Launch** — unchanged. `shouldDeElevate()` already decides this and no code path elevates a
+    spawn, so a `runAsAdmin` of `true` arriving at the daemon starts a normal-integrity shell.
+
+  **STORED VALUES ARE NOT REWRITTEN.** Neither the preference in `settings.json` nor any Panel's
+  persisted `runAsAdmin` may be changed by any of the above — FR-006, and the symmetry matters: an
+  unelevated session silently writing `false` over a `true` the user set deliberately while elevated
+  is the same defect with its sign flipped. The resolution is **read-side**, exactly as FR-005a is.
+
+  **Why this is not cosmetic.** `buildConfig` persists the seeded value into the Panel's config and
+  the workspace file. So an ungated seed does not merely mislabel today's terminal — it plants a
+  `runAsAdmin: true` that does nothing on this unelevated run and then, **the next time throng starts
+  elevated, opens that panel's shell as administrator from a box the user was never able to tick**.
+  A latent privilege change, persisted, with no visible trace at the moment it was set.
+
+  *Amends FR-008 rather than superseding it: FR-008 stated the rule and named the control and the
+  launch. The seed is neither, and that is the whole of the gap.*
 
 ### B. Reload mode (#293)
 

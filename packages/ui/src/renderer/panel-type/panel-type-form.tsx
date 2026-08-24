@@ -78,9 +78,25 @@ export function PanelTypeForm({
       settings.terminals.defaultRunAsAdmin,
     ],
   );
+  /*
+   * 039 FR-008a — the elevation capability reaches the DESCRIPTOR, not just the checkbox.
+   *
+   * `terminalDefaults.runAsAdmin` was seeded straight from the preference here, with no elevation
+   * check, while `terminal-inputs.tsx` disabled the control it fed. So an unelevated throng with
+   * the preference on opened this dialog with `runAsAdmin` already `true` behind a box the user
+   * could not untick — and Confirm persisted that `true` into the Panel, where it waits for the
+   * next elevated launch. The gate was on the control and not on the value that reaches it.
+   *
+   * It is resolved in `defaults()` rather than here so every caller of the descriptor inherits it.
+   *
+   * `elevated` starts `false` and becomes true a tick later on an elevated machine, so a user who
+   * chooses "Terminal" in that first moment seeds `false` and ticks the box themselves once the
+   * control enables. That is the safe direction to fail in, and FR-007 already says an open dialog
+   * need not track a preference that changes under it.
+   */
   const ctx = useMemo<PanelTypeContext>(
-    () => ({ projectRoot, flavours, rootless, terminalMemory, terminalDefaults }),
-    [projectRoot, flavours, rootless, terminalMemory, terminalDefaults],
+    () => ({ projectRoot, flavours, rootless, terminalMemory, terminalDefaults, daemonElevated: elevated }),
+    [projectRoot, flavours, rootless, terminalMemory, terminalDefaults, elevated],
   );
   const deps = useMemo<FormDeps>(() => ({ registry, ctx }), [registry, ctx]);
   // The draft lives in a cross-window store keyed by panelId, so a cloned Panel's

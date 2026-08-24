@@ -95,6 +95,27 @@ export interface PanelTypeContext {
    * the whole settings tree: the descriptor layer has no business reading anything else.
    */
   terminalDefaults?: TerminalPanelDefaults;
+  /**
+   * 039 FR-008a — whether the terminal-hosting daemon is running ELEVATED.
+   *
+   * Carried here for one reason: `terminalDefaults.runAsAdmin` is a SEED, and a seed may not
+   * out-rank the elevation gate. Without this the descriptor hands the form `runAsAdmin: 'true'`
+   * on an unelevated machine, the form renders it behind a disabled checkbox the user cannot
+   * untick, and `buildConfig` writes that `true` into the Panel's persisted config — where it lies
+   * dormant until the next elevated launch starts that shell as administrator.
+   *
+   * ══ WHY IT LIVES ON THE CONTEXT AND NOT AT THE CALL SITE ══
+   *
+   * The gate was already correct in `terminal-inputs.tsx` (the control is disabled) and in the
+   * daemon (`shouldDeElevate` never elevates anything). What was missing was the gate on the VALUE,
+   * and putting that in the renderer would leave the next caller of `defaults()` to remember it.
+   * Here, every caller inherits it.
+   *
+   * **Absent means NOT elevated**, which is the safe reading and matches `useCapabilities`, whose
+   * own default is `{ elevated: false }` until the daemon answers. A context that cannot establish
+   * elevation must not seed an elevation request.
+   */
+  daemonElevated?: boolean;
 }
 
 /** Outcome of a descriptor's validation: ok, or per-input error messages. */

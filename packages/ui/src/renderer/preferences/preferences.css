@@ -334,6 +334,19 @@
   color: var(--text-dim, var(--text));
 }
 
+/* 039 FR-008a — why a control is inert, under its description.
+   Marked with a leading rule rather than a colour: this is a CONDITION, not a failure (throng
+   is simply not elevated), so it must not borrow the warning palette. It reads as a footnote to
+   the description above it, which is what it is. */
+.settings-row__inert {
+  margin: 4px 0 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-dim, var(--text));
+}
+
 /* `flex: 0 1 auto` + a cap is what actually makes the multi-value controls WRAP (FR-019).
    As `flex: 0 0 auto` this box simply grew with its content, so a row of chords or a stack of
    font pills ran on in a single line and squashed — the inner containers had `flex-wrap: wrap`
