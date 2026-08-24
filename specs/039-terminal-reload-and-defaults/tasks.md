@@ -31,6 +31,19 @@ so it could not have failed. Both fixed in `6fb2a813`.
 
 **Remaining** — the full `npm run gate`, then the PR.
 
+**Phase 7 (review feedback on PR #312)** — two defects the maintainer found by hand, both in this
+branch's own new code. Fixed on this branch; see Phase 7 below. **Verified green at the cheap rungs
+only**: lint, typecheck, build, unit + component (386 files / 3803 tests) after both fixes. The
+integration, contract and E2E tiers have NOT been re-run since, so T065's green is stale and T080 is
+what replaces it.
+
+The first defect is worth reading even if the fix is obvious: an unelevated throng seeded the New
+Panel dialog's admin control ON and persisted that `true` into the Panel's config, where it does
+nothing until the next ELEVATED launch — at which point that panel's shell opens as administrator
+from a box the user was never able to tick. A latent privilege change with no visible trace at the
+moment it was set. The suite had a test named for the requirement that asserted the control was
+disabled and never asserted what it held.
+
 ---
 
 ## Phase 1: Setup
@@ -209,6 +222,59 @@ preference; 025 FR-015's safeguard is real again.
 - [ ] **T065** `npm run gate` — the only thing that establishes done-ness. **Ask the supervisor for
       the baton first**; ~18 min for E2E alone and two other sessions share this machine. Quote the
       stage summary when reporting.
+
+---
+
+## Phase 7: Review feedback on PR #312 (manual testing by the maintainer)
+
+Two defects, both in this branch's own new code, fixed on this branch rather than filed — this is
+review of unmerged work, not a follow-up.
+
+### Defect 1 — the "Run as admin by default" preference circumvented the elevation gate
+
+- [x] **T070** **Amend the spec: FR-008a.** FR-008 already stated the rule and named the CONTROL and
+      the LAUNCH. The seed is neither, and that was the whole gap — so this is an amendment, not a
+      supersession. It names the three bindings separately (**seed / display / launch**) because
+      conflating them is how the gap opened, and states the **no-rewrite** rule explicitly: an
+      unelevated session must not write `false` over a `true` the user set while elevated, which
+      would be the same defect with its sign flipped (FR-006).
+- [x] **T071** Component (Red): with `elevated: false` and `defaultRunAsAdmin: true`, the New Panel
+      admin control is UNTICKED, and Confirm writes `runAsAdmin: false` into the Panel's config.
+      The second assertion reads the live workspace store rather than the DOM — the value that
+      reaches `workspace.save` is the defect, not its appearance.
+      → `packages/ui/tests/component/terminal-admin-default-gate.test.ts`
+      **Red output confirmed by the supervisor before any production change.**
+- [x] **T072** Unit (Red): `terminalPanelType.defaults()` never seeds `runAsAdmin` on when
+      `ctx.daemonElevated` is absent or false — the cheapest layer that sees the seed.
+      → `packages/core/tests/unit/panel-type-descriptor.test.ts`
+- [x] **T073** Component (Red): the preference's own toggle is disabled, unticked and states its
+      reason when unelevated, and honours a stored `true` again once elevation is reported.
+      → `packages/ui/tests/component/preferences-admin-default-gate.test.ts`
+- [x] **T074** Gate the SEED in core via a `daemonElevated` context flag, applied with the same
+      `canRunAsAdmin` the control and the daemon use. Absent means NOT elevated.
+- [x] **T075** Gate the DISPLAY: `checked={runAsAdmin && elevated}` in `terminal-inputs.tsx`,
+      mirroring `rememberDirectory`'s existing treatment; `ToggleControl` honours `disabled`, which
+      it had ignored since 007 despite its own doc-comment warning about exactly that.
+- [x] **T076** **Fix the test that let this ship.** `terminal-panel-type-inputs.test.ts` had a test
+      named for FR-008 asserting `toBeDisabled()` and never asserting what the control HELD, so it
+      read `checked="" disabled=""` as success. It now asserts both halves and says why — this is
+      the most reusable lesson of the two defects, and it belongs in the suite, not only here.
+
+### Defect 2 — the dormant placeholder named the panel wrongly and was unstyled
+
+- [x] **T077** Component (Red): the placeholder names the panel the way the panel names itself —
+      flavour label, a user rename outranking it, a live window title outranking both.
+      → `packages/ui/tests/component/dormant-terminal.test.ts`
+- [x] **T078** `DormantTerminal` takes the **Panel** and resolves through `usePanelDisplayNames`,
+      the resolver the tab popover uses, bounded by `tabs.maxNameLength` as the header is. This
+      removes the starved call site rather than correcting the string it produced — it was #294
+      ("the right function starved of its inputs") reappearing in this PR's own new code.
+- [x] **T079** Style it. `panel-box__placeholder-detail` had **no CSS rule anywhere**, which is why
+      it looked unfinished rather than badly finished. Theme tokens only; the Reload button typed as
+      the safe primary (021 FR-027); deliberately quiet, because dormancy is a state and not a
+      failure (FR-029). No E2E declaration moved, so the budget is not re-seeded.
+- [ ] **T080** Re-run `npm run gate` after the review fixes and update PR #312's Testing section.
+      **T065's green is stale** — a green gate goes stale the moment you edit, and these are edits.
 
 ---
 
