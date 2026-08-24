@@ -73,6 +73,7 @@
 .panel-type-form__actions button,
 .panel-type-form__confirm,
 .panel-type-form__clear,
+.terminal-dormant__reload,
 .capture-modal__btn {
   font-family: var(--throng-font-button-family, var(--throng-font-family));
   font-size: var(--throng-font-button-size, var(--throng-font-size));
@@ -1141,6 +1142,68 @@ textarea,
    fill the body and manage their own overflow. */
 .panel-box__body > .panel-box__placeholder {
   margin: auto;
+}
+
+/* --- The dormant terminal placeholder (039 FR-023, #293) -------------
+ *
+ * It keeps `panel-box__placeholder` for the shared Pane Text role and the centring rule above; what
+ * follows is the layout that class never had. The detail line was written against a class
+ * (`panel-box__placeholder-detail`) with NO RULE ANYWHERE, so its three children flowed inline in an
+ * unstyled box: a name, a sentence and a button, run together on one line with no spacing. That is
+ * the whole of "the panel looks unfinished" — it was never styled, rather than styled badly.
+ *
+ * It is deliberately quiet. Dormancy is a STATE the user chose, not a failure (FR-029), so there is
+ * no card, no border around the whole thing, no icon and nothing from the warning palette — the
+ * treatment has to read as "waiting", not as "wrong". The name carries the only emphasis, because
+ * naming which terminal is waiting is the placeholder's entire job when twenty of them are dormant.
+ */
+.terminal-dormant {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  /* Breathing room the bare placeholder never had. `margin: auto` above still centres the block. */
+  padding: 16px 18px;
+  /* A measure, so the sentence wraps as prose rather than stretching across a wide panel. */
+  max-width: 46ch;
+}
+
+.terminal-dormant__name {
+  font-weight: var(--throng-font-weight-bold, 700);
+  /* Full-strength text against the dimmed body colour the panel body sets — the name is the thing
+     being identified, and it is what the user scans for. */
+  color: var(--text);
+  /* A shell's window title can be a long unbroken path; it must wrap rather than widen the panel. */
+  overflow-wrap: anywhere;
+}
+
+.terminal-dormant__detail {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+/* Typed as the safe PRIMARY (021 FR-027), like every other Confirm in the application: it is the
+   affirmative action of this surface and the only control on it. Same six tokens, same shape. */
+.terminal-dormant__reload {
+  padding: 6px 14px;
+  border: 1px solid var(--throng-colour-confirmButtonBorder);
+  border-radius: 4px;
+  background: var(--throng-colour-confirmButtonBg);
+  color: var(--throng-colour-confirmButtonText);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.terminal-dormant__reload:hover {
+  border-color: var(--throng-colour-confirmButtonHoverBorder);
+  background: var(--throng-colour-confirmButtonHoverBg);
+  color: var(--throng-colour-confirmButtonHoverText);
+}
+
+.terminal-dormant__reload:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 /* --- Edge drop zones (shown while dragging) -------------------------- */

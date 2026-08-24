@@ -102,12 +102,16 @@ export function PanelBody({ panel, tabId }: { panel: Panel; tabId: string }): Re
      * Dormancy is a state, not a failure (FR-029) — nothing here touches the notice surfaces.
      */
     if (panel.dormant === true) {
+      /*
+       * The PANEL, not its title (#294).
+       *
+       * This passed `panel.title` — the raw stored title — so a dormant terminal showed "Panel 3"
+       * while its own header showed the flavour or the shell's window title. `panelDisplayTitle`
+       * has been the one rule since #218; the placeholder now resolves through it, which is the
+       * same correction `usePanelDisplayNames` made for the tab popover.
+       */
       return (
-        <DormantTerminal
-          panelId={panel.id}
-          panelName={panel.title}
-          onReload={() => ws.setPanelDormant(panel.id, false)}
-        />
+        <DormantTerminal panel={panel} onReload={() => ws.setPanelDormant(panel.id, false)} />
       );
     }
     // Display labels for the app-close warning details (FR-015). A sub-workspace-

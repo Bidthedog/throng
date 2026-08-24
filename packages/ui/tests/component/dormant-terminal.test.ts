@@ -1,8 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Panel } from '@throng/core';
 import { DormantTerminal } from '../../src/renderer/terminal/dormant-terminal.js';
+import { clearTerminalTitle, setTerminalTitle } from '../../src/renderer/terminal/title-store.js';
 
 /*
  * 039 FR-023/FR-027/FR-029 (#293) — the placeholder a terminal Panel shows when Manual reload mode
@@ -20,18 +22,73 @@ import { DormantTerminal } from '../../src/renderer/terminal/dormant-terminal.js
  * passing vacuously, because each asserts the PRESENCE of something before asserting anything about
  * it. There is no test here that a blank render would satisfy.
  */
-describe('the dormant terminal placeholder (039 FR-023)', () => {
-  const renderDormant = (onReload = (): void => {}) =>
-    render(
-      createElement(DormantTerminal, { panelId: 'p1', panelName: 'Build', onReload }),
-    );
+/**
+ * A dormant terminal Panel, as the layout holds it.
+ *
+ * `title` is the PLACEHOLDER the layout numbers panels with; `config.flavourLabel` is captured when
+ * the type is confirmed. That pairing is the whole of the naming bug below: the panel wears
+ * "Command Prompt" everywhere else and the placeholder was showing "Panel 3".
+ */
+function dormantPanel(over: Partial<Panel> = {}): Panel {
+  return {
+    type: 'panel',
+    id: 'p1',
+    originProjectId: 'proj',
+    title: 'Panel 3',
+    kind: 'terminal',
+    dormant: true,
+    config: { flavourId: 'cmd', flavourLabel: 'Command Prompt' },
+    ...over,
+  } as Panel;
+}
 
-  it('names the panel, so the user knows which terminal is waiting (FR-023)', () => {
+afterEach(() => {
+  clearTerminalTitle('p1');
+});
+
+describe('the dormant terminal placeholder (039 FR-023)', () => {
+  const renderDormant = (onReload = (): void => {}, panel: Panel = dormantPanel()) =>
+    render(createElement(DormantTerminal, { panel, onReload }));
+
+  /*
+   * #294, AGAIN — and that is why this is a structural fix rather than a string change.
+   *
+   * `panelDisplayTitle` has been the one place a panel's name is decided since #218. #294 was that
+   * rule "starved of its inputs": the tab popover called it with no sources, so every automatically
+   * named panel was listed as its placeholder. `usePanelDisplayNames` exists because of it.
+   *
+   * This placeholder was handed `panel.title` — the raw stored title — which is the same defect
+   * arriving by a shorter route, in the same PR that fixed the popover's siblings. A user renames
+   * nothing, opens a project in Manual mode, and sees "Panel 3" in the body of a panel whose own
+   * header, one line above, says "Command Prompt".
+   */
+  it('names the panel the way the panel names itself, not by its stored title (#294)', () => {
     renderDormant();
+    expect(screen.getByTestId('terminal-dormant-name')).toHaveTextContent('Command Prompt');
+  });
+
+  it('a name the user typed outranks the flavour, exactly as the header does', () => {
+    renderDormant(undefined, dormantPanel({ title: 'Build', titleIsCustom: true }));
     // FR-027: a dormant Panel keeps its name. The placeholder is where that is visible — without
     // it, twenty dormant panels are twenty identical boxes and "reload the two I care about" is
     // guesswork.
     expect(screen.getByTestId('terminal-dormant-name')).toHaveTextContent('Build');
+  });
+
+  /*
+   * The one source a dormant panel genuinely cannot have, asserted so the resolver is not merely
+   * assumed to be in the loop.
+   *
+   * A dormant panel holds no shell (FR-026), so there is no live OSC 0/2 window title — the
+   * flavour label is what names it. But the store is keyed by panel id and outlives an unmount, so
+   * a panel that HAD a terminal and was later left dormant can still have one; when it does, it
+   * must win, because that is what the header and the tab popover both do. Anything that resolved
+   * the name from `panel.config` alone would fail here.
+   */
+  it('a live window title still wins where one exists, as everywhere else', () => {
+    setTerminalTitle('p1', 'ISSUE MANAGEMENT');
+    renderDormant();
+    expect(screen.getByTestId('terminal-dormant-name')).toHaveTextContent('ISSUE MANAGEMENT');
   });
 
   it('offers Reload on the panel itself (FR-023)', () => {
