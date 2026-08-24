@@ -15,6 +15,8 @@ import type {
   TerminalPanelDefaults,
   ValidationResult,
 } from '../panel-type/descriptor.js';
+// 039 FR-008a — the same predicate the control and the daemon gate on, applied to the SEED.
+import { canRunAsAdmin } from './elevation.js';
 
 export type { TerminalPanelDefaults };
 
@@ -193,7 +195,20 @@ export const terminalPanelType: PanelTypeDescriptor<TerminalValues> = {
        */
       rememberCommand: boolValue(memory?.rememberCommand, seeds.rememberCommand),
       rememberDirectory: boolValue(memory?.rememberDirectory, seeds.rememberDirectory),
-      runAsAdmin: boolValue(undefined, seeds.runAsAdmin),
+      /*
+       * 039 FR-008a — the SEED half of the elevation gate, and the reason it is here.
+       *
+       * `undefined` for the memory is deliberate and unchanged: a Panel does not remember whether
+       * it was an admin terminal, so the preference is the SOLE source of this value. That is
+       * exactly what made an ungated seed dangerous rather than untidy — `buildConfig` writes it
+       * straight into the Panel's persisted config, so a preference of `on` on an unelevated
+       * machine plants a `runAsAdmin: true` that does nothing today and opens that panel's shell
+       * as administrator on the next ELEVATED launch, from a box the user could never tick.
+       *
+       * `canRunAsAdmin` is the same predicate the control and the daemon use, so there is still
+       * one rule; this applies it one step earlier, to the value rather than to the widget.
+       */
+      runAsAdmin: boolValue(undefined, seeds.runAsAdmin && canRunAsAdmin(ctx.daemonElevated === true)),
     };
   },
   validate: (values: TerminalValues, ctx: PanelTypeContext): ValidationResult => {

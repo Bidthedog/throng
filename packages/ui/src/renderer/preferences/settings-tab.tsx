@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import {
   SETTINGS_METADATA,
   buildShippedDefaults,
+  canRunAsAdmin,
   emptyValueFor,
   filterFields,
   getAtPath,
@@ -19,6 +20,7 @@ import { useResetNotice } from './reset-notice.js';
 import { useOnEntry } from './on-entry.js';
 import { RowActions } from './row-actions.js';
 import { SettingControl } from './form-controls.js';
+import { useCapabilities } from '../panel-type/use-capabilities.js';
 import { createApplyClient } from './apply-client.js';
 
 /**
@@ -90,6 +92,15 @@ const NOTICE_TIMEOUT_KEY = /^notifications\.(?:error|warning|info|success)\.time
 const SILENCEABLE_FAILURE_KEY = /^notifications\.(?:error|warning)\.mode$/;
 
 /**
+ * The one setting whose meaning is taken away by something OUTSIDE the settings file (039 FR-008a).
+ *
+ * A literal key rather than a pattern, because there is exactly one and inventing a pattern for it
+ * would imply a family that does not exist. If a second such setting ever appears, this becomes the
+ * pattern the two above already are.
+ */
+const ELEVATION_GATED_KEY = 'terminals.defaultRunAsAdmin';
+
+/**
  * The consent FR-008 requires before a failure stops reporting itself.
  *
  * *Never display* is offerable at all only because the user is told, in the moment, what it costs:
@@ -121,6 +132,9 @@ export function SettingsTab({
   searchDebounceMs?: number;
 } = {}): ReactElement {
   const settings = useAppSettings();
+  // 039 FR-008a — the daemon capability that gates "Run as administrator by default". The same
+  // signal 005 FR-025a requires the per-panel control to use; the renderer never probes the OS.
+  const { elevated } = useCapabilities();
   const entry = useOnEntry().settings;
   const { report } = useResetNotice();
   // THE confirmation model — the one `preferences-app.tsx` already mounts around this tab. A second
@@ -277,9 +291,44 @@ export function SettingsTab({
    * comes from, so a `notifications` block missing from the file disables nothing by accident.
    */
   const isInert = (d: FieldDescriptor): boolean => {
+    if (inertReason(d) !== null) return true;
     if (!NOTICE_TIMEOUT_KEY.test(d.key)) return false;
     const modeKey = `${d.key.slice(0, d.key.lastIndexOf('.'))}.mode`;
     return getAtPath(settings, modeKey) !== 'timed';
+  };
+
+  /**
+   * Why a control is inert, in the user's words — or `null` when it is live (039 FR-008a).
+   *
+   * Separate from {@link isInert} because the two answer different questions and only one setting
+   * currently has an answer to this one. A notice duration under *Never display* is inert for a
+   * reason the mode dropdown beside it already makes obvious; "Run as administrator by default" is
+   * inert for a reason that is nowhere on this screen, and a control that is simply grey with no
+   * explanation is the thing 005 FR-025a exists to prevent.
+   *
+   * The wording is the per-panel checkbox's, verbatim (`terminal-inputs.tsx`), so the two controls
+   * explain themselves identically rather than in two dialects of the same fact.
+   */
+  const inertReason = (d: FieldDescriptor): string | null => {
+    if (d.key !== ELEVATION_GATED_KEY || canRunAsAdmin(elevated)) return null;
+    return 'Relaunch throng as administrator to enable admin terminals';
+  };
+
+  /**
+   * What the control SHOWS, which is not always what the file HOLDS (039 FR-008a).
+   *
+   * With throng unelevated, `terminals.defaultRunAsAdmin` resolves to off wherever it is read —
+   * the New Panel seed, and here. Rendering the stored `true` on a disabled toggle would repeat
+   * the exact complaint this fix answers: a control that says "on" and cannot be turned off.
+   *
+   * READ-SIDE ONLY. Nothing is written back, so a `true` the user set during an elevated session
+   * survives in `settings.json` and takes effect again the next time they run elevated — FR-006,
+   * and the half of FR-008a that is easy to get backwards.
+   */
+  const shownValue = (d: FieldDescriptor): unknown => {
+    const stored = getAtPath(settings, d.key);
+    if (d.key === ELEVATION_GATED_KEY) return stored === true && canRunAsAdmin(elevated);
+    return stored;
   };
 
   /**
@@ -369,11 +418,23 @@ export function SettingsTab({
               <div className="settings-row__meta">
                 <label className="settings-row__label">{d.label}</label>
                 <p className="settings-row__desc">{d.description}</p>
+                {/* 039 FR-008a — DISABLED WITH A REASON, never hidden. A control that vanishes
+                    takes its explanation with it; a grey one with nothing beside it is a control
+                    the user is entitled to think is broken. It sits with the description rather
+                    than as a hover title so it is readable without aiming at anything. */}
+                {inertReason(d) !== null ? (
+                  <p className="settings-row__inert" data-testid={`setting-inert-${d.key}`}>
+                    {inertReason(d)}
+                  </p>
+                ) : null}
               </div>
-              <div className="settings-row__control">
+              <div
+                className="settings-row__control"
+                title={inertReason(d) ?? undefined}
+              >
                 <SettingControl
                   descriptor={d}
-                  value={getAtPath(settings, d.key)}
+                  value={shownValue(d)}
                   options={dynamicOptions(d, themes, detected)}
                   optionLabels={dynamicOptionLabels(d, detected)}
                   disabled={isInert(d)}

@@ -134,7 +134,17 @@ export function TerminalInputs({
         <input
           type="checkbox"
           data-testid="terminal-admin"
-          checked={runAsAdmin}
+          /*
+           * 039 FR-008a, display half — and the same treatment "Reopen in the last directory"
+           * gets twenty lines above, for the same reason its comment gives: a control left
+           * TICKED while disabled is a lie in a quieter voice. It told the user this terminal
+           * would be elevated and offered them no way to say otherwise.
+           *
+           * This is display only. The value in `values` is untouched, so nothing is written back
+           * over a Panel's stored `runAsAdmin` (FR-006, and FR-008a's no-rewrite rule) — the
+           * checkbox is disabled, so its `onChange` cannot fire either.
+           */
+          checked={runAsAdmin && elevated}
           disabled={!elevated}
           onChange={(e) => onChange({ ...values, runAsAdmin: e.target.checked ? 'true' : 'false' })}
         />

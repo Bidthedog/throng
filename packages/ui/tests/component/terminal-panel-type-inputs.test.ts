@@ -188,11 +188,31 @@ describe('the Terminal type form offers its three configuration controls (025 FR
    * must never force, imply or appear to grant elevation. `elevated: false` is the unelevated
    * daemon, and the control must stay disabled regardless of what the value says.
    */
-  it('leaves "Run as administrator" DISABLED when unelevated, even seeded on (039 FR-008)', async () => {
+  /*
+   * ══ THIS TEST USED TO STOP AT `toBeDisabled()`, AND THAT IS THE LESSON ══
+   *
+   * It asserted that the control was disabled and never asserted WHAT IT HELD. So it passed for
+   * the whole life of the defect it was written to prevent: with `runAsAdmin: 'true'` and an
+   * unelevated daemon the checkbox rendered `checked="" disabled=""` — ticked and untickable at
+   * once — and this test read that as success, because "disabled" was true and "disabled" was all
+   * it looked at.
+   *
+   * A test that checks a control's ENABLEMENT while never checking its VALUE is the same family as
+   * the impossible fixtures found on this branch: correct about what it observed, silent about
+   * what mattered. The `not.toBeChecked()` line below is the whole difference, and it is worth more
+   * than the one above it.
+   *
+   * (039 FR-008a, display half. The sibling directory control four tests down has asserted both
+   * halves since it was written — "Leaving it checked while disabled would be the same lie in a
+   * quieter voice" — so the pattern to copy was already in this file.)
+   */
+  it('leaves "Run as administrator" DISABLED and UNTICKED when unelevated (039 FR-008a)', async () => {
     stubBridge();
     await renderForm({ runAsAdmin: 'true' });
 
     expect(control('terminal-admin')).toBeDisabled();
+    expect(control('terminal-admin')).not.toBeChecked();
+    expect(control('terminal-admin').closest('label')?.title).toMatch(/Relaunch throng as administrator/i);
   });
 });
 

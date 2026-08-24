@@ -82,15 +82,49 @@ describe('Terminal descriptor — defaults seed from the preferences (039 FR-004
   const ALL_OFF = { rememberCommand: false, rememberDirectory: false, runAsAdmin: false };
 
   it('takes each checkbox from the preference when the Panel has no memory', () => {
-    const on = terminalPanelType.defaults(ctx({ terminalDefaults: ALL_ON }));
+    // `daemonElevated` because `runAsAdmin` is now gated on it (FR-008a, asserted below). This
+    // test is about the OTHER rule — that each seed comes from the preference — so it is stated
+    // on a machine where all three preferences can actually be honoured.
+    const on = terminalPanelType.defaults(ctx({ terminalDefaults: ALL_ON, daemonElevated: true }));
     expect(on.rememberCommand).toBe('true');
     expect(on.rememberDirectory).toBe('true');
     expect(on.runAsAdmin).toBe('true');
 
-    const off = terminalPanelType.defaults(ctx({ terminalDefaults: ALL_OFF }));
+    const off = terminalPanelType.defaults(ctx({ terminalDefaults: ALL_OFF, daemonElevated: true }));
     expect(off.rememberCommand).toBe('false');
     expect(off.rememberDirectory).toBe('false');
     expect(off.runAsAdmin).toBe('false');
+  });
+
+  /*
+   * 039 FR-008a — the SEED half of the elevation gate.
+   *
+   * A preference is a seed. `canRunAsAdmin()` is the gate, and a seed may not out-rank it. This
+   * matters more than it looks: `buildConfig` writes the seeded value into the Panel's PERSISTED
+   * config, and nothing rewrites it afterwards — so an ungated seed does not merely mislabel
+   * today's unelevated terminal, it plants a `runAsAdmin: true` that opens that panel's shell as
+   * administrator the next time throng is launched elevated, from a box the user could never tick.
+   *
+   * Note what is NOT gated: the other two seeds are untouched by elevation, so a red here can only
+   * be about the admin flag rather than about the seeding mechanism in general.
+   */
+  it('never seeds runAsAdmin ON when the daemon is not elevated (FR-008a)', () => {
+    const unelevated = terminalPanelType.defaults(ctx({ terminalDefaults: ALL_ON }));
+    expect(unelevated.runAsAdmin).toBe('false');
+    expect(unelevated.rememberCommand).toBe('true');
+    expect(unelevated.rememberDirectory).toBe('true');
+
+    // Explicit `false` reads the same as absent: a context that cannot establish elevation must
+    // not seed an elevation request, and `useCapabilities` reports exactly this until the daemon
+    // answers.
+    expect(
+      terminalPanelType.defaults(ctx({ terminalDefaults: ALL_ON, daemonElevated: false })).runAsAdmin,
+    ).toBe('false');
+
+    // And the gate does not invent one either — elevated plus a preference of OFF is still off.
+    expect(
+      terminalPanelType.defaults(ctx({ terminalDefaults: ALL_OFF, daemonElevated: true })).runAsAdmin,
+    ).toBe('false');
   });
 
   it("what the Panel remembered still WINS over the preference (FR-005, 025 FR-007a)", () => {
@@ -112,9 +146,12 @@ describe('Terminal descriptor — defaults seed from the preferences (039 FR-004
   // FR-003: one set of defaults for every flavour. Flavours own shell arguments and recipes, not
   // these three, and a per-flavour path here would be a bug rather than a feature.
   it('seeds identically for every flavour (FR-003)', () => {
-    const pwsh = terminalPanelType.defaults(ctx({ terminalDefaults: ALL_ON }));
+    // Elevated on both sides, so all three seeds are genuinely ON and the comparison has
+    // something to distinguish. Under FR-008a an unelevated pair would agree on `runAsAdmin` by
+    // both being off, which is agreement the parity claim should not be resting on.
+    const pwsh = terminalPanelType.defaults(ctx({ terminalDefaults: ALL_ON, daemonElevated: true }));
     const bash = terminalPanelType.defaults(
-      ctx({ terminalDefaults: ALL_ON, flavours: [FLAVOURS[1]!, FLAVOURS[0]!] }),
+      ctx({ terminalDefaults: ALL_ON, daemonElevated: true, flavours: [FLAVOURS[1]!, FLAVOURS[0]!] }),
     );
     expect(bash.flavourId).toBe('bash'); // proves the two really are different flavours
     for (const key of ['rememberCommand', 'rememberDirectory', 'runAsAdmin'] as const) {
