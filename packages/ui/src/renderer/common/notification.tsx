@@ -818,10 +818,12 @@ function NoticePartView({ notice, part }: { notice: Notice; part: NoticePart }):
  * division is deliberate: a row that assembled its own label would bypass the 48-character
  * truncation and let one long panel name break the bound this component exists to keep.
  *
- * Rows are READ, not operated (FR-032b). None is a link, a button or a tab stop — clicking a row to
- * "go to that panel" is a plausible feature and not this one, and offering the affordance without
- * the behaviour is worse than not offering it. The LIST is focusable, because a bounded scroll
- * region whose lower rows can only be reached with a wheel is unreadable by keyboard.
+ * Rows are READ, not operated (FR-032b, and #313 does not change this). None is a link, a button or
+ * a tab stop — clicking a row to "go to that panel" is a plausible feature and not this one, and
+ * offering the affordance without the behaviour is worse than not offering it. What #313 changes is
+ * only whether the SCROLL REGION can be reached: it now takes the wheel as well as the arrow keys.
+ * The LIST stays focusable, because a bounded scroll region whose lower rows can only be reached
+ * with a wheel is unreadable by keyboard.
  */
 function AffectedList({ groups }: { groups: readonly AffectedTabGroup[] }): ReactElement {
   /*
@@ -835,10 +837,11 @@ function AffectedList({ groups }: { groups: readonly AffectedTabGroup[] }): Reac
     <div
       className="notice__affected"
       data-testid="notice-affected"
-      /* Focusable so it can be scrolled from the KEYBOARD — which is the only way, because the card
-         takes no pointer events (see `.notice__affected` in theme.css: a notice must never cover the
-         controls that would fix what it reports). NOT a focus trap: Tab leaves, because nothing
-         inside it takes focus of its own. */
+      /* Focusable so it can be scrolled from the KEYBOARD. That used to be the ONLY way — the card
+         took no pointer events — and #313 supersedes that half of 030 FR-032b: the card takes clicks
+         now, so the wheel reaches this list too. The tab stop stays. It is what a keyboard user has,
+         and removing it because a mouse works would be the same mistake in the other direction.
+         Still NOT a focus trap: Tab leaves, because nothing inside it takes focus of its own. */
       tabIndex={0}
     >
       {groups.map((group) => (

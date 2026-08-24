@@ -644,7 +644,8 @@ earlier one.
 - **FR-032a**: When a notice grows (FR-037), what is announced to assistive technology MUST be only
   what was added — the tab and how many panels joined — not a re-reading of the whole notice. A notice
   that gains a group MUST NOT cause its entire list to be announced again.
-- **FR-032b**: The affected-panel list MUST be reachable and scrollable by keyboard, and any control
+- **FR-032b** *(the keyboard-only half is SUPERSEDED by FR-060; the non-trapping half stands)*: The
+  affected-panel list MUST be reachable and scrollable by keyboard, and any control
   the notice carries MUST be in the tab order. Reaching the list MUST NOT trap focus: a user who tabs
   into it can tab out again. **Keyboard-only, deliberately**: 018 gives the notice card
   `pointer-events: none` so a notice can never cover the controls that would fix what it reports, and
@@ -798,6 +799,61 @@ earlier one.
   severity always auto-dismisses — MUST be updated to describe the configurable behaviour, so that no
   stated description of the product contradicts it.
 
+#### Group 7 — A notice is an interactive surface (amendment, #313)
+
+*Raised against shipped behaviour and agreed by the maintainer on #313. This group amends 030; it is
+not a new feature and takes no new spec directory.*
+
+- **FR-060**: A notice MUST receive the pointer events that land on it. A click anywhere on a notice
+  card MUST be delivered to the notice and MUST NOT reach any element beneath it, and the
+  affected-panel list MUST be scrollable with the mouse wheel as well as by keyboard. Where a notice
+  covers something the user needs, the remedy is to **dismiss** the notice, which MUST therefore
+  remain available on every notice. The notice *column* MUST remain transparent to the pointer
+  outside the bounds of its cards, so that the empty region of a fixed corner strip never intercepts
+  anything.
+
+  *(Supersedes the **keyboard-only** decision of FR-032b, and with it 018's `pointer-events: none` on
+  the notice card. FR-032b's other half is unchanged and explicitly preserved: the list stays a tab
+  stop, remains keyboard-scrollable, and MUST NOT trap focus. Mouse support is added beside the
+  keyboard route, not substituted for it.)*
+
+  **Why the earlier decision is reversed.** FR-032b's measurement is not in dispute and is retained
+  in the code that implements this — a notice listing two panels sat over the panel-type form's
+  Confirm button and swallowed 60 retried clicks. What was wrong was the inference. Click-through
+  does not remove that collision; it converts a **visible** obstruction into an **invisible** one.
+  Before, the user clicked the notice and nothing happened, which is legible — the thing on top took
+  the click. After, the click silently reaches a control the user can neither see nor was aiming at,
+  and no feedback follows, because the notice is drawn over the result. A notice that absorbs a click
+  costs the user one dismissal; a notice that passes it through can cost them an action they never
+  chose.
+
+  **And the measurement never fitted the remedy it produced.** The panel-type form is *not* a modal
+  or a dialog — it is ordinary panel content, and its actions row is bottom-right of its panel while
+  the notice column is pinned bottom-right of the window, so the two compete for the same corner by
+  construction. No rule about notices not obscuring *dialogs*, and no z-ordering, reaches that case.
+  Dismissal does, and dismissal is what FR-032b's own evidence was always pointing at.
+
+  **The suite was defending the behaviour being superseded, and that is part of the supersession
+  rather than incidental to it.** `packages/ui/tests/e2e/notice-overlay.e2e.ts` already existed and
+  already asserted the old outcome deliberately — `expect(swallows).toBe('THROUGH')`, measured with
+  `document.elementFromPoint` in a real window, under a header explaining why a card that took
+  pointer events would be wrong. So the change is not "add a test for the new rule"; it is inverting
+  an existing guard from `'THROUGH'` to `'THE-NOTICE'` with its mechanism untouched, which is the
+  clearest record a superseded decision can leave. Any future reader of that file sees one expected
+  value change and the reasoning above it rewritten, rather than a deleted test and a new one that
+  cannot be compared to it. **A guard asserting the value that turns out to be wrong is not
+  self-announcing**: it reports green for exactly as long as the code and the guard agree, which
+  says nothing about whether the requirement behind them still holds. That is the gap #307 tracks —
+  *nothing detects a functional requirement that production code has stopped honouring* — seen from
+  the test side rather than the code side.
+
+- **FR-060a**: A user MUST have a route to the affected-panel list that does not depend on knowing it
+  is focusable. FR-060's wheel support satisfies this for the pointer. It is NOT satisfied for the
+  keyboard, which FR-032b left reachable in principle and unreachable in practice: no binding focuses
+  a notice, nothing autofocuses one, and no cue indicates the list is a tab stop. That gap is tracked
+  as its own enhancement (#314) rather than closed here, because supplying it is a design decision
+  about affordance rather than a defect in this one.
+
 ### Key Entities
 
 - **Notice**: The transient report of an event — the toast — carrying a severity, a subject, a message,
@@ -877,6 +933,11 @@ earlier one.
   with a generic stand-in, is rejected by the project's own checks before it can be merged.
 - **SC-014**: A settings file from any earlier version opens without error and without the user losing
   any preference they had already set.
+- **SC-015** (FR-060, #313): A click at any point on a notice card resolves to the notice, and 0% of
+  such clicks activate a control beneath it — measured against a real overlap between a notice and
+  the panel-type form's Confirm button, the same collision FR-032b's 60-click measurement recorded.
+  The affected-panel list scrolls under a mouse wheel, and still scrolls by keyboard without trapping
+  focus.
 
 ## Assumptions
 
