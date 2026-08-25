@@ -11,6 +11,7 @@ import {
   firstPanelId,
   runApp as runOwnApp,
 } from './harness.js';
+import { skipIfElevated } from './admin.js';
 
 /**
  * 039 US2 (#293) — Manual reload mode starts NO shell.
@@ -80,6 +81,23 @@ async function makeTerminal(win: import('@playwright/test').Page): Promise<strin
  * gate: 99 @terminal against a budget of 101.
  */
 test('Automatic starts a real shell — the control that proves this test can SEE one (039 FR-021)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
+    /*
+     * BOTH measurements below are unavailable on an elevated daemon, and they are two separate
+     * assumptions rather than one — which is why this comment names them individually (#112: guard
+     * per assumption, not per file).
+     *
+     *   • `panel-cwd-<id>` (:96) — the working directory is read back from the shell the daemon
+     *     started. Under the de-elevated agent that readback never reaches the panel, so the
+     *     element does not appear at all and the poll burns its full 30s.
+     *   • `conhostChildren(daemon)` (:104) — an elevated daemon routes terminals through the agent,
+     *     so the conhosts are the AGENT's children and the daemon's count is 0.
+     *
+     * The first is the one that actually fires, thirty seconds before the second is reached, and it
+     * is the one #316's own diagnosis missed. Every sibling spec asserting either fact already
+     * guards it: `terminal-no-orphans.e2e.ts` for the conhost count, and `terminal-command-memory`,
+     * `terminal-directory-memory` and `open-in-terminal` for the CWD readback.
+     */
+    skipIfElevated();
     test.setTimeout(120_000);
     const cfg = freshCfgRoot({ terminals: { reloadMode: 'automatic' } });
     const root = freshRoot();
@@ -108,6 +126,21 @@ test('Automatic starts a real shell — the control that proves this test can SE
 });
 
 test('Manual starts NO shell and no conhost, and offers Reload on each panel (039 FR-022/FR-023/FR-026)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
+    /*
+     * Guarded for the daemon-owned-conhost assumption only — this test never reads `panel-cwd`.
+     * `expect(baseline.length).toBeGreaterThan(0)` (:127) is the line that failed on the runner, in
+     * 3s rather than the 30s the sibling test spent, because a zero count fails immediately.
+     *
+     * The whole test skips rather than just its conhost half, and that is a deliberate reading of
+     * #112 rather than a shortcut around it. What would survive an elevated run is the dormant
+     * placeholder, its Reload control and the absence of a failure notice — and the docblock at the
+     * top of this file records that all three are already asserted in
+     * `ui/tests/component/dormant-terminal.test.ts` and `ui/tests/unit/menu-sections.test.ts`. FR-026
+     * — that a dormant panel holds no PTY, no shell and no conhost — is the ONLY claim here that
+     * needs a real process table, so a version of this test that ran elevated with the process
+     * assertions removed would be exactly the vacuous E2E the docblock argues against.
+     */
+    skipIfElevated();
     test.setTimeout(120_000);
     const cfg = freshCfgRoot({ terminals: { reloadMode: 'manual' } });
     const root = freshRoot();
