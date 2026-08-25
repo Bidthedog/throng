@@ -171,13 +171,24 @@ jobs:
       # untouched. Only a PURE INFRA fault (non-zero exit with 0 flaky AND 0 unexpected — a worker/
       # global-teardown crash no test owns, which no retry absorbs) is retried once. The classifier
       # cannot turn a real test flake green; see scripts/ci-e2e-run.ps1 and the constitution.
-      # Run at NORMAL INTEGRITY. GitHub's Windows runners are elevated, and 84 spec files
-      # call skipIfElevated() because they assume a normal-integrity daemon — so before this, 208
-      # tests self-skipped here and a green E2E stage said nothing whatever about them. Thirteen more
-      # lacked the guard and simply failed, which the shard script's broken exit-code handling then
-      # reported as a pass. `run-deelevated.ps1` re-enters through a Limited scheduled task, which
-      # needs no interactive shell token (the reason the product's own de-elevation cannot be reused
-      # here) and fails loudly rather than quietly running elevated.
+      # This lane runs ELEVATED, like every hosted Windows runner, and that is not a choice — it is
+      # a measured limit. This comment used to claim the opposite ("Run at NORMAL INTEGRITY … via a
+      # Limited scheduled task"), and it was describing something the workflow does not do: the step
+      # below invokes `ci-e2e-run.ps1` directly, with no de-elevation wrapper anywhere in the job.
+      #
+      # Both ways of dropping admin rights were measured FAILING here (run 30947653266): with UAC
+      # off there is no filtered token, so a Limited scheduled task still came up admin=True, and
+      # `runas /trustlevel` produced nothing at all. `scripts/run-deelevated.ps1` is kept only for a
+      # self-hosted runner with UAC on. See the long note at `scripts/ci-e2e-run.ps1:82`.
+      #
+      # What actually closed the old gap was NARROWING the guard — 85 files to 22 — so the specs
+      # that never depended on the process tree run elevated instead of self-skipping. The ones that
+      # remain are guarded because their SUBJECT is the process tree, and they stay skipped here.
+      # That count is printed live on every run, because the danger was always silence, not size.
+      #
+      # Left uncorrected this comment costs a whole investigation: #316 was diagnosed against it,
+      # and "make the release lane de-elevate too" looked like the obvious fix right up until the
+      # measurement above turned up.
       #
       # The @admin job below is deliberately NOT de-elevated: it is the elevated path's own coverage.
       - name: Run E2E critical lane (flake-policy aware)
