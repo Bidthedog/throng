@@ -283,6 +283,25 @@
   color: var(--text-dim, var(--text));
 }
 
+/* 040 FR-036a — a SUBSECTION inside a section, and the second level has to LOOK like a second
+   level or the heading reads as a sibling of the one above it. The top margin is what separates it
+   from the ungrouped rows that render above it (FR-036b); the heading below is the group title one
+   notch quieter, because it is the same kind of label at a lower rank. Nothing folds: no border,
+   no chevron, no affordance — the `<section>` containing this does not collapse either. */
+.settings-subgroup {
+  margin-top: 14px;
+}
+
+.settings-subgroup__title {
+  margin: 0 0 6px;
+  padding-left: 12px; /* aligned with the rows below it, which carry the same left padding */
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim, var(--text));
+  opacity: 0.85;
+}
+
 /* Horizontal padding is not decoration (FR-019b): without it a row-hover highlight runs
    edge-to-edge to the panel border and reads as a rendering fault the moment the hover colour
    differs from the panel behind it. */

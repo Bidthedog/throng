@@ -3,7 +3,8 @@
  *
  * The query is split on whitespace into tokens; a field qualifies when **any**
  * token is a case-insensitive substring of its key, label, description, its
- * **group** (021 — so a section name returns the whole section), or its current
+ * **group** (021 — so a section name returns the whole section), its **subgroup**
+ * (040 — the same, for a subsection), or its current
  * value. OR semantics (unlike the font typeahead's AND, {@link
  * matchFamilies}) so that typing several loosely-remembered words widens rather
  * than narrows the result — the user is recalling a setting, not filtering a
@@ -24,6 +25,19 @@ export interface SearchableField {
    * the match is a substring — "editor" ⊂ "Editor · Syntax").
    */
   group?: string;
+  /**
+   * The subsection the field sits under, inside its group (040, FR-036). Optional and searched on
+   * exactly the same terms as {@link group}, because it obeys the same invariant: **a heading the
+   * user can read is a heading the user can search by.**
+   *
+   * 040 made that invariant load-bearing rather than incidental. A subgroup renders as a visible
+   * `<h4>`, and a heading that returns "No settings match" while its own words are on screen is the
+   * search telling the user something untrue. The one subgroup shipped today (`Status Bar`) would
+   * appear to work without this — "status" and "bar" happen to be substrings of its fields' keys —
+   * which is precisely why the omission was invisible and why the field is modelled here rather
+   * than left to luck.
+   */
+  subgroup?: string;
 }
 
 /** Split a query into lowercase tokens, discarding whitespace runs. */
@@ -42,9 +56,12 @@ function renderValue(value: unknown): string {
   return String(value);
 }
 
-/** The lowercased text a field is searched against: key + label + description + group + value. */
+/**
+ * The lowercased text a field is searched against: key + label + description + group + subgroup +
+ * value. Both heading levels are in it for the same reason — see {@link SearchableField.subgroup}.
+ */
 export function fieldHaystack(field: SearchableField, value: unknown): string {
-  return `${field.key} ${field.label} ${field.description} ${field.group ?? ''} ${renderValue(value)}`.toLowerCase();
+  return `${field.key} ${field.label} ${field.description} ${field.group ?? ''} ${field.subgroup ?? ''} ${renderValue(value)}`.toLowerCase();
 }
 
 /** True when any query token appears in the field's haystack (blank query → true). */

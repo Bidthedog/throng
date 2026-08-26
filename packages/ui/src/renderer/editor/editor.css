@@ -92,10 +92,30 @@
 .editor-status-strip {
   flex: 0 0 auto;
   display: flex;
-  justify-content: flex-end; /* right-aligned (FR-010) */
+  /* 040 FR-013 — the bar has TWO alignment groups now: the readouts lead, the language indicator
+     and the wrap toggle trail. `space-between` is what puts the width pressure BETWEEN them
+     (FR-014) instead of letting either overrun the other.
+
+     It replaces `flex-end`, which was correct while the bar held one right-aligned label (016
+     FR-010c) and is wrong for a bar with two groups — under it BOTH groups draw hard right and the
+     readouts never reach the left edge, with every structural test still passing. That is the gap
+     `status-strip-declared-css.test.ts` exists to close.
+
+     016 FR-010c is preserved, not overturned: the language indicator is in the trailing group, so
+     it is still the right-aligned label that requirement asks for. THE LEADING GROUP MUST RENDER
+     EVEN WHEN EMPTY (`status-strip.tsx`) — `space-between` with a single child puts that child on
+     the LEFT, so a group that unmounted when every readout was dropped, or when both preferences
+     were off, would silently move the language label to the wrong edge. */
+  justify-content: space-between;
   align-items: center;
   gap: 6px;
   padding: 0 8px;
+  /* FR-020 — one line at every width. Inherited by everything the bar contains, so a readout added
+     later cannot wrap the bar onto a second line and shorten the editor's text area (SC-002)
+     because the user dragged a splitter sideways. */
+  white-space: nowrap;
+  /* A MINIMUM, never a fixed `height`: the picker below pops UPWARD out of this box, and a hard
+     height would clip it. See the overflow note directly below, which is the same constraint. */
   min-height: 20px;
   /* The strip owns a stacking context ABOVE the CodeMirror content, so the picker it opens is not
      swallowed by the document. It must NOT clip its own overflow: the picker pops UPWARD out of a
@@ -119,6 +139,75 @@
 
 .panel-box--active-dimmed .editor-status-strip {
   opacity: 0.55;
+}
+
+/* 040 FR-013 — the bar's two alignment groups. The readouts lead, the language indicator and the
+   wrap toggle trail, and width pressure is absorbed BETWEEN them (FR-014) rather than by either
+   group overrunning the other. `min-width: 0` is what lets a group actually give way: a flex item's
+   default `min-width: auto` refuses to shrink below its content, which is how a bar ends up wider
+   than the panel it sits in. */
+.editor-status-strip__group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 040 FR-014 — THE TRAILING GROUP IS SUBTRACTED AT WHAT IT COSTS, SO IT MUST NOT BE SQUEEZED.
+────────────────────────────────────────────────────────────────────────────────────────────────────
+   `status-strip.tsx` measures this group and hands the rest to the readouts:
+
+       available = bar - controls - gap
+
+   Under the rule above alone that is a measurement of its own output. `min-width: 0` plus the
+   default `flex: 0 1 auto` makes this group SHRINK, so its `getBoundingClientRect().width` reports
+   what the readouts left over rather than what the two controls cost — and the readouts were sized
+   from that very number.
+
+   The failure it produced is a stable WRONG fixed point rather than a wobble, which is why nothing
+   noticed. At a width where five readouts just fit, change the language from `Plain Text` to
+   something longer: the measured value is still the old smaller one, `available` stays overstated,
+   no readout gives way, and the bar overflows by the difference. The next measurement reads the
+   SHRUNK group and confirms the same wrong answer — language ellipsised, readouts painting over it,
+   which is FR-014 exactly inverted. The requirement says the READOUTS are what give way.
+
+   `flex-shrink: 0` makes the measured width INTRINSIC — a function of the two controls' content and
+   of nothing else — so the arithmetic above stops feeding back on itself.
+
+   `max-width: 100%` is what keeps FR-022b alive alongside it. A group that could never shrink would
+   simply overflow the panel once the language name alone was wider than the bar, spilling outside
+   the panel's right edge instead of ellipsising. The percentage resolves against the STRIP's content
+   box — the flex container — so it depends on the panel's width and NOT on the readouts, which is
+   the property that matters: the clamp cannot reintroduce the loop. At that point `available` goes
+   negative, every readout is dropped (FR-023), and the language truncates beside the wrap toggle
+   exactly as FR-022b and FR-024 require. */
+.editor-status-strip__group--controls {
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
+/* The measuring ruler (040 FR-021/FR-022a): every present readout in both label forms, so the fit
+   is decided in one pass rather than converging over several frames. Out of flow so it adds no
+   width, invisible so it is never seen, and `pointer-events: none` so it can never be clicked.
+
+   `visibility: hidden` rather than `display: none` — a `display: none` element has NO box, so every
+   measurement would come back 0 and the bar would believe everything fits at every width. */
+.editor-status-strip__ruler {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+  display: flex;
+  gap: 6px;
+}
+
+/* A figure and its label are one unit and must never break across lines: the strip is one line high
+   at every width (FR-020), and a readout that wrapped internally would grow it. Hiding, not
+   wrapping and not truncating, is how a readout gives way (FR-022) — see `status-strip-fit.ts`. */
+.editor-status-strip__readout {
+  white-space: nowrap;
 }
 
 .editor-status-strip__language {

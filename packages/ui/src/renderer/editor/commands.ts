@@ -300,6 +300,25 @@ export const indentCompartment = new Compartment();
  */
 export const wrapCompartment = new Compartment();
 
+/**
+ * Holds the line-number gutter (040 US4, #254) — `lineNumbers()` when `editor.showGutter` is on,
+ * empty when it is off.
+ *
+ * In a compartment for the reason every other compartment on this page is: the preference must reach
+ * an ALREADY-OPEN view without reopening it (FR-043) and without disturbing the document position or
+ * the selection (FR-044). Recreating the `EditorView` would do neither, and hiding the gutter with
+ * CSS would leave it occupying layout — so the width the user was reclaiming would never reach the
+ * text (FR-041), which is the whole point of the setting.
+ *
+ * ONE compartment instance, shared by BOTH editor surfaces — the editor panels in `use-editor.ts`
+ * and the standalone editor the preferences and theme editors mount. A `Compartment` is a key, not
+ * a value: two independently-created views each hold their own content under it, exactly as
+ * `languageCompartment` already works. FR-042 requires the two surfaces to read the one setting, and
+ * missing the standalone call site is the defect #254 warns about by name — the preferences JSON
+ * editor keeping its gutter while every panel loses theirs.
+ */
+export const gutterCompartment = new Compartment();
+
 /** The CodeMirror facets for one indentation profile. */
 export function indentExtensions(profile: IndentProfile): Extension {
   return [indentUnit.of(indentUnitOf(profile)), EditorState.tabSize.of(profile.tabWidth)];

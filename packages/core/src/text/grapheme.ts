@@ -10,6 +10,13 @@
  *
  * Pure: no DOM, no OS, no configuration. The limit itself lives in settings; this module only
  * applies one it is handed.
+ *
+ * **This is not the only "character" throng counts, and the other one is deliberate.** The editor
+ * status bar counts UTF-16 CODE UNITS instead — `countCharacters` and `caretPosition` in
+ * `../editor/document-metrics.js` (040 FR-003c) — because a caret column has to land where a
+ * compiler or a linter says it does, and because segmenting a 5 MB document costs far more than a
+ * filename. So one emoji is 1 character here and 2 there. Reach for this module when the number
+ * sits beside a name the USER typed, and for that one when it measures a document.
  */
 
 /**

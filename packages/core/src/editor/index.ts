@@ -88,3 +88,17 @@ export { seedFromSelections } from './seed-selection.js';
 // 033 US2 — what the Go To Line modal's raw input means: a clamped line, or null
 // for "do nothing" (contracts/navigation-modals.md §5).
 export { resolveGotoLine } from './goto-line.js';
+// 040 US1 — the editor status bar's counting rules (data-model.md §4). Line breaks ARE characters,
+// one each however the file spells them (FR-003a, reversed 2026-08-25); a word is a run of
+// non-whitespace; a tab advances the column by exactly 1.
+//
+// This comment said the opposite until the review caught it. It is the re-export a reader hits
+// first when they follow `countCharacters` from `@throng/core`, so a stale rule here outranks the
+// correct one in the module itself.
+export {
+  type CaretPosition,
+  caretPosition,
+  countCharacters,
+  countWords,
+  selectedCharacters,
+} from './document-metrics.js';

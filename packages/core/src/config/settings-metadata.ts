@@ -509,11 +509,68 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Editor',
     control: 'toggle',
   },
+  /*
+   * The gutter (040 US4, FR-040 / #254).
+   *
+   * NO `subgroup`, deliberately. 040 introduces the subgroup mechanism for `Editor → Status Bar`
+   * three lines below, and the tempting mistake while it is fresh is to reach for it again — which
+   * would file the gutter toggle under a heading it has nothing to do with. It belongs beside the
+   * word-wrap default: both are about how the editor draws a document, not about the bar underneath
+   * it. `settings-metadata-040.test.ts` guards the converse (no other Editor setting acquires a
+   * subgroup), and `settings-gutter-040.test.ts` guards this one.
+   *
+   * The description names LINE NUMBERS rather than only "the gutter": a user reading a settings form
+   * should not have to know the word. And it says what hiding it buys, because that is the only
+   * reason anyone would.
+   */
+  {
+    key: 'editor.showGutter',
+    label: 'Show the editor gutter',
+    description:
+      'Show the strip of line numbers down the left-hand side of every editor. Hiding it gives that width back to the document, which then starts at the panel’s left edge.',
+    group: 'Editor',
+    control: 'toggle',
+  },
+  /*
+   * The status bar (040 FR-037) — three settings, one subsection.
+   *
+   * `editor.showStatusBar` keeps its shipped KEY. Moving it under `editor.statusBar.*` to match its
+   * two neighbours would rename a setting every existing `settings.json` may already carry, which
+   * FR-039 forbids for a reason worth restating: a rename does not fail, it silently resets. The
+   * grouping is what puts the three together, and grouping decides where a control appears and
+   * nothing else.
+   *
+   * The description below is a REWRITE, not a tweak (FR-034). What it replaced —
+   * "(language, word-wrap toggle)" — was an inventory, and an inventory is wrong the moment the bar
+   * gains anything; 040 gave it five readouts on the day it was written. It now says what the bar is
+   * FOR and what hiding it costs, which stays true as the bar changes. It also says "status bar"
+   * rather than "status strip" (FR-034a), so the prose agrees with the key the user is reading.
+   */
   {
     key: 'editor.showStatusBar',
     label: 'Show editor status bar',
-    description: 'Show the status strip along the bottom of each editor panel (language, word-wrap toggle).',
+    description:
+      'Show the bar along the bottom of each editor panel: the language control, the word-wrap toggle, the cursor position, and the character and word counts. Hiding it hides all of them, whatever the two settings below say — the wrap command and the language picker stay reachable from the content menu and Ctrl+Alt+W.',
     group: 'Editor',
+    subgroup: 'Status Bar',
+    control: 'toggle',
+  },
+  {
+    key: 'editor.statusBar.showCursorPosition',
+    label: 'Show cursor position',
+    description:
+      'Show the line and column the cursor is on in the editor status bar. The character and word counts are governed separately.',
+    group: 'Editor',
+    subgroup: 'Status Bar',
+    control: 'toggle',
+  },
+  {
+    key: 'editor.statusBar.showCounts',
+    label: 'Show character and word counts',
+    description:
+      'Show how many characters are selected, and how many characters and words the document holds, in the editor status bar. The cursor position is governed separately.',
+    group: 'Editor',
+    subgroup: 'Status Bar',
     control: 'toggle',
   },
 
