@@ -20,6 +20,8 @@ import { useActiveTheme, useAppSettings } from '../config/config-store.js';
 import { writeConfig, scheduleWrite, debounce } from '../config/write-config.js';
 import { createApplyClient } from './apply-client.js';
 import { ThemeTokenControl } from './pickers.js';
+import { groupDescriptors, type DescriptorGroup } from './group-descriptors.js';
+import { Subsection } from './subsection.js';
 import { RowActions } from './row-actions.js';
 import { IconSection } from './icon-section.js';
 import { IconButton } from '../common/icon-button.js';
@@ -84,21 +86,19 @@ const ICON_PACK_FIELD = {
  */
 const RENDERED_ELSEWHERE = new Set(['colours.iconColour']);
 
-function groupNonIconDescriptors(items: readonly FieldDescriptor[]): {
-  group: string;
-  items: FieldDescriptor[];
-}[] {
-  const order: string[] = [];
-  const byGroup = new Map<string, FieldDescriptor[]>();
-  for (const d of items) {
-    if (RENDERED_ELSEWHERE.has(d.key)) continue;
-    if (!byGroup.has(d.group)) {
-      byGroup.set(d.group, []);
-      order.push(d.group);
-    }
-    byGroup.get(d.group)!.push(d);
-  }
-  return order.map((group) => ({ group, items: byGroup.get(group)! }));
+/**
+ * The tab's grouping: the shared rule (040 FR-036), minus the tokens rendered elsewhere.
+ *
+ * It COMPOSES rather than configures. {@link groupDescriptors} takes no predicate — a hook only one
+ * of its three callers would ever pass makes a shared helper carry a parameter to describe one
+ * tab's exception — so the exception is applied here, before grouping, where it reads as what it is.
+ *
+ * The name this replaced (`groupNonIconDescriptors`) was misleading and worth not repeating: it
+ * never filtered icon CONTROLS. That happens at module scope, in `THEME_TOKEN_FIELDS`. What is
+ * excluded here is exactly `colours.iconColour` — see {@link RENDERED_ELSEWHERE}.
+ */
+function groupTokenDescriptors(items: readonly FieldDescriptor[]): DescriptorGroup[] {
+  return groupDescriptors(items.filter((d) => !RENDERED_ELSEWHERE.has(d.key)));
 }
 
 /* The `Pending` modal state is gone: the three confirmations are `await`ed on the shared model now,
@@ -143,7 +143,7 @@ export function ThemesTab(): ReactElement {
     () => filterFields(applied, THEME_TOKEN_FIELDS, (d) => getAtPath(activeTheme, d.key)),
     [applied, activeTheme],
   );
-  const groups = useMemo(() => groupNonIconDescriptors(matches), [matches]);
+  const groups = useMemo(() => groupTokenDescriptors(matches), [matches]);
 
   /**
    * The icon section is part of the theme, so it is part of the search (FR-021). It used to sit
@@ -642,10 +642,43 @@ export function ThemesTab(): ReactElement {
         </p>
       ) : null}
 
-      {groups.map(({ group, items }) => (
+      {groups.map(({ group, items, subgroups }) => (
         <section className="settings-group" key={group} data-testid={`settings-group-${group}`}>
           <h3 className="settings-group__title">{group}</h3>
-          {items.map((d) => (
+          {/* 040 FR-036 — this registry declares no `subgroup` either; it groups by SIBLING STRING
+              (`Editor · Syntax`, `General · Buttons · Confirm`), derived by `areaForToken` rather
+              than declared per descriptor. FR-037a leaves those five exactly where they are, so
+              what follows is capability, not migration: one registry, one rendering rule, ready for
+              the first theme descriptor to carry a subgroup. FR-036b: the ungrouped tokens first. */}
+          {items.map(row)}
+          {/* Shared markup; `themes-subgroup-`, NOT `settings-subgroup-`. This tab already borrows
+              the Settings tab's `settings-group-` prefix for its sections (a collision inherited,
+              not chosen); reusing the settings prefix here would extend it into ids this feature is
+              adding. */}
+          {subgroups.map(({ subgroup, items: subItems }) => (
+            <Subsection key={subgroup} testIdPrefix="themes-subgroup" group={group} subgroup={subgroup}>
+              {subItems.map(row)}
+            </Subsection>
+          ))}
+        </section>
+      ))}
+
+      <IconSection
+        theme={activeTheme}
+        onSetPack={setIconPack}
+        onOverride={overrideIcon}
+        // An ordinary token edit — the same debounced, theme-captured write path every colour uses,
+        // so the icon colour cannot misfile itself into another theme any more than a colour can.
+        onSetIconColour={(hex) => commitToken('colours.iconColour', hex)}
+        filter={iconFilter}
+      />
+    </div>
+  );
+
+  /** One token row, rendered from the group and from each subsection (040 FR-036a/b). Hoisted
+   *  below the `return` so the row's body is unchanged and the diff is the grouping alone. */
+  function row(d: FieldDescriptor): ReactElement {
+    return (
             <div className="settings-row" key={d.key} data-testid={`theme-row-${d.key}`}>
               <div className="settings-row__meta">
                 <label className="settings-row__label">{d.label}</label>
@@ -680,19 +713,6 @@ export function ThemesTab(): ReactElement {
                 onClear={() => commitToken(d.key, emptyValueFor(d))}
               />
             </div>
-          ))}
-        </section>
-      ))}
-
-      <IconSection
-        theme={activeTheme}
-        onSetPack={setIconPack}
-        onOverride={overrideIcon}
-        // An ordinary token edit — the same debounced, theme-captured write path every colour uses,
-        // so the icon colour cannot misfile itself into another theme any more than a colour can.
-        onSetIconColour={(hex) => commitToken('colours.iconColour', hex)}
-        filter={iconFilter}
-      />
-    </div>
-  );
+    );
+  }
 }

@@ -12,6 +12,7 @@ import {
 } from '@codemirror/view';
 import { defaultKeymap } from '@codemirror/commands';
 import {
+  caretPosition,
   columnSelectHeld,
   DEFAULT_BINDING_PLATFORM,
   effectiveActivePanelId,
@@ -20,6 +21,7 @@ import {
   inferIndent,
   languageName,
   PLAIN_TEXT_ID,
+  selectedCharacters,
   shippedBindingsFor,
   type ActionId,
   type CanonicalChangeMsg,
@@ -34,7 +36,12 @@ import {
 import { useWorkspace } from '../state/workspace-store.js';
 import { useProjects } from '../state/projects-store.js';
 import { useAppSettings } from '../config/config-store.js';
-import { setEditorState, removeEditorState } from './editor-state.js';
+import {
+  allEditorStates,
+  getEditorState,
+  setEditorState,
+  removeEditorState,
+} from './editor-state.js';
 import { registerEditorActions, unregisterEditorActions } from './editor-actions.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import { registerPanelSearch, unregisterPanelSearch } from '../search/search-controller.js';
@@ -66,6 +73,12 @@ import {
   saveEditorViewState,
   takeEditorViewState,
 } from './editor-view-state.js';
+import { forgetPanelCaret, setPanelCaret } from './caret-store.js';
+import {
+  forgetDocumentMetrics,
+  invalidateDocumentMetrics,
+  scheduleDocumentMetrics,
+} from './document-metrics-store.js';
 import { DocumentReplica } from './document-replica.js';
 import {
   columnBlockField,
@@ -77,6 +90,7 @@ import {
   commandKeymapCompartment,
   cutLineCommand,
   editorCommandKeymap,
+  gutterCompartment,
   indentCompartment,
   indentExtensions,
   indentLinesCommand,
@@ -137,6 +151,44 @@ export interface UseEditorParams {
 }
 
 const win = (): typeof window.throng | undefined => window.throng;
+
+/**
+ * Publish this panel's caret and selection size to the status bar's store (040 FR-002, FR-002a,
+ * FR-004, FR-005, FR-008a).
+ *
+ * Called synchronously from the update listener, and cheap enough to be: `lineAt` is a binary
+ * search over the line index CodeMirror already maintains, and the only string this touches is the
+ * caret's own line.
+ *
+ * ══ WHERE EACH HALF OF THE POSITION COMES FROM ══
+ *
+ * The LINE number is CodeMirror's, because its index already answers the question and re-deriving
+ * it would be an O(document) scan on the keystroke path. The COLUMN comes from `@throng/core`'s
+ * `caretPosition`, applied to that one line — so the definition that says a tab advances the column
+ * by exactly 1 (FR-002a, and NOT a display column) lives in one place, is unit-tested there, and
+ * cannot drift into an indent-width-dependent variant here.
+ *
+ * ══ WHY THE RANGES ARE STREAMED AND NOT SLICED ══
+ *
+ * `iterRange` hands `selectedCharacters` a CURSOR over the rope, so a selection is counted without
+ * ever being assembled into a string. `sliceString` would assemble it: Ctrl+A then `Shift+Down` in
+ * a 5 MB document would allocate and discard ~5 MB here, on this synchronous path, once per
+ * selection change — and once per mouse-move of a shift-drag (T012a). The counting rule is
+ * per-character and therefore identical over chunks, so nothing is traded for it.
+ *
+ * Empty ranges are skipped before a cursor is even opened: a bare caret is the common case by an
+ * enormous margin, and it must cost nothing at all.
+ */
+function publishCaret(panelId: string, state: EditorState): void {
+  const head = state.selection.main.head;
+  const line = state.doc.lineAt(head);
+  const { column } = caretPosition(line.text, head - line.from);
+  const ranges: Iterable<string>[] = [];
+  for (const range of state.selection.ranges) {
+    if (!range.empty) ranges.push(state.doc.iterRange(range.from, range.to));
+  }
+  setPanelCaret(panelId, { line: line.number, column }, selectedCharacters(ranges));
+}
 
 /**
  * How a change may coalesce into the undo entry above it (FR-026).
@@ -296,6 +348,48 @@ export function useEditor(params: UseEditorParams): void {
     seededFor.current = panel.id;
     configRef.current = (panel.config ?? {}) as EditorPanelConfig;
   }
+  /**
+   * The DOCUMENT this panel is showing right now, named the way the status bar's stores key it
+   * (040 FR-007).
+   *
+   * ══ WHY THIS IS NOT `wrapDocKeyRef` ══
+   *
+   * Word wrap keys its document off `panel.config.filePath` — the workspace LAYOUT's copy of the
+   * path — and gets away with it because it re-reads the key on every render, so a key that arrives
+   * late simply starts working. The counts do not: they are written ONCE per document change, and a
+   * figure written under a key that later changes is invisible for the rest of the session.
+   *
+   * `openFile` sets `configRef.current.filePath` the instant the load returns, and `publishState`
+   * copies that into `editor-state`, which is where {@link StatusStrip} reads its key from. So this
+   * and the bar name the document from the SAME value at the same moment. The layout's copy follows
+   * a render or two later, which was long enough for the bar to show `Ln 1 Col 1` and no counts at
+   * all — every store and every component test green, and blank readouts in the running app.
+   */
+  const metricsDocKey = (): string => wordWrapDocKey(configRef.current.filePath ?? null, panel.id);
+
+  /**
+   * Re-publish this document's counts under the key the panel has NOW (040 FR-003, FR-007).
+   *
+   * ══ THE RACE, WHICH IS THE SAME ONE `refreshLanguage` DOCUMENTS ══
+   *
+   * The authority broadcasts a document's replacement as soon as it has loaded the file, so the
+   * RESET can reach this view before `openFile` has recorded the new path — `use-editor.ts:659`
+   * says so in as many words, about language detection resolving the old file's language. The
+   * counts have exactly the same problem one step along: the reset's own schedule names the
+   * OUTGOING document, and the bar then reads a key nobody ever wrote.
+   *
+   * The caret does not need this because it is republished on every keystroke and heals itself
+   * within one. A count is written once per document change, so it never does.
+   *
+   * Called wherever `configRef` is REPLACED — an open in place, and a Save-As. A revert or an
+   * external reload keeps the path, so the reset's own schedule is already correctly keyed.
+   */
+  const republishCounts = (): void => {
+    const view = viewRef.current;
+    if (!view) return;
+    scheduleDocumentMetrics(metricsDocKey(), () => view.state.doc.toString());
+  };
+
   const keybindingsRef = useRef(keybindings);
   keybindingsRef.current = keybindings;
   /**
@@ -346,6 +440,81 @@ export function useEditor(params: UseEditorParams): void {
       effects: wrapCompartment.reconfigure(wordWrapOn ? EditorView.lineWrapping : []),
     });
   }, [wordWrapOn]);
+
+  /**
+   * 040 US4: the gutter follows `editor.showGutter` on the LIVE view (FR-043).
+   *
+   * The same shape as the word-wrap effect above, and for the same reason — the alternative is
+   * recreating the `EditorView`, which would take the undo history, the scroll and the selection
+   * with it (FR-044, research D3). Nothing here is per-document: the gutter is a preference about
+   * how editors are drawn, so every panel changes together (FR-046).
+   *
+   * The transaction carries no `changes` and no `selection`, which is what makes FR-044's selection
+   * half true by construction rather than by care.
+   */
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+
+    /*
+     * ANCHOR FIRST, AND THIS WAS MEASURED RATHER THAN ASSUMED.
+     *
+     * FR-044 records that "a compartment reconfigure preserves the reader's place" is an assumption
+     * nothing in this repository had ever checked. It is FALSE here, and the first version of this
+     * effect — a bare reconfigure — proved it: with the document scrolled to `line 016`,
+     * `editor-gutter-visibility.e2e.ts` measured the top visible line as `line 019` afterwards.
+     *
+     * The mechanism is the one FR-044 predicts. `.cm-content` is `flexGrow: 2` in a flex
+     * `.cm-scroller`, so removing the gutter WIDENS the text column; every wrapped line then needs
+     * fewer visual rows, the document above the viewport gets shorter, and the same pixel
+     * `scrollTop` lands further down the file. CodeMirror does not compensate: the pixel offset is
+     * preserved and the LINE is not, which is precisely backwards from what a reader wants.
+     *
+     * So the document position is captured before the reconfigure and re-asserted after it, using
+     * this file's own idiom for exactly this problem (#144, `scrollIntoView(anchor, { y: 'start' })`
+     * — doc-position based, so re-applying is idempotent).
+     *
+     * ══ AT VISUAL-ROW GRANULARITY, WHICH IS NOT WHAT `lineBlockAtHeight` GIVES ══
+     *
+     * This read `view.lineBlockAtHeight(view.scrollDOM.scrollTop).from`, and that anchor is the
+     * start of the whole LOGICAL line. CodeMirror's own words for a line block: "a range delimited
+     * on both sides by either a non-hidden line break, or the start/end of the document" — wrapping
+     * does not subdivide it. So restoring with `y: 'start'` put the line's FIRST row at the top and
+     * the reader lost however far into the line they had scrolled: measured at 2.3 rows in the
+     * modest fixture `editor-gutter-visibility.e2e.ts` uses, and hundreds of rows in the case the
+     * fix exists for — minified JSON, a prose paragraph, the preferences JSON editor, which declares
+     * `lineWrapping` unconditionally.
+     *
+     * `posAtCoords` answers at the granularity that actually matters: the document position at the
+     * top-left of the viewport, wherever inside a wrapped line that falls. `false` as the second
+     * argument is what makes it total — the precise overload returns null for a point the rendered
+     * DOM does not cover, and there is no sensible thing to do with a null here.
+     *
+     * SCREEN coordinates, not the document heights `lineBlockAtHeight` takes, which is why this
+     * reads the scroller's bounding rect rather than its `scrollTop`. The 1px insets keep the point
+     * off the exact boundary, where it would resolve to the row above.
+     */
+    const scrollerTop = view.scrollDOM.getBoundingClientRect().top;
+    const contentLeft = view.contentDOM.getBoundingClientRect().left;
+    const anchor = view.posAtCoords({ x: contentLeft + 1, y: scrollerTop + 1 }, false);
+    view.dispatch({
+      effects: gutterCompartment.reconfigure(settings.showGutter ? lineNumbers() : []),
+    });
+    /*
+     * A SECOND transaction, after the reconfigure, so the scroll is re-asserted against the widths
+     * the new configuration produces rather than the ones it replaced.
+     *
+     * `yMargin: 0` where the #144 sites take the default, and the difference was measured too: the
+     * default margin is 5px, which leaves the last few pixels of the PREVIOUS line peeking in above
+     * the anchor — so the same E2E then read the top visible line as `line 015` where it had been
+     * `line 016`. Restoring a scroll position should restore it, not nudge it; five pixels is
+     * immaterial when #144 re-asserts a scroll across a remount, and is the whole assertion here.
+     */
+    view.dispatch({ effects: EditorView.scrollIntoView(anchor, { y: 'start', yMargin: 0 }) });
+    // No `eslint-disable` here, unlike the indent effect below: `settings.showGutter` really is the
+    // whole dependency, because the value goes straight into the reconfigure rather than through a
+    // helper that closes over anything else.
+  }, [settings.showGutter]);
   // The app-wide context-menu host (FR-036/037): exactly one menu is open anywhere at a time, so
   // the editor asks for one rather than rendering its own.
   const { openMenu } = useContextMenu();
@@ -483,7 +652,14 @@ export function useEditor(params: UseEditorParams): void {
     publishState();
     // Save-As gave the document a new name, and the name is what decides the language (FR-002a):
     // saving `notes` as `notes.py` must highlight it as Python, there and then.
-    if (isNewPath) refreshLanguage();
+    //
+    // The counts follow the name too (040 FR-007). The FIGURES are unchanged — a save writes what
+    // is already in the buffer — but they are keyed by the document's identity, and the identity is
+    // exactly what just changed, so the bar would go on reading the untitled key it was written to.
+    if (isNewPath) {
+      refreshLanguage();
+      republishCounts();
+    }
     return true;
   };
 
@@ -596,6 +772,9 @@ export function useEditor(params: UseEditorParams): void {
       unloadableRef.current = false; // the path read, so whatever the banner was about is over
       unloadableDetailRef.current = undefined;
       publishState();
+      // …and the counts belong to the new document too (040 FR-007). Same race, same remedy: see
+      // `republishCounts`.
+      republishCounts();
       // The document's IDENTITY changed, and its name is what decides its language (FR-002a).
       //
       // This must happen HERE, and not only when the replacement content arrives: the authority
@@ -705,6 +884,33 @@ export function useEditor(params: UseEditorParams): void {
     replicaRef.current = replica;
 
     const updateListener = EditorView.updateListener.of((update) => {
+      /*
+       * 040 US1 — the status bar's readouts ride THIS listener (FR-008: no figure adds one of its
+       * own, in the hottest path in the editor).
+       *
+       * ══ WHY THESE TWO LINES ARE ABOVE THE GUARD AND NOT PART OF IT ══
+       *
+       * `if (!update.docChanged) return;` guards everything below it, and everything below it
+       * ASSUMES a document change: `replica.record` reports the edit to the document authority,
+       * and the auto-save timer starts a save. A caret move is `update.selectionSet`, not
+       * `docChanged`, so the obvious widening is to relax that line to
+       * `if (!update.docChanged && !update.selectionSet) return;` — and it is WRONG. Every arrow
+       * key would then fall into `replica.record` and report a change that never happened: an
+       * empty edit against the shared undo history, invisible on screen and undiagnosable later.
+       *
+       * So the new concerns are added ABOVE, each with its own guard, and the existing line is
+       * untouched (research.md D1). A reviewer confirms the old behaviour is intact by reading one
+       * line, and `component/editor-update-listener.test.ts` fails if anyone relaxes it.
+       *
+       * The caret is computed SYNCHRONOUSLY (FR-008a) — a line lookup CodeMirror has already
+       * indexed. The counts are only SCHEDULED (FR-008b): they are a full document scan, the
+       * store debounces them at 200 ms, and the document is not even flattened until that scan
+       * runs (FR-008c).
+       */
+      if (update.docChanged || update.selectionSet) publishCaret(panelId, update.state);
+      if (update.docChanged) {
+        scheduleDocumentMetrics(metricsDocKey(), () => update.state.doc.toString());
+      }
       if (!update.docChanged) return;
       // A change the authority just gave us. Sending it back would apply it twice.
       if (update.transactions.some((tr) => tr.annotation(fromAuthority))) return;
@@ -731,7 +937,14 @@ export function useEditor(params: UseEditorParams): void {
       state: EditorState.create({
         doc: '',
         extensions: [
-          lineNumbers(),
+          /*
+           * The line-number gutter, in a compartment so `editor.showGutter` can flip it on the live
+           * view (040 FR-041/FR-043). Seeded from `metaRef.current.settings`, NOT from the
+           * `settings` closure: this mount effect's deps are `[container, panelId]`, so the closure
+           * it captured is fixed for the life of the view and would seed a panel opened later with
+           * whatever the setting was when the hook first ran.
+           */
+          gutterCompartment.of(metaRef.current.settings.showGutter ? lineNumbers() : []),
           drawSelection(),
           highlightActiveLine(),
           /**
@@ -1014,6 +1227,14 @@ export function useEditor(params: UseEditorParams): void {
     const applyReset = (reset: ResetDocumentMsg): void => {
       const target = viewRef.current;
       if (!target) return;
+      /*
+       * The document is being REPLACED — a different file opened in place, a revert, or a reload
+       * after the file changed underneath us (040 AS7). Any count standing from the outgoing text
+       * is now a lie about this document, and a lie the user has no reason to distrust, so it is
+       * withdrawn here rather than left to expire. The dispatch below is a document change, so the
+       * incoming text schedules its own count through the update listener in the ordinary way.
+       */
+      invalidateDocumentMetrics(metricsDocKey());
       replica.reset(reset.version);
       dirtyRef.current = reset.dirty;
       target.dispatch({
@@ -1035,6 +1256,21 @@ export function useEditor(params: UseEditorParams): void {
       publishState();
       reinferIndent(reset.text); // a different document — read what IT does (FR-018a)
       refreshLanguage(); // …and re-highlight it
+      /*
+       * …and COUNT it, rather than leaving that to the dispatch above (040 FR-003).
+       *
+       * The dispatch usually is enough: replacing the text is a document change, so the update
+       * listener schedules the incoming count in the ordinary way. It is not enough when the
+       * outgoing and incoming text are BOTH EMPTY — `{ from: 0, to: 0, insert: '' }` is an empty
+       * `ChangeSet`, `update.docChanged` is false, and the listener never runs. The withdrawal a
+       * few lines up would then be permanent: an empty document whose bar goes blank at the first
+       * revert and never comes back.
+       *
+       * Same document key either way, so the two schedules are one scan (the store cancels and
+       * re-arms), and the 200 ms window AS7 asks for is unaffected — the figure is still withdrawn
+       * for the whole of it.
+       */
+      republishCounts();
     };
 
     // Subscribe FIRST — before the async initialisation below — so no canonical change is missed.
@@ -1089,6 +1325,9 @@ export function useEditor(params: UseEditorParams): void {
         // `notes.txt` renamed to `notes.py` must highlight as Python there and then. Exactly what
         // a Save-As to a new path does (`writeTo`), for exactly the same reason.
         refreshLanguage();
+        // …and the counts are keyed by that same identity (040 FR-007). A move is not an edit, so
+        // no document change will come along to republish them.
+        republishCounts();
       }
       // 024 US1 (FR-001a): the document's wrap changed at the authority — possibly because a
       // Panel in ANOTHER window toggled it. One document, one answer, so this view follows.
@@ -1152,6 +1391,28 @@ export function useEditor(params: UseEditorParams): void {
       publishState();
       reinferIndent(state.text); // what does THIS file already do? (FR-018a)
       refreshLanguage(); // the document's identity is now known — highlight it
+      /*
+       * …and COUNT it (040 FR-003, US1 AS1, and the spec's "empty document" Edge Case).
+       *
+       * ══ WHY ADOPTION CANNOT RELY ON THE UPDATE LISTENER ══
+       *
+       * The dispatch above is the only thing that ever put this document's text into this view, and
+       * for a NON-empty document it is a document change, so the listener schedules the count and
+       * this line is redundant. For an EMPTY one it is not a change at all: the view was created
+       * with `doc: ''` a few statements earlier, so the dispatch is `{ from: 0, to: 0, insert: '' }`
+       * — an empty `ChangeSet`, and `update.docChanged` is FALSE.
+       *
+       * Nothing else covers it. `republishCounts`'s other callers are a Save-As, an in-place open
+       * and a move; a plain mount is none of those. So `documentMetrics()` stayed `null` for the
+       * life of the panel, and the bar's `if (metrics !== null)` omitted BOTH readouts — for every
+       * untitled/scratch panel and every 0-byte file. The spec says an empty document reports 0
+       * characters and 0 words; it reported nothing, and a blank readout is indistinguishable from
+       * the FR-008b debounce window that is supposed to be transient.
+       *
+       * Scheduled rather than computed, like every other count: an empty scan is free, but a 5 MB
+       * one is not, and FR-008c keeps that off the adoption path as firmly as off the keystroke one.
+       */
+      republishCounts();
       onReadyRef.current?.(); // content adopted — the panel can drop its loading skeleton
       // When RESTORING a previously-shown editor (a project/tab switch: it was unmounted
       // and now remounts with saved view state), take keyboard focus so the restored
@@ -1293,6 +1554,9 @@ export function useEditor(params: UseEditorParams): void {
 
 /** Remove the renderer-side editor state (called on explicit Panel destroy). */
 export function disposeEditor(panelId: string): void {
+  // Read the document key BEFORE the state goes: it is derived from this panel's `filePath`, and
+  // `removeEditorState` is what takes that away.
+  const docKey = wordWrapDocKey(getEditorState(panelId)?.filePath ?? null, panelId);
   removeEditorState(panelId);
   unregisterEditorActions(panelId);
   // The panel is gone, so the language chosen for it goes too — otherwise a recycled panel id
@@ -1300,6 +1564,29 @@ export function disposeEditor(panelId: string): void {
   removePanelLanguage(panelId);
   // The document is gone — don't leak its saved caret (issue 144).
   clearEditorViewState(panelId);
+  // …nor the status bar's READOUT of that caret (040 FR-006, data-model.md §3.1). Keyed by panel,
+  // so a recycled panel id would otherwise inherit a dead document's line and column.
+  forgetPanelCaret(panelId);
+  /*
+   * …and the document's COUNTS, once no panel is left showing it (040 FR-007, data-model.md §3.2).
+   *
+   * Two things this stops, and neither is visible from the strip. `settled` grew one entry per
+   * document ever opened, for the life of the session — and an untitled buffer keys on
+   * `panel:<id>`, so every scratch panel leaked one with no path that could ever be revisited. And
+   * a scan armed inside the 200 ms debounce window still RAN after the view was destroyed: the
+   * scheduled thunk is `() => update.state.doc.toString()`, so it holds the whole `ViewUpdate` —
+   * both `EditorState`s and the rope — alive past teardown, then materialises the entire document
+   * as a string to count a file nobody has open. `document-metrics-store.ts` describes exactly that
+   * hazard beside `cancel()`; until now its cancel path had no caller.
+   *
+   * GUARDED, because the key is per DOCUMENT and not per panel. Two panels on one file share this
+   * entry, so disposing either of them unconditionally would blank the other one's counts with
+   * nothing to restore them until the next keystroke — Principle XI's "shared as a single value"
+   * turned into a defect. `removeEditorState` has already run, so this panel is not counted.
+   */
+  if (!allEditorStates().some((s) => wordWrapDocKey(s.filePath, s.panelId) === docKey)) {
+    forgetDocumentMetrics(docKey);
+  }
   win()?.editor?.destroy(panelId);
 }
 

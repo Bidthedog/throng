@@ -80,6 +80,26 @@ export interface FieldDescriptor {
   description: string;
   /** labelled section the field is grouped into (FR-026/030/038). */
   group: string;
+  /**
+   * Optional second level of grouping INSIDE {@link group} (040, FR-035).
+   *
+   * **One level only.** There is no `subsubgroup` and no recursion: the requirement was a hierarchy
+   * for the status-bar settings, and one level satisfies it. A general tree is a renderer nobody
+   * needs and three tabs' worth of code to maintain — `settings-tab`, `keybindings-tab` and
+   * `themes-tab` each group this one registry themselves.
+   *
+   * **A descriptor without one renders exactly as it did before this feature**: flat under its
+   * group's heading, and above every subsection (FR-036b). That is what makes the field additive —
+   * it was absent on every descriptor that existed before 040, and absence has to keep meaning what
+   * it always meant.
+   *
+   * Only meaningful inside a group, which needs no check: {@link group} is required, so a subgroup
+   * with nothing above it is not representable.
+   *
+   * It adds no {@link ControlKind}. This is a property of the field, not a way of editing one, so
+   * 007 FR-028's exhaustive control vocabulary is untouched.
+   */
+  subgroup?: string;
   /** the control matched to the value type (FR-028/029/038). */
   control: ControlKind;
   /** allowed set for select/multiselect/enum (FR-029). */

@@ -4,6 +4,8 @@ import { EditorView, keymap, lineNumbers, drawSelection, highlightActiveLine } f
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { throngHighlighting } from './highlight-style.js';
 import { applyLanguage, functionHighlightCompartment, languageCompartment } from './editor-language.js';
+import { gutterCompartment } from './commands.js';
+import { useAppSettings } from '../config/config-store.js';
 
 /**
  * A buffer-only CodeMirror editor (feature 007, US5 — extracted from the 006
@@ -39,6 +41,18 @@ export function StandaloneEditor({
   // doesn't misreport it as a user edit (which would re-apply/loop).
   const suppressRef = useRef(false);
 
+  /**
+   * 040 US4 (FR-042): this editor reads the ONE gutter setting, like every editor panel does.
+   *
+   * No new provider, no IPC and no prop drilling were needed for it. The preferences window mounts
+   * its own `ConfigProvider`, so this hook is reading that window's live config rather than a
+   * snapshot — and `ConfigContext`'s default is the shipped settings, so a test that renders this
+   * component bare still gets a real answer instead of throwing.
+   */
+  const showGutter = useAppSettings().editor.showGutter;
+  const gutterRef = useRef(showGutter);
+  gutterRef.current = showGutter;
+
   // Mount once; the buffer content is synced via the value effect below.
   useEffect(() => {
     if (!container.current) return;
@@ -47,7 +61,19 @@ export function StandaloneEditor({
       state: EditorState.create({
         doc: value,
         extensions: [
-          lineNumbers(),
+          /*
+           * The SECOND call site of the gutter, and the one #254 warns about by name (040 FR-042).
+           *
+           * Without it the preferences JSON editor would keep its gutter while every editor panel
+           * lost theirs — one setting, two readers, and the disagreement invisible until somebody
+           * opens preferences. The compartment instance is shared with `use-editor.ts`, which is
+           * fine and is how `languageCompartment` already works: a `Compartment` is a key, and each
+           * view holds its own content under it.
+           *
+           * Seeded from a ref rather than the `settings` closure for the same reason the panel does:
+           * this mount effect runs once, with `[]` deps.
+           */
+          gutterCompartment.of(gutterRef.current ? lineNumbers() : []),
           history(),
           drawSelection(),
           highlightActiveLine(),
@@ -82,6 +108,37 @@ export function StandaloneEditor({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * Bring the gutter into step on the LIVE view when the setting moves (040 FR-042/FR-043).
+   *
+   * The mount effect above has `[]` deps and runs once, so without this the preferences JSON editor
+   * would honour the setting only for editors opened AFTER the change — which is the same "reopen it
+   * for your preference to take effect" that FR-043 exists to forbid, hiding in the second call site
+   * rather than the first.
+   */
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    /*
+     * Anchored the same way the editor panels are (`use-editor.ts`, #144): this view declares
+     * `EditorView.lineWrapping` UNCONDITIONALLY, so it is always in the case where removing the
+     * gutter re-wraps the document and the same pixel offset lands somewhere else. Measured, not
+     * assumed — the panel version of this effect was seen to move the reader three lines.
+     *
+     * A VISUAL-ROW anchor, and this call site is the one that needed it most. `lineBlockAtHeight`
+     * answers for the whole LOGICAL line, so it threw the reader to that line's first row; and this
+     * editor holds `settings.json` and `keybindings.json`, whose lines wrap to many rows each in a
+     * narrow preferences pane. See the long note in `use-editor.ts` for the mechanism.
+     */
+    const scrollerTop = view.scrollDOM.getBoundingClientRect().top;
+    const contentLeft = view.contentDOM.getBoundingClientRect().left;
+    const anchor = view.posAtCoords({ x: contentLeft + 1, y: scrollerTop + 1 }, false);
+    view.dispatch({ effects: gutterCompartment.reconfigure(showGutter ? lineNumbers() : []) });
+    // `yMargin: 0` — the default 5px leaves the previous line peeking in above the anchor, which is
+    // a different line at the top of the view and so a different place for the reader.
+    view.dispatch({ effects: EditorView.scrollIntoView(anchor, { y: 'start', yMargin: 0 }) });
+  }, [showGutter]);
 
   // Sync an external value change (e.g. tab/theme switch, or a clean reload) into
   // the view. A no-op when the buffer already equals `value` (i.e. the user's own

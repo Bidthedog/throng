@@ -179,6 +179,35 @@ export interface EditorNavigationSettings {
   rememberGotoLineNumber: boolean;
 }
 
+/**
+ * What the editor status bar REPORTS (040, `Editor → Status Bar`).
+ *
+ * Its own block rather than loose keys on `EditorSettings`, for the same reason
+ * {@link EditorNavigationSettings} is one: these three govern one surface, and the preferences
+ * group they appear in is the shape the user reads them in. `editor.showStatusBar` stays where it
+ * is — renaming a shipped key silently resets every existing `settings.json` (FR-039) — and is
+ * joined to these two by its descriptor's `subgroup`, not by its path.
+ *
+ * TWO toggles for five figures, not five (FR-032). A bar that can be assembled into a dozen
+ * near-identical arrangements is a cost with no reader.
+ */
+export interface EditorStatusBarSettings {
+  /**
+   * FR-030 — the caret's **line and column**, and nothing else.
+   *
+   * Ships **on**: the position is the readout a user goes to the bar for, and a bar that shipped
+   * without it would have to be discovered before it could be switched on.
+   */
+  showCursorPosition: boolean;
+  /**
+   * FR-031 — the three counts as ONE: selected characters, total characters, total words.
+   *
+   * One switch rather than three, because they are the same kind of answer about the same
+   * document; a user who does not want the document measured does not want it measured three ways.
+   */
+  showCounts: boolean;
+}
+
 /** Editor panel preferences (006, contracts/config-additions.md). */
 export interface EditorSettings {
   /** How a file-tree click opens into the last active editor. */
@@ -227,6 +256,15 @@ export interface EditorSettings {
   /** 024 US1 (#152): show the editor's per-panel status strip. When off, the strip is hidden and
    *  its row reclaimed; the wrap command and language picker stay reachable by chord/menu. */
   showStatusBar: boolean;
+  /**
+   * 040 US4 (#254): draw the line-number gutter down the left of every editor surface.
+   *
+   * App-wide and nothing else — no per-language and no per-document override (FR-046). Read by BOTH
+   * editors: the panels and the standalone editor the preferences and theme editors mount (FR-042).
+   */
+  showGutter: boolean;
+  /** 040: what the status bar REPORTS, when it is shown at all (`Editor → Status Bar`). */
+  statusBar: EditorStatusBarSettings;
   /** 033: the navigation modals' own preferences (`Editor · Navigation`). */
   navigation: EditorNavigationSettings;
 }
@@ -475,6 +513,17 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     persistUndoHistory: true,
     defaultWordWrap: true,
     showStatusBar: true,
+    // 040 FR-040 — the gutter ships ON. It is what every editor in this class draws by default, and
+    // a preference that reclaims width is opt-IN: shipping it off would change what today's users
+    // see on upgrade without anyone having asked for it.
+    showGutter: true,
+    // 040 FR-030/FR-031 — both readout groups ship ON. The bar already has to earn its row; a
+    // reader who does not want the figures switches them off, rather than a reader who does having
+    // to discover they exist.
+    statusBar: {
+      showCursorPosition: true,
+      showCounts: true,
+    },
     // FR-069b — Quick Open starts by excluding what the project hides. The shipped answer to "is
     // this file hidden?" has to be the same one the tree gives, and the tree hides it.
     // FR-058 — both remember settings ship OFF. FR-057 is the shipped behaviour: both modals open
@@ -807,6 +856,7 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     typeof v.defaultWordWrap === 'boolean' ? v.defaultWordWrap : fallback.defaultWordWrap;
   const showStatusBar =
     typeof v.showStatusBar === 'boolean' ? v.showStatusBar : fallback.showStatusBar;
+  const showGutter = typeof v.showGutter === 'boolean' ? v.showGutter : fallback.showGutter;
   return {
     openOnClick,
     openTarget,
@@ -825,6 +875,11 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     persistUndoHistory,
     defaultWordWrap,
     showStatusBar,
+    // The FOURTH edit this key needs. A field in the interface, the defaults and the local above but
+    // NOT in this hand-listed literal compiles, ships, and is silently dropped on every read — the
+    // user's `false` comes back as the default `true` and nothing anywhere says so.
+    showGutter,
+    statusBar: statusBarSettings(v.statusBar, fallback.statusBar),
     navigation: navigationSettings(v.navigation, fallback.navigation),
   };
 }
@@ -843,8 +898,9 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
  *
  * THE TRAP, since the spread below is what makes this short: it copies the scalar members and it
  * copies the object-valued ones BY REFERENCE. Every object-valued member of `EditorSettings` must
- * therefore be re-cloned underneath it. There are four; `editor-settings.test.ts` asserts identity
- * over all of them AND sweeps for a fifth, because adding one and forgetting this line compiles.
+ * therefore be re-cloned underneath it. There are five (040 added `statusBar`);
+ * `editor-settings.test.ts` asserts identity over the named ones AND sweeps every object-valued
+ * member for the same fault, because adding one and forgetting this line compiles.
  */
 function cloneEditor(e: EditorSettings): EditorSettings {
   return {
@@ -853,6 +909,25 @@ function cloneEditor(e: EditorSettings): EditorSettings {
     indentByLanguage: cloneIndentMap(e.indentByLanguage),
     languageByExtension: { ...e.languageByExtension },
     navigation: { ...e.navigation },
+    // 040: the FIFTH object-valued member the comment above warned about. `editor-settings.test.ts`
+    // sweeps for exactly this omission, so adding the block above without adding this line turns a
+    // neighbouring test file red for a reason that reads like an unrelated regression.
+    statusBar: { ...e.statusBar },
+  };
+}
+
+/** Tolerant per-field parse of `editor.statusBar` (040). A bad leaf falls back to its own default. */
+function statusBarSettings(
+  v: unknown,
+  fallback: EditorStatusBarSettings,
+): EditorStatusBarSettings {
+  if (!isRecord(v)) return { ...fallback };
+  return {
+    showCursorPosition:
+      typeof v.showCursorPosition === 'boolean'
+        ? v.showCursorPosition
+        : fallback.showCursorPosition,
+    showCounts: typeof v.showCounts === 'boolean' ? v.showCounts : fallback.showCounts,
   };
 }
 

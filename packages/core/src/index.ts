@@ -510,6 +510,12 @@ export {
   seedFromSelections,
   // 033 US2 — Go To Line's pure half (contracts/navigation-modals.md §5).
   resolveGotoLine,
+  // 040 US1 — the editor status bar's counting rules (data-model.md §4).
+  caretPosition,
+  countCharacters,
+  countWords,
+  selectedCharacters,
+  type CaretPosition,
   type PadStyle,
   type RectPasteChange,
   type RowSpan,

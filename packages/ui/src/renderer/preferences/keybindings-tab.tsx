@@ -19,6 +19,8 @@ import { useResetNotice } from './reset-notice.js';
 import { useOnEntry } from './on-entry.js';
 import { RowActions } from './row-actions.js';
 import { CaptureModal } from './capture-modal.js';
+import { groupDescriptors } from './group-descriptors.js';
+import { Subsection } from './subsection.js';
 
 /**
  * The Key Bindings tab (feature 007, US3 + H2 — FR-030/031/033b). A grouped list
@@ -45,22 +47,6 @@ const SHIPPED = buildShippedDefaults();
 
 /** How long the typeahead waits after the last keystroke before filtering. */
 const SEARCH_DEBOUNCE_MS = 150;
-
-function groupDescriptors(items: readonly FieldDescriptor[]): {
-  group: string;
-  items: FieldDescriptor[];
-}[] {
-  const order: string[] = [];
-  const byGroup = new Map<string, FieldDescriptor[]>();
-  for (const d of items) {
-    if (!byGroup.has(d.group)) {
-      byGroup.set(d.group, []);
-      order.push(d.group);
-    }
-    byGroup.get(d.group)!.push(d);
-  }
-  return order.map((group) => ({ group, items: byGroup.get(group)! }));
-}
 
 /*
  * 018 / FR-013 — the chord's right-click menu is REBUILT ON THE SHARED MENU.
@@ -182,10 +168,43 @@ export function KeybindingsTab({
         </p>
       ) : null}
 
-      {groups.map(({ group, items }) => (
+      {groups.map(({ group, items, subgroups }) => (
         <section className="settings-group" key={group} data-testid={`keybindings-group-${group}`}>
           <h3 className="settings-group__title">{group}</h3>
-          {items.map((d) => {
+          {/* 040 FR-036 — this registry declares NO subgroups today, and the rendering is here
+              anyway. `subgroup` is a field on the one `FieldDescriptor` all three tabs read; a tab
+              that ignored it would render the first descriptor to carry one silently flat, in one
+              tab out of three, with nothing to say so. FR-036b: the ungrouped bindings first. */}
+          {items.map(row)}
+          {/* Shared markup, this tab's OWN id prefix — matching `keybindings-group-${group}`. */}
+          {subgroups.map(({ subgroup, items: subItems }) => (
+            <Subsection
+              key={subgroup}
+              testIdPrefix="keybindings-subgroup"
+              group={group}
+              subgroup={subgroup}
+            >
+              {subItems.map(row)}
+            </Subsection>
+          ))}
+        </section>
+      ))}
+
+      {capturing ? (
+        <CaptureModal
+          action={capturing.action}
+          label={capturing.label}
+          bindings={keybindings.bindings}
+          onApply={applyBindings}
+          onClose={() => setCapturing(null)}
+        />
+      ) : null}
+    </div>
+  );
+
+  /** One binding row, rendered from the group and from each subsection (040 FR-036a/b). Hoisted
+   *  below the `return` so the row's body is unchanged and the diff is the grouping alone. */
+  function row(d: FieldDescriptor): ReactElement {
             const action = d.key as ActionId;
             const chords = keybindings.bindings[d.key] ?? [];
             return (
@@ -272,19 +291,5 @@ export function KeybindingsTab({
                 />
               </div>
             );
-          })}
-        </section>
-      ))}
-
-      {capturing ? (
-        <CaptureModal
-          action={capturing.action}
-          label={capturing.label}
-          bindings={keybindings.bindings}
-          onApply={applyBindings}
-          onClose={() => setCapturing(null)}
-        />
-      ) : null}
-    </div>
-  );
+  }
 }

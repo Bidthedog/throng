@@ -20,6 +20,8 @@ import { useResetNotice } from './reset-notice.js';
 import { useOnEntry } from './on-entry.js';
 import { RowActions } from './row-actions.js';
 import { SettingControl } from './form-controls.js';
+import { groupDescriptors } from './group-descriptors.js';
+import { Subsection } from './subsection.js';
 import { useCapabilities } from '../panel-type/use-capabilities.js';
 import { createApplyClient } from './apply-client.js';
 
@@ -42,22 +44,6 @@ import { createApplyClient } from './apply-client.js';
 
 /** How long the typeahead waits after the last keystroke before filtering. */
 const SEARCH_DEBOUNCE_MS = 150;
-
-function groupDescriptors(items: readonly FieldDescriptor[]): {
-  group: string;
-  items: FieldDescriptor[];
-}[] {
-  const order: string[] = [];
-  const byGroup = new Map<string, FieldDescriptor[]>();
-  for (const d of items) {
-    if (!byGroup.has(d.group)) {
-      byGroup.set(d.group, []);
-      order.push(d.group);
-    }
-    byGroup.get(d.group)!.push(d);
-  }
-  return order.map((group) => ({ group, items: byGroup.get(group)! }));
-}
 
 /** The shipped record is frozen and pure — build it once for the overridden-test. */
 const SHIPPED = buildShippedDefaults();
@@ -410,10 +396,35 @@ export function SettingsTab({
         </p>
       ) : null}
 
-      {groups.map(({ group, items }) => (
+      {groups.map(({ group, items, subgroups }) => (
         <section className="settings-group" key={group} data-testid={`settings-group-${group}`}>
           <h3 className="settings-group__title">{group}</h3>
-          {items.map((d) => (
+          {/* FR-036b — the fields with no subgroup FIRST. A field must never appear below a
+              subsection heading it does not belong to. */}
+          {items.map(row)}
+          {/* FR-036a — then each subsection, in declaration order. The markup itself lives in
+              `Subsection`, shared with the other two tabs: `contracts/metadata.md` pins six
+              rendering rules on all three at once, and three copies of it meant three edits to
+              change one rule, with nothing failing if a copy was missed. */}
+          {subgroups.map(({ subgroup, items: subItems }) => (
+            <Subsection key={subgroup} testIdPrefix="settings-subgroup" group={group} subgroup={subgroup}>
+              {subItems.map(row)}
+            </Subsection>
+          ))}
+        </section>
+      ))}
+    </div>
+  );
+
+  /**
+   * ONE row, rendered from TWO places now — the group's own fields and each of its subsections
+   * (040 FR-036a/b). A hoisted declaration below the `return`, rather than a `const` above it, so
+   * the row's body is byte-identical to what it was and the diff shows the grouping change alone;
+   * it still closes over `commit`, `shownValue`, `inertReason` and the rest exactly as the inline
+   * map did.
+   */
+  function row(d: FieldDescriptor): ReactElement {
+    return (
             <div className="settings-row" key={d.key} data-testid={`setting-${d.key}`}>
               <div className="settings-row__meta">
                 <label className="settings-row__label">{d.label}</label>
@@ -467,9 +478,6 @@ export function SettingsTab({
                 onClear={() => commit(d, emptyValueFor(d))}
               />
             </div>
-          ))}
-        </section>
-      ))}
-    </div>
-  );
+    );
+  }
 }
