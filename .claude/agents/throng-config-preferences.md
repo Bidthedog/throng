@@ -15,13 +15,17 @@ Configuration is a constitutional area, not a convenience. Two rules govern ever
    and theme token MUST be exposed and editable through the **visual** preference editors. Nothing is
    editable only by hand-editing JSON. This is enforced mechanically by a descriptor registry plus
    completeness tests — a new key without a descriptor fails the build.
-3. **Displayed numbers are digit-grouped; grouping is never stored** (constitution 4.5.0). Use
-   `formatGrouped` / `parseGrouped` from `@throng/core` — never `toLocaleString` at a call site, and
-   never a hand-rolled comma. The parser is the exact inverse of the formatter *for the active
-   locale*: the separator is derived from the locale, not assumed to be a comma, because a locale
-   that groups with `.` turns `1.024` into a corrupted or rejected number depending which way the bug
-   falls. A separator reaching `settings.json`, a theme file or an IPC boundary is the defect this
-   guards.
+3. **Displayed quantities are digit-grouped; grouping is never stored** (constitution 4.5.0, scope
+   widened by **5.4.0** from preference editors to every surface). Use `formatGrouped` /
+   `parseGrouped` from `@throng/core` — never `toLocaleString` at a call site, and never a hand-rolled
+   comma. The parser is the exact inverse of the formatter *for the active locale*: the separator is
+   derived from the locale, not assumed to be a comma, because a locale that groups with `.` turns
+   `1.024` into a corrupted or rejected number depending which way the bug falls. A separator reaching
+   `settings.json`, a theme file or an IPC boundary is the defect this guards.
+   - The rule covers **quantities** — amounts the user reads. An **ordinal inside a name**
+     (`Panel 1024`), a number **seeded into an editable field** whose parser takes bare digits, and
+     anything **machine-read** are excluded; grouping those is a defect. `navigate/goto-line.tsx`
+     carries the worked reasoning for the editable-seed case.
 
 So a "one-line setting" is never one line. The minimum change set is: the value in the model, a
 descriptor in the matching metadata registry, the shipped default, the editor control, and a test.
