@@ -78,6 +78,16 @@ npx vitest run --project unit --project component --project integration --projec
 npx playwright test packages/ui/tests/e2e/<spec>.e2e.ts --workers=1
 ```
 
+**Pass the full path, with the `.e2e.ts` — a bare stem runs all 207 files.** `npx playwright test
+editor-status-bar` selects **573 tests in 207 files**; add the suffix and it selects 2. Nothing warns
+you, because the command is valid and the run starts normally — the only symptom is eighteen minutes
+of a suite you did not want, answering a question you did not ask. It has cost that once already.
+Check any filter before a long run; `--list` launches nothing:
+
+```bash
+npx playwright test <your filter> --list | tail -1     # "Total: N tests in M files"
+```
+
 ## When an E2E passes but the user says it is broken
 
 This has happened repeatedly, and the reason is nearly always the same: **the harness is not the

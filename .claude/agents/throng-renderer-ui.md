@@ -37,11 +37,21 @@ stores: `renderer/state/` (`workspace-store.tsx`, `projects-store.tsx`, `subwork
   Panel's menu; a status bar control or chord is an accelerator over the menu, not a substitute.
   Continuous/navigational input (scroll, find-next, column-select) is exempt but still rebindable.
   The constitution enumerates the known pre-existing gaps — do not add to them.
-- **Displayed numbers are digit-grouped** (constitution 4.5.0). Any number the UI renders goes
-  through `formatGrouped` from `@throng/core`, and anything read back goes through `parseGrouped` —
-  never `toLocaleString` at a call site, never a hand-rolled comma, and never a separator in a value
-  that gets stored or crosses IPC. The two are exact inverses *for the active locale*, which is the
-  point: a locale that groups with `.` turns `1.024` into a corrupted or rejected number otherwise.
+- **Displayed quantities are digit-grouped** (constitution 4.5.0, scope widened by **5.4.0**). Any
+  **quantity** the UI renders — on any surface, not just a preference editor — goes through
+  `formatGrouped` from `@throng/core`, and anything read back goes through `parseGrouped` — never
+  `toLocaleString` at a call site, never a hand-rolled comma, and never a separator in a value that
+  gets stored or crosses IPC. The two are exact inverses *for the active locale*, which is the point:
+  a locale that groups with `.` turns `1.024` into a corrupted or rejected number otherwise.
+  - **A quantity is an amount the user reads** — a count, a size, a length, a position, a duration.
+    Three things are not, and grouping them is a defect, not compliance: an **ordinal inside a name**
+    (`Panel 1024`, `report copy 1024.txt` — see `unique-name.ts`, `naming.ts`); a number **seeded into
+    an editable field** whose parser takes bare digits (see the comment in `navigate/goto-line.tsx`);
+    and anything **machine-read**, such as a log field.
+  - 5.4.0 enumerates four known gaps in this package that predate the widening — `find-bar.tsx`,
+    `app-close-prompt.tsx`, `subworkspaces-panel.tsx`, `subworkspace-app.tsx`. Do not add to them, and
+    close the one you are touching before its next numeric change. `navigate/quick-open.tsx` is the
+    worked example of compliance.
 - **Every UI change ships with passing coverage at the lowest layer that can prove it** (Principle
   V). For most renderer work that is a **component test** (`vitest --project component`, jsdom):
   what the component renders, its computed style, focus movement inside it, its keyboard handling,

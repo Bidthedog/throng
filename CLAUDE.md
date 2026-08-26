@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/033-open-and-navigate/plan.md
+at specs/040-editor-status-bar-and-gutter/plan.md
 <!-- SPECKIT END -->
 
 ## Verifying done-ness
