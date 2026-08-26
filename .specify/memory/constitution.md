@@ -1,6 +1,64 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 5.3.0 → 5.4.0
+Bump rationale: MINOR, materially expanded guidance. Nothing is removed and nothing is redefined
+                incompatibly — the digit-grouping obligation is unchanged in what it requires. What
+                changed is HOW FAR it reaches, plus an explicit statement of what it does not cover.
+
+Modified sections:
+  - Development Workflow & Quality Gates → "Displayed numbers MUST be digit-grouped…"
+    RENAMED to "Displayed QUANTITIES MUST be digit-grouped…". Scope widened from "every number a
+    preference editor displays" to every surface the application shows a user. Adds the
+    quantity/not-a-quantity distinction with three named exclusions, and enumerates four known gaps.
+
+Added: nothing (no new principle, no new section).
+Removed: nothing.
+
+Why now: spec 040 adds a character count to the editor status bar. The strip is not a preference
+         editor, so on a literal reading of 4.5.0 an ungrouped `1048576` was permissible on a
+         surface whose entire purpose is being read at a glance — while the rule's own rationale,
+         "eight digits nobody can scan", described that surface exactly.
+
+Two things the code settled that the principle could not:
+
+  (1) THE PRACTICE WAS ALREADY WIDER THAN THE TEXT. `navigate/quick-open.tsx` groups "Showing N of
+      M matches" and predates this amendment; nothing in the constitution asked it to. Meanwhile
+      `search/find-bar.tsx` renders `N of M` ungrouped, and a find in a large file passes a thousand
+      matches routinely. One rule, two surfaces of the same kind, opposite answers.
+
+  (2) THE OBVIOUS WORDING WOULD HAVE BEEN HARMFUL. "Any surface displaying a number" mandates
+      `Panel 1,024` (`workspace/unique-name.ts`) and `report copy 1,024.txt` (`explorer/naming.ts`),
+      and it breaks Go To Line, whose seeded field takes bare digits — `navigate/goto-line.tsx`
+      already carries a source comment reasoning its way to that boundary. Hence "quantities", with
+      identifiers, editable seeds and machine-read fields excluded by name.
+
+Known gaps: enumerated IN the rule rather than fixed here, per 4.6.0's precedent that a widened rule
+            the shipped app does not satisfy is recorded as an end-state requirement with its gaps
+            listed, never as a rule the codebase quietly violates. Four, all in packages/ui:
+            find-bar.tsx (the only one whose magnitude routinely passes 1,000), app-close-prompt.tsx,
+            subworkspaces-panel.tsx, subworkspace-app.tsx.
+
+Templates requiring updates:
+  ✅ .specify/templates/plan-template.md      — no change needed (no grouping reference)
+  ✅ .specify/templates/spec-template.md      — no change needed (no grouping reference)
+  ✅ .specify/templates/tasks-template.md     — no change needed (no grouping reference)
+  ✅ .claude/agents/throng-renderer-ui.md     — updated: cites 5.4.0, adds the three exclusions and
+                                                the gap list
+  ✅ .claude/agents/throng-config-preferences.md — updated: cites 5.4.0, adds the exclusions
+  ✅ .specify/memory/constitution.md          — 4.5.0's amendment note marked SUPERSEDED IN PART, so
+                                                a reader who lands on it is sent to 5.4.0
+
+Not updated, deliberately: specs/018, specs/030, specs/032 reference the rule as it stood when they
+                           shipped. Shipped specs are a record of what was decided then; they are not
+                           rewritten by a later amendment.
+
+Follow-up TODOs: none deferred. The four gaps are tracked in the rule itself, not as TODOs.
+-->
+
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 5.2.0 → 5.3.0
 Bump rationale: MINOR, three changes to Principle V, all additive to the rule set.
 
@@ -1813,21 +1871,49 @@ let it acquire many conflicting truths.
   considered complete, and a PR MUST NOT be merged, while any configurable key lacks its editor
   descriptor. (A raw-JSON escape hatch MAY be offered in addition to, never instead of, the visual
   editor.)
-- **Displayed numbers MUST be digit-grouped, and grouping MUST NEVER be stored (NON-NEGOTIABLE).**
-  Every number a preference editor *displays* — settings, key bindings, theme tokens, and any editor
-  added later — MUST be rendered with the **active locale's** digit grouping, so `10485760` reads as
-  `10,485,760` rather than as eight digits nobody can scan. Grouping applies at every magnitude: a
-  column in which `5000` sits beside `10,000` teaches the reader that the separator means something,
-  when it means only that one number crossed a threshold.
+- **Displayed quantities MUST be digit-grouped, and grouping MUST NEVER be stored (NON-NEGOTIABLE).**
+  Every **quantity** the application shows a user — in a preference editor, on a status bar, in a
+  notice, a dialog, a tooltip, a panel, or any surface added later — MUST be rendered with the
+  **active locale's** digit grouping, so `10485760` reads as `10,485,760` rather than as eight digits
+  nobody can scan. Grouping applies at every magnitude: a column in which `5000` sits beside `10,000`
+  teaches the reader that the separator means something, when it means only that one number crossed a
+  threshold.
+  - **The rule is about quantities, not about digits.** A quantity is a number the user reads *as an
+    amount* — a count, a size, a length, a position, a duration. Three things are therefore **NOT**
+    quantities and MUST NOT be grouped:
+    - **An identifier or an ordinal inside a name.** `Panel 1024`, `report copy 1024.txt`,
+      `Terminal 3`. These are names that happen to contain digits; grouping produces `Panel 1,024`
+      and a filename with a comma in it.
+    - **A number seeded into an editable field**, unless that field's parser is the **exact inverse**
+      of the formatter that seeded it. The preference editors pair the two and so may group; a field
+      whose parser accepts bare digits MUST be seeded ungrouped, or its own starting value is invalid
+      and submitting an untouched field fails.
+    - **Anything machine-read** — a log line, a diagnostic field, a serialised message, a test
+      fixture. These are covered by the storage rule below, and are named here because a log is a
+      surface a human also reads, which is exactly when the mistake gets made.
   - **Grouping is strictly a view concern.** A grouping character MUST NEVER reach a stored value, a
     settings file, a theme file, or anything crossing a process boundary. The parser that reads a
     displayed number back MUST be the exact inverse of the formatter **for the same locale** — the
     separator is derived from the locale, never assumed to be a comma, because a locale that groups
     with `.` otherwise turns `1.024` into either a corrupted number or a rejected one depending on
     which way the bug falls.
-  - Formatting and parsing MUST live in **one** platform-agnostic place, so no editor grows its own.
-  A change that adds or alters a numeric editor control MUST NOT be considered complete while that
-  control displays an ungrouped number or lets a separator reach a stored value.
+  - Formatting and parsing MUST live in **one** platform-agnostic place, so no surface grows its own.
+  A change that adds or alters a surface displaying a quantity MUST NOT be considered complete while
+  that surface displays an ungrouped quantity or lets a separator reach a stored value.
+  - **The shipped app does not yet satisfy this at every surface.** Widening the scope in 5.4.0
+    brought existing surfaces inside the rule that were outside it when they were written, so this is
+    recorded as an end-state requirement with its gaps enumerated rather than as a rule the codebase
+    quietly violates. Known gaps, all quantities, none yet fixed:
+    - `packages/ui/src/renderer/search/find-bar.tsx` — the find bar's `N of M` match counter. The
+      only gap whose magnitude routinely passes 1,000, and therefore the one worth fixing first.
+    - `packages/ui/src/renderer/app-close-prompt.tsx` — the running-terminal count.
+    - `packages/ui/src/renderer/sidebar/subworkspaces-panel.tsx` — the tab and panel counts in a
+      sub-workspace row's tooltip.
+    - `packages/ui/src/renderer/subworkspace-app.tsx` — its local `plural()` helper.
+
+    Closing a gap is not required by the feature that happens to touch the file; it is required
+    before that surface's next *numeric* change. `packages/ui/src/renderer/navigate/quick-open.tsx`
+    already complies and predates the widening — evidence that the practice was ahead of the text.
 - **Action controls MUST be themeable icons with hover titles (NON-NEGOTIABLE).**
   Every interactive control that performs an action — toolbar buttons, row affordances, dismiss and
   clear controls, panel and tab chrome — MUST be presented as an **icon drawn from the active theme's
@@ -1874,7 +1960,43 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 5.3.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-08-18
+**Version**: 5.4.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-08-25
+
+<!--
+  5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
+  names the three things that are NOT quantities.
+
+  Rationale: 4.5.0 promoted the rule out of 018's spec because "a per-feature spec is the wrong home
+  for a constraint that governs every numeric control added afterwards". It then scoped itself to
+  "every number a PREFERENCE EDITOR displays" — which reproduced the same defect one level up. Spec
+  040 hit it exactly: the editor status bar is about to display a character count, it is not a
+  preference editor, and on a literal reading `1048576` was permissible on a surface whose whole
+  purpose is being read at a glance. The rule's own rationale — "eight digits nobody can scan" —
+  described the new surface better than its scope line did.
+
+  Two things settled the wording, and both came from reading the code rather than from the principle.
+
+  FIRST, the practice was ALREADY wider than the text. `quick-open.tsx` groups "Showing N of M
+  matches" and has since 033; nothing in the constitution asked it to. Meanwhile `find-bar.tsx`
+  renders `N of M` ungrouped, and a find in a large file passes a thousand matches routinely. One
+  rule, two surfaces of the same kind, opposite answers — the signature of a scope line nobody can
+  apply.
+
+  SECOND, and the reason this is not a one-word edit: "any surface displaying a number" would have
+  been ACTIVELY HARMFUL. `unique-name.ts` builds `Panel ${n}` and `${base} (${n})`; `naming.ts`
+  builds `${stem} copy ${n}`. Widened naively, the rule mandates `Panel 1,024` and a filename with a
+  comma in it. `goto-line.tsx` already carries a comment reasoning its way to the same boundary from
+  the other side — it seeds an editable field whose parser takes bare digits, so a grouped seed makes
+  the field's own starting value invalid and Enter on an untouched `1,024` moves nothing.
+
+  Hence the rule is about QUANTITIES — amounts a user reads — with identifiers, editable seeds and
+  machine-read fields named as exclusions. That a contributor had already written the goto-line
+  carve-out into a source comment is the evidence that the boundary needed stating here instead.
+
+  The four known gaps are enumerated in the rule rather than fixed in this amendment, following
+  4.6.0's precedent: a widened rule the shipped app does not satisfy is recorded as an end-state
+  requirement with its gaps listed, never as a rule the codebase quietly violates.
+-->
 
 <!--
   5.0.0 — MAJOR. Principle V no longer mandates an E2E per user-facing UI change. Full rationale is
@@ -1940,6 +2062,12 @@ let it acquire many conflicting truths.
   Its stated reason was that `5,000` "reads as a typo rather than a kindness" — a defensible
   judgement, reversed because a threshold makes a *column* inconsistent, and 030's own timeout rows
   would have shown `5000` beside `10,000`.
+
+  SUPERSEDED IN PART by 5.4.0 (2026-08-25). The gate's SCOPE — "every number a preference editor
+  displays" — was widened to every surface, for the same reason this note gives for promoting it out
+  of 018: a scope drawn around one kind of surface is the wrong home for a constraint governing every
+  surface added afterwards. The grouping rule itself, the removal of the five-digit floor, and the
+  storage prohibition are unchanged. Read 5.4.0's note before citing this one.
 -->
 
 <!--
