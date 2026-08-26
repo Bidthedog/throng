@@ -953,6 +953,31 @@ Three things about the numbers, because each has misled someone:
 It works on a partial run too — `npx playwright test some-spec.e2e.ts` with the same env var — which
 is the cheap way to check whether one file got faster without paying for the suite.
 
+### Keep the `.e2e.ts` on the filter, or you run all 207 files
+
+**A positional filter that drops the suffix silently selects the ENTIRE suite.** Measured on
+2026-08-26 with `--list`, so nothing had to be run to find it:
+
+| Command | Selects |
+|---|---|
+| `npx playwright test editor-status-bar` | **573 tests in 207 files** — the whole suite |
+| `npx playwright test editor-status-bar.e2e.ts` | 2 tests in 1 file |
+| `npx playwright test packages/ui/tests/e2e/editor-status-bar.e2e.ts` | 2 tests in 1 file |
+
+The failure is quiet in the worst way: the command is accepted, the run starts, and the only symptom
+is that it takes eighteen minutes instead of twenty seconds. It cost a full 25.8-minute run in the
+session that found it — a run whose *result* was meaningless, because it was answering a question
+nobody had asked.
+
+**So always pass the suffix, and prefer the full path.** `--list` settles it in seconds and launches
+nothing, which makes it the cheap habit worth having before any long run:
+
+```bash
+npx playwright test <your filter> --list | tail -1     # "Total: N tests in M files"
+```
+
+If that line says 207 files, the filter did not do what you think.
+
 ## Quarantine
 
 A test that genuinely cannot be made deterministic is tagged **`@quarantine`** and excluded from the

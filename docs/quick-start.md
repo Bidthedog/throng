@@ -267,7 +267,14 @@ which becomes an editor showing that file.
   file you are editing stays marked either way.
 - **Save** with **Ctrl+S**; **Ctrl+Shift+S** saves all (scoped to the project); **Ctrl+Alt+S** is Save As.
 - **Syntax highlighting** covers 31 languages, detected by extension. Wrong guess? Correct it from
-  the **language picker** in the status strip — throng remembers your choice for that file.
+  the **language picker** in the status bar — throng remembers your choice for that file.
+- **The status bar says where you are** — the caret's line and column, how many characters are
+  selected while something is, and how many characters and words the document holds. Narrow the panel
+  and the readouts give ground in a fixed order — the word count first, the line number last — rather
+  than showing you half a figure; widen it and they come back. **Settings → Editor → Status Bar** has
+  a switch for the position, one for the counts, and one for the whole bar.
+- **Line numbers** run down the left of every editor. Turn them off under **Settings → Editor → Show
+  the editor gutter** and the document starts at the panel's left edge instead.
 - **Right-click** inside an editor for cut/copy/paste, Select All, Undo/Redo and "Set Language…".
 - **Ctrl+X with nothing selected cuts the whole line**, and pastes it back *as a line*, above the caret.
 - **Column select** by holding **Alt** and dragging, or **Shift+Alt+Arrow** — then type, delete,
