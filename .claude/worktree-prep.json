@@ -14,5 +14,16 @@
   "run": [
     "npm install"
   ],
-  "teardown": []
+  "teardown": [
+    "powershell -NoProfile -ExecutionPolicy Bypass -File \"$(cygpath -w \"$SOURCE_PATH/.claude/skills/throng-clear-dev-state/scripts/clear-dev-state.ps1\")\" -RepoRoot \"$(cygpath -w \"$WORKTREE_PATH\")\" -KeepData"
+  ],
+  "teardownNotes": {
+    "why": "throng's daemon is DESIGNED to outlive its window (Constitution Principle III: terminals keep running when the UI closes). So closing the app, or ending an E2E run, does not stop it. A daemon, its pty-agent, the shells it started and a conhost.exe per shell all keep running, holding the dev data folder open — which is why a later run inherits stale state, and why deleting the worktree can fail with a permission error while nothing appears to be running.",
+    "whatWorktreeCleanAlreadyDoes": "worktree-clean stops every process whose executable or command line lives INSIDE the worktree. That catches Electron, the daemon and the pty-agent without any help from this manifest.",
+    "whatThisAdds": "The terminal shells and their conhost processes, which that scan CANNOT see. A shell spawned by the daemon has a command line like 'powershell.exe -NoLogo -NoExit -Command ...' with no mention of the worktree anywhere in it — its only link to throng is its parent pid. clear-dev-state.ps1 walks the daemon's process tree to find them, and stops children first so nothing is orphaned when the daemon goes.",
+    "keepDataIsMandatory": "-KeepData is NOT optional here. Without it the script deletes %APPDATA%/throng-dev and ~/.throng-dev, and those folders are SHARED by every worktree and by the main checkout's dev instance. Tearing down one worktree would silently destroy another worktree's database and settings. Only clear that state deliberately, via the throng-clear-dev-state skill, when you mean to reset the whole dev environment.",
+    "cygpathIsMandatory": "worktree-clean exports WORKTREE_PATH and SOURCE_PATH in MSYS form ('/d/git/throng/...'). PowerShell cannot resolve that, and -RepoRoot in particular is matched as a SUBSTRING against Win32 command lines, which are Windows-form ('D:\\git\\throng\\...'). Passing the MSYS path silently matches nothing, so the teardown reports success while stopping no processes at all.",
+    "neverTouchesTheInstalledApp": "Matching is scoped by -RepoRoot to the worktree path. The installed throng runs from its own location and stores data in %APPDATA%/throng (no -dev suffix), so neither it, its daemon, nor the terminals a user has open in it are ever candidates.",
+    "verifying": "Preview without changing anything: worktree-clean's --dry-run prints the rendered command, and clear-dev-state.ps1 accepts -WhatIf. To confirm nothing survived a real run, look for leftovers by path:\n  Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*<worktree-path>*' }"
+  }
 }
