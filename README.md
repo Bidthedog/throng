@@ -48,7 +48,9 @@ goal is to pull all of that into a single, simple customisable workspace.
 - **Editor panels** — a CodeMirror editor that preserves encoding and line endings, shares one buffer
   per file across every window, and recovers in-progress edits *and their undo history* after a crash.
 - **Code editing** — syntax highlighting for 31 languages, rectangular selection, whole-line cut and
-  paste, and indentation that follows the file's own style rather than a house one.
+  paste, and indentation that follows the file's own style rather than a house one. A status bar
+  reports the caret's line and column and the size of the selection and the document, and the
+  line-number gutter can be turned off to give that width back.
 - **File explorer** — a live, project-scoped file tree with rename, move, copy, Recycle-Bin delete and
   per-project hiding, all undoable with Ctrl+Z and persisted across restarts.
 - **In-panel search** — one find bar that adapts to the active panel: find and replace in an editor,
