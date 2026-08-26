@@ -177,3 +177,56 @@ describe('section-name search (021, FR-015/016/017)', () => {
     expect(filterFields('theme', FIELDS, valueOf)).toEqual([THEME]);
   });
 });
+
+/**
+ * SUBSECTION-name search (040, FR-036 over 021 FR-015).
+ *
+ * 040 gave `FieldDescriptor` a second level of grouping, and every subgroup renders as a VISIBLE
+ * `<h4>` heading. 021's invariant — documented on {@link SearchableField.group} — is that a heading
+ * the user can read is a heading the user can search by, so a subgroup name must reach its fields
+ * exactly as a group name does. It is not a nicety: the heading stays on screen (its group is
+ * matched by nothing, so the whole section goes) only when a field survives, so a subgroup name
+ * that matches nothing renders "No settings match" while the user is looking at the words they
+ * typed.
+ *
+ * `AUTOSAVE_DELAY` is built so that ONLY its subgroup contains "autosave" — not its key, label,
+ * description, group or value. That is the same construction `SYNTAX_KEYWORD` uses for groups, and
+ * it is what makes the test fail for the requirement's reason rather than by accident: the one real
+ * subgroup shipped today, `Status Bar`, is findable only because "status" and "bar" happen to be
+ * substrings of its fields' keys and descriptions.
+ */
+const AUTOSAVE_DELAY: SearchableField = {
+  key: 'editor.persistDelayMs',
+  label: 'Persist delay',
+  description: 'Dwell time before an unfocused buffer is written back to disk.',
+  group: 'Editor',
+  subgroup: 'Autosave',
+};
+const SUBGROUPED = [EDITOR_BG, AUTOSAVE_DELAY, TERMINAL_FG];
+const subgroupedValue = (f: SearchableField): unknown =>
+  (({
+    'colours.editorBg': '#101010',
+    'editor.persistDelayMs': 900,
+    'colours.terminalFg': '#d6deea',
+  }) as Record<string, unknown>)[f.key];
+
+describe('subsection-name search (040, FR-036)', () => {
+  it('includes the subgroup in the haystack, lowercased', () => {
+    expect(fieldHaystack(AUTOSAVE_DELAY, 900)).toContain('autosave');
+  });
+
+  it('matches a field by its SUBSECTION name when nothing else about it does', () => {
+    expect(matchesQuery('Autosave', AUTOSAVE_DELAY, 900)).toBe(true);
+  });
+
+  it('makes a subsection name as good as a section name — the same field, either way', () => {
+    // The invariant in one line: what the group name returns, the subgroup name returns too.
+    expect(filterFields('editor', SUBGROUPED, subgroupedValue)).toContain(AUTOSAVE_DELAY);
+    expect(filterFields('autosave', SUBGROUPED, subgroupedValue)).toEqual([AUTOSAVE_DELAY]);
+  });
+
+  it('leaves a subgroup-less field untouched (absence contributes nothing, not "undefined")', () => {
+    expect(fieldHaystack(EDITOR_BG, '#101010')).not.toContain('undefined');
+    expect(matchesQuery('autosave', EDITOR_BG, '#101010')).toBe(false);
+  });
+});

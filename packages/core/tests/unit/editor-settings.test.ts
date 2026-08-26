@@ -24,6 +24,8 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       saveDocumentScroll: false,
       defaultWordWrap: true,
       showStatusBar: true,
+      // 040 FR-040 — the gutter, shipped ON. Exhaustive assertion, same reason as the blocks below.
+      showGutter: true,
       // 033 FR-069b — the navigation block. Shipped ON: Quick Open starts by excluding what the
       // project hides, so the modal and the tree give one answer.
       // 033 FR-058 — and the two remember toggles, both shipped OFF. Their own key-by-key parsing
@@ -33,6 +35,13 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
         quickOpenExcludeHidden: true,
         rememberQuickOpenQuery: false,
         rememberGotoLineNumber: false,
+      },
+      // 040 FR-030/FR-031 — the status-bar readout block, both shipped ON. Here for the same reason
+      // the navigation block is: this assertion is exhaustive, which is what makes a silently-added
+      // key impossible. Its key-by-key parsing is asserted below.
+      statusBar: {
+        showCursorPosition: true,
+        showCounts: true,
       },
     });
   });
@@ -44,6 +53,40 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
     expect(parseAppSettings({ editor: { showStatusBar: false } }).editor.showStatusBar).toBe(false);
     expect(parseAppSettings({ editor: { defaultWordWrap: 'yes' } }).editor.defaultWordWrap).toBe(true);
     expect(parseAppSettings({ editor: { showStatusBar: 1 } }).editor.showStatusBar).toBe(true);
+  });
+
+  /*
+   * 040 — `editor.statusBar`, key by key.
+   *
+   * The exhaustive assertions above prove the block EXISTS and defaults correctly; they cannot tell
+   * a real sub-parser from `fallback` handed straight back, because both produce the shipped
+   * values. These four cases are the difference: an explicit `false` has to survive, a non-boolean
+   * has to fall back to its OWN default rather than discarding the block, and a half-specified
+   * block must keep the half that was specified.
+   */
+  it('parses editor.statusBar field by field (040 FR-030/FR-031)', () => {
+    expect(parseAppSettings({}).editor.statusBar).toEqual({
+      showCursorPosition: true,
+      showCounts: true,
+    });
+    expect(
+      parseAppSettings({ editor: { statusBar: { showCursorPosition: false, showCounts: false } } })
+        .editor.statusBar,
+    ).toEqual({ showCursorPosition: false, showCounts: false });
+    // Half a block is not all-or-nothing: the specified leaf wins, the absent one defaults.
+    expect(
+      parseAppSettings({ editor: { statusBar: { showCounts: false } } }).editor.statusBar,
+    ).toEqual({ showCursorPosition: true, showCounts: false });
+    // A non-boolean is not a value, and it does not take the rest of the block down with it.
+    expect(
+      parseAppSettings({ editor: { statusBar: { showCursorPosition: 'no', showCounts: false } } })
+        .editor.statusBar,
+    ).toEqual({ showCursorPosition: true, showCounts: false });
+    // A block that is not an object at all falls back WHOLE.
+    expect(parseAppSettings({ editor: { statusBar: 'off' } }).editor.statusBar).toEqual({
+      showCursorPosition: true,
+      showCounts: true,
+    });
   });
 
   it('parses warnOnMissingFile (default true; honours an explicit false)', () => {
@@ -100,6 +143,8 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       saveDocumentScroll: false,
       defaultWordWrap: true,
       showStatusBar: true,
+      // 040 FR-040 — the gutter, shipped ON. Exhaustive assertion, same reason as the blocks below.
+      showGutter: true,
       // 033 FR-069b — the navigation block. Shipped ON: Quick Open starts by excluding what the
       // project hides, so the modal and the tree give one answer.
       // 033 FR-058 — and the two remember toggles, both shipped OFF. Their own key-by-key parsing
@@ -109,6 +154,13 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
         quickOpenExcludeHidden: true,
         rememberQuickOpenQuery: false,
         rememberGotoLineNumber: false,
+      },
+      // 040 FR-030/FR-031 — the status-bar readout block, both shipped ON. Here for the same reason
+      // the navigation block is: this assertion is exhaustive, which is what makes a silently-added
+      // key impossible. Its key-by-key parsing is asserted below.
+      statusBar: {
+        showCursorPosition: true,
+        showCounts: true,
       },
     });
   });
@@ -243,11 +295,16 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
     ];
 
     for (const [label, raw] of fallbackInputs) {
-      it(`copies all four object-valued members — ${label}`, () => {
+      it(`copies all five object-valued members — ${label}`, () => {
         const editor = parseAppSettings(raw).editor;
         const shipped = DEFAULT_APP_SETTINGS.editor;
 
         /*
+         * FIVE, not four: 040 added `statusBar` to `EditorSettings`, and `cloneEditor` re-clones it
+         * alongside the other four. The count in this title and the list below are the same claim
+         * as `app-settings.ts`'s "There are five (040 added `statusBar`)" — a title still saying
+         * four while a member went unnamed is how a sixth gets added and missed.
+         *
          * `expect.soft`, so a broken clone names EVERY member it shares rather than stopping at the
          * first. That matters here more than it usually does: the defect this replaces was one of
          * four members on one line being re-cloned, and a hard assertion would have reported
@@ -261,6 +318,7 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
           .soft(editor.languageByExtension, 'editor.languageByExtension')
           .not.toBe(shipped.languageByExtension);
         expect.soft(editor.navigation, 'editor.navigation').not.toBe(shipped.navigation);
+        expect.soft(editor.statusBar, 'editor.statusBar').not.toBe(shipped.statusBar);
 
         // …and the copy still says the same thing, so this is a clone and not a reset.
         expect(editor).toEqual(shipped);

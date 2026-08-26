@@ -78,6 +78,19 @@ export interface EditorHarness {
   pushMoved(absPath: string): void;
   /** Broadcast any other sync message the authority sends — `externalChange`, `dirty`, `wordWrap`. */
   pushSync(msg: Record<string, unknown>): void;
+  /**
+   * Broadcast a SETTINGS change, as main's config hot-reload watcher does (`throng:config`).
+   *
+   * The counterpart of {@link pushSync} for the other live channel. `opts.settings` seeds what the
+   * editor mounts WITH; this is what happens after it has mounted — the half of every "takes effect
+   * without reopening" requirement that a seed cannot show, because a value present at mount proves
+   * only that the mount read it.
+   *
+   * The payload is the whole config document, exactly as `ConfigProvider` receives it: main
+   * broadcasts the document, not a diff, and `guardedSettingsValidator` fills every key the caller
+   * leaves out. Wrap the call in `act()` — it drives a React state update.
+   */
+  pushSettings(settings: Record<string, unknown>): void;
   /** Every message the renderer sent back through `editor.dispatch`. */
   readonly dispatched: unknown[];
   /** The live CodeMirror content element. */
@@ -113,6 +126,8 @@ export function mountEditor(opts: {
 
   let current: EditorDoc = { dirty: false, absPath: null, ...opts.doc };
   const listeners: ((msg: unknown) => void)[] = [];
+  /** Subscribers to the config hot-reload channel — see {@link EditorHarness.pushSettings}. */
+  const configListeners: ((payload: unknown) => void)[] = [];
   const dispatched: unknown[] = [];
   /** Files this harness will serve to a subsequent `openFile`, keyed by path. */
   const pendingOpens = new Map<string, EditorDoc>();
@@ -160,7 +175,21 @@ export function mountEditor(opts: {
         Promise.resolve(
           opts.settings ? { settings: opts.settings } : { settings: undefined },
         ),
-      onChange: () => () => {},
+      /*
+       * A REAL subscription, not a stub that returns an unsubscribe and forgets the callback.
+       *
+       * The version this replaced — `onChange: () => () => {}` — stored nothing, so no settings
+       * change could ever be pushed to a mounted editor and every "this takes effect live"
+       * requirement was unprovable below E2E. It looked complete, which is why it survived: the
+       * signature is right and the unsubscribe works.
+       */
+      onChange: (fn: (payload: unknown) => void) => {
+        configListeners.push(fn);
+        return () => {
+          const at = configListeners.indexOf(fn);
+          if (at >= 0) configListeners.splice(at, 1);
+        };
+      },
     },
     editor: {
       ...calls,
@@ -299,6 +328,9 @@ export function mountEditor(opts: {
     },
     pushSync(msg: Record<string, unknown>) {
       for (const fn of [...listeners]) fn({ panelId, ...msg });
+    },
+    pushSettings(settings: Record<string, unknown>) {
+      for (const fn of [...configListeners]) fn({ settings });
     },
     async openFile(doc: EditorDoc & { absPath: string }) {
       pendingOpens.set(doc.absPath, doc);
