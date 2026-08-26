@@ -20,6 +20,7 @@
     "editor-feedback3.e2e.ts": "FOCUS",
     "editor-file-deleted.e2e.ts": "FOCUS",
     "editor-find.e2e.ts": "TIMING",
+    "editor-gutter-visibility.e2e.ts": "FOCUS",
     "editor-highlight-perf.e2e.ts": "TIMING",
     "editor-menus.e2e.ts": "FOCUS",
     "editor-mirrored-undo.e2e.ts": "FOCUS",
