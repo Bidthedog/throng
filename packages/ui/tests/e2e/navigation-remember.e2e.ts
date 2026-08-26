@@ -161,12 +161,36 @@ async function openFileAndFocus(win: Page, pid: string, file: string, firstText:
  * correctly ignored and nothing retries it, so the test dies later on an assertion about the value
  * that was never accepted. `quick-open.e2e.ts` measured this exact failure.
  */
-async function acceptQuickOpenQuery(win: Page, query: string): Promise<void> {
+async function acceptQuickOpenQuery(win: Page, query: string, opensText: string): Promise<void> {
   await openQuickOpen(win);
   await win.keyboard.type(query);
   await expect(quickOpenRows(win)).toHaveCount(1);
   await win.keyboard.press('Enter');
   await expect(win.getByTestId('quickopen')).toHaveCount(0);
+
+  /*
+   * ══ THE MODAL CLOSING IS NOT THE QUERY BEING RECORDED — issue #321 ══
+   *
+   * `choose` (`quick-open.tsx`) calls `onDismiss()` SYNCHRONOUSLY and then does the real work in an
+   * async IIFE: `await openFileInTab(...)`, `if (!opened) return`, and only then
+   * `rememberQuickOpenQuery(...)`. That ordering is deliberate and correct — FR-061 defines
+   * "accepted" as a file having OPENED, so a route the user cancels at the unsaved-changes prompt
+   * must record nothing.
+   *
+   * The consequence is that the assertion above — the modal is gone — resolves while the record is
+   * still pending behind the open. Returning here let the caller read the remembered value before
+   * anything had written it, and the read is a plain non-retrying `expect`, so it got `''`.
+   *
+   * MEASURED, not argued. Instrumenting the store showed the order in a failing run:
+   *     seed{remember:true, held:null} · seed{remember:true, held:null} · accept{query:"guide"}
+   * — the second modal opened and seeded from an empty store BEFORE the accept was recorded, with
+   * `remember` true throughout and NO discard of any kind. On this machine that lost the race in
+   * 4 of 20 runs of the spec alone; the issue recorded it as 1 in ~705.
+   *
+   * So wait for the OPEN, which is the record's actual precondition. `opensText` is the content of
+   * the file the query resolves to — the cheapest observable that the router finished.
+   */
+  await expect(win.locator('.editor-panel')).toContainText(opensText, { timeout: 15_000 });
 }
 
 /** Type a line number into Go To Line and confirm it. */
@@ -293,7 +317,7 @@ test('at the shipped defaults BOTH modals reopen empty, even straight after a va
          * shared picker's K6 makes an empty query match everything, and FR-057 only ever required an
          * empty INPUT. The spec records that correction in AS-18 itself.
          */
-        await acceptQuickOpenQuery(win, 'guide');
+        await acceptQuickOpenQuery(win, 'guide', '// docs/guide.md');
         await openQuickOpen(win);
         await expect(win.getByTestId('quickopen-input')).toHaveValue('');
         // …and it is listing the WHOLE project, which is what an unseeded query does.
@@ -342,7 +366,7 @@ test('with rememberQuickOpenQuery on, the accepted query comes back selected wit
         await expect(win.getByTestId('quickopen')).toHaveCount(0);
 
         // …now accept one, which is the only thing FR-061 records.
-        await acceptQuickOpenQuery(win, 'guide');
+        await acceptQuickOpenQuery(win, 'guide', '// docs/guide.md');
 
         /*
          * AS-19 — present, fully selected, and showing ITS results.
@@ -434,10 +458,18 @@ test('both toggles live in Editor · Navigation, ship off, and turning them off 
 
         // Put a value in each — there has to be something to discard for FR-063 to be about anything.
         await acceptGotoLine(win, '42');
-        await acceptQuickOpenQuery(win, 'guide');
+        await acceptQuickOpenQuery(win, 'guide', '// docs/guide.md');
         // …and prove BOTH are being surfaced before anything is switched off. Without this the test
         // could pass against an implementation that never remembered anything in the first place.
-        expect(await quickOpenInputValue(win)).toBe('guide');
+        // TEMPORARY PROBE (#321) — remove. The trace is read ONLY on failure, so the passing path
+        // is byte-for-byte what it was; an extra round trip before the read masks the race.
+        const seen = await quickOpenInputValue(win);
+        if (seen !== 'guide') {
+          const trace = await win.evaluate(
+            () => (window as unknown as { __qo?: unknown[] }).__qo ?? [],
+          );
+          throw new Error(`#321 REPRO — expected 'guide', got '${seen}'. trace=${JSON.stringify(trace)}`);
+        }
         await openFileAndFocus(win, pid, 'long.txt', 'line-0001');
         expect(await gotoLineInputValue(win)).toBe('42');
 
