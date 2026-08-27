@@ -276,6 +276,17 @@ Both are worth reading before re-opening it — but note that neither ever *meas
 case-insensitive `pty` grep also matching "empty"). **#117 re-opens the question empirically**, and is
 where the evidence should land.
 
+## `THRONG_TEST_SHELL_HISTORY` — the shells a run opens keep no history
+
+Set to `off` by `harness.ts` for every app it launches, so a run never writes the developer's own
+shell history. It has a section of its own because the reasoning is about a shared OS resource
+rather than about a knob: see *The global OS resources a run must never write* below, which covers
+what it does per shell and why the clipboard sits beside it.
+
+Unset everywhere else. A real terminal records history exactly as it always did — that is what
+recall and Ctrl+R are for — and `packages/platform-windows/tests/integration/shell-history.integration.test.ts`
+pins that direction as well as the suppressed one.
+
 ## `THRONG_E2E_STEP_MS` — watch a run happen
 
 Pauses between the steps of a spec that opts in, so a run can be followed by eye. Zero by default,
