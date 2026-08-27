@@ -496,6 +496,12 @@ export type TerminalAttachEnvelope =
       /** The program owns the alternate screen (028 follow-up) — the view must match, or it
        *  reclaims keys the program owns. */
       altScreen?: boolean;
+      /**
+       * What the program has negotiated about the keyboard (#290) — the companion to `altScreen`
+       * above. A rebuilt view adopts this instead of re-deriving it from the replayed tail, which
+       * still contains the sequences that produced it and would count every push a second time.
+       */
+      keyboard?: import('@throng/core').KittyKeyboardState;
       exit?: { code: number | null };
       /** A remembered directory that no longer exists; the terminal started at the root (FR-005b). */
       cwdFallback?: string;

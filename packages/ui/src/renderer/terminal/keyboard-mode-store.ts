@@ -17,6 +17,21 @@ import type { KittyKeyboardState } from '@throng/core';
  * is precisely the case that matters, because full-screen programs are the ones that negotiate.
  *
  * The state belongs to the session, not to a view of it. This is the smallest thing that says so.
+ *
+ * ══ IT IS NO LONGER THE AUTHORITY, AND THAT MATTERS TO ANYONE DEBUGGING FROM HERE (#290) ══
+ *
+ * Being per-panel rather than per-view fixed the case above and left a worse one. A rebuilt view
+ * restored what this map held AND re-parsed the daemon's replayed scrollback tail, which still
+ * contains the sequences that produced it — so every `CSI > flags u` was counted twice, and since
+ * the protocol is a stack, the program's matching pop then cancelled only the duplicate. Enhanced
+ * key reporting stayed on after the program had turned it off, `programOwnsKeyboard` stuck true, and
+ * the terminal's scrollback chords were handed to a program that no longer wanted them.
+ *
+ * The daemon now tracks the negotiation from the output stream — it is the only thing that sees
+ * every byte, including while a panel is unmounted — and returns it in the attach response, which
+ * the view ADOPTS (`use-terminal.ts`). What this map does now is narrower and still worth having:
+ * it is the value a view starts from BEFORE the attach resolves, and where the live parse keeps its
+ * answer between rebuilds. If it disagrees with the daemon, the daemon wins.
  */
 const modes = new Map<string, KittyKeyboardState>();
 
