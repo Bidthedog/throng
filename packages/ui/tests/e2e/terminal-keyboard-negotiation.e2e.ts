@@ -220,10 +220,50 @@ test('a program that drops its keyboard negotiation while its panel is unmounted
     const term2 = win.getByTestId(`terminal-${pid}`);
     await expect(term2).toBeVisible();
     await term2.click();
+
+    /*
+     * ══ EVERY ROUTE THE REPORT NAMES, ASSERTED AS THE USER WOULD SEE IT ══
+     *
+     * These come BEFORE the diagnostics below, deliberately. All of them fail from the same stale
+     * boolean, so asserting the boolean alone would be enough to make the test go red — but a red on
+     * `programOwnsKeyboard` tells a reader that an internal flag is wrong, while a red on "Ctrl+Home
+     * does not reach the top of the scrollback" tells them what the person who filed #290 actually
+     * experienced. When each half of the fix was disabled to check it was load-bearing, this is
+     * where the failure landed.
+     *
+     * The reporter's own words for the frozen state: "Ctrl+Home / Ctrl+End, PageUp / PageDown"
+     * dead together, "typing in to the prompt worked OK". That last clause is not a throwaway — it
+     * is the signature that distinguishes THIS defect from a wedged or disconnected terminal, and
+     * it is asserted at the end.
+     */
     await win.keyboard.press('Control+Home');
+    await expect(term2, 'Ctrl+Home did not reach the top of the scrollback (#290)').toContainText(
+      'TOP_OF_HISTORY',
+    );
     const after = await lastKeyDecision(win, pid);
 
-    // THE ASSERTION. The program turned the protocol off; the rebuilt view must agree.
+    await win.keyboard.press('Control+End');
+    await expect(term2, 'Ctrl+End did not return to the live bottom (#290)').toContainText(
+      'filler 200',
+    );
+
+    // PLAIN PageUp/PageDown — not Shift+ — because that is the pair `use-terminal.ts` gates on
+    // `!programOwnsKeyboard`, and the pair the report names.
+    await win.keyboard.press('PageUp');
+    await expect(term2, 'PageUp did not move the viewport off the live bottom (#290)').not.toContainText(
+      'filler 200',
+    );
+    await win.keyboard.press('PageDown');
+    await expect(term2, 'PageDown did not bring the live bottom back (#290)').toContainText(
+      'filler 200',
+    );
+
+    // THE CONTROL THE REPORT HANDS US. A terminal frozen this way still accepts input — so if
+    // typing were broken too, the failure above would be something else entirely and this test
+    // would be pointing at the wrong defect.
+    await runCommand(win, pid, 'echo STILL_ALIVE', 'STILL_ALIVE');
+
+    // …and the mechanism underneath all four, so a future reader knows WHY they died together.
     expect(
       after.kitty,
       'the rebuilt view still believes the program wants enhanced key reporting, after the ' +
@@ -234,8 +274,6 @@ test('a program that drops its keyboard negotiation while its panel is unmounted
       after.reserved,
       'Ctrl+Home must be reserved for scrollback once no program owns the keyboard (#290)',
     ).toBe(true);
-    // …and the user-visible consequence: the viewport actually moves.
-    await expect(term2).toContainText('TOP_OF_HISTORY');
 
     /*
      * ══ PHASE 2: the STACK DEPTH has to survive a rebuild too, not just the flag ══
