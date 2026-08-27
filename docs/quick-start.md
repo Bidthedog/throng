@@ -447,6 +447,7 @@ also the full list.
 | **F11** | Full screen |
 | **Ctrl+`** / **Ctrl+Shift+`** | Cycle the active panel forward / back |
 | **Ctrl+Alt+Arrow** | Move focus to the panel left / right / up / down |
+| **Ctrl+Alt+M** | Focus the most recent notice, so its list can be read and scrolled by keyboard. **Esc** returns you to where you were |
 | **Ctrl+=** / **Ctrl+-** / **Ctrl+0** | Zoom the whole app in / out / reset (also Ctrl+Wheel) |
 | **Ctrl+Alt+=** / **Ctrl+Alt+-** / **Ctrl+Alt+0** | Zoom **this panel** independently |
 | **Ctrl+F** / **Ctrl+H** | Find / replace in the active panel |
