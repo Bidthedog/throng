@@ -46,12 +46,32 @@ function gutterExtensions(h: EditorHarness): unknown[] {
   return Array.isArray(content) ? (content as unknown[]) : [content];
 }
 
-async function mounted(settings?: Record<string, unknown>): Promise<EditorHarness> {
+/**
+ * Mount, and wait for BOTH channels this file's assertions depend on (#335's class, #339's run).
+ *
+ * Waiting only for the document text is what made "puts it back when the setting is turned on
+ * again" a flake: `opts.settings` arrives through `config.get()`, which `ConfigProvider` awaits in
+ * its own effect, and nothing sequences it against `editor.getContent()`. Every test here that
+ * seeds `showGutter: false` then asserts the compartment is EMPTY is asserting on the settings
+ * channel — so losing that race reads a tree still holding `DEFAULT_APP_SETTINGS`, where
+ * `showGutter` defaults to true and the gutter is therefore still installed.
+ *
+ * The symptom is the misleading one #335 describes: not a wrong number but a full compartment
+ * where an empty one was expected — `expected [ FacetProvider{…}, …(2) ] to deeply equal []`,
+ * which reads exactly like a broken reconfigure rather than a test that looked too early. Observed
+ * on CI against this branch, then reproduced here 3/3 with `configDelayTicks`.
+ */
+async function mounted(
+  settings?: Record<string, unknown>,
+  configDelayTicks = 0,
+): Promise<EditorHarness> {
   const h = mountEditor({
     doc: { text: DOC, version: 1, absPath: 'C:/proj/lines.txt' },
     ...(settings ? { settings } : {}),
+    configDelayTicks,
   });
   await waitFor(() => expect(h.text()).toContain('one'));
+  await waitFor(() => expect(h.settingsLoaded()).toBe(true));
   return h;
 }
 
@@ -115,6 +135,23 @@ describe('a settings change reconfigures the LIVE view (FR-043)', () => {
 
     await waitFor(() => expect(gutterExtensions(h).length).toBeGreaterThan(0));
     expect(h.view()).toBe(before);
+  });
+
+  it('reads a seeded setting even when its channel loses the race (#335 class)', async () => {
+    /*
+     * The regression test for the flake above, and the reason it can be one: `configDelayTicks`
+     * pushes `config.get()` far enough behind `editor.getContent()` that the settings ALWAYS
+     * arrive second. Against the version of `mounted()` that waited only for the document text
+     * this failed 3/3 with the wording CI reported —
+     * `expected [ FacetProvider{ …(5) }, …(2) ] to deeply equal []` — because `showGutter` was
+     * still its shipped default of true and the gutter had never been removed.
+     *
+     * Five ticks rather than one, for the reason `editor-update-listener.test.ts` gives: one is
+     * enough to lose the race, and four more keep a future hop on either channel from quietly
+     * turning this back into a coin toss that passes.
+     */
+    const h = await mounted({ editor: { showGutter: false } }, 5);
+    expect(gutterExtensions(h)).toEqual([]);
   });
 });
 
