@@ -38,6 +38,22 @@ Three rules about using it:
 - **A green gate goes stale the moment you edit.** Quote the actual stage summary when reporting
   done, and re-run if anything changed after it.
 
+## Formatting is ESLint's job — never run Prettier here
+
+**This repo has no Prettier configuration, and `prettier --write` must not be run in it.** The only
+formatter is `npm run lint` (`eslint .`); there is no `format` script and no `.prettierrc`.
+
+That absence is exactly what makes the mistake expensive rather than harmless. With no config to
+read, Prettier applies *its own* defaults — which include double quotes, where this codebase uses
+single — so a single `prettier --write` over a glob rewrites every string delimiter in every file it
+touches, in a diff that looks deliberate and reviews as noise. Measured once: **~230 files
+reformatted** from one command aimed at four, which then had to be reverted with
+`git checkout --` and the real edits re-applied by hand.
+
+The pull towards it is real and worth naming: a scripted edit lands with awkward wrapping, and
+reaching for a formatter to tidy it is the obvious next move. Re-indent the lines you actually
+changed, or let ESLint do it.
+
 ## Before you add a requirement, find the one that already governs it
 
 **A requirement that changes existing behaviour needs a search for the requirement that already
