@@ -2,7 +2,7 @@ import { render } from '@testing-library/react';
 import { EditorView } from '@codemirror/view';
 import { createElement, Fragment, type ReactElement } from 'react';
 import { vi } from 'vitest';
-import { createDefaultLayout, type Panel, type WorkspaceLayout } from '@throng/core';
+import { createDefaultLayout, type AppSettings, type Panel, type WorkspaceLayout } from '@throng/core';
 import type { ThrongBridge } from '../../../src/renderer/state/bridge.js';
 import { ProjectsClient } from '../../../src/renderer/state/projects-client.js';
 import { WorkspaceClient } from '../../../src/renderer/state/workspace-client.js';
@@ -13,7 +13,11 @@ import { PanelNameClient } from '../../../src/renderer/state/panel-name-client.j
 import { ServicesProvider, type Services } from '../../../src/renderer/composition-root.js';
 import { WorkspaceProvider } from '../../../src/renderer/state/workspace-store.js';
 import { ProjectsProvider } from '../../../src/renderer/state/projects-store.js';
-import { ConfigProvider } from '../../../src/renderer/config/config-store.js';
+import {
+  ConfigProvider,
+  useAppSettings,
+  useConfigLoaded,
+} from '../../../src/renderer/config/config-store.js';
 import { NotificationProvider } from '../../../src/renderer/common/notification.js';
 import { ContextMenuProvider } from '../../../src/renderer/context-menu-provider.js';
 import { ConfirmProvider } from '../../../src/renderer/confirm-dialog.js';
@@ -91,6 +95,28 @@ export interface EditorHarness {
    * leaves out. Wrap the call in `act()` — it drives a React state update.
    */
   pushSettings(settings: Record<string, unknown>): void;
+  /**
+   * The settings the mounted tree is holding RIGHT NOW — not the ones `opts.settings` asked for.
+   *
+   * ══ THE TRAP THIS EXISTS TO CLOSE (issue #335) ══
+   *
+   * `opts.settings` is delivered through `config.get()`, which `ConfigProvider` awaits in an
+   * effect. The document arrives on a DIFFERENT promise, through `editor.getContent()`. Waiting
+   * for the document — the thing every test here mounts for — says nothing about whether the
+   * settings have landed, so a test that waits for the text and then asserts on
+   * settings-dependent behaviour is reading a tree still holding `DEFAULT_APP_SETTINGS`.
+   *
+   * It is invisible locally, because both promises are already resolved and the two effects
+   * settle in the same handful of microtasks. On a loaded CI runner it is a coin toss: #335 was
+   * `editor.autoSave` still reading its shipped default of `false`, so the auto-save timer the
+   * test was counting had never been armed and the assertion saw an empty array.
+   *
+   * So a test whose subject is a setting waits on {@link settingsLoaded} — or, better, on the
+   * observable that setting produces — before it asserts anything.
+   */
+  settings(): AppSettings;
+  /** True once `config.get()`'s payload has been applied to the tree (see {@link settings}). */
+  settingsLoaded(): boolean;
   /** Every message the renderer sent back through `editor.dispatch`. */
   readonly dispatched: unknown[];
   /** The live CodeMirror content element. */
@@ -103,6 +129,29 @@ export interface EditorHarness {
 }
 
 const PROJECT = 'proj-editor';
+
+/**
+ * Resolve `value` `ticks` macrotasks from now — zero ticks resolves as a plain promise would.
+ *
+ * Macrotasks rather than microtasks on purpose: a chain of `await`s would still settle inside the
+ * same task, so React could flush everything before any test code ran and the delay would prove
+ * nothing. A `setTimeout(…, 0)` yields to the event loop, which is where the two channels of
+ * issue #335 actually get reordered.
+ */
+function afterTicks<T>(ticks: number, value: T): Promise<T> {
+  if (ticks <= 0) return Promise.resolve(value);
+  return new Promise<T>((resolve) => {
+    let left = ticks;
+    const step = (): void => {
+      if (left-- <= 0) {
+        resolve(value);
+        return;
+      }
+      setTimeout(step, 0);
+    };
+    step();
+  });
+}
 
 export function mountEditor(opts: {
   panelId?: string;
@@ -120,6 +169,17 @@ export function mountEditor(opts: {
    * have one rendering beside the editor.
    */
   withNotices?: boolean;
+  /**
+   * Hold `config.get()`'s answer back by this many macrotasks, so the settings channel provably
+   * loses its race with the document channel (issue #335).
+   *
+   * Zero — the default — changes nothing: the promise resolves as it always did. Any positive
+   * value turns a race that CI loses occasionally into one this machine loses every time, which
+   * is what makes a settings-dependent assertion testable rather than merely lucky. A test that
+   * waits on {@link EditorHarness.settingsLoaded} passes at any value; one that waits only for
+   * the document text fails at 1.
+   */
+  configDelayTicks?: number;
 }): EditorHarness {
   const panelId = opts.panelId ?? 'p-ed';
   const projectRoot = opts.projectRoot ?? 'C:/proj';
@@ -172,7 +232,8 @@ export function mountEditor(opts: {
     panel: { notifyDestroyed: vi.fn(), notifyRenamed: vi.fn() },
     config: {
       get: () =>
-        Promise.resolve(
+        afterTicks(
+          opts.configDelayTicks ?? 0,
           opts.settings ? { settings: opts.settings } : { settings: undefined },
         ),
       /*
@@ -272,10 +333,30 @@ export function mountEditor(opts: {
     panelNames: new PanelNameClient(bridge),
   };
 
+  /**
+   * What the tree's config context holds, refreshed on every render that changes it.
+   *
+   * A witness rather than a second read of `opts.settings`: the question a test needs answered is
+   * whether the PROVIDER has adopted the payload yet, and only something rendered under the
+   * provider can answer that. It sits beside the editor in the same subtree, so it re-renders in
+   * the same commit — when this says the settings have landed, `use-editor`'s `metaRef` is holding
+   * them too.
+   */
+  const witness: { settings: AppSettings | null; loaded: boolean } = {
+    settings: null,
+    loaded: false,
+  };
+  const SettingsWitness = (): null => {
+    witness.settings = useAppSettings();
+    witness.loaded = useConfigLoaded();
+    return null;
+  };
+
   const tree = (): ReactElement =>
     createElement(
       ConfigProvider,
       null,
+      createElement(SettingsWitness, null),
       createElement(
         ServicesProvider,
         { services },
@@ -331,6 +412,13 @@ export function mountEditor(opts: {
     },
     pushSettings(settings: Record<string, unknown>) {
       for (const fn of [...configListeners]) fn({ settings });
+    },
+    settings(): AppSettings {
+      if (!witness.settings) throw new Error('the config provider has not rendered yet');
+      return witness.settings;
+    },
+    settingsLoaded(): boolean {
+      return witness.loaded;
     },
     async openFile(doc: EditorDoc & { absPath: string }) {
       pendingOpens.set(doc.absPath, doc);

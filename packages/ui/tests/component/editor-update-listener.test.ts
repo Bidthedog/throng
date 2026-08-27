@@ -70,14 +70,36 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A mounted editor with auto-save ARMED — a pathed document and a distinctive debounce. */
-async function mounted() {
+/**
+ * A mounted editor with auto-save ARMED — a pathed document and a distinctive debounce.
+ *
+ * ══ THE DOCUMENT ARRIVING IS NOT THE SETTINGS ARRIVING — issue #335 ══
+ *
+ * These mount with `autoSave: true`, and half the assertions below are about what that produces.
+ * But `autoSave` reaches the editor through `config.get()`, which `ConfigProvider` awaits in its
+ * own effect, while the text reaches it through `editor.getContent()` — a DIFFERENT promise, in a
+ * DIFFERENT component. Waiting for the text says nothing about the settings, and the shipped
+ * default for `editor.autoSave` is `false`.
+ *
+ * So the version of this that waited only for the text was asserting against a tree that USUALLY
+ * held the requested settings by then. On a loaded CI runner it did not, the listener took the
+ * `metaRef.current.settings.autoSave` branch with the shipped default, no timer was ever armed,
+ * and "still arms the auto-save timer" failed with an empty array — then passed on a re-run of the
+ * same commit, which is what made it a flake rather than a defect.
+ *
+ * The fix is the same shape as #321's: wait for the precondition the assertion actually depends
+ * on, not for the nearest thing that happens to be observable. `settingsLoaded()` is that
+ * precondition, and the harness renders a witness under the provider to expose it.
+ */
+async function mounted(configDelayTicks = 0) {
   const h = mountEditor({
     panelId: PANEL,
     doc: { text: DOC, version: 1, absPath: PATH },
     settings: { editor: { autoSave: true, autoSaveDebounceMs: AUTO_SAVE_MS } },
+    configDelayTicks,
   });
   await waitFor(() => expect(h.view().state.doc.toString()).toBe(DOC));
+  await waitFor(() => expect(h.settingsLoaded()).toBe(true));
   return h;
 }
 
@@ -166,6 +188,40 @@ describe('a real edit still reports and still arms the save', () => {
     });
 
     expect(autoSaveTimers(spy)).toHaveLength(1);
+  });
+
+  it('still arms it when the settings channel loses its race with the document (#335)', async () => {
+    /*
+     * The regression test for the flake, and the reason it can be one: `configDelayTicks` pushes
+     * `config.get()` far enough behind `editor.getContent()` that the settings ALWAYS arrive
+     * second. Against the version of `mounted()` that waited only for the document text this
+     * fails every run, with the CI wording — "expected [] to have a length of 1 but got +0" —
+     * because `editor.autoSave` was still its shipped default of `false` and no timer was armed.
+     *
+     * Five ticks rather than one: one is enough to lose the race, and four more are there so a
+     * future change that adds a hop to either channel does not quietly turn this back into a
+     * coin toss that passes.
+     */
+    const h = await mounted(5);
+    const spy = vi.spyOn(globalThis, 'setTimeout');
+
+    act(() => {
+      h.view().dispatch({ changes: { from: 0, insert: 'X' } });
+    });
+
+    expect(
+      autoSaveTimers(spy),
+      'the settings must be the ones the test asked for, not the shipped defaults',
+    ).toHaveLength(1);
+  });
+
+  it('holds the requested settings by the time the document is mounted (#335)', async () => {
+    // The precondition itself, asserted directly. Without it the test above could go green for
+    // the wrong reason — a debounce that happened to match, or a default that changed.
+    const h = await mounted(5);
+
+    expect(h.settings().editor.autoSave).toBe(true);
+    expect(h.settings().editor.autoSaveDebounceMs).toBe(AUTO_SAVE_MS);
   });
 });
 
