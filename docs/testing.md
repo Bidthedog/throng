@@ -868,6 +868,46 @@ Two things make this class hard to spot, and both are worth checking for by hand
 So when a value comes back empty rather than wrong, ask what wrote it and *when*, and check that the
 condition you waited on is downstream of that write rather than merely near it.
 
+**…and it may be downstream of a different channel entirely.** The variant above is one write with a
+wait placed too early in it. This one is two writes that never had an ordering, and it is not an E2E
+problem — #335 was a **component** test, which is worth saying out loud, because "flake" reads as
+"Electron, six workers, a real shell" and this needed none of that.
+
+`mount-editor.ts` feeds a mounted editor from two independent promises: the document through
+`editor.getContent()`, and the settings through `config.get()`, which `ConfigProvider` awaits in its
+own effect. Nothing sequences them. `editor-update-listener.test.ts` mounted with
+`autoSave: true`, waited for the document text — the obvious "it is ready" signal, and the one every
+other test in the file needs — and then asserted on a timer that only exists if the *settings* have
+landed:
+
+```ts
+if (metaRef.current.settings.autoSave && configRef.current.filePath) {
+  autoSaveTimer.current = setTimeout(…, metaRef.current.settings.autoSaveDebounceMs);
+}
+```
+
+The shipped default for `editor.autoSave` is `false`, so losing that race arms nothing at all and the
+assertion sees an empty array rather than a wrong number — the same misleading symptom as #321.
+
+Three things generalise from it:
+
+- **Two channels with no barrier are a race even when both promises are already resolved.** Under
+  vitest they settle within a few microtasks of each other, which is why this passed locally,
+  through a full `npm run gate`, and on most CI runs. It failed on a loaded GitHub runner and passed
+  on a re-run of the same commit.
+- **A default that is `false` turns a stale read into an absence.** Had the default been a different
+  *number*, the filter would have found a timer with the wrong delay and said so. Prefer asserting
+  the precondition directly — `mounted()` now also checks `h.settings()` — so a green result cannot
+  come from the defaults.
+- **The fix is a precondition, not a longer wait.** `mountEditor` exposes `settingsLoaded()` from a
+  witness component rendered under the provider, and `configDelayTicks` pushes `config.get()` behind
+  the document deliberately, so the race is lost on *every* run rather than one in a few hundred.
+  A regression test that cannot lose the race is not a regression test.
+
+The general form: **when a test mounts something with configuration, "the subject appeared" is not
+"the configuration arrived".** Wait for the observable that setting produces, or for the setting
+itself.
+
 ## Budgets — the six clocks, and why each is where it is
 
 A test suite that runs six Electron apps at once creates its own load, and every
