@@ -2,6 +2,8 @@
 // contracts/terminal-rpc.md). Commands are request/response; output/exit are
 // JSON-RPC *notifications* (no id) pushed over a long-lived subscribed socket.
 
+import type { KittyKeyboardState } from '@throng/core';
+
 // --- Command methods (request → response) ---
 export const TERMINAL_ATTACH_METHOD = 'terminal.attach';
 export const TERMINAL_WRITE_METHOD = 'terminal.write';
@@ -187,6 +189,21 @@ export interface TerminalAttachResult {
    * buffer and reclaims keys the program owns: measured as Ctrl+End dying after a tab switch.
    */
   altScreen?: boolean;
+  /**
+   * What the program has negotiated about the KEYBOARD (#290) — the same fact as `altScreen` above,
+   * for the other half of what a rebuilt view must be told rather than left to work out.
+   *
+   * The view used to reconstruct this from two sources at once: the renderer's own panel store, and
+   * the replayed scrollback tail, which still contains the sequences that produced what the store
+   * holds. Applying both counts every `CSI > flags u` push twice, and since the protocol is a stack
+   * the program's matching pop then only cancels the duplicate — leaving throng convinced a program
+   * wants enhanced key reporting after it has said it does not. `programOwnsKeyboard` sticks true,
+   * the scrollback chords are surrendered, and Ctrl+Home / PageUp stop scrolling.
+   *
+   * The daemon reads every byte whether or not a view exists, so it is the one place that can hold
+   * this honestly. Absent only when there is no running session to ask.
+   */
+  keyboard?: KittyKeyboardState;
   exit?: { code: number | null; signal?: string };
 }
 

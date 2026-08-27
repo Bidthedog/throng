@@ -11,6 +11,9 @@ import {
   type PtyHandle,
   appendScrollback,
   trackAltScreen,
+  createNegotiationScan,
+  scanKeyboardNegotiation,
+  type NegotiationScan,
   classifyFailure,
   type FailureCause,
 } from '@throng/core';
@@ -117,6 +120,17 @@ interface Session {
    * for nothing before the program's own redraw overwrites it.
    */
   altScreen: boolean;
+  /**
+   * What the program has negotiated about the KEYBOARD (#290) — kitty CSI-u flags and the DEC
+   * private modes, plus any half-read escape sequence carried across a chunk boundary.
+   *
+   * Tracked here for the same reason as `altScreen` directly above: the daemon reads every byte
+   * whether or not a view exists, and a panel in a background tab is unmounted, so a program that
+   * un-negotiates while nobody is looking would otherwise never be heard. A rebuilt view used to
+   * work this out for itself from the store PLUS the replayed tail, which double-counted every
+   * push and left the protocol stuck on. See `negotiation-scan.ts`.
+   */
+  negotiation: NegotiationScan;
   /**
    * The grid is stale because every view has gone (028 follow-up). The next attach MUST push a real
    * resize even when the recomputed grid equals the stored one, because the program needs a window
@@ -437,6 +451,7 @@ export class TerminalService {
           grid: existing.grid,
           redrawn,
           altScreen: existing.altScreen,
+          keyboard: existing.negotiation.state,
         };
       }
       this.terminate(existing);
@@ -521,6 +536,7 @@ export class TerminalService {
       grid: { cols: startCols, rows: startRows },
       scrollback: '',
       altScreen: false,
+      negotiation: createNegotiationScan(),
       gridStale: false,
       status: 'running',
       userKilled: false,
@@ -543,6 +559,8 @@ export class TerminalService {
       host.onData(handle, (chunk) => {
         session.scrollback = appendScrollback(session.scrollback, chunk, MAX_SCROLLBACK);
         session.altScreen = trackAltScreen(session.altScreen, chunk);
+        // #290 — the other half a rebuilt view must be TOLD rather than left to infer.
+        session.negotiation = scanKeyboardNegotiation(session.negotiation, chunk);
         this.events.publishOutput(panelId, chunk);
         if (startupCommandPending) {
           startupCommandPending = false;

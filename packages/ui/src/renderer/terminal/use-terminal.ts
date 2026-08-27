@@ -498,6 +498,19 @@ export function useTerminal(opts: UseTerminalOptions): void {
      * away from yet.
      */
     let kitty = peekKeyboardMode(panelId) ?? createKittyKeyboardState();
+    /*
+     * Is a REPLAYED scrollback tail being parsed right now (#290)?
+     *
+     * The tail is raw bytes and still contains every negotiation sequence the program ever emitted.
+     * Parsing them again applies them a SECOND time on top of the state this view starts from — and
+     * because the kitty protocol is a stack, two pushes against the program's one pop leave it
+     * enabled for good. So while the tail is being written the negotiation handlers below observe
+     * without mutating: the replay is paint, and the daemon's snapshot is the truth.
+     *
+     * Live output is not affected. The flag is cleared in the tail write's own callback, and xterm
+     * parses writes in order, so anything that arrives after the replay is parsed normally.
+     */
+    let replayingTail = false;
     /** Keep the panel's copy in step whenever the program changes what it wants. */
     const rememberKitty = (): void => saveKeyboardMode(panelId, kitty);
     // 028 (#187): which DEC mouse-reporting modes the program has enabled. Tracked at the same
@@ -676,6 +689,9 @@ export function useTerminal(opts: UseTerminalOptions): void {
     const flatten = (params: (number | number[])[]): number[] =>
       params.map((p) => (Array.isArray(p) ? (p[0] ?? 0) : p));
     const onKittyCsi = (prefix: KittyCsiPrefix) => (params: (number | number[])[]): boolean => {
+      // Replayed tail: already accounted for in what the daemon handed us, and answering a `?`
+      // query from it would reply to a handshake the program completed long ago (#290).
+      if (replayingTail) return true;
       const { state, reply } = applyKittyCsi(kitty, prefix, flatten(params));
       kitty = state;
       rememberKitty();
@@ -737,8 +753,16 @@ export function useTerminal(opts: UseTerminalOptions): void {
          * Who is READING is a different question, and the encoders answer it themselves from
          * bracketed paste. Tracking stays faithful; the decisions stay informed.
          */
-        kitty = applyDecPrivateMode(kitty, modes, enable);
-        rememberKitty();
+        // #290 — same rule as the kitty handler: a replayed tail must not re-negotiate. The
+        // daemon tracks win32-input and bracketed paste too, so the state it handed over already
+        // reflects these bytes.
+        if (!replayingTail) {
+          kitty = applyDecPrivateMode(kitty, modes, enable);
+          rememberKitty();
+        }
+        // Mouse reporting is NOT suppressed: the daemon does not track it, so the replayed tail is
+        // this view's only source for it, and unlike the kitty stack these modes are idempotent
+        // flags that re-applying cannot corrupt.
         mouseReporting.apply(modes, enable); // 028 (issue 187) — same snoop, second question
         return false; // observe only — never claim the sequence
       };
@@ -1080,7 +1104,28 @@ export function useTerminal(opts: UseTerminalOptions): void {
         // overwritten anyway. Recorded so a test can assert on it rather than on flicker.
         (window as unknown as { __throngLastReplayBytes?: number }).__throngLastReplayBytes =
           res.scrollback?.length ?? 0;
-        if (res.scrollback) term.write(res.scrollback);
+        /*
+         * ADOPT what the program has negotiated, rather than working it out again (#290).
+         *
+         * This view may never have seen the negotiation — a panel in a background tab is unmounted,
+         * and a program that turns enhanced key reporting off while nobody is watching was simply
+         * not heard. The daemon reads every byte regardless, so it is asked instead.
+         *
+         * Before the replay, deliberately. The tail still contains the sequences that produced this
+         * very state, so letting it re-apply them on top would count each push twice and leave the
+         * protocol stuck on — which is the defect. `replayingTail` mutes the handlers for exactly
+         * the span of the tail.
+         */
+        if (res.keyboard) {
+          kitty = res.keyboard;
+          rememberKitty();
+        }
+        if (res.scrollback) {
+          replayingTail = true;
+          term.write(res.scrollback, () => {
+            replayingTail = false;
+          });
+        }
         // Scrollback is applied — open the gate and flush any live output that
         // arrived during the attach window, in order, after the backlog.
         for (const chunk of gate.release()) writeChunk(chunk);

@@ -101,6 +101,11 @@ export {
   type WheelRoute,
 } from './wheel-decision.js';
 export { trackAltScreen } from './alt-screen.js';
+export {
+  createNegotiationScan,
+  scanKeyboardNegotiation,
+  type NegotiationScan,
+} from './negotiation-scan.js';
 export { encodeModifiedKey, kittyReportsAllKeys, KITTY_REPORT_ALL_KEYS } from './kitty-keyboard.js';
 export {
   terminalReloadAction,
