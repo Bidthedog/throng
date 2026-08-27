@@ -130,7 +130,6 @@ export const COVERED: ReadonlyMap<string, string> = new Map([
   ['focus.cycle', 'cycling panel focus both ways'],
   ['focus.cycleBack', 'cycling panel focus both ways'],
   ['view.fullscreen', 'fullscreen'],
-  ['focus.notice', 'the notice chord over a focused terminal'],
 ]);
 
 /**
@@ -147,6 +146,17 @@ export const COVERED: ReadonlyMap<string, string> = new Map([
  */
 export const COVERED_ELSEWHERE: ReadonlyMap<string, { spec: string; press: string }> = new Map([
   ['menu.open', { spec: 'menu-keyboard.e2e.ts', press: 'Shift+F10' }],
+  /*
+   * 041 FR-020a — `Ctrl+Alt+M` takes the letter branch, so it belongs in this file's subject, and it
+   * is deliberately not in it. What the requirement claims is that a REAL SHELL does not swallow the
+   * chord, and this file's shared app has no terminal: adding one would make every test in it pay
+   * for a `cmd` launch, and the assertion still needs a notice on screen to move focus TO.
+   *
+   * It lived here for one commit as a press over the focused EDITOR against an empty notice stack,
+   * which asserted nothing — an inert binding passes that identically (T062, FR-029). Its real home
+   * builds the shell and the notice it needs.
+   */
+  ['focus.notice', { spec: 'notice-focus-chord.e2e.ts', press: 'Control+Alt+M' }],
 ]);
 
 /**

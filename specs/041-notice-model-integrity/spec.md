@@ -346,6 +346,11 @@ with the keyboard. Escape returns focus where it started.
 - **FR-008c**: A notice whose display mode is **Dismiss only** has no timer to restart; it MUST pulse
   and otherwise be unaffected. A notice whose severity is set to **Never display** MUST NOT be raised
   or pulsed — the existing notification preferences continue to govern, unchanged by this feature.
+- **FR-008ca**: FR-008c is **already honoured** and MUST be kept so by a guard rather than
+  implemented. Both halves fall out of where the pulse was added: `flash` restarts a timer only where
+  one exists, so **Dismiss only** is unaffected without a branch saying so, and **Never display** is
+  refused before a notice is ever raised, so there is nothing to pulse. Its task list is therefore
+  tests and no implementation, which is not an omission.
 - **FR-008d**: No repeat count MUST be rendered on a row. The pulse is the signal; a count is a new
   element inside a height-bounded list (030 FR-032) and was not asked for.
 - **FR-008e**: Repeats arriving while a pulse is still running MUST be **absorbed into it** rather
@@ -372,6 +377,11 @@ with the keyboard. Escape returns focus where it started.
   still confirmed.
 - **FR-012**: Suppression MUST be scoped to the live notice. Once it is dismissed or has timed out,
   the same cause defeating the same casualty MUST raise a fresh notice (030 FR-037a).
+- **FR-012a**: FR-012 is **already honoured** and MUST be kept so by a guard rather than implemented.
+  It is structural rather than coded: a repeat is absorbed only by finding a matching notice **in
+  `live.current`**, and dismissal removes the notice from that list — so a raise after a dismissal
+  finds nothing to merge into and takes the fresh-notice path by default. Nothing needs to expire a
+  suppression because nothing outlives the notice.
 
 #### Group 3 — A refusal is not a document (#327)
 
@@ -413,6 +423,11 @@ with the keyboard. Escape returns focus where it started.
   banner behaviour (030 FR-038). This feature changes only whether a panel is **created**.
 - **FR-017**: Panel creation that is not an open-a-file action — workspace restore, an explicit
   new-panel command — MUST be unaffected.
+- **FR-017a**: FR-017 is **already honoured** and MUST be kept so by a guard rather than implemented.
+  The refusal is consulted in exactly one place — `refusalFor` inside `editor-coordinator.ts`'s
+  `openInto` — and restore and the new-panel command reach neither. The requirement is a statement
+  about a boundary that already exists, so a guard that watches it is the whole of the work; an
+  implementation task would have to invent something to change.
 - **FR-018**: A notice row MUST render the subject's path **relative to the project root**, never the
   absolute path. The notice already names the project (030 FR-031), so the root is context and is
   elided — the same principle 030 FR-022a applies to the project and tab parts of a panel name.
@@ -476,6 +491,11 @@ with the keyboard. Escape returns focus where it started.
   under them.
 - **FR-021**: From that notice, the casualty list MUST be reachable and scrollable by keyboard
   (030 FR-032b, preserved by FR-060).
+- **FR-021a**: FR-021 is **already honoured** and MUST be kept so by a guard rather than implemented.
+  030 FR-032b gave the list `tabIndex={0}` and its own scroll box, so it takes focus and scrolls
+  under the arrow keys today. What #314 adds is a way to GET there in one keystroke (FR-020), not the
+  reachability itself — and the guard exists because a list that quietly loses its tab stop would
+  make the new binding land somewhere unusable while every test about the binding still passed.
 - **FR-022**: Escape MUST return focus to **the element that had focus before the binding was
   pressed**.
 - **FR-022a**: FR-022 holds wherever inside the notice stack focus has since travelled. A user who
@@ -743,6 +763,34 @@ version of the same class of mistake:
   synchronous, never calls `openInto`, and is invoked directly by the explorer's own *Open In → New
   Editor*. The compile-time enforcement the design leans on does not reach a function that never asks
   the question.
+
+### Corrections from the guard review (T062) — 2026-08-27
+
+FR-029 and FR-030 were written to be applied to this feature's own tests at the end, and applying them
+found three things. None is a requirement that was wrong; all three are places where the CODE or the
+TESTS did not do what a requirement already said.
+
+- **The storm guard tested a function production did not call.** `use-explorer-data.ts` shipped with
+  its own ancestor loop, so `isSuppressedByAncestor` — the subject of SC-001's counts and SC-006f's
+  120-permutation sweep — had no production caller. Deleting the renderer's suppression outright left
+  every one of those assertions green, which is FR-029's failure mode in its purest form: the rule had
+  two statements and the tests exercised the one that never ran. The renderer now delegates, and
+  `explorer-storm-suppression.test.ts` covers the half core cannot see — that the renderer asks.
+  **The lesson generalises past this feature**: "is the function under test on the path that produces
+  the outcome?" is a different question from "does the test assert an outcome", and only the first
+  would have caught this.
+- **The one E2E asserted nothing.** It pressed the chord over an editor with an empty notice stack and
+  asserted the editor still had focus — true whether the binding resolves, is inert, or does not
+  exist. It has been replaced by one that builds a real shell and a real notice and asserts that focus
+  MOVED. FR-030 is usually read as "do not park it too high"; this is the same rule from the other
+  side, where a test high enough to be expensive was not doing the work that justified the height.
+- **FR-020 was not honoured for most notices.** It says "the most recent notice on screen", and
+  `focusMostRecentNotice` targeted the most recent notice **carrying a casualty list** — so on a
+  rename collision, a refused delete or a failed watcher the binding did nothing, and where a plain
+  notice was newest than a list-carrying one it walked BACKWARDS to the older, which FR-020d forbids
+  in as many words. The code was wrong rather than the requirement: FR-020 is unqualified, FR-024
+  scopes "do nothing" to *no notice on screen*, and neither admits a third state where a notice is
+  present and unreachable. Fixed by targeting the newest notice card and preferring its list within.
 
 ---
 
