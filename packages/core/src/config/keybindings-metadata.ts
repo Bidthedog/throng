@@ -80,6 +80,12 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Cycle focus backward',
     'Move focus to the previous panel in layout order, wrapping at the start.',
   ),
+  chord(
+    'focus.notice',
+    'Focus & Zoom',
+    'Focus the most recent notice',
+    'Move focus to the newest notice on screen so its list can be read and scrolled by keyboard. Does nothing when there is no notice.',
+  ),
 
   // View
   chord('view.fullscreen', 'View', 'Toggle fullscreen', 'Enter or leave fullscreen mode.'),

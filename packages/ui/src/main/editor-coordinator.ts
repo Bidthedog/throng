@@ -184,6 +184,29 @@ export interface CoordinatorDeps {
   /** Watch a folder for external file changes — powers soft change-detection
    *  (FR-028). Omitted in tests that don't exercise it. */
   fileWatcher?: IFileWatcher;
+  /**
+   * 041 FR-013 (#327) — would opening this path be REFUSED, and why? `undefined` means it would not.
+   *
+   * Injected rather than called directly, for the reason the rest of this interface is: the
+   * coordinator decides WHAT to do about an open, and the filesystem question belongs to whatever
+   * owns the filesystem. It also lets the unit suite drive every refusal reason — including the one
+   * that matters most, a MISSING file coming back openable — without a real file of each kind.
+   *
+   * Omitted in tests that do not exercise it, which is what keeps the existing suite unchanged.
+   */
+  refusalFor?: (absPath: string, ownership?: OpenOwnership) => Promise<string | undefined>;
+}
+
+/**
+ * What the caller knows about ownership when it asks to open a path (041 FR-013).
+ *
+ * Only `out-of-tree` needs it, and only main's confinement rule can decide that — from roots main
+ * knows per REGISTERED document, of which a first-time open has none. Hence the caller's.
+ */
+export interface OpenOwnership {
+  ownerKind: EditorOwnerKind;
+  ownerRoot: string | null;
+  allProjectRoots: readonly string[];
 }
 
 export class EditorCoordinator {
@@ -488,9 +511,43 @@ export class EditorCoordinator {
     }
   }
 
-  /** FR-011a: focus the existing editor for an already-open path, else open new. */
-  openInto(absPath: string): OpenDecision {
-    return openOrFocus(this.registry, absPath);
+  /**
+   * FR-011a: focus the existing editor for an already-open path, else open new — or REFUSE.
+   *
+   * ══ 041 FR-013 (#327): THE REFUSAL IS DECIDED HERE, BEFORE A PANEL EXISTS ══
+   *
+   * Opening a too-large file with no editor panel open used to CREATE one, show the refusal inside it
+   * as a banner, and raise no notification — leaving the user holding a panel for a file that was
+   * never opened. With a panel already open, the same action correctly produced a notification and no
+   * panel. One action, two outcomes, decided by unrelated workspace state.
+   *
+   * The cause was ordering: `createDedicatedEditor` built the panel before anything read the file, so
+   * the first moment the refusal was knowable was already too late. This asks first.
+   *
+   * ══ WHY IT RIDES ON THIS CALL ══
+   *
+   * Every entry point that can create a panel already awaits this decision, so the refusal costs no
+   * round-trip — where a separate probe would make an ACCEPTED file pay two in order to save a refused
+   * one a panel. And a caller that fails to handle `refuse` fails to COMPILE, which is what makes
+   * FR-013a's "every entry point" a property of the type rather than a convention to remember.
+   *
+   * ══ THE OWNERSHIP CONTEXT IS THE CALLER'S, AND MUST BE ══
+   *
+   * `out-of-tree` is a refusal about the PROJECT ROOTS, and main knows those only per registered
+   * document — there is no registered document for a file being opened for the first time, which is
+   * exactly the case this decides. So the renderer supplies them, the same way it already does for
+   * `load`. Optional, and its absence narrows the check rather than skipping it: a caller that cannot
+   * name the roots still gets `folder`, `too-large` and `binary`, and never a false `out-of-tree`.
+   *
+   * A MISSING file returns `open` (FR-015). Its panel is what holds the recovered buffer, and
+   * refusing it here would delete 018's recovery path without a single failing test near the editor.
+   */
+  async openInto(absPath: string, ownership?: OpenOwnership): Promise<OpenDecision> {
+    const decision = openOrFocus(this.registry, absPath);
+    if (decision.action !== 'open') return decision;
+
+    const reason = await this.deps.refusalFor?.(absPath, ownership);
+    return reason ? { action: 'refuse', reason } : decision;
   }
 
   isOpen(absPath: string): boolean {

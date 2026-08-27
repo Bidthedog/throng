@@ -121,6 +121,80 @@ function locate(layout: WorkspaceLayout | null | undefined, panelId: string): Pl
  * handler without re-arming anything. The layout and the project list are read through refs for the
  * same reason: this must not re-raise every time a panel is dragged.
  */
+/**
+ * 041 FR-014 (#327) — a refusal that never had a panel, and could not report through the one above.
+ *
+ * ══ THE TRAP THIS EXISTS TO AVOID ══
+ *
+ * `useReportPanelFailure` opens with `const place = locate(...); if (!place) return;`. That guard is
+ * CORRECT and stays: a panel destroyed between the failure and the render that reports it must not
+ * get an invented row (030 FR-027).
+ *
+ * But FR-013 stops creating a panel for a refused open — so a refusal routed through that hook takes
+ * the early return and the user is told NOTHING. "No panel is created" would silently become "no
+ * panel and no notification", which is worse than the defect being fixed and would look, from every
+ * test that only counts panels, exactly like success.
+ *
+ * So a refusal reports through here instead. Same notice, same consolidation, same project heading —
+ * the row simply carries a SUBJECT rather than a panel, which is what `AffectedSubject` is for.
+ */
+export interface SubjectFailureReport {
+  /** What the open was attempted on — half the casualty's identity (FR-007). */
+  subject: string;
+  /** Why it was refused — the other half. One of `NOT_A_MISSING_FILE`. */
+  reason: string;
+  /** What the user should read. Already spoken — never a raw errno (FR-034). */
+  message: string;
+  /** The path RENDERED on the row, relative to the project root (FR-018). */
+  displayPath: string;
+  /** The absolute path and any raw error. Copy and the log only (FR-018c). */
+  detail?: string;
+  /** Which project the notice is about, so the heading names the right one (030 FR-031). */
+  projectId?: string;
+}
+
+/**
+ * Report an open that was refused before any panel existed.
+ *
+ * Deliberately a sibling of {@link useReportPanelFailure} rather than a branch inside it: the two
+ * differ in what they can locate, not in what they mean, and folding them together would put the
+ * `locate` guard back on a path that must never take it.
+ */
+export function useReportSubjectFailure(): (report: SubjectFailureReport) => void {
+  const { notify } = useNotify();
+  const { layout } = useWorkspace();
+  const { projects } = useProjects();
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
+
+  return useCallback(
+    (report: SubjectFailureReport) => {
+      const projectId = report.projectId ?? layoutRef.current?.projectId;
+      const projectName = projectsRef.current.find((p) => p.id === projectId)?.name;
+
+      notify({
+        severity: 'error',
+        subject: projectName ? { kind: 'project', name: projectName } : { kind: 'none' },
+        action: 'open',
+        message: report.message,
+        testId: PANEL_FAILURE_TEST_ID,
+        groupKey: operationGroupKey(projectId),
+        affected: [
+          {
+            subject: report.subject,
+            reason: report.reason,
+            displayPath: report.displayPath,
+            ...(report.detail ? { detail: report.detail } : {}),
+          },
+        ],
+      });
+    },
+    [notify],
+  );
+}
+
 export function useReportPanelFailure(): (report: PanelFailureReport) => void {
   const { notify } = useNotify();
   const { layout } = useWorkspace();

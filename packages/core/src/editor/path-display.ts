@@ -28,6 +28,38 @@ function leaf(path: string): string {
  * back-slashes, every other platform forward-slashes. Fixes mixed-separator paths
  * (e.g. `D:\git/file.txt`) shown in pills, titles, and dialogs. Pure. No OS/DOM.
  */
+/**
+ * 041 FR-018/FR-018a — a path as a notice ROW shows it: relative to the project root.
+ *
+ * A row for a refused open has no panel, so it cannot render a panel name and renders the path
+ * instead. Relative, because the notice's heading already names the project (030 FR-031) — the same
+ * eliding principle 030 FR-022a applies to the project and tab parts of a panel name. The ABSOLUTE
+ * form stays in the row's `detail`, for Copy and the diagnostics log (FR-018c): this narrows what is
+ * SHOWN, never what is recoverable, and a bug report still needs the full path.
+ *
+ * ══ OUTSIDE THE ROOT, THERE IS NO RELATIVE FORM (FR-018a) ══
+ *
+ * A file outside the project — which `out-of-tree` refusals are BY DEFINITION — gets its path back
+ * unchanged. The alternative is a `../../elsewhere/big.bin`, which is a path the user can neither
+ * recognise nor act on, and which quietly claims a relationship to the project that does not exist.
+ *
+ * The containment test is on SEGMENTS rather than on the string, because `D:/project-two` starts with
+ * `D:/proj` and a prefix check would strip it to `ect-two/big.bin` — a nonsense path presented as
+ * though it were inside the project.
+ */
+export function relativeToRoot(path: string, root: string | undefined | null): string {
+  if (!root) return path;
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  const rootParts = root.split(/[\\/]/).filter(Boolean);
+  if (parts.length <= rootParts.length) return path;
+  // Case-insensitive, because Windows roots are — and the stored root and the reported path may have
+  // been produced by different code paths with different casing of the drive letter alone.
+  for (const [i, part] of rootParts.entries()) {
+    if (parts[i]?.toLowerCase() !== part.toLowerCase()) return path;
+  }
+  return parts.slice(rootParts.length).join('/');
+}
+
 export function toDisplayPath(path: string, os: OsName): string {
   return os === 'windows' ? path.replace(/\//g, '\\') : path.replace(/\\/g, '/');
 }

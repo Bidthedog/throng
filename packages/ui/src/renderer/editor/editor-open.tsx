@@ -1,7 +1,18 @@
 import { useEffect } from 'react';
-import { collectPanels, isPanel, type EditorOpenTarget, type LayoutNode } from '@throng/core';
+import {
+  collectPanels,
+  isPanel,
+  relativeToRoot,
+  toDisplayPath,
+  type EditorOpenTarget,
+  type LayoutNode,
+} from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
+import { useProjects } from '../state/projects-store.js';
 import { useAppSettings } from '../config/config-store.js';
+import { useReportSubjectFailure } from '../workspace/panel-failure-notice.js';
+import { missingFileMessage } from './editor-missing-notice.js';
+import { drainRefusedOpens, publishRefusedOpen, useRefusedOpens } from './refusal-store.js';
 import { getEditorActions } from './editor-actions.js';
 import { getEditorState } from './editor-state.js';
 import { getLastActiveEditor, setLastActiveEditor } from './last-active-editor.js';
@@ -19,6 +30,41 @@ export function EditorOpenListener(): null {
   const ws = useWorkspace();
   // US7 (#141): the default open target for a file-tree open (last active editor, or a new one).
   const openTarget = useAppSettings().editor.openTarget;
+
+  /*
+   * 041 FR-014 (#327) — turn refused opens into notices.
+   *
+   * This component is where the two halves meet: `openFileInTab` and friends are modules and cannot
+   * hold a hook, so they publish, and this drains. Mounted once inside the workspace, so a refusal
+   * from ANY gesture — tree, Quick Open, drop, Open In → New Editor — arrives at one place.
+   *
+   * The alternative was to report through `useReportPanelFailure`, and it cannot work: that hook
+   * opens `if (!place) return`, and after FR-013 there IS no panel. "No panel is created" would have
+   * become "no panel and no notification" — worse than the defect, and invisible to any test that
+   * only counts panels.
+   */
+  const refused = useRefusedOpens();
+  const reportSubject = useReportSubjectFailure();
+  const { projects } = useProjects();
+  const osName = window.throng?.osName ?? 'windows';
+  const projectId = ws.layout?.projectId;
+  const projectRoot = projects.find((p) => p.id === projectId)?.rootFolder;
+  useEffect(() => {
+    if (refused.length === 0) return;
+    for (const { absPath, reason } of drainRefusedOpens()) {
+      reportSubject({
+        subject: absPath,
+        reason,
+        message: missingFileMessage(reason),
+        // FR-018 — the row renders the path RELATIVE to the project root, because the notice's
+        // heading already names the project. The absolute form stays in `detail` (FR-018c).
+        displayPath: relativeToRoot(absPath, projectRoot),
+        detail: `${toDisplayPath(absPath, osName)} (${reason})`,
+        ...(projectId ? { projectId } : {}),
+      });
+    }
+  }, [refused, reportSubject, osName, projectRoot, projectId]);
+
   useEffect(() => {
     const handler = (e: Event): void => {
       const detail = (e as CustomEvent).detail as { absPath?: string } | undefined;
@@ -88,10 +134,18 @@ export async function openFileInTab(
   //    #68). This holds regardless of the open-target preference (US7 / FR-027).
   //    Counts as opened: the file the caller asked for is what the user is now looking at, whether
   //    this window raised it or UI-main raised the window holding it.
-  const decision = await window.throng?.editor?.openInto({ absPath });
+  const decision = await window.throng?.editor?.openInto({ absPath, ownerKind: 'project', ownerProjectId: ws.layout?.projectId });
   if (decision?.action === 'focus') {
     focusPanelIfLocal(ws, decision.panelId);
     return true;
+  }
+  // 041 FR-013 (#327) — throng will not open this file, so NO PANEL IS CREATED, and the refusal goes
+  // to the sink `EditorOpenListener` drains into a notice. Published rather than returned because
+  // FR-013a binds every entry point, and a reason each caller must remember to forward is a rule the
+  // next entry point will forget — which is how `openFileInNewEditor` came to bypass this check.
+  if (decision?.action === 'refuse') {
+    publishRefusedOpen({ absPath, reason: decision.reason });
+    return false;
   }
 
   const layout = ws.layout;
@@ -166,9 +220,15 @@ export async function openFileInPanel(
   absPath: string,
 ): Promise<void> {
   // 1) Already open anywhere → focus that one editor (no second buffer, FR-011a).
-  const decision = await window.throng?.editor?.openInto({ absPath });
+  const decision = await window.throng?.editor?.openInto({ absPath, ownerKind: 'project', ownerProjectId: ws.layout?.projectId });
   if (decision?.action === 'focus') {
     focusPanelIfLocal(ws, decision.panelId);
+    return;
+  }
+  // 041 FR-013 — a drop of a refused file. Note this returns before the `actions` fallback below,
+  // which would otherwise route to `openFileInTab` and create the tab's dedicated editor.
+  if (decision?.action === 'refuse') {
+    publishRefusedOpen({ absPath, reason: decision.reason });
     return;
   }
 

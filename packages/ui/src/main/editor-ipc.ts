@@ -246,9 +246,33 @@ export function registerEditorIpc(coordinator: EditorCoordinator, deps: EditorIp
     });
   });
 
-  ipcMain.handle('throng:editor:openInto', (_event, raw: Record<string, unknown>) => {
+  ipcMain.handle('throng:editor:openInto', async (event, raw: Record<string, unknown>) => {
     const absPath = String(raw.absPath);
-    const decision = coordinator.openInto(absPath);
+    /*
+     * 041 FR-013 — the ownership context comes from `authoritative`, NOT from the renderer.
+     *
+     * The first draft of this took `ownerRoot` and `allProjectRoots` off the payload, which is
+     * exactly what the comment on `authoritative` above exists to forbid: a renderer supplying the
+     * roots is choosing the rule it is about to be judged by, and can hand over an empty list to make
+     * "outside every project" vacuously false. 018 US9 settled that, and this must not reopen it —
+     * the refusal check runs the same confinement rule as `load`, so it needs the same authority.
+     *
+     * Fails CLOSED in the same direction `load` does: if the project list is unavailable we decline
+     * to REFUSE rather than declining to open. A refusal invented from an unknown root list would
+     * stop a user opening a file that is perfectly in scope, which is worse than the panel that
+     * FR-013 is removing.
+     */
+    const meta = await authoritative(toMeta(event, { ...raw, absPath }));
+    const decision = await coordinator.openInto(
+      absPath,
+      meta
+        ? {
+            ownerKind: meta.ownerKind,
+            ownerRoot: meta.ownerRoot,
+            allProjectRoots: meta.allProjectRoots,
+          }
+        : undefined,
+    );
     if (decision.action === 'focus') coordinator.focusExisting(decision.windowId, decision.panelId);
     return decision;
   });

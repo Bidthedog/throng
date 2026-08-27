@@ -23,6 +23,14 @@ export type ActionId =
   | 'focus.down'
   | 'focus.cycle'
   | 'focus.cycleBack'
+  /**
+   * 041 FR-020 (#314) — move focus to the most recent notice on screen.
+   *
+   * 030 FR-060a deferred this by name: the affected-panel list is already a tab stop, but nothing
+   * focuses a notice, so reaching one means tabbing through the whole application until focus
+   * happens to land there.
+   */
+  | 'focus.notice'
   | 'view.fullscreen'
   | 'view.toggleProjects'
   | 'view.toggleExplorer'
@@ -164,6 +172,10 @@ export const COMMAND_SCOPES: CommandScopes = {
   'focus.down': EVERYWHERE,
   'focus.cycle': EVERYWHERE,
   'focus.cycleBack': EVERYWHERE,
+  // 041 FR-020a — a notice can be raised while ANY surface has focus, and a terminal is where one
+  // is most likely to appear, because that is where long-running things fail. A narrower scope would
+  // leave it unreachable in exactly the case that motivates the binding.
+  'focus.notice': EVERYWHERE,
   'view.fullscreen': EVERYWHERE,
   'view.toggleProjects': EVERYWHERE,
   'view.toggleExplorer': EVERYWHERE,
@@ -254,6 +266,15 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'focus.down': ['Ctrl+Alt+ArrowDown'],
     'focus.cycle': ['Ctrl+`'],
     'focus.cycleBack': ['Ctrl+Shift+`'],
+    /*
+     * 041 FR-020b — `Ctrl+Alt+M`: unbound, and inside the `Ctrl+Alt` family throng already owns.
+     *
+     * keybindings.ts records that family as being in NEITHER constitutional tier (constitution IV),
+     * so it displaces no hosted line-editor binding and needs no exception. Notices are deliberately
+     * NOT added to the `focus.cycle` ring (FR-020c): the ring is pressed constantly and a notice is
+     * transient, so one timing out mid-cycle would change what the next press does.
+     */
+    'focus.notice': ['Ctrl+Alt+M'],
     'view.fullscreen': ['F11'],
     // 026 / #165 — the pane toggles live in the Ctrl+Alt family, NOT on Ctrl+B / Ctrl+N.
     // Those two belong to the shell: Ctrl+B is readline's `backward-char` (and tmux's prefix key)

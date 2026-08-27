@@ -28,6 +28,7 @@ import { useErrorNotice } from '../common/notification.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { openFileInTab, openFileInNewEditor } from '../editor/editor-open.js';
+import { publishRefusedOpen } from '../editor/refusal-store.js';
 import { getLastActiveEditor } from '../editor/last-active-editor.js';
 import { getEditorState, useDirtyPathKey } from '../editor/editor-state.js';
 import { useActiveEditorFilePath } from '../editor/active-editor-file.js';
@@ -413,8 +414,35 @@ export function FileTree({
             icon: 'add',
             section: 'navigate',
             disabled: alreadyOpen || !activeTabId,
+            /*
+             * 041 FR-013d (#327) — gated HERE, at the call site, not inside `openFileInNewEditor`.
+             *
+             * That function is the one entry point the refusal's compile-time enforcement cannot
+             * reach: it is synchronous and never asks `openInto`, so nothing makes this caller
+             * handle a refusal. And it is the path #327 was reported from.
+             *
+             * The gate goes in the caller because 033 already decided that, in as many words
+             * (`quick-open.tsx`): "That function means force a new panel; making it silently not
+             * force would change a shipped contract under a caller that has already done the check,
+             * and would turn a synchronous call into an asynchronous one for both."
+             *
+             * `openFileInTab` needs no equivalent — it awaits `openInto` on its first line, before
+             * the `openTarget === 'new'` branch reaches this same function.
+             */
             onClick: () => {
-              if (activeTabId) openFileInNewEditor(ws, activeTabId, absPath);
+              if (!activeTabId) return;
+              void (async () => {
+                const decision = await window.throng?.editor?.openInto({ absPath, ownerKind: 'project', ownerProjectId: projectId });
+                if (decision?.action === 'refuse') {
+                  publishRefusedOpen({ absPath, reason: decision.reason });
+                  return;
+                }
+                if (decision?.action === 'focus') {
+                  void openFileInTab(ws, activeTabId, absPath);
+                  return;
+                }
+                openFileInNewEditor(ws, activeTabId, absPath);
+              })();
             },
           },
         ];

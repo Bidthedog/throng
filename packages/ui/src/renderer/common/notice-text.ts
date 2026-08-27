@@ -2,6 +2,8 @@ import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import {
   formatSubject,
   groupAffected,
+  ungroupedAffected,
+  type AffectedRow,
   type AffectedTabGroup,
   type NoticeSubject,
 } from '@throng/core';
@@ -56,8 +58,15 @@ export type NoticePart =
   | { kind: 'message'; text: string }
   /** Arbitrary rendered content — today the editor notice's structured file list. */
   | { kind: 'body'; node: ReactNode }
-  /** The panels one cause defeated, already grouped and formatted by `@throng/core`. */
-  | { kind: 'affected'; groups: readonly AffectedTabGroup[] }
+  /**
+   * The casualties one cause defeated, already grouped and formatted by `@throng/core`.
+   *
+   * `groups` are the rows that have a PANEL, under their tab headings. `ungrouped` are the rows that
+   * do not (041 FR-013: a refused open creates none), which have no tab to sit under and render as
+   * one section after every group. Both travel in ONE part so the drawn list and the copied list
+   * cannot diverge — the reason grouping moved out of the component in the first place.
+   */
+  | { kind: 'affected'; groups: readonly AffectedTabGroup[]; ungrouped: readonly AffectedRow[] }
   | { kind: 'details'; items: readonly string[] };
 
 /**
@@ -144,7 +153,12 @@ export function noticeParts(n: NoticeContent): readonly NoticePart[] {
   if (n.affected?.length) {
     // Grouping, ordering and every rendered name are `@throng/core`'s (`notice/affected.ts`) — pure
     // decisions, made once, so the copied list and the drawn list cannot order or name differently.
-    parts.push({ kind: 'affected', groups: groupAffected(n.affected, { project: projectOf(n.subject) }) });
+    const context = { project: projectOf(n.subject) };
+    parts.push({
+      kind: 'affected',
+      groups: groupAffected(n.affected, context),
+      ungrouped: ungroupedAffected(n.affected, context),
+    });
   }
   if (n.details?.length) parts.push({ kind: 'details', items: n.details });
   return parts;

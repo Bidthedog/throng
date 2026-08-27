@@ -26,6 +26,7 @@ import {
   type IUiSettings,
   type ShippedDefaults,
   type Theme,
+  NOT_A_MISSING_FILE,
 } from '@throng/core';
 import type { IClipboard } from '@throng/core';
 import { createUiContainer, UI_TYPES } from './composition-root.js';
@@ -1216,6 +1217,45 @@ if (isPrimaryInstance)
     // panel-*-sync broadcasts.
     relaySync: (fromWebContentsId, msg) => {
       broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:editor:sync', msg, fromWebContentsId);
+    },
+    /*
+     * 041 FR-013 (#327) — would opening this be refused, and why?
+     *
+     * `EditorService.load` already knows: it runs the confinement rule and the binary sniff and
+     * returns a reason. So the refusal check is that same load, asked before a panel exists, and
+     * the answer is filtered through `NOT_A_MISSING_FILE` — which is what makes a MISSING file come
+     * back OPENABLE (FR-015). Its panel is what holds the recovered buffer, so refusing it here
+     * would delete 018's recovery path with no failing test anywhere near the editor.
+     *
+     * Reading the file twice on the accepted path is the cost, and it is the right trade: the
+     * alternative is a second refusal rule beside the one `load` already applies, and two rules that
+     * must agree about what is openable will eventually disagree.
+     */
+    refusalFor: async (absPath, ownership) => {
+      const result = await editorService.load({
+        absPath,
+        ownerKind: ownership?.ownerKind ?? 'project',
+        ownerRoot: ownership?.ownerRoot ?? null,
+        allProjectRoots: ownership?.allProjectRoots ?? [],
+      });
+      if (result.ok) return undefined;
+      if (!NOT_A_MISSING_FILE.has(result.reason)) return undefined;
+      /*
+       * NEVER INVENT AN `out-of-tree` REFUSAL WITHOUT AN OWNER ROOT.
+       *
+       * `resolveSaveConfinement` falls back to "must be OUTSIDE every project" when a project-owned
+       * document has no `ownerRoot` — so an ordinary in-project file comes back `out-of-tree` the
+       * moment the owner is unknown, and refusing on that would stop the user opening a file that is
+       * perfectly in scope. It is not hypothetical: the first version of this shipped it, and the E2E
+       * suite caught normal opens creating no panel at all.
+       *
+       * Confinement is still enforced — `load` runs the same rule when the panel opens, with the
+       * per-panel ownership it actually has. What is declined here is only the PRE-EMPTIVE refusal,
+       * and only for the one reason that depends on knowing the owner.
+       */
+      const ownerUnknown = (ownership?.ownerKind ?? 'project') === 'project' && !ownership?.ownerRoot;
+      if (result.reason === 'out-of-tree' && ownerUnknown) return undefined;
+      return result.reason;
     },
     // Raise the window that already owns an open file and focus its Panel (FR-011a).
     focusEditor: (windowId, panelId) => {

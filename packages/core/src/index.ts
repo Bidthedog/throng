@@ -9,6 +9,7 @@ export type { IPlatformInfo, OsName } from './abstractions/platform-info.js';
 export type { IClipboard } from './abstractions/clipboard.js';
 export type { ClipboardMode, ClipboardRecord, CursorRange, SelectionShape } from './editor/clipboard-mode.js';
 export { clipboardModeFor, pasteModeFor } from './editor/clipboard-mode.js';
+export { NOT_A_MISSING_FILE, isMissingReason } from './editor/refusal.js';
 // `cut-line` (016, FR-016a) — what Ctrl+X takes when nothing is selected.
 export { cutLine } from './editor/cut-line.js';
 export type { CursorSpan, CutLineResult, LineIndex, LineRef } from './editor/cut-line.js';
@@ -470,6 +471,7 @@ export {
   type OpenDocEntry,
   type OpenDocRegistry,
   type OpenDecision,
+  type RefusalReason,
   createOpenRegistry,
   isOpenAnywhere,
   openOrFocus,
@@ -482,6 +484,7 @@ export {
   projectRootWouldContainOpenEditor,
   editorAutoTitle,
   editorPathParts,
+  relativeToRoot,
   toDisplayPath,
   type EditorPathParts,
   // Language registry, extension-only detection, bounded indentation inference (016).
