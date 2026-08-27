@@ -27,9 +27,34 @@ export function isOpenAnywhere(reg: OpenDocRegistry, absPath: string): boolean {
   return reg.byPath.has(normaliseFolder(absPath));
 }
 
+/** One of `NOT_A_MISSING_FILE` — why throng will not open this file at all (041 FR-013). */
+export type RefusalReason = string;
+
+/**
+ * What to do about an open request.
+ *
+ * ══ `refuse` IS 041's ONLY ADDITION, AND IT IS DELIBERATELY HERE (FR-013) ══
+ *
+ * #327: opening a too-large file with no editor panel open created one, showed the refusal inside it
+ * as a banner, and raised no notification — so the user was left holding a panel for a file that was
+ * never opened. With a panel already open the same action correctly produced a notification and no
+ * panel. One action, two outcomes, decided by unrelated workspace state.
+ *
+ * The obvious design is a separate `probeOpenable` call. It is the wrong one, and the reason is
+ * arithmetic: every open path ALREADY awaits this decision, so a second call would make an accepted
+ * file cost two round-trips in order to save a refused one a panel. A third variant costs none.
+ *
+ * It also makes the rule enforceable rather than remembered. FR-013a binds every entry point that
+ * would create a panel, and a caller that fails to handle `refuse` FAILS TO COMPILE — which is worth
+ * more than a convention, because the one path that skipped the check (`openFileInNewEditor`, which
+ * never asks this question at all) is exactly where the defect was reported from.
+ *
+ * A MISSING file is `open`, never `refuse` (FR-015). Its panel is what holds the recovered buffer.
+ */
 export type OpenDecision =
   | { action: 'focus'; panelId: string; windowId: string }
-  | { action: 'open' };
+  | { action: 'open' }
+  | { action: 'refuse'; reason: RefusalReason };
 
 /** Decide whether to focus the existing editor for `absPath` or open a new one. */
 export function openOrFocus(reg: OpenDocRegistry, absPath: string): OpenDecision {

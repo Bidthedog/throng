@@ -39,11 +39,16 @@ export {
   groupAffected,
   joinedPanels,
   mergeAffected,
+  ungroupedAffected,
+  type AffectedCasualty,
   type AffectedContext,
   type AffectedPanel,
   type AffectedRow,
+  type AffectedSubject,
   type AffectedTabGroup,
 } from './affected.js';
+export { casualtyKey } from './casualty.js';
+export { ancestorsWithinRoot, isSuppressedByAncestor } from './ancestor-suppression.js';
 export {
   noticeLogRecord,
   type NoticeAffectedDetail,

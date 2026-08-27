@@ -362,10 +362,21 @@ declare global {
         }) => Promise<string | null>;
         save: (req: unknown) => Promise<EditorSaveResult>;
         saveAll: (req: unknown) => Promise<EditorSaveAllResult>;
+        /**
+         * 041 FR-013 (#327) — `refuse` is the third answer, and declaring it here is what enforces
+         * FR-013a's "every entry point". A caller that does not handle it fails to COMPILE, which is
+         * worth more than a convention: the one path that skipped the check (`openFileInNewEditor`,
+         * which never asks this question) is exactly where the defect was reported from.
+         */
         openInto: (req: {
           absPath: string;
+          /** 041 — WHICH document, never the confinement rules themselves (018 US9). */
+          ownerKind?: 'project' | 'subworkspace';
+          ownerProjectId?: string;
         }) => Promise<
-          { action: 'focus'; panelId: string; windowId: string } | { action: 'open' }
+          | { action: 'focus'; panelId: string; windowId: string }
+          | { action: 'open' }
+          | { action: 'refuse'; reason: string }
         >;
         isOpen: (absPath: string) => Promise<boolean>;
         list: () => Promise<

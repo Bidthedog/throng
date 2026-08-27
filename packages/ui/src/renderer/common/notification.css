@@ -1,0 +1,88 @@
+/*
+ * 041 FR-008a (#328) — THE PULSE.
+ *
+ * A repeat of a condition already on screen makes the notice LOUDER rather than longer. The state is
+ * set in `notification.tsx` and removed when the pulse ends; this file only decides what it looks
+ * like while it is on.
+ *
+ * ══ WHY ONLY THESE PROPERTIES ══
+ *
+ * `box-shadow` and `transform: scale` are compositor-only: neither reflows, so the notice's layout
+ * box is identical throughout. That is FR-010 as a stylesheet rule rather than a hope — a pulse that
+ * animated `padding`, `border-width` or `font-size` would move the affected-list under a reader who
+ * is part-way down it, and the component test asserting `scrollTop` is unchanged could not see it.
+ *
+ * The scale is deliberately tiny. The notice may be one of several stacked, and a pulse large enough
+ * to overlap its neighbours reads as a new notice arriving — the opposite of the signal it is for.
+ *
+ * ══ REDUCED MOTION ══
+ *
+ * Under `prefers-reduced-motion` the movement goes and the emphasis stays: the shadow still lifts, so
+ * a user who has asked for less motion still gets told the condition recurred. Dropping the cue
+ * entirely would leave them exactly where #328 left everyone — retrying into silence.
+ *
+ * This is the only place the pulse's appearance is decided, and nothing asserts it. The component
+ * test asserts the STATE (`data-pulsing`), because jsdom applies no stylesheet; the look is a design
+ * decision like every other rule in this repository's CSS.
+ */
+
+.notice--pulsing {
+  animation: notice-pulse 600ms ease-out;
+}
+
+/*
+ * 041 FR-025 (#314) — the list SAYS it is focusable, before focus arrives.
+ *
+ * 030 FR-060a's complaint was not only that no binding reached the list; it was that "no cue
+ * indicates the list is a tab stop", so even a user who knows to Tab has no reason to believe there
+ * is anywhere to Tab TO. A focus ring appears only once focus is already there, which is the one
+ * moment the cue is no longer needed.
+ *
+ * A dotted left edge rather than a border: it reads as "there is more here" without drawing a box
+ * that competes with the notice's own card, and it costs no layout — the list's box is unchanged, so
+ * the flash's promise not to move anything (FR-010) still holds.
+ *
+ * The MARKUP is the contract (`data-focusable`, FR-025a); this is only what it looks like.
+ */
+.notice__affected[data-focusable='true'] {
+  border-left: 2px dotted color-mix(in srgb, var(--text-dim) 35%, transparent);
+  padding-left: 6px;
+}
+
+.notice__affected[data-focusable='true']:focus-visible {
+  border-left-style: solid;
+  border-left-color: var(--accent, #4c8dff);
+  outline: 1px solid var(--accent, #4c8dff);
+  outline-offset: 1px;
+}
+
+@keyframes notice-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent, #4c8dff);
+    transform: scale(1);
+  }
+  35% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent, #4c8dff) 45%, transparent);
+    transform: scale(1.012);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notice--pulsing {
+    animation: notice-pulse-still 600ms ease-out;
+  }
+
+  @keyframes notice-pulse-still {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 transparent;
+    }
+    35% {
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent, #4c8dff) 45%, transparent);
+    }
+  }
+}

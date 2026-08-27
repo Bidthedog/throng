@@ -34,7 +34,7 @@ import { PanelRenameSync } from './workspace/panel-rename-sync.js';
 import { PanelDestroySync } from './workspace/panel-destroy-sync.js';
 import { PanelStateSync } from './workspace/panel-state-sync.js';
 import { PanelNameSync } from './workspace/panel-name-sync.js';
-import { useErrorNotice } from './common/notification.js';
+import { focusMostRecentNotice, useErrorNotice } from './common/notification.js';
 import { windowTitle } from './common/window-title.js';
 import { HoverSuppression } from './common/use-hover-suppression.js';
 import { AppClosePrompt } from './app-close-prompt.js';
@@ -192,6 +192,7 @@ export const WINDOW_HANDLED_ACTIONS: ReadonlySet<string> = new Set([
       'focus.down',
       'focus.cycle',
       'focus.cycleBack',
+      'focus.notice',
       'view.fullscreen',
       'view.toggleProjects',
       'view.toggleExplorer',
@@ -354,6 +355,16 @@ function KeybindingsHandler({
           break;
         case 'focus.cycleBack':
           dispatchCycle(-1);
+          break;
+        /*
+         * 041 FR-020 (#314) — focus the most recent notice.
+         *
+         * Dispatched from here rather than from inside the notification provider because the chord
+         * is scoped EVERYWHERE (FR-020a): it has to work while focus is in a terminal, which is
+         * where a notice is most likely to appear. Idempotent and never cycling — see FR-020d.
+         */
+        case 'focus.notice':
+          focusMostRecentNotice();
           break;
         case 'view.fullscreen':
           window.throng?.fullscreenToggle?.();

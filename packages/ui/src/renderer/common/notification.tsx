@@ -14,15 +14,19 @@ import {
 import {
   affectedDetails,
   causeMessage,
+  casualtyKey,
   causeKey,
   formatSubject,
   groupAffected,
+  ungroupedAffected,
   isTransportFailure,
   joinedPanels,
   mergeAffected,
   noticeLogRecord,
   DEFAULT_NOTIFICATION_SETTINGS,
+  type AffectedCasualty,
   type AffectedPanel,
+  type AffectedRow,
   type AffectedTabGroup,
   type FailureCause,
   type NoticeSeverity,
@@ -31,6 +35,7 @@ import {
   type SeverityNotificationSettings,
 } from '@throng/core';
 import { useAppSettings } from '../config/config-store.js';
+import './notification.css';
 import { copyToClipboard } from './clipboard-copy.js';
 import { IconButton } from './icon-button.js';
 import { noticeParts, noticeToText, projectOf, type NoticePart } from './notice-text.js';
@@ -164,7 +169,7 @@ export interface Notice {
    * Ordering, de-duplication and the rendering of every name live in `@throng/core`'s
    * `notice/affected.ts` — pure, and therefore provable without a browser.
    */
-  affected?: readonly AffectedPanel[];
+  affected?: readonly AffectedCasualty[];
   /**
    * The message's and dismiss control's identifiers, where a folded-in surface used its own.
    *
@@ -215,7 +220,7 @@ export type { NoticeSeverity };
  * ordering, de-duplication and per-row formatting rules are pure decisions, and this repository has
  * no jsdom harness — a type declared in the renderer could not have had the unit test T036 asks for.
  */
-export type { AffectedPanel };
+export type { AffectedCasualty, AffectedPanel };
 
 interface NotifyContextValue {
   notify(notice: NoticeInput): void;
@@ -264,11 +269,11 @@ let seq = 0;
  * to it unchanged — which is every notice in the application except the consolidated one.
  */
 function panelIdsOf(input: NoticeInput): readonly string[] {
-  return input.affected?.map((p) => p.panelId) ?? [];
+  return input.affected?.map((c) => casualtyKey(c)) ?? [];
 }
 
 /** Shared empty list, so `mergeAffected`'s "nothing joined" identity check has something to match. */
-const NO_PANELS: readonly AffectedPanel[] = [];
+const NO_PANELS: readonly AffectedCasualty[] = [];
 
 /**
  * What a GROWTH record says (FR-006a).
@@ -280,21 +285,35 @@ const NO_PANELS: readonly AffectedPanel[] = [];
  */
 function growthMessage(
   message: string,
-  joined: readonly AffectedPanel[],
+  joined: readonly AffectedCasualty[],
   project: string | undefined,
 ): string {
   const names = affectedNames(joined, project);
   return names.length === 0 ? message : `${message} Also affecting: ${names.join(', ')}.`;
 }
 
-/** The panels, named `Tab — Panel`, through the one formatter. Used by the log and by the reader. */
+/**
+ * The casualties, named through the one formatter. Used by the log and by the reader.
+ *
+ * 041 — BOTH kinds of row. This projected `groupAffected` alone, which was complete while every
+ * casualty had a panel; after FR-013 a refused open has none, and leaving it would have made the
+ * growth announcement and the log's name list silently blind to exactly the casualties this feature
+ * adds. The same omission `affectedDetails` had, in the surface a screen-reader user hears.
+ *
+ * A panelled row is `Tab — Panel`; a panel-less one is its own label, because there is no tab
+ * heading above it to qualify it with.
+ */
 function affectedNames(
-  affected: readonly AffectedPanel[],
+  affected: readonly AffectedCasualty[],
   project: string | undefined,
 ): readonly string[] {
-  return groupAffected(affected, { project }).flatMap((group) =>
-    group.rows.map((row) => [group.label, row.label].filter(Boolean).join(' — ')),
-  );
+  const context = { project };
+  return [
+    ...groupAffected(affected, context).flatMap((group) =>
+      group.rows.map((row) => [group.label, row.label].filter(Boolean).join(' — ')),
+    ),
+    ...ungroupedAffected(affected, context).map((row) => row.label),
+  ];
 }
 
 /**
@@ -307,6 +326,92 @@ function affectedNames(
  * changes.
  */
 const ANNOUNCE_MS = 1000;
+
+/**
+ * 041 FR-008a/FR-008aa — how long the pulse state stays on.
+ *
+ * Long enough for the CSS animation to run and be seen, short enough that a user retrying at a human
+ * pace gets a distinct pulse per attempt rather than one continuous shimmer. Nothing is measured
+ * against this number: absorption is bound to the pulse being in flight, and the announcement to one
+ * per pulse, so both are about its start and end rather than its length.
+ */
+const PULSE_MS = 600;
+
+/**
+ * 041 US4 (#314) — where focus was before `focus.notice` was pressed.
+ *
+ * ══ WHY A MODULE-LEVEL VALUE AND NOT PROVIDER STATE ══
+ *
+ * The command is dispatched from `app.tsx`, outside the notification provider's subtree, and it must
+ * work while focus is anywhere — including inside a terminal (FR-020a). So the entry point is a plain
+ * function rather than a hook, and the origin it has to remember lives beside it. There is exactly one
+ * notice stack per window, so there is exactly one origin.
+ *
+ * ══ CAPTURED AT THE PRESS, AND NOT RE-CAPTURED BY TAB (FR-022a) ══
+ *
+ * A user may press the chord, then Tab on to a second notice, then press Escape. Re-capturing on each
+ * focus change would send them back to the PREVIOUS NOTICE — still inside the stack they were trying
+ * to leave. So it is written once, when the binding is pressed, and cleared when it is honoured.
+ */
+let focusOrigin: HTMLElement | null = null;
+
+/**
+ * Move focus to the most recent notice's list (FR-020).
+ *
+ * IDEMPOTENT (FR-020d): every press targets the newest notice, and pressing again re-focuses the same
+ * one. It never walks the stack — traversing is Tab's job (FR-023), so this only has to get the user
+ * IN, which is all SC-005 claims. Cycling here would also contradict FR-020c's reason for keeping
+ * notices out of the `focus.cycle` ring: a transient destination makes a constant aid unpredictable.
+ *
+ * With no notice on screen it does NOTHING, and raises nothing to say so (FR-024) — a notice about
+ * the absence of notices is the joke that writes itself and the bug that follows.
+ */
+export function focusMostRecentNotice(): void {
+  const lists = document.querySelectorAll<HTMLElement>('[data-testid="notice-affected"]');
+  const target = lists[lists.length - 1];
+  if (!target) return;
+
+  // Only capture on the way IN. Pressing the chord while already inside the stack must not overwrite
+  // the origin with a notice, or Escape would return the user to where they already are.
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || !active.closest('.notices')) {
+    focusOrigin = active instanceof HTMLElement ? active : null;
+  }
+  target.focus();
+}
+
+/**
+ * Give focus back (FR-022, FR-022b).
+ *
+ * The origin may have been destroyed while the user was reading — its panel closed, its tab went. A
+ * detached element cannot take focus, and calling `.focus()` on one silently leaves focus on
+ * `document.body`, which is nowhere: no keybinding scope resolves there, so the user's next chord
+ * goes to the window and appears to do nothing. So the fallback is explicit and to something real.
+ */
+function restoreFocusFromNotice(): void {
+  const origin = focusOrigin;
+  focusOrigin = null;
+  if (origin?.isConnected) {
+    origin.focus();
+    return;
+  }
+  /*
+   * The application root, found STRUCTURALLY rather than by a selector.
+   *
+   * A first attempt looked for `[data-testid="workspace"], main, #root`, and it was the wrong shape
+   * of answer: a fallback that depends on a particular element existing fails exactly when the tree
+   * is unusual, which is the case it is for. The root is whatever body child is not the notice stack
+   * the user is trying to leave.
+   */
+  const fallback = [...document.body.children].find(
+    (el): el is HTMLElement => el instanceof HTMLElement,
+  );
+  if (!fallback) return;
+  // `focus()` is a no-op on an element with no tabindex, and `-1` makes it programmatically
+  // focusable without adding a tab stop the user would then have to tab past.
+  if (!fallback.hasAttribute('tabindex')) fallback.tabIndex = -1;
+  fallback.focus();
+}
 
 export function NotificationProvider({ children }: { children: ReactNode }): ReactElement {
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -350,8 +455,28 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
    * as the notice stands. That is worse than silence. This region carries the delta instead.
    */
   const [growth, setGrowth] = useState('');
+  /**
+   * 041 FR-011a — what a REPEAT says, for a notice that gained nothing.
+   *
+   * Its own region rather than a share of `growth`: the two carry different facts, and a repeat
+   * overwriting a growth still being read would lose the one that named new casualties.
+   */
+  const [repeat, setRepeat] = useState<{ text: string; seq: number }>({ text: '', seq: 0 });
+  const repeatSeq = useRef(0);
   /** Notice ids that have had their one announcement and are now `aria-live="off"`. */
   const [announced, setAnnounced] = useState<readonly string[]>([]);
+  /**
+   * 041 FR-008aa — the notice ids currently pulsing, as a STATE with a start and an end.
+   *
+   * "Briefly" is deliberately left without a duration in the spec, because nothing here is measured
+   * against the pulse's LENGTH: absorption (FR-008e) is bound to the pulse being in flight and the
+   * announcement (FR-011c) to one per pulse. Both are assertions about its start and end, which a
+   * test can observe directly — where a duration would have to be raced.
+   */
+  const [pulsing, setPulsing] = useState<readonly string[]>([]);
+  const pulseTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  /** `flash` needs `dismiss`, and `dismiss` is declared after it. A ref breaks the cycle. */
+  const dismissRef = useRef<(id: string) => void>(() => {});
 
   /** Mirror the authoritative list into state. The ref moves first; rendering follows it. */
   const publish = useCallback((next: Notice[]) => {
@@ -360,7 +485,7 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
   }, []);
 
   const announceGrowth = useCallback(
-    (joined: readonly AffectedPanel[], project: string | undefined) => {
+    (joined: readonly AffectedCasualty[], project: string | undefined) => {
       const names = affectedNames(joined, project);
       if (names.length === 0) return;
       // Led by the COUNT, because that is the fact a listener needs first and the names are the
@@ -372,12 +497,93 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
     [],
   );
 
+  /**
+   * 041 FR-008a — THE FLASH: pulse the card, restart the timer. Two effects, and no others.
+   *
+   * This replaces two silent `return`s. The model already DETECTED both repeats — a casualty already
+   * listed, and an identical notice raised again — and threw the fact away, so a user re-triggering a
+   * condition got nothing back and concluded it had not registered. Nothing is added to the notice,
+   * nothing in it changes, and no count is rendered (FR-008d).
+   *
+   * ══ ABSORPTION (FR-008e) ══
+   *
+   * A repeat arriving while a pulse is still running restarts the timer but queues NO second pulse.
+   * The pulse is a signal that the condition recurred, not a counter; a queue of them would make the
+   * notice twitch for as long as the user kept trying. `pulseTimers` holding the id IS the in-flight
+   * state, so the check and the guarantee are the same fact rather than two that can disagree.
+   */
+  const flash = useCallback((id: string, subject?: string) => {
+    if (!live.current.some((n) => n.id === id)) return;
+
+    // Restart the dismissal timer FIRST, and unconditionally. FR-008b: this is what stops a notice
+    // expiring while the user is still producing the condition it reports, and it must happen for an
+    // absorbed repeat too — otherwise a fast enough retry loop still loses the notice mid-sequence.
+    const existing = timers.current.get(id);
+    if (existing) {
+      clearTimeout(existing);
+      const behaviour = displaySettings.current?.[live.current.find((n) => n.id === id)!.severity];
+      const timeoutMs = behaviour?.timeoutMs ?? DEFAULT_NOTIFICATION_SETTINGS.error.timeoutMs;
+      timers.current.set(
+        id,
+        setTimeout(() => dismissRef.current(id), timeoutMs),
+      );
+    }
+
+    if (pulseTimers.current.has(id)) return; // absorbed into the pulse already running
+    setPulsing((prev) => (prev.includes(id) ? prev : [...prev, id]));
+
+    /*
+     * 041 FR-011a/FR-011c — ONE ANNOUNCEMENT PER PULSE, emitted from here for that reason.
+     *
+     * It sits below the absorption check so the two cannot disagree: a repeat that was absorbed into
+     * a running pulse has already returned, so it announces nothing. That is the whole bound — no
+     * timing constant of its own, and a guard that counts utterances against pulses rather than
+     * racing a clock.
+     *
+     * A polite region QUEUES rather than interrupts, which is exactly why the bound is needed: ten
+     * rapid retries would otherwise become ten utterances the user must sit through, the audible
+     * form of the row-stacking #328 is about.
+     *
+     * FR-011b — it names the SUBJECT and says the condition recurred, never the list. 030 FR-032a
+     * exists to stop a notice re-reading itself, and this does not weaken it.
+     */
+    /*
+     * The SEQUENCE is what makes an identical repeat announce again, and it is deliberately not part
+     * of the text. A live region speaks when its content CHANGES, so two consecutive repeats of the
+     * same subject produce the same string and the second is silent. Appending a counter or a
+     * timestamp to the sentence would fix that by making a screen reader read the number out.
+     *
+     * So the region is re-keyed on this instead: React mounts a fresh node, the region announces, and
+     * what the user hears is the sentence alone. The counter is also what a test counts, which is how
+     * "utterances equal pulses" (FR-011c) is asserted without inspecting spoken text for a nonce.
+     */
+    setRepeat({
+      text: subject ? `${subject} again.` : 'That happened again.',
+      seq: repeatSeq.current + 1,
+    });
+    repeatSeq.current += 1;
+
+    pulseTimers.current.set(
+      id,
+      setTimeout(() => {
+        pulseTimers.current.delete(id);
+        setPulsing((prev) => prev.filter((p) => p !== id));
+      }, PULSE_MS),
+    );
+  }, []);
+
   const dismiss = useCallback(
     (id: string) => {
       const t = timers.current.get(id);
       if (t) {
         clearTimeout(t);
         timers.current.delete(id);
+      }
+      const pulse = pulseTimers.current.get(id);
+      if (pulse) {
+        clearTimeout(pulse);
+        pulseTimers.current.delete(id);
+        setPulsing((prev) => prev.filter((p) => p !== id));
       }
       // `onDismiss` reaches into a STORE (it is how a migrated error strip says "the failure has been
       // acknowledged"), so it must not run inside a state updater: that is calling another component's
@@ -390,6 +596,9 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
     },
     [publish],
   );
+  // `flash` restarts a dismissal timer, so it needs `dismiss` — which is declared after it because it
+  // is the more fundamental of the two. The ref is the smaller of the two ways round.
+  dismissRef.current = dismiss;
 
   const notify = useCallback(
     (input: NoticeInput) => {
@@ -417,7 +626,7 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
        */
       const fileRecord = (of: {
         message: string;
-        details: readonly AffectedPanel[];
+        details: readonly AffectedCasualty[];
         count?: number;
       }): void => {
         window.throng?.notices?.log?.(
@@ -469,7 +678,16 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
           const existing = target.affected ?? NO_PANELS;
           const incoming = input.affected ?? NO_PANELS;
           const merged = mergeAffected(existing, incoming);
-          if (merged === existing) return; // nothing new: the same event, seen again
+          if (merged === existing) {
+            // 041 FR-008 — the same casualty, reported again. This used to return SILENTLY, which is
+            // the whole of #328's second half: the model knew the repeat was a repeat and told the
+            // user nothing, so a retry looked like it had not registered. Flash instead — the notice
+            // it already has, made louder rather than longer.
+            // The recurring subject is named, never the list (FR-011b). `incoming` is what was just
+            // re-reported, so its first row is the thing the user actually retried.
+            flash(target.id, affectedNames(incoming, project)[0]);
+            return;
+          }
           const joined = joinedPanels(existing, incoming);
           // A MERGE IS AN EVENT TOO (FR-006a). Without this, a user who silenced the severity would
           // have the first batch of casualties in the log and every later one nowhere.
@@ -514,7 +732,7 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
        * subject, so without this clause naming subjects would have made the model SILENTLY DROP the
        * second of two real problems — reintroducing #178 through a door it did not have before.
        */
-      const duplicate = live.current.some(
+      const duplicate = live.current.find(
         (n) =>
           n.severity === input.severity &&
           n.message === input.message &&
@@ -523,7 +741,16 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
           n.testId === input.testId &&
           formatSubject(n.subject ?? { kind: 'none' }) === subject,
       );
-      if (duplicate) return;
+      if (duplicate) {
+        // 041 FR-008 — an identical notice, raised again. The other silent `return`, at the notice
+        // scale rather than the row scale, and the same fix.
+        //
+        // `.find` rather than `.some`: the matching notice has to be IN HAND to flash the right card.
+        // Flashing the most recent live notice instead would pulse the wrong one whenever two are up,
+        // which is exactly when a user most needs the signal to mean something.
+        flash(duplicate.id, subject || undefined);
+        return;
+      }
       // …and the same question asked of the notices the user chose not to see (FR-005b). Without
       // this half a silenced repeat is compared against an empty list and files a record every time,
       // so a severity turned off is LOUDER in the log than the same events displayed (SC-003).
@@ -587,8 +814,8 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
           ? silencedGrowth(silenced.current, shadowKey, panelIds, now)
           : undefined;
       if (shadow?.grew) {
-        const joined = (input.affected ?? NO_PANELS).filter((p) =>
-          shadow.unreported.includes(p.panelId),
+        const joined = (input.affected ?? NO_PANELS).filter((c) =>
+          shadow.unreported.includes(casualtyKey(c)),
         );
         fileRecord({
           message: growthMessage(input.message, joined, project),
@@ -644,7 +871,7 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
         );
       }
     },
-    [announceGrowth, dismiss, publish],
+    [announceGrowth, dismiss, flash, publish],
   );
 
   const clear = useCallback(
@@ -702,8 +929,13 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
         {notices.map((n) => (
           <div
             key={n.id}
-            className={`notice notice--${n.severity}`}
+            className={`notice notice--${n.severity}${pulsing.includes(n.id) ? ' notice--pulsing' : ''}`}
             data-testid={n.testId ?? `notice-${n.severity}`}
+            /* 041 FR-008aa — the pulse as MARKUP, not only as a class the stylesheet reads.
+               jsdom applies no stylesheet, so a pulse expressed only in CSS could be asserted
+               nowhere below an Electron launch, and FR-008e/FR-011c both hang on the pulse having an
+               observable start and end. The class drives the animation; this drives the tests. */
+            data-pulsing={pulsing.includes(n.id) ? 'true' : undefined}
             role={n.severity === 'error' ? 'alert' : undefined}
           >
             <div
@@ -771,6 +1003,24 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
       >
         {growth}
       </div>
+      {/* 041 FR-011a — THE REPEAT, for a notice that did not grow.
+          Its sibling above carries a notice that GAINED a row. This one carries the case where
+          nothing was added at all: the pulse is a visual-only signal, so without this a
+          screen-reader user's retry is met with silence and they cannot tell it registered.
+          Separate region rather than reusing `growth`, because the two say different things and a
+          shared one would make a repeat overwrite a growth still being read. */}
+      <div
+        key={repeat.seq}
+        className="notice-growth-live"
+        data-testid="notice-repeat-region"
+        /* The utterance count, for the guard that asserts one announcement per pulse (FR-011c).
+           NOT part of the spoken text — a counter inside the sentence would be read aloud. */
+        data-announce-seq={repeat.seq}
+        role="status"
+        aria-live="polite"
+      >
+        {repeat.text}
+      </div>
     </NotifyContext.Provider>
   );
 }
@@ -798,7 +1048,7 @@ function NoticePartView({ notice, part }: { notice: Notice; part: NoticePart }):
     case 'body':
       return <Fragment>{part.node}</Fragment>;
     case 'affected':
-      return <AffectedList groups={part.groups} />;
+      return <AffectedList groups={part.groups} ungrouped={part.ungrouped} />;
     case 'details':
       return (
         <ul className="notice__details" data-testid={`${notice.testId ?? 'notice'}-details`}>
@@ -825,13 +1075,25 @@ function NoticePartView({ notice, part }: { notice: Notice; part: NoticePart }):
  * The LIST stays focusable, because a bounded scroll region whose lower rows can only be reached
  * with a wheel is unreadable by keyboard.
  */
-function AffectedList({ groups }: { groups: readonly AffectedTabGroup[] }): ReactElement {
+function AffectedList({
+  groups,
+  ungrouped,
+}: {
+  groups: readonly AffectedTabGroup[];
+  ungrouped: readonly AffectedRow[];
+}): ReactElement {
   /*
    * ALREADY GROUPED, by `noticeParts` (030 FR-049).
    *
    * The grouping used to happen here, which meant the drawn list and the COPIED list each called
    * `groupAffected` for themselves — two paths that could drift in ordering or naming. There is one
    * now, and this component draws what it is handed.
+   *
+   * 041 — TWO KINDS OF ROW, one list. `groups` are the casualties that have a panel; `ungrouped` are
+   * the ones that do not, because FR-013 stopped creating a panel for a refused open. They render
+   * after every group, with no heading, because there is no tab to head them with — and NOT inside a
+   * synthetic group with a blank label, which already means something else (`affected.test.ts` pins
+   * a blank-named tab keeping its rows under an empty heading).
    */
   return (
     <div
@@ -843,6 +1105,19 @@ function AffectedList({ groups }: { groups: readonly AffectedTabGroup[] }): Reac
          and removing it because a mouse works would be the same mistake in the other direction.
          Still NOT a focus trap: Tab leaves, because nothing inside it takes focus of its own. */
       tabIndex={0}
+      /* 041 FR-025/FR-025a — the affordance, IN THE MARKUP.
+         A cue expressed only in the stylesheet could be proven nowhere below an Electron launch,
+         because jsdom applies no CSS — and Constitution V reserves E2E for what no cheaper layer can
+         observe. This attribute is the contract; `notification.css` decides how it looks. */
+      data-focusable="true"
+      /* 041 FR-022 — Escape gives focus back to wherever the binding was pressed from. Bound here
+         rather than on the window so it cannot swallow an Escape meant for a modal or a find bar,
+         which the spec's Assumptions single out as taking precedence. */
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape') return;
+        e.stopPropagation();
+        restoreFocusFromNotice();
+      }}
     >
       {groups.map((group) => (
         <div className="notice__affected-group" key={group.tabId}>
@@ -868,6 +1143,22 @@ function AffectedList({ groups }: { groups: readonly AffectedTabGroup[] }): Reac
           </ul>
         </div>
       ))}
+      {ungrouped.length > 0 ? (
+        <ul className="notice__affected-rows" data-testid="notice-affected-ungrouped">
+          {ungrouped.map((row) => (
+            <li
+              className="notice__affected-row"
+              data-testid="notice-affected-row"
+              /* No `data-panel-id`: there is no panel, and emitting an empty one would let FR-038's
+                 "does every listed panel still show its own failure?" match a row that never had a
+                 panel to show anything. */
+              key={row.displayPath ?? row.label}
+            >
+              {row.label}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

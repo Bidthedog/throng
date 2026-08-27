@@ -43,26 +43,12 @@ export interface LoadErrorEntry {
 /**
  * Reasons a file could not be opened that are NOT "the file isn't there" (018 / US9, FR-061).
  *
- * This used to be spelt `reason !== 'binary' && reason !== 'too-large'`, in two places — a rule that
- * silently classified every OTHER reason as a missing file, including reasons that did not yet exist.
- * So the moment the load path learned to REFUSE a file on ownership grounds, the refusal was announced
- * as a file that "may have been moved, renamed, or deleted", which is not true, and then SUPPRESSED for
- * anyone with missing-file warnings off, which is worse than not true.
- *
- * It is enumerated now, and it is enumerated ONCE — a rule that has to be restated is a rule that will
- * eventually be restated differently.
+ * MOVED TO `@throng/core` by 041 (FR-013c) and re-exported here, so no caller changes. It went
+ * because FR-013 makes MAIN decide whether a file is openable before a panel exists, and main cannot
+ * import a renderer module — one pure domain decision with consumers in two processes, which is
+ * where Constitution II draws the line.
  */
-export const NOT_A_MISSING_FILE: ReadonlySet<string> = new Set([
-  'binary',
-  'too-large',
-  'out-of-tree',
-  'folder',
-]);
-
-/** True when the file could not be opened because it is not there (as opposed to not permitted). */
-export function isMissingReason(reason: string): boolean {
-  return !NOT_A_MISSING_FILE.has(reason);
-}
+export { NOT_A_MISSING_FILE, isMissingReason } from '@throng/core';
 
 /**
  * The sentence for ONE unopenable file.

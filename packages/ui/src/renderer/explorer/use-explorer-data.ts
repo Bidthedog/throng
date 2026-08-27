@@ -18,6 +18,7 @@ import type { NodeApi, TreeApi } from 'react-arborist';
  */
 type OpenMap = { [id: string]: boolean };
 import {
+  ancestorsWithinRoot,
   deletePaths,
   descendantOpenFolders,
   emptyStack,
@@ -207,6 +208,56 @@ function savePersisted(projectId: string, expanded: string[], selectedId: string
   }
 }
 
+/**
+ * 041 FR-003/FR-003c (#278) — is this listing failure a CAUSE, or a casualty of one?
+ *
+ * ══ THE DEFECT ══
+ *
+ * One `git worktree remove` produced five dialogs. Every expanded folder under the removed one
+ * fails its next listing, and each failure mints its own cause key — `path-missing:<folder>`, keyed
+ * on the last segment of the path the errno quotes — so `shouldSuppressForCause` compares five
+ * DIFFERENT keys, matches none, and 029 FR-019's one-cause-one-notice rule never engages. The keys
+ * were never wrong. Four of those five failures simply were not causes.
+ *
+ * ══ WHY IT ASKS THE FILESYSTEM RATHER THAN THE OTHER EVENTS ══
+ *
+ * The tempting implementation waits: buffer the failures briefly, keep the shallowest. 030 FR-036
+ * forbids grouping "by time or by window", and FR-003b does not supersede it — but the stronger
+ * argument is that waiting is unnecessary. "Is an ancestor of this also gone?" is answerable from
+ * this path alone, so a watcher may report the descendants before the folder the user actually
+ * removed and the answer is unchanged. That is what makes SC-006f's permutation sweep meaningful:
+ * the outcome is identical under all 120 arrival orders because no ordering is ever consulted.
+ *
+ * `ancestorsWithinRoot` is core's, deliberately: the caller has to resolve absence for a set of
+ * paths before the pure predicate can be asked, and it can only know WHICH paths by performing the
+ * same walk. Sharing the walk is what stops a call site probing paths the predicate never reads —
+ * which would look correct and suppress nothing.
+ *
+ * A probe that itself fails is treated as PRESENT: refusing to report a real failure because a
+ * check about it was inconclusive is the worse error of the two.
+ */
+async function suppressedByAncestor(
+  relDir: string,
+  rawError: string,
+  projectId: string,
+): Promise<boolean> {
+  // Paths here are project-relative, so the root is the empty prefix and every proper ancestor of
+  // `relDir` is in scope. `relDir` itself is excluded by the walk — it is the thing that failed.
+  const ancestors = ancestorsWithinRoot(relDir, '');
+  for (const ancestor of ancestors) {
+    const stillThere = await window.throng?.files?.exists?.(ancestor).catch(() => true);
+    if (stillThere === false) {
+      // FR-005a — suppression is a PRESENTATION rule. One removal defeating five tree nodes is one
+      // notice and five records, so the screen count falls while the log's does not.
+      console.warn(
+        `[explorer] suppressing "${relDir}" for project ${projectId}: ancestor "${ancestor}" is also gone. ${rawError}`,
+      );
+      return true;
+    }
+  }
+  return false;
+}
+
 export function useExplorerData(
   rootFolder: string | null,
   projectId: string,
@@ -359,6 +410,10 @@ export function useExplorerData(
             console.warn(
               `[explorer] discarding unresolvable persisted path "${relDir}" for project ${projectId}: ${res.error}`,
             );
+          } else if (await suppressedByAncestor(relDir, res.error, projectId)) {
+            // 041 FR-003/FR-003c (#278) — a folder whose ancestor also went is a CASUALTY of that
+            // ancestor's removal, not a cause of its own. Logged, never raised: FR-005a is explicit
+            // that suppression narrows what is SHOWN and never what is recorded.
           } else {
             // FR-025 — "this folder" named nothing; the folder is now the subject, and the action
             // ends where the subject begins: "Couldn't list the contents of Src".
