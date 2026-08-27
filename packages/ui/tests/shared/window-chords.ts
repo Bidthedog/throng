@@ -130,6 +130,7 @@ export const COVERED: ReadonlyMap<string, string> = new Map([
   ['focus.cycle', 'cycling panel focus both ways'],
   ['focus.cycleBack', 'cycling panel focus both ways'],
   ['view.fullscreen', 'fullscreen'],
+  ['focus.notice', 'the notice chord over a focused terminal'],
 ]);
 
 /**

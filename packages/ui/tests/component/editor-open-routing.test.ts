@@ -36,7 +36,7 @@
  * open call) and an empty workspace would satisfy those for free — so each one first asserts the
  * layout it expects to act on.
  */
-import { act, render, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { createElement, useEffect, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { collectPanels, createDefaultLayout, type WorkspaceLayout } from '@throng/core';
@@ -49,6 +49,7 @@ import { FileOpUndoClient } from '../../src/renderer/state/fileop-undo-client.js
 import { PanelNameClient } from '../../src/renderer/state/panel-name-client.js';
 import { ServicesProvider, type Services } from '../../src/renderer/composition-root.js';
 import { WorkspaceProvider, useWorkspace } from '../../src/renderer/state/workspace-store.js';
+import { ProjectsProvider } from '../../src/renderer/state/projects-store.js';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import {
   registerEditorActions,
@@ -84,6 +85,13 @@ function fakeServices(): Services {
           } as TResult);
         case 'workspace.save':
           return Promise.resolve({ ok: true } as TResult);
+        // 041 — `ProjectsProvider` joined the tree so a refused open can name the project its notice
+        // is about. It reads this on mount, and the default `{}` below leaves `projects` undefined,
+        // which the store then calls `.find` on. One project, matching the layout's.
+        case 'projects.list':
+          return Promise.resolve({
+            projects: [{ id: PROJECT, name: 'Proj', rootFolder: 'D:/proj' }],
+          } as TResult);
         case 'document.pruneMissing':
           return Promise.resolve({ pruned: 0 } as TResult);
         case 'fileopUndo.get':
@@ -435,13 +443,21 @@ describe('the open-target preference reaches the routing (US7 / #141)', () => {
         createElement(
           ConfigProvider,
           null,
+          // 041 — `ProjectsProvider` joins the tree because `EditorOpenListener` now turns a refused
+          // open into a notice (FR-014), and naming the project it is about means reading the project
+          // list. The real app has had this provider above everything since the composition root; this
+          // hand-built tree simply had not needed it before.
           createElement(
-            WorkspaceProvider,
-            { client: svc.workspace, activeProjectId: PROJECT },
+            ProjectsProvider,
+            { client: svc.projects },
             createElement(
-              NotificationProvider,
-              null,
-              createElement('div', null, createElement(Probe, null), createElement(EditorOpenListener, null)),
+              WorkspaceProvider,
+              { client: svc.workspace, activeProjectId: PROJECT },
+              createElement(
+                NotificationProvider,
+                null,
+                createElement('div', null, createElement(Probe, null), createElement(EditorOpenListener, null)),
+              ),
             ),
           ),
         ),
@@ -624,5 +640,156 @@ describe('an OS drop types an untyped panel directly (migrated from os-drop.e2e.
 
     expect(panelsIn(live())).toHaveLength(1);
     expect(panelsIn(live())[0]?.config?.filePath).toBe(FILE_A);
+  });
+});
+
+/**
+ * 041 US3 (#327) — A REFUSAL IS NOT A DOCUMENT.
+ *
+ * Opening a file throng will not open used to create a panel when no editor panel existed, show the
+ * refusal inside it as a banner, and raise NO notification — leaving the user holding a panel for a
+ * file that was never opened. With a panel already open, the same action correctly gave a
+ * notification and no panel. One action, two outcomes, decided by unrelated workspace state.
+ *
+ * ══ WHY THESE ARE COMPONENT TESTS ══
+ *
+ * The claim is a panel count in the workspace store and a notice in the provider — neither crosses a
+ * process boundary. This file already stubs `openInto` and asserts panel ABSENCE, which is the whole
+ * reason it exists (see its header). Constitution V asks for the lowest layer that can prove it; what
+ * genuinely needs main is only what `openInto` RETURNS, and that is an integration test.
+ *
+ * ══ THE ASSERTION THAT MATTERS MOST ══
+ *
+ * "Zero panels" alone is satisfied by doing nothing at all, so the notification is asserted beside
+ * it. The failure this feature could most easily ship is turning "no panel is created" into "no panel
+ * AND no notification" — which every panel-counting test on its own would call success.
+ */
+describe('a refused open creates no panel, and still tells the user (FR-013, FR-014)', () => {
+  /** Mounts the listener too — it is what turns a published refusal into a notice. */
+  function mountWithListener(decision: unknown): void {
+    const svc = fakeServices();
+    Reflect.set(window, 'throng', {
+      editor: { openInto: () => Promise.resolve(decision) },
+      panel: { notifyTyped: () => {} },
+      osName: 'windows',
+      notices: { log: () => {} },
+      config: { get: () => Promise.resolve({ settings: {} }), onChange: () => () => {} },
+    });
+    render(
+      createElement(
+        ServicesProvider,
+        { services: svc },
+        createElement(
+          ConfigProvider,
+          null,
+          createElement(
+            ProjectsProvider,
+            { client: svc.projects },
+            createElement(
+              WorkspaceProvider,
+              { client: svc.workspace, activeProjectId: PROJECT },
+              createElement(
+                NotificationProvider,
+                null,
+                createElement('div', null, createElement(Probe, null), createElement(EditorOpenListener, null)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  const REFUSED = 'D:/proj/big.bin';
+
+  it.each([0, 1, 3])('creates no panel with %i editor panels already open (SC-004)', async (existing) => {
+    mountWithListener({ action: 'open' });
+    const ws = await ready();
+    const tabId = tabOf(ws).id;
+
+    // Build the layout this test acts on, and assert it BEFORE any absence claim — an empty
+    // workspace would satisfy "no panel was created" for free.
+    for (let i = 0; i < existing; i += 1) {
+      const id = i === 0 ? panelsIn(live())[0]!.id : live().addPanel(tabId);
+      act(() => live().setPanelType(id as string, 'editor', { filePath: `D:/proj/open-${i}.txt` }));
+      asEditor(id as string);
+    }
+    expect(editorPanels(live())).toHaveLength(existing);
+
+    Reflect.set(window, 'throng', {
+      ...(window as unknown as { throng: Record<string, unknown> }).throng,
+      editor: { openInto: () => Promise.resolve({ action: 'refuse', reason: 'too-large' }) },
+    });
+    await act(async () => {
+      await openFileInTab(live(), tabId, REFUSED);
+    });
+
+    expect(
+      editorPanels(live()),
+      'a panel was created for a file throng refused to open',
+    ).toHaveLength(existing);
+  });
+
+  it.each(['too-large', 'binary', 'out-of-tree', 'folder'])(
+    'refuses %s the same way — the reason does not change the outcome (FR-013)',
+    async (reason) => {
+      mountWithListener({ action: 'refuse', reason });
+      const ws = await ready();
+      const before = editorPanels(ws).length;
+
+      await act(async () => {
+        await openFileInTab(live(), tabOf(live()).id, REFUSED);
+      });
+
+      expect(editorPanels(live())).toHaveLength(before);
+    },
+  );
+
+  it('reports the refusal even though no panel exists to report it (FR-014)', async () => {
+    // The guard against the silent-drop failure. `useReportPanelFailure` opens with
+    // `if (!place) return`, so a refusal routed through it would vanish without a trace — and this
+    // test is what makes shipping that impossible to do unnoticed.
+    mountWithListener({ action: 'refuse', reason: 'too-large' });
+    const ws = await ready();
+
+    await act(async () => {
+      await openFileInTab(live(), tabOf(ws).id, REFUSED);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryAllByTestId('panel-failure-notice').length,
+        'no panel AND no notification — worse than the defect being fixed',
+      ).toBeGreaterThan(0);
+    });
+  });
+
+  it('creates no panel on a DROP either — every entry point, not just the tree (FR-013a)', async () => {
+    mountWithListener({ action: 'refuse', reason: 'too-large' });
+    const ws = await ready();
+    const tabId = tabOf(ws).id;
+    const target = panelsIn(ws)[0]!.id;
+    const before = editorPanels(live()).length;
+
+    await act(async () => {
+      await openFileInPanel(live(), tabId, target, REFUSED);
+    });
+
+    expect(editorPanels(live())).toHaveLength(before);
+  });
+
+  it('still creates a panel for a MISSING file — 018 recovery is untouched (FR-015)', async () => {
+    // The control, and the single highest-value assertion here. A missing file is NOT a refusal: its
+    // panel is what holds the recovered buffer that can be saved back. If this ever goes green by
+    // creating zero panels, 018's recovery path has been deleted with nothing near it failing.
+    mountWithListener({ action: 'open' });
+    const ws = await ready();
+    const before = editorPanels(ws).length;
+
+    await act(async () => {
+      await openFileInTab(live(), tabOf(live()).id, 'D:/proj/gone.txt');
+    });
+
+    expect(editorPanels(live()).length, 'a missing file was treated as a refusal').toBe(before + 1);
   });
 });

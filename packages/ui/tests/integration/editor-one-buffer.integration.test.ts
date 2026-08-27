@@ -56,13 +56,13 @@ describe('app-wide one-buffer registry (006, FR-011a)', () => {
     expect(coordinator.isOpen(file)).toBe(true);
 
     // Window 2 tries to open the same file → focus the existing editor (w1/p1).
-    const decision = coordinator.openInto(file);
+    const decision = await coordinator.openInto(file);
     expect(decision).toEqual({ action: 'focus', panelId: 'p1', windowId: 'w1' });
   });
 
-  it('a fresh path opens; matching is case/separator-insensitive', () => {
+  it('a fresh path opens; matching is case/separator-insensitive', async () => {
     const file = join(root, 'x.txt');
-    expect(coordinator.openInto(file)).toEqual({ action: 'open' });
+    await expect(coordinator.openInto(file)).resolves.toEqual({ action: 'open' });
   });
 
   it('destroying the editor frees the file for a fresh open', async () => {
@@ -71,7 +71,7 @@ describe('app-wide one-buffer registry (006, FR-011a)', () => {
     await coordinator.load(meta('p1', 'w1', file));
     coordinator.destroy('p1');
     expect(coordinator.isOpen(file)).toBe(false);
-    expect(coordinator.openInto(file)).toEqual({ action: 'open' });
+    await expect(coordinator.openInto(file)).resolves.toEqual({ action: 'open' });
   });
 
   it('re-pointing an editor at a new file releases its previous one-buffer claim', async () => {

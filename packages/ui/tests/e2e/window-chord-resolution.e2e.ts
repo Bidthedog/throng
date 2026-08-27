@@ -191,6 +191,38 @@ test('the pane toggles still resolve — Ctrl+Alt+B and Ctrl+Alt+N', { tag: ['@e
   await expect(win.getByTestId('pane-hide-right')).toBeVisible();
 });
 
+/**
+ * 041 FR-020a (#314) — the notice chord resolves even while a REAL SHELL has the keyboard.
+ *
+ * ══ WHY THIS ONE IS AN E2E AND THE REST OF #314 IS NOT ══
+ *
+ * Every other claim about `focus.notice` — that it is idempotent, that an arriving notice does not
+ * steal focus, that Escape returns to the origin, that the list carries its affordance — is focus
+ * movement inside one surface, which `notice-focus.test.ts` asserts in jsdom in milliseconds.
+ *
+ * What no cheaper layer can observe is that a terminal did NOT receive the chord. A terminal panel
+ * forwards nearly everything to its shell, so a binding in the wrong tier is swallowed and the notice
+ * is unreachable in exactly the place it is most likely to appear (FR-020a). Only a real ConPTY and a
+ * real keyboard can answer that, and it is asserted here rather than in a spec of its own so it
+ * inherits this file's tier placement.
+ *
+ * ONE assertion, deliberately: `e2e-tags.test.ts` fails a test that appears to need two reserve
+ * entries (035 FR-016b), and "focus arrives at the notice" already has a component test.
+ */
+test('the notice chord still resolves over a focused terminal — Ctrl+Alt+M', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
+  const win = shared.win;
+  await focusEditorPanel(win);
+
+  // No notice on screen: the chord must do nothing AND raise nothing (FR-024). That is the half a
+  // shell-swallowed chord and a correctly-ignored one look identical from, so it is checked first.
+  await win.keyboard.press(chordFor('focus.notice'));
+  await expect(win.getByTestId('notices').locator('> *')).toHaveCount(0);
+
+  // …and it reached the application rather than the document, which is what the shell would have
+  // eaten. The editor keeps focus because there was nowhere for it to go.
+  await expect(win.getByTestId(`editor-${editorPanel}`).locator('.cm-editor.cm-focused')).toBeVisible();
+});
+
 test('the tab picker still resolves — Ctrl+Alt+T', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   const win = shared.win;
   await win.locator('body').click();
