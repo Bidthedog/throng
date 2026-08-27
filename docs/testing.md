@@ -828,6 +828,46 @@ code for as long as you believe it. Hence the helpers above: they are not shorth
 call, they are the difference between a key that lands where you meant it and one that quietly edits
 your fixture.
 
+**The thing you waited for may not be the thing you are about to read.** Everything above is about
+waiting rather than sleeping; this is the case where you waited on a real condition, correctly, and
+still read too early — because the observable you chose happens *before* the effect you are
+asserting. A wait is only a synchronisation if it is downstream of the write.
+
+`navigation-remember.e2e.ts` lost that one for months (#321). Accepting a Quick Open query ends with
+the modal gone, so the helper waited for `quickopen` to reach count 0 — an honest condition, and the
+wrong one. `quick-open.tsx`'s `choose` calls `onDismiss()` **synchronously** and then does the real
+work in an async IIFE:
+
+```ts
+onDismiss();                                          // the modal disappears HERE
+…
+const opened = await openFileInTab(ws, tabId, absPath, target);
+if (!opened) return;
+if (remember) rememberQuickOpenQuery(query, root);    // …and the query is recorded HERE
+```
+
+That ordering is deliberate and required by 033's FR-061 — "accepted" means a file actually opened,
+so a route the user cancels at the unsaved-changes prompt must record nothing. The helper returned
+between the two, and the caller then read the remembered value with a plain, non-retrying `expect`.
+
+It failed about once in 705 serial executions on a warm machine and **four times in twenty** on a
+cold worktree, where opening the file is slow enough to lose the race reliably. The fix was to wait
+for the file to be on screen — the record's actual precondition — not for the modal to go.
+
+Two things make this class hard to spot, and both are worth checking for by hand:
+
+- **The symptom names the wrong thing.** `Expected: "guide" / Received: ""` reads as "the feature
+  did not remember", so you go looking at the store. The store was fine; nothing had asked it to
+  remember yet.
+- **Instrumenting it can hide it.** A probe that reads state over IPC *before* the assertion adds a
+  round trip, which is enough to let the pending write land: the same spec went 10/10 green with an
+  eager probe in place and 7/10 without it. If a diagnostic makes a flake disappear, that is
+  evidence about the timing, not an exoneration — capture into a global and read it in the failure
+  path only.
+
+So when a value comes back empty rather than wrong, ask what wrote it and *when*, and check that the
+condition you waited on is downstream of that write rather than merely near it.
+
 ## Budgets — the six clocks, and why each is where it is
 
 A test suite that runs six Electron apps at once creates its own load, and every
