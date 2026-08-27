@@ -365,11 +365,29 @@ let focusOrigin: HTMLElement | null = null;
  *
  * With no notice on screen it does NOTHING, and raises nothing to say so (FR-024) — a notice about
  * the absence of notices is the joke that writes itself and the bug that follows.
+ *
+ * ══ THE NEWEST CARD, THEN ITS LIST — NOT THE NEWEST LIST (T062) ══
+ *
+ * This used to look for `[data-testid="notice-affected"]` and take the last one, which is only the
+ * most recent NOTICE when every notice happens to carry a casualty list. Most do not: a rename
+ * collision, a refused delete, a watcher that fell over — each is a sentence and a Dismiss button,
+ * and each is far commoner than the consolidated kind. So the binding did nothing at all on the
+ * notices a user actually meets, and where a plain notice was newest it silently skipped BACKWARDS
+ * to an older one that had a list, which is the stack-walking FR-020d forbids in as many words.
+ *
+ * FR-020 says "the most recent notice on screen" and admits no third state where a notice is present
+ * and unreachable; FR-024 scopes "do nothing" to there being NO notice. So the card is the target and
+ * the list is a preference within it.
+ *
+ * FR-025 is untouched by this. That rule is about a list ANNOUNCING it is focusable before focus
+ * arrives, and a plain notice still has no list to announce — being reachable and advertising a tab
+ * stop are different claims, and only the second belongs to the list.
  */
 export function focusMostRecentNotice(): void {
-  const lists = document.querySelectorAll<HTMLElement>('[data-testid="notice-affected"]');
-  const target = lists[lists.length - 1];
-  if (!target) return;
+  const cards = document.querySelectorAll<HTMLElement>('.notices > .notice');
+  const card = cards[cards.length - 1];
+  if (!card) return;
+  const target = card.querySelector<HTMLElement>('[data-testid="notice-affected"]') ?? card;
 
   // Only capture on the way IN. Pressing the chord while already inside the stack must not overwrite
   // the origin with a notice, or Escape would return the user to where they already are.
@@ -377,6 +395,10 @@ export function focusMostRecentNotice(): void {
   if (!(active instanceof HTMLElement) || !active.closest('.notices')) {
     focusOrigin = active instanceof HTMLElement ? active : null;
   }
+  // A card is not focusable on its own. `-1` makes it programmatically focusable without adding a
+  // tab stop the user would then have to tab past — the same choice `restoreFocusFromNotice` makes,
+  // and the reason FR-023's "tab out again" still behaves as it did.
+  if (target === card && !card.hasAttribute('tabindex')) card.tabIndex = -1;
   target.focus();
 }
 

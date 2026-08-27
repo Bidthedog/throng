@@ -168,6 +168,7 @@ Constitution V requires the **lowest layer that can prove it**. Chosen by what e
 | Requirement | Layer | Why not lower / higher |
 |---|---|---|
 | FR-003c, FR-003d — suppression, order-independence | **unit** | a pure predicate over paths + an injected absence probe. The permutation sweep (SC-006f) is only affordable here |
+| FR-003 — the renderer ASKS, and one cause is one notice | **component** | added by T062. The row above proves the RULE; nothing proved the renderer consults it, and it did not — see `explorer-storm-suppression.test.ts`. A notice count needs a React tree and a notification provider, and nothing more |
 | FR-007, FR-007b–d — identity, merge, ordering | **unit** | pure; `affected.ts`'s existing suite is already at this layer |
 | FR-005a, FR-005b — the log keeps every casualty | **unit** | the log record is a pure projection |
 | FR-004, FR-018, FR-018a — what a row renders | **component** | needs a DOM to prove *absence* of raw error text and presence of a truncated path |
@@ -178,15 +179,22 @@ Constitution V requires the **lowest layer that can prove it**. Chosen by what e
 | FR-015 — what `openInto` returns for each reason | **integration** | this one genuinely crosses renderer → IPC → main |
 | FR-020a — the chord survives a focused terminal | **e2e** | only a real shell can prove it never received the chord |
 
-**E2E is one test, added to an existing file** — not a new spec. It asserts **one thing**: that a real
-shell never receives `Ctrl+Alt+M`. That focus *arrives* at the notice is a component assertion and
-belongs to the Group 4 component tests; splitting them is not tidiness but what
-`packages/ui/tests/unit/e2e-tags.test.ts` enforces, since it fails a test that appears to need two
-reserve entries (035 FR-016b).
+**E2E is one test.** It asserts **one thing**: that a real shell does not swallow `Ctrl+Alt+M`. That
+focus *arrives* at the notice is a component assertion and belongs to the Group 4 component tests;
+splitting them is not tidiness but what `packages/ui/tests/unit/e2e-tags.test.ts` enforces, since it
+fails a test that appears to need two reserve entries (035 FR-016b).
 
-Its home is `packages/ui/tests/e2e/window-chord-resolution.e2e.ts`, which already holds this exact
-family — *"the tab picker still resolves — `Ctrl+Alt+T`"*, an `EVERYWHERE` chord in the same
-`Ctrl+Alt` group. Tags: `['@extended', '@window', '@reserve:input']`.
+**Its home changed during T062, and the reason is worth keeping.** The plan put it in
+`packages/ui/tests/e2e/window-chord-resolution.e2e.ts`, which holds this exact family — *"the tab
+picker still resolves — `Ctrl+Alt+T`"*, an `EVERYWHERE` chord in the same `Ctrl+Alt` group. That file's
+shared app has an editor and **no terminal**, and the assertion needs a notice to move focus TO, so
+what got written there was a press over a focused *editor* against an *empty* notice stack — which an
+inert binding passes identically. The family was the right neighbourhood and the wrong fixture.
+
+It now lives in `packages/ui/tests/e2e/notice-focus-chord.e2e.ts`, which builds the `cmd` and the
+missing-file notice it needs, and `window-chords.ts`'s `COVERED_ELSEWHERE` points the manifest guard at
+it — the mechanism `menu.open` already uses for the same reason. Tags are unchanged:
+`['@extended', '@window', '@reserve:input']`, and so is the budget.
 
 **The two tags come from two separate decisions**, and keeping them separate matters: `@reserve:input`
 (real keyboard and input dispatch, *not* `@reserve:pty`) follows from what the test claims — where a

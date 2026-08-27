@@ -47,6 +47,7 @@
     "navigation-remember.e2e.ts": "FOCUS",
     "notice-a11y.e2e.ts": "CPU",
     "notice-consolidation.e2e.ts": "CPU",
+    "notice-focus-chord.e2e.ts": "CPU",
     "notice-subjects.e2e.ts": "CPU",
     "notification-prefs.e2e.ts": "FOCUS",
     "open-in-terminal.e2e.ts": "FOCUS",

@@ -15,7 +15,8 @@
  * an attribute a test can see — and its appearance is a stylesheet decision like every other.
  *
  * The one thing no cheaper layer can observe is that a REAL SHELL never receives the chord. That is
- * one E2E, in `window-chord-resolution.e2e.ts`, beside the family it belongs to.
+ * one E2E, in `notice-focus-chord.e2e.ts`, which builds the shell and the notice it needs; the
+ * manifest guard finds it through `window-chords.ts`'s `COVERED_ELSEWHERE`.
  */
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { createElement, type ReactElement } from 'react';
@@ -248,5 +249,61 @@ describe('the list says it is focusable BEFORE focus arrives (FR-025, FR-025a)',
     );
 
     expect(screen.getByTestId('n-plain').querySelector('[data-focusable]')).toBeNull();
+  });
+});
+
+/**
+ * FR-020 says "the most recent notice on screen", and says it without qualification.
+ *
+ * A notice only carries a casualty list when a cause defeated something enumerable. Most do not: a
+ * rename collision, a refused delete, a watcher that fell over — each is a sentence and a Dismiss
+ * button, and each is FAR commoner than the consolidated kind. Targeting the newest
+ * `notice-affected` therefore left the binding doing nothing at all on the notices a user actually
+ * meets, and — worse, because it is silent — skipping BACKWARDS past the newest notice to an older
+ * one that happened to carry a list, which is precisely the "walk the stack" FR-020d forbids.
+ *
+ * The affordance rule is untouched by this: FR-025 is about a list ANNOUNCING it is focusable, and a
+ * plain notice still has no list to announce. Being reachable and advertising a tab stop are
+ * different claims, and only the second is the list's.
+ */
+describe('the newest notice wins even when it carries no casualty list (FR-020, FR-020d)', () => {
+  const plain = (id: string): NoticeInput => ({
+    severity: 'error',
+    message: 'A file or folder with this name already exists.',
+    subject: { kind: 'none' },
+    testId: id,
+  });
+
+  it('reaches a notice that carries no list — the commonest kind there is', async () => {
+    const probe = await mount();
+    act(() => probe.notify!(plain('n-plain')));
+
+    const origin = screen.getByTestId('origin');
+    origin.focus();
+    act(() => focusMostRecentNotice());
+
+    expect(
+      document.activeElement,
+      'the binding did nothing — a notice was on screen and FR-024 does not apply',
+    ).not.toBe(origin);
+    expect(
+      screen.getByTestId('n-plain').contains(document.activeElement),
+      'focus landed outside the notice it was supposed to reach',
+    ).toBe(true);
+  });
+
+  it('does NOT skip back to an older notice that happens to carry one', async () => {
+    const probe = await mount();
+    act(() => probe.notify!(raise('n-a', 'Alpha'))); // older, carries a list
+    act(() => probe.notify!(plain('n-plain'))); // newest, carries none
+
+    screen.getByTestId('origin').focus();
+    act(() => focusMostRecentNotice());
+
+    expect(
+      document.activeElement,
+      'the binding walked backwards to an older notice — "most recent" means most recent',
+    ).not.toBe(listOf('n-a'));
+    expect(screen.getByTestId('n-plain').contains(document.activeElement)).toBe(true);
   });
 });

@@ -6,13 +6,20 @@
 
 ---
 
-## Status — 74 of 81, and why the other seven are open
+## Status — 80 of 84, and why the other four are open
 
 Delivered and green: the casualty widening, #278's suppression, #328's flash and
-announcement, #327's refusal path, #314's keyboard route. PR #337 (draft).
+announcement, #327's refusal path, #314's keyboard route, and Group 5's guards —
+reviewed against FR-029/FR-030 (T062) and each proven to go red (T063).
 
-The seven that remain are open for three different reasons, and only the last group is
-ordinary unfinished work:
+The list grew by three. T062 was not a tidy-up: applying FR-029 and FR-030 to this
+feature's own tests found three defects, and each needed a fix rather than a note, so
+each became a task of its own (T062b, T062c, T062d). The worst of them was a guard
+that tested a function production never called — SC-001's counts and SC-006f's
+120-permutation sweep, all green with the renderer's suppression deleted outright.
+That is measured, not argued: the pairing is under T063 below.
+
+The four that remain are open for two reasons, and neither is ordinary unfinished work:
 
 **Not reproducible — T015, T016, T020.** #278 declares a *second* defect: a raw
 `ENOENT: no such file or directory, realpath '<path>'` rendered as the notice's second
@@ -29,11 +36,9 @@ supplies the reproduction.
 [quickstart.md](./quickstart.md#7-regression-watch) is the developer's to perform; it is
 not automatable and not the implementer's to tick.
 
-**Genuinely outstanding — T062, T062a, T063.** The guard review against FR-029/FR-030, the
-labelling of already-true requirements, and FR-030a's sensitivity proof (revert each
-guard's fix once, observe *that* guard fail, record the pairing in the PR). T063 is the one
-with teeth: a guard nobody has watched go red is an assertion that it would, which is
-precisely the assumption Group 5 exists to stop making.
+Nothing else is outstanding. T062, T062a and T063 — the guard review, the labelling of
+already-true requirements, and FR-030a's sensitivity proof — are done, and the three
+defects the review turned up are fixed, tested and proven sensitive.
 
 ---
 
@@ -323,10 +328,34 @@ Three shipped requirements stopped being honoured with nothing failing. These ta
 happening again, and FR-029 is the part that matters: a guard asserts the **observable outcome**, not
 the shape of the code that currently produces it.
 
-- [ ] T062 Review every test added in Phases 3–6 against **FR-029 and FR-030**. FR-029: each must assert a notice count, a row count, a panel count or the absence of raw error text — never the presence of a particular function or module; rewrite any that would pass a refactor while the requirement was broken. FR-030: re-check each test's **layer** against what its assertion actually needs, because the layer decisions were made in the plan and nothing else revisits them at the end. Two specific traps this feature already fell into once each — an assertion parked at integration that crosses no boundary, and a visual claim parked at component where jsdom applies no stylesheet.
+- [x] T062 Review every test added in Phases 3–6 against **FR-029 and FR-030**. FR-029: each must assert a notice count, a row count, a panel count or the absence of raw error text — never the presence of a particular function or module; rewrite any that would pass a refactor while the requirement was broken. FR-030: re-check each test's **layer** against what its assertion actually needs, because the layer decisions were made in the plan and nothing else revisits them at the end. Two specific traps this feature already fell into once each — an assertion parked at integration that crosses no boundary, and a visual claim parked at component where jsdom applies no stylesheet.
 
-- [ ] T062a **Label the requirements that are already true**, so nobody goes looking for code that should not be written. Four have a test task and deliberately no implementation task: FR-008c (*Dismiss only* / *Never display* already behave correctly), FR-012 (suppression is already bounded by the live list), FR-017 (restore is already not an open-a-file action) and FR-021 (the list already carries `tabIndex={0}`). Add the one-line "guard, not a fix" note FR-019a sets the pattern for. An unlabelled already-true requirement reads as a missing implementation, and the reader's options are to write code that is not needed or to assume the task list is wrong.
-- [ ] T063 Prove each guard's sensitivity **once**: revert that guard's fix, run the guard, observe it fail, restore the fix. Record the pairing (guard → the failure observed) in the PR description (FR-030a, SC-006). A guard nobody has seen go red is an assertion that it would.
+- [x] T062a **Label the requirements that are already true**, so nobody goes looking for code that should not be written. Four have a test task and deliberately no implementation task: FR-008c (*Dismiss only* / *Never display* already behave correctly), FR-012 (suppression is already bounded by the live list), FR-017 (restore is already not an open-a-file action) and FR-021 (the list already carries `tabIndex={0}`). Add the one-line "guard, not a fix" note FR-019a sets the pattern for. An unlabelled already-true requirement reads as a missing implementation, and the reader's options are to write code that is not needed or to assume the task list is wrong.
+### What T062 found
+
+Three defects, each of the kind FR-029 and FR-030 exist to catch. They are listed as their own tasks
+because each needed a fix rather than a note.
+
+- [x] T062b **The one E2E asserted nothing.** `window-chord-resolution.e2e.ts`'s notice-chord test focused an EDITOR, pressed the chord with an EMPTY notice stack, and asserted the editor still had focus — an outcome identical whether the binding resolves, is inert, or is deleted outright. Its own comment claimed a focused terminal it never created. Replace it with `packages/ui/tests/e2e/notice-focus-chord.e2e.ts`: a real `cmd`, a real missing-file notice, and an assertion that focus MOVED. Move `focus.notice` from `COVERED` to `COVERED_ELSEWHERE` in `packages/ui/tests/shared/window-chords.ts` so the manifest guard checks the press in its new home, and register the spec as `CPU` in `parallel-plan.json`. The budget is unchanged: one declaration, one `@window` tag, a different file.
+- [x] T062c **The storm guard tested a function production did not call.** `use-explorer-data.ts` walked the ancestors with its own loop and decided for itself, so `isSuppressedByAncestor` — the subject of SC-001's counts and SC-006f's 120-permutation sweep — had no production caller at all. Deleting the renderer's suppression outright left every one of those assertions green. Make the renderer resolve absence over the shared walk and delegate the DECISION to core, and add `packages/ui/tests/component/explorer-storm-suppression.test.ts` for the half core cannot see: that the renderer asks. Observable outcome, component layer, no app.
+- [x] T062d **`focus.notice` could not reach most notices.** FR-020 says "the most recent notice on screen" without qualification, but `focusMostRecentNotice` targets `[data-testid="notice-affected"]`, which only a notice carrying a casualty list has. A rename collision, a refused delete, a failed watcher — each is a sentence and a Dismiss button, each is commoner than the consolidated kind, and on each the binding did nothing. Worse, with a plain notice newest and an older one carrying a list, it walked BACKWARDS to the older — the stack-walking FR-020d forbids. Target the newest notice CARD and prefer its list within; FR-025's affordance rule is untouched, because being reachable and advertising a tab stop are different claims.
+- [x] T063 Prove each guard's sensitivity **once**: revert that guard's fix, run the guard, observe it fail, restore the fix. Record the pairing (guard → the failure observed) in the PR description (FR-030a, SC-006). A guard nobody has seen go red is an assertion that it would.
+#### T063's pairings — each guard, reverted once, and what went red
+
+Measured 2026-08-27. Nothing here ships (FR-030b): each revert was applied, run, and undone.
+
+| Restored requirement | Fix reverted | What failed, and how |
+|---|---|---|
+| **029 FR-019** — one cause, one notice (#278) | `use-explorer-data.ts:270` — the renderer stops consulting `isSuppressedByAncestor` | `explorer-storm-suppression.test.ts` → *"one removed folder produced a notice per defeated descendant"*, **2 notices where 1 is required**. |
+| **029 FR-016 / FR-018, 030 FR-034** — the raw errno is never rendered | `panel-failure-banner.tsx:213` — the banner also renders `detail.systemError` | `panel-failure-banner-path.test.ts` → **2 failures**: `expected 'This file could not be read…' not to contain 'ENOENT'`, and the path-once guard caught it too (`expected 2 to be 1`) because the errno carries the path. |
+| **030 FR-037a** — no duplicate row per re-attempt (#328) | `affected.ts:182,185` — `joinedPanels` keys on `panelId` alone again | `affected.test.ts` → **4 failures**, all the same collapse: `expected [ … ] to have a length of 2 but got 1`. Two distinct panel-less casualties reduced to one row. |
+| *(bonus)* **FR-020a** — a real shell does not swallow the chord | `notice-focus-chord.e2e.ts` presses an unbound `Control+Alt+Shift+F9` | The E2E → *"the shell swallowed the chord, or it resolved to nothing — focus never reached the notice"*. Proves the replacement spec discriminates where the one it replaced did not. |
+
+**The most important row is the one that stayed GREEN.** Under the first revert,
+`ancestor-suppression.test.ts` passed **18/18** — SC-001's counts and SC-006f's 120-permutation sweep
+included — while the storm raged. That is the whole argument for T062c in one measurement: a guard
+can be immaculate and still be pointed at code that does not run.
+
 - [x] T064 Confirm no mutation harness, gate stage or paired negative test has been added (FR-030b). What must hold continuously is that a future regression fails something, which the guard itself delivers.
 
 ---

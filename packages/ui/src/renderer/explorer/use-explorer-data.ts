@@ -24,6 +24,7 @@ import {
   emptyStack,
   immediateChildFolders,
   isExcluded,
+  isSuppressedByAncestor,
   nextExpandTargets,
   parentRel,
   plannedMoves,
@@ -228,10 +229,10 @@ function savePersisted(projectId: string, expanded: string[], selectedId: string
  * removed and the answer is unchanged. That is what makes SC-006f's permutation sweep meaningful:
  * the outcome is identical under all 120 arrival orders because no ordering is ever consulted.
  *
- * `ancestorsWithinRoot` is core's, deliberately: the caller has to resolve absence for a set of
- * paths before the pure predicate can be asked, and it can only know WHICH paths by performing the
- * same walk. Sharing the walk is what stops a call site probing paths the predicate never reads —
- * which would look correct and suppress nothing.
+ * BOTH halves are core's, deliberately: `ancestorsWithinRoot` says which paths are in scope and
+ * `isSuppressedByAncestor` says what their absence means. This file supplies only the probe, because
+ * only it can reach the filesystem — the split Constitution II asks for, and the reason the rule can
+ * be asserted at all without an app.
  *
  * A probe that itself fails is treated as PRESENT: refusing to report a real failure because a
  * check about it was inconclusive is the worse error of the two.
@@ -244,18 +245,39 @@ async function suppressedByAncestor(
   // Paths here are project-relative, so the root is the empty prefix and every proper ancestor of
   // `relDir` is in scope. `relDir` itself is excluded by the walk — it is the thing that failed.
   const ancestors = ancestorsWithinRoot(relDir, '');
+
+  /*
+   * ══ RESOLVE ABSENCE FIRST, THEN ASK CORE — RATHER THAN DECIDING HERE (T062) ══
+   *
+   * This loop used to return `true` the moment it found an absent ancestor, which made it a SECOND
+   * statement of the rule `isSuppressedByAncestor` already states. Two statements of one rule is one
+   * rule and one lookalike, and it was the lookalike that ran: `ancestor-suppression.test.ts` — the
+   * 120-permutation sweep SC-006f rests on, and SC-001's "one cause for five descendants" — exercised
+   * core's predicate, which production did not call. Every one of those assertions would have stayed
+   * green with the suppression here deleted outright.
+   *
+   * So the probe stays here, where the IPC is, and the DECISION goes back to the one place that
+   * defines it. The cost is that every ancestor is probed rather than stopping at the first absent
+   * one: bounded by tree depth, each a cheap `exists`, and paid to keep the rule single-valued.
+   *
+   * A probe that itself fails is treated as PRESENT — see the header.
+   */
+  const absent = new Set<string>();
   for (const ancestor of ancestors) {
     const stillThere = await window.throng?.files?.exists?.(ancestor).catch(() => true);
-    if (stillThere === false) {
-      // FR-005a — suppression is a PRESENTATION rule. One removal defeating five tree nodes is one
-      // notice and five records, so the screen count falls while the log's does not.
-      console.warn(
-        `[explorer] suppressing "${relDir}" for project ${projectId}: ancestor "${ancestor}" is also gone. ${rawError}`,
-      );
-      return true;
-    }
+    if (stillThere === false) absent.add(ancestor);
   }
-  return false;
+  if (!isSuppressedByAncestor(relDir, '', (path) => absent.has(path))) return false;
+
+  // The nearest absent ancestor, because `ancestorsWithinRoot` walks outwards from the failure and
+  // that is the one a reader of the log is looking for.
+  const cause = ancestors.find((ancestor) => absent.has(ancestor));
+  // FR-005a — suppression is a PRESENTATION rule. One removal defeating five tree nodes is one
+  // notice and five records, so the screen count falls while the log's does not.
+  console.warn(
+    `[explorer] suppressing "${relDir}" for project ${projectId}: ancestor "${cause}" is also gone. ${rawError}`,
+  );
+  return true;
 }
 
 export function useExplorerData(

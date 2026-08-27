@@ -299,6 +299,14 @@ function the test supplies rather than a directory tree it has to build.
   rather than by waiting.
 - A notice is **never raised and then amended** to name a different subject (FR-003d).
 
+**The renderer MUST call this, not re-decide.** `use-explorer-data.ts` resolves absence for the
+ancestors `ancestorsWithinRoot` names — that walk is shared, so a call site cannot probe paths the
+predicate never reads — and then asks this function. It first shipped with its own equivalent loop,
+which meant the rule had two statements and the tests exercised the one production did not run: every
+assertion in `ancestor-suppression.test.ts`, SC-001 and SC-006f included, stayed green with the
+renderer's suppression deleted outright (T062). One statement of a rule is the point of putting it in
+core at all, and `explorer-storm-suppression.test.ts` is what now fails if the call goes away.
+
 Suppression is a **presentation** rule: a suppressed casualty still reaches the diagnostics log, at
 the cause's own level, never demoted to debug (FR-005a, FR-005b). One removal defeating five tree
 nodes is **one notice and five log entries**.
