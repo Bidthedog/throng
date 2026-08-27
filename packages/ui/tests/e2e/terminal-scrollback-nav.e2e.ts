@@ -5,6 +5,7 @@ import { test, expect, type Page } from '@playwright/test';
 import {
   openApp,
   createProject as newProject,
+  switchProject,
   firstPanelId,
   cleanupTemp,
   type AppOptions,
@@ -225,6 +226,18 @@ test('scrollback still scrolls after a project switch and back (#290)', { tag: [
    *
    * The control assertion before the switch is deliberate. Without it a red here could equally mean
    * "the keys never worked in this file", and the whole value of the test is telling those apart.
+   *
+   * ══ THIS TEST USED TO FLAKE, AND IT WAS NOT #290 ══
+   *
+   * It failed about one gate run in six — never on a scroll assertion, always one step earlier, at
+   * `expect(termN).toBeVisible()` with "element(s) not found". That is worth knowing before reading
+   * a red here as a reproduction: it was the spec reading a panel id out of a DOM still showing the
+   * project it had just left, because the sidebar's `data-active` flips optimistically on the click
+   * while the workspace keeps the outgoing layout for the whole `client.load` round trip. Every
+   * switch below goes through `switchProject`, which waits on `workspace-pane[data-project]` — the
+   * state whose arrival mounts the new panels. See its doc comment for the 150-trip measurement.
+   *
+   * So a red here is once again what this test was written to be: a reproduction of #290.
    */
   const rootA = mkdtempSync(join(tmpdir(), 'throng-nav-a-'));
   const rootB = mkdtempSync(join(tmpdir(), 'throng-nav-b-'));
@@ -254,8 +267,7 @@ test('scrollback still scrolls after a project switch and back (#290)', { tag: [
       const nameB = (
         await win.locator('.project-item[data-active="true"]').evaluate((el) => el.textContent ?? '')
       ).trim();
-      await win.locator('.project-item').filter({ hasText: nameA }).first().click();
-      await expect(win.locator('.project-item[data-active="true"]')).toContainText(nameA);
+      await switchProject(win, nameA);
 
       // The terminal is back and still holds its history…
       const back = await firstPanelId(win);
@@ -297,10 +309,8 @@ test('scrollback still scrolls after a project switch and back (#290)', { tag: [
        * follows from it directly.
        */
       for (let trip = 0; trip < 5; trip++) {
-        await win.locator('.project-item').filter({ hasText: nameB }).first().click();
-        await expect(win.locator('.project-item[data-active="true"]')).toContainText(nameB);
-        await win.locator('.project-item').filter({ hasText: nameA }).first().click();
-        await expect(win.locator('.project-item[data-active="true"]')).toContainText(nameA);
+        await switchProject(win, nameB);
+        await switchProject(win, nameA);
 
         const pidN = await firstPanelId(win);
         const termN = win.getByTestId(`terminal-${pidN}`);

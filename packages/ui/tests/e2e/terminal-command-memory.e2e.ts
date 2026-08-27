@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { runApp, createProject, switchProject, firstPanelId, cleanupTemp} from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /**
@@ -321,8 +321,10 @@ test('a command that takes over REPLACES the startup command the user typed (US2
     await runApp(
       async (_app, win) => {
         // The recovery runs as the Panel mounts, so the project has to be open — which is also
-        // exactly when the user would look at the setting.
-        await win.locator('.project-item', { hasText: 'MemOver' }).click();
+        // exactly when the user would look at the setting. `switchProject` rather than a bare click:
+        // the panel id is read on the very next line, and a click alone returns while the OUTGOING
+        // project's panels are still mounted (#290).
+        await switchProject(win, 'MemOver');
         const pid = await firstPanelId(win);
         await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible({ timeout: 25_000 });
         await expectLayout(

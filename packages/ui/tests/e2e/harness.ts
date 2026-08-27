@@ -1003,26 +1003,78 @@ export async function createProject(win: Page, name: string, root: string): Prom
   await win.getByTestId('project-name-input').fill(name);
   await win.getByTestId('project-save').click();
   await expect(win.locator('.project-item').filter({ hasText: name }).first()).toBeVisible();
-  /*
-   * Wait for the new project to be ACTIVE, not merely listed.
-   *
-   * Creating a project opens it immediately (`projects-store.tsx` — `setOpenedId(created.id)`),
-   * which swaps the entire workspace. Returning as soon as the row appears leaves the PREVIOUS
-   * project's panels on screen, so a caller that reads a panel id straight afterwards can capture
-   * one that is about to be destroyed. Every later `panel-type-select-<dead pid>` then waits out the
-   * full test budget for an element that can never exist.
-   *
-   * That is not a hypothetical: in a full-suite run under six CPU hogs it accounted for four of six
-   * failures, every one a 30s timeout, and it produced two of the CI failures on this branch too.
-   * The symptom looks like a slow app; the cause is a stale id read a few milliseconds too early.
-   *
-   * Keyed on `data-active` rather than on the name: `hasText` is a SUBSTRING match over the row's
-   * whole text, so in a file that accumulates projects it can resolve to more than one row and trip
-   * strict mode. Exactly one project is active, which makes it the unambiguous handle.
-   */
+  await settleOnActiveProject(win, name);
+}
+
+/**
+ * Wait until the WORKSPACE is showing the named project — not merely until its sidebar row has gone
+ * active. Returns the project's id.
+ *
+ * ══ WHY THE ROW IS THE WRONG SIGNAL, AND THE PANE IS THE RIGHT ONE (#290) ══
+ *
+ * Opening a project is optimistic and SYNCHRONOUS on the sidebar's side: `switchProject` in
+ * `projects-store.tsx` calls `setOpenedId(id)` before it awaits anything, so `data-active` flips on
+ * the click. The workspace's side is neither. `workspace-store.tsx`'s layout effect awaits
+ * `client.load(projectId)` — a real round trip — and it deliberately does NOT clear `layout` while
+ * that is in flight, because blanking the pane on every switch was a visible flash.
+ *
+ * So there is a window, one RPC long, in which the sidebar says the new project and the DOM still
+ * holds the OLD project's `<TabGroup/>`. A caller that reads a panel id in that window gets a panel
+ * belonging to the project it just left. Nothing then recovers: `terminal-<that id>` is an element
+ * that can never exist, so the next locator waits out its whole budget and fails with
+ * "element(s) not found" — a stale id read a few milliseconds too early, wearing the costume of a
+ * slow app.
+ *
+ * MEASURED, not reasoned about — twice, years apart, from opposite ends.
+ *
+ * The FIRST measurement is why this wait existed at all: in a full-suite run under six CPU hogs, a
+ * stale id read straight after `createProject` accounted for four of six failures, every one a 30s
+ * timeout, plus two CI failures on that branch. It was fixed by waiting for `data-active`, which
+ * narrowed the window without closing it.
+ *
+ * The SECOND (#290) closed it. A probe switched between two projects 150 times on an idle machine,
+ * reading the pane id and the panel id in a single pass:
+ *
+ *     workspace-pane still on the outgoing project    3 / 150
+ *     firstPanelId returned its panel — data-active    2 / 150
+ *     firstPanelId returned its panel — data-project   0 / 150
+ *
+ * The gap between 3 and 2 is the part worth keeping: on one trip the window was open, but
+ * `firstPanelId`'s own round trip was enough for the layout to land. EVERY extra hop between the
+ * click and the read shrinks the failure rate without closing anything, which is exactly how this
+ * survived as "one gate run in six" rather than presenting as an outright bug.
+ *
+ * `data-project` on the workspace pane (`app.tsx`) is the honest signal because it is stamped from
+ * `layout.projectId` — the very state whose arrival mounts the new panels, in the same commit. When
+ * it reads the project we asked for, the panels on screen are that project's by construction.
+ *
+ * The `data-active` wait is kept as well, and deliberately: it is what makes a failure legible.
+ * Without it, a project that never opens at all fails here on the pane attribute, which does not say
+ * whether the click landed. Keyed on `data-active` rather than the name because `hasText` is a
+ * SUBSTRING match over the row's whole text and can resolve to more than one row in a file that
+ * accumulates projects; exactly one project is active, which makes it the unambiguous handle.
+ */
+export async function settleOnActiveProject(win: Page, name: string): Promise<string> {
   const active = win.locator('.project-item[data-active="true"]');
   await expect(active).toHaveCount(1);
   await expect(active).toContainText(name);
+  const id = ((await active.getAttribute('data-testid')) ?? '').replace('project-item-', '');
+  if (id === '') {
+    throw new Error(`settleOnActiveProject: the active row for "${name}" carries no data-testid`);
+  }
+  await expect(win.getByTestId('workspace-pane')).toHaveAttribute('data-project', id);
+  return id;
+}
+
+/**
+ * Switch to an already-created project by name and wait for its workspace to be the one on screen.
+ *
+ * Every caller that clicks a project row and then reads panel state wants this rather than the click
+ * alone; see {@link settleOnActiveProject} for the window it closes.
+ */
+export async function switchProject(win: Page, name: string): Promise<string> {
+  await win.locator('.project-item').filter({ hasText: name }).first().click();
+  return settleOnActiveProject(win, name);
 }
 
 export async function firstPanelId(win: Page): Promise<string> {

@@ -7,6 +7,7 @@ import {
   conhostChildren,
   expectNoOrphanConhosts,
   createProject,
+  switchProject,
   daemonPid,
   firstPanelId,
   runApp as runOwnApp,
@@ -160,19 +161,14 @@ test('Manual starts NO shell and no conhost, and offers Reload on each panel (03
 
         // ── Leave the project and come back. THAT is the project open the preference governs.
         await createProject(win, 'Elsewhere', other);
-        await win.locator('.project-item').filter({ hasText: 'ManualReload' }).first().click();
         /*
-         * Wait for it to be ACTIVE, not merely clicked — `createProject`'s own comment records that
-         * reading a panel id before the swap completes cost four of six failures in one full-suite
-         * run. The same hazard applies here: the dormant placeholder belongs to the project being
-         * opened, and asserting on it too early can catch the outgoing project's panels instead.
-         *
-         * Keyed on `data-active` rather than the name, for the reason the harness gives: `hasText`
-         * is a substring match over the whole row and can resolve to more than one project.
+         * Wait for the WORKSPACE to be this project's, not merely for the row to go active — the
+         * dormant placeholder asserted below belongs to the project being opened, and the outgoing
+         * project's panels stay mounted for the whole layout round trip. `switchProject` owns that
+         * rule now (and the measurement behind it, #290); this file used to carry its own weaker
+         * copy of it, keyed on `data-active`, which flips optimistically on the click.
          */
-        const active = win.locator('.project-item[data-active="true"]');
-        await expect(active).toHaveCount(1);
-        await expect(active).toContainText('ManualReload');
+        await switchProject(win, 'ManualReload');
 
         // The panel is dormant: it keeps its place and its type, says so, and offers Reload.
         await expect(win.getByTestId(`terminal-dormant-${pid}`)).toBeVisible({ timeout: 30_000 });
