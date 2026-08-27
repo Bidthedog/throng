@@ -873,14 +873,37 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // clear (which would wipe scrollback), whether or not this xterm's size changes.
       resizedAt = Date.now();
       if (term.cols === cols && term.rows === rows) {
-        // The grid already matches, so there is no resize — but this is often the FIRST thing that
-        // happens to a newly opened terminal, whose container may not have been measurable when
-        // `term.open()` ran (the panel was still laying out, and the `fit()` there is wrapped in a
-        // try/catch for exactly that reason). xterm computes its viewport's scroll area during a
-        // render, so a terminal that never resized and never rendered has no scroll area — and a
-        // mouse wheel over it does nothing at all until something else forces the sync. Repainting
-        // here is that something: it costs one render of an already-correct grid, and it means the
-        // wheel works from the first frame rather than from whenever the next repaint happens to be.
+        /*
+         * The grid already matches, so there is no resize — and this is often the FIRST thing that
+         * happens to a newly opened terminal, whose container may not have been measurable when
+         * `term.open()` ran (the panel was still laying out, and the `fit()` there is wrapped in a
+         * try/catch for exactly that reason).
+         *
+         * ══ WHAT THIS CALL DOES, AND WHAT IT WAS ONCE CLAIMED TO DO (#290) ══
+         *
+         * This comment used to say the repaint gives such a terminal its viewport scroll area, "so
+         * the wheel works from the first frame". READ AGAINST xterm 6.0.0, THAT IS NOT TRUE, and it
+         * is left corrected rather than deleted because it is the reasoning a reader of #290 will
+         * otherwise re-derive:
+         *
+         *   Terminal.refresh(a, b)  →  this._renderService?.refreshRows(a, b)
+         *
+         * — rows, and nothing else. The viewport's scroll area is synced from `queueSync()`, which
+         * is subscribed to exactly three things: `_bufferService.onResize`, `_bufferService`'s
+         * `buffers.onBufferActivate` (a normal↔alternate switch), and the scroll events
+         * (`onScroll` / the input handler's). A repaint is none of them. `Terminal.resize()` also
+         * early-returns when neither dimension changed, so a same-size resize is not a way in
+         * either — which is why this branch exists at all.
+         *
+         * That matches what #290 reports from the other end: a window resize recovers a dead
+         * viewport every time, more output sometimes does, and `Ctrl+F5` (`terminal.redraw`) never
+         * does — and `terminal.redraw` issues this very call.
+         *
+         * The repaint is KEPT. It costs one render of an already-correct grid, it is what makes a
+         * first frame appear for a panel whose container was not measurable at `open()`, and
+         * removing it is a production change that #290 does not yet have a reproduction to justify.
+         * What is gone is the claim that it fixes scrolling.
+         */
         try {
           term.refresh(0, term.rows - 1);
         } catch {
