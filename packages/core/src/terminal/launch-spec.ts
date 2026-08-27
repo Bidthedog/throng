@@ -74,6 +74,16 @@ export interface LaunchFlavour {
    * forced it. Composed ahead of any Startup Command, through the same recipe.
    */
   shellIntegration?: string;
+  /**
+   * A statement asking this shell to persist NO history (#339) — set only under test.
+   *
+   * Composed FIRST, ahead of shell integration and the user's Startup Command, so that nothing
+   * throng itself runs can be recorded either. Empty in a shipped app, where a terminal recording
+   * history is the behaviour users depend on.
+   */
+  historySuppression?: string;
+  /** Environment asking this shell to persist no history (#339) — bash's `HISTFILE`, and friends. */
+  historySuppressionEnv?: Record<string, string>;
 }
 
 /**
@@ -108,14 +118,22 @@ export function resolveLaunchSpec(
   const args = [...flavour.args, ...tokenizeParams(shellArguments)];
   const userCommand = prepareStartupCommand(flavour.id ?? '', startupCommand?.trim() ?? '');
   const integration = flavour.shellIntegration?.trim() ?? '';
+  const historyOff = flavour.historySuppression?.trim() ?? '';
 
-  // Shell integration runs FIRST, so the prompt is reporting before the user's command produces
-  // any output — and so a long-running command never delays it. Both travel through the same
-  // recipe: to the shell this is simply one script to run.
-  const command = [integration, userCommand].filter((part) => part !== '').join('; ');
+  // History suppression runs before EVERYTHING (#339). It is only ever set under test, and running
+  // it first means not even throng's own integration snippet can be recorded — PSReadLine saves
+  // incrementally, so a statement that ran before the suppression took effect would already be on
+  // the developer's disk. Shell integration runs next, so the prompt is reporting before the user's
+  // command produces any output — and so a long-running command never delays it. All three travel
+  // through the same recipe: to the shell this is simply one script to run.
+  const command = [historyOff, integration, userCommand].filter((part) => part !== '').join('; ');
 
   // Nothing to run → byte-for-byte today's behaviour (FR-006): no extra args, no PTY write.
-  const env = flavour.shellIntegrationEnv;
+  const hasEnv =
+    flavour.shellIntegrationEnv !== undefined || flavour.historySuppressionEnv !== undefined;
+  const env = hasEnv
+    ? { ...flavour.shellIntegrationEnv, ...flavour.historySuppressionEnv }
+    : undefined;
   if (command === '') {
     return env ? { file: flavour.file, args, cwd: projectRoot, env } : { file: flavour.file, args, cwd: projectRoot };
   }

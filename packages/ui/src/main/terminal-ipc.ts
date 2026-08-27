@@ -3,6 +3,8 @@ import { ipcMain, type WebContents } from 'electron';
 import { statSync } from 'node:fs';
 import {
   resolveLaunchSpec,
+  resolveShellHistorySuppression,
+  shellHistoryOff,
   resolveStartDirectory,
   fallbackToReport,
   requestedStartDirectory,
@@ -228,6 +230,14 @@ export function registerTerminalIpc(deps: {
       // session with /K, PowerShell with -NoExit, bash by re-execing itself. A flavour with no
       // recipe falls back to writing the command into the PTY once it is ready (FR-012), which is
       // what `launch.writeOnReady` carries back to the renderer.
+      // #339: under test, ask the shell to keep no history. The E2E suite types real commands into
+      // real shells, and PSReadLine writes them straight into the ONE per-user history file the
+      // developer's own shells recall from — evicting their commands once its 4096-entry cap is
+      // passed. Off unless a harness asks for it, so a shipped terminal still records history.
+      const historySuppression = resolveShellHistorySuppression(
+        flavour.id,
+        shellHistoryOff(process.env),
+      );
       const launch = resolveLaunchSpec(
         {
           id: flavour.id,
@@ -236,6 +246,8 @@ export function registerTerminalIpc(deps: {
           commandRecipe: flavour.commandRecipe,
           shellIntegration: flavour.shellIntegration,
           shellIntegrationEnv: flavour.shellIntegrationEnv,
+          historySuppression: historySuppression.snippet,
+          historySuppressionEnv: historySuppression.env,
         },
         req.shellArguments,
         cwd,

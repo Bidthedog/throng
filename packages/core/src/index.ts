@@ -84,6 +84,7 @@ export { normaliseForCompare, samePath, isUnderPath } from './fs/path-id.js';
 
 // Terminal shell detection (005 Phase B): OS seam.
 export type { IShellDetection, DetectedShell } from './abstractions/shell-detection.js';
+export type { ShellHistorySuppression } from './terminal/shell-history.js';
 
 // Terminal PTY + directory-lock OS seams (005 Phase C).
 export type {
@@ -568,6 +569,11 @@ export {
   BUILTIN_SHELL_INTEGRATION_ENV,
   flavourReportsDirectory,
   BUILTIN_SHELL_INTEGRATION,
+  THRONG_TEST_SHELL_HISTORY,
+  SHELL_HISTORY_OFF_SNIPPET,
+  SHELL_HISTORY_OFF_ENV,
+  resolveShellHistorySuppression,
+  shellHistoryOff,
   readTerminalPanelConfig,
   SHIPPED_TERMINAL_PANEL_DEFAULTS,
   // 039 (#293) — what opening a project does to a terminal Panel.

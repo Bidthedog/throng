@@ -60,7 +60,12 @@ function launchApp(pipeName: string): Promise<ElectronApplication> {
   const userData = tmpDir('throng-ud-');
   return electron.launch({
     args: [mainEntry, `--user-data-dir=${userData}`],
-    env: { ...process.env, THRONG_PIPE_NAME: pipeName, THRONG_CONFIG_ROOT: tmpDir('throng-cfg-') },
+    env: {
+      ...process.env,
+      THRONG_PIPE_NAME: pipeName,
+      THRONG_CONFIG_ROOT: tmpDir('throng-cfg-'),
+      THRONG_TEST_SHELL_HISTORY: 'off',
+    },
   });
 }
 

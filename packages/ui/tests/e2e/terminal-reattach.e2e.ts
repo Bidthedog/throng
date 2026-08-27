@@ -92,7 +92,12 @@ test('a pre-existing terminal reattaches after restart and still warns on close'
   await new Promise<void>((res) => daemon.stdout!.on('data', (c: string) => c.includes('listening') && res()));
 
   const launch = (): Promise<ElectronApplication> =>
-    electron.launch({ args: [mainEntry, `--user-data-dir=${userData}`], env: { ...process.env, THRONG_PIPE_NAME: pipe, THRONG_CONFIG_ROOT: cfg } });
+    electron.launch({ args: [mainEntry, `--user-data-dir=${userData}`], env: {
+      ...process.env,
+      THRONG_PIPE_NAME: pipe,
+      THRONG_CONFIG_ROOT: cfg,
+      THRONG_TEST_SHELL_HISTORY: 'off',
+    } });
   const stubDialog = (app: ElectronApplication): Promise<void> =>
     app.evaluate(({ dialog }) => { dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] }); });
 

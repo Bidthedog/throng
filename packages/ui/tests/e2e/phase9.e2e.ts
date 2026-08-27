@@ -58,7 +58,12 @@ async function startHarness(): Promise<Harness> {
 function launchApp(pipeName: string, userData: string): Promise<ElectronApplication> {
   return electron.launch({
     args: [mainEntry, `--user-data-dir=${userData}`],
-    env: { ...process.env, THRONG_PIPE_NAME: pipeName, THRONG_CONFIG_ROOT: tmpDir('throng-cfg-') },
+    env: {
+      ...process.env,
+      THRONG_PIPE_NAME: pipeName,
+      THRONG_CONFIG_ROOT: tmpDir('throng-cfg-'),
+      THRONG_TEST_SHELL_HISTORY: 'off',
+    },
   });
 }
 
