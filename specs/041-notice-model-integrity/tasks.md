@@ -6,6 +6,37 @@
 
 ---
 
+## Status — 74 of 81, and why the other seven are open
+
+Delivered and green: the casualty widening, #278's suppression, #328's flash and
+announcement, #327's refusal path, #314's keyboard route. PR #337 (draft).
+
+The seven that remain are open for three different reasons, and only the last group is
+ordinary unfinished work:
+
+**Not reproducible — T015, T016, T020.** #278 declares a *second* defect: a raw
+`ENOENT: no such file or directory, realpath '<path>'` rendered as the notice's second
+line. It could not be reproduced. `ENOENT` classifies at `cause.ts:102`, so
+`files-service.ts`'s `failure()` returns `{ error: causeMessage(cause), cause }` for
+anything classified — the message reaching the notice is already the spoken sentence and
+the raw text rides in `copyDetail`, which no code path renders. The raw string can only
+surface through the *unclassified* branch, and the route there was not found. **Nothing was
+changed on a theory**: a fix behind no failing test cannot be verified by anything,
+including the green suite that would follow it. These three stay open until someone
+supplies the reproduction.
+
+**Deferred by decision — T068.** The manual regression watch in
+[quickstart.md](./quickstart.md#7-regression-watch) is the developer's to perform; it is
+not automatable and not the implementer's to tick.
+
+**Genuinely outstanding — T062, T062a, T063.** The guard review against FR-029/FR-030, the
+labelling of already-true requirements, and FR-030a's sensitivity proof (revert each
+guard's fix once, observe *that* guard fail, record the pairing in the PR). T063 is the one
+with teeth: a guard nobody has watched go red is an assertion that it would, which is
+precisely the assumption Group 5 exists to stop making.
+
+---
+
 ## How to read this list
 
 **Tests are mandatory here, not optional.** Constitution V is non-negotiable: every behaviour is
@@ -219,7 +250,7 @@ Repeat with a panel already open; identical.
   > contract to fix a defect that was not there, which is precisely what CLAUDE.md's
   > *find-the-requirement-that-already-governs-it* rule exists to catch.
 - [x] T047 [US3] Route a refusal that created no panel to the panel-less report in `packages/ui/src/renderer/editor/use-editor.ts`'s `maybeWarn`, leaving the existing already-open-panel path untouched (FR-016).
-- [ ] T047a [P] [US3] Write a component test in `packages/ui/tests/component/panel-failure-banner.test.ts` asserting a panel failure banner prints its path **exactly once** — for **both** panel types, driven through `useEditorFailure`'s copy shape and `terminal-panel.tsx`'s (FR-019, FR-019a). Count occurrences of the path string in the rendered text; assert 1.
+- [x] T047a [P] [US3] Write a component test in `packages/ui/tests/component/panel-failure-banner.test.ts` asserting a panel failure banner prints its path **exactly once** — for **both** panel types, driven through `useEditorFailure`'s copy shape and `terminal-panel.tsx`'s (FR-019, FR-019a). Count occurrences of the path string in the rendered text; assert 1.
 
   > **This is a guard, not a fix.** FR-019 is already honoured: both headlines are path-free
   > (`'This file could not be read'`, `'This terminal could not be opened'`) and `detail.path` renders
@@ -296,20 +327,20 @@ the shape of the code that currently produces it.
 
 - [ ] T062a **Label the requirements that are already true**, so nobody goes looking for code that should not be written. Four have a test task and deliberately no implementation task: FR-008c (*Dismiss only* / *Never display* already behave correctly), FR-012 (suppression is already bounded by the live list), FR-017 (restore is already not an open-a-file action) and FR-021 (the list already carries `tabIndex={0}`). Add the one-line "guard, not a fix" note FR-019a sets the pattern for. An unlabelled already-true requirement reads as a missing implementation, and the reader's options are to write code that is not needed or to assume the task list is wrong.
 - [ ] T063 Prove each guard's sensitivity **once**: revert that guard's fix, run the guard, observe it fail, restore the fix. Record the pairing (guard → the failure observed) in the PR description (FR-030a, SC-006). A guard nobody has seen go red is an assertion that it would.
-- [ ] T064 Confirm no mutation harness, gate stage or paired negative test has been added (FR-030b). What must hold continuously is that a future regression fails something, which the guard itself delivers.
+- [x] T064 Confirm no mutation harness, gate stage or paired negative test has been added (FR-030b). What must hold continuously is that a future regression fails something, which the guard itself delivers.
 
 ---
 
 ## Phase 8: Polish & cross-cutting
 
-- [ ] T065 [P] Update `docs/testing.md` if the E2E counts or tiers moved.
+- [x] T065 [P] Update `docs/testing.md` if the E2E counts or tiers moved.
 - [x] T065a [P] Add `Ctrl+Alt+M` to the keyboard-shortcut table in `docs/quick-start.md` (around lines 443–449), beside the `focus.*` family already listed there — `Ctrl+Alt+B`/`N`/`T`, `Ctrl+``, `Ctrl+Alt+Arrow`. Check the README's shipped-state description for the same gap.
 
   > An earlier version of T065 said this feature "adds no user-facing surface that the manual
   > documents". That was wrong: a new default chord is exactly what that table is for, and the
   > constitution's documentation-currency rule is non-negotiable. A shortcut nobody can discover is
   > the same defect #314 reports, one layer out.
-- [ ] T066 [P] Re-read every comment touched in this feature against what the code now does. `missingFileDetail`'s stays as it is (Finding 2). `affected.ts`'s doc comment needs updating to describe a **casualty** rather than a panel — and to record that the panel-named symbols (`mergeAffected`, `joinedPanels`, `affectedDetails`) keep their names deliberately, so the next reader meets the decision rather than inferring drift (see [data-model.md](./data-model.md#identity)).
+- [x] T066 [P] Re-read every comment touched in this feature against what the code now does. `missingFileDetail`'s stays as it is (Finding 2). `affected.ts`'s doc comment needs updating to describe a **casualty** rather than a panel — and to record that the panel-named symbols (`mergeAffected`, `joinedPanels`, `affectedDetails`) keep their names deliberately, so the next reader meets the decision rather than inferring drift (see [data-model.md](./data-model.md#identity)).
 - [x] T067 Run `npm run gate` — eight stages in CI's order, fail-fast. Quote the actual stage summary when reporting done; a green gate goes stale the moment anything is edited after it.
 - [ ] T068 Verify the regression watch in [quickstart.md](./quickstart.md#7-regression-watch) by hand: a project-root rename still gives one notice listing editors and terminals; two unrelated failures still stack; an already-open panel's banner is unchanged; a banner prints its path once.
 
