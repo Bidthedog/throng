@@ -28,6 +28,14 @@ export {
   flavourReportsDirectory,
   BUILTIN_SHELL_INTEGRATION,
 } from './command-recipe.js';
+export {
+  THRONG_TEST_SHELL_HISTORY,
+  SHELL_HISTORY_OFF_SNIPPET,
+  SHELL_HISTORY_OFF_ENV,
+  resolveShellHistorySuppression,
+  shellHistoryOff,
+} from './shell-history.js';
+export type { ShellHistorySuppression } from './shell-history.js';
 export { quoteDropPath, formatDroppedPaths } from './drop-paths.js';
 export { terminalLinkTarget } from './link-menu.js';
 export {

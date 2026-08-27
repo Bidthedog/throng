@@ -100,6 +100,7 @@ async function launchApp(): Promise<ElectronApplication> {
        * as every sibling spec already does.
        */
       THRONG_PIPE_NAME: pipeName,
+      THRONG_TEST_SHELL_HISTORY: 'off',
     },
   });
   launchedPipes.set(app, pipeName);

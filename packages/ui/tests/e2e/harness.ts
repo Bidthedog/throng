@@ -532,6 +532,18 @@ async function launchApp(opts: AppOptions): Promise<{
         // in-process instead: the tests then prove the FEATURE, and parallel workers stop fighting
         // over the one global OS clipboard. The shipped path is untouched (016, FR-013a).
         THRONG_E2E_CLIPBOARD: 'memory',
+        // #339 — every shell this app launches keeps NO history.
+        //
+        // The suite types real commands into real PowerShell sessions, and PSReadLine writes each
+        // one, as it is typed, into the ONE per-user file the developer's own shells recall from.
+        // It caps that file at 4096 entries, so a run does not just add noise: it EVICTS their
+        // commands. Measured before this was fixed — 1,853 of 7,398 lines were probes from these
+        // very specs (`READYOK`, `SCROLLMARK118`, `LINKFENCE4`).
+        //
+        // Exactly the reasoning behind THRONG_E2E_CLIPBOARD above, one seam further out: a global
+        // OS resource is not the suite's to write. The shipped path is untouched — a real terminal
+        // still records history, which is what recall and Ctrl+R are for.
+        THRONG_TEST_SHELL_HISTORY: 'off',
         // When the app spawns its own daemon, point that daemon at this run's DB
         // (the daemon inherits the app's env) so we never touch the real store.
         ...(opts.skipDaemon ? { THRONG_DATABASE_PATH: join(dataDir, 'throng.db') } : {}),

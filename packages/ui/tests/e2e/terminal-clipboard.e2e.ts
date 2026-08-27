@@ -97,7 +97,14 @@ test('an OSC 52 sequence from inside the terminal writes to the system clipboard
   try {
     app = await electron.launch({
       args: [mainEntry, `--user-data-dir=${userData}`],
-      env: { ...process.env, THRONG_PIPE_NAME: pipe, THRONG_CONFIG_ROOT: cfg },
+      // THRONG_TEST_SHELL_HISTORY: this file opens a REAL PowerShell and types into it, so without
+      // it every command below lands in the developer's own PSReadLine history (#339).
+      env: {
+        ...process.env,
+        THRONG_PIPE_NAME: pipe,
+        THRONG_CONFIG_ROOT: cfg,
+        THRONG_TEST_SHELL_HISTORY: 'off',
+      },
     });
     const win = await app.firstWindow();
     await app.evaluate(({ dialog }) => {
@@ -234,6 +241,10 @@ test.describe('the two tests that need the in-process clipboard seam', () => {
         THRONG_PIPE_NAME: pipe,
         THRONG_CONFIG_ROOT: cfg,
         THRONG_E2E_CLIPBOARD: 'memory',
+        // The same argument, one resource along: this file types into a REAL PowerShell, and
+        // PSReadLine would write every one of those commands into the developer's own history
+        // file, evicting theirs once its 4096-entry cap is passed (#339).
+        THRONG_TEST_SHELL_HISTORY: 'off',
       },
     });
     win = await app.firstWindow();
