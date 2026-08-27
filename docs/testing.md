@@ -969,6 +969,34 @@ The general form, across all three: **ask what writes the thing you are about to
 something that cannot be true before that write has happened.** "Near it", "usually after it", and
 "set when the work was requested" are all the same bug.
 
+### Reproducing a flake: separate invocations, never `--repeat-each`
+
+The rule above says stress the one test until it fails on demand. **How you stress it decides whether
+the answer means anything**, and the obvious tool is the wrong one.
+
+`--repeat-each=N` replays a test N times **inside one worker, against whatever state the previous
+repeat left**. The suite never does that: it runs each test once, with its own app and its own config
+root. So for any spec about state that persists — `preferences-reset.e2e.ts` most of all, which is a
+file about config writes landing — `--repeat-each` manufactures failures that do not exist.
+
+Measured, 2026-08-27, chasing the flakes in [#341](https://github.com/Bidthedog/throng/issues/341):
+
+- With `--repeat-each=5`, `preferences-reset.e2e.ts:265` failed waiting for `binding-reset-zoom.in`
+  to become enabled. The button was **disabled**, titled *"Zoom in is already at its default value"* —
+  the previous repeat's *reset-all* still in effect. A perfect-looking reproduction of a defect that
+  was not there, and it sent the investigation at the diff rather than at the harness.
+- Re-run as separate invocations, that test passed **4 of 4** rounds, and the real flake surfaced
+  somewhere else entirely: `theme-flash.e2e.ts:199`, `Error: no new window was created`.
+
+So: **one round is one `npx playwright test <spec> --workers=1 --retries=0` process**, repeated by a
+loop *outside* Playwright, with the pass/fail of each round recorded. It is slower per sample, and it
+is the only sampling that shares the suite's conditions.
+
+**And run the same rounds on `origin/master` before attributing anything.** The same session's
+measurements — branch 1 failure in 4 rounds, master **2 in 6** — are what turned "my branch broke the
+preferences specs" into "this family flakes on master too", and the two sides failed *different*
+tests, which no single-sided run could have shown.
+
 ## Budgets — the six clocks, and why each is where it is
 
 A test suite that runs six Electron apps at once creates its own load, and every
