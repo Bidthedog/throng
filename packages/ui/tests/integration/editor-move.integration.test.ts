@@ -144,8 +144,8 @@ describe('markMoved re-points the document — it does not reload it (FR-002)', 
     await moveFile(from, to);
 
     // FR-011a: the file is still open — at its new path, and the old path is free again.
-    expect(coord.openInto(to)).toMatchObject({ action: 'focus', panelId: 'p1' });
-    expect(coord.openInto(from)).toEqual({ action: 'open' });
+    await expect(coord.openInto(to)).resolves.toMatchObject({ action: 'focus', panelId: 'p1' });
+    await expect(coord.openInto(from)).resolves.toEqual({ action: 'open' });
     // The watch is per-FOLDER, so a cross-folder move must re-watch or the document stops
     // noticing external edits to the file it now points at (FR-028).
     await writeFile(to, 'edited by another program\n');
@@ -218,7 +218,7 @@ describe('an in-flight keystroke cannot drag the document back to its old path (
     coord.register(meta('p2', null), 'scratch\n');
     editDocument(coord, meta('p2', join(root, 'invented.txt')), 'scratch!\n');
     expect(coord.getContent('p2')?.absPath).toBeNull();
-    expect(coord.openInto(join(root, 'invented.txt'))).toEqual({ action: 'open' });
+    await expect(coord.openInto(join(root, 'invented.txt'))).resolves.toEqual({ action: 'open' });
   });
 });
 
