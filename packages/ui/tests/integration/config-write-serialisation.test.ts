@@ -16,7 +16,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildShippedDefaults, DEFAULT_APP_SETTINGS } from '@throng/core';
+import { buildShippedDefaults, DEFAULT_APP_SETTINGS, DEFAULT_KEYBINDINGS } from '@throng/core';
 import { FileConfigStore } from '../../src/main/config-store.js';
 import { writeConfigDoc, writeConfigPatch } from '../../src/main/config-write-ipc.js';
 import { ShippedDefaultsService } from '../../src/main/shipped-defaults-service.js';
@@ -38,6 +38,29 @@ function fresh(seed: unknown): {
 
 function readSettings(root: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(root, 'settings.json'), 'utf8')) as Record<string, unknown>;
+}
+
+/**
+ * The keybindings counterpart of {@link fresh}: seeds `keybindings.json` rather than
+ * `settings.json`, because the pairing below writes the keybindings document from both channels.
+ */
+function freshKeybindings(): { store: FileConfigStore; svc: ShippedDefaultsService; root: string } {
+  const root = mkdtempSync(join(tmpdir(), 'throng-write-serialisation-kb-'));
+  tempDirs.push(root);
+  mkdirSync(root, { recursive: true });
+  writeFileSync(
+    join(root, 'keybindings.json'),
+    `${JSON.stringify(DEFAULT_KEYBINDINGS, null, 2)}\n`,
+    'utf8',
+  );
+  const store = new FileConfigStore(root);
+  return { store, svc: new ShippedDefaultsService(store, buildShippedDefaults()), root };
+}
+
+function readKeybindings(root: string): { bindings: Record<string, string[]> } {
+  return JSON.parse(readFileSync(join(root, 'keybindings.json'), 'utf8')) as {
+    bindings: Record<string, string[]>;
+  };
 }
 
 afterEach(() => {
@@ -164,5 +187,68 @@ describe('the lock does not over-serialise', () => {
     expect((readSettings(root) as { appearance: { theme: string } }).appearance.theme).toBe(
       'StillWorks',
     );
+  });
+});
+
+describe('a whole-document write and a reset — one KEYBINDINGS document (#333)', () => {
+  /*
+   * ══ THE GAP THIS CLOSES ══
+   *
+   * The pairings above cover a patch against a document write, and a patch against a reset — both
+   * on SETTINGS — plus a keybindings reset against a settings patch, which shares no file and so
+   * proves only that the lock is per-document.
+   *
+   * Nothing paired the two channels that the Key Bindings tab actually mixes on ONE file. Removing
+   * a chord goes through `writeConfig`, which serialises the WHOLE keybindings document from the
+   * renderer's replica; clicking Reset goes through `resetBinding`, a different IPC that reads and
+   * rewrites the same file. Those are exactly the "nothing in common except the file they write"
+   * pair this suite exists for, and they were the one combination missing.
+   */
+  it('the reset wins, restoring the FULL shipped chord set (#333)', async () => {
+    const { store, svc, root } = freshKeybindings();
+    const shipped = DEFAULT_KEYBINDINGS.bindings['zoom.in'];
+    expect(shipped.length).toBeGreaterThan(1);
+
+    // What removing chord 0 from `zoom.in` sends: the whole document, minus that one chord.
+    const edited = {
+      version: DEFAULT_KEYBINDINGS.version,
+      bindings: { ...DEFAULT_KEYBINDINGS.bindings, 'zoom.in': shipped.slice(1) },
+    };
+
+    // The user's order: remove, then reset. The reset is issued second, so it must land second —
+    // if the document write lands after it, `zoom.in` keeps the edited value and the Reset control
+    // silently did nothing, which is the reported symptom.
+    const write = writeConfigDoc(store, { kind: 'keybindings' }, JSON.stringify(edited));
+    const reset = svc.resetBinding('zoom.in');
+    await Promise.all([write, reset]);
+
+    expect(readKeybindings(root).bindings['zoom.in']).toEqual(shipped);
+  });
+
+  it('the reset reads the earlier write’s result, so a sibling edit survives it (G11)', async () => {
+    const { store, svc, root } = freshKeybindings();
+    const shippedIn = DEFAULT_KEYBINDINGS.bindings['zoom.in'];
+    const shippedOut = DEFAULT_KEYBINDINGS.bindings['zoom.out'];
+
+    // Both actions edited in one document write, then only `zoom.in` reset. `zoom.out` is the
+    // probe: the reset writes the whole document computed from what it READ, so the edited
+    // `zoom.out` can only be present if the reset observed the write rather than merely following
+    // it. Finding the shipped value there means the reset read the ORIGINAL file.
+    const edited = {
+      version: DEFAULT_KEYBINDINGS.version,
+      bindings: {
+        ...DEFAULT_KEYBINDINGS.bindings,
+        'zoom.in': shippedIn.slice(1),
+        'zoom.out': shippedOut.slice(1),
+      },
+    };
+
+    const write = writeConfigDoc(store, { kind: 'keybindings' }, JSON.stringify(edited));
+    const reset = svc.resetBinding('zoom.in');
+    await Promise.all([write, reset]);
+
+    const after = readKeybindings(root).bindings;
+    expect(after['zoom.in']).toEqual(shippedIn);
+    expect(after['zoom.out']).toEqual(shippedOut.slice(1));
   });
 });
