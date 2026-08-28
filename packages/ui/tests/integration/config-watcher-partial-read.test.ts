@@ -156,6 +156,18 @@ describe('a partially written settings.json is not mistaken for the defaults', (
     );
     const payload = await readConfigPayload(new FileConfigStore(root));
     expect(payload.settings.notifications.error.mode).toBe('never');
-    expect(Object.keys(payload).sort()).toEqual(['iconPacks', 'keybindings', 'settings', 'theme']);
+    /*
+     * `generation` joined the set deliberately (#341, #333), and it is the ONE addition since 032
+     * pinned this. It is not a new signal for readers — every existing consumer ignores it — but the
+     * ordering token that lets the watcher tell a current read from one a write overtook. The pin
+     * stays a pin: it is here so the next widening is a decision rather than an accident.
+     */
+    expect(Object.keys(payload).sort()).toEqual([
+      'generation',
+      'iconPacks',
+      'keybindings',
+      'settings',
+      'theme',
+    ]);
   });
 });

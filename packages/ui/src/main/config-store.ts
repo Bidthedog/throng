@@ -93,6 +93,26 @@ export class FileConfigStore implements IConfigStore {
   private writeSeq = 0;
 
   /**
+   * How many config writes this process has COMMITTED (#341, #333).
+   *
+   * The ordering token between the write path and the watcher's read, and it exists because those
+   * two are the only writers/readers of these files and neither could otherwise tell whose turn it
+   * was. A read that begins at generation N and finishes after the counter has moved was overtaken
+   * by a write, so the document it holds is already history — see `readConfigOnce`, which captures
+   * this before reading, and the store's consumers, which refuse to broadcast a payload the counter
+   * has outrun.
+   *
+   * Bumped on COMMIT rather than on entry, so a write that fails to land never makes a live read
+   * look stale. Monotonic and process-local: it is compared only against itself.
+   */
+  private commitGeneration = 0;
+
+  /** The number of committed config writes — see {@link commitGeneration}. */
+  get generation(): number {
+    return this.commitGeneration;
+  }
+
+  /**
    * One in-flight chain per document path (031, FR-013c).
    *
    * Atomic renames already made a single write all-or-nothing, but nothing ordered TWO writers of
@@ -203,6 +223,7 @@ export class FileConfigStore implements IConfigStore {
       tmp = `${path}.${(this.writeSeq += 1)}.tmp`; // unique per write (no shared-tmp race)
       await writeFile(tmp, FileConfigStore.serialize(value), 'utf8');
       await renameWithRetry(tmp, path); // atomic replace (libuv MoveFileEx w/ replace on Windows)
+      this.commitGeneration += 1;
       return { ok: true };
     } catch (err) {
       // Never throw (contract) — but never claim success either (issue #75): the caller decides
@@ -345,6 +366,7 @@ export class FileConfigStore implements IConfigStore {
     for (const s of snaps) {
       try {
         await rename(s.tmp, s.path);
+        this.commitGeneration += 1;
         committed.push(s);
       } catch (err) {
         await this.rollback(committed);

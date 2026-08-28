@@ -35,6 +35,27 @@ export interface ConfigPayload {
    * (FR-005) rather than merely eventual.
    */
   iconPacks: LoadedIconPack[];
+  /**
+   * The store's commit generation as it was when this read STARTED (#341, #333).
+   *
+   * ══ WHAT IT IS FOR ══
+   *
+   * A watcher read is not instantaneous: it opens several files, and 032 FR-008 makes it retry for
+   * up to ~100 ms when it catches a partial write. A config write can therefore commit while a read
+   * is in progress, and the payload that read produces describes a file that no longer exists —
+   * while arriving AFTER the renderer has already adopted the write that superseded it.
+   *
+   * That is not a theoretical ordering. Measured on an idle machine, the Key Bindings tab lost an
+   * edit this way once in every seven or so attempts: the renderer reverted to the pre-write
+   * document, and the NEXT whole-document edit was then composed from it and wrote the reverted
+   * value back to disk.
+   *
+   * Captured before the read rather than after, which is the only order that is safe. Capturing
+   * afterwards would stamp a stale document with a fresh generation and make it look current;
+   * capturing first can only ever make a current document look stale, and the cost of that is one
+   * suppressed broadcast that the write's own file event immediately replaces.
+   */
+  generation: number;
 }
 
 /** A payload, plus whether the settings document could actually be read (032, FR-008). */
@@ -100,6 +121,8 @@ export async function readConfigOnce(
   store: IConfigStore,
   loadIconPacks: () => Promise<LoadedIconPack[]> = async () => [],
 ): Promise<ConfigReadResult> {
+  // BEFORE the first read, so a write that commits from here on makes this payload provably stale.
+  const generation = storeGeneration(store);
   const rawSettings = await store.readRaw({ kind: 'settings' });
   let settingsUnreadable = false;
   if (rawSettings.trim().length === 0) {
@@ -153,7 +176,32 @@ export async function readConfigOnce(
   );
   const keybindings = await store.read({ kind: 'keybindings' }, DEFAULT_KEYBINDINGS, parseKeybindings);
   const iconPacks = await loadIconPacks();
-  return { payload: { settings, theme, keybindings, iconPacks }, settingsUnreadable };
+  return { payload: { settings, theme, keybindings, iconPacks, generation }, settingsUnreadable };
+}
+
+/**
+ * The store's commit generation, for stores that keep one.
+ *
+ * Optional rather than part of `IConfigStore`, because the ordering token is an implementation
+ * concern of a store that writes files — an in-memory fake has no partial write to be overtaken by,
+ * and every test double in the repository would otherwise have to grow a counter it never reads.
+ * A store without one reports 0 forever, which never suppresses anything: the guard degrades to
+ * exactly the behaviour that shipped before it.
+ */
+function storeGeneration(store: IConfigStore): number {
+  const gen = (store as { generation?: unknown }).generation;
+  return typeof gen === 'number' ? gen : 0;
+}
+
+/**
+ * Whether `payload` was overtaken by a write while it was being read (#341, #333).
+ *
+ * The whole guard, in one comparison. A caller that broadcasts a payload this returns true for is
+ * telling every window that the file says something it stopped saying — and, because the Preferences
+ * tabs compose their next edit from what they were last told, that lie is then written back to disk.
+ */
+export function isSupersededPayload(store: IConfigStore, payload: ConfigPayload): boolean {
+  return storeGeneration(store) > payload.generation;
 }
 
 /**
@@ -206,7 +254,21 @@ export function startConfigWatcher(deps: {
 }): Disposable {
   return deps.watcher.watch(deps.config.configRoot, () => {
     void readConfigWithRetry(deps.store, deps.policy ?? DEFAULT_CONFIG_WATCH_POLICY, deps.loadIconPacks).then(
-      (result) => deps.broadcast(result.payload),
+      (result) => {
+        /*
+         * Drop a read a write overtook (#341, #333).
+         *
+         * Checked HERE, at the moment of sending, rather than when the read returned: the read and
+         * the broadcast are separated by the retry policy and by the icon-pack load, and the write
+         * we are racing can commit anywhere in that gap. Testing as late as possible makes the
+         * remaining window a single synchronous step.
+         *
+         * Nothing is lost by dropping it. The write that superseded this read changed a file the
+         * watcher is watching, so it has already queued the event whose read WILL be current.
+         */
+        if (isSupersededPayload(deps.store, result.payload)) return;
+        deps.broadcast(result.payload);
+      },
     );
   });
 }
