@@ -328,7 +328,29 @@ function PreferencesShell({ initialTab }: { initialTab: Tab }): ReactElement {
               scrollTops.current[tab] = e.currentTarget.scrollTop;
             }}
           >
-            {mode === 'json' ? (
+            {/*
+              Nothing is editable until the configuration has actually loaded (#341).
+
+              The window renders from the SHIPPED DEFAULTS while `config.get()` is in flight, and
+              that read is a genuine round trip — it re-reads three documents and enumerates the
+              icon-pack directory — so the gap is not theoretical. Two things went wrong inside it,
+              and neither is recoverable afterwards:
+
+              - **The on-entry snapshot is captured on the render where `loaded` first turns true.**
+                An edit made before then is already in the payload that resolves the load, so the
+                snapshot records the EDITED value and "revert to how this window opened" restores
+                the very thing the user was discarding. `preferences-reset.e2e.ts:217` fails exactly
+                this way — a poll for `false` that reads `true` for its whole budget.
+              - **The Key Bindings tab composes WHOLE documents from what it currently holds.** Held
+                before the load, that is the shipped defaults, so one edit would write the default
+                keybindings over the user's real ones.
+
+              The window cannot repair either after the fact: it never saw the state it would have
+              to revert to. So it must not accept the edit in the first place, which is what this
+              gate does. In practice the read resolves in a few milliseconds and nothing is visible;
+              what it removes is the window between the frame being interactive and it being right.
+            */}
+            {!loaded ? null : mode === 'json' ? (
               <JsonTab
                 docId={
                   tab === 'settings'
