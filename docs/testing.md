@@ -969,6 +969,51 @@ The general form, across all three: **ask what writes the thing you are about to
 something that cannot be true before that write has happened.** "Near it", "usually after it", and
 "set when the work was requested" are all the same bug.
 
+### When waiting correctly is not enough, because the app is telling the renderer something untrue
+
+The three above are all the test's fault: it read something before the thing that writes it had run.
+The two below are **not**, and the distinction is worth holding onto, because the first instinct on
+meeting them is to add another wait — and no wait fixes either. The test waited correctly and was
+told a lie.
+
+Both surfaced in `preferences-reset.e2e.ts` chasing [#341](https://github.com/Bidthedog/throng/issues/341),
+and both turned out to be product defects that cost a user real work rather than harness problems.
+
+- **A broadcast can be older than the write it lands after.** A watcher read is not instantaneous —
+  it opens three documents and enumerates the icon-pack directory, and 032 FR-008 makes it retry for
+  up to ~100 ms when it catches a partial write. A config write can commit inside that window, so the
+  payload describes a file that has stopped saying it, and it reaches the renderer *after* the
+  renderer adopted the write that superseded it. The renderer cannot defend itself: `onChange`
+  replaces the whole state because a broadcast is supposed to *be* the truth, and nothing in the
+  payload ever said which moment it was the truth at.
+
+  The damage is not a stale render. The preferences tabs compose their next edit from what they were
+  last told, so the next whole-document write puts the reverted value **back on disk**. Remove a
+  chord from `zoom.in`, get reverted, remove one from `zoom.out`, and that second write restores
+  `zoom.in` to its shipped value. The Reset control then correctly reports the row as un-overridden,
+  which is why the failure presents as a click that never becomes actionable rather than as a wrong
+  value. `ConfigPayload.generation` now carries the store's commit count as at the read's *start*,
+  and a read the counter has outrun is never broadcast.
+
+- **A window that is interactive before it has loaded cannot honour "revert".** The preferences
+  editors rendered from the shipped defaults while `config.get()` was in flight. An edit made in that
+  gap is already in the payload that resolves the load, so the on-entry snapshot — captured on the
+  render where `loaded` first turns true — records the *edited* value, and "revert every editor to
+  its state when this window opened" restores the very thing the user was discarding. Retrying the
+  read cannot help: a re-read returns fresher content, never the state the window opened with.
+
+  The worse half never reached the tracker on its own: the Key Bindings tab composes **whole
+  documents** from what it currently holds, so one edit in that gap writes the default keybindings
+  over the user's real ones. The editors now wait for `loaded`; the toolbar does not.
+
+Measured, `preferences-reset.e2e.ts` alone, idle machine, one worker, retries off: **5 failed / 14**
+before, **1 / 14** after the first fix, **0 / 16** after the second — then a full `npm run gate` at
+560 E2E, 0 flaky.
+
+The general form of *these* two: **ask whether the thing telling you is entitled to be believed.**
+A payload with no notion of when it was true, and a window with no notion of what it opened with,
+are both saying "this is the state" while holding no evidence for it.
+
 ### Reproducing a flake: separate invocations, never `--repeat-each`
 
 The rule above says stress the one test until it fails on demand. **How you stress it decides whether
