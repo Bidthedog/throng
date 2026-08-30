@@ -114,6 +114,16 @@ async function run(win: Page, pid: string, cmd: string, marker: string): Promise
     .toBeGreaterThanOrEqual(inCommand + 1);
 }
 
+/**
+ * The token that separates "before find" from "during find" in the terminal buffer (issue #352).
+ *
+ * Echoed at the prompt once the scrollback is seeded and immediately before the find bar opens, so
+ * SC-002 can be asserted against the text that follows it rather than against the whole buffer.
+ * Deliberately contains no `NEEDLE_`, which is what the find bar searches for, and nothing a shell
+ * would treat as special.
+ */
+const FIND_PHASE = 'FIND_PHASE_BEGIN';
+
 /** xterm's live grid — searching must not resize it (FR-013). */
 async function grid(win: Page, pid: string): Promise<{ width: number; rows: number }> {
   return win.getByTestId(`terminal-${pid}`).evaluate((el) => ({
@@ -155,6 +165,11 @@ test('finds in the scrollback, counts and steps matches — and types nothing at
       await run(win, pid, 'echo NEEDLE_A', 'NEEDLE_A');
       await run(win, pid, 'echo other', 'other');
       await run(win, pid, 'echo NEEDLE_B', 'NEEDLE_B');
+
+      // The phase boundary for SC-002 — see the assertion at the end of this test.
+      await run(win, pid, `echo ${FIND_PHASE}`, FIND_PHASE);
+      const beforeFind = await term.innerText();
+
       const before = await grid(win, pid);
 
       await win.keyboard.press('Control+f');
@@ -175,7 +190,58 @@ test('finds in the scrollback, counts and steps matches — and types nothing at
       // stray input was interpreted at the prompt (SC-002).
       await win.getByTestId('find-close').click();
       await run(win, pid, 'echo STILL_ALIVE', 'STILL_ALIVE');
-      await expect(term).not.toContainText('is not recognized');
+
+      /*
+       * SCOPED TO THE FIND INTERACTION, NOT TO THE WHOLE BUFFER (issue #352).
+       *
+       * This assertion used to read `await expect(term).not.toContainText('is not recognized')` —
+       * the entire terminal, whenever anything in it arrived. A run captured under #347 failed it
+       * with a stray `t` and 32 `V`s that reached the prompt during app/terminal STARTUP, before
+       * `echo NEEDLE_A` and long before the find bar existed:
+       *
+       *     C:\…\throng-tfind-bIGj75>t't' is not recognized as an internal or external command,…
+       *     C:\…\throng-tfind-bIGj75>echo NEEDLE_A
+       *
+       * A whole-buffer scan cannot tell that apart from the one thing this test exists to disprove,
+       * so the failure read as "searching typed at the shell" and sent a reader into the find and
+       * reserved-key paths, which were clean.
+       *
+       * The per-phase token fixes it — the habit `.claude/skills/throng-testing/SKILL.md:136` calls
+       * "a unique token per attempt … so [two outcomes] are two different observations rather than
+       * one ambiguous one", which is this failure in one sentence. (Issue #352 attributes that
+       * guidance to `docs/testing.md`; it is not there, and a citation that sends the next reader to
+       * the wrong file is the mistake CLAUDE.md's "find the requirement that already governs it"
+       * section is about.) Everything after the LAST occurrence
+       * of the phase marker — its echoed output, not the typed command — belongs to the find
+       * interaction and to nothing before it. Read from `innerText`, so the buffer is never typed
+       * into and the find session stays clean.
+       */
+      const buffer = await term.innerText();
+      const findPhaseAt = buffer.lastIndexOf(FIND_PHASE);
+      expect(
+        findPhaseAt,
+        'the phase marker is still on screen, so the slice below really is a scope',
+      ).toBeGreaterThanOrEqual(0);
+      expect(
+        buffer.slice(findPhaseAt),
+        'the find interaction typed at the shell (output BEFORE the phase marker is out of scope ' +
+          'here and belongs to #347)',
+      ).not.toContain('is not recognized');
+
+      /*
+       * The other half of the ambiguity: say when something DID reach the prompt earlier, without
+       * failing on it. #347 has that under observation deliberately — it is not reproducible on
+       * demand, so asserting on it here would buy a flake rather than a guarantee. An annotation
+       * puts it in the report under its own name, which is all the original message was missing.
+       */
+      if (beforeFind.includes('is not recognized')) {
+        test.info().annotations.push({
+          type: 'startup-noise',
+          description:
+            'something reached the prompt BEFORE the find bar was opened (#347) — not a find ' +
+            'defect, and not what this test asserts',
+        });
+      }
     });
   } finally {
     cleanupTemp(root);
