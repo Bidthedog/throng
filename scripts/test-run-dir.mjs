@@ -94,6 +94,9 @@ export function sweepStaleRunDirs({ ageMs = 6 * 60 * 60 * 1000, keep = '' } = {}
   return { removed, scanned: entries.length };
 }
 
+/** `throng-agent-<pid>.log` — the de-elevated PTY agent's diagnostic sink (pty-agent-log.ts). */
+const AGENT_LOG = /^throng-agent-\d+\.log$/;
+
 /**
  * Remove the run folder if the run cleaned up after itself (empty), otherwise keep it and say where
  * it is, so the leftovers can be inspected.
@@ -101,8 +104,28 @@ export function sweepStaleRunDirs({ ageMs = 6 * 60 * 60 * 1000, keep = '' } = {}
  * A leftover is NOT evidence that something went wrong. Windows routinely keeps a handle on a
  * directory after the process that owned it has gone, so `cleanupTemp` (tests/e2e/harness.ts)
  * deliberately gives up rather than failing a test whose assertions already passed — that lock used
- * to cost two thirds of CI's slowest shard in retries. The wording here matters because the previous
- * "a test likely crashed" reading sent people looking for a crash that had not happened.
+ * to cost two thirds of CI's slowest shard in retries.
+ *
+ * ══ THIS MESSAGE HAS NAMED THE WRONG CAUSE TWICE — SO IT NOW NAMES NONE (issue #336) ══
+ *
+ * It first read "a test likely crashed", which sent people looking for a crash that had not
+ * happened. That was corrected to also offer a Windows lock — and the lock was not there either.
+ * Both times the folder held the same thing: `throng-agent-<pid>.log` files. `%TEMP%` is redirected
+ * into the run folder for the duration of a run, the agent writes one log per process, and NO
+ * cleanup path removes them — so an ordinary green run ends with a folder full of them. Measured on
+ * a 205-passed / 0-failed run: 137 of 161 items were agent logs.
+ *
+ * The pattern behind both wordings is the same one: stating a cause that was never checked. A
+ * confident wrong diagnosis costs a reader more than no diagnosis, because they believe it. So the
+ * line now COUNTS what is there, and offers the two candidates only where they are still plausible
+ * — beside something that is not an agent log — and only ever as candidates.
+ *
+ * The logs are reported rather than deleted on purpose. They are the only record of an agent that
+ * dies after connecting back (`packages/daemon/DEBUG-agent-crash.md` sends developers to exactly
+ * these files), and they do not accumulate: {@link sweepStaleRunDirs} drops run folders older than
+ * six hours on every gate and every E2E run. Bounded diagnostics are worth keeping.
+ *
+ * Held by `packages/ui/tests/unit/test-run-dir.test.ts`.
  */
 export function cleanupRunDir(dir) {
   let leftovers = [];
@@ -115,8 +138,22 @@ export function cleanupRunDir(dir) {
     rmSync(dir, { recursive: true, force: true });
     return;
   }
-  console.log(
-    `\n[throng test] kept run dir with ${leftovers.length} leftover item(s) ` +
-      `(a directory Windows would not release, or a test that crashed before its cleanup):\n  ${dir}\n`,
-  );
+
+  const logs = leftovers.filter((name) => AGENT_LOG.test(name)).length;
+  const other = leftovers.length - logs;
+  const counted = [
+    logs > 0 ? `${logs} pty-agent log(s)` : '',
+    other > 0 ? `${other} other item(s)` : '',
+  ]
+    .filter(Boolean)
+    .join(' and ');
+
+  // Only the unexplained leftovers are worth speculating about, and only out loud as speculation.
+  const guess =
+    other > 0
+      ? '\n  The non-log leftovers may be a directory Windows would not release, or a test that ' +
+        'stopped\n  before its cleanup — neither has been established here, so open it and look.'
+      : '';
+
+  console.log(`\n[throng test] kept run dir for inspection — ${counted}:\n  ${dir}${guess}\n`);
 }
