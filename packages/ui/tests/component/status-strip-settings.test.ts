@@ -62,13 +62,47 @@ const readout = (id: string): HTMLElement | null =>
  * The bridge answers `config.get` with this document and the store parses it exactly as it parses a
  * real `settings.json` — so an unspecified key falls back the way it would on a user's machine
  * rather than being absent.
+ *
+ * `configDelayTicks` holds that answer back, so the settings channel provably loses its race with
+ * the document channel — see {@link settled}.
  */
-function panelWith(editor: Record<string, unknown>): ReturnType<typeof mountEditor> {
+function panelWith(
+  editor: Record<string, unknown>,
+  configDelayTicks = 0,
+): ReturnType<typeof mountEditor> {
   return mountEditor({
     panelId: PANEL,
     doc: { text: TEXT, version: 1, absPath: FILE },
     settings: { editor },
+    configDelayTicks,
   });
+}
+
+/**
+ * Wait until the tree is holding the SEEDED settings rather than the shipped defaults (issue #345).
+ *
+ * ══ WHICH MOUNTS NEED THIS, AND WHICH ALREADY HAD IT ══
+ *
+ * `config.get()` and `editor.getContent()` are two promises, and nothing orders them. A test that
+ * waits only for something the DOCUMENT produces has said nothing about whether the settings have
+ * landed — so it asserts against `DEFAULT_APP_SETTINGS` whenever the settings channel loses. That
+ * is #335 in `editor-update-listener.test.ts` and again in `gutter-compartment.test.ts`, and this
+ * file was the third instance of the same shape.
+ *
+ * The distinction that matters here, because it is what makes only SOME tests below exposed:
+ *
+ * - The two tests that wait on `chars` or `line` are waiting on a readout the shipped defaults draw
+ *   TOO. The wait passes whether or not the seed arrived, so it is not a settings wait at all —
+ *   their only guard was the unrelated 200 ms metrics debounce happening to outlast the race.
+ *   Measured on this file at `configDelayTicks: 20`: both fail, `line is off: expected <span> to be
+ *   null` and `chars is a count: expected <span> to be null`, reading the defaults exactly as #345
+ *   predicted.
+ * - The three tests that wait for the bar or a readout to be ABSENT are waiting on the observable
+ *   the SEEDED setting produces, which cannot pass until the seed has landed. Those are correct as
+ *   written and are deliberately left alone; the helper's own doc calls that the better form.
+ */
+async function settled(h: ReturnType<typeof mountEditor>): Promise<void> {
+  await waitFor(() => expect(h.settingsLoaded(), 'the seeded settings have landed').toBe(true));
 }
 
 beforeEach(() => {
@@ -87,10 +121,29 @@ afterEach(() => {
 
 describe('editor.statusBar.showCursorPosition governs line and column, and nothing else (FR-030)', () => {
   it('removes line and column and leaves the counts', async () => {
-    panelWith({ statusBar: { showCursorPosition: false } });
+    const h = panelWith({ statusBar: { showCursorPosition: false } });
+    await settled(h);
 
     // The counts arrive through the real 200 ms-debounced store, so they are waited for rather than
     // poked in — a bar reading the wrong document key fails here.
+    await waitFor(() => expect(readout('chars')).not.toBeNull());
+    expect(readout('words')).not.toBeNull();
+    expect(readout('line'), 'line is off').toBeNull();
+    expect(readout('column'), 'column is off').toBeNull();
+  });
+
+  it('reads the preference even when the settings channel provably loses (#345)', async () => {
+    /*
+     * The regression test for the wait above, and the reason it is a separate `it` rather than a
+     * delay added to the one before it: the delay has to be big enough to outlast the 200 ms metrics
+     * debounce, which is what accidentally covered this file for as long as it did. At
+     * `configDelayTicks: 20` the same assertions fail without `settled()` — measured — and pass with
+     * it. Left as the ordinary path, the delay would just make every run of this file slower for a
+     * guarantee one test can hold.
+     */
+    const h = panelWith({ statusBar: { showCursorPosition: false } }, 20);
+    await settled(h);
+
     await waitFor(() => expect(readout('chars')).not.toBeNull());
     expect(readout('words')).not.toBeNull();
     expect(readout('line'), 'line is off').toBeNull();
@@ -105,6 +158,7 @@ describe('editor.statusBar.showCursorPosition governs line and column, and nothi
 describe('editor.statusBar.showCounts governs all three counts together (FR-031)', () => {
   it('removes selected, chars and words and leaves line and column', async () => {
     const h = panelWith({ statusBar: { showCounts: false } });
+    await settled(h);
     await waitFor(() => expect(readout('line')).not.toBeNull());
 
     // A real selection, so the `selected` readout would be present if the toggle did not govern it.
