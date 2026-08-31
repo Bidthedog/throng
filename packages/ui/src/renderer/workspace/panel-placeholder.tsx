@@ -53,6 +53,7 @@ import { clearEditorPanelType } from '../editor/clear-editor-panel-type.js';
 import { disposeEditor } from '../editor/use-editor.js';
 import { clearTerminalViewState } from '../terminal/terminal-view-state.js';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
+import { revealPanelFile } from './reveal-panel-file.js';
 
 const EDGES: Edge[] = ['top', 'right', 'bottom', 'left'];
 
@@ -576,14 +577,10 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                     }),
                   );
                 },
+                // #273 — the panel's OWN absolute path. See `revealPanelFile` for what this used to
+                // do and why a root-relative path was wrong in two directions at once.
                 openInOsExplorer: () => {
-                  const abs = (editorUi?.filePath ?? '').replace(/\\/g, '/');
-                  const root = (editorUi?.ownerRoot ?? '').replace(/\\/g, '/').replace(/\/+$/, '');
-                  const rel =
-                    root && abs.toLowerCase().startsWith(`${root.toLowerCase()}/`)
-                      ? abs.slice(root.length + 1)
-                      : null;
-                  if (rel !== null) void window.throng?.files?.reveal?.(rel);
+                  revealPanelFile(editorUi?.filePath, window.throng?.files);
                 },
                 /*
                  * The BANNER'S retry, not a second call to the same operation.

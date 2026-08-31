@@ -1312,6 +1312,9 @@ if (isPrimaryInstance)
   // Deleting a file that is open in an editor marks that editor dirty (FR-099): the
   // buffer survives so the user can save it back (re-creating the file) or discard.
   filesService.setOnDeleted((absPaths) => editorCoordinator.markDeleted(absPaths));
+  // #273 — what confines `revealDocument`, since a rootless sub-workspace panel has no root to be
+  // confined by: a path may be revealed exactly while some Panel, in some window, is showing it.
+  filesService.setOpenDocumentCheck((absPath) => editorCoordinator.isOpen(absPath));
   // 024 US3 (#85): the inverse — undoing a delete lets a stranded editor become clean again.
   filesService.setOnRestored((absPaths) => void editorCoordinator.markRestored(absPaths));
   // Moving one that is open re-points it instead (019, #87): the move is BRACKETED — announced

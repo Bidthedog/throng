@@ -48,6 +48,12 @@ export function registerFilesIpc(service: FilesService, watcher: ExplorerWatcher
   ipcMain.handle('throng:files:reveal', (_event, relPath: unknown) =>
     service.reveal(asStr(relPath)),
   );
+  // #273 — a Panel menu reveals its own file by ABSOLUTE path. The panel's file need not be under
+  // the root this process last saw (a torn-out panel), and need not be under any root at all (a
+  // rootless sub-workspace panel), so the open-document registry is what confines this, not a root.
+  ipcMain.handle('throng:files:revealDocument', (_event, absPath: unknown) =>
+    service.revealDocument(asStr(absPath)),
+  );
   // 024 US3 (#85): does this path exist inside the project? The undo engine's world-check.
   ipcMain.handle('throng:files:exists', (_event, relPath: unknown) =>
     service.existsInProject(asStr(relPath)),
