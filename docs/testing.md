@@ -1014,6 +1014,35 @@ The general form of *these* two: **ask whether the thing telling you is entitled
 A payload with no notion of when it was true, and a window with no notion of what it opened with,
 are both saying "this is the state" while holding no evidence for it.
 
+### A terminal test that asserts on DEC private modes must use `windows-powershell`
+
+**Which DEC private modes reach xterm is decided by the system ConPTY, not by the program that wrote
+them** — so a terminal spec can arm a mode, observe nothing, and pass while measuring nothing at all.
+This is worse than a flake: a flake is loud, and this is silent.
+
+Measured on Windows 11 26200, one Node fixture writing the same four sequences under each flavour:
+
+| Written by the program | `cmd` | `windows-powershell` |
+|---|---|---|
+| `CSI ? 1049 h` (alt screen) | reaches xterm | reaches xterm |
+| `CSI ? 1002 ; 1006 h` (mouse + SGR) | **never arrives** | reaches xterm |
+| `CSI ? 1015 h` (urxvt encoding) | reaches xterm | reaches xterm |
+| `CSI ? 1003 h` (any-event mouse) | **never arrives** | reaches xterm |
+
+The missing set under `cmd` is exactly `MOUSE_REPORTING_MODES` from
+`core/src/terminal/wheel-decision.ts`. Nothing in throng filters them, and xterm 6.0.0 cannot skip a
+registered `?…h` handler — its parser dispatches by prefix and final byte alone
+(`EscapeSequenceParser.ts`, `CSI_DISPATCH`), and it answers DECRQM for any `$p` it receives, which it
+did not. So the bytes never reached the parser. The surviving set matches the ConPTY note at
+`platform-windows/src/node-pty-host.ts:127-142` from #298, which already records that this varies by
+Windows build; the flavour is a second axis on the same mechanism, and `terminal-claude-keys.e2e.ts`
+was on `windows-powershell` when it recorded real SGR mouse reports.
+
+**So: pick the flavour deliberately, and put an anti-vacuity control in front of the assertion** — one
+that fails when the negotiation did not happen, separately from the behaviour under test.
+`terminal-mouse-negotiation.e2e.ts` is written that way, and the control is what caught this: without
+it the spec would have passed under `cmd` for any implementation, correct or not.
+
 ### Reproducing a flake: separate invocations, never `--repeat-each`
 
 The rule above says stress the one test until it fails on demand. **How you stress it decides whether
