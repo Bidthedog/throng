@@ -13,9 +13,24 @@
  * rule the whole move signal is measured by. It did not consolidate the OTHER normaliser, and this
  * docstring used to claim that it had.
  *
- * `normaliseFolder` (`projects/project.ts`) still exists and is not a synonym: it trims, and it
- * collapses repeated separators, neither of which happens here. It is what keys the app-wide open
- * registry (`editor/open-registry.ts`) — the very map `markMoved` re-keys — and `isUnderPath` below
+ * `normaliseFolder` (`projects/project.ts`) still exists and is not a synonym. Stated in full,
+ * because naming only the DIFFERENCES has already misled a reader into thinking the two disagree
+ * about separators — they do not, and that mistake cost an afternoon chasing a defect that was
+ * never there:
+ *
+ * | | `normaliseForCompare` (here) | `normaliseFolder` |
+ * |---|---|---|
+ * | `\` → `/` | yes | **yes** |
+ * | lower-case | yes | yes |
+ * | strip trailing separator | yes | yes |
+ * | trim surrounding whitespace | no | yes |
+ * | collapse repeated separators | no | yes |
+ *
+ * So they differ ONLY in the last two rows. Both flatten backslashes, which is why a stored path
+ * spelled `D:\p/notes.md` and one spelled `D:\p\notes.md` are one key to either of them (#229).
+ *
+ * `normaliseFolder` is what keys the app-wide open registry
+ * (`editor/open-registry.ts`) — the very map `markMoved` re-keys — and `isUnderPath` below
  * is byte-for-byte the predicate already spelled as `isWithinRoot` (`explorer/path-rules.ts`) and as
  * `isFolderConflict` (`projects/project.ts`), each built on that other normaliser.
  *

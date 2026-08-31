@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import { sep } from 'node:path';
 import {
+  canonicalisePersistedPaths,
   collectPanels,
   createDefaultLayout,
   isMainLayoutValid,
   LAYOUT_SCHEMA_VERSION,
   type IWorkspaceStore,
+  type PathSeparator,
   type SubWorkspace,
   type WorkspaceLayout,
   type WorkspaceLoadResult,
@@ -35,6 +38,14 @@ interface SubWorkspaceRow {
  * document falls back to the default empty workspace with `restored: false`
  * (FR-029). Sub-workspace records are stored as JSON documents too (US4).
  */
+/**
+ * The host's separator, as the storage canon for absolute paths (#229).
+ *
+ * Read once here rather than inside `@throng/core`, which is OS-agnostic by Principle II and imports
+ * no `node:path`. This is the platform-aware edge that supplies it.
+ */
+const HOST_SEPARATOR = sep as PathSeparator;
+
 export class WorkspaceRepository implements IWorkspaceStore {
   constructor(private readonly db: ThrongDatabase) {}
 
@@ -45,7 +56,11 @@ export class WorkspaceRepository implements IWorkspaceStore {
 
     if (row) {
       const parsed = this.tryParseLayout(row.layout_json, projectId);
-      if (parsed) return { layout: parsed, restored: true };
+      // Canonicalised on the way OUT as well as in, so a row written before #229 comes back in the
+      // storage canon without a migration or a write-on-read. It settles on disk at the next save.
+      if (parsed) {
+        return { layout: canonicalisePersistedPaths(parsed, HOST_SEPARATOR), restored: true };
+      }
       // A row exists but could not be parsed/validated → corrupt (FR-029, SC-011).
       return { layout: this.defaultLayout(projectId), restored: false, reason: 'corrupt' };
     }
@@ -53,6 +68,9 @@ export class WorkspaceRepository implements IWorkspaceStore {
   }
 
   save(ownerUser: string, projectId: string, layout: WorkspaceLayout): void {
+    // #229: the single boundary every persisted layout passes through, so the storage canon holds
+    // regardless of which producer built the path. Structural — the caller's layout is not mutated.
+    const canonical = canonicalisePersistedPaths(layout, HOST_SEPARATOR);
     this.db
       .prepare(
         `INSERT INTO workspace_layout (owner_user, project_id, schema_version, layout_json, updated_at)
@@ -65,8 +83,8 @@ export class WorkspaceRepository implements IWorkspaceStore {
       .run({
         owner_user: ownerUser,
         project_id: projectId,
-        schema_version: layout.schemaVersion,
-        layout_json: JSON.stringify(layout),
+        schema_version: canonical.schemaVersion,
+        layout_json: JSON.stringify(canonical),
         updated_at: new Date().toISOString(),
       });
   }

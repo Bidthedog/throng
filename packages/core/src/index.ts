@@ -82,6 +82,8 @@ export type { FileNode, NodeKind, RenameResult, DedupeStyle, DragModifiers, Drag
 // Path identity (019, FR-007): is this the same file, is this file under that folder — asked of
 // paths spelled by different producers (the tree's `/`, `node:path.join`'s `\`). Pure rules.
 export { normaliseForCompare, samePath, isUnderPath } from './fs/path-id.js';
+export { toCanonicalPath, isCanonicalPath, type PathSeparator } from './fs/path-canon.js';
+export { canonicalisePersistedPaths } from './workspace/persisted-paths.js';
 
 // Terminal shell detection (005 Phase B): OS seam.
 export type { IShellDetection, DetectedShell } from './abstractions/shell-detection.js';
