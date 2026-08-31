@@ -104,6 +104,7 @@
     "terminal-keyboard-negotiation.e2e.ts": "CPU",
     "terminal-mirror-survival.e2e.ts": "FOCUS",
     "terminal-mirror.e2e.ts": "FOCUS",
+    "terminal-mouse-negotiation.e2e.ts": "CPU",
     "terminal-no-orphans.e2e.ts": "CPU",
     "terminal-redraw-action.e2e.ts": "FOCUS",
     "terminal-scrollback-nav.e2e.ts": "CPU",
