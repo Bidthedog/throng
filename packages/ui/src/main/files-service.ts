@@ -128,6 +128,18 @@ export class FilesService {
   }
 
   /**
+   * Is some Panel, in some window, showing this absolute path? The bound on {@link revealDocument}.
+   *
+   * Injected rather than imported, so this service stays ignorant of editors and windows — the same
+   * seam, for the same reason, as {@link setHolderResolver}.
+   */
+  private isDocumentOpen: ((absPath: string) => boolean) | null = null;
+
+  setOpenDocumentCheck(isOpen: (absPath: string) => boolean): void {
+    this.isDocumentOpen = isOpen;
+  }
+
+  /**
    * Classify a failure, and record the raw text it replaced.
    *
    * Only when a cause was found. An UNCLASSIFIED failure is reported verbatim (FR-011b), so its raw
@@ -464,6 +476,52 @@ export class FilesService {
       const name = dedupeName('New file.txt', siblings, 'numbered');
       await this.fs.writeBytes(join(destAbs, name), new Uint8Array());
       return { relPath: joinRel(destRelDir, name) };
+    } catch (e) {
+      return this.failed(e);
+    }
+  }
+
+  /**
+   * Reveal a document by its ABSOLUTE path, confined by what is open rather than by a root (#273).
+   *
+   * ══ WHY THIS EXISTS BESIDE `reveal` ══
+   *
+   * Every other operation here is root-relative, and resolves against the one root the main
+   * window's explorer last set. That is right for the explorer, which is the only caller that has a
+   * relative path and is the only surface mounted in the main window — and wrong for every panel
+   * menu, because a Panel's file is not necessarily under that root, or under ANY root:
+   *
+   *   - A Panel torn out of project B into a sub-workspace window keeps project B's file while the
+   *     main window has moved on to project A. A relative path then resolves under A: a wrong
+   *     result, silently, and the same relative path may well exist there.
+   *   - A Panel CREATED inside a sub-workspace is ROOTLESS — it can open a file from anywhere on the
+   *     workstation and belongs to no project at all. There is no root to be relative to, so the
+   *     caller could not build a relative path even if it wanted one. "Open in OS Explorer" was
+   *     therefore enabled and did NOTHING for such a panel.
+   *
+   * Both callers already hold the absolute path. Making them destroy it to satisfy a root-relative
+   * API is what produced the two defects, so this takes the path they have.
+   *
+   * ══ WHAT CONFINES IT, SINCE A ROOT CANNOT ══
+   *
+   * The open-document registry: a path may be revealed exactly while some Panel, in some window, is
+   * showing it. That is a tighter bound than a project root rather than a looser one — a root
+   * permits every file beneath it including ones nothing has opened, while this permits only files
+   * the user is already looking at. It is also the only bound that can express a rootless panel's
+   * legitimate reach without permitting the whole filesystem.
+   *
+   * Injected, for the reason `resolveHolder` is: this service knows about a filesystem and nothing
+   * else. Absent (never wired, as in a test that does not care) the answer is NO — a confinement
+   * check that fails open is not a confinement check.
+   */
+  async revealDocument(absPath: string): Promise<OkOrError> {
+    if (!absPath) return { error: OUTSIDE };
+    if (!this.isDocumentOpen?.(absPath)) return { error: OUTSIDE };
+    try {
+      const { kind } = await this.fs.stat(absPath);
+      if (kind === 'file') await this.shell.revealInFileManager(absPath);
+      else await this.shell.openFolder(absPath);
+      return { ok: true };
     } catch (e) {
       return this.failed(e);
     }

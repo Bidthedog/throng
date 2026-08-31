@@ -260,6 +260,12 @@ declare global {
         newFolder: (destRelDir: string) => Promise<{ relPath: string } | FilesFailure>;
         newFile: (destRelDir: string) => Promise<{ relPath: string } | FilesFailure>;
         reveal: (relPath: string) => Promise<FilesOkOrError>;
+        /**
+         * #273 — reveal a Panel's own file by ABSOLUTE path. Confined by the open-document
+         * registry, not by a project root, because a sub-workspace panel may own a file under
+         * another project's root or under no root at all.
+         */
+        revealDocument?: (absPath: string) => Promise<FilesOkOrError>;
         /** 024 US3 (#85): does this path exist inside the project? The undo world-check. */
         exists?: (relPath: string) => Promise<boolean>;
         /** 024 US3 (#85): restore a trashed item to its original path. */
