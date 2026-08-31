@@ -98,6 +98,34 @@ export default defineConfig({
           include: ['packages/**/tests/component/**/*.test.ts'],
           environment: 'jsdom',
           setupFiles: ['./packages/ui/tests/component/setup.ts'],
+          /*
+           * 15 s, STATED rather than inherited (#355).
+           *
+           * This was vitest's default 5 s — not a value anyone chose, sitting in the same file as
+           * `osSerial`, whose author took the trouble to declare 30 s and say why. It was doing
+           * real work: on a machine roughly 2.5-3x slower per core than a current desktop, the two
+           * most expensive tests in this layer fail on it, and they fail with `Test timed out in
+           * 5000ms` rather than on any assertion.
+           *
+           * They are expensive for a reason that is not going away. Per-file fixed costs here —
+           * constructing a jsdom, importing React and a component tree — come to roughly DOUBLE the
+           * assertion time across the layer. On top of that `preferences-themes-tab` mounts a row
+           * per theme token (193 of them) and then types eight characters through `userEvent`,
+           * reconciling that list on each one, before waiting out the filter's real 150 ms
+           * debounce. All single-threaded JavaScript with no I/O to overlap, so it scales with
+           * per-core speed and nothing else.
+           *
+           * Which is why the alternative does not work: capping workers reaches the same green,
+           * because each test gets a larger share of a core, but costs 3.8x the wall clock (504 s
+           * against 132 s) — six extra minutes on every run to avoid writing this line down.
+           * Parallelism changes how many tests run at once, never how long one of them takes.
+           *
+           * 15 s and not 30 s: triple the old ceiling covers hardware several times slower, while
+           * staying well short of letting a genuine hang sit unnoticed. A hung test is hung, not
+           * three times slow, so tripling the budget costs the signal nothing — whereas the
+           * inherited 5 s was already producing false failures on real hardware.
+           */
+          testTimeout: 15_000,
         },
       },
       {
