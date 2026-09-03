@@ -19,19 +19,30 @@ Downloading, verifying, installing, upgrading, and removing throng on Windows.
 
 ## 1. Download
 
-From the [Releases page](https://github.com/Bidthedog/throng/releases), download the installer for the
-version you want:
+From the [Releases page](https://github.com/Bidthedog/throng/releases), pick **one** of three downloads.
+They are the same throng; they differ only in how it gets onto your machine.
 
-```
-throng-setup-<version>.exe
-```
+| Download | Choose it when | What it does |
+|---|---|---|
+| `throng-setup-<version>.exe` | **You want throng properly installed.** This is the one to take if you are not sure. | A setup wizard. Installs into your own profile, adds a Start-menu shortcut, and appears in *Apps & features* so it can be removed the usual way. No administrator rights. |
+| `throng-portable-<version>.exe` | You cannot install software, or you are trying throng out. | One file. Double-click it and throng runs — nothing is installed and no shortcut is created. It unpacks itself to a temporary folder each time it starts, so it takes longer to open than an installed copy. |
+| `throng-<version>.zip` | You want to keep throng in a folder you choose — a USB stick, a tools directory, a second machine. | An ordinary archive. Extract it anywhere and run `throng.exe` from inside. Deleting the folder removes it. |
 
-The release notes for that version list its **SHA-256 checksum** and repeat the guidance below.
+All three install **per user** and none of them asks for an administrator password. There is no
+machine-wide install today; that is tracked as
+[#361](https://github.com/Bidthedog/throng/issues/361).
+
+Whichever you take, your projects, settings, themes and layouts live in your user profile rather than
+beside the application — so you can move between these downloads without losing anything.
+
+The release notes for that version list a **SHA-256 checksum for every download**, against its own
+filename, and repeat the guidance below.
 
 ## 2. Verify the download (recommended)
 
 throng is unsigned (see [why](#the-unrecognised-app-warning)), so the checksum is how you confirm the file
-you got is exactly the file that was released — untampered and uncorrupted. In PowerShell:
+you got is exactly the file that was released — untampered and uncorrupted. In PowerShell, using the
+filename you actually downloaded:
 
 ```powershell
 Get-FileHash .\throng-setup-<version>.exe -Algorithm SHA256
@@ -42,9 +53,11 @@ intact. If they **don't**, do not run it — delete it and download again.
 
 ## The unrecognised-app warning
 
-Because throng's installer is **not code-signed**, Windows will show a **"Windows protected your PC" /
-unrecognised-app** warning (SmartScreen) when you run it. This is expected for an unsigned app and does not
-mean anything is wrong with the file — you already confirmed it with the checksum in step 2.
+Because throng's downloads are **not code-signed**, Windows will show a **"Windows protected your PC" /
+unrecognised-app** warning (SmartScreen) when you run one. This applies to the setup installer and the
+portable build alike, and to `throng.exe` the first time you run it from an extracted archive. It is
+expected for an unsigned app and does not mean anything is wrong with the file — you already confirmed it
+with the checksum in step 2.
 
 To proceed: click **More info**, then **Run anyway**.
 
@@ -57,16 +70,24 @@ To proceed: click **More info**, then **Run anyway**.
 
 ## 3. Install
 
-Run the installer. Because it is per-user:
+**If you took the setup installer**, run it. Because it is per-user:
 
 - it installs to `%LOCALAPPDATA%\Programs\throng` — no admin prompt;
 - it creates a **Start-menu shortcut**, with throng's icon;
 - it registers throng in **Settings → Apps → Installed apps**, where you can later remove it.
 
+**If you took the portable build**, there is nothing to install: double-click
+`throng-portable-<version>.exe` and throng starts. It has no Start-menu shortcut and does not appear in
+*Installed apps*. To remove it, delete the file.
+
+**If you took the archive**, extract it to any folder you can write to and run `throng.exe` from inside
+it. To remove it, delete the folder.
+
 ## 4. First launch
 
-Launch throng from the Start-menu shortcut. Create a project and spawn a terminal — everything works with
-nothing else installed. See the [quick start](quick-start.md) for the tour.
+Launch throng — from the Start-menu shortcut, the portable file, or `throng.exe` in the extracted folder.
+Create a project and spawn a terminal; everything works with nothing else installed. See the
+[quick start](quick-start.md) for the tour.
 
 Your data — projects, layouts, settings, keybindings, custom themes, the edit list — is stored in your
 **profile** (`%APPDATA%\throng` and `%USERPROFILE%\.throng`), **outside** the install folder. That is why

@@ -125,10 +125,11 @@ first launch to a working project, with the default key bindings.
 
 ### Installing a packaged build
 
-throng ships as a **self-contained per-user Windows installer** (no admin, no prerequisites) — see
-[`docs/installation.md`](docs/installation.md) to download, verify the checksum, install, upgrade and
-uninstall, and [`docs/releasing.md`](docs/releasing.md) for how a build becomes a versioned, verified,
-published release. The running app shows its version, build id and licence in **Help → About throng**
+throng ships as **three self-contained Windows downloads** (no admin, no prerequisites): a per-user
+installer, a portable executable that runs without installing, and a zip archive to extract wherever you
+like. See [`docs/installation.md`](docs/installation.md) to choose one, verify its checksum, install,
+upgrade and uninstall, and [`docs/releasing.md`](docs/releasing.md) for how a build becomes a versioned,
+verified, published release. The running app shows its version, build id and licence in **Help → About throng**
 (reached from the title-bar cog menu).
 
 ## Configuration
