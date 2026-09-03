@@ -133,13 +133,30 @@ jobs:
         id: ver
         shell: bash
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-      - name: Package (build + stage runtime + electron-builder NSIS per-user)
+      - name: Package (build + stage runtime + electron-builder targets)
         run: npm run package -- --publish never
+      # 042 FR-013 — the artifacts actually built must be exactly the declared set, in BOTH
+      # directions. A build that produced a file nobody declared is a build whose output is not
+      # understood, and this fails here rather than four jobs later at the checksum.
+      - name: Reconcile the built artifacts against the declared set
+        shell: bash
+        run: node scripts/artifact-set.mjs reconcile
+      - name: Resolve the artifact paths to upload
+        id: artifacts
+        shell: bash
+        run: |
+          {
+            echo "paths<<ARTIFACT_PATHS_EOF"
+            node scripts/artifact-set.mjs list --paths
+            echo "ARTIFACT_PATHS_EOF"
+          } >> "$GITHUB_OUTPUT"
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
           name: throng-installer
-          path: dist/installer/*.exe
+          # 042 FR-012 — every artifact is named. A `*.exe` glob would silently pick up a second
+          # `.exe`-producing target, or silently miss one.
+          path: ${{ steps.artifacts.outputs.paths }}
           if-no-files-found: error
           # The installer is ~131 MB and this artifact is only a hand-off between the three jobs
           # below; the bytes anyone actually wants are the ones `publish` attaches to the GitHub
@@ -172,20 +189,44 @@ jobs:
         with:
           name: throng-installer
           path: dist/installer
-      - name: Verify install -> launch -> version -> uninstall -> residue
+      # 042 FR-012/FR-014 — every artifact of the declared set is verified, each resolved by ROLE.
+      # This replaced `ls dist/installer/*.exe | head -n1`, which picks a file rather than naming
+      # one: with two `.exe`-producing targets, this step and the two gate steps below could each
+      # have picked a different artifact, silently.
+      - name: Verify every declared artifact
         shell: bash
         run: |
-          installer=$(ls dist/installer/*.exe | head -n1)
-          echo "Verifying $installer"
-          node scripts/verify-installer.mjs "$installer" \
-            --expected-version "${{ needs.build-installer.outputs.version }}" \
-            --verdict-out verification-verdict.json
-      - name: Upload verdict
+          set -euo pipefail
+          for role in $(node scripts/artifact-set.mjs list | cut -f1); do
+            artifact=$(node scripts/artifact-set.mjs resolve "$role")
+            echo "Verifying $role — $artifact"
+            node scripts/verify-installer.mjs "$artifact" \
+              --role "$role" \
+              --expected-version "${{ needs.build-installer.outputs.version }}" \
+              --verdict-out "verification-verdict-$role.json"
+          done
+      # 042 FR-006 — render the EXACT body publication will use, before the gated job, so the
+      # person giving the QA sign-off approves the text that actually ships. It also means a
+      # non-publishing `workflow_dispatch` rehearses the composition without releasing anything.
+      - name: Render the release body
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/release-notes.mjs render \
+            --version "${{ needs.build-installer.outputs.version }}" \
+            --artifacts "$(node scripts/artifact-set.mjs checksums)" \
+            --sha "${{ github.sha }}" \
+            --out release-body-preview.md
+          echo "--- release body preview ---"
+          cat release-body-preview.md
+      - name: Upload verdicts and the rendered body
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: verification-verdict
-          path: verification-verdict.json
+          path: |
+            verification-verdict-*.json
+            release-body-preview.md
           if-no-files-found: warn
           # `publish` downloads this too, so it expires with the installer above rather than
           # outliving it — a verdict without its build is a gate failure that reads like a bug.
@@ -222,43 +263,55 @@ jobs:
         with:
           name: verification-verdict
           path: .
-      - name: Evaluate publish gates (real version + verified + signed off; refuse re-publish)
+      - name: Evaluate publish gates (real version + set reconciles + verified + notes + signed off)
         shell: bash
         env:
-          THRONG_VERDICT_FILE: verification-verdict.json
           THRONG_QA_SIGNED_OFF: '1' # the release Environment approval gates this job's run
           # The release tag this run publishes — the sign-off/version binding (T041a/T038a): the gate
           # refuses unless the installer filename, package version, verdict-reported version and this
           # tag all agree, so an approval cannot satisfy the gate for a different build.
           THRONG_RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          installer=$(ls dist/installer/*.exe | head -n1)
-          export THRONG_INSTALLER_FILE="$installer"
+          set -euo pipefail
           version="${{ needs.build-installer.outputs.version }}"
           if gh release view "v$version" >/dev/null 2>&1; then export THRONG_ALREADY_PUBLISHED=1; fi
+          # 042 FR-016 — one verdict per declared artifact, and the list is DERIVED from the
+          # declaration rather than written out here, so adding a role cannot leave its verdict
+          # silently unread. A verdict covering only some of the set is a refusal, not a partial
+          # pass; the gate names the artifact with no verdict.
+          THRONG_VERDICT_FILES=$(node scripts/artifact-set.mjs list \
+            | cut -f1 \
+            | sed 's|^|verification-verdict-|; s|$|.json|' \
+            | paste -sd, -)
+          export THRONG_VERDICT_FILES
+          # No artifact is resolved here any more: the gate reads the declared set itself, so the
+          # thing it gates on cannot differ from the thing that gets published.
           node scripts/publish-gates.mjs
         # gh is preinstalled on the runner; GH_TOKEN provided below.
-      - name: Compute checksum (last step reading the bytes) and publish
+      - name: Compute checksums (last step reading the bytes), compose the body, and publish
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          installer=$(ls dist/installer/*.exe | head -n1)
+          set -euo pipefail
           version="${{ needs.build-installer.outputs.version }}"
-          sum=$(node scripts/checksum.mjs "$installer")
+          # 020 FR-042a — each digest is computed from the exact published bytes, here, as the last
+          # step that reads them. 042 FR-017 — every artifact gets its own row, against its own
+          # filename.
+          artifacts=$(node scripts/artifact-set.mjs checksums)
+          # 042 FR-001/FR-007 — the body is COMPOSED from CHANGELOG.md and the invariant footer,
+          # never authored here. This step used to hold a hardcoded string that made every release
+          # textually identical apart from a version number and a hash.
+          node scripts/release-notes.mjs render \
+            --version "$version" \
+            --artifacts "$artifacts" \
+            --sha "${{ github.sha }}" \
+            --out release-body.md
           # A SemVer prerelease suffix (1.0.0-alpha1, 1.0.0-rc.2) publishes as a GitHub PRERELEASE, so an
           # alpha never becomes the repository's "latest release" that the install docs point people at.
           prerelease=''
           case "$version" in *-*) prerelease='--prerelease';; esac
-          notes="Automated release of throng v$version.
-
-          **This installer is not code-signed.** Windows will show an \"unrecognised app\" warning
-          (SmartScreen) — click **More info → Run anyway**. Never disable a security feature to install.
-          Verify your download matches the checksum below (\`Get-FileHash <file> -Algorithm SHA256\`).
-
-          | Artifact | SHA-256 |
-          |---|---|
-          | $(basename "$installer") | \`$(echo "$sum" | cut -d' ' -f1)\` |
-
-          Built from ${{ github.sha }}."
-          gh release create "v$version" "$installer" --title "throng v$version" --notes "$notes" $prerelease
+          # Every artifact of the declared set is attached — named, not globbed (042 FR-017).
+          mapfile -t files < <(node scripts/artifact-set.mjs list --paths)
+          gh release create "v$version" "${files[@]}" \
+            --title "throng v$version" --notes-file release-body.md $prerelease

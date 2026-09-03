@@ -56,10 +56,40 @@ export type {
 } from './config/install-handoff.js';
 export {
   VERIFICATION_STEPS,
-  verdictFromSteps,
-  isVerdictPassingFor,
+  buildArtifactVerdict,
+  buildSetVerdict,
+  isVerdictPassingForSet,
 } from './config/verification-verdict.js';
-export type { VerificationStep, VerificationVerdict } from './config/verification-verdict.js';
+export type {
+  ArtifactVerdict,
+  StepOutcome,
+  VerificationStep,
+  VerificationVerdict,
+} from './config/verification-verdict.js';
+export {
+  END_STATE_STEPS,
+  declareArtifactSet,
+  reconcileArtifactSet,
+  resolveArtifact,
+} from './config/release-artifacts.js';
+export type {
+  ReconcileResult,
+  ReleaseArtifact,
+  ReleaseArtifactRole,
+  ReleaseArtifactSet,
+} from './config/release-artifacts.js';
+export {
+  NO_USER_VISIBLE_CHANGES,
+  RELEASE_BODY_MAX_LENGTH,
+  composeReleaseBody,
+  lookupReleaseNotes,
+} from './config/release-notes.js';
+export type {
+  ComposeReleaseBodyInput,
+  NotesLookupResult,
+  NotesSection,
+  ReleaseNotes,
+} from './config/release-notes.js';
 
 // User-scoped application configuration (003): abstractions + pure schemas.
 export type {

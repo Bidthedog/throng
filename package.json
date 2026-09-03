@@ -27,6 +27,7 @@
     "generate:licenses": "node scripts/generate-licenses.mjs",
     "stamp:build": "node scripts/stamp-build.mjs",
     "stage:runtime": "node scripts/stage-runtime.mjs",
+    "prepackage": "node scripts/clean-dist.mjs",
     "package": "npm run build && npm run stage:runtime && electron-builder --config electron-builder.yml",
     "verify:installer": "node scripts/verify-installer.mjs",
     "publish:check": "node scripts/publish-gates.mjs",
