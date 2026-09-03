@@ -39,6 +39,11 @@ e2e-report.json
 
 # Installer verification verdict (020): a generated CI artifact, not source.
 verification-verdict.json
+# 042: one verdict per artifact role, and whatever `--verdict-out` was pointed at. A verification
+# run writes wherever it is told, and the obvious short name lands in the repo root — which is one
+# `git add -A` from being committed, as it duly was.
+verification-verdict-*.json
+/v.json
 # Scratch from scripts/run-deelevated.ps1 if a run is interrupted
 deelevated-*.log
 deelevated-*.cmd
