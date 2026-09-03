@@ -35,3 +35,50 @@ describe('scanResidue (020 FR-020/024)', () => {
     expect(offenders[0]).toMatch(/daemon/i);
   });
 });
+
+/**
+ * 042 FR-021 — a throng process is residue when it is THIS installation's, not because it is named
+ * throng.
+ *
+ * Found by verifying the archive artifact on a developer machine: the scan failed because the
+ * developer's own throng was open from an unrelated folder. On a clean CI runner nothing else is
+ * ever running, so the name-only rule looked correct and was never wrong there — which is exactly
+ * why it would have stayed unnoticed until someone tried to reproduce a CI verdict locally.
+ *
+ * With a root given, attribution is by path. Without one, the old name-only rule stands, because
+ * a caller that cannot say where the app lived has nothing better to go on.
+ */
+describe('scanResidue — attributing a process to the installation being scanned (042 FR-021)', () => {
+  const root = 'C:\\Users\\me\\AppData\\Local\\Programs\\throng';
+
+  it('flags a throng process running from under the scanned root', () => {
+    const offenders = scanResidue(root, [{ name: 'throng.exe', path: `${root}\\throng.exe` }]);
+    expect(offenders.length).toBe(1);
+    expect(offenders[0]).toMatch(/throng/i);
+  });
+
+  it('does NOT flag a throng running from somewhere else — that is another installation', () => {
+    expect(scanResidue(root, [{ name: 'throng.exe', path: 'E:\\tools\\throng\\throng.exe' }])).toEqual([]);
+  });
+
+  it('still flags a throng process whose path is unknown, rather than assuming it is innocent', () => {
+    expect(scanResidue(root, [{ name: 'throng.exe', path: '' }]).length).toBe(1);
+  });
+
+  it('keeps the name-only rule when no root is given', () => {
+    expect(scanResidue(undefined, [{ name: 'throng.exe', path: 'E:\\tools\\throng\\throng.exe' }]).length).toBe(1);
+  });
+
+  it('flags a survivor from a root that has already been deleted', () => {
+    // The folder is gone; the process it started is not. Passing the root even after removal is
+    // what keeps this detectable.
+    const gone = 'C:\\Temp\\throng-verify-archive-1234';
+    const offenders = scanResidue(gone, [{ name: 'throng.exe', path: `${gone}\\throng.exe` }]);
+    expect(offenders.length).toBe(1);
+  });
+
+  it('is case-insensitive about the path, as Windows is', () => {
+    const offenders = scanResidue(root, [{ name: 'throng.exe', path: `${root.toUpperCase()}\\THRONG.EXE` }]);
+    expect(offenders.length).toBe(1);
+  });
+});
