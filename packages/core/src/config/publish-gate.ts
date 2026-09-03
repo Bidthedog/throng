@@ -24,6 +24,18 @@ export interface PublishGateInput {
   isSignedOff: boolean;
   /** This version has already been published (re-publish must be refused, FR-034). */
   isAlreadyPublished: boolean;
+  /**
+   * `CHANGELOG.md` holds a non-empty section for exactly this version (042 FR-005). False covers
+   * all three failures — no section, an empty one, and one headed with a different version — which
+   * the refusal message from `scripts/release-notes.mjs` distinguishes for the reader.
+   */
+  notesBindToVersion: boolean;
+  /**
+   * The artifacts actually built are exactly the declared set (042 FR-013). False covers both
+   * directions: a declared artifact the build did not produce, and one it produced that nobody
+   * declared — publishing an artifact that was never verified is what FR-016 forbids.
+   */
+  artifactSetReconciles: boolean;
 }
 
 export interface PublishGateResult {
@@ -50,8 +62,22 @@ export function evaluatePublishGate(input: PublishGateInput): PublishGateResult 
   if (input.isAlreadyPublished) {
     return { allowed: false, reason: 'this version has already been published' };
   }
+  if (!input.artifactSetReconciles) {
+    return {
+      allowed: false,
+      reason: 'the built artifacts do not match the declared artifact set',
+    };
+  }
   if (!input.isVerified) {
     return { allowed: false, reason: 'the installer is not verified' };
+  }
+  // Cheap and deterministic, so it is checked BEFORE the human condition: a release whose notes
+  // were never written should be refused before anyone is asked to certify the build (042 FR-005).
+  if (!input.notesBindToVersion) {
+    return {
+      allowed: false,
+      reason: 'the release notes are missing, empty, or written for a different version',
+    };
   }
   if (!input.isSignedOff) {
     return { allowed: false, reason: 'QA sign-off is missing' };

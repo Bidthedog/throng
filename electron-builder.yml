@@ -86,8 +86,40 @@ extraResources:
     to: LICENSE
 
 win:
-  target: nsis
+  # 042 FR-018 — three artifacts, and every filename is DECLARED rather than discovered. The
+  # declaration in packages/core/src/config/release-artifacts.ts is the contract; `npm run package`
+  # is followed by `node scripts/artifact-set.mjs reconcile`, which fails the build if what is
+  # produced here disagrees with it, in either direction.
+  #
+  # `portable` and `nsis` both produce a `.exe`, which is exactly why no pipeline step may resolve
+  # an artifact by extension any more.
+  target:
+    - nsis
+    - portable
+    - zip
   icon: packages/ui/assets/throng.ico
+  # The default name for any win target that has no config block of its own. electron-builder has
+  # no top-level `zip:` section — passing one fails schema validation outright — so this is where
+  # the archive artifact gets its declared filename. `nsis` and `portable` override it below.
+  artifactName: throng-${version}.${ext}
+
+# A single self-extracting executable: download it, double-click it, throng runs. No install, no
+# administrator rights (020 FR-012 and FR-040 both still hold — see specs/042, "Requirements this
+# feature supersedes"; machine-wide install is #361, not this).
+#
+# It unpacks itself before running, and throng is deliberately NOT asar-packed (020 FR-009): it
+# ships its workspace packages/* tree verbatim plus a bundled host-Node runtime. So the unpack is
+# large and is paid at every launch, and — the part that matters for FR-021 — the unpack location
+# is NOT the folder the user deletes. `unpackDirName: false` keeps that location stable rather than
+# random per run, so the residue scan has something it can actually be pointed at.
+portable:
+  artifactName: throng-portable-${version}.${ext}
+  unpackDirName: false
+
+# The `zip` target — an ordinary archive, extracted wherever the user wants — is configured by
+# `win.artifactName` above rather than by a block here, because electron-builder has no `zip`
+# configuration section. Neither of the portable target's two risks applies to it: nothing
+# self-extracts, and deleting the folder is the whole uninstall.
 
 # Per-user (no administrator) install (FR-012/040). The uninstaller "also delete my data" checkbox
 # (FR-021) and the install-time downgrade refusal (FR-016a) are added via a custom NSIS include in
