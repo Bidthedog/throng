@@ -36,11 +36,58 @@ runtime dependency means checking both.
 
 ## Release (docs/releasing.md)
 
-Versioning → packaging → **verification** (`verify-installer`, producing `verification-verdict.json`)
-→ **QA sign-off** → publish via `gh release create`, gated by `scripts/publish-gates.mjs`
-(`THRONG_QA_SIGNED_OFF`, `THRONG_VERDICT_FILE`, `THRONG_RELEASE_TAG`, `THRONG_INSTALLER_FILE`,
+Versioning → packaging → **reconcile** → **verification** (one verdict per artifact) → **QA
+sign-off** → publish via `gh release create`, gated by `scripts/publish-gates.mjs`
+(`THRONG_QA_SIGNED_OFF`, `THRONG_VERDICT_FILES`, `THRONG_ARTIFACT_DIR`, `THRONG_RELEASE_TAG`,
 `THRONG_ALREADY_PUBLISHED`). There is a published **checksum instead of code signing** — that is a
 deliberate, documented choice, not an omission to fix.
+
+**A release is a DECLARED SET of artifacts, not a file the pipeline finds** (042). The declaration
+is `packages/core/src/config/release-artifacts.ts` — three roles today (`setup`, `portable`,
+`archive`), and #361 will add a fourth. Every step resolves by **role** through
+`scripts/artifact-set.mjs` (`list`, `resolve`, `reconcile`, `checksums`). Nothing globs, and nothing
+resolves by file extension: `nsis` and `portable` both produce a `.exe`, which is exactly why
+`ls dist/installer/*.exe | head -n1` was removed from three separate places in `release.yml`.
+
+- **`reconcile` runs straight after packaging and fails in BOTH directions** — a declared artifact
+  that was not built, and one that was built but never declared. `npm run package` empties
+  `dist/installer` first (`prepackage` → `scripts/clean-dist.mjs`) so a stale artifact from a
+  previous release cannot fail a clean build.
+- **Verification produces one `ArtifactVerdict` per role**, and a step has THREE outcomes:
+  `passed`, `failed`, `not-applicable`. An archive has no installer, and a verdict asserting an
+  uninstall that never ran is worse than one that fails honestly. A verdict marking an *applicable*
+  step `not-applicable` is **invalid**; a verdict covering only some of the set is a **refusal**,
+  not a partial pass.
+- **Release notes come from `CHANGELOG.md`**, committed before the tag so they are reviewed as a
+  diff. `scripts/release-notes.mjs` composes the body; it never writes prose and never falls back to
+  another version's notes. Publication is refused when the notes are missing, empty, or headed with
+  a different version.
+- **The gate has five conditions**, the four cheap ones before the human: real version → artifact
+  set reconciles → verified → notes bind to this version → QA sign-off.
+
+When running `verify-installer.mjs` on a developer machine, two things look like product bugs and
+are not: the launch probe needs its own `--user-data-dir` (Electron keys the single-instance lock to
+`userData`, which a *packaged* build does not isolate, so it collides with any throng already
+running), and the residue scan attributes processes **by path** because a throng running from
+somewhere else is a different installation. Neither can occur on a clean runner.
+
+**Verifying the `portable` role has three rules, and breaking any one of them produces a failure that
+looks exactly like a broken package.** Seven runs were spent learning them; the build was never at
+fault, and launching a portable throng normally opens a window every time.
+
+1. **Copy the unpacked tree before stopping the launcher.** The launcher deletes its unpack
+   directory when it exits, so unpack → kill → drive the unpacked exe destroys what it is about to
+   test. The probe then starts, attaches a debugger and quits as its files disappear.
+2. **Wait for the tree to settle before copying.** `throng.exe` appears first and the remaining
+   ~135 MB lands behind it; copying on first sight takes a torn read that starts, attaches, and then
+   hangs forever waiting for a file that was never copied.
+3. **Pass NO `PORTABLE_EXECUTABLE_DIR` / `PORTABLE_EXECUTABLE_FILE`.** Supplying them — which is
+   what the launcher does, and looks obviously correct — makes the app exit 1 the instant Playwright
+   attaches. The `archive` role is the same binary driven the same way without them, and passes.
+
+`--keep-residue` is how you check the residue scan can still fail: it leaves the tree in place and
+`residue-scan` must come back `failed`. A pass there means the scan is looking somewhere the app
+never was, and its ordinary green is worthless.
 
 ## CI (`.github/workflows/ci.yml`)
 
