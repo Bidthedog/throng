@@ -1,0 +1,149 @@
+name: Gate
+
+# THE FULL `npm run gate`, on a self-hosted Windows runner, so it stops running on a workstation.
+#
+# A local full run saturates every core for the better part of an hour, steals focus for its whole
+# duration, and — measured — exhausts the interactive desktop heap after a few hundred Electron
+# launches, at which point Windows refuses to start processes at all (0xC0000142). This workflow is
+# how that run happens somewhere else.
+#
+# IT IS ADDITIVE. ci.yml and release.yml are untouched and still run on GitHub-hosted runners;
+# nothing here gates master, and no required check depends on it. Deleting this one file reverts the
+# whole arrangement with no other edit — which is deliberate, because a self-hosted runner is a
+# machine someone has to keep alive, and the day it stops being worth it should be a cheap day.
+#
+# ── WHY THERE IS NO `pull_request` TRIGGER, AND WHY THERE MUST NEVER BE ONE ────────────────────
+#
+# This repository is PUBLIC and this runner is not hosted by GitHub. A `pull_request` trigger would
+# execute any fork's code on it, with whatever access that machine happens to have.
+#
+# The exclusion here is STRUCTURAL, not conditional: `workflow_dispatch` requires write access to
+# this repository, and `schedule` only ever runs on the default branch of this repository. Neither
+# has a fork-shaped path into it. That means there is no `if:` guard on this file to review, weaken,
+# or get subtly wrong — which is the point, because a guard is only as good as the next person to
+# edit it.
+#
+# Adding `pull_request`, `pull_request_target`, `issue_comment` or `repository_dispatch` re-opens
+# that hole in one line. Refuse that change.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  # One gate at a time, and a newer request wins. There is a single runner, so without this a second
+  # dispatch simply queues behind an 80-minute run that is already obsolete.
+  group: gate-self-hosted
+  cancel-in-progress: true
+
+env:
+  npm_config_loglevel: error
+
+jobs:
+  gate:
+    name: npm run gate
+    runs-on: [self-hosted, windows, gate]
+
+    # A HANG DETECTOR, not a budget. The expected run is 75-90 minutes: this machine is several
+    # times slower than a workstation, and the E2E serial tier is ~86% of the E2E stage and
+    # unparallelisable. If a run approaches 180 minutes, something is wrong that a larger number
+    # would only hide.
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pin the version rather than inheriting whatever `nvm use` last left active in the runner's
+      # interactive session. Node 20 matches ci.yml, which is what the native builds
+      # (better-sqlite3, node-pty, koffi) were compiled against.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # ── THE STEP THAT ONLY EXISTS BECAUSE THIS RUNNER IS SELF-HOSTED ──────────────────────────
+      #
+      # A GitHub-hosted runner is a fresh machine every time and cannot go stale. This one reuses
+      # its workspace, so `dist/` and tsc's incremental buildinfo SURVIVE between runs — and
+      # CLAUDE.md records exactly what that costs:
+      #
+      #   a stale packages/core/dist, which `tsc -b`'s buildinfo believed was current, produced a
+      #   red E2E while every cheap layer stayed green — because vitest resolves @throng/core to
+      #   SOURCE while the Electron app loads DIST. Unit and component tests all agreed with each
+      #   other and disagreed with reality.
+      #
+      # On a hosted runner that is impossible. Here it is the DEFAULT unless this step exists.
+      #
+      # Note this is NOT `scripts/clean-dist.mjs` (npm's `prepackage` hook). That removes
+      # `dist/installer`, the packaging output — a different directory solving a different problem.
+      # Neither substitutes for the other.
+      #
+      # The counts are printed on purpose. The obvious way to write this step
+      # (`Get-ChildItem packages -Directory -Filter dist`) matches NOTHING, because these are
+      # grandchildren of `packages/`, not children — so it deletes nothing while reading as
+      # protection. A step whose failure mode is silence has to say what it did.
+      - name: Clear stale build output
+        shell: pwsh
+        run: |
+          $dists = @(Get-Item -Path packages/*/dist -ErrorAction SilentlyContinue)
+          $infos = @(Get-Item -Path packages/*/tsconfig.tsbuildinfo -ErrorAction SilentlyContinue)
+          Write-Host "[clean] removing $($dists.Count) dist dir(s) and $($infos.Count) buildinfo file(s)"
+          $dists | Remove-Item -Recurse -Force
+          $infos | Remove-Item -Force
+
+      # ── ASSERT THE INVARIANT, NOT A PARTICULAR PATH ───────────────────────────────────────────
+      #
+      # Several file specs realpath a target — expanding an 8.3 short name to its long form — and
+      # then compare it against the raw root they were given. Where the temp path contains a short
+      # name, those two disagree and in-tree / watcher path matching breaks, in a way that
+      # reproduces on no other machine. `~` is what an 8.3 alias always contains, so that is the
+      # thing to assert; the conventional fix is a short alias-free root such as C:\t, but this
+      # workflow deliberately does not hard-code one machine's choice.
+      #
+      # It is asserted rather than SET because the runner inherits the environment of the session
+      # its logon task starts in, and a value set here would not be the value the daemon and the
+      # shells it spawns inherit.
+      #
+      # Getting this wrong is subtle: setting TEMP at MACHINE scope alone does nothing for a
+      # logged-in user, because Windows creates TEMP/TMP in HKCU\Environment on every profile and
+      # the User value takes precedence. That reads as a value which has not propagated yet, so the
+      # instinct is to wait or reboot — and neither ever fixes it. Set both scopes, then log the
+      # session off and back on.
+      - name: Assert an alias-free temp dir
+        shell: pwsh
+        run: |
+          foreach ($v in 'TEMP','TMP') {
+            $val = [Environment]::GetEnvironmentVariable($v)
+            if (-not $val)      { throw "$v is not set in the runner's session." }
+            if ($val -match '~') {
+              throw "$v is '$val', which contains an 8.3 short name. Point TEMP and TMP at an alias-free path (User scope AND Machine scope), then log the runner's session off and back on."
+            }
+            Write-Host "[temp] $v = $val"
+          }
+
+      - name: Install dependencies
+        run: npm ci
+
+      # A no-op on this runner's real desktop, unlike a hosted runner's 1024x768 virtual one — but
+      # run it anyway. A display setting nobody re-checks after a driver update is exactly the kind
+      # of thing that regresses silently, and several specs assert layout that only holds at a
+      # realistic size (a 1100px window clamps to 1024 and the assertion fails somewhere unrelated).
+      - name: Set screen resolution to 1920x1080
+        shell: pwsh
+        run: ./scripts/ci-set-resolution.ps1
+
+      # All eight stages, fail-fast, in CI's order: lint, typecheck, build, unit, component,
+      # integration, contract, e2e. gate.mjs clears the app/daemon/pty-agent/Playwright processes a
+      # run leaves behind — on success, on failure, and on Ctrl+C — which matters more here than
+      # anywhere else, because this workspace is reused by the next run.
+      - name: Run the gate
+        shell: pwsh
+        run: npm run gate
+
+      - name: Upload traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-test-results
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
