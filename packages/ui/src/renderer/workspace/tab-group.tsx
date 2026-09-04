@@ -530,16 +530,26 @@ function NewTabButton({ onNewTab }: { onNewTab: () => void }): ReactElement {
   const drop = useDroppable({ id: NEW_TAB_DROP_ID });
   const panelOver = drop.isOver && draggingPanelId !== null;
   return (
-    <button
-      ref={drop.setNodeRef}
-      type="button"
-      className={`tab-strip__add${panelOver ? ' tab-strip__add--over' : ''}`}
-      data-testid="tab-add"
+    /*
+     * Through `IconButton` rather than a hand-rolled `<button>` (#282, #291).
+     *
+     * It used to be its own button with a literal `+` as its only child, and that cost it two
+     * separate things. A `title` does not win the accessible-name computation against text content,
+     * so a screen reader announced the control as "plus" — and the raw glyph was centred as a TEXT
+     * BOX, which is not where `+`'s ink sits, so it also drew high. `IconButton` sets `title` and
+     * `aria-label` from one string, and `Icon` draws into a fixed square that centres by geometry
+     * rather than by font metrics, so one move settles both.
+     *
+     * The only reason it was ever off this path is `drop.setNodeRef`, which `IconButton` now takes.
+     */
+    <IconButton
+      nodeRef={drop.setNodeRef}
+      token="add"
       title={draggingPanelId ? 'Drop to move into a new tab' : 'New tab'}
+      className={`tab-strip__add${panelOver ? ' tab-strip__add--over' : ''}`}
+      testId="tab-add"
       onClick={onNewTab}
-    >
-      +
-    </button>
+    />
   );
 }
 

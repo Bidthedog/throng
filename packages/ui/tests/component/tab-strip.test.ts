@@ -1308,3 +1308,56 @@ describe('the confirmation LEVEL the user set reaches a destroy (migrated from c
     await waitFor(() => expect(screen.getByTestId('confirm-dialog')).toBeTruthy());
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * The two glyph controls are named by their ACTION (#282)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * `title` does not win the accessible-name computation when an element has text content — and the
+ * text content of these two buttons was the glyph, so both announced as "plus".
+ *
+ * The name is computed here rather than asserted on an attribute, which is the whole reason this is
+ * a component test and not a source grep: `getByRole('button', { name })` runs the real algorithm,
+ * so a fix that added `aria-label` while leaving the text node in place would still fail — as it
+ * should, since a screen reader would then read both.
+ *
+ * The negative assertion is the load-bearing half. Without it, a control that gained the right name
+ * AND kept announcing its glyph would pass.
+ */
+describe('the glyph controls are announced by their action, not their glyph (#282)', () => {
+  const firstPanelId = (): string => panelsIn(liveWorkspace())[0]!.id;
+
+  it('names the New Tab button "New tab"', async () => {
+    mount();
+    await ready();
+
+    expect(screen.getByRole('button', { name: 'New tab' })).toBe(screen.getByTestId('tab-add'));
+    expect(screen.queryByRole('button', { name: '+' })).toBeNull();
+  });
+
+  it('names the Add Panel button "Add panel"', async () => {
+    mount();
+    await ready();
+    const id = firstPanelId();
+
+    expect(screen.getByRole('button', { name: 'Add panel' })).toBe(
+      screen.getByTestId(`panel-add-${id}`),
+    );
+    expect(screen.queryByRole('button', { name: '+' })).toBeNull();
+  });
+
+  /*
+   * The sibling that already got it right (`panel-close`, three lines below `panel-add` in the same
+   * `<span>`) is asserted alongside them — not for its own sake, but so this file fails if a later
+   * change to the shared button path takes the name away from ALL THREE at once. A test that only
+   * covered the two that were broken could not tell that apart from a fix.
+   */
+  it('leaves the Destroy Panel control named as it already was', async () => {
+    mount();
+    await ready();
+    const id = firstPanelId();
+
+    expect(screen.getByTestId(`panel-close-${id}`)).toHaveAccessibleName(/ panel$/);
+  });
+});
