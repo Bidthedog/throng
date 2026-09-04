@@ -229,7 +229,7 @@ export function PanelFailureBanner({
       <IconButton
         token="retry"
         title="Try again"
-        className="icon-button panel-failure__control"
+        className="panel-failure__control"
         disabled={retrying}
         onClick={retry}
       />
@@ -241,13 +241,13 @@ export function PanelFailureBanner({
       <IconButton
         token="copy"
         title="Copy details"
-        className="icon-button panel-failure__control"
+        className="panel-failure__control"
         onClick={() => copy(panelFailureText({ headline, subject, detail }), subject)}
       />
       <IconButton
         token="dismiss"
         title="Clear panel type"
-        className="icon-button panel-failure__control"
+        className="panel-failure__control"
         onClick={onCancel}
       />
     </div>
