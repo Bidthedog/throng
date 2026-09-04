@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { spawn } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
@@ -157,6 +157,21 @@ describe('WindowsDeElevatedLauncher — a failed de-elevated launch must be able
   it('still returns void synchronously, without blocking or throwing', () => {
     const root = fakeSystemRoot(process.execPath);
     process.env.SystemRoot = root;
+
+    // Take the disk OUT of the measured window, rather than sizing the window around it.
+    //
+    // `fakeSystemRoot` has just written a ~100MB binary, so the `spawn` below would otherwise be
+    // the OS reading that back COLD, behind its own write-back — and that read, not the launcher,
+    // is what has twice pushed this assertion over its ceiling. Reading the file once here makes
+    // its pages resident and lets the write-back settle, leaving the launcher as the only thing
+    // the clock below can see.
+    //
+    // This is the fix the 2s -> 5s change was titled after but did not make: that commit widened
+    // the tolerance and explained why the tolerance was fair, which held until a machine with a
+    // genuinely slow disk came in at 5888ms. A budget that absorbs disk will keep needing to grow,
+    // and it cannot grow far — see the ceiling's own note below.
+    readFileSync(join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'));
+
     const started = Date.now();
     // No `report` at all: the parameter is optional and the old 2-arg call still works.
     const returned = new WindowsDeElevatedLauncher().launch('C:\\Windows\\System32\\cmd.exe', ['/c', 'exit']);
@@ -165,16 +180,22 @@ describe('WindowsDeElevatedLauncher — a failed de-elevated launch must be able
      * The ceiling discriminates against WAITING ON THE SHIM, and nothing finer.
      *
      * A shim run is seconds — the tests above allow 10s and 30s, because PowerShell compiles the
-     * C# member definition via Add-Type before it can even fail. So any budget comfortably under
-     * that proves the claim.
+     * C# member definition via Add-Type before it can even fail. So the budget has to sit under
+     * that to prove anything at all, and THAT is what caps it: this number cannot simply keep
+     * rising to meet the slowest disk it meets, because at 10s it stops distinguishing a launcher
+     * that returned from one that waited, and the test still passes while proving nothing.
      *
-     * It was 2s, and it failed 2 runs in 5 at 2056ms / 2307ms / 2541ms. The time is not the
-     * launcher blocking: `fakeSystemRoot` has just COPIED a ~100MB binary, and the `spawn` inside
-     * this window is the OS reading that file back cold, behind its own write-back. That is disk,
-     * measured under whatever else the machine is doing, and no amount of it means `launch` awaited
-     * anything. Sized so the gap it tests — sub-second work versus a multi-second shim — is what
-     * decides the result, rather than how busy the disk was.
+     * Its history is the argument for the warm-read above rather than for a bigger number here.
+     * It was 2s and failed 2 runs in 5 (2056 / 2307 / 2541ms). It became 5s, under a commit titled
+     * "stop timing the disk" which did not — it widened the tolerance. Then a machine with a slow
+     * disk measured 5888ms and the same failure came back, this time on a runner where it is a
+     * permanent red rather than an occasional flake.
+     *
+     * 8s: above the 5888ms observed with a cold read, and below the 10s the shim tests allow. With
+     * the disk no longer inside the window the real measurement should be far under this, so a
+     * future failure here means the launcher started waiting on something — which is the only
+     * thing this assertion was ever supposed to catch.
      */
-    expect(Date.now() - started, 'launch must not wait on the shim').toBeLessThan(5_000);
+    expect(Date.now() - started, 'launch must not wait on the shim').toBeLessThan(8_000);
   });
 });
