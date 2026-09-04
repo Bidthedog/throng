@@ -28,6 +28,26 @@ name: Gate
 
 on:
   workflow_dispatch:
+    inputs:
+      only:
+        description: 'Run ONE stage instead of the whole gate. Use when iterating on a single red stage.'
+        type: choice
+        default: 'full gate'
+        options:
+          - 'full gate'
+          - lint
+          - typecheck
+          - build
+          - 'test:unit'
+          - 'test:component'
+          - 'test:integration'
+          - 'test:contract'
+          - 'test:e2e'
+
+  # TEMPORARY, and it must be removed before this branch merges — see the note in the `gate` job.
+  push:
+    branches: [feature/I358-self-hosted-gate-runner]
+
   schedule:
     # 01:00 UTC — 02:00 BST, 01:00 GMT. Two reasons, and the second is the less obvious one:
     # nobody is waiting on the result overnight, and the machine is at its coolest then. A
@@ -66,6 +86,19 @@ jobs:
   gate:
     name: npm run gate
     runs-on: [self-hosted, windows, gate]
+
+    # ── THE `push:` TRIGGER ABOVE IS TEMPORARY AND MUST NOT MERGE ─────────────────────────────
+    #
+    # `workflow_dispatch` only works once the workflow file is on the DEFAULT branch, so until this
+    # merges there is no way to dispatch it — and no way to prove it works before merging it, which
+    # is the wrong order. A branch-scoped `push:` runs the workflow from the pushed ref's own file,
+    # so the workflow can be exercised on the branch that introduces it.
+    #
+    # It adds no fork exposure: a fork's pushes go to the fork, and a fork cannot push here. It is
+    # temporary only because leaving it in would start an 80-minute gate on every commit to this
+    # branch, not because it is unsafe.
+    #
+    # REMOVE IT, and this comment, before opening the PR for merge.
 
     # A HANG DETECTOR, not a budget. The expected run is 75-90 minutes: this machine is several
     # times slower than a workstation, and the E2E serial tier is ~86% of the E2E stage and
@@ -159,9 +192,30 @@ jobs:
       # integration, contract, e2e. gate.mjs clears the app/daemon/pty-agent/Playwright processes a
       # run leaves behind — on success, on failure, and on Ctrl+C — which matters more here than
       # anywhere else, because this workspace is reused by the next run.
+      #
+      # `only` runs a SINGLE stage instead. The gate is fail-fast, so iterating on one red stage
+      # otherwise costs a full run of every stage before it — measured at ~19 minutes to reach
+      # `contract`, twice, to learn one assertion's number. That is the documented fail-fast
+      # workflow ("re-run only what failed") applied to a runner rather than a laptop.
+      #
+      # The value comes through the ENVIRONMENT rather than being interpolated into the script.
+      # `choice` already constrains it to this list, so this is belt-and-braces — but a workflow
+      # input pasted straight into a shell line is a habit worth not having.
       - name: Run the gate
         shell: pwsh
-        run: npm run gate
+        env:
+          # A push on the temporary trigger iterates on the stage that is currently RED, rather than
+          # paying a full gate per attempt — the gate is fail-fast, so a full run spends ~19 minutes
+          # re-proving seven green stages to reach the eighth. Dispatch still honours `only`, and the
+          # nightly schedule still runs everything. This defaulting goes when the push trigger goes.
+          ONLY: ${{ inputs.only || (github.event_name == 'push' && 'test:contract' || 'full gate') }}
+        run: |
+          if (-not $env:ONLY -or $env:ONLY -eq 'full gate') {
+            npm run gate
+          } else {
+            Write-Host "[gate] single stage: $env:ONLY"
+            npm run $env:ONLY
+          }
 
       - name: Upload traces
         if: ${{ !cancelled() }}

@@ -196,6 +196,14 @@ describe('WindowsDeElevatedLauncher — a failed de-elevated launch must be able
      * future failure here means the launcher started waiting on something — which is the only
      * thing this assertion was ever supposed to catch.
      */
-    expect(Date.now() - started, 'launch must not wait on the shim').toBeLessThan(8_000);
+    const elapsedMs = Date.now() - started;
+
+    // Reported on EVERY run, not only on failure. This assertion has now been resized three times
+    // (2s, 5s, 8s) and every resize was argued from a mechanism rather than from a distribution,
+    // because the only number anyone ever saw was the one that broke. A ceiling picked from a
+    // single failing sample is a guess with a decimal point on it.
+    console.log(`[de-elevated-launch] returned in ${elapsedMs}ms (ceiling 8000ms)`);
+
+    expect(elapsedMs, 'launch must not wait on the shim').toBeLessThan(8_000);
   });
 });
