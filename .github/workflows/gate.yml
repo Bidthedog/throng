@@ -286,6 +286,25 @@ jobs:
           if (-not $env:ONLY -or $env:ONLY -eq 'full gate') {
             npm run gate
           } else {
+            # A SINGLE STAGE STILL NEEDS THE BUILD, and skipping it is not a small mistake.
+            #
+            # `npm run gate` runs build as its third stage, so the layers after it find a daemon to
+            # spawn. Running one stage on its own skips that — and the clean step above has just
+            # deleted every packages/*/dist — so integration and contract come up against no
+            # `daemon/dist/main.js` and no BUILD_ID at all.
+            #
+            # Measured: `only=test:integration` produced 8 failures across daemon-lifecycle and
+            # daemon-elevated-respawn that had nothing to do with the change under test, and looked
+            # exactly like a regression. ci.yml builds before those layers for the same reason and
+            # says so at its own build step.
+            #
+            # Excluded for the three stages that either ARE the build or precede it, where it would
+            # just double the work.
+            if ($env:ONLY -notin @('lint', 'typecheck', 'build')) {
+              Write-Host "[gate] building first — $env:ONLY spawns a real daemon"
+              npm run build
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
             Write-Host "[gate] single stage: $env:ONLY"
             npm run $env:ONLY
           }
