@@ -170,6 +170,29 @@ an entry there is ever fixed without being removed.
 
 ## `npm run gate` — the one command that says the work is done
 
+**It runs on the gate runner, not on a workstation.** Dispatch it against a ref and wait:
+
+```bash
+gh workflow run gate.yml --ref <branch>
+gh run watch <run-id> --exit-status        # one blocking watch, expect 75-90 min
+```
+
+A workstation runs only the tests under the red-green-refactor cursor — one spec, one file, one
+project layer. The full gate locally pins every core for the better part of an hour, steals focus
+throughout, and eventually exhausts the interactive desktop heap, at which point Windows refuses to
+start processes at all. It is not a faster route to the same answer.
+
+Because the workflow is dispatched against a **ref**, a green run is evidence about that *commit* and
+not about a working tree that has moved on since — so quote the run URL and the SHA when reporting
+done. The timings throughout this document remain the reference figures, and they are still what a
+comparison is measured against; what they no longer describe is the normal route to a verdict.
+
+The runner is reached only by `workflow_dispatch` and `schedule`, neither of which a fork can trigger
+— see `.github/workflows/gate.yml`, which explains why that exclusion is structural rather than a
+condition someone could weaken.
+
+What the command itself does, wherever it runs:
+
 ```
 npm run gate
 ```

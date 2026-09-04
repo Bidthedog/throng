@@ -19,9 +19,16 @@ something available in seconds. It prints one line per stage, stops at the first
 the app/daemon/pty-agent/Playwright processes a run leaves behind — on success, on failure, and on
 Ctrl+C.
 
+**It runs on the gate runner, not here.** Dispatch it against a ref and wait:
+
+```bash
+gh workflow run gate.yml --ref <branch>
+gh run watch <run-id> --exit-status        # one blocking watch, expect 75-90 min
 ```
-npm run gate
-```
+
+Running it locally is not a faster route to the same answer — it pins every core for the better part
+of an hour and eventually exhausts the interactive desktop heap. See *Where a test is allowed to run*
+in the `throng-testing` skill for what the workstation is still for.
 
 Three rules about using it:
 
@@ -35,8 +42,9 @@ Three rules about using it:
   the cheap stages run first precisely so the expensive one is only ever reached by code that has
   already earned it. Running the individual `npm run test:*` scripts while iterating is fine and
   expected — it is claiming *done* off the back of them that is not.
-- **A green gate goes stale the moment you edit.** Quote the actual stage summary when reporting
-  done, and re-run if anything changed after it.
+- **A green gate goes stale the moment you edit** — and a remote gate is triggered against a REF, so
+  it was only ever evidence about that *commit*, never about the working tree. Quote the run URL and
+  the SHA when reporting done, not just the stage summary, and re-run if anything changed after it.
 
 ## Formatting is ESLint's job — never run Prettier here
 

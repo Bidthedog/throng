@@ -5,6 +5,39 @@ description: Run throng's tests and hands-on sessions without leaving processes 
 
 # Testing throng without leaving a mess
 
+## Where a test is allowed to run
+
+Two rules. The second is the one that gets broken, and it gets broken by someone who has read the
+first and is being reasonable.
+
+**The workstation runs only the tests under the red-green-refactor cursor.** A handful of files, at
+the lowest layer that reproduces the behaviour — which is what *Choosing the layer* below already
+argues for, now with a boundary attached. Running one spec, one project or one file while iterating
+is exactly right and needs no justification.
+
+**The full suite runs on the gate runner. Always.** Not "preferably", not "when the machine is
+free". `npm run gate` locally pins every core for the better part of an hour, steals focus for the
+whole duration, and — measured — exhausts the interactive desktop heap after a few hundred Electron
+launches, at which point Windows refuses to start processes at all (`0xC0000142`, surfacing in
+Playwright as *"Process failed to launch"*).
+
+```bash
+gh workflow run gate.yml --ref <branch>
+gh run list --workflow=gate.yml --limit 1 --json databaseId --jq '.[0].databaseId'
+gh run watch <run-id> --exit-status
+```
+
+**One blocking watch, never a poll loop of short turns.** Say the expected cost in one line before
+starting it: *"Waiting on gate run `<id>`, expected 75-90 min."*
+
+**A remote gate is triggered against a REF**, so a green run proves that *commit* — not the working
+tree that has moved on since. Quote the run URL and the SHA when reporting done, not just the stage
+summary.
+
+The tempting thought is *"just this once, locally, it'll be quicker"*. It will not be quicker. It
+will be ninety minutes during which nothing else on the machine works, which is the entire reason
+the runner exists.
+
 ## The thing that catches everyone
 
 throng's daemon is **designed to outlive its window** (Principle III — terminals keep running when the
