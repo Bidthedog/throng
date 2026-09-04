@@ -64,6 +64,19 @@ export interface IconButtonProps {
    * past the one code path every action control shares.
    */
   dataAttrs?: Record<string, string>;
+  /**
+   * The underlying button element, for a host that must REGISTER it with something outside React.
+   *
+   * The one caller is the New Tab control, which is also a drop target (031 FR-027): `@dnd-kit`
+   * hands back a `setNodeRef` callback and measures whatever is passed to it, so a droppable whose
+   * node is never registered is a droppable that silently never fires.
+   *
+   * That requirement is why the control used to be a hand-rolled `<button>` with a literal `+`
+   * inside it — and being off this path is what cost it its accessible name (#282). A callback ref
+   * is the whole of what it needed, so it gets one, rather than a second button implementation.
+   * Deliberately just a ref: it cannot smuggle in another className, child or handler.
+   */
+  nodeRef?: (element: HTMLButtonElement | null) => void;
 }
 
 export function IconButton({
@@ -82,6 +95,7 @@ export function IconButton({
   onPointerLeave,
   onPointerCancel,
   dataAttrs,
+  nodeRef,
 }: IconButtonProps): ReactElement {
   /*
    * The pill is the SAME class the per-tab panel-count pill wears (031 FR-052b) — reused, not
@@ -96,6 +110,7 @@ export function IconButton({
     );
   return (
     <button
+      ref={nodeRef}
       type="button"
       className={className}
       data-testid={testId}
