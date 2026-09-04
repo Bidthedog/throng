@@ -63,29 +63,50 @@ on:
     - cron: '0 1 * * *'
 
 concurrency:
-  # One gate at a time, and a newer request wins. There is a single runner, so without this a second
-  # dispatch simply queues behind an 80-minute run that is already obsolete.
-  group: gate-self-hosted
+  # Keyed by EVENT, so the nightly and an on-demand dispatch do not cancel each other. They run on
+  # different hardware now — the nightly is hosted, dispatch is self-hosted — so there is no
+  # contention to resolve, and a developer asking for a gate should not silently kill the nightly.
+  #
+  # Within a group a newer request still wins: there is one self-hosted runner, so a second dispatch
+  # would otherwise queue behind an 80-minute run that is already obsolete.
+  group: gate-${{ github.event_name }}
   cancel-in-progress: true
 
 env:
   npm_config_loglevel: error
 
-  # This runner is deliberately slower than a developer workstation — that is the trade it exists
-  # to make. So it is not hardware a performance requirement is about, and the wall-clock SLAs are
-  # recorded here rather than adjudicated: see "Where a performance SLA is measured" in
-  # docs/testing.md.
+  # Neither runner this workflow uses is hardware a performance requirement is about: the
+  # self-hosted one is deliberately slower than a workstation, and a hosted one is contended by
+  # construction. So the wall-clock SLAs are RECORDED here rather than adjudicated — see "Where a
+  # performance SLA is measured" in docs/testing.md.
   #
-  # Actions sets CI=true, which already suppresses them. This is set anyway and on purpose: the
-  # gate is also run BY HAND on this machine, and a hand-run has no CI variable while running at
-  # one worker — so it looks exactly like an uncontended developer workstation taking a clean
-  # reading, which is the one case the old predicate could not see.
+  # Actions sets CI=true, which already suppresses them in both cases. This is set anyway and on
+  # purpose, for the case neither covers: the gate is also run BY HAND on the self-hosted box, and
+  # a hand-run has no CI variable while running at one worker — so it looks exactly like an
+  # uncontended developer workstation taking a clean reading. That is the one case the original
+  # predicate could not see, and the machine sets this variable itself for the same reason.
   THRONG_NON_REFERENCE_HARDWARE: '1'
 
 jobs:
   gate:
     name: npm run gate
-    runs-on: [self-hosted, windows, gate]
+
+    # ── WHERE IT RUNS DEPENDS ON WHO ASKED ────────────────────────────────────────────────────
+    #
+    # The NIGHTLY runs hosted. It is an unattended health check on `master` that nobody is waiting
+    # for, and it should not depend on one particular machine being powered on, logged in and not
+    # mid-experiment. A nightly that goes quiet because that machine is off is worse than no
+    # nightly, because silence reads as green. Hosted minutes are free on a public repo, so this
+    # costs nothing but wall-clock nobody is watching.
+    #
+    # DISPATCH runs self-hosted. That is the lane this whole workflow exists for: the full gate, on
+    # demand, off the developer's workstation.
+    #
+    # Both branches must be arrays for the expression's types to match.
+    runs-on: >-
+      ${{ github.event_name == 'schedule'
+          && fromJSON('["windows-2022"]')
+          || fromJSON('["self-hosted","windows","gate"]') }}
 
     # ── THE `push:` TRIGGER ABOVE IS TEMPORARY AND MUST NOT MERGE ─────────────────────────────
     #
@@ -165,14 +186,35 @@ jobs:
       # the User value takes precedence. That reads as a value which has not propagated yet, so the
       # instinct is to wait or reboot — and neither ever fixes it. Set both scopes, then log the
       # session off and back on.
+      # A HOSTED runner's own %TEMP% is C:\Users\RUNNER~1\AppData\Local\Temp — it contains an 8.3
+      # short name by construction, because the runner's username forces one. So this cannot merely
+      # assert: on the nightly it would throw before a single test ran. ci.yml solves it the same
+      # way, by pointing TEMP at RUNNER_TEMP (D:\a\_temp), which has no aliased component.
+      #
+      # RUNNER_TEMP is alias-free on the self-hosted runner too, and is cleaned between jobs, so
+      # using it on both is simpler than branching AND matches what ci.yml does. The machine-level
+      # C:\t still matters for a gate run driven BY HAND on that box, which has no RUNNER_TEMP.
+      - name: Use an alias-free temp dir
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # Separate step because GITHUB_ENV only reaches SUBSEQUENT steps — asserting in the step above
+      # would read the old value and pass while proving nothing.
+      #
+      # Several file specs realpath a target, expanding an 8.3 alias to its long form, then compare
+      # it against the raw root they were given. Where the temp path carries a short name those two
+      # disagree and in-tree / watcher path matching breaks, in a way that reproduces on no other
+      # machine. `~` is what an alias always contains, so that is the thing to assert.
       - name: Assert an alias-free temp dir
         shell: pwsh
         run: |
           foreach ($v in 'TEMP','TMP') {
             $val = [Environment]::GetEnvironmentVariable($v)
-            if (-not $val)      { throw "$v is not set in the runner's session." }
+            if (-not $val)       { throw "$v is not set." }
             if ($val -match '~') {
-              throw "$v is '$val', which contains an 8.3 short name. Point TEMP and TMP at an alias-free path (User scope AND Machine scope), then log the runner's session off and back on."
+              throw "$v is '$val', which contains an 8.3 short name. On a hosted runner RUNNER_TEMP should have replaced it; on a hand-driven run set TEMP and TMP to an alias-free path at User AND Machine scope, then log the session off and back on."
             }
             Write-Host "[temp] $v = $val"
           }

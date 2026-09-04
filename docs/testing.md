@@ -182,6 +182,29 @@ project layer. The full gate locally pins every core for the better part of an h
 throughout, and eventually exhausts the interactive desktop heap, at which point Windows refuses to
 start processes at all. It is not a faster route to the same answer.
 
+**While fixing one red stage, run one stage.** The gate is fail-fast, so re-running it to reach the
+stage that failed spends ~19 minutes re-proving seven green ones:
+
+```bash
+gh workflow run gate.yml --ref <branch> -f only=test:contract
+```
+
+`only` takes `full gate`, `lint`, `typecheck`, `build`, or any `test:*` stage. The full gate is what
+says done; `only` is for getting there.
+
+**Three lanes, two kinds of machine:**
+
+| lane | machine | when |
+|---|---|---|
+| `ci.yml` — lint, tests, `@core` E2E | GitHub-hosted | Every push to master, every PR |
+| `gate.yml` dispatch — the full gate | Self-hosted runner | On demand |
+| `gate.yml` nightly | **GitHub-hosted** | 01:00 UTC, master only |
+
+The nightly is hosted on purpose. An unattended health check must not depend on one machine being
+powered on, logged in and not mid-experiment — a nightly that goes quiet because a VM is off looks
+exactly like a nightly that keeps passing, and silence reading as green is the failure mode worth
+designing against.
+
 Because the workflow is dispatched against a **ref**, a green run is evidence about that *commit* and
 not about a working tree that has moved on since — so quote the run URL and the SHA when reporting
 done. The timings throughout this document remain the reference figures, and they are still what a

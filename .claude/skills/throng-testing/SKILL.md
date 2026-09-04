@@ -21,22 +21,65 @@ whole duration, and — measured — exhausts the interactive desktop heap after
 launches, at which point Windows refuses to start processes at all (`0xC0000142`, surfacing in
 Playwright as *"Process failed to launch"*).
 
+### The loop
+
+Red-green-refactor happens **here**. The green bar that says the work is DONE happens **there**.
+Those are different questions and they get different machines.
+
 ```bash
-gh workflow run gate.yml --ref <branch>
-gh run list --workflow=gate.yml --limit 1 --json databaseId --jq '.[0].databaseId'
-gh run watch <run-id> --exit-status
+# 1. Iterate locally — one file, one project, seconds per cycle.
+npx vitest run --project unit packages/core/tests/unit/<the-one>.test.ts
+
+# 2. Push, then ask the runner for the verdict.
+git push
+gh workflow run gate.yml --ref "$(git branch --show-current)"
+
+# 3. Wait on it. ONE blocking watch, never a poll loop of short turns.
+sleep 10
+RUN=$(gh run list --workflow=gate.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$RUN" --exit-status
 ```
 
-**One blocking watch, never a poll loop of short turns.** Say the expected cost in one line before
-starting it: *"Waiting on gate run `<id>`, expected 75-90 min."*
+Say the expected cost in one line before starting the watch: *"Waiting on gate run `<id>`, expected
+75-90 min."* `--exit-status` makes the command fail on a red gate, so it can be trusted as a gate
+rather than read as a report.
 
-**A remote gate is triggered against a REF**, so a green run proves that *commit* — not the working
-tree that has moved on since. Quote the run URL and the SHA when reporting done, not just the stage
-summary.
+### When one stage is red, run one stage
+
+The gate is fail-fast, so re-running it to reach the stage that failed spends ~19 minutes re-proving
+seven green ones. That was measured twice, learning one number each time.
+
+```bash
+gh workflow run gate.yml --ref "$(git branch --show-current)" -f only=test:contract
+```
+
+`only` takes `full gate`, `lint`, `typecheck`, `build`, or any `test:*` stage. Use it while fixing;
+take the full gate once at the end, because that is the run that says done.
+
+### What a green run does and does not prove
+
+**It is triggered against a REF**, so it proves that *commit* — not a working tree that has moved on
+since. Quote the run URL and the SHA when reporting done, not just the stage summary.
+
+**Performance SLAs are not adjudicated there.** The runner is not reference hardware, so those five
+ceilings are recorded rather than asserted — see *Where a performance SLA is measured* in
+`docs/testing.md`. A green gate is not a statement about the product's speed.
 
 The tempting thought is *"just this once, locally, it'll be quicker"*. It will not be quicker. It
 will be ninety minutes during which nothing else on the machine works, which is the entire reason
 the runner exists.
+
+### Which lane runs where
+
+| lane | machine | when |
+|---|---|---|
+| `ci.yml` — lint, tests, `@core` E2E | GitHub-hosted | Every push to master, every PR |
+| `gate.yml` dispatch — the full gate | Self-hosted runner | On demand, the loop above |
+| `gate.yml` nightly | GitHub-hosted | 01:00 UTC, master only |
+
+The nightly is hosted deliberately: an unattended health check must not depend on one machine being
+powered on and logged in, because a nightly that goes quiet looks exactly like one that keeps
+passing.
 
 ## The thing that catches everyone
 
