@@ -66,6 +66,36 @@ export interface SlaReading {
  * The skip is deliberately visible. A silently absent assertion is indistinguishable from one that
  * passed, which is how a suite ends up believing it checks something it stopped checking.
  */
+/**
+ * The same rule for a performance claim that is NOT a duration.
+ *
+ * `expectWithinSla` covers "this took N ms". Some performance requirements are counted instead —
+ * how many long tasks a load blocked for, whether any frame was dropped across twenty keystrokes —
+ * and those are every bit as hardware-dependent. A machine several times slower produces more long
+ * tasks for the same code, so asserting the count there measures the machine.
+ *
+ * Used as a guard rather than a wrapper, so the assertion stays visible and ordinary at the call
+ * site:
+ *
+ *   if (slaMeasurable(test.info())) {
+ *     expect(onLoad.length).toBeLessThanOrEqual(3);
+ *   } else {
+ *     noteSlaNotMeasured(test.info(), { what: '…', requirement: 'FR-008', observed: `${onLoad.length}` });
+ *   }
+ */
+export function noteSlaNotMeasured(
+  info: TestInfo,
+  reading: { what: string; requirement: string; observed: string },
+): void {
+  info.annotations.push({
+    type: 'sla-not-measured',
+    description:
+      `${reading.requirement}: ${reading.what} — observed ${reading.observed}, NOT asserted. ` +
+      `This host is contended or not reference hardware, so the figure describes the machine as ` +
+      `much as the product. Take the reading on a reference machine at --workers=1.`,
+  });
+}
+
 export function expectWithinSla(info: TestInfo, reading: SlaReading): void {
   const { what, requirement, elapsedMs, budgetMs } = reading;
 
