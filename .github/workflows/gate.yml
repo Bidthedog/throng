@@ -246,11 +246,12 @@ jobs:
       - name: Run the gate
         shell: pwsh
         env:
-          # A push on the temporary trigger iterates on the stage that is currently RED, rather than
-          # paying a full gate per attempt — the gate is fail-fast, so a full run spends ~19 minutes
-          # re-proving seven green stages to reach the eighth. Dispatch still honours `only`, and the
-          # nightly schedule still runs everything. This defaulting goes when the push trigger goes.
-          ONLY: ${{ inputs.only || (github.event_name == 'push' && 'test:contract' || 'full gate') }}
+          # A push on the temporary trigger ran only `test:contract` while that stage was red,
+          # because the gate is fail-fast and a full run spends ~19 minutes re-proving seven green
+          # stages to reach the eighth. Contract is green now (153ms, was 7317ms — #364), so a push
+          # runs everything: E2E has never executed on that machine at all, and it is 86% of the
+          # runtime. Dispatch still honours `only`. This defaulting goes when the push trigger goes.
+          ONLY: ${{ inputs.only || 'full gate' }}
         run: |
           if (-not $env:ONLY -or $env:ONLY -eq 'full gate') {
             npm run gate
