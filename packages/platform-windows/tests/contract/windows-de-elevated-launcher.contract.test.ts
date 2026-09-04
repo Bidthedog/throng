@@ -173,6 +173,11 @@ describe('WindowsDeElevatedLauncher — a failed de-elevated launch must be able
      * `where.exe` is ~64KB and, like every substitutable exe, rejects the launcher's fixed argv
      * and exits non-zero — the property the file's own header note relies on.
      *
+     * Measured after the change: **153ms on the machine that produced 7317ms**, and 35ms on a
+     * workstation. The ceiling below is left at 8s deliberately even though the margin is now ~52x:
+     * it is a shim-detector, not a performance budget, and a launcher that started waiting on the
+     * shim would take the ten to thirty seconds the tests above allow for one.
+     *
      * Resolve it BEFORE overwriting SystemRoot below, or it resolves against the fake tree.
      */
     const standIn = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'where.exe');
