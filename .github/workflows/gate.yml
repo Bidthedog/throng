@@ -257,7 +257,15 @@ jobs:
           #
           # E2E is still the unknown: 86% of the runtime, and it has never executed on that machine.
           # This defaulting goes entirely when the push trigger goes.
-          ONLY: ${{ inputs.only || 'full gate' }}
+          # Narrowed to E2E while three terminal specs are red there. The seven stages before it are
+          # green and re-proving them costs ~14 minutes a cycle.
+          #
+          # These CANNOT be diagnosed on a workstation: run locally they all fail with
+          # `locator.click: Timeout 30000ms exceeded`, an environmental failure of a session with no
+          # usable interactive desktop, identical with and without the change under suspicion. That
+          # masks any real difference, so a local A/B here proves nothing in either direction and
+          # must not be reported as if it did.
+          ONLY: ${{ inputs.only || (github.event_name == 'push' && 'test:e2e' || 'full gate') }}
         run: |
           # ── CLEAN THE MODULE PATH HERE, IN THIS PROCESS ─────────────────────────────────────
           #
