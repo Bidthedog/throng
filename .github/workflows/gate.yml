@@ -51,6 +51,17 @@ concurrency:
 env:
   npm_config_loglevel: error
 
+  # This runner is deliberately slower than a developer workstation — that is the trade it exists
+  # to make. So it is not hardware a performance requirement is about, and the wall-clock SLAs are
+  # recorded here rather than adjudicated: see "Where a performance SLA is measured" in
+  # docs/testing.md.
+  #
+  # Actions sets CI=true, which already suppresses them. This is set anyway and on purpose: the
+  # gate is also run BY HAND on this machine, and a hand-run has no CI variable while running at
+  # one worker — so it looks exactly like an uncontended developer workstation taking a clean
+  # reading, which is the one case the old predicate could not see.
+  THRONG_NON_REFERENCE_HARDWARE: '1'
+
 jobs:
   gate:
     name: npm run gate

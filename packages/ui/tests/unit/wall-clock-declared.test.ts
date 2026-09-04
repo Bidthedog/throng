@@ -35,6 +35,19 @@ import { describe, it, expect } from 'vitest';
  * means reading the expression under `expect()`, and a scanner that guesses will guess wrong on the
  * one that matters; a scanner that makes the author declare cannot.
  *
+ * ── What this scanner no longer covers, and why that is not a hole ──────────────────────────────
+ *
+ * Performance SLAs have moved to `expectWithinSla` (`../e2e/helpers/sla.ts`), whose `requirement`
+ * field is REQUIRED BY THE TYPE. That is strictly stronger than scanning comments: a citation can
+ * no longer be omitted, drift onto the wrong assertion, or be deleted by a rewrite of the prose
+ * above it. Those ceilings are also skipped rather than asserted on hardware the requirement is not
+ * about — see "Where a performance SLA is measured" in docs/testing.md.
+ *
+ * So the bounds this scanner still finds are the ones a type cannot govern: bounds that are not
+ * durations at all, and validity-bounds that separate two OUTCOMES rather than assert a speed. The
+ * first test below is what keeps that honest — if a future change left nothing for the scanner to
+ * find, it fails rather than passing vacuously.
+ *
  * **It bit on first run, which is its control.** Against the suite as it stood on 2026-08-18 it
  * failed with EIGHT undeclared ceilings and went green one at a time as each was answered — so it
  * distinguishes declared from undeclared rather than passing on everything. Three of the eight were

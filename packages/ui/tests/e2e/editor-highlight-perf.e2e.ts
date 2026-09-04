@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { expectWithinSla } from './helpers/sla.js';
 
 /**
  * Highlighting is bounded by the VIEWPORT, not by the document (016, FR-008/SC-003 · T097).
@@ -103,7 +104,12 @@ test('the largest permitted file highlights within budget, and typing never drop
 
       // FIRST HIGHLIGHT, from render. This is the number SC-003 names.
       expect(rendered).not.toBeNull();
-      expect(highlighted! - rendered!).toBeLessThan(200);
+      expectWithinSla(test.info(), {
+        what: 'first syntax highlight lands after render',
+        requirement: 'SC-003',
+        elapsedMs: highlighted! - rendered!,
+        budgetMs: 200,
+      });
 
       /**
        * The load path DOES block the main thread — reproducibly, for one or two tasks of ~50-65 ms —
