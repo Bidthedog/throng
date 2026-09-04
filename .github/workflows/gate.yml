@@ -243,6 +243,37 @@ jobs:
       # The value comes through the ENVIRONMENT rather than being interpolated into the script.
       # `choice` already constrains it to this list, so this is belt-and-braces — but a workflow
       # input pasted straight into a shell line is a habit worth not having.
+      # ── STOP POWERSHELL 7 POISONING WINDOWS POWERSHELL 5.1 ────────────────────────────────────
+      #
+      # `shell: pwsh` means PowerShell 7, and PS7 EXPORTS its own PSModulePath to everything it
+      # spawns. So npm -> node -> vitest -> `powershell.exe` all inherit a module path whose first
+      # entries are PS7's, and Windows PowerShell 5.1 then resolves modules to PS7-only versions it
+      # cannot load. It fails as:
+      #
+      #   Set-PSReadLineOption : found in the module 'PSReadLine', but the module could not be
+      #   loaded ... CouldNotAutoloadMatchingModule
+      #
+      # Measured directly (scripts/diag-psmodulepath.mjs, since deleted): same command, same
+      # machine — WITH PS7's paths FAILED, WITHOUT them OK, UNSET OK. It is the path, not the
+      # presence of PS7, which is why installing PS7 on the runner broke a stage that had passed
+      # twice by hand.
+      #
+      # Stripped here rather than by dropping `shell: pwsh`, because ci.yml uses pwsh throughout and
+      # running the gate under a different shell than CI would trade this for a divergence bug.
+      #
+      # THE PRODUCT HAS THE SAME HOLE and it is NOT fixed by this: sanitizeSpawnEnv drops only
+      # THRONG_* keys, so throng launched from a pwsh session spawns terminals with no PSReadLine —
+      # no history, no completion. Tracked separately; this step only stops the harness injecting
+      # the fault into its own tests.
+      - name: Restore the Windows PowerShell module path
+        shell: pwsh
+        run: |
+          $clean = ($env:PSModulePath -split ';' |
+            Where-Object { $_ -and $_ -notmatch 'PowerShell\\7\\|\\PowerShell\\Modules' }) -join ';'
+          Write-Host "[psmodulepath] was : $env:PSModulePath"
+          Write-Host "[psmodulepath] now : $clean"
+          "PSModulePath=$clean" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
       - name: Run the gate
         shell: pwsh
         env:
