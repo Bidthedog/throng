@@ -813,21 +813,44 @@ textarea,
 }
 
 /*
- * 031 FR-003 — pinned, square, vertically centred, and OUTSIDE the track so it never scrolls away.
+ * 031 FR-003 — pinned, 24px wide, and OUTSIDE the track so it never scrolls away.
  *
- * `flex: 0 0 auto` plus `align-self: center` is what holds it still; the fixed width/height is what
- * makes it square. It used to sit inside the scrolling row, which is why it drifted off with the
- * tabs.
+ * `flex: 0 0 auto` is what holds it still. It used to sit inside the scrolling row, which is why it
+ * drifted off with the tabs.
+ *
+ * ── IT IS SHAPED AS A TAB, NOT AS A SQUARE (#291) ──
+ *
+ * It used to be a 24×24 box with `align-self: center`: a rounded square floating in the middle of
+ * the strip, with a visible gap between its bottom edge and the strip's bottom border. That reads as
+ * a button that happens to live near the tabs rather than as the last thing in the row of them.
+ *
+ * So it now wears the inactive chip's treatment exactly — `align-self: stretch` for the height,
+ * `bg-raised`, rounded top corners only, and NO bottom border — which puts its bottom edge on the
+ * strip's `border-bottom` with nothing between them, the same way `.tab-chip` does. The two rules
+ * agree by construction rather than by two hard-coded numbers that a change to
+ * `--pane-header-height` would silently separate: a chip stretches to the TRACK's content box, the
+ * track stretches to the STRIP's, and this stretches to the strip's directly — all three are the
+ * same box.
+ *
+ * The WIDTH stays 24px and stays hard-coded, because `.tab-strip::after` offsets the trailing fade
+ * by `calc(32px + …)` — this button plus its 4px margin plus the strip's own 4px padding. Widening
+ * it here without changing that would put the fade in the wrong place.
+ *
+ * The glyph centres because `Icon` draws into its own 16px square (`--throng-size-icon`) which this
+ * flex box centres — the FR-052a fix for the chevrons, reached here by routing the control through
+ * `IconButton` for #282. Centring a bare `+` text node was the original defect: what got centred was
+ * its line box, and `+`'s ink does not sit on that box's centre.
  */
 .tab-strip__add {
-  background: transparent;
+  background: var(--bg-raised);
   border: 1px solid var(--border);
+  border-bottom: none;
   color: var(--text-dim);
-  border-radius: 6px;
+  border-radius: 6px 6px 0 0;
+  box-sizing: border-box;
   flex: 0 0 auto;
-  align-self: center;
+  align-self: stretch;
   width: 24px;
-  height: 24px;
   margin-left: 4px;
   padding: 0;
   display: flex;
@@ -844,13 +867,21 @@ textarea,
   border-color: var(--throng-colour-accent, #6aa3ff);
 }
 
-/* Drop affordance while dragging a Panel onto "+" to move it into a new Tab (FR-027). */
+/*
+ * Drop affordance while dragging a Panel onto "+" to move it into a new Tab (FR-027).
+ *
+ * The outline is drawn INSIDE, at `.tab-chip--over`'s offset rather than the `1px` it used to use.
+ * Both reasons arrived with the tab shape (#291): the button's bottom edge now sits ON the strip's
+ * `border-bottom` and the strip is `overflow: hidden`, so an outward offset put the bottom stroke
+ * where it would be clipped — and the two drop affordances in this strip should not differ, given a
+ * panel can be dropped on either a chip or this.
+ */
 .tab-strip__add--over {
   color: var(--throng-colour-accent, #6aa3ff);
   border-color: var(--throng-colour-accent, #6aa3ff);
   background: color-mix(in srgb, var(--throng-colour-accent, #6aa3ff) 22%, transparent);
   outline: 2px solid var(--throng-colour-accent, #6aa3ff);
-  outline-offset: 1px;
+  outline-offset: -2px;
 }
 
 .tab-body {
