@@ -32,6 +32,7 @@ import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { requestRedraw } from '../terminal/redraw.js';
 import { focusTerminal } from '../terminal/focus-registry.js';
 import { Icon } from '../common/icon.js';
+import { IconButton } from '../common/icon-button.js';
 import { NameLimitField } from '../common/name-limit-field.js';
 import { panelHasLiveTerminal, panelHasRunningSubprocess } from './subprocess.js';
 import { useCapabilities } from '../panel-type/use-capabilities.js';
@@ -725,14 +726,24 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
           </span>
         ) : null}
         <span className="panel-box__actions">
-          <button
-            type="button"
+          {/*
+            Through `IconButton` (#282). Its sibling below already carried an `aria-label`; this one
+            did not, and a `title` alone loses the accessible name to the `+` text node — so the two
+            controls that sit three lines apart announced as "Destroy panel" and "plus".
+
+            `className=""` is deliberate and is NOT the default left blank. `IconButton` defaults it
+            to `icon-button`, a class defined in `preferences.css` — which the main window never
+            loads, so the default would resolve to nothing here. That is #276 exactly, and adding a
+            fourth instance of it in the commit that removes the other three would be absurd. This
+            control needs no class of its own: `.panel-box__actions button` styles it by element.
+          */}
+          <IconButton
+            token="add"
             title="Add panel"
-            data-testid={`panel-add-${panel.id}`}
+            className=""
+            testId={`panel-add-${panel.id}`}
             onClick={() => ws.addPanel(activeTabId)}
-          >
-            +
-          </button>
+          />
           <button
             type="button"
             title={`${panelVerb} panel`}
