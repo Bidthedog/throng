@@ -81,6 +81,59 @@ The nightly is hosted deliberately: an unattended health check must not depend o
 powered on and logged in, because a nightly that goes quiet looks exactly like one that keeps
 passing.
 
+## Never guess. Measure, then change one thing
+
+**A fix reasoned from a plausible mechanism is a guess, however good the reasoning sounds. Get the
+number first.**
+
+This is not a counsel of perfection. It is the single most expensive habit in this repo's history,
+and every instance looks identical from the inside: a mechanism is identified, it genuinely explains
+the symptom, a fix follows from it, and the fix does not work — because the mechanism was real but
+was not the *dominant* one.
+
+### What it has actually cost
+
+**A timing ceiling resized three times in a row, never once from data.** It was 2000 ms. A commit
+titled *"stop timing the disk"* raised it to 5000 ms and explained why 5000 was fair — it did not
+stop timing the disk. A slower machine then measured 5888 ms, so it became 8000 ms with a warm-read
+argued from write-back behaviour; the next run measured 8522 ms. Only then did anyone print the
+number on every run instead of only on failure, which produced **5888 / 8522 / 7317** — a ±20%
+spread straddling every ceiling anyone had chosen, proving the whole approach wrong rather than the
+number. The actual cause took one measurement: the test copied a **91,380,224-byte** stand-in for a
+**454,656-byte** `powershell.exe`, two hundred times the binary production spawns. Replacing it took
+the measurement to **153 ms**. Three rounds and roughly an hour of runner time to learn something one
+`console.log` would have said at the start.
+
+**A denylist written against one machine's install layout.** `PSModulePath` was filtered with
+`-notmatch 'PowerShell\\7\\'`, which is correct for `C:\Program Files\PowerShell\7\Modules` — the
+layout on the machine it was written on. The runner had installed PowerShell through winget, so its
+modules live under `...\WindowsApps\Microsoft.PowerShell_7.6.5.0_x64__8wekyb3d8bbwe\Modules`. The
+step reported success, changed nothing that mattered, and cost a full gate cycle.
+
+### The rules that follow
+
+- **Print the measurement on every run, not only when it fails.** A budget you only ever see
+  violated is a budget you can only ever tune blindly. One `console.log` of the elapsed value turns
+  three guesses into one decision.
+- **Three samples before you believe a distribution.** One failing number tells you the ceiling was
+  crossed; it does not tell you by how much, how often, or whether the spread makes any ceiling
+  workable.
+- **Change one variable per run.** Two changes at once and a green result tells you nothing about
+  which mattered — and neither does a red one.
+- **Prefer an allowlist to a denylist.** Naming what to exclude means enumerating every form it takes
+  now and in future, on machines you have not seen. Naming what to keep does not.
+- **A theory you cannot falsify cheaply is not ready to act on.** If checking costs a command, run
+  the command. Two theories in this repo's history were refuted in under a minute each, and both had
+  already been written into a commit message as fact.
+- **Attack the cost, do not widen the tolerance.** A budget raised to fit a slow machine will be
+  raised again for a slower one, until it is above the thing it was supposed to detect and passes
+  while proving nothing.
+
+### The tell
+
+You are guessing whenever the sentence in your head is *"it must be X"* rather than *"I measured X"*.
+Both feel the same while you are writing the fix. Only one of them survives the next machine.
+
 ## The thing that catches everyone
 
 throng's daemon is **designed to outlive its window** (Principle III — terminals keep running when the
