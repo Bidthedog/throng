@@ -23,8 +23,14 @@ Ctrl+C.
 
 ```bash
 gh workflow run gate.yml --ref <branch>
-gh run watch <run-id> --exit-status        # one blocking watch, expect 75-90 min
+gh run watch <run-id> --exit-status                       # one blocking watch, expect 75-90 min
+gh run view <run-id> --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
 ```
+
+**The second command is not belt-and-braces.** `gh run watch` detaches early and its exit code then
+lies both ways — observed returning `0` for a run that concluded `failure`, and `1` for one still
+in progress. Take the verdict from `run view`; if `status` is not `completed`, the watch gave up and
+the run is still going.
 
 Running it locally is not a faster route to the same answer — it pins every core for the better part
 of an hour and eventually exhausts the interactive desktop heap. See *Where a test is allowed to run*

@@ -38,11 +38,30 @@ gh workflow run gate.yml --ref "$(git branch --show-current)"
 sleep 10
 RUN=$(gh run list --workflow=gate.yml --limit 1 --json databaseId --jq '.[0].databaseId')
 gh run watch "$RUN" --exit-status
+
+# 4. ALWAYS re-query the conclusion. Never trust the watch's exit code alone — see below.
+gh run view "$RUN" --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
 ```
 
 Say the expected cost in one line before starting the watch: *"Waiting on gate run `<id>`, expected
-75-90 min."* `--exit-status` makes the command fail on a red gate, so it can be trusted as a gate
-rather than read as a report.
+75-90 min."*
+
+**`gh run watch --exit-status` detaches early, and its exit code then lies in both directions.**
+Observed twice on this repo's runner in one afternoon:
+
+| what it returned | what the run had actually done |
+|---|---|
+| `0` | concluded **failure** |
+| `1` | still `in_progress`, gate step running |
+
+So the exit code answers "what did the watch see before it let go", not "how did the run end". Treat
+it as a *wait*, and take the verdict from `gh run view --json status,conclusion`. If `status` is not
+`completed`, the watch gave up early and the run is still going — re-attach rather than reporting a
+result.
+
+That distinction is the difference between "the gate is red" and "I stopped looking". Reporting the
+first when the second is true is worse than saying nothing, because it sends someone to diagnose a
+failure that has not happened yet.
 
 ### When one stage is red, run one stage
 
