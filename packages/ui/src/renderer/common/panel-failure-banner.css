@@ -59,8 +59,15 @@
   opacity: 0.85;
 }
 
-/* An icon control: it keeps the neutral icon-button treatment and inherits the banner's own error
-   colour, so it can never be a button-type token's business (FR-030's exclusion). */
+/* An icon control: it inherits the banner's own error colour, so it can never be a button-type
+   token's business (FR-030's exclusion).
+
+   This rule is the WHOLE of its styling, and saying so is the point (#276). The three call sites
+   used to pass `icon-button panel-failure__control`, and `.icon-button` is defined in
+   `preferences.css` — imported only by the preferences window. The main window loads `theme.css`,
+   so that first class resolved to no rule at all and the controls were carried entirely by this
+   one. The dead class is gone; nothing about how they draw has changed, which is why nobody
+   noticed it in the first place. */
 .panel-failure__control {
   flex: 0 0 auto;
   color: inherit;
