@@ -265,11 +265,27 @@ jobs:
       # THRONG_* keys, so throng launched from a pwsh session spawns terminals with no PSReadLine —
       # no history, no completion. Tracked separately; this step only stops the harness injecting
       # the fault into its own tests.
+      # An ALLOWLIST, not a denylist, and that distinction is the whole of it.
+      #
+      # This first shipped as `-notmatch 'PowerShell\\7\\|\\PowerShell\\Modules'`, written against a
+      # machine where PS7 lives in `C:\Program Files\PowerShell\7\Modules`. The runner installed it
+      # through winget, so its modules are at
+      # `...\WindowsApps\Microsoft.PowerShell_7.6.5.0_x64__8wekyb3d8bbwe\Modules` — which matches
+      # neither pattern. The entry survived, stayed first, and the stage failed identically while
+      # the step reported success.
+      #
+      # Naming the things to exclude means guessing every install layout PS7 has or will have.
+      # Naming the thing to KEEP does not: every Windows PowerShell 5.1 module directory contains
+      # the literal `WindowsPowerShell`, and no PowerShell 7 directory does — not the Program Files
+      # layout, not the MSIX one, not a side-by-side install.
       - name: Restore the Windows PowerShell module path
         shell: pwsh
         run: |
-          $clean = ($env:PSModulePath -split ';' |
-            Where-Object { $_ -and $_ -notmatch 'PowerShell\\7\\|\\PowerShell\\Modules' }) -join ';'
+          $kept = @($env:PSModulePath -split ';' | Where-Object { $_ -match 'WindowsPowerShell' })
+          if ($kept.Count -eq 0) {
+            throw "No WindowsPowerShell module directories found in PSModulePath ('$env:PSModulePath'). Refusing to hand powershell.exe an empty module path."
+          }
+          $clean = $kept -join ';'
           Write-Host "[psmodulepath] was : $env:PSModulePath"
           Write-Host "[psmodulepath] now : $clean"
           "PSModulePath=$clean" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
