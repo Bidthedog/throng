@@ -445,8 +445,21 @@ context menu's Destroy Tab.
 - **FR-001**: The tab strip MUST NOT render a native horizontal scrollbar at any tab count.
 - **FR-002**: A tab's height and vertical position MUST be identical whether or not the tabs
   overflow the strip.
-- **FR-003**: The New Tab control MUST remain visible at every tab count, pinned to the right-hand
-  edge of the tab pane, vertically centred, and square (equal width and height).
+- **FR-003** *(SUPERSEDED IN PART by #291 — see the shape clause below)*: The New Tab control MUST
+  remain visible at every tab count, pinned to the right-hand edge of the tab pane, vertically
+  centred, and square (equal width and height).
+
+  **Superseded for the SHAPE half only:** as of #291 the control is shaped as a **tab** rather than
+  as a centred square. It keeps its 24px width and stays pinned at every tab count — that half of
+  this requirement is untouched and still tested — but it is no longer square and no longer
+  vertically centred within the strip. It now stretches to the strip's content box and wears the
+  inactive chip's treatment (rounded top corners, no bottom border, raised background), so its
+  bottom edge meets the strip's bottom border exactly as `.tab-chip` does.
+
+  The reason is the one this requirement could not have anticipated: a square floating in the middle
+  of the strip reads as a button that happens to sit near the tabs, when what it makes is a tab. The
+  original wording is kept above rather than rewritten, because `T005` was written to it, and the
+  change to that test is only legible next to the requirement it used to pass.
 - **FR-004**: When tabs are fully hidden to the left, a fade MUST be shown over the leading edge of
   the left-most visible tab; when tabs are fully hidden to the right, over the trailing edge of the
   right-most visible tab.

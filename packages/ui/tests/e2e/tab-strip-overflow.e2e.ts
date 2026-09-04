@@ -109,27 +109,67 @@ test('T003 — an overflowing strip renders no native horizontal scrollbar', { t
   ).toBe(false);
 });
 
-test('T005 — the New Tab button stays pinned, square and centred at every tab count', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
+/*
+ * T005 — 031 FR-003, with its SHAPE half superseded by #291.
+ *
+ * What this test asserted, and no longer can: that the button is SQUARE and VERTICALLY CENTRED. It
+ * is now shaped as a tab — stretched to the strip's content box, bottom edge on the strip's bottom
+ * border — so both of those are false by design. The spec records the supersession against FR-003
+ * rather than rewriting it, and this is the test that change is visible in.
+ *
+ * What survives untouched is the half FR-003 is actually FOR: the control stays VISIBLE and PINNED
+ * at every tab count, including while the strip overflows. That was the 031 defect (it used to live
+ * inside the scrolling row and drift off with the tabs), and nothing here relaxes it.
+ *
+ * ══ WHY IT IS MEASURED AGAINST A CHIP RATHER THAN AGAINST NUMBERS ══
+ *
+ * "Connects to the line below it, just like the tabs do" is a claim about two elements agreeing, not
+ * about either one's coordinates. Asserting `height === 29` would encode today's
+ * `--pane-header-height` and fail the day a theme changes it, while still not saying the thing that
+ * matters. Comparing against a real chip in the same strip is the claim itself, and it holds at any
+ * header height, in any theme, at any zoom.
+ */
+test('T005 — the New Tab button stays pinned, and is shaped as a tab, at every tab count', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await ensureOverflowing();
   const add = shared.win.getByTestId('tab-add');
   await expect(add, 'New Tab is visible while the strip overflows').toBeVisible();
 
   const strip = await shared.win.getByTestId('tab-strip').boundingBox();
   const box = await add.boundingBox();
+  // The last chip still on screen — any chip will do, since FR-002 already fixes them all to one
+  // height and one y. Taking a VISIBLE one matters though: the strip is overflowing, and a chip
+  // scrolled out of the track reports a box that is clipped rather than laid out.
+  const chip = await shared.win.locator('.tab-chip').last().boundingBox();
   expect(box).toBeTruthy();
   expect(strip).toBeTruthy();
+  expect(chip).toBeTruthy();
 
-  // Square.
-  expect(Math.abs(box!.width - box!.height), 'New Tab is square').toBeLessThanOrEqual(1);
-
-  // Pinned to the right-hand edge rather than drifting off with the tabs.
+  // Pinned to the right-hand edge rather than drifting off with the tabs — FR-003's surviving half.
   const gapToRight = strip!.x + strip!.width - (box!.x + box!.width);
   expect(gapToRight, 'New Tab sits at the right-hand edge of the pane').toBeLessThan(80);
 
-  // Vertically centred within the strip.
-  const buttonMid = box!.y + box!.height / 2;
-  const stripMid = strip!.y + strip!.height / 2;
-  expect(Math.abs(buttonMid - stripMid), 'New Tab is vertically centred').toBeLessThanOrEqual(3);
+  // Still 24px wide. This one IS a number, deliberately: `.tab-strip::after` offsets the trailing
+  // fade by `calc(32px + …)` — this width plus its margin plus the strip's padding — so a change
+  // here silently puts the fade in the wrong place, and nothing else would catch that.
+  expect(Math.abs(box!.width - 24), 'New Tab keeps its 24px width').toBeLessThanOrEqual(1);
+
+  // ── Shaped as a tab (#291) ──
+  // Top edge level with the chips beside it…
+  expect(Math.abs(box!.y - chip!.y), 'New Tab starts where the tabs start').toBeLessThanOrEqual(1);
+  // …and the same height, which puts its bottom edge on the strip's bottom border exactly as a
+  // chip's is. Asserted as height-given-equal-tops rather than as a second coordinate subtraction,
+  // so a failure says which of the two edges moved.
+  expect(
+    Math.abs(box!.height - chip!.height),
+    'New Tab is exactly as tall as a tab, so its bottom meets the line below',
+  ).toBeLessThanOrEqual(1);
+
+  // Stated once against the STRIP as well, because that is the requirement in the user's own words:
+  // the bottom connects to the line below it. Everything above is the button agreeing with a chip,
+  // which a pair of equally-wrong elements would also satisfy. The only thing between the button's
+  // bottom edge and the bottom of the strip is the strip's own 1px border.
+  const gapToBottom = strip!.y + strip!.height - (box!.y + box!.height);
+  expect(gapToBottom, 'nothing but the border sits under the New Tab button').toBeLessThanOrEqual(2);
 });
 
 test('T007 — a fade never displaces a tab', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
