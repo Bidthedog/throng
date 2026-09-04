@@ -251,10 +251,13 @@ jobs:
           # stages to reach the eighth. Contract is green now (153ms, was 7317ms — #364), so a push
           # runs everything: E2E has never executed on that machine at all, and it is 86% of the
           # runtime. Dispatch still honours `only`. This defaulting goes when the push trigger goes.
-          # Back to the red stage while diagnosing it: reaching `integration` costs ~6 minutes of
-          # green stages, and a full run costs ~15 before it even starts E2E. Returns to 'full gate'
-          # once integration is green, and goes entirely with the push trigger.
-          ONLY: ${{ inputs.only || (github.event_name == 'push' && 'test:integration' || 'full gate') }}
+          # Integration is green on the runner now, so a push runs everything again. It was
+          # narrowed to the red stage while that was being diagnosed — reaching `integration` costs
+          # ~6 minutes of already-green stages, and a full run ~15 before E2E even starts.
+          #
+          # E2E is still the unknown: 86% of the runtime, and it has never executed on that machine.
+          # This defaulting goes entirely when the push trigger goes.
+          ONLY: ${{ inputs.only || 'full gate' }}
         run: |
           # ── CLEAN THE MODULE PATH HERE, IN THIS PROCESS ─────────────────────────────────────
           #
