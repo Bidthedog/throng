@@ -290,6 +290,35 @@ jobs:
           Write-Host "[psmodulepath] now : $clean"
           "PSModulePath=$clean" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
+      # TEMPORARY — remove with the push trigger. Cleaning PSModulePath was necessary and was NOT
+      # sufficient: shell-history still fails with CouldNotAutoloadMatchingModule on a module path
+      # that contains nothing but Windows PowerShell's own directories. Rather than guess a fourth
+      # time, print what the job actually has. Runs before the gate so the answer arrives even when
+      # the gate is red, and never fails the job itself.
+      - name: Diagnose PowerShell module loading
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Write-Host "[diag] PSModulePath                 = $env:PSModulePath"
+          Write-Host "[diag] PSExecutionPolicyPreference  = $env:PSExecutionPolicyPreference"
+          Write-Host "[diag] __PSLockDownPolicy           = $env:__PSLockDownPolicy"
+          Write-Host "[diag] PSDisableModuleAnalysisCache = $env:PSDisableModuleAnalysisCacheCleanup"
+          Write-Host "[diag] USERPROFILE                  = $env:USERPROFILE"
+          Write-Host "[diag] LOCALAPPDATA                 = $env:LOCALAPPDATA"
+
+          # Passed as a VARIABLE, not inline, so neither shell gets a chance to eat the quoting.
+          $probe = 'try { Import-Module PSReadLine -ErrorAction Stop; Write-Output LOADED_OK } catch { Write-Output FAILED; Write-Output $_.Exception.ToString() }'
+          Write-Host "[diag] --- import PSReadLine in powershell.exe ---"
+          & powershell.exe -NoLogo -NoProfile -Command $probe
+
+          $where = 'Get-Module -ListAvailable PSReadLine | ForEach-Object { $_.Path }'
+          Write-Host "[diag] --- PSReadLine locations ---"
+          & powershell.exe -NoLogo -NoProfile -Command $where
+
+          $pol = 'try { Get-ExecutionPolicy -List | Out-String } catch { Write-Output POLICY_QUERY_FAILED; Write-Output $_.Exception.Message }'
+          Write-Host "[diag] --- execution policy ---"
+          & powershell.exe -NoLogo -NoProfile -Command $pol
+
       - name: Run the gate
         shell: pwsh
         env:
@@ -298,7 +327,10 @@ jobs:
           # stages to reach the eighth. Contract is green now (153ms, was 7317ms — #364), so a push
           # runs everything: E2E has never executed on that machine at all, and it is 86% of the
           # runtime. Dispatch still honours `only`. This defaulting goes when the push trigger goes.
-          ONLY: ${{ inputs.only || 'full gate' }}
+          # Back to the red stage while diagnosing it: reaching `integration` costs ~6 minutes of
+          # green stages, and a full run costs ~15 before it even starts E2E. Returns to 'full gate'
+          # once integration is green, and goes entirely with the push trigger.
+          ONLY: ${{ inputs.only || (github.event_name == 'push' && 'test:integration' || 'full gate') }}
         run: |
           if (-not $env:ONLY -or $env:ONLY -eq 'full gate') {
             npm run gate
