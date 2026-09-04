@@ -33,10 +33,16 @@ What changed in each release of throng, written for someone deciding whether to 
 - Two new ways to get throng: a **portable** build that runs without installing, and a **zip
   archive** you extract to a folder of your choosing. The per-user installer is unchanged.
 
+### Fixed
+- The **+** buttons that add a tab and add a panel are announced by a screen reader as "New tab" and
+  "Add panel" rather than as "plus".
+
 ### Changed
 - Release notes now say what actually changed in each release, above the download checksums and the
   installation guidance that were previously the whole of the release body.
 - Every published download is listed with its own SHA-256, against its own filename.
+- The **+** at the end of the tab strip is drawn as a tab: it meets the line beneath the tabs
+  instead of floating above it as a rounded square, and its glyph sits centred within it.
 
 ## 1.0.0-alpha3 — 2026-08-30
 
