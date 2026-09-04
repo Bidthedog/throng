@@ -155,21 +155,33 @@ describe('WindowsDeElevatedLauncher — a failed de-elevated launch must be able
   }, 45_000);
 
   it('still returns void synchronously, without blocking or throwing', () => {
-    const root = fakeSystemRoot(process.execPath);
+    /*
+     * A stand-in SIZED LIKE THE THING IT IMPERSONATES.
+     *
+     * The other tests here use `process.execPath` because they need a shim that fails
+     * INFORMATIVELY — they read its stderr. This one reads nothing: it only needs `launch` to
+     * spawn something and return. So it should use whatever is most representative, and node.exe
+     * is not: it is ~87MB, against the ~444KB `powershell.exe` it stands in for. **200 times the
+     * binary production actually spawns**, copied and then cold-spawned inside the timed window.
+     *
+     * That, not the launcher, is what this assertion has been measuring since it was written. It
+     * is why the ceiling went 2s, then 5s, then 8s, and why a machine with a slow disk produced
+     * 5888ms, 8522ms and 7317ms on three consecutive runs — a ±20% spread straddling whatever
+     * number was chosen. No ceiling survives that, and it cannot grow past the 10s the shim tests
+     * budget without ceasing to mean anything.
+     *
+     * `where.exe` is ~64KB and, like every substitutable exe, rejects the launcher's fixed argv
+     * and exits non-zero — the property the file's own header note relies on.
+     *
+     * Resolve it BEFORE overwriting SystemRoot below, or it resolves against the fake tree.
+     */
+    const standIn = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'where.exe');
+    const root = fakeSystemRoot(standIn);
     process.env.SystemRoot = root;
 
-    // Take the disk OUT of the measured window, rather than sizing the window around it.
-    //
-    // `fakeSystemRoot` has just written a ~100MB binary, so the `spawn` below would otherwise be
-    // the OS reading that back COLD, behind its own write-back — and that read, not the launcher,
-    // is what has twice pushed this assertion over its ceiling. Reading the file once here makes
-    // its pages resident and lets the write-back settle, leaving the launcher as the only thing
-    // the clock below can see.
-    //
-    // This is the fix the 2s -> 5s change was titled after but did not make: that commit widened
-    // the tolerance and explained why the tolerance was fair, which held until a machine with a
-    // genuinely slow disk came in at 5888ms. A budget that absorbs disk will keep needing to grow,
-    // and it cannot grow far — see the ceiling's own note below.
+    // Warm the copy so the spawn below is not reading it back cold behind its own write-back.
+    // Near-free now that the file is kilobytes rather than tens of megabytes; it was retained
+    // rather than removed so this change alters ONE variable, the thing being copied.
     readFileSync(join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'));
 
     const started = Date.now();
