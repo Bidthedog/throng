@@ -266,6 +266,18 @@ jobs:
           # masks any real difference, so a local A/B here proves nothing in either direction and
           # must not be reported as if it did.
           ONLY: ${{ inputs.only || (github.event_name == 'push' && 'test:e2e' || 'full gate') }}
+
+          # TEMPORARY. Set to a space-separated spec list to measure just those on the runner;
+          # blank runs the stage named by ONLY. Goes with the push trigger.
+          #
+          # ARM A of an A/B on the three terminal specs that fail identically on both full runs:
+          # two capture nothing at all (Expected "^H"/"u", Received ""). This arm has #367's
+          # dropInheritedModulePath IN, to establish they still fail when run in ISOLATION —
+          # without that, a later pass in arm B could be isolation rather than the change.
+          E2E_SPECS: >-
+            packages/ui/tests/e2e/terminal-kitty-editing-keys.e2e.ts
+            packages/ui/tests/e2e/terminal-link-once.e2e.ts
+            packages/ui/tests/e2e/terminal-modified-enter.e2e.ts
         run: |
           # ── CLEAN THE MODULE PATH HERE, IN THIS PROCESS ─────────────────────────────────────
           #
@@ -293,6 +305,22 @@ jobs:
           }
           $env:PSModulePath = $kept -join ';'
           Write-Host "[psmodulepath] in-process : $env:PSModulePath"
+
+          # TEMPORARY, goes with the push trigger. An escape hatch for measuring specific specs on
+          # the runner, because the full E2E stage is 68 minutes and both tiers always run — there
+          # is no supported way to ask for a subset.
+          #
+          # It exists because these specs CANNOT be measured anywhere else: run on a workstation
+          # they all fail with `locator.click: Timeout 30000ms exceeded`, an environmental failure
+          # of a session with no usable interactive desktop, identically whatever the change under
+          # test. An A/B there compares two broken arms and proves nothing.
+          if ($env:E2E_SPECS) {
+            Write-Host "[gate] targeted E2E: $env:E2E_SPECS"
+            npm run build
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            npx playwright test $env:E2E_SPECS.Split(' ') --workers=1
+            exit $LASTEXITCODE
+          }
 
           if (-not $env:ONLY -or $env:ONLY -eq 'full gate') {
             npm run gate
