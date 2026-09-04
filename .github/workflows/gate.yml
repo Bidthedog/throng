@@ -28,6 +28,19 @@ name: Gate
 
 on:
   workflow_dispatch:
+  schedule:
+    # 01:00 UTC — 02:00 BST, 01:00 GMT. Two reasons, and the second is the less obvious one:
+    # nobody is waiting on the result overnight, and the machine is at its coolest then. A
+    # 90-minute all-core run is the hottest thing it does, and its thermal headroom in summer is a
+    # tighter constraint than its CPU.
+    #
+    # GitHub's cron is UTC and has no timezone field, so this drifts by an hour across BST. That is
+    # accepted; do NOT "fix" it with two schedules and a guard.
+    #
+    # GitHub also DISABLES scheduled workflows after 60 days without repository activity, silently.
+    # A nightly that stopped looks exactly like a nightly that keeps passing, so if it has not
+    # appeared in the Actions tab for a while, check that before believing the green.
+    - cron: '0 1 * * *'
 
 concurrency:
   # One gate at a time, and a newer request wins. There is a single runner, so without this a second
@@ -147,3 +160,68 @@ jobs:
           path: test-results/
           retention-days: 14
           if-no-files-found: ignore
+
+  # A red nightly that nobody is awake for is a red nobody sees. This turns it into an issue.
+  #
+  # Scheduled runs only: a failed MANUAL dispatch already has someone watching it, and filing an
+  # issue for a run you are sitting in front of is noise.
+  #
+  # It DE-DUPLICATES rather than filing nightly. A persistently broken master would otherwise
+  # produce one issue per night, which is the fastest way to teach everyone to mute the repo — so
+  # an existing open issue with the same title gets a comment instead.
+  report-failure:
+    name: Report a failed nightly
+    needs: gate
+    if: ${{ failure() && github.event_name == 'schedule' }}
+
+    # ubuntu-latest, and hosted ON PURPOSE. This job only calls the API, and it must not queue
+    # behind the very runner whose failure it exists to report — if the self-hosted machine is
+    # wedged or offline, this is the only part that still runs.
+    runs-on: ubuntu-latest
+
+    permissions:
+      issues: write
+
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'Nightly gate failed on master';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              'The nightly gate failed on `master`.',
+              '',
+              `- Commit: ${context.sha}`,
+              `- Run: ${runUrl}`,
+              '',
+              'The gate is fail-fast, so the failing stage is the last one printed in the run log.',
+            ].join('\n');
+
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'bug,area:infra',
+              per_page: 100,
+            });
+            const dupe = existing.find((i) => i.title === title && !i.pull_request);
+
+            if (dupe) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: dupe.number,
+                body: `Failed again.\n\n${body}`,
+              });
+              core.notice(`Commented on existing issue #${dupe.number}`);
+            } else {
+              const made = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['bug', 'area:infra'],
+                assignees: ['Bidthedog'],
+              });
+              core.notice(`Opened issue #${made.data.number}`);
+            }
