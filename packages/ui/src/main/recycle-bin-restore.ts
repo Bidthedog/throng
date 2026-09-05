@@ -17,50 +17,50 @@ import { spawn } from 'node:child_process';
 const RESTORE_SCRIPT = `
 $ErrorActionPreference = 'Stop'
 $target = $env:THRONG_RESTORE_TARGET
+$targetDir = Split-Path $target -Parent
+$leaf = Split-Path $target -Leaf
+$leafNoExt = [System.IO.Path]::GetFileNameWithoutExtension($leaf)
 $shell = New-Object -ComObject Shell.Application
 $bin = $shell.Namespace(0xA)
 $items = @($bin.Items())
-$leaf = Split-Path $target -Leaf
 $match = $null
 $seen = @()
 #
-# Column 1 is "Original Location", MEASURED rather than assumed — Windows 11 (10.0.26200), where
-# GetDetailsOf($null, 1) reports that header exactly. An earlier attempt at this scanned the first
-# eight columns for whichever one formed the target path, on the theory that the index moves between
-# builds. Two things came out of probing it against a real bin: the index was right all along, and
-# the scan was WORSE THAN THE BUG IT WAS MEANT TO FIX — column 2 is "Date Deleted", and
-# Join-Path on a date throws DriveNotFoundException, which under 'Stop' aborts the whole restore.
+# == THE SHELL ITEM NAME MAY HAVE NO EXTENSION, AND THAT WAS THE BUG (#373) ==
 #
-# Nothing in the suite would have caught that: node-file-system.test.ts injects a SIMULATED bin, so
-# this script is exercised by no automated test at all. Probe it by hand before changing it.
+# A Shell.Application item's Name is the name as EXPLORER WOULD DISPLAY IT, so it honours
+# "Hide extensions for known file types" -- which is ON by default on a fresh Windows install.
+# The original lookup rebuilt the path as Join-Path $orig $it.Name and compared that to the full
+# target, so on any machine with that default the rebuilt path was ...\\open against a target of
+# ...\\open.txt, nothing ever matched, and EVERY undo of a delete told the user their file was no
+# longer in the Recycle Bin. It was there the whole time.
+#
+# Invisible on a developer machine with extensions shown, which is why it survived. The two
+# samples that identified it, for the same operation: a.txt <- C:\\Users\\... on a workstation,
+# and a <- C:\\actions-runner\\... on the gate runner.
+#
+# So the folder is compared on its own and the name is accepted in EITHER form. Column 1 is
+# "Original Location" -- measured on Windows 11 10.0.26200, not assumed.
 #
 foreach ($it in $items) {
   $orig = $bin.GetDetailsOf($it, 1)
-  #
-  # SAMPLE THE ITEMS THAT SHARE THE TARGET'S NAME, not the first three in the bin.
-  #
-  # The first sampling took whatever came first, which on a runner with fifty entries is three
-  # unrelated leftovers — it proved the bin was populated and nothing else. The interesting item is
-  # the one CALLED what we are looking for: if it is there with a different original location, that
-  # difference IS the bug; if it is not there at all, the delete never recycled it. Same one run,
-  # two answers, and the earlier sample could give neither.
-  #
-  if ($it.Name -ieq $leaf -and $seen.Count -lt 5) {
-    $seen += ("{0} <- '{1}'" -f $it.Name, $orig)
+  if ($it.Name -ieq $leaf -or $it.Name -ieq $leafNoExt) {
+    if ($seen.Count -lt 5) { $seen += ("{0} <- '{1}'" -f $it.Name, $orig) }
   }
   if ([string]::IsNullOrEmpty($orig)) { continue }
-  if ((Join-Path $orig $it.Name) -ieq $target) { $match = $it; break }
+  if ($orig -ieq $targetDir -and ($it.Name -ieq $leaf -or $it.Name -ieq $leafNoExt)) {
+    $match = $it
+    break
+  }
 }
 #
-# WHEN IT DOES NOT MATCH, SAY WHAT WAS THERE.
-#
-# "not in recycle bin" is true of two completely different faults: the delete never recycled (an
-# empty bin — a defect somewhere else entirely), and the item being present under a path that does
-# not compare equal (a short 8.3 name, a casing difference, a redirected temp). The count and a
-# sample of what the bin actually reported tell those apart in ONE run rather than one each.
+# WHEN IT DOES NOT MATCH, SAY WHAT WAS THERE. "not in recycle bin" is true of two completely
+# different faults: an empty bin, meaning the delete never recycled at all, and an item present
+# under a name or path that does not compare equal. The count plus the items sharing the target's
+# name tell those apart in ONE run rather than one each -- which is how #373 was found.
 #
 if ($null -eq $match) {
-  $sample = if ($seen.Count -gt 0) { $seen -join ' ; ' } else { "(no bin item is named '$leaf')" }
+  $sample = if ($seen.Count -gt 0) { $seen -join ' ; ' } else { "(no bin item is named '$leaf' or '$leafNoExt')" }
   throw "not in recycle bin: $target (scanned $($items.Count) item(s); sample: $sample)"
 }
 $restore = $match.Verbs() | Where-Object { ($_.Name -replace '&','') -ieq 'Restore' } | Select-Object -First 1
