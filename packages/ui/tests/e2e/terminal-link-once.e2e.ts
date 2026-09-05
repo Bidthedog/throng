@@ -66,36 +66,50 @@ const createProject = (win: OpenApp['win'], name: string, root: string): Promise
  *
  * ══ READ THIS BEFORE FIXING #198 ══
  *
- * These four cases PASS on this branch. That is not an oversight, and they are not written as
- * red tests, because **the reported double-open does not reproduce here**. Measured, on
- * `08d0fdc`, Windows PowerShell, normal screen buffer: one Ctrl+click on an OSC 8 hyperlink whose
- * display text is the URL produces exactly ONE `shell.openExternal`. Not two.
+ * These cases PASS on this branch. That is not an oversight, and they are not written as
+ * red tests, because **the reported double-open does not reproduce here**. Measured twice, both
+ * times exactly ONE `shell.openExternal` per Ctrl+click:
+ *   - `08d0fdc`, Windows PowerShell, normal screen buffer — the original four cases.
+ *   - `a5dfd00` (2026-09-05), all FIVE cases including the alternate screen, 5/5 in 15.7s at one
+ *     worker with retries off. Re-measured because the first figure predated twenty-odd commits to
+ *     `use-terminal.ts`, `main.ts` and the window-open guard, which made it evidence about a tree
+ *     nobody was running any more.
  *
  * The issue's stated cause is a code reading, not a count. It observes that two link mechanisms are
  * registered on the same terminal and both route to `openTerminalLink` — xterm's `linkHandler`
- * (OSC 8) at `use-terminal.ts:364`, and `WebLinksAddon` (plain-text detection) at `:526` — and
- * infers that cells satisfying both must fire both. xterm 6 does not work that way. Its
- * `Linkifier2` consults registered link PROVIDERS only when no OSC link already matched the
- * position (`if (…linkProviders.length && !i)` in `xterm.js`), and a single `_handleMouseUp`
- * activates `_currentLink` once. The OSC 8 link wins and the addon is never asked, so the two
- * mechanisms cannot both fire for one click on one set of cells.
+ * (OSC 8, now `use-terminal.ts:404`) and `WebLinksAddon` (plain-text detection, now `:779`; the
+ * issue cites `:364` and `:526`, which the file has long since moved past) — and infers that cells
+ * satisfying both must fire both. xterm 6 does not work that way. Both mechanisms are registered
+ * link PROVIDERS on ONE `Linkifier`: `OscLinkProvider` is registered by the terminal itself at
+ * index 0, `WebLinksAddon` calls `registerLinkProvider` after it, `_checkLinkProviderResult` only
+ * uses a provider's link when every higher-priority provider came back empty, and `_handleMouseUp`
+ * activates the single `_currentLink` once. The OSC 8 link wins and the addon's is dropped, so the
+ * two mechanisms cannot both fire for one click on one set of cells.
  *
  * So the reported behaviour is real — it was observed — but its cause is somewhere this branch
- * does not reach from a scripted PowerShell link. Candidates NOT eliminated here, and worth
- * establishing before any fix is designed:
- *   - Claude Code runs on the ALTERNATE screen buffer, which `use-terminal.ts` treats specially in
- *     two places; the alt buffer could not be driven far enough in this harness to get a clickable
- *     link onto it.
- *   - Claude Code may print the URL more than once per line (an OSC 8 link followed by the bare
- *     URL), which would be two links and legitimately two targets — a different defect with a
- *     different fix.
- *   - A doubled `openExternal` upstream of the terminal (the window-open guard also routes to
- *     `shell.openExternal`).
+ * does not reach. Candidates, and where each now stands:
+ *   - ~~The ALTERNATE screen buffer~~ — ELIMINATED. The fifth case below drives a full-screen
+ *     program that takes the alt screen and prints an OSC 8 link into it; still exactly once.
+ *   - ~~A doubled `openExternal` upstream~~ — ELIMINATED by reading. The window-open guard routes
+ *     to `shell.openExternal` only from `setWindowOpenHandler`, which fires for `window.open`;
+ *     `openTerminalLink` calls the IPC seam directly and never opens a window. The seam's
+ *     `ipcMain.on` is registered once, inside `app.whenReady()`. throng's own hover tip is a
+ *     `role=tooltip` div with no click handler.
+ *   - **Claude Code printing the URL more than once per line** (an OSC 8 link followed by the bare
+ *     URL) — STILL OPEN, and now the only candidate standing. That would be two adjacent links and
+ *     two legitimate targets, which is a different defect with a different fix.
+ *
+ * Which makes ONE question decisive, and it needs the reporter rather than this suite: **do the two
+ * browser tabs show the SAME url, or two different ones?** Same means a genuine double-open and
+ * these five fences are looking in the wrong place. Different means two links under one pointer,
+ * and the fix is about link ranges, not de-duplication.
  *
  * What these tests are therefore FOR: they pin "exactly once" at the `shell.openExternal` seam for
- * all three link shapes, so that whatever the fix turns out to be, it cannot double any of them,
- * and cannot fix the OSC 8 case by breaking plain-text detection (or vice versa). Fixing #198 by
- * de-duplicating blindly is the specific risk they exist to catch.
+ * every link shape, so that whatever the fix turns out to be, it cannot double any of them, and
+ * cannot fix the OSC 8 case by breaking plain-text detection (or vice versa). Fixing #198 by
+ * de-duplicating blindly is the specific risk they exist to catch — and with the mechanism above
+ * established, a de-duplicating fix would not be removing a second open, it would be papering over
+ * whichever one is real.
  *
  * ══ On the gesture ══
  *
