@@ -1841,11 +1841,15 @@ lines) behaves without error.
 - **FR-022a**: Two of this feature's settings are **keyed maps**, a shape **no existing control type can
   render**: the **extension→language overrides** (FR-004b — text key → language value) and the **per-language
   indentation overrides** (FR-018/FR-018e — language key → an *object* of style, indent width and tab display
-  width). The Settings editor's control vocabulary is **thirteen** kinds as shipped — *number, text, toggle,
-  select, multiselect, array, colour, font-family, font-size, enum, chord, icon, folder* *(corrected
-  2026-07-12: **007 FR-028** listed **six**; `ControlKind` has since grown seven more, exactly the staleness
-  FR-022a's own note predicted)* — and a keyed map of objects fits **none** of them, so FR-022 cannot be
-  satisfied without extending that vocabulary. This feature
+  width). The Settings editor's control vocabulary was **thirteen** kinds when this feature was written —
+  *number, text, toggle, select, multiselect, array, colour, font-family, font-size, enum, chord, icon,
+  folder* *(corrected 2026-07-12: **007 FR-028** listed **six**; `ControlKind` had since grown seven more,
+  exactly the staleness FR-022a's own note predicted. Corrected again 2026-09-05, issue
+  [#79](https://github.com/Bidthedog/throng/issues/79): the count is **historical**, not current —
+  `ControlKind` in `packages/core/src/config/metadata.ts` is now the declared authority and 007 FR-028 no
+  longer enumerates members, so no reader should take a number from this sentence)* — and a keyed map of
+  objects fits **none** of them, so FR-022 cannot be satisfied without extending that vocabulary. This
+  feature
   MUST therefore add **one new, generic control type — a keyed-table (map) editor** — to the shared
   configuration surface:
   - It MUST be declared in the **single declarative editor-metadata registry** (007 FR-025a) as a new control
