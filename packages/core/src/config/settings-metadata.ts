@@ -141,8 +141,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   ),
   confirmDescriptor(
     'confirmations.destroyTab',
-    'Close a tab',
-    'How many confirmations before a tab (with its panels) is closed.',
+    'Destroy a tab',
+    'How many confirmations before a tab (with its panels) is destroyed.',
   ),
   confirmDescriptor(
     'confirmations.destroyPanel',

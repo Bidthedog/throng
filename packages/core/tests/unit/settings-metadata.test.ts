@@ -271,4 +271,23 @@ describe('SETTINGS_METADATA new-project + verb changes (011)', () => {
     expect(byKey.get('confirmations.destroyProject')?.label).toBe('Remove a project');
     expect(byKey.get('confirmations.destroySubWorkspace')?.label).toBe('Destroy a sub-workspace');
   });
+
+  it('speaks one destructive vocabulary across the whole confirmation group (#329)', () => {
+    // A tab takes its panels with it, and the dialogs governing that already say so —
+    // `tab-group.tsx` uses `Destroy Tab` for one and `Destroy tabs` for several. The label on the
+    // control deciding how hard that is to do said "Close", which is the verb for something cheap
+    // and reversible. The KEY has read `destroyTab` since it was written; only the copy lagged.
+    expect(byKey.get('confirmations.destroyTab')?.label).toBe('Destroy a tab');
+    expect(byKey.get('confirmations.destroyTab')?.description).toBe(
+      'How many confirmations before a tab (with its panels) is destroyed.',
+    );
+    expect(byKey.get('confirmations.destroyPanel')?.label).toBe('Destroy a panel');
+
+    // Nothing in the group softens the verb. Project is the one legitimate exception: removing a
+    // project unregisters it and deletes no files, so "Remove" is accurate rather than soft.
+    const softened = [...byKey.entries()]
+      .filter(([key]) => key.startsWith('confirmations.'))
+      .filter(([, d]) => /\bclos(e|ed|ing)\b/i.test(`${d.label} ${d.description ?? ''}`));
+    expect(softened.map(([key]) => key)).toEqual([]);
+  });
 });
