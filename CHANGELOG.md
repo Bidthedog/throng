@@ -36,6 +36,10 @@ What changed in each release of throng, written for someone deciding whether to 
 ### Fixed
 - The **+** buttons that add a tab and add a panel are announced by a screen reader as "New tab" and
   "Add panel" rather than as "plus".
+- When you run a command that opens a window — `az login`'s sign-in prompt, a browser-based login, a
+  GUI editor — throng now asks Windows to let that window come to the front, instead of leaving it
+  behind throng where a terminal looks like it has stopped responding. Windows makes the final
+  decision and can still refuse.
 
 ### Changed
 - Release notes now say what actually changed in each release, above the download checksums and the
