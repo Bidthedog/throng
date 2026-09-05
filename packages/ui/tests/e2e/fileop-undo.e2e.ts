@@ -289,7 +289,40 @@ test('undoing a delete un-strands the editor that was open on the file', { tag: 
       // the user their work is at risk over a file that is sitting on disk again, and every later
       // "save before closing?" asks about a document with nothing to save.
       await win.keyboard.press('Control+z');
-      await expect.poll(() => existsSync(join(root, 'open.txt')), { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
+      /*
+       * SAY WHAT THE APP DID, when the file does not come back.
+       *
+       * A bare `existsSync` poll can only ever report "still absent", which is the one thing already
+       * known. It cannot distinguish the chord going somewhere else, the undo running and the
+       * RESTORE failing, or the delete never having been recyclable in the first place — and those
+       * need completely different fixes. A first attempt at this test guessed at the first of them
+       * and was wrong, which cost a full gate cycle to learn.
+       *
+       * So the failure carries the app's own account of itself: where focus was, and whatever notice
+       * the app raised. `restoring a recycled item` is the only path that can fail silently at the
+       * OS level, and if that is what is happening the notice is where it will say so.
+       */
+      try {
+        await expect
+          .poll(() => existsSync(join(root, 'open.txt')), { timeout: FILE_OP_TIMEOUT_MS })
+          .toBe(true);
+      } catch (cause) {
+        const text = async (testId: string): Promise<string> => {
+          const el = win.getByTestId(testId);
+          return (await el.count()) ? ((await el.first().innerText()).trim() || '(empty)') : '(absent)';
+        };
+        const focus = await win.evaluate(() => {
+          const el = document.activeElement;
+          return el ? `${el.tagName}[data-testid=${el.getAttribute('data-testid') ?? '-'}]` : '(none)';
+        });
+        throw new Error(
+          `undo did not restore open.txt within ${FILE_OP_TIMEOUT_MS}ms.` +
+            ` focus=${focus};` +
+            ` panel-failure-notice=${await text('panel-failure-notice')};` +
+            ` notices=${await text('notices')}`,
+          { cause },
+        );
+      }
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toHaveCount(0, { timeout: 8000 });
       // …and the tree's own dirty mark goes with it.
       await expect(win.getByTestId('tree-unsaved-open.txt')).toHaveCount(0);
