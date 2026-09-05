@@ -87,22 +87,42 @@ const createProject = (win: OpenApp['win'], name: string, root: string): Promise
  * two mechanisms cannot both fire for one click on one set of cells.
  *
  * So the reported behaviour is real — it was observed — but its cause is somewhere this branch
- * does not reach. Candidates, and where each now stands:
- *   - ~~The ALTERNATE screen buffer~~ — ELIMINATED. The fifth case below drives a full-screen
- *     program that takes the alt screen and prints an OSC 8 link into it; still exactly once.
- *   - ~~A doubled `openExternal` upstream~~ — ELIMINATED by reading. The window-open guard routes
- *     to `shell.openExternal` only from `setWindowOpenHandler`, which fires for `window.open`;
- *     `openTerminalLink` calls the IPC seam directly and never opens a window. The seam's
+ * does not reach. Every candidate has since been eliminated, and none by a fix:
+ *   - ~~The ALTERNATE screen buffer~~ — the fifth case below drives a full-screen program that takes
+ *     the alt screen and prints an OSC 8 link into it; still exactly once.
+ *   - ~~A doubled `openExternal` upstream~~ — by reading. The window-open guard routes to
+ *     `shell.openExternal` only from `setWindowOpenHandler`, which fires for `window.open`;
+ *     `openTerminalLink` calls the IPC seam directly and never opens a window. That seam's
  *     `ipcMain.on` is registered once, inside `app.whenReady()`. throng's own hover tip is a
  *     `role=tooltip` div with no click handler.
- *   - **Claude Code printing the URL more than once per line** (an OSC 8 link followed by the bare
- *     URL) — STILL OPEN, and now the only candidate standing. That would be two adjacent links and
- *     two legitimate targets, which is a different defect with a different fix.
+ *   - ~~Two adjacent links under one pointer~~ (an OSC 8 link followed by the bare URL, which would
+ *     be two legitimate targets) — the reporter confirmed on 2026-09-05 that **both tabs showed the
+ *     SAME url**. So it was one link opened twice, not two links opened once each.
+ *   - ~~The xterm upgrade fixed it~~ — the obvious "fixed elsewhere" theory, and it is FALSE.
+ *     `@xterm/xterm` has been `^6` since the repository's first commit (285d2cab, 2026-07-07), three
+ *     weeks BEFORE this was filed, so the single-`_currentLink` de-duplication was present the whole
+ *     time. The doubling happened despite it.
  *
- * Which makes ONE question decisive, and it needs the reporter rather than this suite: **do the two
- * browser tabs show the SAME url, or two different ones?** Same means a genuine double-open and
- * these five fences are looking in the wrong place. Different means two links under one pointer,
- * and the fix is about link ranges, not de-duplication.
+ * ══ Where that leaves it ══
+ *
+ * Unreproducible by the reporter as of 2026-09-05, and unreproducible here. No commit between the
+ * report and now touches link activation: the only changes to `use-terminal.ts` in that window are
+ * 028's redraw/keys, 029's failure paths, 033's settings, #295's title-on-unmount and #290's
+ * keyboard-mode ownership. **So "it was fixed elsewhere" has no evidence behind it, and this file
+ * does not claim it.**
+ *
+ * Two explanations survive that the suite cannot distinguish, both worth checking FIRST if it ever
+ * recurs, because neither is a defect in the code these fences cover:
+ *   - **Two physical mouseups for one intended click.** xterm activates on a mouseup matching its
+ *     mousedown, so a doubled click — a failing mouse micro-switch, an accessibility or driver
+ *     setting — is two legitimate activations of one link, and would look exactly like this.
+ *   - **A transient second live view of the same panel**, each with its own xterm and its own
+ *     Linkifier. Nothing found says this happened, and one click reaches one element, so it is the
+ *     weaker of the two.
+ *
+ * What these five fences are FOR is therefore unchanged and, if anything, sharper: they pin "exactly
+ * once" at the `shell.openExternal` seam so a regression that genuinely doubles it fails loudly,
+ * rather than being argued about from a code reading again.
  *
  * What these tests are therefore FOR: they pin "exactly once" at the `shell.openExternal` seam for
  * every link shape, so that whatever the fix turns out to be, it cannot double any of them, and
