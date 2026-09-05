@@ -238,7 +238,7 @@ test('undoing a delete un-strands the editor that was open on the file', { tag: 
   const root = mkdtempSync(join(tmpdir(), 'throng-undodel-'));
   writeFileSync(join(root, 'open.txt'), 'ORIGINAL\n');
   try {
-    await runApp(async (_app, win) => {
+    await runApp(async (app, win) => {
       await createProject(win, 'UndoDelProj', root);
       const pid = await firstPanelId(win);
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('editor');
@@ -315,11 +315,30 @@ test('undoing a delete un-strands the editor that was open on the file', { tag: 
           const el = document.activeElement;
           return el ? `${el.tagName}[data-testid=${el.getAttribute('data-testid') ?? '-'}]` : '(none)';
         });
+        /*
+         * THE RAW ERROR, VIA THE CONTROL THE USER WOULD USE.
+         *
+         * FR-034 forbids rendering a system error, so the notice on screen says only "An error
+         * occurred when you tried to undo that file operation" — true, deliberate, and useless for
+         * telling a refused validation apart from a Recycle-Bin restore that failed. The detail
+         * exists in `copyDetail`, and its only route out is the Copy control. So the test presses
+         * it and reads the clipboard, which is exactly what a user would be asked to do.
+         */
+        let detail = '(no copy control)';
+        const copy = win.getByTestId('notice-error-copy');
+        if (await copy.count()) {
+          await copy.first().click();
+          detail =
+            (await app.evaluate(({ clipboard }) => clipboard.readText()).catch(() => '')) ||
+            '(clipboard empty)';
+        }
         throw new Error(
           `undo did not restore open.txt within ${FILE_OP_TIMEOUT_MS}ms.` +
             ` focus=${focus};` +
             ` panel-failure-notice=${await text('panel-failure-notice')};` +
-            ` notices=${await text('notices')}`,
+            ` notices=${await text('notices')};` +
+            ` notice-body=${await text('notice-body')};` +
+            ` copyDetail=${detail.replace(/\s+/g, ' ').slice(0, 500)}`,
           { cause },
         );
       }

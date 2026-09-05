@@ -19,14 +19,38 @@ $ErrorActionPreference = 'Stop'
 $target = $env:THRONG_RESTORE_TARGET
 $shell = New-Object -ComObject Shell.Application
 $bin = $shell.Namespace(0xA)
+$items = @($bin.Items())
 $match = $null
-foreach ($it in @($bin.Items())) {
-  $orig = $bin.GetDetailsOf($it, 1)   # "Original Location" (folder) on Windows 10/11
+$seen = @()
+#
+# Column 1 is "Original Location", MEASURED rather than assumed — Windows 11 (10.0.26200), where
+# GetDetailsOf($null, 1) reports that header exactly. An earlier attempt at this scanned the first
+# eight columns for whichever one formed the target path, on the theory that the index moves between
+# builds. Two things came out of probing it against a real bin: the index was right all along, and
+# the scan was WORSE THAN THE BUG IT WAS MEANT TO FIX — column 2 is "Date Deleted", and
+# Join-Path on a date throws DriveNotFoundException, which under 'Stop' aborts the whole restore.
+#
+# Nothing in the suite would have caught that: node-file-system.test.ts injects a SIMULATED bin, so
+# this script is exercised by no automated test at all. Probe it by hand before changing it.
+#
+foreach ($it in $items) {
+  $orig = $bin.GetDetailsOf($it, 1)
   if ([string]::IsNullOrEmpty($orig)) { continue }
-  $full = Join-Path $orig $it.Name
-  if ($full -ieq $target) { $match = $it; break }
+  if ($seen.Count -lt 3) { $seen += ("{0} <- {1}" -f $it.Name, $orig) }
+  if ((Join-Path $orig $it.Name) -ieq $target) { $match = $it; break }
 }
-if ($null -eq $match) { throw "not in recycle bin: $target" }
+#
+# WHEN IT DOES NOT MATCH, SAY WHAT WAS THERE.
+#
+# "not in recycle bin" is true of two completely different faults: the delete never recycled (an
+# empty bin — a defect somewhere else entirely), and the item being present under a path that does
+# not compare equal (a short 8.3 name, a casing difference, a redirected temp). The count and a
+# sample of what the bin actually reported tell those apart in ONE run rather than one each.
+#
+if ($null -eq $match) {
+  $sample = if ($seen.Count -gt 0) { $seen -join ' ; ' } else { '(no items with an original location)' }
+  throw "not in recycle bin: $target (scanned $($items.Count) item(s); sample: $sample)"
+}
 $restore = $match.Verbs() | Where-Object { ($_.Name -replace '&','') -ieq 'Restore' } | Select-Object -First 1
 if ($null -eq $restore) { throw "no Restore verb" }
 $restore.DoIt()
