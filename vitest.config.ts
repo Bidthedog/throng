@@ -54,8 +54,33 @@ const osSerial = {
   fileParallelism: false,
   pool: 'forks',
   maxWorkers: 1,
-  testTimeout: 30_000,
-  hookTimeout: 30_000,
+  /*
+   * 60 s, RAISED from 30 (#359). Not the same fix as #355 below, and the difference is the whole
+   * argument: that layer was INHERITING vitest's 5 s default, so stating a budget was itself the
+   * correction. Here a budget was already stated deliberately, so raising it needs a reason.
+   *
+   * The reason is that THIS LAYER DOES NOT SCALE WITH CPU, and the 30 s was set as though it did.
+   * These tests are dominated by real OS process work — a daemon started and stopped per test,
+   * ConPTY spawns, and process-tree probing to decide whether a shell is busy. That is syscall-
+   * and I/O-bound, so it degrades far harder on slow or virtualised hardware than compute does.
+   *
+   * Measured, same commit, `terminal-reattach.integration.test.ts`:
+   *
+   *   closeIdle/killAll test   4.7 s here          >30 s (timed out) on a slow Windows box
+   *   whole file (2 tests)     6.0 s here          38.5 s there
+   *
+   * That is ~6.4x, against the 1.9-4.1x the compute-bound stages show on the same machine — and
+   * it matches the gate's own numbers, where the integration stage ran 9m01s at 12% MEAN CPU. It
+   * was waiting, not computing. So 30 s looked like a 6x margin and was really a 1x one.
+   *
+   * Do NOT buy headroom back by shortening `ping -n 12` in that test. The ping is not a cost the
+   * test pays — it is killed by `killAll` long before its 12 seconds elapse, and it exists only
+   * so the daemon has a genuinely multi-second child to classify as busy. Shortening it races the
+   * classification poll it was sized to outlast, and trades the test's meaning for a runtime it
+   * was not spending anyway.
+   */
+  testTimeout: 60_000,
+  hookTimeout: 60_000,
 } as const;
 
 export default defineConfig({

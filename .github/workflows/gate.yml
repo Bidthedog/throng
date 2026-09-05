@@ -1,0 +1,460 @@
+name: Gate
+
+# THE FULL `npm run gate`, on a self-hosted Windows runner, so it stops running on a workstation.
+#
+# A local full run saturates every core for the better part of an hour, steals focus for its whole
+# duration, and — measured — exhausts the interactive desktop heap after a few hundred Electron
+# launches, at which point Windows refuses to start processes at all (0xC0000142). This workflow is
+# how that run happens somewhere else.
+#
+# IT IS ADDITIVE. ci.yml and release.yml are untouched and still run on GitHub-hosted runners;
+# nothing here gates master, and no required check depends on it. Deleting this one file reverts the
+# whole arrangement with no other edit — which is deliberate, because a self-hosted runner is a
+# machine someone has to keep alive, and the day it stops being worth it should be a cheap day.
+#
+# ── WHY THERE IS NO `pull_request` TRIGGER, AND WHY THERE MUST NEVER BE ONE ────────────────────
+#
+# This repository is PUBLIC and this runner is not hosted by GitHub. A `pull_request` trigger would
+# execute any fork's code on it, with whatever access that machine happens to have.
+#
+# The exclusion here is STRUCTURAL, not conditional: `workflow_dispatch` requires write access to
+# this repository, and `schedule` only ever runs on the default branch of this repository. Neither
+# has a fork-shaped path into it. That means there is no `if:` guard on this file to review, weaken,
+# or get subtly wrong — which is the point, because a guard is only as good as the next person to
+# edit it.
+#
+# Adding `pull_request`, `pull_request_target`, `issue_comment` or `repository_dispatch` re-opens
+# that hole in one line. Refuse that change.
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Run ONE stage instead of the whole gate. Use when iterating on a single red stage.'
+        type: choice
+        default: 'full gate'
+        options:
+          - 'full gate'
+          - lint
+          - typecheck
+          - build
+          - 'test:unit'
+          - 'test:component'
+          - 'test:integration'
+          - 'test:contract'
+          - 'test:e2e'
+
+  schedule:
+    # 01:00 UTC — 02:00 BST, 01:00 GMT. Two reasons, and the second is the less obvious one:
+    # nobody is waiting on the result overnight, and the machine is at its coolest then. A
+    # 90-minute all-core run is the hottest thing it does, and its thermal headroom in summer is a
+    # tighter constraint than its CPU.
+    #
+    # GitHub's cron is UTC and has no timezone field, so this drifts by an hour across BST. That is
+    # accepted; do NOT "fix" it with two schedules and a guard.
+    #
+    # GitHub also DISABLES scheduled workflows after 60 days without repository activity, silently.
+    # A nightly that stopped looks exactly like a nightly that keeps passing, so if it has not
+    # appeared in the Actions tab for a while, check that before believing the green.
+    - cron: '0 1 * * *'
+
+concurrency:
+  # Keyed by EVENT, so the nightly and an on-demand dispatch do not cancel each other. They run on
+  # different hardware now — the nightly is hosted, dispatch is self-hosted — so there is no
+  # contention to resolve, and a developer asking for a gate should not silently kill the nightly.
+  #
+  # Within a group a newer request still wins: there is one self-hosted runner, so a second dispatch
+  # would otherwise queue behind an 80-minute run that is already obsolete.
+  group: gate-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  npm_config_loglevel: error
+
+  # Neither runner this workflow uses is hardware a performance requirement is about: the
+  # self-hosted one is deliberately slower than a workstation, and a hosted one is contended by
+  # construction. So the wall-clock SLAs are RECORDED here rather than adjudicated — see "Where a
+  # performance SLA is measured" in docs/testing.md.
+  #
+  # Actions sets CI=true, which already suppresses them in both cases. This is set anyway and on
+  # purpose, for the case neither covers: the gate is also run BY HAND on the self-hosted box, and
+  # a hand-run has no CI variable while running at one worker — so it looks exactly like an
+  # uncontended developer workstation taking a clean reading. That is the one case the original
+  # predicate could not see, and the machine sets this variable itself for the same reason.
+  THRONG_NON_REFERENCE_HARDWARE: '1'
+
+  # This host's system ConPTY drops the key bytes throng RE-ENCODES on the way INTO a program
+  # — CSI-u, 0x08 for Ctrl+Backspace and 0x1b for Escape alike, while what xterm itself writes
+  # arrives. The discriminator is who wrote the byte, not which byte it is. Measured: throng
+  # encodes and writes them and the daemon acks them (written 18 / acked 18 / failed 0), and the
+  # program receives the plain characters and the bare CR and neither CSI-u. Not a throng defect.
+  #
+  # DECLARED rather than probed, and that is deliberate. Two auto-detections were written and both
+  # were wrong — one measured the outward negotiation instead of the inward key sequence, the other
+  # answered "absent" on a reference machine where these specs pass, because it wrote straight to a
+  # node child while throng writes through a shell. The OS build is not the discriminator either:
+  # both machines report 10.0.26200. A declaration cannot silently disable the specs anywhere that
+  # has not opted in, which a wrong probe already nearly did.
+  THRONG_NO_REENCODED_KEY_DELIVERY: '1'
+
+jobs:
+  gate:
+    name: npm run gate
+
+    # ── WHERE IT RUNS DEPENDS ON WHO ASKED ────────────────────────────────────────────────────
+    #
+    # The NIGHTLY runs hosted. It is an unattended health check on `master` that nobody is waiting
+    # for, and it should not depend on one particular machine being powered on, logged in and not
+    # mid-experiment. A nightly that goes quiet because that machine is off is worse than no
+    # nightly, because silence reads as green. Hosted minutes are free on a public repo, so this
+    # costs nothing but wall-clock nobody is watching.
+    #
+    # DISPATCH runs self-hosted. That is the lane this whole workflow exists for: the full gate, on
+    # demand, off the developer's workstation.
+    #
+    # Both branches must be arrays for the expression's types to match.
+    runs-on: >-
+      ${{ github.event_name == 'schedule'
+          && fromJSON('["windows-2022"]')
+          || fromJSON('["self-hosted","windows","gate"]') }}
+
+    # A HANG DETECTOR, not a budget. The expected run is 75-90 minutes: this machine is several
+    # times slower than a workstation, and the E2E serial tier is ~86% of the E2E stage and
+    # unparallelisable. If a run approaches 180 minutes, something is wrong that a larger number
+    # would only hide.
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # \u2500\u2500 WHAT A CHANGE OF RUNNER ACCOUNT SILENTLY TAKES AWAY \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+      #
+      # This step FIXES NOTHING. It names, in the first fifteen seconds, a condition that would
+      # otherwise surface minutes later as something that looks like a code failure.
+      #
+      # Moving this runner from the machine's first admin account to its own standard account cost
+      # FOUR consecutive runs, and not one of the four failures mentioned an account:
+      #
+      #   `pwsh: command not found`                      \u2014 PS7 was a per-user MSIX install
+      #   `Could not find any Python installation`       \u2014 Python was under %LOCALAPPDATA%
+      #   `running scripts is disabled on this system`   \u2014 execution policy was set at CurrentUser
+      #   (and TEMP, QuickEdit and the screensaver, which fail quietly rather than loudly)
+      #
+      # Every one is a per-user setting that LOOKS machine-wide until the account changes. The
+      # lesson is not the three tools; it is that the Windows default for tooling and policy is
+      # per-user, so "it works on the runner" is a statement about an ACCOUNT, not a machine.
+      #
+      # Only conditions that are (a) invisible in the failure they cause and (b) cheap to test
+      # belong here. Anything a `setup-*` action provides does not \u2014 the tool cache follows the
+      # runner, which is the whole reason to prefer one.
+      - name: Assert the runner account can actually build
+        if: runner.environment == 'self-hosted'
+        shell: pwsh
+        run: |
+          $who = "$env:USERDOMAIN\$env:USERNAME"
+          Write-Host "[precheck] runner account: $who"
+
+          # The runner invokes STEP scripts with -ExecutionPolicy Unrestricted, so this step runs
+          # whatever the policy says. Actions that call powershell.exe themselves do not \u2014
+          # actions/setup-python runs its own setup.ps1 and is refused outright. So the policy has
+          # to be tested rather than inferred from this step having started.
+          $policy = Get-ExecutionPolicy
+          Write-Host "[precheck] execution policy: $policy"
+          if ($policy -in @('Restricted', 'AllSigned')) {
+            throw "Execution policy is '$policy' for $who, so actions that run their own .ps1 (setup-python among them) will be refused. Set it at LOCALMACHINE scope from an ELEVATED shell: Set-ExecutionPolicy -Scope LocalMachine RemoteSigned. A CurrentUser fix is what evaporated when this runner changed account."
+          }
+
+          # \u2500\u2500 PYTHON, AND WHY THIS IS AN ASSERTION RATHER THAN A `setup-python` STEP \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+          #
+          # node-gyp builds better-sqlite3 and node-pty from source and needs Python. A
+          # GitHub-hosted image ships one, which is why ci.yml says nothing about it.
+          #
+          # `actions/setup-python` was tried here and DOES NOT WORK on this runner. On a tool-cache
+          # miss it runs python-versions' setup.ps1, which runs the real Python installer, which
+          # raises UAC under a standard runner account. Authorising that prompt does not fix it
+          # either: elevating with an ADMIN'S credentials runs the installer as that admin, so the
+          # files do not land in the runner account's tool cache. Measured \u2014 run 33975486826 got
+          # past the prompt and then failed with
+          #
+          #   New-Item : Cannot find path '...\_tool\Python\3.12.10\x64\python.exe'
+          #
+          # which is the installer having quietly installed somewhere else. A step that needs an
+          # interactive prompt has no place in an unattended job in any case.
+          #
+          # So Python is a MACHINE-WIDE install on this host, asserted here rather than provisioned.
+          if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+            throw "python is not on PATH for $who. node-gyp needs it to build better-sqlite3 and node-pty. Install Python 3.12 MACHINE-WIDE ('Install for all users' / InstallAllUsers=1) from an elevated installer \u2014 a per-user install under another account is what this whole step exists to catch."
+          }
+          Write-Host "[precheck] python: $((Get-Command python).Source)"
+
+          # node-gyp shells out to git for some dependency resolutions, and git is one of the tools
+          # nobody has yet proven is machine-wide on this box.
+          if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+            throw "git is not on PATH for $who. It was probably installed per-user under a different account; reinstall it machine-wide."
+          }
+          Write-Host "[precheck] git: $((Get-Command git).Source)"
+
+      # Pin the version rather than inheriting whatever `nvm use` last left active in the runner's
+      # interactive session. Node 20 matches ci.yml, which is what the native builds
+      # (better-sqlite3, node-pty, koffi) were compiled against.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # ── THE STEP THAT ONLY EXISTS BECAUSE THIS RUNNER IS SELF-HOSTED ──────────────────────────
+      #
+      # A GitHub-hosted runner is a fresh machine every time and cannot go stale. This one reuses
+      # its workspace, so `dist/` and tsc's incremental buildinfo SURVIVE between runs — and
+      # CLAUDE.md records exactly what that costs:
+      #
+      #   a stale packages/core/dist, which `tsc -b`'s buildinfo believed was current, produced a
+      #   red E2E while every cheap layer stayed green — because vitest resolves @throng/core to
+      #   SOURCE while the Electron app loads DIST. Unit and component tests all agreed with each
+      #   other and disagreed with reality.
+      #
+      # On a hosted runner that is impossible. Here it is the DEFAULT unless this step exists.
+      #
+      # Note this is NOT `scripts/clean-dist.mjs` (npm's `prepackage` hook). That removes
+      # `dist/installer`, the packaging output — a different directory solving a different problem.
+      # Neither substitutes for the other.
+      #
+      # The counts are printed on purpose. The obvious way to write this step
+      # (`Get-ChildItem packages -Directory -Filter dist`) matches NOTHING, because these are
+      # grandchildren of `packages/`, not children — so it deletes nothing while reading as
+      # protection. A step whose failure mode is silence has to say what it did.
+      - name: Clear stale build output
+        shell: pwsh
+        run: |
+          $dists = @(Get-Item -Path packages/*/dist -ErrorAction SilentlyContinue)
+          $infos = @(Get-Item -Path packages/*/tsconfig.tsbuildinfo -ErrorAction SilentlyContinue)
+          Write-Host "[clean] removing $($dists.Count) dist dir(s) and $($infos.Count) buildinfo file(s)"
+          $dists | Remove-Item -Recurse -Force
+          $infos | Remove-Item -Force
+
+      # ── ASSERT THE INVARIANT, NOT A PARTICULAR PATH ───────────────────────────────────────────
+      #
+      # Several file specs realpath a target — expanding an 8.3 short name to its long form — and
+      # then compare it against the raw root they were given. Where the temp path contains a short
+      # name, those two disagree and in-tree / watcher path matching breaks, in a way that
+      # reproduces on no other machine. `~` is what an 8.3 alias always contains, so that is the
+      # thing to assert; the conventional fix is a short alias-free root such as C:\t, but this
+      # workflow deliberately does not hard-code one machine's choice.
+      #
+      # It is asserted rather than SET because the runner inherits the environment of the session
+      # its logon task starts in, and a value set here would not be the value the daemon and the
+      # shells it spawns inherit.
+      #
+      # Getting this wrong is subtle: setting TEMP at MACHINE scope alone does nothing for a
+      # logged-in user, because Windows creates TEMP/TMP in HKCU\Environment on every profile and
+      # the User value takes precedence. That reads as a value which has not propagated yet, so the
+      # instinct is to wait or reboot — and neither ever fixes it. Set both scopes, then log the
+      # session off and back on.
+      # A HOSTED runner's own %TEMP% is C:\Users\RUNNER~1\AppData\Local\Temp — it contains an 8.3
+      # short name by construction, because the runner's username forces one. So this cannot merely
+      # assert: on the nightly it would throw before a single test ran. ci.yml solves it the same
+      # way, by pointing TEMP at RUNNER_TEMP (D:\a\_temp), which has no aliased component.
+      #
+      # RUNNER_TEMP is alias-free on the self-hosted runner too, and is cleaned between jobs, so
+      # using it on both is simpler than branching AND matches what ci.yml does. The machine-level
+      # C:\t still matters for a gate run driven BY HAND on that box, which has no RUNNER_TEMP.
+      - name: Use an alias-free temp dir
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # Separate step because GITHUB_ENV only reaches SUBSEQUENT steps — asserting in the step above
+      # would read the old value and pass while proving nothing.
+      #
+      # Several file specs realpath a target, expanding an 8.3 alias to its long form, then compare
+      # it against the raw root they were given. Where the temp path carries a short name those two
+      # disagree and in-tree / watcher path matching breaks, in a way that reproduces on no other
+      # machine. `~` is what an alias always contains, so that is the thing to assert.
+      - name: Assert an alias-free temp dir
+        shell: pwsh
+        run: |
+          foreach ($v in 'TEMP','TMP') {
+            $val = [Environment]::GetEnvironmentVariable($v)
+            if (-not $val)       { throw "$v is not set." }
+            if ($val -match '~') {
+              throw "$v is '$val', which contains an 8.3 short name. On a hosted runner RUNNER_TEMP should have replaced it; on a hand-driven run set TEMP and TMP to an alias-free path at User AND Machine scope, then log the session off and back on."
+            }
+            Write-Host "[temp] $v = $val"
+          }
+
+      - name: Install dependencies
+        run: npm ci
+
+      # A no-op on this runner's real desktop, unlike a hosted runner's 1024x768 virtual one — but
+      # run it anyway. A display setting nobody re-checks after a driver update is exactly the kind
+      # of thing that regresses silently, and several specs assert layout that only holds at a
+      # realistic size (a 1100px window clamps to 1024 and the assertion fails somewhere unrelated).
+      - name: Set screen resolution to 1920x1080
+        shell: pwsh
+        run: ./scripts/ci-set-resolution.ps1
+
+      # All eight stages, fail-fast, in CI's order: lint, typecheck, build, unit, component,
+      # integration, contract, e2e. gate.mjs clears the app/daemon/pty-agent/Playwright processes a
+      # run leaves behind — on success, on failure, and on Ctrl+C — which matters more here than
+      # anywhere else, because this workspace is reused by the next run.
+      #
+      # `only` runs a SINGLE stage instead. The gate is fail-fast, so iterating on one red stage
+      # otherwise costs a full run of every stage before it — measured at ~19 minutes to reach
+      # `contract`, twice, to learn one assertion's number. That is the documented fail-fast
+      # workflow ("re-run only what failed") applied to a runner rather than a laptop.
+      #
+      # The value comes through the ENVIRONMENT rather than being interpolated into the script.
+      # `choice` already constrains it to this list, so this is belt-and-braces — but a workflow
+      # input pasted straight into a shell line is a habit worth not having.
+      - name: Run the gate
+        shell: pwsh
+        env:
+          # A push on the temporary trigger ran only `test:contract` while that stage was red,
+          # because the gate is fail-fast and a full run spends ~19 minutes re-proving seven green
+          # stages to reach the eighth. Contract is green now (153ms, was 7317ms — #364), so a push
+          # runs everything: E2E has never executed on that machine at all, and it is 86% of the
+          # runtime. Dispatch still honours `only`. This defaulting goes when the push trigger goes.
+          # Integration is green on the runner now, so a push runs everything again. It was
+          # narrowed to the red stage while that was being diagnosed — reaching `integration` costs
+          # ~6 minutes of already-green stages, and a full run ~15 before E2E even starts.
+          #
+          # E2E is still the unknown: 86% of the runtime, and it has never executed on that machine.
+          # This defaulting goes entirely when the push trigger goes.
+          # Narrowed to E2E while three terminal specs are red there. The seven stages before it are
+          # green and re-proving them costs ~14 minutes a cycle.
+          #
+          # These CANNOT be diagnosed on a workstation: run locally they all fail with
+          # `locator.click: Timeout 30000ms exceeded`, an environmental failure of a session with no
+          # usable interactive desktop, identical with and without the change under suspicion. That
+          # masks any real difference, so a local A/B here proves nothing in either direction and
+          # must not be reported as if it did.
+          ONLY: ${{ inputs.only || 'full gate' }}
+
+        run: |
+          # ── CLEAN THE MODULE PATH HERE, IN THIS PROCESS ─────────────────────────────────────
+          #
+          # This cannot be done in an earlier step. GITHUB_ENV reaches later steps, but every
+          # `shell: pwsh` step starts a NEW PowerShell 7 process, and PS7 re-injects its own module
+          # directories at startup regardless of what it inherited. Measured: a preceding step
+          # wrote a clean value and printed it, and the very next pwsh step still reported
+          #
+          #   ...\WindowsApps\microsoft.powershell_7.6.5.0_x64__8wekyb3d8bbwe\Modules;...
+          #
+          # So the value must be fixed inside the process that spawns npm, which is this one.
+          #
+          # An ALLOWLIST, because a denylist already failed here once: it was written against
+          # `C:\Program Files\PowerShell\7\Modules` and missed the winget/MSIX layout entirely.
+          # Every Windows PowerShell 5.1 module directory contains `WindowsPowerShell`; no
+          # PowerShell 7 directory does, under any install layout.
+          #
+          # What this repairs is command AUTOLOADING specifically. An explicit `Import-Module
+          # PSReadLine` succeeds even with the poisoned path — measured — while
+          # `Set-PSReadLineOption` fails with CouldNotAutoloadMatchingModule, because autoload
+          # resolves through the module analysis cache and picks the PS7 copy 5.1 cannot load.
+          $kept = @($env:PSModulePath -split ';' | Where-Object { $_ -match 'WindowsPowerShell' })
+          if ($kept.Count -eq 0) {
+            throw "No WindowsPowerShell module directories in PSModulePath ('$env:PSModulePath'). Refusing to hand powershell.exe an empty module path."
+          }
+          $env:PSModulePath = $kept -join ';'
+          Write-Host "[psmodulepath] in-process : $env:PSModulePath"
+
+          if (-not $env:ONLY -or $env:ONLY -eq 'full gate') {
+            npm run gate
+          } else {
+            # A SINGLE STAGE STILL NEEDS THE BUILD, and skipping it is not a small mistake.
+            #
+            # `npm run gate` runs build as its third stage, so the layers after it find a daemon to
+            # spawn. Running one stage on its own skips that — and the clean step above has just
+            # deleted every packages/*/dist — so integration and contract come up against no
+            # `daemon/dist/main.js` and no BUILD_ID at all.
+            #
+            # Measured: `only=test:integration` produced 8 failures across daemon-lifecycle and
+            # daemon-elevated-respawn that had nothing to do with the change under test, and looked
+            # exactly like a regression. ci.yml builds before those layers for the same reason and
+            # says so at its own build step.
+            #
+            # Excluded for the three stages that either ARE the build or precede it, where it would
+            # just double the work.
+            if ($env:ONLY -notin @('lint', 'typecheck', 'build')) {
+              Write-Host "[gate] building first — $env:ONLY spawns a real daemon"
+              npm run build
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+            Write-Host "[gate] single stage: $env:ONLY"
+            npm run $env:ONLY
+          }
+
+      - name: Upload traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-test-results
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # A red nightly that nobody is awake for is a red nobody sees. This turns it into an issue.
+  #
+  # Scheduled runs only: a failed MANUAL dispatch already has someone watching it, and filing an
+  # issue for a run you are sitting in front of is noise.
+  #
+  # It DE-DUPLICATES rather than filing nightly. A persistently broken master would otherwise
+  # produce one issue per night, which is the fastest way to teach everyone to mute the repo — so
+  # an existing open issue with the same title gets a comment instead.
+  report-failure:
+    name: Report a failed nightly
+    needs: gate
+    if: ${{ failure() && github.event_name == 'schedule' }}
+
+    # ubuntu-latest, and hosted ON PURPOSE. This job only calls the API, and it must not queue
+    # behind the very runner whose failure it exists to report — if the self-hosted machine is
+    # wedged or offline, this is the only part that still runs.
+    runs-on: ubuntu-latest
+
+    permissions:
+      issues: write
+
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'Nightly gate failed on master';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              'The nightly gate failed on `master`.',
+              '',
+              `- Commit: ${context.sha}`,
+              `- Run: ${runUrl}`,
+              '',
+              'The gate is fail-fast, so the failing stage is the last one printed in the run log.',
+            ].join('\n');
+
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'bug,area:infra',
+              per_page: 100,
+            });
+            const dupe = existing.find((i) => i.title === title && !i.pull_request);
+
+            if (dupe) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: dupe.number,
+                body: `Failed again.\n\n${body}`,
+              });
+              core.notice(`Commented on existing issue #${dupe.number}`);
+            } else {
+              const made = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['bug', 'area:infra'],
+                assignees: ['Bidthedog'],
+              });
+              core.notice(`Opened issue #${made.data.number}`);
+            }

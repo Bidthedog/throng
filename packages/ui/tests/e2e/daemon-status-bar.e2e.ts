@@ -2,6 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
+import { expectWithinSla } from './helpers/sla.js';
 import {
   runApp,
   createProject,
@@ -83,7 +84,12 @@ test('the daemon indicator reports the state, restarts on demand, and outlives t
          */
         await expect(win.getByTestId('daemon-error')).toHaveCount(1, { timeout: 30_000 });
         const noticedIn = Date.now() - killedAt;
-        expect(noticedIn, `the daemon notice took ${noticedIn}ms to appear`).toBeLessThan(2000);
+        expectWithinSla(test.info(), {
+          what: 'the daemon-death notice reaches the screen',
+          requirement: 'SC-002',
+          elapsedMs: noticedIn,
+          budgetMs: 2000,
+        });
 
         /**
          * FR-008 — the indicator is an ICON with a hover title (Constitution VI), and it says which

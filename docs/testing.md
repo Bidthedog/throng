@@ -170,6 +170,52 @@ an entry there is ever fixed without being removed.
 
 ## `npm run gate` — the one command that says the work is done
 
+**It runs on the gate runner, not on a workstation.** Dispatch it against a ref and wait:
+
+```bash
+gh workflow run gate.yml --ref <branch>
+gh run watch <run-id> --exit-status        # one blocking watch, expect 75-90 min
+```
+
+A workstation runs only the tests under the red-green-refactor cursor — one spec, one file, one
+project layer. The full gate locally pins every core for the better part of an hour, steals focus
+throughout, and eventually exhausts the interactive desktop heap, at which point Windows refuses to
+start processes at all. It is not a faster route to the same answer.
+
+**While fixing one red stage, run one stage.** The gate is fail-fast, so re-running it to reach the
+stage that failed spends ~19 minutes re-proving seven green ones:
+
+```bash
+gh workflow run gate.yml --ref <branch> -f only=test:contract
+```
+
+`only` takes `full gate`, `lint`, `typecheck`, `build`, or any `test:*` stage. The full gate is what
+says done; `only` is for getting there.
+
+**Three lanes, two kinds of machine:**
+
+| lane | machine | when |
+|---|---|---|
+| `ci.yml` — lint, tests, `@core` E2E | GitHub-hosted | Every push to master, every PR |
+| `gate.yml` dispatch — the full gate | Self-hosted runner | On demand |
+| `gate.yml` nightly | **GitHub-hosted** | 01:00 UTC, master only |
+
+The nightly is hosted on purpose. An unattended health check must not depend on one machine being
+powered on, logged in and not mid-experiment — a nightly that goes quiet because a VM is off looks
+exactly like a nightly that keeps passing, and silence reading as green is the failure mode worth
+designing against.
+
+Because the workflow is dispatched against a **ref**, a green run is evidence about that *commit* and
+not about a working tree that has moved on since — so quote the run URL and the SHA when reporting
+done. The timings throughout this document remain the reference figures, and they are still what a
+comparison is measured against; what they no longer describe is the normal route to a verdict.
+
+The runner is reached only by `workflow_dispatch` and `schedule`, neither of which a fork can trigger
+— see `.github/workflows/gate.yml`, which explains why that exclusion is structural rather than a
+condition someone could weaken.
+
+What the command itself does, wherever it runs:
+
 ```
 npm run gate
 ```
@@ -206,6 +252,55 @@ Three things worth knowing:
   The gap that stood here is closed. Two earlier gate runs at the end of 035 stopped inside a tier
   under fail-fast and timed nothing, and this file said so rather than restating a stale figure; the
   third ran green end to end and is where the number above comes from.
+
+## Where a performance SLA is measured
+
+**A wall-clock SLA is asserted only where the reading means something, and skipped — never relaxed —
+everywhere else.**
+
+A performance ceiling compares the product against a requirement, and it can only do that on
+hardware the requirement describes. 001 SC-001 says so in as many words: *"in under 5 seconds on a
+typical modern Windows machine."* Asked on a contended runner or a deliberately slow test VM, the
+same assertion does not report a slow product. It reports a slow computer, in the shape of a test
+failure, and nothing downstream can tell those apart.
+
+`expectWithinSla` (`packages/ui/tests/e2e/helpers/sla.ts`) asserts when all three hold:
+
+| condition | why |
+|---|---|
+| `workers === 1` | Six Electron apps at once measures the rig, not the app |
+| not `CI` | A shared hosted runner is contended by construction |
+| not `THRONG_NON_REFERENCE_HARDWARE` | The machine must be one the requirement is about |
+
+Otherwise it records an **`sla-not-measured` annotation carrying the number it would have asserted**,
+so the measurement still appears in the report and is simply not adjudicated there. A silently
+absent assertion is indistinguishable from one that passed, which is how a suite comes to believe it
+checks something it stopped checking.
+
+**Relaxing was tried and is worse.** `app-shell` used to fall back to a 20 s ceiling under
+contention — wide enough to pass essentially anything, so it defended nothing while looking like it
+did. Two budgets for one requirement also means nobody can say which one the requirement made.
+
+The five SLAs currently under this rule: **NFR-002** (shell opens), **001 SC-001** (launch to painted
+panel), **SC-002** (daemon-death notice), **SC-003** (first highlight), **SC-007** (find on a 10k-line
+file).
+
+**The consequence, which is the point rather than a side effect:** if the full suite only ever runs
+on non-reference hardware, these five are never adjudicated. Taking the reading is therefore a
+deliberate act on a reference machine:
+
+```bash
+npx playwright test packages/ui/tests/e2e/performance.e2e.ts --workers=1
+```
+
+with `CI` and `THRONG_NON_REFERENCE_HARDWARE` both unset. Any host that is not a reference machine
+should set `THRONG_NON_REFERENCE_HARDWARE=1` at machine **and user** scope — on Windows the User
+value overrides the Machine one, so setting only the latter has no effect on a logged-in session.
+
+Requirement citations are enforced by `SlaReading.requirement`, a required field, rather than by the
+comment scanner in `wall-clock-declared.test.ts`. That scanner still governs every raw
+`toBeLessThan` in the E2E specs — the bounds that are *not* durations, and the validity-bounds that
+separate two outcomes rather than asserting a speed.
 
 ## Type-checking covers the renderer too
 

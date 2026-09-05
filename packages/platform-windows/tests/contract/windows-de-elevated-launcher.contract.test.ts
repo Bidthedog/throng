@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { spawn } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
@@ -155,8 +155,40 @@ describe('WindowsDeElevatedLauncher — a failed de-elevated launch must be able
   }, 45_000);
 
   it('still returns void synchronously, without blocking or throwing', () => {
-    const root = fakeSystemRoot(process.execPath);
+    /*
+     * A stand-in SIZED LIKE THE THING IT IMPERSONATES.
+     *
+     * The other tests here use `process.execPath` because they need a shim that fails
+     * INFORMATIVELY — they read its stderr. This one reads nothing: it only needs `launch` to
+     * spawn something and return. So it should use whatever is most representative, and node.exe
+     * is not: it is ~87MB, against the ~444KB `powershell.exe` it stands in for. **200 times the
+     * binary production actually spawns**, copied and then cold-spawned inside the timed window.
+     *
+     * That, not the launcher, is what this assertion has been measuring since it was written. It
+     * is why the ceiling went 2s, then 5s, then 8s, and why a machine with a slow disk produced
+     * 5888ms, 8522ms and 7317ms on three consecutive runs — a ±20% spread straddling whatever
+     * number was chosen. No ceiling survives that, and it cannot grow past the 10s the shim tests
+     * budget without ceasing to mean anything.
+     *
+     * `where.exe` is ~64KB and, like every substitutable exe, rejects the launcher's fixed argv
+     * and exits non-zero — the property the file's own header note relies on.
+     *
+     * Measured after the change: **153ms on the machine that produced 7317ms**, and 35ms on a
+     * workstation. The ceiling below is left at 8s deliberately even though the margin is now ~52x:
+     * it is a shim-detector, not a performance budget, and a launcher that started waiting on the
+     * shim would take the ten to thirty seconds the tests above allow for one.
+     *
+     * Resolve it BEFORE overwriting SystemRoot below, or it resolves against the fake tree.
+     */
+    const standIn = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'where.exe');
+    const root = fakeSystemRoot(standIn);
     process.env.SystemRoot = root;
+
+    // Warm the copy so the spawn below is not reading it back cold behind its own write-back.
+    // Near-free now that the file is kilobytes rather than tens of megabytes; it was retained
+    // rather than removed so this change alters ONE variable, the thing being copied.
+    readFileSync(join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'));
+
     const started = Date.now();
     // No `report` at all: the parameter is optional and the old 2-arg call still works.
     const returned = new WindowsDeElevatedLauncher().launch('C:\\Windows\\System32\\cmd.exe', ['/c', 'exit']);
@@ -165,16 +197,30 @@ describe('WindowsDeElevatedLauncher — a failed de-elevated launch must be able
      * The ceiling discriminates against WAITING ON THE SHIM, and nothing finer.
      *
      * A shim run is seconds — the tests above allow 10s and 30s, because PowerShell compiles the
-     * C# member definition via Add-Type before it can even fail. So any budget comfortably under
-     * that proves the claim.
+     * C# member definition via Add-Type before it can even fail. So the budget has to sit under
+     * that to prove anything at all, and THAT is what caps it: this number cannot simply keep
+     * rising to meet the slowest disk it meets, because at 10s it stops distinguishing a launcher
+     * that returned from one that waited, and the test still passes while proving nothing.
      *
-     * It was 2s, and it failed 2 runs in 5 at 2056ms / 2307ms / 2541ms. The time is not the
-     * launcher blocking: `fakeSystemRoot` has just COPIED a ~100MB binary, and the `spawn` inside
-     * this window is the OS reading that file back cold, behind its own write-back. That is disk,
-     * measured under whatever else the machine is doing, and no amount of it means `launch` awaited
-     * anything. Sized so the gap it tests — sub-second work versus a multi-second shim — is what
-     * decides the result, rather than how busy the disk was.
+     * Its history is the argument for the warm-read above rather than for a bigger number here.
+     * It was 2s and failed 2 runs in 5 (2056 / 2307 / 2541ms). It became 5s, under a commit titled
+     * "stop timing the disk" which did not — it widened the tolerance. Then a machine with a slow
+     * disk measured 5888ms and the same failure came back, this time on a runner where it is a
+     * permanent red rather than an occasional flake.
+     *
+     * 8s: above the 5888ms observed with a cold read, and below the 10s the shim tests allow. With
+     * the disk no longer inside the window the real measurement should be far under this, so a
+     * future failure here means the launcher started waiting on something — which is the only
+     * thing this assertion was ever supposed to catch.
      */
-    expect(Date.now() - started, 'launch must not wait on the shim').toBeLessThan(5_000);
+    const elapsedMs = Date.now() - started;
+
+    // Reported on EVERY run, not only on failure. This assertion has now been resized three times
+    // (2s, 5s, 8s) and every resize was argued from a mechanism rather than from a distribution,
+    // because the only number anyone ever saw was the one that broke. A ceiling picked from a
+    // single failing sample is a guess with a decimal point on it.
+    console.log(`[de-elevated-launch] returned in ${elapsedMs}ms (ceiling 8000ms)`);
+
+    expect(elapsedMs, 'launch must not wait on the shim').toBeLessThan(8_000);
   });
 });
