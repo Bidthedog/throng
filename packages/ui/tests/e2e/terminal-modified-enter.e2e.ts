@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { copyFileSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { release } from 'node:os';
+import { skipIfHostCannotDeliverCsiU } from './helpers/console-caps.js';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
@@ -196,6 +197,7 @@ test('at a PowerShell prompt, a modified Enter inserts a soft line break and the
 });
 
 test('a program that negotiates the kitty protocol gets a distinct CSI-u sequence', { tag: ['@extended', '@terminal'] }, async () => {
+  skipIfHostCannotDeliverCsiU();
   const root = tmpDir('throng-me-kitty-');
   copyFileSync(KITTY, join(root, 'k.mjs'));
   await runApp(async (_app, win) => {

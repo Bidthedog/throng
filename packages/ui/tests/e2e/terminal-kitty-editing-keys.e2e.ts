@@ -4,6 +4,7 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
 import { skipIfConsoleHidesAltScreen } from './admin.js';
+import { skipIfHostCannotDeliverCsiU } from './helpers/console-caps.js';
 import { openApp,
   createProject as newProject,
   firstPanelId,
@@ -143,6 +144,7 @@ async function captured(root: string, left: string, right: string): Promise<stri
 }
 
 test('Ctrl+Backspace reaches a kitty program in the encoding its flags asked for', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
+  skipIfHostCannotDeliverCsiU();
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-kitty-bksp-'));
   copyFileSync(KITTY, join(root, 'k.mjs'));
