@@ -44,10 +44,6 @@ on:
           - 'test:contract'
           - 'test:e2e'
 
-  # TEMPORARY, and it must be removed before this branch merges — see the note in the `gate` job.
-  push:
-    branches: [feature/I358-self-hosted-gate-runner]
-
   schedule:
     # 01:00 UTC — 02:00 BST, 01:00 GMT. Two reasons, and the second is the less obvious one:
     # nobody is waiting on the result overnight, and the machine is at its coolest then. A
@@ -121,19 +117,6 @@ jobs:
       ${{ github.event_name == 'schedule'
           && fromJSON('["windows-2022"]')
           || fromJSON('["self-hosted","windows","gate"]') }}
-
-    # ── THE `push:` TRIGGER ABOVE IS TEMPORARY AND MUST NOT MERGE ─────────────────────────────
-    #
-    # `workflow_dispatch` only works once the workflow file is on the DEFAULT branch, so until this
-    # merges there is no way to dispatch it — and no way to prove it works before merging it, which
-    # is the wrong order. A branch-scoped `push:` runs the workflow from the pushed ref's own file,
-    # so the workflow can be exercised on the branch that introduces it.
-    #
-    # It adds no fork exposure: a fork's pushes go to the fork, and a fork cannot push here. It is
-    # temporary only because leaving it in would start an 80-minute gate on every commit to this
-    # branch, not because it is unsafe.
-    #
-    # REMOVE IT, and this comment, before opening the PR for merge.
 
     # A HANG DETECTOR, not a budget. The expected run is 75-90 minutes: this machine is several
     # times slower than a workstation, and the E2E serial tier is ~86% of the E2E stage and
@@ -281,14 +264,6 @@ jobs:
           # must not be reported as if it did.
           ONLY: ${{ inputs.only || 'full gate' }}
 
-          # TEMPORARY. Set to a space-separated spec list to measure just those on the runner;
-          # blank runs the stage named by ONLY. Goes with the push trigger.
-          #
-          # ARM A of an A/B on the three terminal specs that fail identically on both full runs:
-          # two capture nothing at all (Expected "^H"/"u", Received ""). This arm has #367's
-          # dropInheritedModulePath IN, to establish they still fail when run in ISOLATION —
-          # without that, a later pass in arm B could be isolation rather than the change.
-          E2E_SPECS: ''
         run: |
           # ── CLEAN THE MODULE PATH HERE, IN THIS PROCESS ─────────────────────────────────────
           #
@@ -316,22 +291,6 @@ jobs:
           }
           $env:PSModulePath = $kept -join ';'
           Write-Host "[psmodulepath] in-process : $env:PSModulePath"
-
-          # TEMPORARY, goes with the push trigger. An escape hatch for measuring specific specs on
-          # the runner, because the full E2E stage is 68 minutes and both tiers always run — there
-          # is no supported way to ask for a subset.
-          #
-          # It exists because these specs CANNOT be measured anywhere else: run on a workstation
-          # they all fail with `locator.click: Timeout 30000ms exceeded`, an environmental failure
-          # of a session with no usable interactive desktop, identically whatever the change under
-          # test. An A/B there compares two broken arms and proves nothing.
-          if ($env:E2E_SPECS) {
-            Write-Host "[gate] targeted E2E: $env:E2E_SPECS"
-            npm run build
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            npx playwright test $env:E2E_SPECS.Split(' ') --workers=1
-            exit $LASTEXITCODE
-          }
 
           if (-not $env:ONLY -or $env:ONLY -eq 'full gate') {
             npm run gate
