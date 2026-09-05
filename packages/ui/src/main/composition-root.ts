@@ -8,11 +8,16 @@ import type {
   IConfigStore,
   IFileWatcher,
   IFontEnumeration,
+  IForegroundHandoff,
   IUiSettings,
   ShippedDefaults,
 } from '@throng/core';
-import { buildShippedDefaults, defaultPipeName } from '@throng/core';
-import { WindowsFontEnumeration, NodeUserContext } from '@throng/platform-windows';
+import { buildShippedDefaults, defaultPipeName, NoForegroundHandoff } from '@throng/core';
+import {
+  WindowsFontEnumeration,
+  NodeUserContext,
+  WindowsForegroundHandoff,
+} from '@throng/platform-windows';
 import { UI_TYPES } from './tokens.js';
 import { ElectronClipboard } from './electron-clipboard.js';
 import { MemoryClipboard } from './memory-clipboard.js';
@@ -86,6 +91,27 @@ export function createUiContainer(): Container {
     .bind<ClipboardService>(UI_TYPES.ClipboardService)
     .toConstantValue(new ClipboardService(clipboardSeam));
   container.bind<DaemonClient>(UI_TYPES.DaemonClient).to(DaemonClient);
+  /*
+   * #199 — the foreground-handoff seam.
+   *
+   * Windows-only by nature: `AllowSetForegroundWindow` has no equivalent elsewhere, and every other
+   * platform gets the no-op rather than a conditional at the call site (Principle II).
+   *
+   * OFF under E2E unless a spec asks for it. The grant lets ANY process take the foreground for a
+   * moment, and a suite that runs several Electron windows would have them stealing focus from each
+   * other — which is both a false negative for whatever the spec was testing and, since throng
+   * closes menus on blur, a way to make an unrelated test flake. The spec that covers this feature
+   * turns it on explicitly with `THRONG_E2E_FOREGROUND_HANDOFF`.
+   *
+   * `THRONG_E2E_CLIPBOARD` is the harness's marker for "this is a test run" — the same signal the
+   * clipboard seam above reads, rather than a second env var meaning the same thing.
+   */
+  const underHarness = process.env.THRONG_E2E_CLIPBOARD === 'memory';
+  const foregroundHandoff: IForegroundHandoff =
+    underHarness && process.env.THRONG_E2E_FOREGROUND_HANDOFF !== '1'
+      ? new NoForegroundHandoff()
+      : new WindowsForegroundHandoff();
+  container.bind<IForegroundHandoff>(UI_TYPES.ForegroundHandoff).toConstantValue(foregroundHandoff);
 
   const configSettings = readConfigSettings(devMode);
   container.bind<IConfigSettings>(UI_TYPES.ConfigSettings).toConstantValue(configSettings);

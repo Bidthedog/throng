@@ -136,6 +136,9 @@ export type { IElevationState } from './abstractions/elevation.js';
 // Process-cwd OS seam (012 revision): read a running process's working directory
 // (the daemon polls each terminal's shell pid to show its live cwd in the title).
 export type { IProcessCwd } from './abstractions/process-cwd.js';
+// #199: let a window opened by a terminal command come to the front instead of behind throng.
+export type { IForegroundHandoff } from './abstractions/foreground-handoff.js';
+export { NoForegroundHandoff, submitsCommand } from './abstractions/foreground-handoff.js';
 
 // De-elevation OS seam (005 Phase G, FR-025c): wrap a launch to run de-elevated.
 export type { IDeElevator, DeElevateSpec } from './abstractions/de-elevator.js';

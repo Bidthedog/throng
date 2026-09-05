@@ -28,7 +28,7 @@ import {
   type Theme,
   NOT_A_MISSING_FILE,
 } from '@throng/core';
-import type { IClipboard } from '@throng/core';
+import type { IClipboard, IForegroundHandoff } from '@throng/core';
 import { createUiContainer, UI_TYPES } from './composition-root.js';
 import { appIcon } from './app-icon.js';
 import { isSafeExternalUrl } from './external-url.js';
@@ -1390,6 +1390,8 @@ if (isPrimaryInstance)
     attachTimeoutMs: settings.attachTimeoutMs,
     // Through the seam (016, FR-013a) — never Electron's clipboard module directly.
     clipboard: container.get<IClipboard>(UI_TYPES.Clipboard),
+    // #199: granted from here because only the foreground owner may hand the foreground on.
+    foregroundHandoff: container.get<IForegroundHandoff>(UI_TYPES.ForegroundHandoff),
   });
   /*
    * 029 / #182 — the daemon supervisor.
