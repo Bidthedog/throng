@@ -36,6 +36,27 @@ export interface EditorUiState {
    * the last read attempt returned — and an absent system error is omitted rather than invented.
    */
   unloadableDetail?: string;
+  /**
+   * The panel's INITIAL OPEN has not decided anything yet (#369).
+   *
+   * The third state, and the reason it has to exist. `fileMissing` and `unloadable` are both false
+   * in two entirely different situations — *the file is there*, and *nobody has looked yet* — and
+   * anything reading them as one cannot tell a healthy panel from a panel still opening. That is
+   * what made `missing-file-watcher` a verdict deadline: it sampled 300 ms after a tab activated,
+   * skipped every panel whose two flags were still false, and re-armed only on the next tab or
+   * settings change. A panel whose open answered at 301 ms was not reported late — it was never
+   * reported at all, and on a machine slow enough for that to be the normal case the consolidated
+   * notice 030 FR-034a requires simply never appeared.
+   *
+   * True from mount until the open ANSWERS: the load returned, the authority's verification came
+   * back, or there was no path to open. So a reader waits on an answer rather than on a duration,
+   * and no constant is left to be wrong on the next machine.
+   *
+   * FR-105 depends on this clearing reliably. A panel left pending forever would be reported when
+   * its file was deleted under a tab the user was already looking at — which is the one thing that
+   * rule forbids.
+   */
+  openPending: boolean;
   ownerProjectId?: string;
 }
 
@@ -68,6 +89,14 @@ export function setEditorState(panelId: string, patch: Partial<EditorUiState>): 
     dirty: false,
     fileMissing: false,
     unloadable: false,
+    /*
+     * FALSE, not true — a panel nobody has said anything about is not one we are waiting on.
+     *
+     * Only `use-editor` knows an open is in flight, and it says so explicitly on mount. Defaulting
+     * to true would make every hand-seeded panel in a test, and every non-editor writer of this
+     * store, look like a pending open that no answer is ever coming for.
+     */
+    openPending: false,
   };
   states.set(panelId, { ...prev, ...patch, panelId });
   emit();
@@ -112,6 +141,18 @@ export function findEditorPanelByPath(absPath: string): string | null {
 function subscribe(cb: () => void): () => void {
   listeners.add(cb);
   return () => listeners.delete(cb);
+}
+
+/**
+ * Subscribe to ANY editor state change from outside React (#369).
+ *
+ * The same channel the hooks above use, exposed for a caller that is not rendering from it —
+ * `missing-file-watcher`, which has to keep watching the panels whose open had not answered when it
+ * sampled, and cannot express that as a hook: the set is discovered inside a `setTimeout`, and its
+ * membership is per-activation rather than per-render.
+ */
+export function subscribeEditorStates(cb: () => void): () => void {
+  return subscribe(cb);
 }
 
 /** Subscribe to one panel's editor state (pills + dot). */

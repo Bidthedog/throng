@@ -412,6 +412,16 @@ declare global {
             wordWrap?: boolean;
             /** throng moved the file: the document's new absolute path (019, FR-002). */
             movedTo?: string;
+            /**
+             * The `verifyPath` this view asked for on mount has ANSWERED (#369).
+             *
+             * Carries no state — a verdict that changed something arrives as `unloadable` above.
+             * This is the acknowledgement, and it exists because verification is SILENT when
+             * nothing is wrong: without it a mounting view cannot tell "the path is fine" from
+             * "the check has not come back", and `EditorUiState.openPending` would never clear on
+             * a healthy restore.
+             */
+            verified?: boolean;
           }) => void,
         ) => () => void;
         onFocus: (cb: (msg: { panelId: string }) => void) => () => void;

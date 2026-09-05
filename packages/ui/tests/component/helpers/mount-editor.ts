@@ -24,6 +24,7 @@ import { ConfirmProvider } from '../../../src/renderer/confirm-dialog.js';
 import { EditorPanel } from '../../../src/renderer/editor/editor-panel.js';
 import { getEditorActions } from '../../../src/renderer/editor/editor-actions.js';
 import { EditorNoticeDialog } from '../../../src/renderer/editor/editor-notice-dialog.js';
+import { MissingFileWatcher } from '../../../src/renderer/editor/missing-file-watcher.js';
 
 /**
  * Mount a REAL CodeMirror editor panel in jsdom, behind a fake `editor.*` bridge.
@@ -170,6 +171,17 @@ export function mountEditor(opts: {
    */
   withNotices?: boolean;
   /**
+   * Also mount `MissingFileWatcher`, the once-per-tab-activation scan that raises the CONSOLIDATED
+   * notice naming which panels an absent path defeated (030 FR-029/FR-034a/FR-035).
+   *
+   * Off by default, for the same reason as `withNotices`: it is a second subject. It is available
+   * here — rather than in `component/missing-file-watcher.test.ts`, which drives the watcher against
+   * a hand-written `editor-state` fixture — because the defect it is needed for is about WHEN this
+   * panel's own mount publishes its load state, and a fixture that writes those flags by hand is
+   * precisely what cannot express "the open has not answered yet".
+   */
+  withMissingFileWatcher?: boolean;
+  /**
    * Hold `config.get()`'s answer back by this many macrotasks, so the settings channel provably
    * loses its race with the document channel (issue #335).
    *
@@ -306,7 +318,21 @@ export function mountEditor(opts: {
     ...(current.absPath ? { config: { filePath: current.absPath } } : {}),
   };
 
+  /*
+   * The layout holds THIS panel, kind and all — not the placeholder `createDefaultLayout` makes.
+   *
+   * `makePanel` builds `{ type, id, originProjectId, title }` with NO `kind`, because a fresh tab's
+   * panel has not been given one yet. Every consumer that asks what kind of panel this is therefore
+   * got `undefined` from the layout while the mounted component was plainly an editor — and one of
+   * them filters on it: `missing-file-watcher` scans `collectPanels(tab.root).filter(p => p.kind ===
+   * EDITOR_KIND)`, which over the placeholder is the empty list.
+   *
+   * That is silent in the worst way. A test mounting the watcher would see it report nothing, which
+   * is what a passing scan looks like, and a repro written against it would be red because the scan
+   * never ran rather than because of the defect it was written for. Measured exactly once, on #369.
+   */
   const layout: WorkspaceLayout = createDefaultLayout(PROJECT, { tab: 't1', panel: panelId });
+  layout.tabs[0].root = panel;
   const bridge: ThrongBridge = {
     invoke<T>(method: string): Promise<T> {
       switch (method) {
@@ -385,6 +411,7 @@ export function mountEditor(opts: {
                       rootless: opts.rootless ?? false,
                     }),
                     opts.withNotices ? createElement(EditorNoticeDialog, null) : null,
+                    opts.withMissingFileWatcher ? createElement(MissingFileWatcher, null) : null,
                   ),
                 ),
               ),

@@ -155,6 +155,15 @@ export interface EditorSyncMsg {
    * document, in every window — wrap is document state, so one document has one answer.
    */
   wordWrap?: boolean;
+  /**
+   * The `verifyPath` a mounting view asked for has ANSWERED (#369). Carries no state.
+   *
+   * Every other field here reports a change. This one reports that a question is finished, which is
+   * the half that was missing: verification is silent when nothing is wrong, so a view waiting on
+   * its own open could not distinguish a healthy path and a check that has not answered. It waited
+   * forever, and the only alternative was to guess at a duration — which is exactly the defect.
+   */
+  verified?: boolean;
 }
 
 export interface CoordinatorDeps {
@@ -766,30 +775,49 @@ export class EditorCoordinator {
    * it does not read the file. The full read happens only when there is something to recover.
    */
   async verifyPath(panelId: string): Promise<void> {
-    const doc = this.docs.get(panelId);
-    const abs = doc?.absPath;
-    if (!doc || !abs) return;
-    const req = {
-      absPath: abs,
-      ownerRoot: doc.ownerRoot,
-      ownerKind: doc.ownerKind,
-      allProjectRoots: doc.allProjectRoots,
-    };
-    const decision = await this.service.resolveEntry(req).catch(() => ({ ok: false }) as const);
-    // The document can be re-pointed or destroyed inside that await (019) — anything decided about
-    // the old path is an answer to a question nobody is asking any more.
-    if (this.docs.get(panelId) !== doc || doc.absPath !== abs) return;
-    if (!decision.ok) {
-      if (!doc.unloadable) {
-        doc.unloadable = true;
-        this.deps.relaySync(-1, { panelId: doc.panelId, unloadable: true });
+    /*
+     * ══ IT ALWAYS ANSWERS, EVEN WHEN IT HAS NOTHING TO SAY (#369) ══
+     *
+     * Every early return below is a legitimate "nothing to relay": the path is fine, the document
+     * moved out from under the question, there is no path at all. But silence is not an answer a
+     * VIEW can act on, and a view that has just mounted is waiting on precisely this call to learn
+     * whether its own open decided anything — `EditorUiState.openPending`.
+     *
+     * Without the acknowledgement that pending state never clears on a healthy restore, so the
+     * missing-file scan would have to bound its wait with a duration instead. That duration is the
+     * defect this fixes; putting it back one layer down would be the same bug wearing a hat.
+     *
+     * `finally` rather than a line at each return: there are five ways out of this method, and the
+     * next one added would otherwise be the one that forgets.
+     */
+    try {
+      const doc = this.docs.get(panelId);
+      const abs = doc?.absPath;
+      if (!doc || !abs) return;
+      const req = {
+        absPath: abs,
+        ownerRoot: doc.ownerRoot,
+        ownerKind: doc.ownerKind,
+        allProjectRoots: doc.allProjectRoots,
+      };
+      const decision = await this.service.resolveEntry(req).catch(() => ({ ok: false }) as const);
+      // The document can be re-pointed or destroyed inside that await (019) — anything decided about
+      // the old path is an answer to a question nobody is asking any more.
+      if (this.docs.get(panelId) !== doc || doc.absPath !== abs) return;
+      if (!decision.ok) {
+        if (!doc.unloadable) {
+          doc.unloadable = true;
+          this.deps.relaySync(-1, { panelId: doc.panelId, unloadable: true });
+        }
+        return;
       }
-      return;
+      if (!doc.unloadable && !doc.fileMissing) return; // nothing was wrong; nothing to do
+      const res = await this.service.load(req);
+      if (this.docs.get(panelId) !== doc || doc.absPath !== abs) return;
+      if (res.ok) this.pathCameBack(doc, res);
+    } finally {
+      this.deps.relaySync(-1, { panelId, verified: true });
     }
-    if (!doc.unloadable && !doc.fileMissing) return; // nothing was wrong; nothing to do
-    const res = await this.service.load(req);
-    if (this.docs.get(panelId) !== doc || doc.absPath !== abs) return;
-    if (res.ok) this.pathCameBack(doc, res);
   }
 
   /** The authority's current state, for a view that is mounting or has fallen out of step. */

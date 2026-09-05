@@ -19,11 +19,11 @@
  * the casualties in a tab nothing has rendered yet.
  */
 import { useEffect, useRef } from 'react';
-import { collectPanels, EDITOR_KIND } from '@throng/core';
+import { collectPanels, EDITOR_KIND, type Panel } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useReportPanelFailure } from '../workspace/panel-failure-notice.js';
-import { getEditorState } from './editor-state.js';
+import { getEditorState, subscribeEditorStates } from './editor-state.js';
 import { missingFileDetail, missingFileMessage } from './editor-missing-notice.js';
 
 const SCAN_DELAY_MS = 300; // let the tab's editors mount + publish their load state
@@ -66,9 +66,16 @@ export function MissingFileWatcher(): null {
     if (!tab) return;
     const panels = collectPanels(tab.root).filter((p) => p.kind === EDITOR_KIND);
 
+    /** Torn down with the activation, so a tab change never leaves a watch behind (see below). */
+    let unwatch: (() => void) | undefined;
+
     const timer = setTimeout(() => {
       const os = window.throng?.osName ?? 'windows';
-      for (const { p, st } of panels.map((p) => ({ p, st: getEditorState(p.id) }))) {
+
+      const report = (
+        p: Panel,
+        st: NonNullable<ReturnType<typeof getEditorState>>,
+      ): void => {
         /*
          * DEFEATED BY THE PATH — on either of the two flags that can say so (#277).
          *
@@ -95,7 +102,6 @@ export function MissingFileWatcher(): null {
          * effect; the guard enforcing it is this effect's once-per-activation gate above, which is
          * untouched.
          */
-        if (!st?.fileMissing && !st?.unloadable) continue;
         reportRef.current({
           panelId: p.id,
           message: missingFileMessage('missing'),
@@ -115,9 +121,64 @@ export function MissingFileWatcher(): null {
            */
           causeKind: 'path-missing',
         });
+      };
+
+      /*
+       * ══ THE SAMPLE, AND THE PANELS IT CANNOT JUDGE YET (#369) ══
+       *
+       * A panel is in one of three states, not two, and the third is the one this scan used to get
+       * wrong. `fileMissing` and `unloadable` both false means EITHER the file is there OR the open
+       * has not answered — and reading those two as one made 300 ms a verdict deadline: a panel
+       * whose open answered at 301 ms was not reported late, it was never reported at all, because
+       * the effect re-arms only on a tab change or a settings change.
+       *
+       * On the reference workstation the initial `load()` answers well inside the delay, so the
+       * third state is over before the sample and the defect is invisible. On a machine ~2.5x
+       * slower it is the NORMAL case: 3/3 on the self-hosted gate runner, where the consolidated
+       * notice FR-034a requires never appeared and the user got two per-panel banners and the file
+       * tree's report of the same absent folder instead.
+       *
+       * So the sample partitions rather than filters, and the fix is to publish the third state
+       * rather than to lengthen the delay — no constant is left here to be wrong on the next
+       * machine.
+       */
+      const pending = new Map<string, Panel>();
+      for (const p of panels) {
+        const st = getEditorState(p.id);
+        if (st?.fileMissing || st?.unloadable) report(p, st);
+        else if (st?.openPending) pending.set(p.id, p);
       }
+      if (pending.size === 0) return;
+
+      /*
+       * ══ WAIT ON AN ANSWER, NOT ON A DURATION ══
+       *
+       * Only the panels that were STILL PENDING WHEN THIS SAMPLED are watched, and each is dropped
+       * the moment its open decides — reported if the answer was that the path is defeated, and
+       * forgotten otherwise.
+       *
+       * That membership rule is what keeps FR-105 intact, and it is the whole of it. A panel that
+       * had already answered cleanly is not in this set, so a file deleted under a tab the user is
+       * already looking at is as silent as it was — which `missing-file-watcher.test.ts:234` pins.
+       * The set only ever shrinks, and it is torn down with the activation that built it.
+       */
+      unwatch = subscribeEditorStates(() => {
+        for (const [id, p] of [...pending]) {
+          const st = getEditorState(id);
+          if (!st || st.openPending) continue; // still undecided — keep waiting
+          pending.delete(id);
+          if (st.fileMissing || st.unloadable) report(p, st);
+        }
+        if (pending.size === 0) {
+          unwatch?.();
+          unwatch = undefined;
+        }
+      });
     }, SCAN_DELAY_MS);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      unwatch?.();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabId, warn]);
 
