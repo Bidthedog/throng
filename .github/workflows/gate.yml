@@ -127,6 +127,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # \u2500\u2500 WHAT A CHANGE OF RUNNER ACCOUNT SILENTLY TAKES AWAY \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+      #
+      # This step FIXES NOTHING. It names, in the first fifteen seconds, a condition that would
+      # otherwise surface minutes later as something that looks like a code failure.
+      #
+      # Moving this runner from the machine's first admin account to its own standard account cost
+      # FOUR consecutive runs, and not one of the four failures mentioned an account:
+      #
+      #   `pwsh: command not found`                      \u2014 PS7 was a per-user MSIX install
+      #   `Could not find any Python installation`       \u2014 Python was under %LOCALAPPDATA%
+      #   `running scripts is disabled on this system`   \u2014 execution policy was set at CurrentUser
+      #   (and TEMP, QuickEdit and the screensaver, which fail quietly rather than loudly)
+      #
+      # Every one is a per-user setting that LOOKS machine-wide until the account changes. The
+      # lesson is not the three tools; it is that the Windows default for tooling and policy is
+      # per-user, so "it works on the runner" is a statement about an ACCOUNT, not a machine.
+      #
+      # Only conditions that are (a) invisible in the failure they cause and (b) cheap to test
+      # belong here. Anything a `setup-*` action provides does not \u2014 the tool cache follows the
+      # runner, which is the whole reason to prefer one.
+      - name: Assert the runner account can actually build
+        if: runner.environment == 'self-hosted'
+        shell: pwsh
+        run: |
+          $who = "$env:USERDOMAIN\$env:USERNAME"
+          Write-Host "[precheck] runner account: $who"
+
+          # The runner invokes STEP scripts with -ExecutionPolicy Unrestricted, so this step runs
+          # whatever the policy says. Actions that call powershell.exe themselves do not \u2014
+          # actions/setup-python runs its own setup.ps1 and is refused outright. So the policy has
+          # to be tested rather than inferred from this step having started.
+          $policy = Get-ExecutionPolicy
+          Write-Host "[precheck] execution policy: $policy"
+          if ($policy -in @('Restricted', 'AllSigned')) {
+            throw "Execution policy is '$policy' for $who, so actions that run their own .ps1 (setup-python among them) will be refused. Set it at LOCALMACHINE scope from an ELEVATED shell: Set-ExecutionPolicy -Scope LocalMachine RemoteSigned. A CurrentUser fix is what evaporated when this runner changed account."
+          }
+
+          # node-gyp shells out to git for some dependency resolutions, and git is one of the three
+          # tools nobody has yet proven is machine-wide on this box.
+          if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+            throw "git is not on PATH for $who. It was probably installed per-user under a different account; reinstall it machine-wide."
+          }
+          Write-Host "[precheck] git: $((Get-Command git).Source)"
+
       # Pin the version rather than inheriting whatever `nvm use` last left active in the runner's
       # interactive session. Node 20 matches ci.yml, which is what the native builds
       # (better-sqlite3, node-pty, koffi) were compiled against.
