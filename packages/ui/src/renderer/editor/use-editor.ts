@@ -548,6 +548,14 @@ export function useEditor(params: UseEditorParams): void {
   const unloadableRef = useRef(false);
   /** WHY, where this view was the one that tried to read it (030 FR-052) — see `unloadableDetail`. */
   const unloadableDetailRef = useRef<string | undefined>(undefined);
+  /**
+   * This panel's INITIAL OPEN has not decided anything yet (#369) — see `EditorUiState.openPending`.
+   *
+   * True for exactly as long as the mount effect is still asking about the path, and false the
+   * instant an answer exists. It qualifies the two flags above rather than joining them: both are
+   * false while this is true, and a reader that treats that as "the file is fine" is wrong.
+   */
+  const openPendingRef = useRef(false);
 
   // Build the metadata UI main needs for confinement / mirror. It rides with every dispatched
   // change because it is MUTABLE — projects come and go, a Save-As re-points the file — and the
@@ -580,6 +588,7 @@ export function useEditor(params: UseEditorParams): void {
       fileMissing: fileMissingRef.current,
       unloadable: unloadableRef.current,
       unloadableDetail: unloadableRef.current ? unloadableDetailRef.current : undefined,
+      openPending: openPendingRef.current,
       ownerProjectId: metaRef.current.ownerProjectId,
     });
   };
@@ -1425,6 +1434,17 @@ export function useEditor(params: UseEditorParams): void {
       if (savedView && isActivePanelRef.current) view.focus();
     };
 
+    /*
+     * SAY THAT THIS PANEL HAS NOT ANSWERED YET, before the first await (#369).
+     *
+     * `MissingFileWatcher` samples the flags shortly after a tab activates and used to read two
+     * false ones as a verdict, so a panel whose open answered a moment later was never reported at
+     * all. Publishing the pending state — here, synchronously, ahead of every round trip below — is
+     * what lets it wait for an answer instead of for a duration.
+     */
+    openPendingRef.current = true;
+    publishState();
+
     void (async () => {
       const bridge = win()?.editor;
       // Already open (moved panel / mirrored view): adopt UI main's document as it stands.
@@ -1446,6 +1466,10 @@ export function useEditor(params: UseEditorParams): void {
         // load, so without adopting the authority's answer the editor would quietly go back to
         // presenting remembered text as the file (027 / #161).
         unloadableRef.current = !!existing.unloadable;
+        // ANSWERED (#369): the authority's current verdict is this panel's verdict. The verification
+        // fired below is about a path that may have broken while nothing was mounted — a later
+        // question, not an outstanding part of this open.
+        openPendingRef.current = false;
         initialise(existing);
         // …and CHECK, rather than take the authority's last answer on trust (027 / #161). This
         // branch never touches the disk, so a path that broke while this panel was unmounted — a
@@ -1520,6 +1544,10 @@ export function useEditor(params: UseEditorParams): void {
       // never from a copy assembled here, which is how a replica becomes a second original.
       const state = await bridge?.getContent?.(panelId);
       if (state) initialise(state);
+      // ANSWERED (#369) — whichever branch above decided it, and whichever way it went. This is the
+      // other of the open's two exits; the adopt path returns above with the same line.
+      openPendingRef.current = false;
+      publishState();
     })();
 
     return () => {

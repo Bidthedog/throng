@@ -45,35 +45,63 @@ function cdLine(flavour: string, dir: string): string {
   return flavour === 'git-bash' ? `cd ./${dir}` : `cd ${dir}`;
 }
 
-/** Poll the persisted layout until `predicate` holds — the row is real and observable. */
+/**
+ * Poll the persisted layout until `predicate` holds — the row is real and observable.
+ *
+ * ══ THE BUDGET, AND WHY IT IS 30 s ══
+ *
+ * It was 20 s, which is SMALLER than the 25 s the callers allow for the cwd to reach the panel
+ * header — and the persist necessarily happens after that observation, because both are driven by
+ * the same `useTerminalCwd` signal. A downstream wait shorter than the upstream one it depends on
+ * is the wrong way round however generous either looks in isolation.
+ *
+ * ══ AND WHY THE FAILURE NOW CARRIES THE LAST ERROR ══
+ *
+ * `catch { return false }` made two very different situations identical: the row genuinely not
+ * being written yet, and the database being unreadable (a locked or mid-write SQLite file returns
+ * SQLITE_BUSY, and every poll would swallow it). Measured on the self-hosted runner: this timed out
+ * once and passed on retry — flaky, which the strict gate reddens — and the message could not say
+ * which of the two it was.
+ *
+ * The debounce is 400 ms (`AUTOSAVE_DEBOUNCE_MS`), so a healthy write lands two orders of magnitude
+ * inside this budget. Reaching the deadline at all means something is wrong rather than slow, and
+ * the reason is now attached rather than discarded.
+ */
 async function expectLayout(
   dataDir: string,
   projectName: string,
   predicate: (layoutJson: string) => boolean,
   message: string,
 ): Promise<void> {
-  await expect
-    .poll(
-      () => {
-        let db: InstanceType<typeof Database> | undefined;
-        try {
-          db = new Database(join(dataDir, 'throng.db'), { readonly: true });
-          const row = db
-            .prepare(
-              `SELECT w.layout_json AS json FROM workspace_layout w
-                 JOIN projects p ON p.id = w.project_id WHERE p.name = ?`,
-            )
-            .get(projectName) as { json?: string } | undefined;
-          return row?.json !== undefined && predicate(row.json);
-        } catch {
-          return false; // not written yet, or a transient read of a mid-write DB
-        } finally {
-          db?.close();
-        }
-      },
-      { timeout: 20_000, message },
-    )
-    .toBe(true);
+  let lastError = '(the row was readable but never matched)';
+  try {
+    await expect
+      .poll(
+        () => {
+          let db: InstanceType<typeof Database> | undefined;
+          try {
+            db = new Database(join(dataDir, 'throng.db'), { readonly: true });
+            const row = db
+              .prepare(
+                `SELECT w.layout_json AS json FROM workspace_layout w
+                   JOIN projects p ON p.id = w.project_id WHERE p.name = ?`,
+              )
+              .get(projectName) as { json?: string } | undefined;
+            if (row?.json === undefined) lastError = '(no workspace_layout row for the project)';
+            return row?.json !== undefined && predicate(row.json);
+          } catch (e) {
+            lastError = `(could not read the database: ${(e as Error).message})`;
+            return false; // not written yet, or a transient read of a mid-write DB
+          } finally {
+            db?.close();
+          }
+        },
+        { timeout: 30_000, message },
+      )
+      .toBe(true);
+  } catch (cause) {
+    throw new Error(`${message} — last observation: ${lastError}`, { cause });
+  }
 }
 
 for (const flavour of FLAVOURS) {

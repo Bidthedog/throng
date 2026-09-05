@@ -5,7 +5,212 @@ description: Run throng's tests and hands-on sessions without leaving processes 
 
 # Testing throng without leaving a mess
 
-## The thing that catches everyone
+## Where a test is allowed to run
+
+Two rules. The second is the one that gets broken, and it gets broken by someone who has read the
+first and is being reasonable.
+
+**The workstation runs only the tests under the red-green-refactor cursor.** A handful of files, at
+the lowest layer that reproduces the behaviour — which is what *Choosing the layer* below already
+argues for, now with a boundary attached. Running one spec, one project or one file while iterating
+is exactly right and needs no justification.
+
+**The full suite runs on the gate runner. Always.** Not "preferably", not "when the machine is
+free". `npm run gate` locally pins every core for the better part of an hour, steals focus for the
+whole duration, and — measured — exhausts the interactive desktop heap after a few hundred Electron
+launches, at which point Windows refuses to start processes at all (`0xC0000142`, surfacing in
+Playwright as *"Process failed to launch"*).
+
+### The loop
+
+Red-green-refactor happens **here**. The green bar that says the work is DONE happens **there**.
+Those are different questions and they get different machines.
+
+```bash
+# 1. Iterate locally — one file, one project, seconds per cycle.
+npx vitest run --project unit packages/core/tests/unit/<the-one>.test.ts
+
+# 2. Push, then ask the runner for the verdict.
+git push
+gh workflow run gate.yml --ref "$(git branch --show-current)"
+
+# 3. Wait on it. ONE blocking watch, never a poll loop of short turns.
+sleep 10
+RUN=$(gh run list --workflow=gate.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$RUN" --exit-status
+
+# 4. ALWAYS re-query the conclusion. Never trust the watch's exit code alone — see below.
+gh run view "$RUN" --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
+```
+
+Say the expected cost in one line before starting the watch: *"Waiting on gate run `<id>`, expected
+75-90 min."*
+
+**`gh run watch --exit-status` detaches early, and its exit code then lies in both directions.**
+Observed twice on this repo's runner in one afternoon:
+
+| what it returned | what the run had actually done |
+|---|---|
+| `0` | concluded **failure** |
+| `1` | still `in_progress`, gate step running |
+
+So the exit code answers "what did the watch see before it let go", not "how did the run end". Treat
+it as a *wait*, and take the verdict from `gh run view --json status,conclusion`. If `status` is not
+`completed`, the watch gave up early and the run is still going — re-attach rather than reporting a
+result.
+
+That distinction is the difference between "the gate is red" and "I stopped looking". Reporting the
+first when the second is true is worse than saying nothing, because it sends someone to diagnose a
+failure that has not happened yet.
+
+### When one stage is red, run one stage
+
+The gate is fail-fast, so re-running it to reach the stage that failed spends ~19 minutes re-proving
+seven green ones. That was measured twice, learning one number each time.
+
+```bash
+gh workflow run gate.yml --ref "$(git branch --show-current)" -f only=test:contract
+```
+
+`only` takes `full gate`, `lint`, `typecheck`, `build`, or any `test:*` stage. Use it while fixing;
+take the full gate once at the end, because that is the run that says done.
+
+### What a green run does and does not prove
+
+**It is triggered against a REF**, so it proves that *commit* — not a working tree that has moved on
+since. Quote the run URL and the SHA when reporting done, not just the stage summary.
+
+**Performance SLAs are not adjudicated there.** The runner is not reference hardware, so those five
+ceilings are recorded rather than asserted — see *Where a performance SLA is measured* in
+`docs/testing.md`. A green gate is not a statement about the product's speed.
+
+The tempting thought is *"just this once, locally, it'll be quicker"*. It will not be quicker. It
+will be ninety minutes during which nothing else on the machine works, which is the entire reason
+the runner exists.
+
+### Which lane runs where
+
+| lane | machine | when |
+|---|---|---|
+| `ci.yml` — lint, tests, `@core` E2E | GitHub-hosted | Every push to master, every PR |
+| `gate.yml` dispatch — the full gate | Self-hosted runner | On demand, the loop above |
+| `gate.yml` nightly | GitHub-hosted | 01:00 UTC, master only |
+
+The nightly is hosted deliberately: an unattended health check must not depend on one machine being
+powered on and logged in, because a nightly that goes quiet looks exactly like one that keeps
+passing.
+
+## Never guess. Measure, then change one thing
+
+**A fix reasoned from a plausible mechanism is a guess, however good the reasoning sounds. Get the
+number first.**
+
+This is not a counsel of perfection. It is the single most expensive habit in this repo's history,
+and every instance looks identical from the inside: a mechanism is identified, it genuinely explains
+the symptom, a fix follows from it, and the fix does not work — because the mechanism was real but
+was not the *dominant* one.
+
+### What it has actually cost
+
+**A timing ceiling resized three times in a row, never once from data.** It was 2000 ms. A commit
+titled *"stop timing the disk"* raised it to 5000 ms and explained why 5000 was fair — it did not
+stop timing the disk. A slower machine then measured 5888 ms, so it became 8000 ms with a warm-read
+argued from write-back behaviour; the next run measured 8522 ms. Only then did anyone print the
+number on every run instead of only on failure, which produced **5888 / 8522 / 7317** — a ±20%
+spread straddling every ceiling anyone had chosen, proving the whole approach wrong rather than the
+number. The actual cause took one measurement: the test copied a **91,380,224-byte** stand-in for a
+**454,656-byte** `powershell.exe`, two hundred times the binary production spawns. Replacing it took
+the measurement to **153 ms**. Three rounds and roughly an hour of runner time to learn something one
+`console.log` would have said at the start.
+
+**A denylist written against one machine's install layout.** `PSModulePath` was filtered with
+`-notmatch 'PowerShell\\7\\'`, which is correct for `C:\Program Files\PowerShell\7\Modules` — the
+layout on the machine it was written on. The runner had installed PowerShell through winget, so its
+modules live under `...\WindowsApps\Microsoft.PowerShell_7.6.5.0_x64__8wekyb3d8bbwe\Modules`. The
+step reported success, changed nothing that mattered, and cost a full gate cycle.
+
+### The rules that follow
+
+- **Print the measurement on every run, not only when it fails.** A budget you only ever see
+  violated is a budget you can only ever tune blindly. One `console.log` of the elapsed value turns
+  three guesses into one decision.
+- **Three samples before you believe a distribution.** One failing number tells you the ceiling was
+  crossed; it does not tell you by how much, how often, or whether the spread makes any ceiling
+  workable.
+- **Change one variable per run.** Two changes at once and a green result tells you nothing about
+  which mattered — and neither does a red one.
+- **Prefer an allowlist to a denylist.** Naming what to exclude means enumerating every form it takes
+  now and in future, on machines you have not seen. Naming what to keep does not.
+- **A theory you cannot falsify cheaply is not ready to act on.** If checking costs a command, run
+  the command. Two theories in this repo's history were refuted in under a minute each, and both had
+  already been written into a commit message as fact.
+- **Attack the cost, do not widen the tolerance.** A budget raised to fit a slow machine will be
+  raised again for a slower one, until it is above the thing it was supposed to detect and passes
+  while proving nothing.
+
+### The tell
+
+You are guessing whenever the sentence in your head is *"it must be X"* rather than *"I measured X"*.
+Both feel the same while you are writing the fix. Only one of them survives the next machine.
+
+## A fixed delay that decides is a deadline, not a debounce
+
+**Waiting a fixed time and then READING state is only safe if the reader can tell "not yet" from
+"no". Where it cannot, the delay has stopped being a debounce and has become a verdict deadline —
+and its value is now a property of the machine rather than of the code.**
+
+This is a sibling of *Never guess* above and not the same failure. That one is about a **tolerance**
+tuned by hand: a ceiling raised until it fits. This one is about **sampling**: a single read of state
+that has not settled, where two different situations produce identical bytes.
+
+### The instance
+
+`missing-file-watcher.tsx` waited `SCAN_DELAY_MS` (300 ms) after a tab activated, then reported every
+editor panel whose `fileMissing` or `unloadable` was true. Both flags are false when the file is
+fine. Both flags are *also* false while the panel's initial `load()` has not come back. The scan read
+those as one state.
+
+The effect re-arms only on a tab change or a settings change, so a panel that answered at 301 ms was
+not reported late — **it was never reported at all**. Not a delay, a silent drop.
+
+On the reference workstation the open answers well inside 300 ms, so it passed everywhere it was ever
+run. On the gate runner (~2.5× slower, cold disk) two restored editors were both still loading when
+the scan fired: the user got a banner in each panel and the file tree's own notice, and the
+consolidated notice that 030 FR-034a requires to **supersede** the tree's was never raised — the exact
+duplicate-notice storm FR-029 exists to end. `notice-a11y.e2e.ts:115` failed 3/3, waiting the full
+90 s for an element that could no longer appear. Filed as #369.
+
+### How to spot it before a slow machine does
+
+Ask two questions of any `setTimeout(…)` that is followed by a read:
+
+1. **Can the reader distinguish "no" from "not yet"?** If the same values mean both, the delay is
+   load-bearing and the code is wrong on some machine you have not met.
+2. **What happens to a late answer?** If the answer is "nothing — there is no second look", the delay
+   is not a debounce. A debounce that fires early costs latency; this costs the report entirely.
+
+### The fix is a third state, never a bigger number
+
+Publishing "this has not decided yet" as a **fact** — here, `EditorUiState.openPending` — lets the
+reader wait for an *answer* rather than for a *duration*. The delay survives as a genuine debounce
+(how soon the first report may go out) and stops deciding whether one goes out at all.
+
+Any larger constant is the same defect with a different threshold, and it will be raised again for
+the next machine. **There is no number that is correct here, which is how you know a number is the
+wrong tool.**
+
+### The trap when fixing it
+
+The obvious repair is to subscribe to the state and report whatever breaks. That reintroduces the
+rule the component exists for: **FR-105 forbids reporting a file deleted under a tab the user is
+already looking at.** The watch has to be scoped to the panels that were *still pending when the scan
+sampled*, each leaving the set as it answers — so a settled panel is never looked at again.
+
+Write the anti-vacuity control for that in the same commit. Without it, "watch the pending ones" and
+"watch everything" are indistinguishable, and the test proving the fix passes under a fix that breaks
+FR-105.
+
+## The thing that catches everyone
 
 throng's daemon is **designed to outlive its window** (Principle III — terminals keep running when the
 UI closes). So a finished E2E run, or an app you closed, routinely leaves behind:
@@ -186,5 +391,32 @@ THRONG_E2E_RETRIES=0 npx playwright test <spec> --workers=6
 A pass rate that falls as workers rise is starvation; a defect fails the *same* test every time. If
 it is starvation, the answer is a budget or a tier — **not** an entry here. See *Budgets* in
 `docs/testing.md`, which records the five that were undersized and what each is derived from.
+
+### When the starvation test cannot answer
+
+The worker sweep above discriminates only where the worker count is a variable. **A spec in the
+SERIAL tier already runs at one worker**, so running it at one worker again proves nothing, and
+running it at six tells you about a configuration it never uses.
+
+That is where a red is most likely to be misread as flakiness, and it happened: five serial-tier
+specs appeared to fail in a rotating set across gate runs on the self-hosted runner, which reads
+exactly like contention. It was not. The membership changed because the suite is fail-fast and each
+run stopped at a different point — four separate real defects, fixed one at a time, and the last one
+standing (`notice-a11y.e2e.ts:115`) then failed **3/3 with identical output**, which is a defect
+signature and not a flake one.
+
+So for a serial-tier red, the discriminator is **repetition, not workers**:
+
+```bash
+# Three identical failures with the same message is a defect. Three different ones, or a pass
+# among them, is a race — and see `running-tests`' flake-forensics for that.
+THRONG_E2E_RETRIES=2 npx playwright test <spec> --workers=1
+```
+
+And read what the failure actually says before reaching for either. `notice-a11y`'s error named a
+locator that was never in the DOM, and the `error-context.md` artifact Playwright writes beside it
+held the full aria snapshot — which showed both panels reporting their failure inline while the
+consolidated notice was simply absent. That artifact answered in one read what a worker sweep could
+not have answered at all.
 
 A green CI is still not proof for `@admin` specs, which only verify when elevated.

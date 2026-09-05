@@ -23,10 +23,24 @@ import { collectPanels, EDITOR_KIND } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useReportPanelFailure } from '../workspace/panel-failure-notice.js';
-import { getEditorState } from './editor-state.js';
+import { getEditorState, subscribeEditorStates } from './editor-state.js';
 import { missingFileDetail, missingFileMessage } from './editor-missing-notice.js';
 
-const SCAN_DELAY_MS = 300; // let the tab's editors mount + publish their load state
+/**
+ * How long to let the tab's editors mount and publish before looking.
+ *
+ * It is a DEBOUNCE, not a deadline (#369). A panel that has not answered by the time this elapses is
+ * waited for by name — see the watch below — so this number decides only how soon the first report
+ * can go out, never whether one goes out at all. It used to decide both, which is why a slower
+ * machine silently lost the consolidated notice altogether.
+ */
+const SCAN_DELAY_MS = 300;
+
+/** A panel, as much of one as this component needs. */
+interface Casualty {
+  id: string;
+  title: string;
+}
 
 export function MissingFileWatcher(): null {
   const ws = useWorkspace();
@@ -66,58 +80,117 @@ export function MissingFileWatcher(): null {
     if (!tab) return;
     const panels = collectPanels(tab.root).filter((p) => p.kind === EDITOR_KIND);
 
-    const timer = setTimeout(() => {
+    let unwatch: (() => void) | undefined;
+
+    const raise = (p: Casualty): void => {
+      const st = getEditorState(p.id);
       const os = window.throng?.osName ?? 'windows';
-      for (const { p, st } of panels.map((p) => ({ p, st: getEditorState(p.id) }))) {
+      reportRef.current({
+        panelId: p.id,
+        message: missingFileMessage('missing'),
+        // The path rides as the row's own detail — copied and logged, never rendered (FR-034).
+        detail: missingFileDetail(
+          { filePath: st?.filePath ?? null, panelName: p.title, reason: 'missing' },
+          os,
+        ),
         /*
-         * DEFEATED BY THE PATH — on either of the two flags that can say so (#277).
+         * WHAT KIND OF FAILURE THIS IS (FR-029) — the half that was missing.
          *
-         * `fileMissing` is set by a view that ATTEMPTED A LOAD and was refused. `unloadable` is the
-         * AUTHORITY's verdict on the path, broadcast to every view of the document. They are
-         * deliberately distinct (see `EditorUiState`), and reading only the first is what made the
-         * consolidated notice never appear on a cold restart into a project whose root had been
-         * renamed away:
+         * A file that is not there is `path-missing`, and saying so is what lets the consolidated
+         * notice supersede the file tree's report of the same absent folder. Reporting without it
+         * left the notice with no cause key, so the two stood side by side: measured in a real
+         * session as "Couldn't list the contents of test 1" and "Couldn't open test 1", 265 ms
+         * apart, for one renamed folder.
          *
-         *   - restoring a persisted panel takes the `getContent` branch, which adopts the
-         *     authority's `fileMissing` — still FALSE, because nothing has read the disk yet — and
-         *     returns without ever attempting a load of its own;
-         *   - it then asks for a verification, and the verdict comes back on the sync channel as
-         *     `unloadable: true`, which sets the banner the user can see;
-         *   - `fileMissing` is never written by that path, so it stays false forever, and this scan
-         *     skipped every panel. Measured with a probe: two panels, both `hasState: true`, both
-         *     `unloadable: true`, both `fileMissing: false`, nothing reported.
-         *
-         * So the user saw two per-panel banners and the file tree's notice, and the consolidated
-         * notice that FR-034a requires to supersede the tree's — the one naming which panels the
-         * absent folder defeated — was never raised at all.
-         *
-         * This does NOT weaken FR-105. That rule is about not warning from an editor's own mount
-         * effect; the guard enforcing it is this effect's once-per-activation gate above, which is
-         * untouched.
+         * The KIND only. The subject has to be the project the notice is about, and this scan does
+         * not know its name — `useReportPanelFailure` does, and supplies it.
          */
-        if (!st?.fileMissing && !st?.unloadable) continue;
-        reportRef.current({
-          panelId: p.id,
-          message: missingFileMessage('missing'),
-          // The path rides as the row's own detail — copied and logged, never rendered (FR-034).
-          detail: missingFileDetail({ filePath: st.filePath, panelName: p.title, reason: 'missing' }, os),
-          /*
-           * WHAT KIND OF FAILURE THIS IS (FR-029) — the half that was missing.
-           *
-           * A file that is not there is `path-missing`, and saying so is what lets the consolidated
-           * notice supersede the file tree's report of the same absent folder. Reporting without it
-           * left the notice with no cause key, so the two stood side by side: measured in a real
-           * session as "Couldn't list the contents of test 1" and "Couldn't open test 1", 265 ms
-           * apart, for one renamed folder.
-           *
-           * The KIND only. The subject has to be the project the notice is about, and this scan does
-           * not know its name — `useReportPanelFailure` does, and supplies it.
-           */
-          causeKind: 'path-missing',
-        });
+        causeKind: 'path-missing',
+      });
+    };
+
+    /**
+     * DEFEATED BY THE PATH — on either of the two flags that can say so (#277).
+     *
+     * `fileMissing` is set by a view that ATTEMPTED A LOAD and was refused. `unloadable` is the
+     * AUTHORITY's verdict on the path, broadcast to every view of the document. They are
+     * deliberately distinct (see `EditorUiState`), and reading only the first is what made the
+     * consolidated notice never appear on a cold restart into a project whose root had been renamed
+     * away:
+     *
+     *   - restoring a persisted panel takes the `getContent` branch, which adopts the authority's
+     *     `fileMissing` — still FALSE, because nothing has read the disk yet — and returns without
+     *     ever attempting a load of its own;
+     *   - it then asks for a verification, and the verdict comes back on the sync channel as
+     *     `unloadable: true`, which sets the banner the user can see;
+     *   - `fileMissing` is never written by that path, so it stays false forever, and this scan
+     *     skipped every panel. Measured with a probe: two panels, both `hasState: true`, both
+     *     `unloadable: true`, both `fileMissing: false`, nothing reported.
+     *
+     * So the user saw two per-panel banners and the file tree's notice, and the consolidated notice
+     * that FR-034a requires to supersede the tree's was never raised at all.
+     */
+    const defeated = (id: string): boolean => {
+      const st = getEditorState(id);
+      return !!st?.fileMissing || !!st?.unloadable;
+    };
+
+    const timer = setTimeout(() => {
+      /*
+       * ══ #369 — A PANEL THAT HAS NOT ANSWERED IS NOT A PANEL THAT IS FINE ══
+       *
+       * Both flags are false in two entirely different situations: the file is there, and the open
+       * has not come back yet. This scan used to read them as one, so a panel still opening at the
+       * sample point was dropped FOREVER — the effect re-arms only on a tab change or a settings
+       * change, and nothing ever asked again.
+       *
+       * That made 300 ms a verdict deadline tuned on one machine's speed. On a slower one, two
+       * editors restored into a project whose root had been renamed away were both still inside
+       * their initial `load()` when it fired: the user got a banner in each panel and the file
+       * tree's own notice, and the consolidated notice FR-034a requires to supersede the tree's was
+       * never raised. Measured on the self-hosted gate runner, three attempts out of three.
+       *
+       * So the ones still opening are WAITED FOR BY NAME, and reported the moment they answer. The
+       * wait ends on an answer rather than on a duration, which leaves no constant to be wrong on
+       * the next machine.
+       */
+      const pending = new Set<string>();
+      const byId = new Map<string, Casualty>(panels.map((p) => [p.id, p]));
+
+      for (const p of panels) {
+        if (getEditorState(p.id)?.openPending) pending.add(p.id);
+        else if (defeated(p.id)) raise(p);
       }
+      if (pending.size === 0) return;
+
+      /*
+       * FR-105 IS NOT REOPENED BY THIS, and the membership of `pending` is the reason.
+       *
+       * Only panels that were STILL OPENING when the scan sampled are watched, and each leaves the
+       * set the moment it answers. A file deleted under a tab the user is already looking at belongs
+       * to a panel that answered long ago, so nothing here ever sees it — which is the rule this
+       * component exists for, and the test file pins it from both directions.
+       */
+      unwatch = subscribeEditorStates(() => {
+        for (const id of [...pending]) {
+          if (getEditorState(id)?.openPending) continue;
+          pending.delete(id);
+          const p = byId.get(id);
+          if (p && defeated(id)) raise(p);
+        }
+        if (pending.size === 0) {
+          unwatch?.();
+          unwatch = undefined;
+        }
+      });
     }, SCAN_DELAY_MS);
-    return () => clearTimeout(timer);
+
+    return () => {
+      clearTimeout(timer);
+      // The ACTIVATION owns the watch. Clicking away before a slow panel answers must not report it
+      // into a notice about a tab the user has left.
+      unwatch?.();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabId, warn]);
 

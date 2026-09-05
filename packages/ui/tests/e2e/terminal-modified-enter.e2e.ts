@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { release } from 'node:os';
+import { skipIfHostCannotDeliverReencodedKeys } from './helpers/console-caps.js';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
@@ -195,6 +197,7 @@ test('at a PowerShell prompt, a modified Enter inserts a soft line break and the
 });
 
 test('a program that negotiates the kitty protocol gets a distinct CSI-u sequence', { tag: ['@extended', '@terminal'] }, async () => {
+  skipIfHostCannotDeliverReencodedKeys();
   const root = tmpDir('throng-me-kitty-');
   copyFileSync(KITTY, join(root, 'k.mjs'));
   await runApp(async (_app, win) => {
@@ -209,7 +212,24 @@ test('a program that negotiates the kitty protocol gets a distinct CSI-u sequenc
     await win.keyboard.type('d', { delay: 40 });
 
     const got = await readCapture(root);
-    expect(between(got, 'a', 'b')).toBe('\x1b[13;2u'); // Shift+Enter — distinct, NO trailing \r
+    /*
+     * The whole capture and throng's own decisions go in the failure message, because the slice
+     * alone says `Received: ""` and cannot distinguish "throng sent nothing" from "throng sent the
+     * legacy byte and the slice missed it". Diagnostics record, per panel, the last keypresses with
+     * what throng decided and the exact bytes it transmitted.
+     */
+    const diag = await win.evaluate(() => {
+      const f = (window as unknown as { __throngTerminalDiagnostics?: () => unknown })
+        .__throngTerminalDiagnostics;
+      try {
+        return f ? JSON.stringify(f()) : 'no diagnostics helper on window';
+      } catch (e) {
+        return `diagnostics threw: ${String(e)}`;
+      }
+    });
+    const detail = `build=${release()} capture=${JSON.stringify(got)} diagnostics=${String(diag).slice(0, 4000)}`;
+
+    expect(between(got, 'a', 'b'), detail).toBe('\x1b[13;2u'); // Shift+Enter — distinct, NO trailing \r
     expect(between(got, 'b', 'c')).toBe('\x1b[13;5u'); // Ctrl+Enter — distinct
     expect(between(got, 'c', 'd')).toBe('\r'); // plain Enter — unchanged
   });

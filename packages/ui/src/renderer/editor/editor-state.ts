@@ -36,6 +36,20 @@ export interface EditorUiState {
    * the last read attempt returned — and an absent system error is omitted rather than invented.
    */
   unloadableDetail?: string;
+  /**
+   * This panel's INITIAL OPEN has not decided anything yet (#369).
+   *
+   * True from the moment the mount effect starts asking about the path until an answer exists —
+   * whichever route it took: the authority's adopted state, a `load()` verdict, or a later
+   * `verifyPath` relay. `fileMissing` and `unloadable` are both still FALSE while it is true, and
+   * that is exactly the state a reader must not mistake for "the file is fine".
+   *
+   * `MissingFileWatcher` is the reader in question. It samples once, shortly after a tab activates,
+   * and used to treat two false flags as a verdict — so on a machine where the open had not answered
+   * by then, a casualty was never reported AT ALL. Making the wait a FACT rather than a duration is
+   * what removes the constant that had to be tuned per machine.
+   */
+  openPending?: boolean;
   ownerProjectId?: string;
 }
 
@@ -68,6 +82,9 @@ export function setEditorState(panelId: string, patch: Partial<EditorUiState>): 
     dirty: false,
     fileMissing: false,
     unloadable: false,
+    // Settled unless a panel says otherwise — so every existing publisher, and every surface that
+    // never had an opening phase, means what it has always meant.
+    openPending: false,
   };
   states.set(panelId, { ...prev, ...patch, panelId });
   emit();
@@ -112,6 +129,17 @@ export function findEditorPanelByPath(absPath: string): string | null {
 function subscribe(cb: () => void): () => void {
   listeners.add(cb);
   return () => listeners.delete(cb);
+}
+
+/**
+ * Subscribe to ANY editor state change, outside React (#369).
+ *
+ * The hooks above are the normal way in and cannot serve here: `MissingFileWatcher` waits on a set of
+ * panels whose membership is decided inside an effect, and a hook cannot be called from there. The
+ * caller reads values with {@link getEditorState} and must dispose the returned function.
+ */
+export function subscribeEditorStates(cb: () => void): () => void {
+  return subscribe(cb);
 }
 
 /** Subscribe to one panel's editor state (pills + dot). */

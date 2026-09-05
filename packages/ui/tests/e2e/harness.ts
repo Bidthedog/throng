@@ -57,18 +57,70 @@ function startDaemon(
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  /*
+   * ══ WAITING FOR THE DAEMON, AND SAYING WHAT HAPPENED IF IT NEVER COMES ══
+   *
+   * This budget was 10 s and threw a bare `daemon not ready`, which is the third fixed
+   * daemon-startup timeout this suite has been bitten by on slower hardware — after `daemonRpc`'s
+   * 3 s and `daemonPid`'s one-shot read. It is a spawned Node process racing up to five siblings
+   * doing the same thing, on a machine two to three times slower than a workstation, so 10 s is a
+   * statement about one machine's speed rather than about the daemon.
+   *
+   * Measured: `hover-suppression.e2e.ts:99` failed on it once and passed on retry, which the strict
+   * flaky gate correctly reddened — a test that only passes the second time has not passed.
+   *
+   * Two changes, and the second matters more than the number.
+   *
+   * THE BUDGET IS A HANG DETECTOR. 30 s, matching `daemonPid`'s deadline, chosen so that crossing
+   * it means something is actually wrong rather than merely busy.
+   *
+   * THE MEASUREMENT IS ALWAYS PRINTED, not only on failure. A budget you only ever see violated is
+   * one you can only ever tune blindly — which is exactly how it came to be 10 s. One line per
+   * daemon start makes the distribution visible in any run's log, so the next person changing this
+   * number has data instead of a guess.
+   *
+   * AND THE FAILURE SAYS WHY. `daemon not ready` hid the case where the daemon CRASHED on startup:
+   * its stderr went nowhere and the message named a timeout. The tail of both streams now rides on
+   * the error.
+   */
+  const DAEMON_READY_TIMEOUT_MS = 30_000;
+  const startedAt = Date.now();
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('daemon not ready')), 10_000);
+    let out = '';
+    let err = '';
+    const timer = setTimeout(() => {
+      const tail = (s: string): string => s.trim().split(/\r?\n/).slice(-3).join(' | ') || '(nothing)';
+      reject(
+        new Error(
+          `daemon never printed 'listening' within ${DAEMON_READY_TIMEOUT_MS}ms on ${pipeName} — ` +
+            `stdout: ${tail(out)} — stderr: ${tail(err)}`,
+        ),
+      );
+    }, DAEMON_READY_TIMEOUT_MS);
     child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', (c: string) => {
+      err += c;
+    });
     child.stdout?.on('data', (c: string) => {
+      out += c;
       if (c.includes('listening')) {
         clearTimeout(timer);
+        console.log(`[daemon] ready in ${Date.now() - startedAt}ms`);
         resolve(child);
       }
     });
     child.on('error', (e) => {
       clearTimeout(timer);
       reject(e);
+    });
+    child.on('exit', (code, signal) => {
+      clearTimeout(timer);
+      reject(
+        new Error(
+          `daemon exited before listening (code=${code}, signal=${signal}) — stderr: ${err.trim() || '(nothing)'}`,
+        ),
+      );
     });
   });
 }
@@ -1346,22 +1398,54 @@ export async function viewport(win: Page): Promise<{ width: number; height: numb
   return win.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
 }
 
-/** JSON-RPC over the daemon pipe (one-shot request/response). */
-export function daemonRpc(
+/**
+ * WHY A ONE-SHOT RPC REPORTS WHY IT FAILED (#369's sibling).
+ *
+ * `daemonRpc` collapses four different outcomes into `null`: the pipe refused the connection, the
+ * daemon did not answer in time, the reply did not parse, and the daemon answered with no result.
+ * Callers then invent a reason for the `null` they get — `daemonPid` threw
+ * `daemon health.ping returned no pid`, which asserts the FOURTH and is the least likely of the
+ * four. Measured on the self-hosted runner: `terminal-reload-mode.e2e.ts:158` failed three times out
+ * of three with that message, and it was not possible to tell from the log whether the daemon was
+ * slow, absent, or answering strangely — the three need completely different fixes.
+ *
+ * So the outcome is carried alongside the value. `daemonRpc` keeps its old shape for the callers
+ * that only want the value; anything that must EXPLAIN a failure uses this.
+ */
+export type RpcFailure = 'timeout' | 'socket-error' | 'unparseable' | 'no-result';
+
+export interface RpcOutcome {
+  value: unknown;
+  /** Absent when the call succeeded. */
+  failure?: RpcFailure;
+}
+
+/**
+ * How long one attempt waits for the daemon to answer.
+ *
+ * A healthy local named pipe answers in milliseconds; this is a HANG DETECTOR for a single attempt,
+ * not a verdict on the daemon's health — `daemonPid` retries until its own deadline, so a daemon
+ * that is merely still starting is waited for rather than declared missing.
+ */
+const RPC_ATTEMPT_TIMEOUT_MS = 5000;
+
+/** JSON-RPC over the daemon pipe (one-shot request/response), with the reason it failed. */
+export function daemonRpcOutcome(
   pipeName: string,
   method: string,
   params: Record<string, unknown> = {},
-): Promise<unknown> {
+  timeoutMs: number = RPC_ATTEMPT_TIMEOUT_MS,
+): Promise<RpcOutcome> {
   return new Promise((resolve) => {
     const socket = connect(pipeName);
     let buffer = '';
-    const done = (v: unknown): void => {
+    const done = (o: RpcOutcome): void => {
       clearTimeout(timer);
       socket.removeAllListeners();
       socket.destroy();
-      resolve(v);
+      resolve(o);
     };
-    const timer = setTimeout(() => done(null), 3000);
+    const timer = setTimeout(() => done({ value: null, failure: 'timeout' }), timeoutMs);
     socket.setEncoding('utf8');
     socket.on('connect', () =>
       socket.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })}\n`),
@@ -1371,13 +1455,23 @@ export function daemonRpc(
       const nl = buffer.indexOf('\n');
       if (nl < 0) return;
       try {
-        done(JSON.parse(buffer.slice(0, nl)).result ?? null);
+        const result = JSON.parse(buffer.slice(0, nl)).result ?? null;
+        done(result === null ? { value: null, failure: 'no-result' } : { value: result });
       } catch {
-        done(null);
+        done({ value: null, failure: 'unparseable' });
       }
     });
-    socket.on('error', () => done(null));
+    socket.on('error', () => done({ value: null, failure: 'socket-error' }));
   });
+}
+
+/** JSON-RPC over the daemon pipe (one-shot request/response). */
+export function daemonRpc(
+  pipeName: string,
+  method: string,
+  params: Record<string, unknown> = {},
+): Promise<unknown> {
+  return daemonRpcOutcome(pipeName, method, params).then((o) => o.value);
 }
 
 /**
@@ -1420,11 +1514,33 @@ export async function installResizeProbe(app: ElectronApplication): Promise<{
   };
 }
 
-/** The terminal-hosting daemon's OS pid (via health.ping over its pipe). */
-export async function daemonPid(pipeName: string): Promise<number> {
-  const pong = (await daemonRpc(pipeName, 'health.ping')) as { pid?: number } | null;
-  if (!pong?.pid) throw new Error('daemon health.ping returned no pid');
-  return pong.pid;
+/**
+ * The terminal-hosting daemon's OS pid (via health.ping over its pipe).
+ *
+ * WAITS FOR AN ANSWER RATHER THAN SAMPLING ONCE. The daemon is a separate process that the app
+ * spawns, so "not answering yet" and "not there" look identical at any single instant — and the old
+ * one-shot read treated the first as the second. On hardware where the spawn is quick that is
+ * invisible; on the self-hosted runner it failed three times out of three, and the message it threw
+ * pointed at the daemon's reply rather than at the wait.
+ *
+ * That is the same shape as #369: a fixed sample point standing in for a verdict. Here the deadline
+ * is a HANG DETECTOR — crossing it is a real finding, and the error says which of the four outcomes
+ * kept happening, so the next reader is not left to guess between "slow", "absent" and "odd reply".
+ */
+export async function daemonPid(pipeName: string, timeoutMs = 30_000): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+  let last: RpcFailure | 'a reply carrying no pid' = 'timeout';
+  for (;;) {
+    const outcome = await daemonRpcOutcome(pipeName, 'health.ping');
+    const pid = (outcome.value as { pid?: number } | null)?.pid;
+    if (pid) return pid;
+    last = outcome.failure ?? 'a reply carrying no pid';
+    if (Date.now() >= deadline) break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  throw new Error(
+    `daemon health.ping gave no pid within ${timeoutMs}ms on ${pipeName} — last outcome: ${last}`,
+  );
 }
 
 /**

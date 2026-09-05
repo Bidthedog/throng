@@ -5,6 +5,10 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page, type ElectronApplication } from '@playwright/test';
 import { runApp, createProject, firstPanelId, panelIds, reloadWindow, cleanupTemp} from './harness.js';
+// The drain budget itself, so the validity-bound below tracks the production constant instead of
+// restating a number that was true when it was written. `ui-settings` is a pure reader with no
+// OS or native imports — it says so in its own docblock — so importing it here costs nothing.
+import { DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS } from '../../src/main/ui-settings.js';
 
 /**
  * Issue #86 — deferred writes and the app's shutdown paths.
@@ -700,6 +704,17 @@ test('#86 C19: a THEME COLOUR edit inside its 150ms debounce survives closing th
         // actually in.
         const mainHandle = await app.browserWindow(win);
 
+        // WARM THE CHANNEL, for the same reason the handle is prefetched above and one step
+        // further. The first `evaluate` on a handle pays connection setup that later ones do not,
+        // and the whole budget below is 150ms — so on a slow machine that setup alone can outlast
+        // the debounce, the timer fires first, and the test reports a defect when what actually
+        // happened is that it could not stage its own scenario.
+        //
+        // A no-op evaluate here moves that cost outside the race. It does not weaken the bound:
+        // the assertion still requires the close to land inside 150ms, it just stops measuring
+        // CDP warm-up as if it were the user's reaction time.
+        await mainHandle.evaluate(() => true);
+
         // THE DECISION: a colour edit, then the user closes at once — inside the 150ms debounce.
         const closed = app.waitForEvent('close', { timeout: 20_000 });
         await prefs.getByTestId('control-colours.accent-hex').fill('#123456');
@@ -970,16 +985,24 @@ test('#86 FR-011: an ORDINARY close after a DRAG still closes promptly — the g
         // force here deliberately) on a window that was never going to answer is 5s of
         // "Closing throng…" after every session containing a drag — the budget is a BACKSTOP
         // for a wedged renderer, not a toll the ordinary user pays.
-        // validity-bound: derived from the production constant `shutdownDrainTimeoutMs` (5000ms,
-        // deliberately in force here). It separates two outcomes rather than asserting a speed —
-        // under 2s means the drain was ACKED, over 5s means it was waited out — and the gap between
-        // them is wide enough that contention cannot move a run from one side to the other. What it
-        // defends is stated in the comment above: the budget is a backstop for a wedged renderer,
-        // not a toll every ordinary close pays.
+        // validity-bound: DERIVED from the production constant rather than hard-coded beside it.
+        // It separates two outcomes instead of asserting a speed — an ack is a few hundred
+        // milliseconds, a wait-out is the whole budget — so what it must do is sit strictly
+        // between them, and it must keep doing so if the constant ever moves.
+        //
+        // It was a literal 2000, chosen when 5000 was the constant, and the comment claimed the
+        // gap was "wide enough that contention cannot move a run from one side to the other". That
+        // is 2.5x, and it is not wide enough: the machine this suite now runs on has been measured
+        // at 2.5-6x a workstation on I/O-bound work, so an honest ACK there can exceed 2000ms
+        // while the wait-out it is supposed to catch still sits at 5000ms+.
+        //
+        // 80% of the budget keeps both sides clear: a wait-out cannot come in under the budget it
+        // waited out, and an ack has four fifths of it to play with.
+        const ackCeilingMs = DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS * 0.8;
         expect(
           closeTookMs,
-          `an ordinary close must not wait out the drain budget (took ${closeTookMs}ms)`,
-        ).toBeLessThan(2000);
+          `an ordinary close must not wait out the drain budget of ${DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS}ms (took ${closeTookMs}ms)`,
+        ).toBeLessThan(ackCeilingMs);
       },
       { dataDir, userDataDir },
     );
