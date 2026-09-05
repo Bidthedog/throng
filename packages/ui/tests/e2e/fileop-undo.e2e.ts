@@ -273,8 +273,13 @@ test('undoing a delete un-strands the editor that was open on the file', { tag: 
        * fired UNAWAITED and `pushUndo` is then called synchronously in the same tick — so the
        * re-render that drops this row cannot happen before the undo entry has been queued.
        *
-       * That is why this is a wait on a real event and not the `waitForTimeout(300)` the move test
-       * uses. It has no number to be wrong on a slower machine.
+       * That is why this is a wait on a real event rather than the fixed 300 ms pause the move
+       * test above uses. It has no number to be wrong on a slower machine.
+       *
+       * (The earlier wording of this comment NAMED that helper, and `sleep-budget.test.ts`
+       * counts the token textually across the whole file — comments included — so describing a
+       * sleep read as adding one. The ratchet is right to be blunt: a regex over source is what
+       * makes it uncheatable, and the cost is that prose has to avoid the literal call.)
        */
       await expect(tree.getByText('open.txt', { exact: true })).toHaveCount(0, {
         timeout: FILE_OP_TIMEOUT_MS,
