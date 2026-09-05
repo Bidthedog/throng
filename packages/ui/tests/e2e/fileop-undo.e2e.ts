@@ -258,6 +258,28 @@ test('undoing a delete un-strands the editor that was open on the file', { tag: 
       await win.getByTestId('confirm-accept').click();
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible({ timeout: 8000 });
 
+      /*
+       * WAIT FOR THE UNDO ENTRY TO EXIST BEFORE SENDING THE CHORD.
+       *
+       * The same gap the move test above guards, and this one did not: the assertion above is the
+       * EDITOR reacting, which says nothing about whether the EXPLORER has recorded an undo record
+       * yet. Under load the chord arrives first, finds an empty stack, and does nothing — and the
+       * symptom is the file simply never coming back, which reads as a broken undo rather than as a
+       * chord sent too early. Measured on the self-hosted runner: three failures out of three, all
+       * timing out on the `existsSync` poll below.
+       *
+       * The tree losing the row is a SUFFICIENT signal, and the ordering is guaranteed by the code
+       * rather than by a measurement. In `use-explorer-data.ts`'s delete handler, `reloadDirs` is
+       * fired UNAWAITED and `pushUndo` is then called synchronously in the same tick — so the
+       * re-render that drops this row cannot happen before the undo entry has been queued.
+       *
+       * That is why this is a wait on a real event and not the `waitForTimeout(300)` the move test
+       * uses. It has no number to be wrong on a slower machine.
+       */
+      await expect(tree.getByText('open.txt', { exact: true })).toHaveCount(0, {
+        timeout: FILE_OP_TIMEOUT_MS,
+      });
+
       // Undo the delete. The file comes back — and the editor must NOTICE. Leaving it dirty tells
       // the user their work is at risk over a file that is sitting on disk again, and every later
       // "save before closing?" asks about a document with nothing to save.
