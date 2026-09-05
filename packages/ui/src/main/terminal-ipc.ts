@@ -9,7 +9,9 @@ import {
   fallbackToReport,
   requestedStartDirectory,
   isTransportFailure,
+  submitsCommand,
   type IClipboard,
+  type IForegroundHandoff,
   type FailureCause,
 } from '@throng/core';
 import type { TerminalAttachResult } from '@throng/ipc-contract';
@@ -104,8 +106,14 @@ export function registerTerminalIpc(deps: {
    * otherwise.
    */
   clipboard: IClipboard;
+  /**
+   * #199: the OS seam that lets a window opened by a terminal command raise itself over throng.
+   * Injected rather than imported so this bridge stays ignorant of whether the platform has any
+   * such concept — on anything but Windows it is the no-op.
+   */
+  foregroundHandoff: IForegroundHandoff;
 }): void {
-  const { daemonClient, shellDetection, attachTimeoutMs, clipboard } = deps;
+  const { daemonClient, shellDetection, attachTimeoutMs, clipboard, foregroundHandoff } = deps;
 
   // Window-close detach backstop (008 FR-008a). When a window (a sub-workspace, or the
   // main window) is torn down, its renderer is destroyed WITHOUT running React effect
@@ -344,11 +352,27 @@ export function registerTerminalIpc(deps: {
     });
   });
 
-  ipcMain.handle('throng:terminal:write', (_e, panelId: string, data: string) =>
-    serializeWrite(panelId)(() =>
+  ipcMain.handle('throng:terminal:write', (_e, panelId: string, data: string) => {
+    /*
+     * #199 — a window opened by the command the user just submitted must be able to come to the
+     * FRONT, instead of appearing behind throng with the terminal looking hung.
+     *
+     * Here, and only here, because this is the one place that satisfies both halves of the Windows
+     * rule: the grant may only be made by the process that owns the foreground (this one — it owns
+     * the window), and it decays with the user's next input, so it has to be made at the moment
+     * the command is submitted rather than at startup.
+     *
+     * Gated on a SUBMIT rather than every keystroke — `submitsCommand` owns that decision and the
+     * reasoning behind it, and is unit-tested without an OS.
+     *
+     * The result is deliberately ignored. It is a hint to the window manager, not a step in
+     * delivering the keystroke — a refused grant must not fail, delay or alter the write.
+     */
+    if (submitsCommand(data)) foregroundHandoff.allow();
+    return serializeWrite(panelId)(() =>
       daemonClient.call('terminal.write', { panelId, data }).catch(() => ({ ok: false })),
-    ),
-  );
+    );
+  });
   ipcMain.handle(
     'throng:terminal:resize',
     (_e, panelId: string, cols: number, rows: number, viewId?: string) =>

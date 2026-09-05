@@ -18,4 +18,8 @@ export const UI_TYPES = {
   // Principle IX puts a boundary's bindings in one file — and the plan claims it is "injected at
   // the main composition root", which would otherwise simply not be true.
   ConfigWatchPolicy: Symbol.for('throng:ConfigWatchPolicy'),
+  // #199: the OS seam that lets a window opened by a terminal command raise itself over throng.
+  // Bound at this boundary because the permission may only be granted by the process that owns the
+  // foreground, which is the one that owns the window — this one.
+  ForegroundHandoff: Symbol.for('throng:IForegroundHandoff'),
 } as const;
