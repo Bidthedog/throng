@@ -13,7 +13,9 @@ import {
   type PtyHandle,
   type PtyStartOptions,
 } from '@throng/core';
-import { dropInheritedModulePath } from './spawn-env-windows.js';
+// TEMPORARY — ARM B. Import left commented with the call it feeds, because removing only the call
+// fails the build with TS6133 and produces no measurement at all.
+// import { dropInheritedModulePath } from './spawn-env-windows.js';
 
 const execFileAsync = promisify(execFile);
 
