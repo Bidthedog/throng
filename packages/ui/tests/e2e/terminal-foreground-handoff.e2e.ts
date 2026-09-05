@@ -53,19 +53,27 @@ import { skipIfElevated } from './admin.js';
  * survive the chain, and #199's fallback (tell the user a window is waiting) becomes the remaining
  * option. Record the measurement either way; do not delete the test to make the suite green.
  *
- * ══ AS OF 2026-09-05 THIS HAS NOT BEEN ADJUDICATED, AND HERE IS WHY ══
+ * ══ VERIFIED BY HAND — `az login` opens IN FRONT (2026-09-05) ══
  *
- * The first run of this spec went red, and the obvious reading — "the handoff does not work" — is
- * WRONG. Instrumenting it showed `GetForegroundWindow` returning **0 for the entire test, before
- * throng was even launched**: the run had no interactive desktop, so there was no foreground for
- * anything to win. Every assertion here would have failed identically whether the grant worked
- * perfectly or was never made, which is why the spec now skips on that condition instead.
+ * The maintainer ran the real case on an interactive desktop and reported the sign-in prompt
+ * arriving in front of throng, which is the outcome #199 was filed to get. The handoff works.
  *
- * So the implementation is unverified rather than disproven, and the difference matters: nobody
- * should read the skip as evidence either way. What settles it is a HUMAN on an interactive desktop
- * — run throng, `az login` (or the command above) in a terminal panel, and watch whether the window
- * arrives in front. That step is in the PR, not here, because no automated run on a headless or
- * locked session can perform it.
+ * ══ Why an automated run here may still SKIP, and why that is not a regression ══
+ *
+ * This spec's first run went red, and the obvious reading — "the handoff does not work" — was
+ * WRONG, as the manual verification then proved. Instrumenting it showed `GetForegroundWindow`
+ * returning **0 for the entire test, before throng was even launched**: the run had no interactive
+ * desktop, so there was no foreground for anything to win, and every assertion would have failed
+ * identically whether the grant worked perfectly or was never made.
+ *
+ * So the skip guard stays, and it is load-bearing rather than an excuse. CI runs this suite
+ * elevated and headless; a workstation running the gate unattended may be locked. In all of those
+ * the reading is invalid, and a red would report a broken environment while looking exactly like a
+ * broken product. On a real desktop the guard passes and the assertion below is live.
+ *
+ * A SKIP here therefore means "not measured", never "failed" — and after 2026-09-05 it also does
+ * not mean "unverified", because a human has measured it once. If this ever goes RED on a machine
+ * with a genuine foreground, that IS a regression and the handoff has stopped working.
  */
 
 test.describe.configure({ mode: 'serial' });
