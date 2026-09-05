@@ -13,9 +13,7 @@ import {
   type PtyHandle,
   type PtyStartOptions,
 } from '@throng/core';
-// TEMPORARY — ARM B. Import left commented with the call it feeds, because removing only the call
-// fails the build with TS6133 and produces no measurement at all.
-// import { dropInheritedModulePath } from './spawn-env-windows.js';
+import { dropInheritedModulePath } from './spawn-env-windows.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -134,12 +132,7 @@ export class NodePtyHost implements IPtyHost {
        * `opts.env` can still set one deliberately.
        */
       env: {
-        // TEMPORARY — ARM B of an A/B, reverted in the next commit either way.
-        // Arm A (with dropInheritedModulePath) failed the three terminal specs in isolation with
-        // Received "" for both captures. If this arm passes, #367's change is the cause; if it
-        // fails identically, the cause is elsewhere and #367 is exonerated by measurement rather
-        // than by argument.
-        ...sanitizeSpawnEnv(opts.baseEnv ?? process.env),
+        ...dropInheritedModulePath(sanitizeSpawnEnv(opts.baseEnv ?? process.env)),
         ...(opts.env ?? {}),
       },
       name: 'xterm-256color',

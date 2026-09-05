@@ -5,6 +5,7 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
 import { runApp, createProject, firstPanelId, FILE_OP_TIMEOUT_MS } from './harness.js';
+import { skipIfConsoleHidesKittyNegotiation } from './helpers/console-caps.js';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
 /**
@@ -195,6 +196,7 @@ test('at a PowerShell prompt, a modified Enter inserts a soft line break and the
 });
 
 test('a program that negotiates the kitty protocol gets a distinct CSI-u sequence', { tag: ['@extended', '@terminal'] }, async () => {
+  await skipIfConsoleHidesKittyNegotiation();
   const root = tmpDir('throng-me-kitty-');
   copyFileSync(KITTY, join(root, 'k.mjs'));
   await runApp(async (_app, win) => {
