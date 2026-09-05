@@ -49,6 +49,18 @@ function packageName(spec: string): string {
   return spec.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
 }
 
+/**
+ * It scans TEXT, so it matches PROSE too — and the failure reads as a missing dependency.
+ *
+ * `from "…"` inside a doc comment is an import as far as this regex is concerned. A sentence
+ * contrasting two quoted phrases produced `["the check has not come back"]` in the undeclared list,
+ * which sends the reader to package.json for a package that was never imported by anything (#369).
+ *
+ * Left as text matching rather than made sound: this guard's job is to be cheap and impossible to
+ * defeat by accident, and an AST walk over seven directories on every unit run is neither. The cost
+ * of the imprecision is a puzzling failure once; the cost of the alternative is paid every run. If
+ * this fails naming something that is plainly not a package, the fix is to reword the comment.
+ */
 const IMPORT_RE = /(?:from|import|require)\s*\(?\s*["']([^"']+)["']/g;
 
 function collectImports(absDir: string, found: Set<string>): void {

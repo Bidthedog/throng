@@ -548,6 +548,15 @@ export function useEditor(params: UseEditorParams): void {
   const unloadableRef = useRef(false);
   /** WHY, where this view was the one that tried to read it (030 FR-052) — see `unloadableDetail`. */
   const unloadableDetailRef = useRef<string | undefined>(undefined);
+  /**
+   * This panel's INITIAL open has not answered yet (#369) — see `EditorUiState.openPending`.
+   *
+   * Set true by the mount effect and cleared the moment the open decides, whichever of the three
+   * routes it took. It is the difference between "the file is there" and "nobody has looked yet",
+   * which the two flags above cannot express between them, and which the missing-file scan needs in
+   * order to wait on an answer rather than on 300 ms.
+   */
+  const openPendingRef = useRef(false);
 
   // Build the metadata UI main needs for confinement / mirror. It rides with every dispatched
   // change because it is MUTABLE — projects come and go, a Save-As re-points the file — and the
@@ -580,8 +589,22 @@ export function useEditor(params: UseEditorParams): void {
       fileMissing: fileMissingRef.current,
       unloadable: unloadableRef.current,
       unloadableDetail: unloadableRef.current ? unloadableDetailRef.current : undefined,
+      openPending: openPendingRef.current,
       ownerProjectId: metaRef.current.ownerProjectId,
     });
+  };
+
+  /**
+   * The initial open has DECIDED — whatever it decided (#369).
+   *
+   * Called from every route out of the mount: the load answered, the authority's verification came
+   * back, or there was no path to open at all. Publishes, because the whole point of the flag is
+   * that somebody outside this hook is waiting to be told.
+   */
+  const openAnswered = (): void => {
+    if (!openPendingRef.current) return;
+    openPendingRef.current = false;
+    publishState();
   };
 
   /**
@@ -1303,8 +1326,15 @@ export function useEditor(params: UseEditorParams): void {
       // The path became unreadable, or (027 / #161) became readable again — the authority decided
       // it, on the document, so every view of it agrees rather than each guessing from its own
       // last load attempt.
+      /*
+       * The verification a mounting view asked for has answered (#369). It carries no state — a
+       * verdict that DID change something arrives as `unloadable` below, and is equally an answer —
+       * so this exists purely to end the wait on the healthy path, which is silent by design.
+       */
+      if (msg.verified === true) openAnswered();
       if (typeof msg.unloadable === 'boolean') {
         unloadableRef.current = msg.unloadable;
+        openPendingRef.current = false; // a verdict is an answer, and this is the one it came for
         // The AUTHORITY decided the condition, and it carries no reason with it — so the reason this
         // view happened to remember from an earlier read is dropped rather than shown beside a
         // verdict it may no longer belong to.
@@ -1425,6 +1455,15 @@ export function useEditor(params: UseEditorParams): void {
       if (savedView && isActivePanelRef.current) view.focus();
     };
 
+    /*
+     * THIS PANEL'S OPEN IS NOW IN FLIGHT (#369), and stays so until one of the routes below
+     * answers. Set before the first `await` so the flag is already published by the time anything
+     * can observe it — a scan that sampled between the mount and the first `publishState` would
+     * otherwise see a panel with three false flags and read it as healthy, which is the defect in
+     * miniature.
+     */
+    openPendingRef.current = true;
+
     void (async () => {
       const bridge = win()?.editor;
       // Already open (moved panel / mirrored view): adopt UI main's document as it stands.
@@ -1516,6 +1555,18 @@ export function useEditor(params: UseEditorParams): void {
         // one-buffer registry only once it gains a path.
         bridge?.register({ ...buildMeta(), text: '' });
       }
+      /*
+       * THE OPEN HAS DECIDED (#369) — on every route that reaches here.
+       *
+       * The load answered ok, the load answered no, or there was no path to open at all. Each of
+       * those has already written whatever it decided into the two flags above, so this is the
+       * point at which "nobody has looked yet" stops being true.
+       *
+       * The one route that does NOT reach here is the adoption branch, which returned above after
+       * asking for a verification. That branch stays pending on purpose: it has not touched the
+       * disk, so nothing it published is an answer yet — its answer arrives on the sync channel.
+       */
+      if (!cancelled) openAnswered();
       // Whatever route we took, the authority now holds this document. Start from ITS state —
       // never from a copy assembled here, which is how a replica becomes a second original.
       const state = await bridge?.getContent?.(panelId);
