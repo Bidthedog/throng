@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { expectWithinSla } from './helpers/sla.js';
 import { makeCmdTerminal } from './altscreen-fixture.js';
 
 /**
@@ -103,10 +104,22 @@ test('switching to a tab of four terminals never blocks the main thread', { tag:
           `(one frame is ${FRAME_MS}ms, stall ceiling ${STALL_MS}ms)`,
       );
 
-      expect(
-        worst,
-        `a ${worst.toFixed(0)}ms task held the main thread — the switch would be felt as a freeze`,
-      ).toBeLessThan(STALL_MS);
+      /*
+       * A claim about what the USER FEELS: a 250ms task is a visible freeze. So it holds only
+       * on hardware the requirement describes — on a machine several times slower the same code
+       * produces longer tasks, and asserting there measures the machine, not the switch.
+       *
+       * Gated rather than raised. A bigger ceiling would redefine "never blocks the main thread"
+       * to mean a longer freeze, which is the opposite of what SC-012 asks for. The measurement
+       * is still printed on every host by the console line above, and recorded as an annotation
+       * where it is not adjudicated.
+       */
+      expectWithinSla(test.info(), {
+        what: 'the worst main-thread task while switching to a tab of four terminals',
+        requirement: 'SC-012',
+        elapsedMs: worst,
+        budgetMs: STALL_MS,
+      });
     });
   } finally {
     cleanupTemp(root);
