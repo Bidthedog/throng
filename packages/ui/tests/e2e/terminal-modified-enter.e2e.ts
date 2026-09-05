@@ -1,11 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { release } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
 import { runApp, createProject, firstPanelId, FILE_OP_TIMEOUT_MS } from './harness.js';
-import { skipIfConsoleHidesKittyNegotiation } from './helpers/console-caps.js';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
 /**
@@ -196,7 +196,6 @@ test('at a PowerShell prompt, a modified Enter inserts a soft line break and the
 });
 
 test('a program that negotiates the kitty protocol gets a distinct CSI-u sequence', { tag: ['@extended', '@terminal'] }, async () => {
-  await skipIfConsoleHidesKittyNegotiation();
   const root = tmpDir('throng-me-kitty-');
   copyFileSync(KITTY, join(root, 'k.mjs'));
   await runApp(async (_app, win) => {
@@ -226,7 +225,7 @@ test('a program that negotiates the kitty protocol gets a distinct CSI-u sequenc
         return `diagnostics threw: ${String(e)}`;
       }
     });
-    const detail = `capture=${JSON.stringify(got)} diagnostics=${String(diag).slice(0, 4000)}`;
+    const detail = `build=${release()} capture=${JSON.stringify(got)} diagnostics=${String(diag).slice(0, 4000)}`;
 
     expect(between(got, 'a', 'b'), detail).toBe('\x1b[13;2u'); // Shift+Enter — distinct, NO trailing \r
     expect(between(got, 'b', 'c')).toBe('\x1b[13;5u'); // Ctrl+Enter — distinct
