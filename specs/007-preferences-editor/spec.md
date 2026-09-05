@@ -460,9 +460,20 @@ sub-workspace's identity and working window controls, with no OS-drawn title bar
   labelled sections.
 - **FR-027**: Each setting MUST show a human-readable label and a clear description of what it changes and
   why.
-- **FR-028**: Each setting MUST render an input control appropriate to its value type — at minimum: number
-  input, single-select dropdown (for enumerated values), text field, boolean toggle, multi-select, and an
-  array editor (add/remove/reorder entries).
+- **FR-028**: Each setting MUST render an input control appropriate to its value type, chosen from the
+  control vocabulary declared by **`ControlKind` in `packages/core/src/config/metadata.ts`**. That union
+  is the authority on what the vocabulary is, and a descriptor MUST NOT ask for a control outside it. At
+  the time this feature shipped the vocabulary was six members — number, single-select dropdown, text,
+  boolean toggle, multi-select, and an array editor — and later features have extended it.
+
+  *(2026-09-05, issue [#79](https://github.com/Bidthedog/throng/issues/79): this requirement previously
+  enumerated those six members in prose, and feature 016's FR-022a described that enumeration as
+  **exhaustive**. It had lapsed long before anyone noticed — `ControlKind` was already at thirteen when
+  016 checked, and is at sixteen now, having since gained `folder` (011), `map` (016 FR-022a), `records`
+  (019 FR-018) and `slider` (018 FR-032). **Naming the union replaces the list rather than re-seeding
+  it**: a hand-maintained enumeration inside a requirement is what produced #79, and writing sixteen
+  entries here would only reset the clock. The rule is what FR-028 states; the membership is what
+  `ControlKind` states; the completeness test behind FR-047 already binds descriptors to it.)*
 - **FR-029**: A setting whose value is constrained to a fixed set of options MUST be edited via a dropdown
   or multi-select limited to those options (never a free-text field).
 - **FR-049**: The Settings UI editor MUST provide a **typeahead search** at the **top of the Settings

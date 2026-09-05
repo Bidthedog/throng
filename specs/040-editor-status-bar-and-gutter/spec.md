@@ -16,7 +16,8 @@ Related but explicitly out of scope: **#234 (Go To Line — already SHIPPED in s
 `packages/ui/src/renderer/navigate/goto-line.tsx`; this feature adds the readout it pairs with and
 changes nothing in it), #169 (terminal horizontal scrolling / wrap spike, which owns the terminal
 bar's future readouts), #108 (the fleet-wide "no inert settings" guard, which this spec must not
-give new work), #79 (the control vocabulary declared exhaustive by 007 FR-028).
+give new work), #79 (the control vocabulary 007 FR-028 governs — since resolved: FR-028 names
+`ControlKind` as the authority rather than enumerating its members).
 
 **Input**: Four v1.0.0 backlog issues grouped as one branch's work by a backlog planning pass on
 2026-08-25, on the grounds that all four edit the same descriptor registry

@@ -325,7 +325,7 @@ This matters most in **sub-workspace windows**, which have no explorer at all: a
 
 ### Preferences — numeric controls (#53)
 
-- **FR-032**: The editor control vocabulary MUST gain a **slider**. Feature 007 declares that vocabulary *exhaustively*; reconciling that declaration is **out of scope here** and is tracked by **[#79](https://github.com/Bidthedog/throng/issues/79)**, because more than one in-flight feature extends the same sentence and its correct final wording depends on the order they land in. This feature adds its control; it does not arbitrate the declaration.
+- **FR-032**: The editor control vocabulary MUST gain a **slider**. This feature adds its control; it does not arbitrate the declaration. *(Corrected 2026-09-05, issue [#79](https://github.com/Bidthedog/throng/issues/79): this requirement said feature 007 declared the vocabulary *exhaustively* and deferred the reconciliation here. 007 FR-028 no longer enumerates the vocabulary at all — it names **`ControlKind`** as the authority — so there is no sentence left to arbitrate and nothing outstanding against #79 from this feature.)*
 - **FR-033**: A numeric preference **declaring the slider control** MUST offer a slider **and** a typed field. Both MUST drive the same underlying value, and each MUST reflect edits made through the other. (A numeric that does not declare it keeps the typed field it has today — see FR-034 for which is which, and why.)
 - **FR-034**: A slider is an **explicit, opt-in control kind**. A descriptor declaring `slider` MUST also declare a minimum, a maximum **and** a step; a numeric descriptor that does not declare `slider` renders as a typed field, exactly as today. The slider MUST take its bounds and step from that descriptor. It MUST NOT invent a silent, undeclared bound that could clamp a value the user already has.
 
@@ -530,7 +530,7 @@ Where the source issues left a detail open and a sensible default exists, this s
 
 ## Out of Scope
 
-- **Reconciling feature 007's control-vocabulary declaration** — tracked by **[#79](https://github.com/Bidthedog/throng/issues/79)**. This feature adds a slider (FR-032); it does not rewrite the sentence in 007 that calls the vocabulary exhaustive, because more than one in-flight feature extends it and the correct final wording depends on the order they land in. Owning that here would make this spec's correctness contingent on another feature's schedule.
+- **Reconciling feature 007's control-vocabulary declaration** — was tracked by **[#79](https://github.com/Bidthedog/throng/issues/79)**, and is **settled**. This feature adds a slider (FR-032) and deliberately did not rewrite 007's declaration, because more than one in-flight feature extended it and the correct final wording depended on the order they landed in. *(2026-09-05: #79 resolved it after both had landed — 007 FR-028 now names `ControlKind` as the authority instead of enumerating members, so no future control type reopens this.)*
 - **#75 — The end-to-end flake tail and suite speed.** Handled on its own branch.
 - **The v1.0.0 epics** — WSL (#13), the project diff tool (#15), AI coding agents (#17), packaging (#21). Each is its own feature, 019 onwards.
 - **The terminal's native context menu.** A deliberate platform choice, not a theming defect.
