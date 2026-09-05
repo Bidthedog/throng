@@ -87,7 +87,9 @@ env:
   # predicate could not see, and the machine sets this variable itself for the same reason.
   THRONG_NON_REFERENCE_HARDWARE: '1'
 
-  # This host's system ConPTY drops CSI-u key sequences on the way INTO a program. Measured: throng
+  # This host's system ConPTY drops the key bytes throng RE-ENCODES on the way INTO a program
+  # — CSI-u, 0x08 for Ctrl+Backspace and 0x1b for Escape alike, while what xterm itself writes
+  # arrives. The discriminator is who wrote the byte, not which byte it is. Measured: throng
   # encodes and writes them and the daemon acks them (written 18 / acked 18 / failed 0), and the
   # program receives the plain characters and the bare CR and neither CSI-u. Not a throng defect.
   #
@@ -97,7 +99,7 @@ env:
   # node child while throng writes through a shell. The OS build is not the discriminator either:
   # both machines report 10.0.26200. A declaration cannot silently disable the specs anywhere that
   # has not opted in, which a wrong probe already nearly did.
-  THRONG_NO_CSI_U_DELIVERY: '1'
+  THRONG_NO_REENCODED_KEY_DELIVERY: '1'
 
 jobs:
   gate:

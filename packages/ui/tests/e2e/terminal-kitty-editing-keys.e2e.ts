@@ -4,7 +4,13 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
 import { skipIfConsoleHidesAltScreen } from './admin.js';
-import { skipIfHostCannotDeliverCsiU } from './helpers/console-caps.js';
+import { skipIfHostCannotDeliverReencodedKeys } from './helpers/console-caps.js';
+
+// EVERY test in this file asserts a byte throng re-encodes and writes itself reaching the
+// program, so the host declaration applies to all of them rather than one. Applied per test
+// rather than per file because this suite is describe.serial: a single failure skips the rest,
+// which is how the same limitation looked like six different problems across three runs.
+test.beforeEach(() => skipIfHostCannotDeliverReencodedKeys());
 import { openApp,
   createProject as newProject,
   firstPanelId,
@@ -144,7 +150,6 @@ async function captured(root: string, left: string, right: string): Promise<stri
 }
 
 test('Ctrl+Backspace reaches a kitty program in the encoding its flags asked for', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-  skipIfHostCannotDeliverCsiU();
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-kitty-bksp-'));
   copyFileSync(KITTY, join(root, 'k.mjs'));
