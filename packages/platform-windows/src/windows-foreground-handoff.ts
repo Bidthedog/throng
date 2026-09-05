@@ -40,6 +40,16 @@ import type { IForegroundHandoff } from '@throng/core';
  * does. Anything that goes wrong — koffi missing, user32 unavailable, not on Windows, the call
  * refused — leaves the feature simply OFF and returns false. A terminal keystroke must never fail
  * because a window-manager hint did.
+ *
+ * ══ The return value is about the DESKTOP, not about this code ══
+ *
+ * A `true` does not mean a window will be raised, and a `false` does not mean the seam is broken.
+ * The OS refuses a caller that does not own the foreground — but that rule is vacuous when NO window
+ * owns it (a locked, disconnected or non-interactive desktop, where `GetForegroundWindow` returns
+ * 0), and there the same call succeeds. Both were observed on one machine within an hour.
+ *
+ * So nothing may branch on this value except to log it, and no test may assert it — see the note in
+ * `windows-foreground-handoff.contract.test.ts`, which asserted `false` and was wrong.
  */
 const require = createRequire(import.meta.url);
 
