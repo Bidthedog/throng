@@ -57,18 +57,70 @@ function startDaemon(
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  /*
+   * ══ WAITING FOR THE DAEMON, AND SAYING WHAT HAPPENED IF IT NEVER COMES ══
+   *
+   * This budget was 10 s and threw a bare `daemon not ready`, which is the third fixed
+   * daemon-startup timeout this suite has been bitten by on slower hardware — after `daemonRpc`'s
+   * 3 s and `daemonPid`'s one-shot read. It is a spawned Node process racing up to five siblings
+   * doing the same thing, on a machine two to three times slower than a workstation, so 10 s is a
+   * statement about one machine's speed rather than about the daemon.
+   *
+   * Measured: `hover-suppression.e2e.ts:99` failed on it once and passed on retry, which the strict
+   * flaky gate correctly reddened — a test that only passes the second time has not passed.
+   *
+   * Two changes, and the second matters more than the number.
+   *
+   * THE BUDGET IS A HANG DETECTOR. 30 s, matching `daemonPid`'s deadline, chosen so that crossing
+   * it means something is actually wrong rather than merely busy.
+   *
+   * THE MEASUREMENT IS ALWAYS PRINTED, not only on failure. A budget you only ever see violated is
+   * one you can only ever tune blindly — which is exactly how it came to be 10 s. One line per
+   * daemon start makes the distribution visible in any run's log, so the next person changing this
+   * number has data instead of a guess.
+   *
+   * AND THE FAILURE SAYS WHY. `daemon not ready` hid the case where the daemon CRASHED on startup:
+   * its stderr went nowhere and the message named a timeout. The tail of both streams now rides on
+   * the error.
+   */
+  const DAEMON_READY_TIMEOUT_MS = 30_000;
+  const startedAt = Date.now();
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('daemon not ready')), 10_000);
+    let out = '';
+    let err = '';
+    const timer = setTimeout(() => {
+      const tail = (s: string): string => s.trim().split(/\r?\n/).slice(-3).join(' | ') || '(nothing)';
+      reject(
+        new Error(
+          `daemon never printed 'listening' within ${DAEMON_READY_TIMEOUT_MS}ms on ${pipeName} — ` +
+            `stdout: ${tail(out)} — stderr: ${tail(err)}`,
+        ),
+      );
+    }, DAEMON_READY_TIMEOUT_MS);
     child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', (c: string) => {
+      err += c;
+    });
     child.stdout?.on('data', (c: string) => {
+      out += c;
       if (c.includes('listening')) {
         clearTimeout(timer);
+        console.log(`[daemon] ready in ${Date.now() - startedAt}ms`);
         resolve(child);
       }
     });
     child.on('error', (e) => {
       clearTimeout(timer);
       reject(e);
+    });
+    child.on('exit', (code, signal) => {
+      clearTimeout(timer);
+      reject(
+        new Error(
+          `daemon exited before listening (code=${code}, signal=${signal}) — stderr: ${err.trim() || '(nothing)'}`,
+        ),
+      );
     });
   });
 }
