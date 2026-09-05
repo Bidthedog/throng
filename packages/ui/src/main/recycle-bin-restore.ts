@@ -20,6 +20,7 @@ $target = $env:THRONG_RESTORE_TARGET
 $shell = New-Object -ComObject Shell.Application
 $bin = $shell.Namespace(0xA)
 $items = @($bin.Items())
+$leaf = Split-Path $target -Leaf
 $match = $null
 $seen = @()
 #
@@ -35,8 +36,19 @@ $seen = @()
 #
 foreach ($it in $items) {
   $orig = $bin.GetDetailsOf($it, 1)
+  #
+  # SAMPLE THE ITEMS THAT SHARE THE TARGET'S NAME, not the first three in the bin.
+  #
+  # The first sampling took whatever came first, which on a runner with fifty entries is three
+  # unrelated leftovers — it proved the bin was populated and nothing else. The interesting item is
+  # the one CALLED what we are looking for: if it is there with a different original location, that
+  # difference IS the bug; if it is not there at all, the delete never recycled it. Same one run,
+  # two answers, and the earlier sample could give neither.
+  #
+  if ($it.Name -ieq $leaf -and $seen.Count -lt 5) {
+    $seen += ("{0} <- '{1}'" -f $it.Name, $orig)
+  }
   if ([string]::IsNullOrEmpty($orig)) { continue }
-  if ($seen.Count -lt 3) { $seen += ("{0} <- {1}" -f $it.Name, $orig) }
   if ((Join-Path $orig $it.Name) -ieq $target) { $match = $it; break }
 }
 #
@@ -48,7 +60,7 @@ foreach ($it in $items) {
 # sample of what the bin actually reported tell those apart in ONE run rather than one each.
 #
 if ($null -eq $match) {
-  $sample = if ($seen.Count -gt 0) { $seen -join ' ; ' } else { '(no items with an original location)' }
+  $sample = if ($seen.Count -gt 0) { $seen -join ' ; ' } else { "(no bin item is named '$leaf')" }
   throw "not in recycle bin: $target (scanned $($items.Count) item(s); sample: $sample)"
 }
 $restore = $match.Verbs() | Where-Object { ($_.Name -replace '&','') -ieq 'Restore' } | Select-Object -First 1
