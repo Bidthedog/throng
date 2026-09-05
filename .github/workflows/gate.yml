@@ -279,7 +279,7 @@ jobs:
           # usable interactive desktop, identical with and without the change under suspicion. That
           # masks any real difference, so a local A/B here proves nothing in either direction and
           # must not be reported as if it did.
-          ONLY: ${{ inputs.only || (github.event_name == 'push' && 'test:e2e' || 'full gate') }}
+          ONLY: ${{ inputs.only || 'full gate' }}
 
           # TEMPORARY. Set to a space-separated spec list to measure just those on the runner;
           # blank runs the stage named by ONLY. Goes with the push trigger.
@@ -288,10 +288,7 @@ jobs:
           # two capture nothing at all (Expected "^H"/"u", Received ""). This arm has #367's
           # dropInheritedModulePath IN, to establish they still fail when run in ISOLATION —
           # without that, a later pass in arm B could be isolation rather than the change.
-          E2E_SPECS: >-
-            packages/ui/tests/e2e/terminal-kitty-editing-keys.e2e.ts
-            packages/ui/tests/e2e/terminal-link-once.e2e.ts
-            packages/ui/tests/e2e/terminal-modified-enter.e2e.ts
+          E2E_SPECS: ''
         run: |
           # ── CLEAN THE MODULE PATH HERE, IN THIS PROCESS ─────────────────────────────────────
           #
