@@ -135,6 +135,33 @@ jobs:
           node-version: 20
           cache: npm
 
+      # ── PYTHON FOR node-gyp, AND WHY IT IS AN ACTION RATHER THAN AN INSTALL ──────────────
+      #
+      # `better-sqlite3` and `node-pty` are built from source by node-gyp, which needs Python. A
+      # GitHub-hosted image ships one, which is why `ci.yml` says nothing about it; a self-hosted
+      # runner has whatever somebody once installed.
+      #
+      # And "somebody once installed" is the trap, because on Windows the default for both Python
+      # and PowerShell 7 is a PER-USER install — %LOCALAPPDATA%\Programs\Python and the MSIX
+      # WindowsApps alias. Both were installed under the account that first set this machine up.
+      # Moving the runner to its own standard account (throng-ci) therefore took both away at once,
+      # and neither failed in a way that named an account:
+      #
+      #   pwsh   → `pwsh: command not found`, killing every `shell: pwsh` step at once
+      #   python → node-gyp probing C:\Users\throng-ci\AppData\Local\Programs\Python\... and
+      #            every machine-wide path, finding nothing, and failing `npm ci` on better-sqlite3
+      #
+      # `actions/setup-python` fixes the class rather than the instance. It downloads into the
+      # runner's own tool cache under `_work/_tool` — the same place `setup-node` above puts Node —
+      # which belongs to the RUNNER rather than to whoever is logged in. So it survives the next
+      # account change, and it pins a version instead of inheriting one.
+      #
+      # Prefer a `setup-*` action over a machine install for anything else this workflow comes to
+      # need, for that reason and not merely for tidiness.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       # ── THE STEP THAT ONLY EXISTS BECAUSE THIS RUNNER IS SELF-HOSTED ──────────────────────────
       #
       # A GitHub-hosted runner is a fresh machine every time and cannot go stale. This one reuses
