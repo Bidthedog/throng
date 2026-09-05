@@ -416,6 +416,30 @@ describe('a panel that had not answered yet is still reported when it does (#369
     expect(reported.calls, 'it had answered; the break came after').toEqual([]);
   });
 
+  it('invents nothing for a panel destroyed while it was still opening', () => {
+    /*
+     * 030 FR-027 — a panel can be destroyed between the failure and the render that reports it, and
+     * a row invented for one that no longer exists is exactly the placeholder that rule forbids.
+     * `useReportPanelFailure` guards it with `locate(…)`, but the guard only helps if the report is
+     * raised at all, and this watch raises reports on a STORE EVENT rather than on a render.
+     *
+     * `removeEditorState` emits, so the watch wakes with the panel gone. It must read that as "no
+     * longer any of my business", not as "answered, and the answer is that nothing is wrong" — and
+     * certainly not as a casualty. Closing a panel while its file is still loading is an ordinary
+     * thing to do, and on a machine slow enough for #369 to bite it is a wide window.
+     */
+    setLayout([seed('t1', [{ id: 'doomed', openPending: true }, { id: 'kept', openPending: true }])], 't1');
+    mount();
+    runScan();
+    expect(reported.calls).toEqual([]);
+
+    removeEditorState('doomed');
+    // …and the sibling still answers normally, so the watch was not torn down with it.
+    setEditorState('kept', { openPending: false, unloadable: true });
+
+    expect(reported.calls.map((c) => c.panelId)).toEqual(['kept']);
+  });
+
   it('stops watching when the tab is left', () => {
     // The activation owns the watch. Clicking away before a slow panel answers must not report it
     // into a notice about a tab the user is no longer looking at.
