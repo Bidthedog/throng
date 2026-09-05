@@ -153,7 +153,64 @@ step reported success, changed nothing that mattered, and cost a full gate cycle
 You are guessing whenever the sentence in your head is *"it must be X"* rather than *"I measured X"*.
 Both feel the same while you are writing the fix. Only one of them survives the next machine.
 
-## The thing that catches everyone
+## A fixed delay that decides is a deadline, not a debounce
+
+**Waiting a fixed time and then READING state is only safe if the reader can tell "not yet" from
+"no". Where it cannot, the delay has stopped being a debounce and has become a verdict deadline —
+and its value is now a property of the machine rather than of the code.**
+
+This is a sibling of *Never guess* above and not the same failure. That one is about a **tolerance**
+tuned by hand: a ceiling raised until it fits. This one is about **sampling**: a single read of state
+that has not settled, where two different situations produce identical bytes.
+
+### The instance
+
+`missing-file-watcher.tsx` waited `SCAN_DELAY_MS` (300 ms) after a tab activated, then reported every
+editor panel whose `fileMissing` or `unloadable` was true. Both flags are false when the file is
+fine. Both flags are *also* false while the panel's initial `load()` has not come back. The scan read
+those as one state.
+
+The effect re-arms only on a tab change or a settings change, so a panel that answered at 301 ms was
+not reported late — **it was never reported at all**. Not a delay, a silent drop.
+
+On the reference workstation the open answers well inside 300 ms, so it passed everywhere it was ever
+run. On the gate runner (~2.5× slower, cold disk) two restored editors were both still loading when
+the scan fired: the user got a banner in each panel and the file tree's own notice, and the
+consolidated notice that 030 FR-034a requires to **supersede** the tree's was never raised — the exact
+duplicate-notice storm FR-029 exists to end. `notice-a11y.e2e.ts:115` failed 3/3, waiting the full
+90 s for an element that could no longer appear. Filed as #369.
+
+### How to spot it before a slow machine does
+
+Ask two questions of any `setTimeout(…)` that is followed by a read:
+
+1. **Can the reader distinguish "no" from "not yet"?** If the same values mean both, the delay is
+   load-bearing and the code is wrong on some machine you have not met.
+2. **What happens to a late answer?** If the answer is "nothing — there is no second look", the delay
+   is not a debounce. A debounce that fires early costs latency; this costs the report entirely.
+
+### The fix is a third state, never a bigger number
+
+Publishing "this has not decided yet" as a **fact** — here, `EditorUiState.openPending` — lets the
+reader wait for an *answer* rather than for a *duration*. The delay survives as a genuine debounce
+(how soon the first report may go out) and stops deciding whether one goes out at all.
+
+Any larger constant is the same defect with a different threshold, and it will be raised again for
+the next machine. **There is no number that is correct here, which is how you know a number is the
+wrong tool.**
+
+### The trap when fixing it
+
+The obvious repair is to subscribe to the state and report whatever breaks. That reintroduces the
+rule the component exists for: **FR-105 forbids reporting a file deleted under a tab the user is
+already looking at.** The watch has to be scoped to the panels that were *still pending when the scan
+sampled*, each leaving the set as it answers — so a settled panel is never looked at again.
+
+Write the anti-vacuity control for that in the same commit. Without it, "watch the pending ones" and
+"watch everything" are indistinguishable, and the test proving the fix passes under a fix that breaks
+FR-105.
+
+## The thing that catches everyone
 
 throng's daemon is **designed to outlive its window** (Principle III — terminals keep running when the
 UI closes). So a finished E2E run, or an app you closed, routinely leaves behind:
@@ -334,5 +391,32 @@ THRONG_E2E_RETRIES=0 npx playwright test <spec> --workers=6
 A pass rate that falls as workers rise is starvation; a defect fails the *same* test every time. If
 it is starvation, the answer is a budget or a tier — **not** an entry here. See *Budgets* in
 `docs/testing.md`, which records the five that were undersized and what each is derived from.
+
+### When the starvation test cannot answer
+
+The worker sweep above discriminates only where the worker count is a variable. **A spec in the
+SERIAL tier already runs at one worker**, so running it at one worker again proves nothing, and
+running it at six tells you about a configuration it never uses.
+
+That is where a red is most likely to be misread as flakiness, and it happened: five serial-tier
+specs appeared to fail in a rotating set across gate runs on the self-hosted runner, which reads
+exactly like contention. It was not. The membership changed because the suite is fail-fast and each
+run stopped at a different point — four separate real defects, fixed one at a time, and the last one
+standing (`notice-a11y.e2e.ts:115`) then failed **3/3 with identical output**, which is a defect
+signature and not a flake one.
+
+So for a serial-tier red, the discriminator is **repetition, not workers**:
+
+```bash
+# Three identical failures with the same message is a defect. Three different ones, or a pass
+# among them, is a race — and see `running-tests`' flake-forensics for that.
+THRONG_E2E_RETRIES=2 npx playwright test <spec> --workers=1
+```
+
+And read what the failure actually says before reaching for either. `notice-a11y`'s error named a
+locator that was never in the DOM, and the `error-context.md` artifact Playwright writes beside it
+held the full aria snapshot — which showed both panels reporting their failure inline while the
+consolidated notice was simply absent. That artifact answered in one read what a worker sweep could
+not have answered at all.
 
 A green CI is still not proof for `@admin` specs, which only verify when elevated.
