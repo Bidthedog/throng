@@ -9,17 +9,23 @@ import { load } from 'js-yaml';
 /**
  * **No workflow that runs on our own hardware may be triggerable from a fork.**
  *
- * `throng` is a PUBLIC repository and the gate runs on a self-hosted Windows machine on a private
- * network. The danger that arrangement creates is specific and total: a workflow triggered by a
- * fork's pull request executes that fork's code — `npm ci` runs its `postinstall`, its test files
+ * `throng` is a PUBLIC repository. If any workflow ever runs on hardware we own, a fork's pull
+ * request would execute that fork's code on it — `npm ci` runs its `postinstall`, its test files
  * run as its author wrote them — on a machine inside somebody's home, with whatever that machine
  * can reach.
  *
- * `gate.yml` is written to make that impossible by construction rather than by condition. It has
- * `workflow_dispatch` (which requires write access to this repository), `schedule` (which only ever
- * runs on the default branch of this repository), and a branch-scoped `push` (a fork's pushes go to
- * the fork). None of the three has a fork-shaped path into it, so there is no `if:` guard to review,
- * weaken, or get subtly wrong.
+ * ── THERE IS NO SELF-HOSTED RUNNER TODAY, AND THAT IS AN INVARIANT, NOT AN ACCIDENT ───────────
+ *
+ * The gate ran on one for a day and was moved back to `windows-2022`: hosted was about twice as
+ * fast on this workload, free on a public repo, and needed no maintaining. So the second test below
+ * asserts the ABSENCE of a self-hosted job rather than its presence — which is what it used to do,
+ * as an anti-vacuity control back when one existed.
+ *
+ * That inversion is deliberate and is the useful half now. Re-introducing a self-hosted runner
+ * becomes a conscious act: it fails this file, whoever does it has to come here, and arriving here
+ * is what puts the fork-reachability rule below in front of them at the moment it starts to matter
+ * again. Deleting this file instead — which its own failure message used to suggest — would remove
+ * the rule exactly when nothing is left to remind anyone of it.
  *
  * ── Why this file exists anyway ─────────────────────────────────────────────────────────────────
  *
@@ -119,14 +125,22 @@ describe('self-hosted runners are unreachable from forks', () => {
     ).toEqual([]);
   });
 
-  it('finds the self-hosted job, so a passing run is not an empty one', () => {
-    const withSelfHosted = workflows.filter((w) => w.selfHostedJobs.length > 0);
+  it('no workflow runs on a self-hosted runner at all', () => {
+    const withSelfHosted = workflows
+      .filter((w) => w.selfHostedJobs.length > 0)
+      .map((w) => `${w.file}: ${w.selfHostedJobs.join(', ')}`);
+
     expect(
-      withSelfHosted.length,
-      'no job targets a self-hosted runner. If that is deliberate — the runner was retired — delete ' +
-        'this test with it. If it is not, the detection above has broken and this file is now ' +
-        'guarding nothing.',
-    ).toBeGreaterThan(0);
+      withSelfHosted,
+      'A job now targets a SELF-HOSTED runner. That is not forbidden, but it is a decision with ' +
+        'consequences that are easy to miss, so it is made here rather than in passing:\n\n' +
+        '  1. The fork-reachability rule below starts applying to that workflow. Read it.\n' +
+        '  2. A machine you own now executes whatever the workflow runs, on your network.\n' +
+        '  3. It was measured as ~2x slower than windows-2022 on this repo\'s gate, and two of\n' +
+        '     nineteen runs died mid-job with no log at all.\n\n' +
+        'If you have weighed those and still want it, update this test to expect the job you are ' +
+        'adding \u2014 and make sure the check below covers it.',
+    ).toEqual([]);
   });
 
   it('no workflow with a self-hosted job carries a fork-reachable trigger', () => {
