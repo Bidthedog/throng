@@ -3,14 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import {
-  runApp,
-  createProject,
-  firstPanelId,
-  daemonPid,
-  forceKillProcessTree,
-  cleanupTemp,
-} from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, daemonPid, firstPanelId, forceKillProcessTree, runApp } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /**
@@ -331,7 +324,7 @@ test('a remembered directory that has gone is reported in the panel, and is not 
         await win.getByTestId('terminal-flavour').selectOption('cmd');
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
         const term = win.getByTestId(`terminal-${pid}`);
-        await expect(term).toContainText(basename(root), { timeout: 20_000 });
+        await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
         await term.click();
         await win.keyboard.type('cd Deep');

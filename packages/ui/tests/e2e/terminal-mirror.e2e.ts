@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, runApp } from './harness.js';
 
 // FR-021 (dedicated E2E, T128): a Terminal Panel synced into a sub-workspace mirrors
 // ONE session across both views — the daemon fans its output out to every subscribed
@@ -33,7 +33,7 @@ test('a synced Terminal Panel mirrors one session: input in one view appears in 
       await win.getByTestId(`panel-type-confirm-${a}`).click();
       const mainTerm = win.getByTestId(`terminal-${a}`);
       const childTerm = child.getByTestId(`terminal-${a}`);
-      await expect(mainTerm).toContainText(basename(root), { timeout: 20000 });
+      await expect(mainTerm).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
       await expect(childTerm).toBeVisible({ timeout: 20000 });
 
       // Send a command through the MAIN window's bridge (the exact bytes, so no

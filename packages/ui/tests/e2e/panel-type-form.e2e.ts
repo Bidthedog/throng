@@ -2,14 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import {
-  openApp,
-  createProject,
-  firstPanelId,
-  cleanupTemp,
-  type AppOptions,
-  type OpenApp,
-} from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, openApp, type AppOptions, type OpenApp } from './harness.js';
 
 // US1 / Plan Phase A (FR-001..008, SC-001/002/010): a new Panel shows an
 // extensible type-selection form instead of "Empty Panel"; choosing Terminal
@@ -122,7 +115,7 @@ test('replaces Empty Panel with the type form; swaps inputs; Clear resets; Confi
       await expect(kind).toHaveAttribute('title', /Terminal/);
       await expect(kind).toHaveAttribute('title', /Command Prompt/);
       // Wait for cmd's prompt (its cwd) so it is ready for input.
-      await expect(term).toContainText(basename(root), { timeout: 15000 });
+      await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       // Close the shell → the Panel reverts to the form (FR-020) and the root unlocks.
       await term.click();
@@ -164,7 +157,7 @@ test('the type form renders and confirms in a sub-workspace window (FR-008)', { 
       await confirm.click();
       const term = child.getByTestId(`terminal-${pid}`);
       await expect(term).toBeVisible();
-      await expect(term).toContainText(basename(root), { timeout: 15000 });
+      await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       // Close the shell so the root unlocks before teardown.
       await term.click();

@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page, type ElectronApplication } from '@playwright/test';
-import { runApp, createProject, firstPanelId, reloadWindow, daemonRpc, cleanupTemp, quiesced } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, daemonRpc, firstPanelId, quiesced, reloadWindow, runApp } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /**
@@ -100,7 +100,7 @@ async function newTerminal(win: Page, root: string): Promise<string> {
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
   await win.getByTestId('terminal-flavour').selectOption('cmd');
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
-  await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: 20000 });
+  await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
   return pid;
 }
 

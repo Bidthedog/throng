@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, runApp } from './harness.js';
 
 // US2 (launch) / Plan Phase C·1 (FR-013/014/SC-004): confirming a Terminal Panel
 // starts a live shell hosted by the daemon, attached inline (xterm.js), rooted at
@@ -30,7 +30,7 @@ test('confirms Terminal → a live inline shell echoes input and starts at the p
 
       // cmd.exe's prompt shows its cwd → the project root (FR-013 / SC-004). The
       // temp dir's unique basename appears in the terminal viewport.
-      await expect(term).toContainText(basename(root), { timeout: 15000 });
+      await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       // A plain left-click must focus the terminal so the user can type (the click
       // also activates the Panel; it must not tear down/blur the view).

@@ -2,15 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import {
-  openApp,
-  createProject as newProject,
-  panelIds,
-  addPanels,
-  cleanupTemp,
-  type AppOptions,
-  type OpenApp,
-} from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, addPanels, cleanupTemp, createProject as newProject, openApp, panelIds, type AppOptions, type OpenApp } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -108,7 +100,7 @@ async function openTerminal(win: Page, pid: string, root: string): Promise<void>
   await confirm.click();
   const term = win.getByTestId(`terminal-${pid}`);
   await expect(term).toBeVisible();
-  await expect(term).toContainText(basename(root), { timeout: 20000 });
+  await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 }
 
 test('with a TERMINAL active, none of the editor commands fire — and the chord reaches the shell', { tag: ['@extended', '@editor'] }, async () => {

@@ -3,7 +3,7 @@ import { mkdtempSync, renameSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import Database from 'better-sqlite3';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp, stayedAbsent } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, runApp, stayedAbsent } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /**
@@ -234,7 +234,7 @@ test('a terminal that fails to launch keeps its configuration and comes back onc
          */
         await expect
           .soft(win.getByTestId(`terminal-${pid}`))
-          .toContainText(basename(root), { timeout: 20_000 });
+          .toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
         await expect(win.getByTestId(`panel-type-form-${pid}`)).toHaveCount(0);
         await expect(win.getByTestId(TERMINAL_VIEW)).toHaveCount(1);
 

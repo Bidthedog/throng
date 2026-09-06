@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp, geom, quiesced} from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, geom, quiesced, runApp } from './harness.js';
 
 // Regression (005 Phase C·1 UX): enlarging a Panel must NOT wipe the terminal's
 // contents. ConPTY repaints the whole enlarged viewport on resize (cursor-home +
@@ -45,7 +45,7 @@ test('enlarging a Terminal Panel keeps its scrollback (does not clear on resize)
 
       const term = win.getByTestId(`terminal-${pid}`);
       await expect(term).toBeVisible();
-      await expect(term).toContainText(basename(root), { timeout: 15000 });
+      await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       // Produce a distinctive line, then confirm it is on screen before resizing.
       await term.click();

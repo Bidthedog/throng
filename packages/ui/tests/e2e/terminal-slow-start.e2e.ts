@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, runApp } from './harness.js';
 
 /**
  * 008 FR-005 / SC-006. A terminal whose shell takes longer to start than the attach
@@ -46,7 +46,7 @@ test('a slow-starting terminal shows the "still starting" state and recovers on 
         // (`setStillStarting(false)` in terminal-panel.tsx), so the overlay is already gone
         // the instant the click returns, whether or not the reattach then succeeded. It
         // passed instantly, proved nothing, and hid the real failure below.
-        await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: 20000 });
+        await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
         await expect(win.getByTestId(`terminal-starting-${pid}`)).toHaveCount(0);
       },
       {

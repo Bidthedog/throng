@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, runApp } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 // FR-019 restore arm (dedicated E2E, T130): a Terminal Panel persisted with a flavour
@@ -87,7 +87,7 @@ test('a Panel restored with a now-removed flavour surfaces unavailability, not a
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
         await win.getByTestId('terminal-flavour').selectOption('cmd');
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
-        await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: 20000 });
+        await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
         await layoutPersisted(dataDir, 'Persist', (json) => json.includes('"flavourId":"cmd"'));
       },
       { dataDir },

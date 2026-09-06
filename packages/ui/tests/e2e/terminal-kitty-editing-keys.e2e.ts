@@ -11,15 +11,7 @@ import { skipIfHostCannotDeliverReencodedKeys } from './helpers/console-caps.js'
 // rather than per file because this suite is describe.serial: a single failure skips the rest,
 // which is how the same limitation looked like six different problems across three runs.
 test.beforeEach(() => skipIfHostCannotDeliverReencodedKeys());
-import { openApp,
-  createProject as newProject,
-  firstPanelId,
-  step,
-  TYPE_DELAY,
-  cleanupTemp,
-  quiesced,
-  type AppOptions,
-  type OpenApp, FILE_OP_TIMEOUT_MS } from './harness.js';
+import { FILE_OP_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, TYPE_DELAY, cleanupTemp, createProject as newProject, firstPanelId, openApp, quiesced, step, type AppOptions, type OpenApp } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -95,7 +87,7 @@ async function runKittyFixture(
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
   const term = win.getByTestId(`terminal-${pid}`);
   await expect(term).toBeVisible();
-  await expect(term).toContainText(basename(root), { timeout: 20000 });
+  await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
   await term.click();
   await win.keyboard.type('node k.mjs', { delay: 40 });
   await win.keyboard.press('Enter');

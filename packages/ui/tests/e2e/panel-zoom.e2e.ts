@@ -2,18 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import {
-  openApp,
-  createProject as newProject,
-  firstPanelId,
-  panelIds,
-  installResizeProbe,
-  reloadWindow,
-  commitPanelRename,
-  cleanupTemp,
-  type AppOptions,
-  type OpenApp,
-} from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, commitPanelRename, createProject as newProject, firstPanelId, installResizeProbe, openApp, panelIds, reloadWindow, type AppOptions, type OpenApp } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -104,7 +93,7 @@ test('zooming one editor scales only that editor — its sibling editor and a te
       await win.getByTestId(`panel-type-select-${p3}`).selectOption('terminal');
       await win.getByTestId('terminal-flavour').selectOption('cmd');
       await win.getByTestId(`panel-type-confirm-${p3}`).click();
-      await expect(win.getByTestId(`terminal-${p3}`)).toContainText(basename(root), { timeout: 15000 });
+      await expect(win.getByTestId(`terminal-${p3}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       const content = win.getByTestId(`editor-${p1}`).locator('.cm-content');
       await content.click();
@@ -218,7 +207,7 @@ test('zooming a terminal recomputes its grid (SC-005)', { tag: ['@extended', '@w
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
       await win.getByTestId('terminal-flavour').selectOption('cmd');
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
-      await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: 15000 });
+      await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
       // sleep-justified: the terminal's own initial fit fires a resize the probe below must not
       // count, and it has no observable completion marker — the probe only starts counting once
       // installed, so any of this noise arriving late (after install) would be misread as the

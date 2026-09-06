@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, reloadWindow, daemonRpc, cleanupTemp} from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, daemonRpc, firstPanelId, reloadWindow, runApp } from './harness.js';
 
 /**
  * 008 User Story 1 (SC-001/SC-004). A long-running program in a project terminal MUST
@@ -26,7 +26,7 @@ async function newTerminal(win: Page, root: string): Promise<string> {
   await win.getByTestId('terminal-flavour').selectOption('cmd');
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
   // The live terminal shows the project root in its prompt — proof it attached.
-  await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: 20000 });
+  await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
   return pid;
 }
 

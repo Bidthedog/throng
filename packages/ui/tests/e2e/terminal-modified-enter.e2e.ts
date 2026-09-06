@@ -6,7 +6,7 @@ import { skipIfHostCannotDeliverReencodedKeys } from './helpers/console-caps.js'
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, FILE_OP_TIMEOUT_MS } from './harness.js';
+import { FILE_OP_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, createProject, firstPanelId, runApp } from './harness.js';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
 /**
@@ -149,7 +149,7 @@ async function runFixture(win: Page, root: string, ready: string) {
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
   const term = win.getByTestId(`terminal-${pid}`);
   await expect(term).toBeVisible();
-  await expect(term).toContainText(basename(root), { timeout: 20000 }); // prompt up before typing
+  await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS }); // prompt up before typing
   await term.click();
   await win.keyboard.type('node k.mjs', { delay: 40 });
   await win.keyboard.press('Enter');
@@ -179,7 +179,7 @@ test('at a PowerShell prompt, a modified Enter inserts a soft line break and the
     await win.getByTestId(`panel-type-confirm-${pid}`).click();
     const term = win.getByTestId(`terminal-${pid}`);
     await expect(term).toBeVisible();
-    await expect(term).toContainText(basename(root), { timeout: 30000 }); // PS prompt (cwd) is up
+    await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS }); // PS prompt (cwd) is up
     await term.click();
     // Type a token, a modified Enter, then a second token. PSReadLine shows a `>> ` continuation
     // line; the second token must land ON it (cursor advanced). The old bare-LF bug left the cursor

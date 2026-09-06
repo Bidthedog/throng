@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, runApp } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 /**
@@ -59,7 +59,7 @@ test('a terminal sees the environment of the app that launched it, not the daemo
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
 
         const term = win.getByTestId(`terminal-${pid}`);
-        await expect(term).toContainText(basename(root), { timeout: 20_000 });
+        await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
         // Ask the shell what it inherited. `echo` on cmd prints the literal name when a variable is
         // unset, which distinguishes "absent" from "empty" without any extra machinery.

@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, runApp } from './harness.js';
 
 // FR-020 (dedicated E2E, T127): when a Terminal Panel's shell ends — the user typed
 // `exit` (or it crashed) — the Panel reverts to the type-selection form, surfacing the
@@ -22,7 +22,7 @@ test('typing exit reverts the Panel to the form with exit info, then it re-types
       await win.getByTestId('terminal-flavour').selectOption('cmd');
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       const term = win.getByTestId(`terminal-${pid}`);
-      await expect(term).toContainText(basename(root), { timeout: 20000 });
+      await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       // End the shell → the Panel reverts to the form.
       await term.click();
@@ -44,7 +44,7 @@ test('typing exit reverts the Panel to the form with exit info, then it re-types
       const failing = win.getByTestId(`terminal-${pid}`);
       await expect(failing).toBeVisible();
       // Wait for the shell to reach its prompt before typing, or the keystrokes are dropped.
-      await expect(failing).toContainText(basename(root), { timeout: 20000 });
+      await expect(failing).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
       await failing.click();
       await win.keyboard.type('exit 3');
       await win.keyboard.press('Enter');
@@ -73,7 +73,7 @@ test('typing exit reverts the Panel to the form with exit info, then it re-types
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       const term2 = win.getByTestId(`terminal-${pid}`);
       await expect(term2).toBeVisible();
-      await expect(term2).toContainText(basename(root), { timeout: 20000 });
+      await expect(term2).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       /*
        * Clean up the live session so the app-close warning doesn't block teardown. The kill IPC

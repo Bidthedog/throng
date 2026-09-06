@@ -9,7 +9,7 @@ import Database from 'better-sqlite3';
 import { test, expect, _electron as electron } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
 import { skipIfElevated } from './admin.js';
-import { cleanupTemp, APP_CLOSE_TIMEOUT_MS } from './harness.js';
+import { APP_CLOSE_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp } from './harness.js';
 
 /**
  * Poll the persisted layout for `needle` rather than sleeping and hoping the autosave landed
@@ -114,7 +114,7 @@ test('a pre-existing terminal reattaches after restart and still warns on close'
     await win1.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
     await win1.getByTestId('terminal-flavour').selectOption('cmd');
     await win1.getByTestId(`panel-type-confirm-${pid}`).click();
-    await expect(win1.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: 15000 });
+    await expect(win1.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
     // That is a wait for a WRITE, not a redraw: poll the persisted layout for the terminal config
     // the autosave writes, rather than sleeping and hoping it landed.
     await expectLayoutContains(dataDir, 'Persist', '"flavourId":"cmd"');

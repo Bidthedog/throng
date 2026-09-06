@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, runApp } from './harness.js';
 
 // FR-074: terminals ARE app-stylable — xterm renders from fontFamily/fontSize
 // options, now sourced from the themeable `terminal` typography role (default
@@ -22,7 +22,7 @@ test('a terminal renders in the themeable monospace font (terminals are stylable
       const term = win.getByTestId(`terminal-${pid}`);
       await expect(term).toBeVisible();
       // Wait for the shell to render output so xterm has laid out its DOM.
-      await expect(term).toContainText(basename(root), { timeout: 15000 });
+      await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       // xterm applies the configured font to its measurement/text DOM. The default
       // terminal typography role is Consolas — assert it took effect somewhere in

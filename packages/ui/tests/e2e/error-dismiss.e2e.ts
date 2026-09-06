@@ -2,16 +2,7 @@ import { basename, join } from 'node:path';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { test, expect, type Page } from '@playwright/test';
-import {
-  openApp,
-  runApp as runOwnApp,
-  createProject,
-  firstPanelId,
-  seedDatabase,
-  cleanupTemp,
-  type AppOptions,
-  type OpenApp,
-} from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, openApp, runApp as runOwnApp, seedDatabase, type AppOptions, type OpenApp } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 // 011, US1 (T037 / FR-001..003,006): every one of the four panel error surfaces
@@ -221,7 +212,7 @@ test('Terminal exit notice: dismiss removes it, leaves the form usable, and recu
       await win.getByTestId('terminal-flavour').selectOption('cmd');
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       const term = win.getByTestId(`terminal-${pid}`);
-      await expect(term).toContainText(basename(root), { timeout: 20000 });
+      await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
       await term.click();
       /*
        * `exit 3`, not `exit` — a FAILING exit is the only one that raises a notice.

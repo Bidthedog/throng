@@ -39,15 +39,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import {
-  openApp,
-  createProject as newProject,
-  firstPanelId,
-  settle,
-  cleanupTemp,
-  type AppOptions,
-  type OpenApp,
-} from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject as newProject, firstPanelId, openApp, settle, type AppOptions, type OpenApp } from './harness.js';
 import { GOTO_LINE_CHORD, openGotoLine } from './helpers/navigation.js';
 
 /*
@@ -589,7 +581,7 @@ test('with a terminal focused the chord opens nothing and the shell receives ^G 
       await win.getByTestId('terminal-flavour').selectOption('cmd');
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       const term = win.getByTestId(`terminal-${pid}`);
-      await expect(term).toContainText(basename(root), { timeout: 20_000 });
+      await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       const textarea = term.locator('.xterm-helper-textarea');
       await term.click();
