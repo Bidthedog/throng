@@ -107,11 +107,35 @@ async function run(win: Page, pid: string, cmd: string, marker: string): Promise
    */
   const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const inCommand = (cmd.match(new RegExp(escaped, 'g')) ?? []).length;
-  await expect
-    .poll(async () => ((await term.innerText()).match(new RegExp(escaped, 'g')) ?? []).length, {
-      timeout: 20000,
-    })
-    .toBeGreaterThanOrEqual(inCommand + 1);
+  try {
+    await expect
+      .poll(async () => ((await term.innerText()).match(new RegExp(escaped, 'g')) ?? []).length, {
+        timeout: 20000,
+      })
+      .toBeGreaterThanOrEqual(inCommand + 1);
+  } catch (cause) {
+    /*
+     * SAY WHICH COMMAND, AND WHAT THE TERMINAL ACTUALLY HELD.
+     *
+     * The bare poll reports only "expected >= 2, received 1" from inside a helper that four call
+     * sites share, so the failure names neither the command that stalled nor the shell it was
+     * typed into — and "the marker is on screen once" is the ECHO, which means the shell took the
+     * line and never ran it. That is a completely different fault from the line never arriving,
+     * and the two are indistinguishable in the message as it stood.
+     *
+     * The buffer tail is what separates them: a prompt with the command echoed and nothing after
+     * it, versus a scrambled line, versus an error the shell printed. Measured on the self-hosted
+     * runner, three failures out of three, and none of them said which of those it was.
+     */
+    const tail = (await term.innerText()).replace(/\s+/g, ' ').slice(-400);
+    throw new Error(
+      `the shell never produced output for ${JSON.stringify(cmd)}: ` +
+        `marker ${JSON.stringify(marker)} appears ${inCommand} time(s) in the command, ` +
+        `so at least ${inCommand + 1} were expected on screen. ` +
+        `terminal tail: ...${tail}`,
+      { cause },
+    );
+  }
 }
 
 /**
