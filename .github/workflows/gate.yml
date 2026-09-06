@@ -81,6 +81,29 @@ env:
   # intent survives a change to how the suite reads its environment.
   THRONG_NON_REFERENCE_HARDWARE: '1'
 
+  # == ONE WORKER. THIS IS THE SETTING, NOT A TUNING KNOB ==
+  #
+  # Each E2E worker is a full Electron app, a detached daemon and real shells. A hosted runner has
+  # a fraction of a workstation's cores, and ci.yml already recorded what happens when that is
+  # ignored: "failures RISE with worker count on this constrained runner ... a question that was
+  # measured shut".
+  #
+  # This job did ignore it, because it inherited the LOCAL tier plan -- which is sized for a
+  # developer workstation and runs the parallel tier at several workers. The result was two runs
+  # where unrelated specs (app-close-terminals, quick-open) found their terminal panel present but
+  # its content BLANK for a full 20 s, then passed on retry. Nothing was broken; the shells were
+  # starved. Raising the timeout first did not help, which is what identified it: a budget that is
+  # already 20 s and still empty is not a budget problem.
+  #
+  # The parallel tier is therefore parallel in name only here, and the wall-clock cost is small
+  # because the serial tier is ~86% of the stage and single-worker either way.
+  THRONG_E2E_WORKERS: '1'
+
+  # Retries are DIAGNOSTIC only. `failOnFlakyTests` (playwright.config.ts) still fails a test that
+  # passes only on retry, so these buy the first failure's assertion and trace rather than absorbing
+  # anything -- which is exactly how the starvation above was seen at all.
+  THRONG_E2E_RETRIES: '3'
+
 jobs:
   gate:
     name: npm run gate
