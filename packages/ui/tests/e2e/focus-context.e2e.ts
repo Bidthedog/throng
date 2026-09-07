@@ -2,18 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import {
-  openApp,
-  createProject,
-  firstPanelId,
-  panelIds,
-  addPanels,
-  installResizeProbe,
-  cleanupTemp,
-  geom,
-  type AppOptions,
-  type OpenApp,
-} from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, addPanels, cleanupTemp, createProject, firstPanelId, geom, installResizeProbe, openApp, panelIds, type AppOptions, type OpenApp } from './harness.js';
 
 // 012 US1 (FR-001/002/005, SC-001a/006): the active panel is a single, visible,
 // theme-driven focus context per window — the foreground treatment when the
@@ -126,7 +115,7 @@ test('changing which panel holds focus sends zero terminal resize messages (SC-0
       await confirm.click();
       const term = win.getByTestId(`terminal-${pid}`);
       await expect(term).toBeVisible();
-      await expect(term).toContainText(basename(root), { timeout: 15000 });
+      await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       // Add a second (plain) panel so there is somewhere to move focus TO. This
       // split DOES resize the terminal — so install + reset the probe AFTER it.

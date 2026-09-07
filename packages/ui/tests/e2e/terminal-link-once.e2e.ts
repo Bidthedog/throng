@@ -199,10 +199,30 @@ async function openTerminal(win: Page, root: string): Promise<Locator> {
   return term;
 }
 
-/** Run the printed script and wait for `printed` to appear in the terminal. */
+/**
+ * Run the printed script and wait for `printed` to appear in the terminal.
+ *
+ * INVOKED THROUGH AN EXPLICIT POLICY BYPASS, not as a bare `.\lnk.ps1`.
+ *
+ * `Restricted` is the DEFAULT execution policy on Windows client, so a bare invocation only works
+ * on a machine somebody has already relaxed — which a developer box usually is and a freshly
+ * installed one is not. On the gate runner it produced, instead of the link:
+ *
+ *   .\lnk.ps1 : File ...\lnk.ps1 cannot be loaded because running scripts is disabled on this
+ *   system. + FullyQualifiedErrorId : UnauthorizedAccess
+ *
+ * and the test then spent its whole 25s budget waiting for output that was never coming. That is an
+ * undeclared dependency on machine configuration, and the fix belongs here rather than in a setup
+ * document nobody re-reads: a test that passes only on a hand-configured host is one that will fail
+ * on the next host, for a reason that has nothing to do with what it checks.
+ *
+ * The script must still be a FILE — see `writeLinkScript` above for why typing the sequence at the
+ * prompt breaks the test. This changes only HOW it is launched, and deliberately keeps the URL out
+ * of the typed command line, which is the property that docblock depends on.
+ */
 async function runScript(win: Page, term: Locator, printed: string): Promise<void> {
   await term.click();
-  await win.keyboard.type('.\\lnk.ps1');
+  await win.keyboard.type('powershell -NoProfile -ExecutionPolicy Bypass -File .\\lnk.ps1');
   await win.keyboard.press('Enter');
   await expect(term).toContainText(printed, { timeout: 25_000 });
 }

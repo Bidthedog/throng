@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { cleanupTemp, shutdownApp } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, shutdownApp } from './harness.js';
 
 // Clipboard support (005): a program running inside the terminal — Claude Code,
 // tmux, vim — copies to the system clipboard by emitting an OSC 52 escape sequence.
@@ -135,7 +135,7 @@ test('an OSC 52 sequence from inside the terminal writes to the system clipboard
     await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
     await win.getByTestId(`panel-type-confirm-${pid}`).click();
     // Wait for the shell to be live (its prompt shows the project root).
-    await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: 20000 });
+    await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
     // Capture what the OSC 52 handler writes AT `clipboard.writeText` in the main
     // process, rather than reading the OS clipboard back. The system clipboard is
@@ -314,7 +314,7 @@ test.describe('the two tests that need the in-process clipboard seam', () => {
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
       await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
-      await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: 20000 });
+      await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       // Right-click the terminal body → the app's themed menu, with Copy and Paste.
       await win.getByTestId(`terminal-${pid}`).click({ button: 'right' });
@@ -380,7 +380,7 @@ test.describe('the two tests that need the in-process clipboard seam', () => {
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
       await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
-      await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: 20000 });
+      await expect(win.getByTestId(`terminal-${pid}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       // Seed the clipboard (in E2E this is the in-process seam), focus the terminal, and press Ctrl+V.
       await win.evaluate((text) => window.throng?.clipboard?.write({ text, mode: 'verbatim' }), PASTE);

@@ -201,23 +201,54 @@ test('undo reverses a move back out of the folder it went into', { tag: ['@exten
         .toBe('true,false');
 
       /*
-       * Let the undo ENTRY be recorded before sending the chord.
+       * WAIT FOR THE UNDO ENTRY TO EXIST BEFORE SENDING THE CHORD.
        *
        * The poll above proves the move landed on DISK, which is not the same as the renderer having
        * pushed its undo record — those are separate, and under load the chord can arrive first and
        * find nothing to undo. The symptom is the file simply staying where it was moved to, which
-       * reads like a broken undo rather than a chord sent too early.
+       * reads like a broken undo rather than a chord sent too early. Measured: 1 failure in 10 under
+       * eight CPU hogs. It then passed 14/14 with a diagnostic `evaluate` in this position — a few
+       * milliseconds of round-trip was enough to hide it, which is what identified the gap as the
+       * cause rather than focus. (That probe also ruled focus out directly: `document.activeElement`
+       * was the same unclassed DIV in every run, passing or not.)
        *
-       * Measured: 1 failure in 10 under eight CPU hogs. It then passed 14/14 with a diagnostic
-       * `evaluate` in this position — a few milliseconds of round-trip was enough to hide it, which
-       * is what identified the gap as the cause rather than focus. (That probe also ruled focus out
-       * directly: `document.activeElement` was the same unclassed DIV in every run, passing or not.)
+       * THE ROW BECOMING A CHILD OF `dst` IS THE SIGNAL, and the ordering is guaranteed by the code
+       * rather than by a measurement. In `use-explorer-data.ts`'s `paste` handler, the cut branch
+       * calls `pushUndo` FIRST and only then fires `reloadDirs(affected)` unawaited, both inside the
+       * same `.then()` — so the re-render that re-parents this row cannot precede the undo entry.
+       * That is a stronger ordering than the delete case below, where the two are merely same-tick.
+       *
+       * IT IS AN INDENT COMPARISON RATHER THAN A DISAPPEARANCE, and that is not fussiness. Waiting
+       * for the row to leave the tree was tried and FAILS: pasting selects and expands `dst`
+       * (measured — the row carries `aria-expanded="true"` the instant the paste is sent), so once
+       * the reload lands `moved.txt` is simply drawn again one level deeper. The count is 1 before
+       * and 1 after, for 30 seconds, and the test times out on a move that worked perfectly.
+       * Comparing the two rows' indents needs no pixel constant and reads the one thing that
+       * actually changes.
+       *
+       * ONE RESIDUAL RACE, stated rather than papered over: the debounced fs-watch reload could in
+       * principle drop the row on its own, ahead of the move promise resolving in the renderer. It
+       * is the same exposure the delete test below already accepts, and it is not a coin flip —
+       * that path carries an 80 ms coalescing delay the move promise does not, on top of the same
+       * IPC round-trip. If this ever does flake, the fix is a signal the undo stack itself
+       * publishes, not a bigger number here.
        */
-      // sleep-justified: canUndoFileOp only renders while the context menu is open, so there is no
-      // sleep-justified: passive signal for "the undo entry was recorded" to wait on — the poll above
-      // sleep-justified: proves the move landed on disk, not that the renderer pushed its undo record,
-      // sleep-justified: and under load the chord can arrive first and find nothing to undo.
-      await win.waitForTimeout(300);
+      await expect
+        .poll(
+          () =>
+            win.evaluate(() => {
+              const rows = [
+                ...document.querySelectorAll('[data-testid="file-explorer-tree"] .tree-row'),
+              ] as HTMLElement[];
+              const indentOf = (name: string): number => {
+                const row = rows.find((r) => (r.textContent ?? '').includes(name));
+                return row ? Number.parseFloat(row.style.paddingLeft || '0') : Number.NaN;
+              };
+              return indentOf('moved.txt') > indentOf('dst');
+            }),
+          { timeout: FILE_OP_TIMEOUT_MS },
+        )
+        .toBe(true);
       // Undo puts it back at the root, where the user had it — again, both ends together.
       await win.keyboard.press('Control+z');
       await expect
@@ -238,7 +269,7 @@ test('undoing a delete un-strands the editor that was open on the file', { tag: 
   const root = mkdtempSync(join(tmpdir(), 'throng-undodel-'));
   writeFileSync(join(root, 'open.txt'), 'ORIGINAL\n');
   try {
-    await runApp(async (_app, win) => {
+    await runApp(async (app, win) => {
       await createProject(win, 'UndoDelProj', root);
       const pid = await firstPanelId(win);
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('editor');
@@ -258,11 +289,91 @@ test('undoing a delete un-strands the editor that was open on the file', { tag: 
       await win.getByTestId('confirm-accept').click();
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible({ timeout: 8000 });
 
+      /*
+       * WAIT FOR THE UNDO ENTRY TO EXIST BEFORE SENDING THE CHORD.
+       *
+       * The same gap the move test above guards, and this one did not: the assertion above is the
+       * EDITOR reacting, which says nothing about whether the EXPLORER has recorded an undo record
+       * yet. Under load the chord arrives first, finds an empty stack, and does nothing — and the
+       * symptom is the file simply never coming back, which reads as a broken undo rather than as a
+       * chord sent too early. Measured on the self-hosted runner: three failures out of three, all
+       * timing out on the `existsSync` poll below.
+       *
+       * The tree losing the row is a SUFFICIENT signal, and the ordering is guaranteed by the code
+       * rather than by a measurement. In `use-explorer-data.ts`'s delete handler, `reloadDirs` is
+       * fired UNAWAITED and `pushUndo` is then called synchronously in the same tick — so the
+       * re-render that drops this row cannot happen before the undo entry has been queued.
+       *
+       * That is why this is a wait on a real event rather than a fixed pause. It has no number to
+       * be wrong on a slower machine — and the move test above now waits the same way, on the same
+       * kind of signal, so this file no longer pauses for a duration anywhere.
+       *
+       * (The earlier wording of this comment NAMED that helper, and `sleep-budget.test.ts`
+       * counts the token textually across the whole file — comments included — so describing a
+       * sleep read as adding one. The ratchet is right to be blunt: a regex over source is what
+       * makes it uncheatable, and the cost is that prose has to avoid the literal call.)
+       */
+      await expect(tree.getByText('open.txt', { exact: true })).toHaveCount(0, {
+        timeout: FILE_OP_TIMEOUT_MS,
+      });
+
       // Undo the delete. The file comes back — and the editor must NOTICE. Leaving it dirty tells
       // the user their work is at risk over a file that is sitting on disk again, and every later
       // "save before closing?" asks about a document with nothing to save.
       await win.keyboard.press('Control+z');
-      await expect.poll(() => existsSync(join(root, 'open.txt')), { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
+      /*
+       * SAY WHAT THE APP DID, when the file does not come back.
+       *
+       * A bare `existsSync` poll can only ever report "still absent", which is the one thing already
+       * known. It cannot distinguish the chord going somewhere else, the undo running and the
+       * RESTORE failing, or the delete never having been recyclable in the first place — and those
+       * need completely different fixes. A first attempt at this test guessed at the first of them
+       * and was wrong, which cost a full gate cycle to learn.
+       *
+       * So the failure carries the app's own account of itself: where focus was, and whatever notice
+       * the app raised. `restoring a recycled item` is the only path that can fail silently at the
+       * OS level, and if that is what is happening the notice is where it will say so.
+       */
+      try {
+        await expect
+          .poll(() => existsSync(join(root, 'open.txt')), { timeout: FILE_OP_TIMEOUT_MS })
+          .toBe(true);
+      } catch (cause) {
+        const text = async (testId: string): Promise<string> => {
+          const el = win.getByTestId(testId);
+          return (await el.count()) ? ((await el.first().innerText()).trim() || '(empty)') : '(absent)';
+        };
+        const focus = await win.evaluate(() => {
+          const el = document.activeElement;
+          return el ? `${el.tagName}[data-testid=${el.getAttribute('data-testid') ?? '-'}]` : '(none)';
+        });
+        /*
+         * THE RAW ERROR, VIA THE CONTROL THE USER WOULD USE.
+         *
+         * FR-034 forbids rendering a system error, so the notice on screen says only "An error
+         * occurred when you tried to undo that file operation" — true, deliberate, and useless for
+         * telling a refused validation apart from a Recycle-Bin restore that failed. The detail
+         * exists in `copyDetail`, and its only route out is the Copy control. So the test presses
+         * it and reads the clipboard, which is exactly what a user would be asked to do.
+         */
+        let detail = '(no copy control)';
+        const copy = win.getByTestId('notice-error-copy');
+        if (await copy.count()) {
+          await copy.first().click();
+          detail =
+            (await app.evaluate(({ clipboard }) => clipboard.readText()).catch(() => '')) ||
+            '(clipboard empty)';
+        }
+        throw new Error(
+          `undo did not restore open.txt within ${FILE_OP_TIMEOUT_MS}ms.` +
+            ` focus=${focus};` +
+            ` panel-failure-notice=${await text('panel-failure-notice')};` +
+            ` notices=${await text('notices')};` +
+            ` notice-body=${await text('notice-body')};` +
+            ` copyDetail=${detail.replace(/\s+/g, ' ').slice(0, 500)}`,
+          { cause },
+        );
+      }
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toHaveCount(0, { timeout: 8000 });
       // …and the tree's own dirty mark goes with it.
       await expect(win.getByTestId('tree-unsaved-open.txt')).toHaveCount(0);
