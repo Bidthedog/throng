@@ -164,9 +164,42 @@ function topVisibleLine(win: Page): Promise<string> {
  * Returns the `line NNN` marker of that logical line and the character offset WITHIN it of the
  * position at the top-left of the viewport — the document position the reader is looking at.
  */
+/**
+ * How many rendered lines the choice below needs before it means anything.
+ *
+ * CodeMirror VIRTUALISES: only the lines near the viewport exist in the DOM, and immediately after
+ * a file opens that can be one or two. `scrollToWrappedRow` picks `lines[min(5, len-1)]`, so with a
+ * single line rendered it picks `lines[0]` -- the document's FIRST line -- scrolls to a wrapped row
+ * inside it, and every assertion about "a wrapped row" still holds, because every line in this
+ * fixture wraps. What then fails is the caller's separate claim that the viewport LEFT the top of
+ * the document, several lines later and looking like a scrolling bug.
+ *
+ * `openEditorWithFile` waits only for `.cm-content` to CONTAIN "line 001", which the very first
+ * rendered line satisfies, so the window is real and was measured: this test failed that way on a
+ * hosted runner while its sibling assertions passed.
+ */
+const RENDERED_LINES_NEEDED = 6;
+
 async function scrollToWrappedRow(
   win: Page,
 ): Promise<{ marker: string; offset: number; rows: number; row: number }> {
+  // Enough lines to choose from, before choosing. Waiting on the render is the condition; the
+  // budget is a hang detector.
+  await expect
+    .poll(
+      () =>
+        win.evaluate(
+          () => document.querySelectorAll('.editor-panel .cm-scroller .cm-line').length,
+        ),
+      {
+        timeout: 8000,
+        message:
+          'CodeMirror never rendered enough lines to pick a scroll target from, so any choice ' +
+          'would be whatever happened to be in the DOM',
+      },
+    )
+    .toBeGreaterThanOrEqual(RENDERED_LINES_NEEDED);
+
   return win.evaluate(() => {
     const scroller = document.querySelector('.editor-panel .cm-scroller');
     const content = document.querySelector('.editor-panel .cm-content');
@@ -175,8 +208,16 @@ async function scrollToWrappedRow(
     // A line well below the top of the document, so "unchanged" is a real claim rather than
     // "still at 0" — and one that is currently rendered, since CodeMirror virtualises.
     const lines = [...scroller.querySelectorAll('.cm-line')];
+    // Never index 0. The caller asserts the viewport left the TOP of the document, and a wrapped
+    // row inside the first line satisfies every other check while contradicting that one.
     const line = lines[Math.min(5, lines.length - 1)];
     if (!line) throw new Error('no rendered lines');
+    if (line === lines[0]) {
+      throw new Error(
+        `scrollToWrappedRow would have chosen the FIRST rendered line (${lines.length} rendered): ` +
+          'scrolling inside it cannot move the viewport off the top of the document',
+      );
+    }
 
     /** One client rect per VISUAL ROW — the granularity `lineBlockAtHeight` does not have. */
     const rowsOf = (el: Element): DOMRect[] => {
@@ -417,7 +458,29 @@ test('the top visible line and the selection survive the toggle', { tag: ['@exte
         expect(anchor.row, 'and the viewport must start INSIDE that line, not at its first row')
           .toBeGreaterThanOrEqual(2);
 
-        await expect.poll(() => topVisibleLine(win), { timeout: 8000 }).toMatch(/^line \d{3}$/);
+        /*
+         * WAIT FOR THE CONDITION THE NEXT LINE ASSERTS, not a weaker one.
+         *
+         * This polled for /^line \d{3}$/ -- which "line 001" SATISFIES. So the wait was answered by
+         * the viewport still sitting at the top of the document, returned immediately, and the
+         * assertion below then failed on exactly the state the poll had just accepted.
+         *
+         * `scrollToWrappedRow` has already asserted it computed a scrolled anchor (row >= 2), so
+         * the scroll was requested and measured; what had not happened yet was the DOM readout
+         * catching up. Waiting for that is not masking anything -- it is waiting for the thing the
+         * test is about to read.
+         *
+         * The lookahead carries both requirements: a well-formed readout, and one that is not the
+         * top of the document.
+         */
+        await expect
+          .poll(() => topVisibleLine(win), {
+            timeout: 8000,
+            message: 'the viewport never reported a line below the top of the document',
+          })
+          .toMatch(/^line (?!001)\d{3}$/);
+        // Re-read rather than reuse the polled value, which `expect.poll` does not hand back. The
+        // assertion stays as the guard on that (very small) window.
         const before = await topVisibleLine(win);
         expect(before, 'the scroll must have left the top of the document').not.toBe('line 001');
 

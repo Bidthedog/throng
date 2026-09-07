@@ -4,8 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, cleanupTemp, APP_CLOSE_TIMEOUT_MS } from './harness.js';
-
+import { APP_CLOSE_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, panelIds, runApp } from './harness.js';
 // T068 (US3 / FR-015): closing the app while terminals are running must warn with
 // a three-choice prompt (leave running / terminate all / cancel) instead of
 // silently killing them. Cancel keeps the app open.
@@ -27,7 +26,7 @@ test('closing with a running terminal shows the three-choice warning; Cancel kee
 
       const term = win.getByTestId(`terminal-${pid}`);
       await expect(term).toBeVisible();
-      await expect(term).toContainText(basename(root), { timeout: 15000 });
+      await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       // Request the app close → the warning appears (a terminal is running).
       await requestClose(app);
@@ -64,7 +63,7 @@ test('“Terminate all” closes the app', { tag: ['@extended', '@window', '@res
       await win.getByTestId('terminal-flavour').selectOption('cmd');
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       const term = win.getByTestId(`terminal-${pid}`);
-      await expect(term).toContainText(basename(root), { timeout: 15000 });
+      await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       await requestClose(app);
       await expect(win.getByTestId('app-close-dialog')).toBeVisible({ timeout: 10000 });
@@ -92,7 +91,7 @@ test('warns with the right count when several terminals run (incl. a busy one)',
       await win.getByTestId(`panel-type-select-${a}`).selectOption('terminal');
       await win.getByTestId('terminal-flavour').selectOption('cmd');
       await win.getByTestId(`panel-type-confirm-${a}`).click();
-      await expect(win.getByTestId(`terminal-${a}`)).toContainText(basename(root), { timeout: 15000 });
+      await expect(win.getByTestId(`terminal-${a}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
       await win.getByTestId(`terminal-${a}`).click();
       await win.keyboard.type('ping -n 30 127.0.0.1');
       await win.keyboard.press('Enter');
@@ -106,7 +105,7 @@ test('warns with the right count when several terminals run (incl. a busy one)',
       await win.getByTestId(`panel-type-confirm-${b}`).click();
       // Panel B is SPLIT (narrow), so its cmd prompt path wraps across xterm rows —
       // match only the temp dir's trailing chars (contiguous on the final wrapped row).
-      await expect(win.getByTestId(`terminal-${b}`)).toContainText(basename(root).slice(-6), { timeout: 15000 });
+      await expect(win.getByTestId(`terminal-${b}`)).toContainText(basename(root).slice(-6), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       // Closing must warn — with BOTH terminals counted (the busy one must not make
       // the count query time out and silently skip the prompt).

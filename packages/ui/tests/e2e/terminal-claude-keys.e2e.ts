@@ -9,7 +9,7 @@ import {
 import { homedir, tmpdir } from 'node:os';
 import { basename, join, sep } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, step, TYPE_DELAY, quiesced } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, TYPE_DELAY, createProject, firstPanelId, quiesced, runApp, step } from './harness.js';
 
 /**
  * 028 follow-up — the reported defects, driven against REAL Claude Code.
@@ -502,7 +502,7 @@ test.describe('Claude Code key handling (opt-in: THRONG_CLAUDE_E2E=1)', () => {
 
         const term = win.getByTestId(`terminal-${pid}`);
         await expect(term).toBeVisible();
-        await expect(term).toContainText(basename(root), { timeout: 30_000 });
+        await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
         await term.click();
         await win.keyboard.type('claude', { delay: TYPE_DELAY });
         await expect(term).toContainText('claude', { timeout: 15_000 });

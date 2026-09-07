@@ -355,6 +355,21 @@ test('US2: a setting shows a reset icon only once overridden, and resetting it l
       // Both rows are now modified, and both say so.
       await expect(prefs.getByTestId('setting-reset-editor.autoSave')).toBeEnabled();
 
+      /*
+       * THE SECOND WRITE NEEDS THE SAME SETTLE AS THE FIRST (#284, again).
+       *
+       * The poll above proves the debounce value reached DISK. The reset below is computed by the
+       * WINDOW from what it currently holds, and those are different facts -- which is exactly what
+       * the note on `settleAppConfig` a few lines up says, for the toggle. The toggle got the
+       * guard; this write did not, and the gap is the same one: a reset issued against a stale view
+       * writes that stale view back, and the poll for `false` then reads `true` for its whole
+       * budget in a test that otherwise finishes in a second.
+       *
+       * Measured on a hosted runner: this failed exactly that way while every assertion before it
+       * passed. `readSettings` cannot see it, because the disk was never the laggard.
+       */
+      await settleAppConfig(prefs, { 'editor.autoSaveDebounceMs': 900 });
+
       // Reset one leaf — immediate, no confirmation.
       await prefs.getByTestId('setting-reset-editor.autoSave').click();
       await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);

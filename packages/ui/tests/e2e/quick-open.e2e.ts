@@ -27,19 +27,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import {
-  openApp,
-  runApp as runOwnApp,
-  createProject as newProject,
-  firstPanelId,
-  reloadWindow,
-  settle,
-  geom,
-  viewport,
-  cleanupTemp,
-  type AppOptions,
-  type OpenApp,
-} from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject as newProject, firstPanelId, geom, openApp, reloadWindow, runApp as runOwnApp, settle, type AppOptions, type OpenApp, viewport } from './harness.js';
 import { createDeepTree, cleanupDeepTree, DEEP_TREE } from './helpers/deep-tree.js';
 import {
   QUICK_OPEN_CHORD,
@@ -192,7 +180,7 @@ test('from a focused terminal the chord opens a centred modal, sends the shell n
       await win.getByTestId('terminal-flavour').selectOption('cmd');
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       const term = win.getByTestId(`terminal-${pid}`);
-      await expect(term).toContainText(basename(tree.root), { timeout: 20_000 });
+      await expect(term).toContainText(basename(tree.root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       const textarea = term.locator('.xterm-helper-textarea');
       await term.click();
