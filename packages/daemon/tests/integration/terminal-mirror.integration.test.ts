@@ -43,13 +43,13 @@ describe('mirrored terminal — one session, many views (FR-021)', () => {
       view.notifications.some(
         (n) => n.method === 'terminal.output' && String(n.params.data).includes(marker),
       );
-    expect(await waitFor(() => has(viewA, 'FROM_A_55'))).toBe(true);
-    expect(await waitFor(() => has(viewB, 'FROM_A_55'))).toBe(true);
+    await waitFor(() => has(viewA, 'FROM_A_55'), 8000, 'view A to see what view A typed');
+    await waitFor(() => has(viewB, 'FROM_A_55'), 8000, 'view B to be mirrored what view A typed');
 
     // Input "from view B" reaches the same single PTY (its echo appears for both).
     await rpcCall(daemon.pipeName, 'terminal.write', { panelId: 'shared', data: 'echo FROM_B_77\r\n' });
-    expect(await waitFor(() => has(viewA, 'FROM_B_77'))).toBe(true);
-    expect(await waitFor(() => has(viewB, 'FROM_B_77'))).toBe(true);
+    await waitFor(() => has(viewA, 'FROM_B_77'), 8000, 'view A to be mirrored what view B typed');
+    await waitFor(() => has(viewB, 'FROM_B_77'), 8000, 'view B to see what view B typed');
 
     // Exactly one session exists for the panel (not one per view).
     const listed = await rpcCall(daemon.pipeName, 'terminal.list', {});
@@ -58,7 +58,7 @@ describe('mirrored terminal — one session, many views (FR-021)', () => {
     await rpcCall(daemon.pipeName, 'terminal.kill', { panelId: 'shared' });
     // Wait for the session to fully close (PTY exit + root lock released) so the
     // temp cwd is no longer held when afterEach deletes it.
-    await waitFor(() => !daemon.lockManager.hasOpenTerminals('proj'));
+    await waitFor(() => !daemon.lockManager.hasOpenTerminals('proj'), 8000, "the project's terminal lock to be released");
     viewA.close();
     viewB.close();
   });

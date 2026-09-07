@@ -56,11 +56,11 @@ describe('terminal resource hygiene', () => {
   it('drops a closed events socket — no leaked subscriber (FR-021)', async () => {
     expect(daemon.events.sinkCount).toBe(0);
     const sub = await openEventsSocket(daemon.pipeName);
-    await waitFor(() => daemon.events.sinkCount === 1, 4000);
+    await waitFor(() => daemon.events.sinkCount === 1, 4000, 'the daemon to register the new events subscriber');
     expect(daemon.events.sinkCount).toBe(1);
 
     sub.close(); // the window/view closes
-    const dropped = await waitFor(() => daemon.events.sinkCount === 0, 4000);
-    expect(dropped).toBe(true); // the subscriber was released, not leaked
+    // Throws if it never drops, so this IS the assertion: the subscriber was released, not leaked.
+    await waitFor(() => daemon.events.sinkCount === 0, 4000, 'the closed events socket to be dropped');
   });
 });

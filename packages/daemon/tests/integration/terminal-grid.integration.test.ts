@@ -57,7 +57,7 @@ describe('mirror survival + detach lifecycle (008 FR-002/FR-007)', () => {
 
     // A running marker proves the ORIGINAL process is alive.
     await rpcCall(daemon.pipeName, 'terminal.write', { panelId: 'shared', data: 'echo BEFORE_MIRROR_11\r\n' });
-    expect(await waitFor(() => has(viewA, 'BEFORE_MIRROR_11'))).toBe(true);
+    await waitFor(() => has(viewA, 'BEFORE_MIRROR_11'), 8000, "view A to see its own shell's output");
 
     // View B mirrors the SAME panel but resolves a DIFFERENT cwd (a sub-workspace). Under
     // the old cwd-in-launchKey design this reaped the running program. It must now reuse.
@@ -77,11 +77,11 @@ describe('mirror survival + detach lifecycle (008 FR-002/FR-007)', () => {
 
     // The SAME process is still alive after the mirror: a new marker still echoes, to BOTH views.
     await rpcCall(daemon.pipeName, 'terminal.write', { panelId: 'shared', data: 'echo AFTER_MIRROR_22\r\n' });
-    expect(await waitFor(() => has(viewA, 'AFTER_MIRROR_22'))).toBe(true);
-    expect(await waitFor(() => has(viewB, 'AFTER_MIRROR_22'))).toBe(true);
+    await waitFor(() => has(viewA, 'AFTER_MIRROR_22'), 8000, 'view A to see output written after the mirror opened');
+    await waitFor(() => has(viewB, 'AFTER_MIRROR_22'), 8000, 'view B to be mirrored the same output as view A');
 
     await rpcCall(daemon.pipeName, 'terminal.kill', { panelId: 'shared' });
-    await waitFor(() => !daemon.lockManager.hasOpenTerminals('proj'));
+    await waitFor(() => !daemon.lockManager.hasOpenTerminals('proj'), 8000, "the project's terminal lock to be released");
     viewA.close();
     viewB.close();
   });

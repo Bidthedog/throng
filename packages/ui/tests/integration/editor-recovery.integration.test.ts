@@ -13,6 +13,40 @@ import { editDocument } from './helpers/edit-document.js';
 const fs = new NodeFileSystem(async () => {});
 const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * WAIT FOR THE RECOVERY WRITE, RATHER THAN FOR A NUMBER.
+ *
+ * These tests used `wait(40)` against a 10 ms debounce — four times the interval, which is ample on
+ * an idle machine and nothing at all on a loaded one. On the self-hosted gate runner the write had
+ * not landed, `recover()` returned `[]`, and the failure read as "crash recovery is broken" rather
+ * than "the test looked too early" (run 33987212849).
+ *
+ * The file itself is the signal, and it was already being asserted on the very next line of most of
+ * these tests — so the condition was observable all along and nobody had waited on it.
+ *
+ * The deadline is a hang detector: crossing it means the write genuinely never happened, which is a
+ * real failure and says so.
+ */
+const tempPath = (panelId: string): string => join(recoveryDir, encodeURIComponent(panelId));
+
+async function recoveryWritten(panelId: string, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (existsSync(tempPath(panelId))) return;
+    await wait(10);
+  }
+  throw new Error(`the recovery temp for ${panelId} was never written within ${timeoutMs}ms`);
+}
+
+async function recoveryRemoved(panelId: string, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!existsSync(tempPath(panelId))) return;
+    await wait(10);
+  }
+  throw new Error(`the recovery temp for ${panelId} was still there after ${timeoutMs}ms`);
+}
+
 let root: string;
 let recoveryDir: string;
 
@@ -58,7 +92,7 @@ describe('editor crash recovery (006, FR-041/042/043)', () => {
     const s1 = makeCoordinator();
     s1.coord.register(meta('p1', null), '');
     editDocument(s1.coord, meta('p1', null), 'work in progress');
-    await wait(40); // let the debounced recovery write flush
+    await recoveryWritten('p1');
 
     // Session 2 (simulated relaunch): a fresh coordinator recovers by panelId.
     const s2 = makeCoordinator();
@@ -76,12 +110,12 @@ describe('editor crash recovery (006, FR-041/042/043)', () => {
     await writeFile(file, 'seed\n');
     coord.register(meta('p1', file), 'seed\n');
     editDocument(coord, meta('p1', file), 'edited\n');
-    await wait(40);
+    await recoveryWritten('p1');
     expect(existsSync(join(recoveryDir, encodeURIComponent('p1')))).toBe(true);
 
     const result = await coord.save({ panelId: 'p1' });
     expect(result.ok).toBe(true);
-    await wait(20);
+    await recoveryRemoved('p1');
     expect(existsSync(join(recoveryDir, encodeURIComponent('p1')))).toBe(false);
     expect(await readFile(file, 'utf8')).toBe('edited\n');
   });
@@ -90,10 +124,10 @@ describe('editor crash recovery (006, FR-041/042/043)', () => {
     const { coord } = makeCoordinator();
     coord.register(meta('p1', null), '');
     editDocument(coord, meta('p1', null), 'temp');
-    await wait(40);
+    await recoveryWritten('p1');
     expect(existsSync(join(recoveryDir, encodeURIComponent('p1')))).toBe(true);
     coord.destroy('p1');
-    await wait(20);
+    await recoveryRemoved('p1');
     expect(existsSync(join(recoveryDir, encodeURIComponent('p1')))).toBe(false);
   });
 
@@ -146,7 +180,7 @@ describe('re-pointing an editor drops the OLD file recovery temp (migrated from 
     // Session 1, first half: open CLAUDE.md and edit it, so a recovery temp exists.
     await coord.load(meta('p1', claude));
     editDocument(coord, meta('p1', claude), 'CLAUDE-DOC-BODY\nEDIT\n');
-    await wait(40);
+    await recoveryWritten('p1');
     expect(existsSync(tempFor('p1'))).toBe(true);
     expect(JSON.parse(await readFile(tempFor('p1'), 'utf8')).text).toContain('EDIT');
 
@@ -157,7 +191,14 @@ describe('re-pointing an editor drops the OLD file recovery temp (migrated from 
     // The stale temp is gone, and no temp has been written for target.txt — the freshly loaded file
     // is clean, so there is nothing to recover for it yet.
     expect(existsSync(tempFor('p1'))).toBe(false);
-    await wait(40);
+    /*
+     * The one wait in this file that CANNOT become a poll: it is asserting that nothing happens.
+     * There is no event to wait for — the claim is that no temp is written for the newly loaded
+     * file — so a settle is the only instrument, and a poll would pass instantly while proving
+     * nothing. Left as a sleep deliberately, and marked so it is not "tidied" into the helpers
+     * above by someone pattern-matching on the others.
+     */
+    await wait(40); // NON-EVENT SETTLE — see above
     expect(existsSync(tempFor('p1'))).toBe(false);
   });
 
@@ -170,7 +211,7 @@ describe('re-pointing an editor drops the OLD file recovery temp (migrated from 
 
     await coord.load(meta('p1', claude));
     editDocument(coord, meta('p1', claude), 'CLAUDE-DOC-BODY\nEDIT\n');
-    await wait(40);
+    await recoveryWritten('p1');
     await coord.load(meta('p1', target));
 
     // Session 2, as the top of this file models it: a fresh coordinator over the same recovery
@@ -186,7 +227,7 @@ describe('re-pointing an editor drops the OLD file recovery temp (migrated from 
 
     await coord.load(meta('p1', claude));
     editDocument(coord, meta('p1', claude), 'CLAUDE-DOC-BODY\nEDIT\n');
-    await wait(40);
+    await recoveryWritten('p1');
     expect(existsSync(tempFor('p1'))).toBe(true);
 
     // A reload of the SAME path is not a re-point — a remount, a tab switch, a resync. Dropping the
@@ -205,7 +246,7 @@ describe('re-pointing an editor drops the OLD file recovery temp (migrated from 
 
     await coord.load(meta('p1', claude));
     editDocument(coord, meta('p1', claude), 'CLAUDE-DOC-BODY\nEDIT\n');
-    await wait(40);
+    await recoveryWritten('p1');
 
     // No settle, no poll: the moment `load` resolves, the temp must already be gone. A
     // fire-and-forget `void this.recovery.remove(...)` passes every assertion above and fails this

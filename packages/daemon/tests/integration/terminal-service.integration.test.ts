@@ -54,18 +54,21 @@ describe('terminal.* daemon IPC (Phase C·1)', () => {
     expect(attached.result.scrollback).toBe('');
 
     await rpcCall(daemon.pipeName, 'terminal.write', { panelId: 'p1', data: 'echo HELLO_MARKER_42\r\n' });
-    const sawOutput = await waitFor(() =>
-      evt.notifications.some(
-        (n) => n.method === 'terminal.output' && String(n.params.data).includes('HELLO_MARKER_42'),
-      ),
+    await waitFor(
+      () =>
+        evt.notifications.some(
+          (n) => n.method === 'terminal.output' && String(n.params.data).includes('HELLO_MARKER_42'),
+        ),
+      8000,
+      'a terminal.output notification carrying the echoed marker',
     );
-    expect(sawOutput).toBe(true);
 
     await rpcCall(daemon.pipeName, 'terminal.kill', { panelId: 'p1' });
-    const sawExit = await waitFor(() =>
-      evt.notifications.some((n) => n.method === 'terminal.exit' && n.params.panelId === 'p1'),
+    await waitFor(
+      () => evt.notifications.some((n) => n.method === 'terminal.exit' && n.params.panelId === 'p1'),
+      8000,
+      'a terminal.exit notification for the killed panel',
     );
-    expect(sawExit).toBe(true);
 
     // A user-initiated kill is NOT an unexpected exit (FR-017).
     const exit = evt.notifications.find((n) => n.method === 'terminal.exit');
