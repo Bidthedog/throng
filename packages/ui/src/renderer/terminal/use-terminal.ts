@@ -640,7 +640,28 @@ export function useTerminal(opts: UseTerminalOptions): void {
         // xterm's hidden input <textarea> is to insert a newline — which xterm would then transmit
         // as a stray \r AFTER our sequence (Shift+Enter → `\x1b[13;2u\r`, submitting in Claude).
         e.preventDefault();
-        void bridge.write(panelId, seq); // we transmit the newline / CSI-u ourselves…
+        /*
+         * ACCOUNTED like the onData path below, and it was not — which is why this defect could
+         * hide behind its own diagnostics.
+         *
+         * `recordKeyBytes` above records what throng DECIDED. Only the onData path called
+         * `countInputWritten` / `recordWrite` / `.then(acked).catch(failed)`, so a re-encoded
+         * sequence appeared in `keys[].sent` and in NO write counter — and a failure here was
+         * swallowed by the bare `void`. On the gate runner that produced diagnostics stating
+         * `sent: "\u001b[13;5u"` for a chord the program never received, with `failed: 0`.
+         *
+         * These are the writes the feature exists for (#90 kitty CSI-u, and the 028 follow-up for
+         * Ctrl+Backspace / Ctrl+Arrow), so they are exactly the ones that must be countable. The
+         * reasoning behind FR-009b/FR-023 — a character the shell never received is invisible from
+         * the rendered view, and only counting both ends can tell "typed" from "arrived" — applies
+         * here at least as strongly.
+         */
+        countInputWritten(panelId);
+        recordWrite(panelId, seq);
+        void bridge
+          .write(panelId, seq) // we transmit the newline / CSI-u ourselves…
+          .then(() => countInputAcked(panelId, true))
+          .catch(() => countInputAcked(panelId, false));
         return false; // …so xterm must not ALSO send its \r
       }
       return true;
