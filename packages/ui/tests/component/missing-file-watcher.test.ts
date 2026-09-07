@@ -68,6 +68,8 @@ interface PanelSpec {
   missing?: boolean;
   /** The AUTHORITY's verdict on the path, as a restored panel receives it (#277). */
   unloadable?: boolean;
+  /** The panel's initial open has not answered yet (#369) — no verdict either way. */
+  openPending?: boolean;
 }
 
 /** A tab holding `panels` side by side, and the editor states they publish. */
@@ -78,6 +80,7 @@ function tab(id: string, panels: PanelSpec[]): Record<string, unknown> {
       displayName: `${p.id}.txt`,
       fileMissing: p.missing ?? false,
       unloadable: p.unloadable ?? false,
+      openPending: p.openPending ?? false,
     });
   }
   return {
@@ -318,6 +321,144 @@ describe('the scan fires on a tab CHANGE and on nothing else (FR-105)', () => {
     expect(reported.calls).toHaveLength(1);
   });
 });
+
+/* ─────────────────────────────────────────────────────────────────────── *
+ * #369 — a verdict that arrives after the scan has already sampled
+ * ─────────────────────────────────────────────────────────────────────── */
+
+describe('a panel that had not answered yet is still reported when it does (#369)', () => {
+  /*
+   * ══ THE DEFECT ══
+   *
+   * The scan ran ONCE, `SCAN_DELAY_MS` after the tab activated, and skipped every panel whose flags
+   * were still false. The effect only re-arms on a tab change or a settings change, so a panel whose
+   * open answered a millisecond later was never reported AT ALL — not late, never.
+   *
+   * 300 ms is a fixed sample point tuned on a developer workstation. On the self-hosted gate runner
+   * — same code, ~2.5× slower, cold disk — the two editors restored into a project whose root had
+   * been renamed away had not finished their initial `load()` when the scan fired. Both showed their
+   * own "This file could not be read" banner, the file tree showed "Couldn't list the contents of…",
+   * and the consolidated notice that FR-034a requires to SUPERSEDE the tree's was never raised.
+   * `notice-a11y.e2e.ts` failed on it three times out of three, waiting 90 s for a notice that could
+   * no longer come.
+   *
+   * That is the same class of defect as #359/#364/#365, and it is not a test problem: a user on a
+   * slow machine restoring a renamed project gets the duplicate-notice storm FR-029 exists to end,
+   * minus the one part of it that says WHICH PANELS the absent folder took with it.
+   *
+   * ══ WHY THE FIX IS NOT A LONGER DELAY ══
+   *
+   * Any constant is the same bug with a different threshold. `openPending` is a fact — this panel's
+   * initial open has not decided anything yet — so the scan waits for an ANSWER rather than for a
+   * duration, and there is no number left to be wrong.
+   *
+   * ══ WHY IT DOES NOT REOPEN FR-105 ══
+   *
+   * Only panels that were still pending WHEN THE SCAN SAMPLED are watched. A panel that had already
+   * answered is never looked at again, so a file deleted under a settled tab is as silent as it was
+   * — which is the last test in this block, and the two in the FR-105 block above.
+   */
+  it('reports the panel when its open answers after the scan', () => {
+    setLayout([seed('t1', [{ id: 'slow', openPending: true }])], 't1');
+    mount();
+    runScan();
+    expect(reported.calls, 'nothing is known about it yet, so nothing is claimed').toEqual([]);
+
+    // The load finally answers: the path could not be read.
+    setEditorState('slow', { openPending: false, unloadable: true });
+
+    expect(reported.calls.map((c) => c.panelId)).toEqual(['slow']);
+    expect(reported.calls[0].causeKind).toBe('path-missing');
+  });
+
+  it('reports two late panels, each exactly once', () => {
+    // The gate runner's actual shape: two restored editors, both still loading at the sample point.
+    setLayout([seed('t1', [{ id: 'a', openPending: true }, { id: 'b', openPending: true }])], 't1');
+    mount();
+    runScan();
+    expect(reported.calls).toEqual([]);
+
+    setEditorState('a', { openPending: false, unloadable: true });
+    setEditorState('b', { openPending: false, unloadable: true });
+    // …and any later churn on the same panels adds nothing: one casualty, one row.
+    setEditorState('a', { dirty: true });
+    setEditorState('b', { dirty: true });
+
+    expect(reported.calls.map((c) => c.panelId).sort()).toEqual(['a', 'b']);
+  });
+
+  it('says nothing about a late panel that turns out to be fine', () => {
+    setLayout([seed('t1', [{ id: 'slow', openPending: true }])], 't1');
+    mount();
+    runScan();
+
+    setEditorState('slow', { openPending: false });
+
+    expect(reported.calls, 'it answered, and the answer was that nothing is wrong').toEqual([]);
+  });
+
+  it('still says nothing when a SETTLED panel breaks later (FR-105 holds)', () => {
+    /*
+     * The anti-vacuity control for the whole block. `openPending` is false here, so this panel had
+     * already answered when the scan sampled it — and a file that goes missing afterwards is a
+     * delete under an active tab, which FR-105 requires this watcher to stay out of.
+     *
+     * Without this, "watch the pending ones" would be indistinguishable from "watch everything",
+     * and the first test above would pass under a fix that reintroduces the defect FR-105 names.
+     */
+    setLayout([seed('t1', [{ id: 'settled' }])], 't1');
+    mount();
+    runScan();
+    expect(reported.calls).toEqual([]);
+
+    setEditorState('settled', { fileMissing: true });
+
+    expect(reported.calls, 'it had answered; the break came after').toEqual([]);
+  });
+
+  it('invents nothing for a panel destroyed while it was still opening', () => {
+    /*
+     * 030 FR-027 — a panel can be destroyed between the failure and the render that reports it, and
+     * a row invented for one that no longer exists is exactly the placeholder that rule forbids.
+     * `useReportPanelFailure` guards it with `locate(…)`, but the guard only helps if the report is
+     * raised at all, and this watch raises reports on a STORE EVENT rather than on a render.
+     *
+     * `removeEditorState` emits, so the watch wakes with the panel gone. It must read that as "no
+     * longer any of my business", not as "answered, and the answer is that nothing is wrong" — and
+     * certainly not as a casualty. Closing a panel while its file is still loading is an ordinary
+     * thing to do, and on a machine slow enough for #369 to bite it is a wide window.
+     */
+    setLayout([seed('t1', [{ id: 'doomed', openPending: true }, { id: 'kept', openPending: true }])], 't1');
+    mount();
+    runScan();
+    expect(reported.calls).toEqual([]);
+
+    removeEditorState('doomed');
+    // …and the sibling still answers normally, so the watch was not torn down with it.
+    setEditorState('kept', { openPending: false, unloadable: true });
+
+    expect(reported.calls.map((c) => c.panelId)).toEqual(['kept']);
+  });
+
+  it('stops watching when the tab is left', () => {
+    // The activation owns the watch. Clicking away before a slow panel answers must not report it
+    // into a notice about a tab the user is no longer looking at.
+    const t1 = seed('t1', [{ id: 'slow', openPending: true }]);
+    const t2 = seed('t2', [{ id: 'other' }]);
+    setLayout([t1, t2], 't1');
+    const { rerender } = mount();
+    runScan();
+
+    setLayout([t1, t2], 't2');
+    rerender(createElement(MissingFileWatcher, null));
+    runScan();
+
+    setEditorState('slow', { openPending: false, unloadable: true });
+
+    expect(reported.calls, 't1 is not the tab on screen').toEqual([]);
+  });
+});
+
 
 /* ────────────────────────────────────────────────────────────────────────── *
  * The setting
