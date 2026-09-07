@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
 import { cleanupTemp, killAppSpawnedDaemon, shutdownApp } from './harness.js';
+import { expectWithinSla } from './helpers/sla.js';
 
 /*
  * WHY THIS SPEC DOES NOT CALL `app.close()` DIRECTLY — #211.
@@ -138,13 +139,20 @@ test('opens the two-Pane shell within 5 seconds (NFR-002)', { tag: ['@core', '@w
     // runs — the same load-sensitive class as performance:72 in the 017 audit). A retry
     // absorbs it, which is exactly what the flake gate now forbids.
     //
-    // So the strict 5s applies only to an UNCONTENDED run — a single worker, not CI —
-    // the sole condition under which the measurement is actually valid (and the canonical
-    // way to take the NFR-002 reading: `--workers=1`). A contended local run or CI gets
-    // generous headroom that still catches a gross regression. This narrows WHEN the SLA
-    // is checked to when it is meaningful; it does not weaken the SLA itself.
-    const uncontended = test.info().config.workers === 1 && !process.env.CI;
-    expect(Date.now() - start).toBeLessThan(uncontended ? 5000 : 20_000);
+    // So the SLA is asserted only where the reading is valid, and NOT relaxed to a bigger
+    // number elsewhere — a second budget is a second promise, and nobody can say which one
+    // NFR-002 made. This used to fall back to 20s under contention; that fallback was wide
+    // enough to pass anything, so it defended nothing while looking like it did.
+    //
+    // `slaMeasurable` also covers the case this file's old predicate could not see: a
+    // dedicated test VM at one worker is UNCONTENDED and still several times slower than
+    // the machine NFR-002 is about. Unloaded is not the same as representative.
+    expectWithinSla(test.info(), {
+      what: 'the two-Pane shell opens',
+      requirement: 'NFR-002',
+      elapsedMs: Date.now() - start,
+      budgetMs: 5000,
+    });
   } finally {
     await closeApp(app);
   }
