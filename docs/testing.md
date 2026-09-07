@@ -170,6 +170,56 @@ an entry there is ever fixed without being removed.
 
 ## `npm run gate` — the one command that says the work is done
 
+**It runs on the gate runner, not on a workstation.** Dispatch it against a ref and wait:
+
+```bash
+gh workflow run gate.yml --ref <branch>
+gh run watch <run-id> --exit-status        # one blocking watch, expect ~35 min
+```
+
+A workstation runs only the tests under the red-green-refactor cursor — one spec, one file, one
+project layer. The full gate locally pins every core for the better part of an hour, steals focus
+throughout, and eventually exhausts the interactive desktop heap, at which point Windows refuses to
+start processes at all. It is not a faster route to the same answer.
+
+**While fixing one red stage, run one stage.** The gate is fail-fast, so re-running it to reach the
+stage that failed spends ~19 minutes re-proving seven green ones:
+
+```bash
+gh workflow run gate.yml --ref <branch> -f only=test:contract
+```
+
+`only` takes `full gate`, `lint`, `typecheck`, `build`, or any `test:*` stage. The full gate is what
+says done; `only` is for getting there.
+
+**Three lanes, two kinds of machine:**
+
+| lane | machine | when |
+|---|---|---|
+| `ci.yml` — lint, tests, `@core` E2E | GitHub-hosted | Every push to master, every PR |
+| `gate.yml` dispatch — the full gate | GitHub-hosted | On demand |
+| `gate.yml` nightly | GitHub-hosted | 01:00 UTC, master only |
+
+**A self-hosted Windows VM was tried for the dispatch lane and retired.** Measured against hosted
+over nineteen runs: the CPU-parallel stages were identical (unit 62s both; component 140s vs 144s),
+and every single-threaded one was 2.2-3.2x slower (lint 46s vs 16s, typecheck 41s vs 13s, contract
+91s vs 33s), for a full gate of ~62 min against ~32. Two of the nineteen runs died mid-job leaving
+no log. The one thing it could do that a hosted runner cannot is run the 41 `skipIfElevated()`
+sites, because a hosted `windows-2022` runner is an administrator with **UAC disabled** — there is
+no filtered token to drop to, so `schtasks /RL LIMITED` has nothing to fall back on and
+`runas /trustlevel` produces nothing. That capability did not pay for the other three.
+
+Because the workflow is dispatched against a **ref**, a green run is evidence about that *commit* and
+not about a working tree that has moved on since — so quote the run URL and the SHA when reporting
+done. The timings throughout this document remain the reference figures, and they are still what a
+comparison is measured against; what they no longer describe is the normal route to a verdict.
+
+The runner is reached only by `workflow_dispatch` and `schedule`, neither of which a fork can trigger
+— see `.github/workflows/gate.yml`, which explains why that exclusion is structural rather than a
+condition someone could weaken.
+
+What the command itself does, wherever it runs:
+
 ```
 npm run gate
 ```
@@ -206,6 +256,63 @@ Three things worth knowing:
   The gap that stood here is closed. Two earlier gate runs at the end of 035 stopped inside a tier
   under fail-fast and timed nothing, and this file said so rather than restating a stale figure; the
   third ran green end to end and is where the number above comes from.
+
+## Where a performance SLA is measured
+
+**A wall-clock SLA is asserted only where the reading means something, and skipped — never relaxed —
+everywhere else.**
+
+A performance ceiling compares the product against a requirement, and it can only do that on
+hardware the requirement describes. 001 SC-001 says so in as many words: *"in under 5 seconds on a
+typical modern Windows machine."* Asked on a contended runner or a deliberately slow test VM, the
+same assertion does not report a slow product. It reports a slow computer, in the shape of a test
+failure, and nothing downstream can tell those apart.
+
+`expectWithinSla` (`packages/ui/tests/e2e/helpers/sla.ts`) asserts when all three hold:
+
+| condition | why |
+|---|---|
+| `workers === 1` | Six Electron apps at once measures the rig, not the app |
+| not `CI` | A shared hosted runner is contended by construction |
+| not `THRONG_NON_REFERENCE_HARDWARE` | The machine must be one the requirement is about |
+
+Otherwise it records an **`sla-not-measured` annotation carrying the number it would have asserted**,
+so the measurement still appears in the report and is simply not adjudicated there. A silently
+absent assertion is indistinguishable from one that passed, which is how a suite comes to believe it
+checks something it stopped checking.
+
+**Relaxing was tried and is worse.** `app-shell` used to fall back to a 20 s ceiling under
+contention — wide enough to pass essentially anything, so it defended nothing while looking like it
+did. Two budgets for one requirement also means nobody can say which one the requirement made.
+
+The seven SLAs currently under this rule: **NFR-002** (shell opens), **001 SC-001** (launch to
+painted panel), **SC-002** (daemon-death notice), **SC-003** (first highlight), **SC-007** (find on a
+10k-line file), **SC-012** (main-thread stall switching to a tab of four terminals), and **FR-008**
+(keystroke into a 10 MiB document, and no long task at all).
+
+**Every one of them lives in the SERIAL tier, and that is a requirement rather than an accident.**
+`workers === 1` is one of the three conditions above, so an SLA spec in the parallel tier asserts
+nothing in any run — not on a reference machine, not anywhere — while still reading like a test.
+`app-shell`, `performance` and `terminal-activation-cost` were exactly that for one branch, which is
+why `parallel-plan.json` carries a TIMING mechanism: a wall-clock ceiling and a concurrent tier are
+mutually exclusive by construction.
+
+**The consequence, which is the point rather than a side effect:** if the full suite only ever runs
+on non-reference hardware, these seven are never adjudicated. Taking the reading is therefore a
+deliberate act on a reference machine:
+
+```bash
+npx playwright test packages/ui/tests/e2e/performance.e2e.ts --workers=1
+```
+
+with `CI` and `THRONG_NON_REFERENCE_HARDWARE` both unset. Any host that is not a reference machine
+should set `THRONG_NON_REFERENCE_HARDWARE=1` at machine **and user** scope — on Windows the User
+value overrides the Machine one, so setting only the latter has no effect on a logged-in session.
+
+Requirement citations are enforced by `SlaReading.requirement`, a required field, rather than by the
+comment scanner in `wall-clock-declared.test.ts`. That scanner still governs every raw
+`toBeLessThan` in the E2E specs — the bounds that are *not* durations, and the validity-bounds that
+separate two outcomes rather than asserting a speed.
 
 ## Type-checking covers the renderer too
 
@@ -678,7 +785,8 @@ Note what "de-elevated" has to mean here: `isElevated()` asks whether `net sessi
 succeeds, so it is a question about **administrator rights**, not integrity level.
 Lowering integrity alone would leave every guarded spec still skipping.
 
-`scripts/run-deelevated.ps1` is kept for a **self-hosted runner with UAC enabled**,
+`scripts/run-deelevated.ps1` is kept for a **machine with UAC enabled** — which now means a
+developer workstation, the gate having moved back to hosted runners —
 where it should work. It probes each strategy before use, so an environment that
 cannot drop rights fails in about 30 seconds with a clear message rather than
 consuming a full E2E run — and it never silently falls back to running elevated,
