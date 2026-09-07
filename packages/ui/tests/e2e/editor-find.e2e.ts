@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { openApp, runApp as runOwnApp, createProject as newProject, firstPanelId, cleanupTemp, type AppOptions, type OpenApp, focusEditor } from './harness.js';
+import { expectWithinSla } from './helpers/sla.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -245,7 +246,12 @@ test('renders results within the 1000 ms budget on a ~10k-line file (SC-007)', {
       const elapsed = Date.now() - started;
 
       // The debounce plus the search itself must land inside the SC-007 budget.
-      expect(elapsed, `find took ${elapsed}ms on a 10k-line file`).toBeLessThan(1000);
+      expectWithinSla(test.info(), {
+        what: 'find resolves all matches on a 10k-line file',
+        requirement: 'SC-007',
+        elapsedMs: elapsed,
+        budgetMs: 1000,
+      });
     });
   } finally {
     cleanupTemp(root);

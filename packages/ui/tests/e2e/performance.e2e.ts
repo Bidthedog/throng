@@ -7,6 +7,7 @@ import Database from 'better-sqlite3';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 import { cleanupTemp, commitPanelRename, shutdownApp, DAEMON_READY_TIMEOUT_MS } from './harness.js';
+import { expectWithinSla } from './helpers/sla.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -145,7 +146,12 @@ test('restores a project workspace within the launch budget (NFR-002)', { tag: [
      * This is measured further than 001 SC-001 asks — through the project switch to a restored,
      * painted panel — so it is a STRICTER reading of the requirement, not a looser one.
      */
-    expect(Date.now() - start).toBeLessThan(5000);
+    expectWithinSla(test.info(), {
+      what: 'launch through a project switch to a restored, painted panel',
+      requirement: '001 SC-001',
+      elapsedMs: Date.now() - start,
+      budgetMs: 5000,
+    });
   } finally {
     if (app) await shutdownApp(app);
     await stopDaemon(h.daemon);
