@@ -13,6 +13,7 @@ import {
   type PtyHandle,
   type PtyStartOptions,
 } from '@throng/core';
+import { dropInheritedModulePath } from './spawn-env-windows.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -119,8 +120,19 @@ export class NodePtyHost implements IPtyHost {
        * Still sanitised either way: `THRONG_*` must not reach a user's shell whichever process the
        * environment came from (#172).
        */
+      /*
+       * `dropInheritedModulePath` is the Windows half of the same rule (#367). PowerShell 7 exports
+       * its own PSModulePath to everything it spawns, so throng launched from a `pwsh` session
+       * would otherwise hand every terminal a module path whose first entries are PS7's — and a
+       * `powershell.exe` panel then silently loses PSReadLine: no history, no completion, no
+       * syntax colouring, and no error saying why.
+       *
+       * It lives here rather than in `sanitizeSpawnEnv` because it names a Windows concept and
+       * core is platform-abstracted (Principle II). Applied AFTER, so an explicit per-launch
+       * `opts.env` can still set one deliberately.
+       */
       env: {
-        ...sanitizeSpawnEnv(opts.baseEnv ?? process.env),
+        ...dropInheritedModulePath(sanitizeSpawnEnv(opts.baseEnv ?? process.env)),
         ...(opts.env ?? {}),
       },
       name: 'xterm-256color',
