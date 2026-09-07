@@ -19,9 +19,33 @@ something available in seconds. It prints one line per stage, stops at the first
 the app/daemon/pty-agent/Playwright processes a run leaves behind — on success, on failure, and on
 Ctrl+C.
 
+**It runs on a GitHub-hosted runner, not here.** Dispatch it against a ref and wait:
+
+```bash
+gh workflow run gate.yml --ref <branch>
+gh run watch <run-id> --exit-status                       # one blocking watch, expect ~35 min
+gh run view <run-id> --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
 ```
-npm run gate
-```
+
+It ran on a self-hosted Windows VM for a day and was moved back to `windows-2022`; `gate.yml`
+carries the measurements. The short version: hosted is about twice as fast on this workload, free on
+a public repo, and needs no maintaining. The one thing it CANNOT do is run the `skipIfElevated()`
+specs — hosted runners are administrators with UAC disabled, so there is no filtered token to drop
+to. `admin-reminder.reporter.ts` prints how many were skipped on every run, so that gap is reported
+rather than assumed.
+
+**The second command is not belt-and-braces.** `gh run watch` detaches early and its exit code then
+lies both ways — observed returning `0` for a run that concluded `failure`, and `1` for one still
+in progress. Take the verdict from `run view`; if `status` is not `completed`, the watch gave up and
+the run is still going.
+
+Running it locally is not a faster route to the same answer — it pins every core for the better part
+of an hour and eventually exhausts the interactive desktop heap. See *Where a test is allowed to run*
+in the `throng-testing` skill for what the workstation is still for.
+
+First green run, for the record: **34m06s**, all eight stages, E2E 181 parallel + 333 serial, zero
+failed and zero flaky — <https://github.com/Bidthedog/throng/actions/runs/34115448861> at
+`9c931345`.
 
 Three rules about using it:
 
@@ -35,8 +59,9 @@ Three rules about using it:
   the cheap stages run first precisely so the expensive one is only ever reached by code that has
   already earned it. Running the individual `npm run test:*` scripts while iterating is fine and
   expected — it is claiming *done* off the back of them that is not.
-- **A green gate goes stale the moment you edit.** Quote the actual stage summary when reporting
-  done, and re-run if anything changed after it.
+- **A green gate goes stale the moment you edit** — and a remote gate is triggered against a REF, so
+  it was only ever evidence about that *commit*, never about the working tree. Quote the run URL and
+  the SHA when reporting done, not just the stage summary, and re-run if anything changed after it.
 
 ## Formatting is ESLint's job — never run Prettier here
 
