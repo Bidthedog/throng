@@ -1,0 +1,339 @@
+name: Gate
+
+# THE FULL `npm run gate`, on a GitHub-hosted Windows runner, so it stops running on a workstation.
+#
+# A local full run saturates every core for the better part of an hour, steals focus for its whole
+# duration, and -- measured -- exhausts the interactive desktop heap after a few hundred Electron
+# launches, at which point Windows refuses to start processes at all (0xC0000142). This workflow is
+# how that run happens somewhere else.
+#
+# IT IS ADDITIVE. ci.yml and release.yml are untouched; nothing here gates master, and no required
+# check depends on it. Deleting this one file reverts the arrangement with no other edit.
+#
+# It ran on a SELF-HOSTED Windows VM for one day and was moved back -- see the measurements on the
+# job below. The short version: hosted is about twice as fast on this workload, free on a public
+# repo, and does not need maintaining, and the one thing the self-hosted machine could do that this
+# cannot is called out there rather than quietly dropped.
+#
+# ── WHY THERE IS NO `pull_request` TRIGGER, AND WHY THERE MUST NEVER BE ONE ────────────────────
+#
+# This repository is PUBLIC. A `pull_request` trigger would run any fork's code in this workflow,
+# and while a hosted runner is disposable, the job still carries repository-scoped credentials.
+#
+# The exclusion here is STRUCTURAL, not conditional: `workflow_dispatch` requires write access to
+# this repository, and `schedule` only ever runs on the default branch of this repository. Neither
+# has a fork-shaped path into it. That means there is no `if:` guard on this file to review, weaken,
+# or get subtly wrong — which is the point, because a guard is only as good as the next person to
+# edit it.
+#
+# Adding `pull_request`, `pull_request_target`, `issue_comment` or `repository_dispatch` re-opens
+# that hole in one line. Refuse that change.
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Run ONE stage instead of the whole gate. Use when iterating on a single red stage.'
+        type: choice
+        default: 'full gate'
+        options:
+          - 'full gate'
+          - lint
+          - typecheck
+          - build
+          - 'test:unit'
+          - 'test:component'
+          - 'test:integration'
+          - 'test:contract'
+          - 'test:e2e'
+
+  schedule:
+    # 01:00 UTC — 02:00 BST, 01:00 GMT. Two reasons, and the second is the less obvious one:
+    # nobody is waiting on the result overnight, and the machine is at its coolest then. A
+    # 90-minute all-core run is the hottest thing it does, and its thermal headroom in summer is a
+    # tighter constraint than its CPU.
+    #
+    # GitHub's cron is UTC and has no timezone field, so this drifts by an hour across BST. That is
+    # accepted; do NOT "fix" it with two schedules and a guard.
+    #
+    # GitHub also DISABLES scheduled workflows after 60 days without repository activity, silently.
+    # A nightly that stopped looks exactly like a nightly that keeps passing, so if it has not
+    # appeared in the Actions tab for a while, check that before believing the green.
+    - cron: '0 1 * * *'
+
+concurrency:
+  # Keyed by EVENT, so the nightly and an on-demand dispatch do not cancel each other. A developer
+  # asking for a gate should not silently kill the nightly, and vice versa.
+  #
+  # Within a group a newer request still wins: a second dispatch would otherwise queue behind a run
+  # that is already obsolete.
+  group: gate-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  npm_config_loglevel: error
+
+  # A hosted runner is not hardware a performance requirement is about -- it is contended by
+  # construction. So throng's wall-clock SLAs are RECORDED here rather than adjudicated; see "Where
+  # a performance SLA is measured" in docs/testing.md.
+  #
+  # Actions sets CI=true, which already suppresses them. This is set anyway and explicitly, so the
+  # intent survives a change to how the suite reads its environment.
+  THRONG_NON_REFERENCE_HARDWARE: '1'
+
+  # == ONE WORKER. THIS IS THE SETTING, NOT A TUNING KNOB ==
+  #
+  # Each E2E worker is a full Electron app, a detached daemon and real shells. A hosted runner has
+  # a fraction of a workstation's cores, and ci.yml already recorded what happens when that is
+  # ignored: "failures RISE with worker count on this constrained runner ... a question that was
+  # measured shut".
+  #
+  # This job did ignore it, because it inherited the LOCAL tier plan -- which is sized for a
+  # developer workstation and runs the parallel tier at several workers. The result was two runs
+  # where unrelated specs (app-close-terminals, quick-open) found their terminal panel present but
+  # its content BLANK for a full 20 s, then passed on retry. Nothing was broken; the shells were
+  # starved. Raising the timeout first did not help, which is what identified it: a budget that is
+  # already 20 s and still empty is not a budget problem.
+  #
+  # The parallel tier is therefore parallel in name only here, and the wall-clock cost is small
+  # because the serial tier is ~86% of the stage and single-worker either way.
+  THRONG_E2E_WORKERS: '1'
+
+  # Retries are DIAGNOSTIC only. `failOnFlakyTests` (playwright.config.ts) still fails a test that
+  # passes only on retry, so these buy the first failure's assertion and trace rather than absorbing
+  # anything -- which is exactly how the starvation above was seen at all.
+  THRONG_E2E_RETRIES: '3'
+
+jobs:
+  gate:
+    name: npm run gate
+
+    # == GITHUB-HOSTED, FOR EVERY TRIGGER ==
+    #
+    # This job ran on a self-hosted Windows VM for one day and was moved back. The goal was only
+    # ever to stop the gate running on a developer's workstation, and a hosted runner does that
+    # too -- for free on a public repo, with nothing to maintain. Measured, 15 self-hosted gate
+    # runs against 5 hosted ci.yml runs, medians:
+    #
+    #   stage         self-hosted   hosted
+    #   lint               46.0s      16s     2.9x
+    #   typecheck          41.0s      13s     3.2x
+    #   build              35.4s      16s     2.2x
+    #   unit               62.0s      62s     1.0x
+    #   component         140.5s     144s     1.0x
+    #   integration       429.0s     181s     2.4x
+    #   contract           91.0s      33s     2.8x
+    #
+    # The SHAPE of that is the argument. CPU-PARALLEL work (unit, component -- vitest across cores)
+    # is IDENTICAL, so the two machines have comparable parallel throughput. Everything
+    # single-threaded or OS-serial is 2.2-3.2x slower, which is an old Xeon's single-core
+    # performance against a modern vCPU. E2E is ~86% serial tier and therefore the worst case: 491
+    # specs took ~47.5 min there against a projected ~24 min here, and the full gate ~62 vs ~32 min.
+    #
+    # Reliability decided it as much as speed. TWO of nineteen self-hosted runs died mid-job with no
+    # step conclusion and no log at all, losing an hour each with nothing to diagnose. Add four
+    # separate rounds of per-user tooling breakage in one day (PowerShell 7, Python, execution
+    # policy, then Python again behind a UAC prompt) and the maintenance was not free either.
+    #
+    # WHAT THIS COSTS, stated so it is not forgotten: 41 skipIfElevated() call sites across 29 spec
+    # files never run here. Hosted Windows runners are administrators with UAC DISABLED, so there is
+    # no filtered token to drop to and no configuration fixes it -- schtasks /RL LIMITED has nothing
+    # to fall back on and runas /trustlevel produces nothing (measured, run 30947653266). Those
+    # tests verify on any ordinary developer machine, which is where they were verified before the
+    # self-hosted runner existed. admin-reminder.reporter.ts prints the count on every run, so the
+    # gap is reported rather than silent.
+    runs-on: windows-2022
+
+    # A HANG DETECTOR, not a budget. The expected run is around 30-35 minutes; the E2E serial tier
+    # is ~86% of the E2E stage and unparallelisable, so it dominates. If a run approaches 120
+    # minutes, something is wrong that a larger number would only hide.
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Use an alias-free temp dir
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # Separate step because GITHUB_ENV only reaches SUBSEQUENT steps — asserting in the step above
+      # would read the old value and pass while proving nothing.
+      #
+      # Several file specs realpath a target, expanding an 8.3 alias to its long form, then compare
+      # it against the raw root they were given. Where the temp path carries a short name those two
+      # disagree and in-tree / watcher path matching breaks, in a way that reproduces on no other
+      # machine. `~` is what an alias always contains, so that is the thing to assert.
+      - name: Assert an alias-free temp dir
+        shell: pwsh
+        run: |
+          foreach ($v in 'TEMP','TMP') {
+            $val = [Environment]::GetEnvironmentVariable($v)
+            if (-not $val)       { throw "$v is not set." }
+            if ($val -match '~') {
+              throw "$v is '$val', which contains an 8.3 short name. On a hosted runner RUNNER_TEMP should have replaced it; on a hand-driven run set TEMP and TMP to an alias-free path at User AND Machine scope, then log the session off and back on."
+            }
+            Write-Host "[temp] $v = $val"
+          }
+
+      - name: Install dependencies
+        run: npm ci
+
+      # LOAD-BEARING, not hygiene. A hosted runner's virtual display starts at 1024x768, and
+      # several specs assert layout that only holds at a realistic size — a 1100px window clamps to
+      # 1024 and the assertion then fails somewhere unrelated to what it was testing.
+      - name: Set screen resolution to 1920x1080
+        shell: pwsh
+        run: ./scripts/ci-set-resolution.ps1
+
+      # All eight stages, fail-fast, in CI's order: lint, typecheck, build, unit, component,
+      # integration, contract, e2e. gate.mjs clears the app/daemon/pty-agent/Playwright processes a
+      # run leaves behind — on success, on failure, and on Ctrl+C — which matters more here than
+      # anywhere else, because this workspace is reused by the next run.
+      #
+      # `only` runs a SINGLE stage instead. The gate is fail-fast, so iterating on one red stage
+      # otherwise costs a full run of every stage before it — measured at ~19 minutes to reach
+      # `contract`, twice, to learn one assertion's number. That is the documented fail-fast
+      # workflow ("re-run only what failed") applied to a runner rather than a laptop.
+      #
+      # The value comes through the ENVIRONMENT rather than being interpolated into the script.
+      # `choice` already constrains it to this list, so this is belt-and-braces — but a workflow
+      # input pasted straight into a shell line is a habit worth not having.
+      - name: Run the gate
+        shell: pwsh
+        env:
+          ONLY: ${{ inputs.only || 'full gate' }}
+
+        run: |
+          # ── CLEAN THE MODULE PATH HERE, IN THIS PROCESS ─────────────────────────────────────
+          #
+          # This cannot be done in an earlier step. GITHUB_ENV reaches later steps, but every
+          # `shell: pwsh` step starts a NEW PowerShell 7 process, and PS7 re-injects its own module
+          # directories at startup regardless of what it inherited. Measured: a preceding step
+          # wrote a clean value and printed it, and the very next pwsh step still reported
+          #
+          #   ...\WindowsApps\microsoft.powershell_7.6.5.0_x64__8wekyb3d8bbwe\Modules;...
+          #
+          # So the value must be fixed inside the process that spawns npm, which is this one.
+          #
+          # An ALLOWLIST, because a denylist already failed here once: it was written against
+          # `C:\Program Files\PowerShell\7\Modules` and missed the winget/MSIX layout entirely.
+          # Every Windows PowerShell 5.1 module directory contains `WindowsPowerShell`; no
+          # PowerShell 7 directory does, under any install layout.
+          #
+          # What this repairs is command AUTOLOADING specifically. An explicit `Import-Module
+          # PSReadLine` succeeds even with the poisoned path — measured — while
+          # `Set-PSReadLineOption` fails with CouldNotAutoloadMatchingModule, because autoload
+          # resolves through the module analysis cache and picks the PS7 copy 5.1 cannot load.
+          $kept = @($env:PSModulePath -split ';' | Where-Object { $_ -match 'WindowsPowerShell' })
+          if ($kept.Count -eq 0) {
+            throw "No WindowsPowerShell module directories in PSModulePath ('$env:PSModulePath'). Refusing to hand powershell.exe an empty module path."
+          }
+          $env:PSModulePath = $kept -join ';'
+          Write-Host "[psmodulepath] in-process : $env:PSModulePath"
+
+          if (-not $env:ONLY -or $env:ONLY -eq 'full gate') {
+            npm run gate
+          } else {
+            # A SINGLE STAGE STILL NEEDS THE BUILD, and skipping it is not a small mistake.
+            #
+            # `npm run gate` runs build as its third stage, so the layers after it find a daemon to
+            # spawn. Running one stage on its own skips that — and the clean step above has just
+            # deleted every packages/*/dist — so integration and contract come up against no
+            # `daemon/dist/main.js` and no BUILD_ID at all.
+            #
+            # Measured: `only=test:integration` produced 8 failures across daemon-lifecycle and
+            # daemon-elevated-respawn that had nothing to do with the change under test, and looked
+            # exactly like a regression. ci.yml builds before those layers for the same reason and
+            # says so at its own build step.
+            #
+            # Excluded for the three stages that either ARE the build or precede it, where it would
+            # just double the work.
+            if ($env:ONLY -notin @('lint', 'typecheck', 'build')) {
+              Write-Host "[gate] building first — $env:ONLY spawns a real daemon"
+              npm run build
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+            Write-Host "[gate] single stage: $env:ONLY"
+            npm run $env:ONLY
+          }
+
+      - name: Upload traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-test-results
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # A red nightly that nobody is awake for is a red nobody sees. This turns it into an issue.
+  #
+  # Scheduled runs only: a failed MANUAL dispatch already has someone watching it, and filing an
+  # issue for a run you are sitting in front of is noise.
+  #
+  # It DE-DUPLICATES rather than filing nightly. A persistently broken master would otherwise
+  # produce one issue per night, which is the fastest way to teach everyone to mute the repo — so
+  # an existing open issue with the same title gets a comment instead.
+  report-failure:
+    name: Report a failed nightly
+    needs: gate
+    if: ${{ failure() && github.event_name == 'schedule' }}
+
+    # ubuntu-latest, and hosted ON PURPOSE. This job only calls the API, and it must not queue
+    # behind the very runner whose failure it exists to report — if the self-hosted machine is
+    # wedged or offline, this is the only part that still runs.
+    runs-on: ubuntu-latest
+
+    permissions:
+      issues: write
+
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'Nightly gate failed on master';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              'The nightly gate failed on `master`.',
+              '',
+              `- Commit: ${context.sha}`,
+              `- Run: ${runUrl}`,
+              '',
+              'The gate is fail-fast, so the failing stage is the last one printed in the run log.',
+            ].join('\n');
+
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'bug,area:infra',
+              per_page: 100,
+            });
+            const dupe = existing.find((i) => i.title === title && !i.pull_request);
+
+            if (dupe) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: dupe.number,
+                body: `Failed again.\n\n${body}`,
+              });
+              core.notice(`Commented on existing issue #${dupe.number}`);
+            } else {
+              const made = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['bug', 'area:infra'],
+                assignees: ['Bidthedog'],
+              });
+              core.notice(`Opened issue #${made.data.number}`);
+            }
