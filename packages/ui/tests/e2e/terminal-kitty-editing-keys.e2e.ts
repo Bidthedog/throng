@@ -4,15 +4,15 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
 import { skipIfConsoleHidesAltScreen } from './admin.js';
-import { openApp,
-  createProject as newProject,
-  firstPanelId,
-  step,
-  TYPE_DELAY,
-  cleanupTemp,
-  quiesced,
-  type AppOptions,
-  type OpenApp, FILE_OP_TIMEOUT_MS } from './harness.js';
+import { skipIfHostCannotDeliverReencodedKeys } from './helpers/console-caps.js';
+
+import { FILE_OP_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, TYPE_DELAY, cleanupTemp, createProject as newProject, firstPanelId, openApp, quiesced, step, type AppOptions, type OpenApp } from './harness.js';
+
+// EVERY test in this file asserts a byte throng re-encodes and writes itself reaching the
+// program, so the host declaration applies to all of them rather than one. Applied per test
+// rather than per file because this suite is describe.serial: a single failure skips the rest,
+// which is how the same limitation looked like six different problems across three runs.
+test.beforeEach(() => skipIfHostCannotDeliverReencodedKeys());
 
 /*
  * ONE app for this file, not one per test.
@@ -88,7 +88,7 @@ async function runKittyFixture(
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
   const term = win.getByTestId(`terminal-${pid}`);
   await expect(term).toBeVisible();
-  await expect(term).toContainText(basename(root), { timeout: 20000 });
+  await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
   await term.click();
   await win.keyboard.type('node k.mjs', { delay: 40 });
   await win.keyboard.press('Enter');
@@ -117,6 +117,27 @@ async function switchAwayAndBack(win: Page, root: string): Promise<void> {
 
   const term = win.locator('[data-testid^="terminal-"]').first();
   await expect(term).toBeVisible();
+
+  /*
+   * WAIT FOR THE REBUILD TO STOP REDRAWING, not merely for one keystroke to land (#374).
+   *
+   * The marker poll below proves the view is DELIVERING INPUT again. It does not prove the view has
+   * finished being rebuilt, and those are different facts: a terminal that accepts a keystroke
+   * during a transient can still be re-attached a moment later, and a re-attach silently drops
+   * whatever was typed in between. The markers here are one-shot, so a dropped one never reappears
+   * and `captured` waits out its whole budget having proved nothing -- which is exactly what the
+   * docblock above warns about, from the other side.
+   *
+   * The alternate-screen fixture makes that concrete: it reprints its READY banner on every
+   * `resize`, so a layout that settles late redraws the terminal AFTER the marker poll has already
+   * passed. Measured on hosted runners: the two tests in this file that call this helper failed in
+   * two of four runs, always losing both the chord under test and the plain character typed after
+   * it, while the tests that never switch tabs passed every time.
+   *
+   * `quiesced` is the file's own idiom for this -- see the alt-screen churn at the end of this
+   * file, "the same redrawing-terminal condition quiesced() exists for". It belongs here too.
+   */
+  await quiesced(term, { what: 'terminal after the tab-switch rebuild' });
   await term.click();
 
   // The fixture truncates cap.bin at startup, so by here it exists and reading it cannot throw.
