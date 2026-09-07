@@ -113,11 +113,36 @@ export function openEventsSocket(pipeName: string): Promise<EventsSocket> {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-export async function waitFor(predicate: () => boolean, timeoutMs = 8000): Promise<boolean> {
+/**
+ * Wait for a condition, and FAIL LOUDLY if it never arrives.
+ *
+ * ══ WHY THIS THROWS RATHER THAN RETURNING FALSE ══
+ *
+ * It used to return `false` on expiry, and most call sites discarded the result — so a wait that
+ * gave up was indistinguishable from one that succeeded, and the test carried on with a precondition
+ * that had never held. The failure then surfaced somewhere further down, as an assertion about
+ * behaviour that was actually correct.
+ *
+ * Measured: `terminal-reattach.integration.test.ts` waited for the daemon to classify a session as
+ * busy, gave up silently, and then failed with
+ *
+ *     AssertionError: expected [ 'idle1', 'busy1' ] to not include 'busy1'
+ *
+ * which reads as "closeIdle closed a busy session" — a serious-sounding daemon defect. The daemon
+ * was right: nothing had made that session busy yet. An hour could be spent in the wrong file.
+ *
+ * No caller wants `false`: every site that binds the result asserts `.toBe(true)`. So expiry is
+ * always a failure, and it now says so at the moment it happens, naming what it was waiting for.
+ */
+export async function waitFor(
+  predicate: () => boolean | Promise<boolean>,
+  timeoutMs = 8000,
+  what = 'a condition',
+): Promise<true> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (predicate()) return true;
+    if (await predicate()) return true;
     await sleep(25);
   }
-  return false;
+  throw new Error(`timed out after ${timeoutMs}ms waiting for ${what}`);
 }

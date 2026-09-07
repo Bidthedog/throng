@@ -13,12 +13,29 @@ async function waitFor(
   timeoutMs: number,
   label: string,
 ): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
+  const started = Date.now();
+  const deadline = started + timeoutMs;
   while (Date.now() < deadline) {
-    if (await predicate()) return;
+    if (await predicate()) {
+      /*
+       * PRINT THE MEASUREMENT, not only the violation.
+       *
+       * Every budget in this file was picked without data, and one of them was picked WRONG in a
+       * way no green run could reveal — see the child-lifetime note below. A budget you only ever
+       * see violated is one you can only ever tune blindly, so each wait now reports what it
+       * actually took, and the next person changing these numbers has a distribution.
+       */
+      // Measured, because the obvious assumption is wrong: vitest's default reporter hides
+      // BOTH streams for a PASSING test, so this shows under `--reporter=verbose` and in any
+      // run that fails. That is not quite the "every run" the rule asks for; it is enough to
+      // take a reading on demand (which is where the figures below came from), and saying so
+      // here is cheaper than the next person re-discovering it.
+      console.error(`[pty-contract] ${label}: ${Date.now() - started}ms`);
+      return;
+    }
     await sleep(25);
   }
-  assert(false, `timed out waiting for ${label}`);
+  assert(false, `timed out after ${timeoutMs}ms waiting for ${label}`);
 }
 
 /**
@@ -72,9 +89,27 @@ export async function runPtyHostContract(env: PtyHostContractEnv): Promise<void>
     await sleep(400); // let the shell settle back to its prompt after the echo
     const idlePids = new Set(host.listChildPids(handle));
     host.write(handle, env.startChildLine());
+    /*
+     * ══ THIS BUDGET AND THE CHILD'S LIFETIME ARE RELATED, AND USED TO BE INVERTED ══
+     *
+     * This wait and the `listChildProcesses` one below both need the child to still be RUNNING.
+     * Together they could wait 16 s — while `startChildLine` was `ping -n 6`, which lives about
+     * five. So the probe window already exceeded the subject's lifetime: on hardware slow enough
+     * that the process snapshot lagged, the child could start, run and EXIT before it was ever
+     * observed, after which it could never appear and the wait burned its full budget.
+     *
+     * That inversion is invisible while the pid shows up quickly, which it does on a developer
+     * workstation — measured there at 581 ms for this wait and 522 ms for the one below, i.e.
+     * roughly a THIRTEENTH of the old 8 s budget. It failed on the self-hosted runner (run
+     * 33983069120), where the process snapshot degrades under load by far more than that
+     * machine's general 2.5-3x.
+     *
+     * Note that RAISING THIS NUMBER ALONE WOULD HAVE MADE IT WORSE: more time spent waiting for
+     * a process that is already dead. The caller's child now lives ~39 s, beyond both waits.
+     */
     await waitFor(
       () => host.listChildPids(handle).some((pid) => !idlePids.has(pid)),
-      8000,
+      15_000,
       'a new child pid to appear while a command runs',
     );
 
@@ -94,7 +129,7 @@ export async function runPtyHostContract(env: PtyHostContractEnv): Promise<void>
         procs = await host.listChildProcesses(handle);
         return procs.some((p) => p.ppid === handle.pid);
       },
-      8000,
+      15_000,
       'a DIRECT child (ppid === handle.pid) to appear in listChildProcesses',
     );
     const direct = procs.find((p) => p.ppid === handle.pid);
