@@ -99,6 +99,31 @@ export default defineConfig({
           name: 'unit',
           include: ['packages/**/tests/unit/**/*.test.ts'],
           environment: 'node',
+          /*
+           * 15 s, STATED rather than inherited — #355's fix, applied to the layer that never got it.
+           *
+           * The component project below says it in as many words: the 5 s it used to run on was
+           * "vitest's default 5 s — not a value anyone chose", and "stating a budget was itself the
+           * correction". This project was left on that same unchosen default, and it produces the
+           * same false failure for the same class of reason.
+           *
+           * Measured, 043 round five, same commit, no code change between runs:
+           *
+           *   `no-os-imports.test.ts` "core/src imports no OS…"   79 ms run alone
+           *   the same test, unit + component in one invocation  `Test timed out in 5000ms`, 2 of 3
+           *
+           * It is I/O-bound — a `readdir` per folder and a `readFile` per file across ~185 files of
+           * core/src, roughly 215 awaits in series — and in a combined run it shares the worker pool
+           * with jsdom files whose per-file setup dominates the machine. Its assertion never failed;
+           * its clock did. This is the second instance on the branch: `test-files-parse.test.ts`
+           * needed its own budget raised for the same shape of work in round two.
+           *
+           * 15 s rather than a per-test bump on this one file, because the defect is the LAYER's
+           * inherited default and two source-scanning guards have now hit it; a per-test number would
+           * leave the next one to be found the same way. 15 s rather than 60 s for #355's reason: a
+           * hung test is hung, not three times slow, so tripling the ceiling costs the signal nothing.
+           */
+          testTimeout: 15_000,
         },
       },
       {

@@ -120,6 +120,47 @@ function readSettings(cfgRoot: string): any {
   }
 }
 /**
+ * Confirm a reset, and PROVE the confirmation was acted on before anything reads the disk (#341).
+ *
+ * Five call sites clicked `prefs-reset-confirm-yes` and went straight to polling the settings file.
+ * When that click does not register — the dialog is in the DOM and painted, but React has not
+ * attached its handler yet, which on a loaded machine is a real interval — nothing is written, and
+ * the test spends its whole thirty-second budget polling a value that was never going to change.
+ * The report is then "Expected: false, Received: true" about a reset that never happened, which
+ * says nothing about the cause and is exactly the shape #341 records for this family.
+ *
+ * The dialog CLOSING is the signal that Yes was handled, so it is waited on rather than assumed —
+ * and if it is still open the click is simply re-issued. A second Yes is safe in a way a general
+ * retry is not: the `count()` guard means it is only ever sent while the dialog is still there, so
+ * it cannot land on whatever replaces it. This is deliberately unlike a poll that re-drives the UI
+ * it is measuring; nothing here is torn down and rebuilt between attempts.
+ *
+ * Three of the five call sites did not even wait for the dialog to appear first. They do now.
+ */
+async function confirmReset(prefs: Page): Promise<void> {
+  const dialog = prefs.getByTestId('prefs-reset-confirm');
+  await expect(dialog).toBeVisible();
+  await expect
+    .poll(
+      async () => {
+        if ((await dialog.count()) === 0) return 'closed';
+        await prefs
+          .getByTestId('prefs-reset-confirm-yes')
+          .click({ timeout: 2000 })
+          .catch(() => {});
+        return 'open';
+      },
+      {
+        timeout: 15_000,
+        message:
+          'the reset confirmation never closed, so Yes was never handled and nothing was written — ' +
+          'the settings file was never going to change',
+      },
+    )
+    .toBe('closed');
+}
+
+/**
  * Open (or re-open) the Preferences window on a tab.
  *
  * Deliberately does NOT wait for a `window` event. throng has ONE shared Preferences window, so if a
@@ -182,8 +223,7 @@ test('the per-tab reset restores the Settings editor from the shipped record (wi
       await settleAppConfig(prefs, { 'editor.autoSave': true });
       // Reset-current → confirm.
       await prefs.getByTestId('prefs-reset-current').click();
-      await expect(prefs.getByTestId('prefs-reset-confirm')).toBeVisible();
-      await prefs.getByTestId('prefs-reset-confirm-yes').click();
+      await confirmReset(prefs);
       await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false); // default
     },
   );
@@ -240,7 +280,7 @@ test('reset-all reverts the session to on-entry; cancel is a no-op', { tag: ['@e
       expect(readSettings(cfgRoot)?.editor?.autoSave).toBe(true);
       // Reset-all → confirm: reverts to on-entry (autoSave false).
       await prefs.getByTestId('prefs-revert-all').click();
-      await prefs.getByTestId('prefs-reset-confirm-yes').click();
+      await confirmReset(prefs);
       await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
     },
   );
@@ -421,7 +461,7 @@ test('US3: Reset All Preferences restores settings + bindings, states both sides
       expect(copy).toContain('key bindings');
       expect(copy).toContain('projects');
 
-      await prefs.getByTestId('prefs-reset-confirm-yes').click();
+      await confirmReset(prefs);
 
       // Settings and bindings are back to shipped …
       await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
@@ -562,7 +602,7 @@ test('a reset performed in JSON mode refreshes the visible document (FR-013b)', 
 
       // Reset the whole editor from the toolbar while JSON mode is showing.
       await prefs.getByTestId('prefs-reset-current').click();
-      await prefs.getByTestId('prefs-reset-confirm-yes').click();
+      await confirmReset(prefs);
 
       // The document the user is looking at follows the file — no stale text (FR-013b).
       await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
@@ -581,7 +621,7 @@ test('resets are idempotent, and the four scopes are distinguishable (SC-003, SC
       // Reset All Preferences on a pristine config: a successful no-op that changes nothing.
       const before = JSON.stringify(readSettings(cfgRoot));
       await prefs.getByTestId('prefs-reset-preferences').click();
-      await prefs.getByTestId('prefs-reset-confirm-yes').click();
+      await confirmReset(prefs);
       await expect(prefs.getByTestId('prefs-notice')).toHaveCount(0); // no failure
       await expect.poll(() => JSON.stringify(readSettings(cfgRoot))).toBe(before);
       // Nothing is overridden, so no row advertises itself as modified.

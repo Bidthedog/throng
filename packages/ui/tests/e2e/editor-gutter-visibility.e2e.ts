@@ -200,10 +200,24 @@ async function scrollToWrappedRow(
     )
     .toBeGreaterThanOrEqual(RENDERED_LINES_NEEDED);
 
-  return win.evaluate(() => {
+  /*
+   * ══ APPLY THE SCROLL, THEN PROVE IT STUCK, THEN READ THE ANCHOR ══
+   *
+   * This was one `evaluate` that set `scrollTop` and read the resulting viewport in the same
+   * synchronous block. CodeMirror is VIRTUALISED: a scroll is not finished when the property is
+   * assigned, it is finished after CodeMirror's own measure cycle has re-rendered the newly visible
+   * lines — and that cycle can move `scrollTop` again. So the anchor was computed from a viewport
+   * that had not settled, and the caller's poll then waited 8 s for a readout that never came
+   * because the scroll had been undone. It failed on a hosted runner reporting "line 001": not a
+   * slow scroll, an absent one.
+   *
+   * The target is computed ONCE as an absolute offset and then re-applied until the readout agrees.
+   * Absolute rather than relative is what makes re-applying safe — a `+=` would walk further down
+   * the document on every attempt and the assertion would pass while measuring the wrong row.
+   */
+  const target = await win.evaluate(() => {
     const scroller = document.querySelector('.editor-panel .cm-scroller');
-    const content = document.querySelector('.editor-panel .cm-content');
-    if (!scroller || !content) throw new Error('no editor scroller');
+    if (!scroller) throw new Error('no editor scroller');
 
     // A line well below the top of the document, so "unchanged" is a real claim rather than
     // "still at 0" — and one that is currently rendered, since CodeMirror virtualises.
@@ -226,11 +240,37 @@ async function scrollToWrappedRow(
       return [...r.getClientRects()].filter((rect) => rect.height > 0);
     };
 
-    const rows = rowsOf(line);
-    const row = Math.min(3, rows.length - 1);
-    scroller.scrollTop += rows[row]!.top - scroller.getBoundingClientRect().top;
+    const rects = rowsOf(line);
+    const row = Math.min(3, rects.length - 1);
+    const scrollTop =
+      scroller.scrollTop + (rects[row]!.top - scroller.getBoundingClientRect().top);
+    return { scrollTop, rows: rects.length, row };
+  });
 
-    // Now read back what is actually at the top-left, from the DOM rather than from arithmetic.
+  await expect
+    .poll(
+      async () => {
+        await win.evaluate((to) => {
+          const scroller = document.querySelector('.editor-panel .cm-scroller');
+          if (scroller) scroller.scrollTop = to;
+        }, target.scrollTop);
+        return topVisibleLine(win);
+      },
+      {
+        timeout: 8000,
+        message:
+          'the viewport never came to rest below the top of the document — the scroll was applied ' +
+          'repeatedly and CodeMirror kept returning it to line 001',
+      },
+    )
+    .toMatch(/^line (?!001)\d{3}$/);
+
+  const anchor = await win.evaluate(() => {
+    const scroller = document.querySelector('.editor-panel .cm-scroller');
+    const content = document.querySelector('.editor-panel .cm-content');
+    if (!scroller || !content) throw new Error('no editor scroller');
+
+    // Read back what is actually at the top-left, from the DOM rather than from arithmetic.
     const top = scroller.getBoundingClientRect().top;
     const x = content.getBoundingClientRect().left + 2;
     const caret = document.caretRangeFromPoint(x, top + 2);
@@ -254,8 +294,13 @@ async function scrollToWrappedRow(
       offset += seen.textContent?.length ?? 0;
     }
 
-    return { marker: (host.textContent ?? '').slice(0, 8), offset, rows: rows.length, row };
+    return { marker: (host.textContent ?? '').slice(0, 8), offset };
   });
+
+  // `rows`/`row` describe the line the scroll was AIMED at and are what the caller asserts the
+  // wrap against; they come from the measurement above rather than from this second pass, which
+  // only answers "what is at the top-left now".
+  return { ...anchor, rows: target.rows, row: target.row };
 }
 
 /**
@@ -459,28 +504,20 @@ test('the top visible line and the selection survive the toggle', { tag: ['@exte
           .toBeGreaterThanOrEqual(2);
 
         /*
-         * WAIT FOR THE CONDITION THE NEXT LINE ASSERTS, not a weaker one.
+         * The WAIT for this has moved into `scrollToWrappedRow`, where the scroll is applied — and
+         * that is the fix rather than a tidy-up.
          *
-         * This polled for /^line \d{3}$/ -- which "line 001" SATISFIES. So the wait was answered by
-         * the viewport still sitting at the top of the document, returned immediately, and the
-         * assertion below then failed on exactly the state the poll had just accepted.
+         * There used to be a poll here, and its history is worth keeping because both versions were
+         * wrong in the same direction. It first polled for /^line \d{3}$/, which "line 001"
+         * satisfies, so it returned instantly on the state the next line then failed on. Tightened
+         * to exclude 001, it started TIMING OUT instead — because waiting here can only observe a
+         * scroll that has already happened, and this one had been silently undone by CodeMirror's
+         * measure cycle before the poll ever ran. A wait cannot fix a scroll that did not stick;
+         * only re-applying it can, which is what the helper now does.
          *
-         * `scrollToWrappedRow` has already asserted it computed a scrolled anchor (row >= 2), so
-         * the scroll was requested and measured; what had not happened yet was the DOM readout
-         * catching up. Waiting for that is not masking anything -- it is waiting for the thing the
-         * test is about to read.
-         *
-         * The lookahead carries both requirements: a well-formed readout, and one that is not the
-         * top of the document.
+         * What remains is the assertion itself, kept because it is the premise of everything below:
+         * if the viewport is at the top of the document, "unchanged across the toggle" is vacuous.
          */
-        await expect
-          .poll(() => topVisibleLine(win), {
-            timeout: 8000,
-            message: 'the viewport never reported a line below the top of the document',
-          })
-          .toMatch(/^line (?!001)\d{3}$/);
-        // Re-read rather than reuse the polled value, which `expect.poll` does not hand back. The
-        // assertion stays as the guard on that (very small) window.
         const before = await topVisibleLine(win);
         expect(before, 'the scroll must have left the top of the document').not.toBe('line 001');
 
