@@ -1887,7 +1887,14 @@ drives the renderer.
       path; type an outside path and watch it refused.
 - [x] T258 Closing converge, read against Phase 14's baseline: a finding already in Phase 14 is not
       this round's, and anything new is.
-- [ ] T259 `npm run gate`, dispatched to a hosted runner, reported with the run URL **and** the SHA.
+- [x] T259 `npm run gate`, dispatched to a hosted runner, reported with the run URL **and** the SHA.
+      GREEN at <https://github.com/Bidthedog/throng/actions/runs/34578357681>, SHA `2a6143b4`,
+      34m20s, all eight stages, E2E 175 parallel + 345 serial, zero failed and zero flaky. Serial is
+      two up on round four's 343 because of `master`'s two #382 tests, the same two the budget merge
+      counted. That SHA is the whole branch consolidated to nine commits and rebased
+      onto `master` at `87753b03`, with T260–T263 in it, so it covers rounds four and five together.
+      The commit that ticks this box is markdown-only and lands on top of it, so the gate does not
+      cover that one commit.
 
 ---
 
