@@ -1,6 +1,36 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 5.4.0 → 5.4.1
+Bump rationale: PATCH. A factual correction to a recorded audit. The rule itself is unchanged in
+                what it requires; only the statement of which menus currently satisfy it moves.
+
+Modified sections:
+  - Principle VI → "One section vocabulary for every menu". The pre-existing-gaps sentence recorded
+    the editor content menu, the panel header menu, the tab context menu and the cog menu as drawing
+    their items in one undivided run. All four were sectioned by feature 033 US5. The gap list is
+    replaced by a statement that the gaps are closed, plus the reason there is no longer a list to
+    keep: `section` is a REQUIRED field on `MenuAction`, so an unsectioned item is a compile error.
+
+Added: nothing. Removed: nothing.
+
+Why now: found while implementing feature 043, whose plan reported the discrepancy rather than
+         working around it. A constitution that records a gap which no longer exists is worse than
+         one that records nothing: the next feature to touch those menus either does redundant work
+         or, having found the record wrong once, stops trusting the rest of the audit.
+
+Verified against the code on 2026-09-09, not inferred from the 033 spec: editor/content-menu.ts
+declares 9 sections, workspace/panel-header-menu.ts 30, workspace/tab-menu.ts 6, and
+title-bar/cog-menu-items.ts 3 — the last being a single Application section, which is why it
+correctly draws no divider. packages/ui/tests/unit/menu-sections.test.ts pins the shape of each.
+
+Templates requiring updates: none. The Constitution Check gate is dynamic (read from this file at
+plan time), and no template names the gap list.
+
+Follow-up TODOs: none.
+
+---- previous report ----
+
 Version change: 5.3.0 → 5.4.0
 Bump rationale: MINOR, materially expanded guidance. Nothing is removed and nothing is redefined
                 incompatibly — the digit-grouping obligation is unchanged in what it requires. What
@@ -1528,11 +1558,18 @@ application's, not the menu's.
   defect, not a default: the vocabulary only holds if it cannot be opted out of silently.
 - This is an **end-state requirement** delivered incrementally under the Incremental
   Delivery rule, binding on new work immediately — a feature that adds a menu item places
-  it in its section in the same increment. Pre-existing gaps, per the 2026-08-15 audit: the
-  Files & Folders menu and the terminal content menu conform; the **editor content menu**,
-  the **panel header menu**, the **tab context menu** and the **cog menu** draw their items
-  in one undivided run and MUST be closed by tracked work — owed to feature 033 and issue
-  #160, not silently tolerated.
+  it in its section in the same increment. **The gaps the 2026-08-15 audit recorded are
+  now closed** (re-verified 2026-09-09): that audit found the Files & Folders and terminal
+  content menus conforming and the **editor content menu**, the **panel header menu**, the
+  **tab context menu** and the **cog menu** drawing their items in one undivided run.
+  Feature 033 US5 sectioned all four — the cog menu draws a single Application section and
+  therefore correctly carries no divider at all — and `menu-sections.test.ts` pins each
+  shape.
+- **Recurrence is now prevented structurally rather than by audit.** `section` is a
+  REQUIRED field on `MenuAction`, so an item that declares none is a compile error, not a
+  convention someone has to notice. That is a stronger guarantee than the audit asked for,
+  which is why this rule no longer carries a gap list: a future gap cannot be introduced
+  silently, so there is nothing left to enumerate.
 
 **Disabled when unavailable, absent when meaningless.** "Grey it out or hide it?" is
 answered by which of two different situations the control is in, and answering it
@@ -1960,7 +1997,7 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 5.4.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-08-25
+**Version**: 5.4.1 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-09-09
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
