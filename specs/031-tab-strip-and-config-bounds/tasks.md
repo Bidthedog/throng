@@ -354,3 +354,15 @@ spec has not yet caught up with. They are recorded here rather than applied, bec
 - [x] T120 Record the relocation of `behaviour.tabHoverActivateMs` into the `Tabs` settings group, with its rewritten description: the key is deliberately unchanged so no existing `settings.json` loses its value, but no requirement currently calls for the move per plan: settings grouping (unrequested)
 - [x] T121 Reconcile this file's tick state — no task is ticked although the work is complete, so the progress record cannot be relied on to say what remains per tasks.md (partial)
 - [x] T122 Add `FR-###` citations to the four requirements genuinely lacking one — FR-008b/c/d/f, the keyed-table rules in `bounds-guard.ts`. The other fifteen the sweep flagged are cited by range and need nothing per spec traceability (partial)
+
+## Phase 10: User Story 8 — every tab reachable, and shown whole (#382)
+
+Reproduced before any production change: 4 unit tests and 2 E2E tests failing for the reported
+reasons, each E2E 3/3 with retries off.
+
+- [x] T123 [US8] Unit: a strip scrolled part-way into its first (last) tab can step back to the start (on to the end); a revealed tab lands clear of the edge fade, in `packages/core/tests/unit/tab-strip.test.ts` (FR-063, FR-064)
+- [x] T124 [US8] E2E: step-left is enabled once a reveal has moved the strip by less than one tab, and leads back to the start, in `packages/ui/tests/e2e/tab-actions.e2e.ts` (FR-063)
+- [x] T125 [US8] E2E: a right-click on either step control moves nothing, in `packages/ui/tests/e2e/tab-actions.e2e.ts` (FR-065)
+- [x] T126 [US8] `stepTarget` steps to the nearest tab start and is `null` only at the ends; `revealTarget` and `stepTarget` honour `edgeInset`, in `packages/core/src/workspace/tab-strip.ts` (FR-063, FR-063a, FR-064)
+- [x] T127 [US8] Step availability from `stepTarget`, the fade width as one constant written to `--tabstrip-fade-width` and passed as `edgeInset`, primary button only, in `packages/ui/src/renderer/workspace/tab-group.tsx` and `theme.css` (FR-063, FR-064a, FR-065)
+- [x] T128 [US8] E2E helpers: "fully visible" and the anchor are measured against the fade that is drawn; the step assertions in `tab-actions.e2e.ts` and `tab-scroll.e2e.ts` move from "flush with the left edge" to "where the left fade ends" (FR-064)

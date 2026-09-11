@@ -374,7 +374,9 @@ context menu's Destroy Tab.
 
 - **A single tab wider than the pane.** One tab whose name alone overruns the strip: the strip
   overflows with nothing to step to on one side. The counts must read 0 on that side and the step
-  control must be inert rather than scrolling to a position that reveals nothing.
+  control must be inert rather than scrolling to a position that reveals nothing. — **Superseded
+  in part by FR-063 (US8, #382)**: the counts still read 0, but a step is available wherever more
+  of that tab lies beyond the edge.
 - **Overflow disappears while scrolled.** The window is widened, or tabs are destroyed, until
   everything fits while the strip is scrolled away from the start. The strip must return to the
   start, the tab-action controls must disappear, and no fade may be left showing.
@@ -566,8 +568,9 @@ context menu's Destroy Tab.
   reordered, and as the window or pane is resized.
 - **FR-023**: Activating step-left or step-right MUST move the strip by exactly one tab.
 - **FR-024**: After a step settles, the newly revealed tab MUST be flush with the left edge of the
-  tab pane.
-- **FR-025**: A step action MUST be unavailable when no tab is hidden in that direction.
+  tab pane. — **Superseded by FR-064 (US8, #382)**: flush with the edge is under the left fade.
+- **FR-025**: A step action MUST be unavailable when no tab is hidden in that direction. —
+  **Superseded by FR-063 (US8, #382)**: available whenever the strip can move that way.
 - **FR-026**: Show-all MUST list every tab in the strip, visible or not, in strip order.
 - **FR-027**: Choosing a tab from the show-all list MUST scroll the strip until that tab is visible
   and make it the active tab.
@@ -1008,6 +1011,70 @@ introduced; the rest are ranges and behaviours that only reveal themselves in us
   discrepancy to a later reader.
 - FR-060 is a regression from US1's restructure and needs a **measured** diagnosis; the cause above
   is a hypothesis with supporting evidence, not a finding.
+
+## User Story 8 - Every tab reachable, and every tab shown whole (Priority: P8)
+
+**Added 2026-09-11** from #382, reported by the maintainer while using the strip. Three things were
+wrong, and two of them were written down on purpose:
+
+- With the window at the right width, clicking the tab cut off at the right edge moves the strip
+  by a few pixels. The first tab is now cut off on the left and the left fade shows, but step-left
+  is **disabled**, and it stays disabled until a whole tab has scrolled past. FR-025 asked for
+  this: a partly visible tab counts as hidden on neither side (FR-021), so "no tab is hidden that
+  way" held true while part of one was.
+- A tab brought into view landed **flush** with the edge (FR-024, and FR-029's placement), which
+  is exactly where the 24px fade overlay is drawn. So the fade covered the end of the tab the user
+  had just gone to.
+- The step controls took a step on **any** mouse button, right-click included.
+
+**Independent test**: with about 20 tabs, size the window so the right-hand tab is cut off by a few
+pixels, click it, and step back to the start. Then go to tabs by clicking, from the picker and by
+stepping, and check that no fade covers any part of the tab you went to. Right-click either step
+control and check that the strip does not move.
+
+### Functional requirements
+
+- **FR-063**: A step control MUST be available whenever the strip can move that way at all:
+  step-left whenever the strip is scrolled away from its start, and step-right whenever it is short
+  of its end.
+  - **This supersedes FR-025**, which made a step unavailable when no tab was *entirely* hidden that
+    way. The part of a tab the strip has scrolled over is still something to reveal, and FR-025
+    left a strip with a half-hidden first tab and no control leading back to it.
+  - **It also supersedes the "single tab wider than the pane" edge case**, which made both controls
+    inert. Scrolled into the middle of one over-wide tab, there is more of it each way.
+  - The counts are unchanged. FR-021 still counts only fully hidden tabs, so step-left can be
+    available while showing `0`: the counts say what is hidden, not whether a step is possible.
+- **FR-063a**: A step MUST move to the nearest tab start in that direction. From a strip scrolled
+  part-way into a tab, step-left completes that tab before moving on to the one before it. This
+  refines FR-023's "exactly one tab" for a strip that does not rest on a tab boundary, which FR-023
+  never addressed.
+- **FR-064**: A tab brought into view MUST be shown **clear of the edge fades**, with no fade
+  covering any part of it. That covers every route FR-029 names, plus a step.
+  - **This supersedes FR-024** ("flush with the left edge of the tab pane") and the flush placement
+    that FR-029 implied. A tab flush with an edge sits under that edge's fade. A stepped-to tab now
+    lands with its leading edge where the left fade ends, which leaves the tab before it showing
+    only under the fade. That is what the fade is for.
+  - FR-029a's "already fully visible" now means clear of any fade that is showing, as well as
+    inside the viewport. At the start of the strip no left fade is drawn, and at the end no right
+    one, so a tab needs no clearance there.
+- **FR-064a**: The fade's width MUST be declared once, and the geometry that places a tab clear of
+  it MUST read that same value. If the width were set in two places, they could drift apart and
+  the fade would move back over the tab.
+- **FR-065**: The step controls MUST respond only to the **primary** pointer button. A right-click
+  or a middle-click on either of them MUST NOT move the strip or start a press-and-hold.
+
+### Notes for planning
+
+- FR-063–FR-064 change `stepTarget` and `revealTarget` in `packages/core/src/workspace/tab-strip.ts`,
+  which are pure functions with their own unit suite. `StripMetrics` gains an optional `edgeInset`
+  (the fade width), so a caller that passes nothing gets bare edges and today's arithmetic.
+- FR-064a: `tab-group.tsx` owns the width as a constant, passes it to the geometry as `edgeInset`,
+  and writes it onto the strip as `--tabstrip-fade-width`, which is the width the stylesheet draws
+  the fades at.
+- The E2E helpers' definition of "fully visible" (`helpers/tabs.ts`) moves with FR-064. It is built
+  from the fade that is actually drawn — the `data-fade-*` flags and the pseudo-element's measured
+  width — rather than from the renderer's constant, so it cannot agree with the implementation by
+  construction.
 
 ## Dependencies
 
