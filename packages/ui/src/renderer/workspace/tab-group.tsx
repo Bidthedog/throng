@@ -565,6 +565,15 @@ function NewTabButton({ onNewTab }: { onNewTab: () => void }): ReactElement {
 const CHEVRON_REPEAT_INTERVAL_MS = 120;
 
 /**
+ * The width of the overflow fade over each end of the track (#382).
+ *
+ * Declared HERE and written onto the strip as `--tabstrip-fade-width`, which is what the stylesheet
+ * draws the fades at, so the geometry that keeps a revealed tab clear of a fade and the fade itself
+ * cannot disagree about how wide it is.
+ */
+const TAB_STRIP_FADE_PX = 24;
+
+/**
  * FR-054 / FR-054b / FR-054c — press-and-hold on a chevron.
  *
  * `onStep` returns whether the strip actually moved; `false` (nothing left to reveal that way) ends
@@ -722,6 +731,12 @@ export function TabGroup(): ReactElement {
     total: 0,
     overflowing: false,
   });
+  /*
+   * Whether each step control has anywhere to go (#382). Derived from `stepTarget` rather than from
+   * the hidden counts: a strip scrolled a few pixels into its first tab hides nothing entirely, and
+   * must still be able to step back to the start.
+   */
+  const [canStep, setCanStep] = useState({ left: false, right: false });
   // The trailing controls' width, so the right-hand fade stops at their leading edge instead of
   // painting a gradient over them. Measured rather than guessed: the group's width changes with the
   // number of digits in its counts.
@@ -793,6 +808,7 @@ export function TabGroup(): ReactElement {
       scrollLeft:
         from === undefined || from === null ? track.scrollLeft : Math.min(Math.max(from, 0), maxScroll),
       viewportWidth,
+      edgeInset: TAB_STRIP_FADE_PX,
     };
   }, []);
 
@@ -823,6 +839,9 @@ export function TabGroup(): ReactElement {
           ? prev
           : next,
       );
+      const left = stepTarget(metrics, 'left') !== null;
+      const right = stepTarget(metrics, 'right') !== null;
+      setCanStep((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
     }
     const width = actionsRef.current?.offsetWidth ?? 0;
     setActionsWidth((prev) => (prev === width ? prev : width));
@@ -1325,7 +1344,7 @@ export function TabGroup(): ReactElement {
   };
 
   /**
-   * Move by exactly one tab, landing it flush with the left edge (S3). `null` → nothing to do.
+   * Move by exactly one tab, landing it clear of the left fade (S3, #382). `null` → nothing to do.
    *
    * Measured from the scroll's PENDING target, so presses ACCUMULATE (A7): two quick steps move two
    * tabs. Measured from the live `scrollLeft` they did not — 50ms into a 400ms glide the strip has
@@ -1421,6 +1440,7 @@ export function TabGroup(): ReactElement {
           style={
             {
               '--tabstrip-actions-width': `${actionsWidth}px`,
+              '--tabstrip-fade-width': `${TAB_STRIP_FADE_PX}px`,
               '--tabstrip-max-width': `${maxWidth}ch`,
             } as CSSProperties
           }
@@ -1481,12 +1501,14 @@ export function TabGroup(): ReactElement {
                 className="tabstrip-actions__btn"
                 testId="tabstrip-step-left"
                 title={`Scroll to the previous tab (${counts.hiddenLeft} hidden to the left)`}
-                // S4 — nothing hidden that way means there is nothing to reveal, so the control is
-                // unavailable rather than a click that does nothing.
-                disabled={counts.hiddenLeft === 0}
+                // #382 — unavailable only where the strip cannot move that way at all, so a click
+                // never does nothing. Not the hidden count: a partly cut-off tab is still there.
+                disabled={!canStep.left}
                 badge={counts.hiddenLeft}
                 dataAttrs={{ 'data-repeating': hold.repeating === 'left' ? 'true' : 'false' }}
-                onPointerDown={() => {
+                onPointerDown={(event) => {
+                  // #382 — the primary button only. A right-click is a request for a menu, not a step.
+                  if (event.button !== 0) return;
                   step('left'); // the press itself is the first step; the hold only repeats it
                   hold.start('left');
                 }}
@@ -1504,11 +1526,12 @@ export function TabGroup(): ReactElement {
                 className="tabstrip-actions__btn"
                 testId="tabstrip-step-right"
                 title={`Scroll to the next tab (${counts.hiddenRight} hidden to the right)`}
-                disabled={counts.hiddenRight === 0}
+                disabled={!canStep.right}
                 badge={counts.hiddenRight}
                 badgeFirst
                 dataAttrs={{ 'data-repeating': hold.repeating === 'right' ? 'true' : 'false' }}
-                onPointerDown={() => {
+                onPointerDown={(event) => {
+                  if (event.button !== 0) return;
                   step('right');
                   hold.start('right');
                 }}

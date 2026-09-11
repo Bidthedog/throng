@@ -17,6 +17,12 @@ export interface StripMetrics {
   scrollLeft: number;
   /** The visible width of the track. */
   viewportWidth: number;
+  /**
+   * The width of the fade drawn over each edge while there is more strip beyond it (#382). A tab
+   * under a fade is not shown whole, so a step or a reveal lands it this far clear of the edge.
+   * Omitted, it is 0: the edges are bare.
+   */
+  edgeInset?: number;
 }
 
 /** What the tab-actions group displays (FR-021). */
@@ -54,13 +60,36 @@ function clampScroll(m: StripMetrics, target: number): number {
   return Math.min(Math.max(target, 0), maxScroll(m));
 }
 
+function inset(m: StripMetrics): number {
+  return m.edgeInset ?? 0;
+}
+
+/**
+ * The part of the viewport no fade covers. A fade is drawn at an edge only while there is more strip
+ * beyond it, so at the start there is no left fade and at the end no right one.
+ */
+function clearView(m: StripMetrics): { left: number; right: number } {
+  const fade = inset(m);
+  return {
+    left: m.scrollLeft + (m.scrollLeft > EPSILON ? fade : 0),
+    right: m.scrollLeft + m.viewportWidth - (m.scrollLeft < maxScroll(m) - EPSILON ? fade : 0),
+  };
+}
+
+/** Where the strip rests to show `tab`'s leading edge clear of the left fade. */
+function leadingStop(m: StripMetrics, tab: { left: number }): number {
+  return clampScroll(m, tab.left - inset(m));
+}
+
 /**
  * Counts of **fully** hidden tabs each side (S1). A tab straddling an edge is partly visible, so it
- * is counted on neither side — which is exactly the tab a step lands flush with the left edge.
+ * is counted on neither side.
  *
  * This holds in the degenerate case of one tab wider than the whole viewport (S6): it straddles
- * both edges at once, so both counts read 0 while `overflowing` is true, and the step controls are
- * correctly inert rather than scrolling to a position that reveals nothing.
+ * both edges at once, so both counts read 0 while `overflowing` is true.
+ *
+ * The counts say what is hidden; they do not say whether a step is possible. A strip scrolled a few
+ * pixels into its first tab hides nothing entirely, and can still step back (#382, `stepTarget`).
  */
 export function stripCounts(m: StripMetrics): StripCounts {
   const viewLeft = m.scrollLeft;
@@ -80,65 +109,66 @@ export function stripCounts(m: StripMetrics): StripCounts {
 }
 
 /**
- * The index of the left-most tab that is not fully hidden to the left — the tab the strip is
- * currently anchored on. `-1` when there are no tabs.
- */
-function anchorIndex(m: StripMetrics): number {
-  const viewLeft = m.scrollLeft;
-  for (let i = 0; i < m.tabOffsets.length; i += 1) {
-    if (m.tabOffsets[i]!.right > viewLeft + EPSILON) return i;
-  }
-  return m.tabOffsets.length - 1;
-}
-
-/**
- * Target `scrollLeft` for a step (S3, S4): move by exactly one tab, landing it flush with the
- * viewport's left edge.
+ * Target `scrollLeft` for a step: move to the next tab boundary that way, landing that tab's leading
+ * edge clear of the left fade (#382, superseding S3/S4).
  *
- * - **left** — the last tab that is fully hidden to the left becomes flush with the left edge.
- * - **right** — the tab after the current anchor becomes flush with the left edge.
+ * - **left** — the nearest tab start behind the current position. From a strip scrolled part-way
+ *   into a tab, that is the start of the tab it cut off; from a tab boundary, the tab before it.
+ * - **right** — the nearest tab start ahead of the current position.
  *
- * `null` when nothing is hidden that way, so the control is unavailable (FR-025), and also when
- * the strip is already at the position the step would produce. The target is clamped to the
- * content, so a step near the end stops at the end rather than scrolling into empty space — the
- * revealed tab is then as far left as it can go.
+ * Available whenever the strip can move that way at all — `null` only at the start (left) or the end
+ * (right). It used to be `null` whenever no tab was ENTIRELY hidden that way, which left a strip
+ * scrolled by a few pixels with its first tab cut off and no control leading back to it. The hidden
+ * counts are unchanged (S1); they no longer decide whether a step is possible.
+ *
+ * The target is clamped to the content, so a step near the end stops at the end rather than
+ * scrolling into empty space.
  */
 export function stepTarget(m: StripMetrics, direction: 'left' | 'right'): number | null {
-  const counts = stripCounts(m);
-  if (direction === 'left' && counts.hiddenLeft === 0) return null;
-  if (direction === 'right' && counts.hiddenRight === 0) return null;
-
-  const anchor = anchorIndex(m);
-  if (anchor < 0) return null;
-  const index = direction === 'left' ? anchor - 1 : anchor + 1;
-  const tab = m.tabOffsets[index];
-  if (tab === undefined) return null;
-
-  const target = clampScroll(m, tab.left);
-  return Math.abs(target - m.scrollLeft) <= EPSILON ? null : target;
+  const max = maxScroll(m);
+  if (direction === 'left') {
+    if (m.scrollLeft <= EPSILON) return null;
+    // The start is always a stop, and the strip is past it.
+    let target = 0;
+    for (const tab of m.tabOffsets) {
+      const stop = leadingStop(m, tab);
+      if (stop < m.scrollLeft - EPSILON && stop > target) target = stop;
+    }
+    return target;
+  }
+  if (m.scrollLeft >= max - EPSILON) return null;
+  // The end is always a stop, and the strip is short of it.
+  let target = max;
+  for (const tab of m.tabOffsets) {
+    const stop = leadingStop(m, tab);
+    if (stop > m.scrollLeft + EPSILON && stop < target) target = stop;
+  }
+  return target;
 }
 
 /**
  * Target `scrollLeft` that brings tab `index` into view, or `null` when it is **already fully
  * visible** so the strip must not move (S5, FR-029a).
  *
- * A tab off the left is brought flush with the left edge; one off the right is brought flush with
- * the right edge — the shortest movement that reveals it. A tab wider than the viewport cannot be
- * shown whole, so its start is shown: a name is read from the left.
+ * "Fully visible" means clear of the edge fades as well as inside the viewport (#382): a tab under a
+ * fade is not shown whole. A tab off the left is brought clear of the left fade; one off the right is
+ * brought clear of the right fade — the shortest movement that reveals it. A tab too wide to show
+ * whole between the fades has its start shown: a name is read from the left.
  */
 export function revealTarget(m: StripMetrics, index: number): number | null {
   if (!Number.isInteger(index)) return null;
   const tab = m.tabOffsets[index];
   if (tab === undefined) return null;
 
-  const viewLeft = m.scrollLeft;
-  const viewRight = m.scrollLeft + m.viewportWidth;
-  const offLeft = tab.left < viewLeft - EPSILON;
-  const offRight = tab.right > viewRight + EPSILON;
+  const view = clearView(m);
+  const offLeft = tab.left < view.left - EPSILON;
+  const offRight = tab.right > view.right + EPSILON;
   if (!offLeft && !offRight) return null;
 
-  const tooWide = tab.right - tab.left > m.viewportWidth;
-  const target = clampScroll(m, offLeft || tooWide ? tab.left : tab.right - m.viewportWidth);
+  const fade = inset(m);
+  const tooWide = tab.right - tab.left > m.viewportWidth - 2 * fade;
+  const target =
+    offLeft || tooWide ? leadingStop(m, tab) : clampScroll(m, tab.right - m.viewportWidth + fade);
   return Math.abs(target - m.scrollLeft) <= EPSILON ? null : target;
 }
 

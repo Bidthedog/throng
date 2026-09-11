@@ -136,19 +136,26 @@ describe('stepTarget (S3, S4)', () => {
     expect(second).toBe(200);
   });
 
-  it('moves exactly one tab leftwards, landing the newly revealed tab flush with the left edge', () => {
-    const m = strip([100, 100, 100, 100, 100, 100], 250, 250);
+  it('moves exactly one tab leftwards from a tab boundary', () => {
+    // Window [200,450]: tabs 0 and 1 are fully hidden, tab 2 starts exactly on the edge.
+    const m = strip([100, 100, 100, 100, 100, 100], 200, 250);
     expect(stripCounts(m).hiddenLeft).toBe(2);
     const target = stepTarget(m, 'left');
-    expect(target).toBe(100); // tab 1's left edge — the last one fully hidden left
+    expect(target).toBe(100); // tab 1's left edge
     expect(stripCounts({ ...m, scrollLeft: target! }).hiddenLeft).toBe(1);
   });
 
-  it('steps leftwards from a position that straddles a tab boundary', () => {
+  /*
+   * #382 supersedes S3 here. A step from part-way into a tab used to skip the tab it had cut off and
+   * land on the one before it (0, from 150). It now completes the cut-off tab first: the nearest tab
+   * start behind the strip — the same rule that lets a strip scrolled a few pixels step back at all.
+   */
+  it('steps leftwards from a position that straddles a tab boundary to the start of the cut-off tab', () => {
     // Window [150,400]: tab 0 [0,100] is fully hidden, tab 1 [100,200] straddles.
     const m = strip([100, 100, 100, 100, 100, 100], 150, 250);
     expect(stripCounts(m).hiddenLeft).toBe(1);
-    expect(stepTarget(m, 'left')).toBe(0);
+    expect(stepTarget(m, 'left')).toBe(100);
+    expect(stepTarget({ ...m, scrollLeft: 100 }, 'left')).toBe(0);
   });
 
   it('never scrolls past the end of the content', () => {
@@ -159,15 +166,106 @@ describe('stepTarget (S3, S4)', () => {
     expect(stepTarget(m, 'right')).toBe(190);
   });
 
-  it('is inert in both directions for a single tab wider than the viewport (S6)', () => {
+  /*
+   * #382 supersedes the edge case that made these inert. Scrolled into the middle of one over-wide
+   * tab there IS more of it each way, and stepping reveals it — the start, or the end.
+   */
+  it('steps to either end of a single tab wider than the viewport (S6)', () => {
     const m = strip([500], 200, 200);
-    expect(stepTarget(m, 'left')).toBeNull();
-    expect(stepTarget(m, 'right')).toBeNull();
+    expect(stepTarget(m, 'left')).toBe(0);
+    expect(stepTarget(m, 'right')).toBe(300);
+    expect(stepTarget({ ...m, scrollLeft: 0 }, 'left'), 'nothing further left at the start').toBeNull();
+    expect(stepTarget({ ...m, scrollLeft: 300 }, 'right'), 'nothing further right at the end').toBeNull();
   });
 
   it('returns null for an empty strip', () => {
     expect(stepTarget(strip([], 0, 250), 'left')).toBeNull();
     expect(stepTarget(strip([], 0, 250), 'right')).toBeNull();
+  });
+});
+
+/*
+ * #382. Reported: click the partly-visible right-most tab and the strip shifts a few pixels to reveal it.
+ * Tab 0 is now cut off on the left and the left fade is showing — but step-left is disabled, and
+ * stays disabled until a whole tab has scrolled past. S4 says there is nothing to reveal that way
+ * because no tab is ENTIRELY hidden; there is — the part of tab 0 the strip scrolled over.
+ */
+describe('stepping back from a strip that has moved by less than one tab', () => {
+  it('steps left to the start when the first tab is only partly hidden', () => {
+    // Window [30,280]: tab 0 [0,100] is cut off by 30px on the left, and nothing is fully hidden.
+    const m = strip([100, 100, 100, 100, 100, 100], 30, 250);
+    expect(stripCounts(m).hiddenLeft).toBe(0);
+    expect(stepTarget(m, 'left'), 'the strip has moved, so it can be stepped back').toBe(0);
+  });
+
+  it('steps right to the end when the last tab is only partly hidden', () => {
+    // Window [330,580]: tab 5 [500,600] is cut off by 20px on the right, and nothing is fully hidden.
+    const m = strip([100, 100, 100, 100, 100, 100], 330, 250);
+    expect(stripCounts(m).hiddenRight).toBe(0);
+    expect(stepTarget(m, 'right'), 'there is more strip to the right').toBe(350);
+  });
+});
+
+/*
+ * #382. Reported: a tab brought into view lands flush with the viewport edge, so the edge fade paints over
+ * it. The fades are 24px overlays at the track's edges (theme.css `.tab-strip::before/::after`), and
+ * they show whenever the strip is not at that end.
+ */
+describe('a revealed tab is clear of the edge fade', () => {
+  const EDGE_FADE = 24;
+  const faded = (widths: number[], scrollLeft: number, viewportWidth: number): StripMetrics => ({
+    ...strip(widths, scrollLeft, viewportWidth),
+    edgeInset: EDGE_FADE,
+  });
+
+  it('brings a tab hidden to the right clear of the right-hand fade', () => {
+    const m = faded([100, 100, 100, 100, 100, 100], 0, 250);
+    const target = revealTarget(m, 3)!;
+    expect(target + 250, 'the strip is not at its end, so the right fade is showing').toBeLessThan(600);
+    expect(m.tabOffsets[3]!.right).toBeLessThanOrEqual(target + 250 - EDGE_FADE);
+  });
+
+  it('brings a tab hidden to the left clear of the left-hand fade', () => {
+    const m = faded([100, 100, 100, 100, 100, 100], 350, 250);
+    const target = revealTarget(m, 2)!;
+    expect(target, 'the strip is not at its start, so the left fade is showing').toBeGreaterThan(0);
+    expect(m.tabOffsets[2]!.left).toBeGreaterThanOrEqual(target + EDGE_FADE);
+  });
+
+  it('moves for a tab that is inside the viewport but under a fade', () => {
+    // Window [110,360]: the left fade covers [110,134], so tab 1 [100,200] has its start under it.
+    const m = faded([100, 100, 100, 100, 100, 100], 110, 250);
+    expect(revealTarget(m, 1)).toBe(76);
+  });
+
+  it('does not move for a tab clear of both fades (S5)', () => {
+    // Window [76,326]: clear region [100,302]. Tab 1 [100,200] is inside it.
+    const m = faded([100, 100, 100, 100, 100, 100], 76, 250);
+    expect(revealTarget(m, 1)).toBeNull();
+  });
+
+  it('needs no clearance at the start or the end, where no fade is drawn', () => {
+    const atStart = faded([100, 100, 100, 100, 100, 100], 350, 250);
+    expect(revealTarget(atStart, 0)).toBe(0);
+    const atEnd = faded([100, 100, 100, 100, 100, 100], 0, 250);
+    expect(revealTarget(atEnd, 5)).toBe(350);
+  });
+});
+
+describe('a step lands its tab clear of the left fade', () => {
+  const faded = (scrollLeft: number): StripMetrics => ({
+    ...strip([100, 100, 100, 100, 100, 100], scrollLeft, 250),
+    edgeInset: 24,
+  });
+
+  it('steps right to the next tab, its start clear of the fade', () => {
+    expect(stepTarget(faded(0), 'right')).toBe(76); // tab 1 at 100, the fade over [76,100]
+    expect(stepTarget(faded(76), 'right')).toBe(176);
+  });
+
+  it('steps back the same way it came', () => {
+    expect(stepTarget(faded(176), 'left')).toBe(76);
+    expect(stepTarget(faded(76), 'left')).toBe(0);
   });
 });
 
