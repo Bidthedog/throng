@@ -73,14 +73,15 @@ height or shift up — it scrolls instead, and three controls appear between the
 
 | Control | What it does |
 |---|---|
-| **‹** | Step one tab left. Its pill counts the tabs hidden off the left edge |
-| **›** | Step one tab right. Its pill counts the tabs hidden off the right |
+| **‹** | Step one tab left. Its pill counts the tabs entirely hidden off the left edge |
+| **›** | Step one tab right. Its pill counts the tabs entirely hidden off the right |
 | **▾** | Open the tab picker. Its pill counts *all* tabs |
 
-Press and hold either chevron and the strip starts scrolling continuously; releasing stops it. A
-fade over the edge of the first and last visible tab marks that there is more in that direction. The
-**+** stays pinned on the right at every tab count, and the active tab is always scrolled into view —
-however it became active.
+A step is available whenever the strip can move that way, even if the only thing past the edge is
+part of a tab. Only the left mouse button steps. Press and hold either chevron and the strip keeps
+scrolling until you let go. A fade over each edge shows that there is more strip in that direction.
+The **+** stays pinned on the right at every tab count. The active tab is always scrolled fully into
+view, clear of the fades, however it became active.
 
 **The tab picker** (**▾**, or **Ctrl+Alt+T** from anywhere, at any tab count) lists every tab, hidden
 or not. Type to narrow it: the terms match in **any order** and anywhere in the name, so `find file`

@@ -39,6 +39,10 @@ What changed in each release of throng, written for someone deciding whether to 
 - A command that opens a window — `az login`'s sign-in prompt, a browser-based login, a GUI editor —
   now brings that window to the front, instead of leaving it behind throng where the terminal looks
   like it has stopped responding.
+- When the tab strip overflows, the ‹ and › arrows now work whenever there is more strip in that
+  direction, including when the first or last tab is only partly cut off. A tab you go to is shown
+  whole rather than partly hidden under the edge fade, and the arrows no longer react to a
+  right-click.
 
 ### Changed
 - Release notes now say what actually changed in each release, above the download checksums and the
