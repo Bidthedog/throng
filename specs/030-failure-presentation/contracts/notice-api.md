@@ -13,12 +13,49 @@ export type NoticeInput = Omit<Notice, 'id'> & {
   groupKey?: string;
   /** The panels this cause has defeated so far (FR-029, FR-030). */
   affected?: readonly AffectedPanel[];
+  /** THIS notice's own display, instead of its severity's (043 FR-082a). Optional — see below. */
+  display?: SeverityNotificationSettings;
 };
 ```
 
 **Breaking change, deliberately**: `subject` is required, so all 12 existing `notify()` call sites
 fail to compile until each states a subject or `{ kind: 'none' }`. That compile error *is* FR-057 —
 the guard is the type system, not a lint rule bolted on afterwards.
+
+## Display: the severity's, unless the notice states its own
+
+**Amended 2026-09-10 by 043 FR-082a.** This contract used to have nothing to say here, because there
+was nothing to say: a raiser stated a severity and the provider resolved the mode and the timeout from
+`notifications.<severity>` alone. `display` is the widening, and it is **optional**.
+
+| The raise carries | The provider uses |
+|---|---|
+| no `display` | `notifications.<severity>` — exactly as before, for every call site that predates this |
+| `display: { mode, timeoutMs }` | those two, and the severity-keyed settings are not consulted at all |
+
+Three rules, and the first is the one with teeth:
+
+1. **Absence keeps meaning what it always meant.** Every call site that existed before this field
+   omits it, so "unchanged" is a requirement rather than an expectation. The regression half of
+   `packages/ui/tests/component/notice-display-override.test.ts` is what holds it up, and it is
+   deliberately the last group in the file rather than an afterthought: a break there reaches every
+   failure report in the application, and no test of the new field would see it.
+2. **The severity is untouched.** It still decides the colour, the icon, the log level, the
+   announcement and every suppression rule. Only the dwell moves.
+3. **It is resolved ONCE per raise**, where `behaviour` is computed, not at each of the three places
+   that consult it (the silenced shadow, the `never` early return, the `timed` timer). Three reads
+   would be three chances for one notice to be shadowed under one mode and rendered under another.
+
+**This does not hand the dwell back to the raiser**, which is what 030 exists to prevent. 030's
+principle is that the USER, not the raiser, decides how long they need to read something — and the
+only caller of this field points it at a **preference of the user's own** (`search.inFiles.
+summaryNoticeMode` / `…TimeoutMs`, 043 FR-082). What changes is which control the user reaches for.
+A raiser that hard-coded a literal here would be re-introducing #224, and a review that sees one
+should say so.
+
+**The cost is stated, not implied**: for a notice carrying an override, a user's global preference —
+"errors stay until I dismiss them" — does not apply. 043 FR-082 records that it was chosen rather than
+overlooked.
 
 ## Rules a call site must satisfy
 
