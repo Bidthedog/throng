@@ -945,6 +945,13 @@ not a new feature and takes no new spec directory.*
 - The three display modes are the complete set; there is no fifth state such as "show only when the
   window is focused" or "show in the status bar instead".
 - Preferences are per severity only. There are no per-notice or per-call-site overrides.
+  > **Partly superseded (2026-09-10) by 043 FR-082a**: ONE call site now carries its own display —
+  > Find in Files' replace summary notice, governed by `search.inFiles.summaryNoticeMode` and
+  > `summaryNoticeTimeoutMs` for all three of its outcomes. The notice contract gained an optional
+  > `display` field for it (`contracts/notice-api.md`, which already records the change). Every other
+  > notice is unchanged: absent `display`, the severity-keyed preference decides, exactly as this
+  > assumption says. Recorded here because 043 FR-082a requires the widening to be stated in this
+  > spec as well as in its own, and until 2026-09-11 only the contract file said so.
 - No notice history or "show me what I missed" surface is part of this feature. Persistence is the only
   in-app mechanism by which a missed notice is recovered; the diagnostic log is the record for anything
   that was never displayed.
@@ -995,6 +1002,8 @@ not a new feature and takes no new spec directory.*
 
 - A new `fatal` severity, or any change to the set of four.
 - Per-notice or per-call-site persistence overrides.
+  > **Partly superseded (2026-09-10) by 043 FR-082a**: one per-call-site override is now in scope —
+  > the replace summary notice's own mode and timeout. See the matching marker under Assumptions.
 - A notice history, notification centre, or replay of dismissed notices.
 - A clickable or navigable affected-panel list — it reports, and the panel's banner acts.
 - An affected-panel list on a notice that is not about particular panels — a stopped daemon reports
