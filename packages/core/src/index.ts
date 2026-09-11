@@ -200,12 +200,23 @@ export type {
   EditorPathDisplay,
   NewProjectSettings,
   StartingFolderMode,
+  // 043 FR-059 — the Find in Files preferences and their three closed value sets.
+  SearchSettings,
+  FindInFilesSettings,
+  FindInFilesOpenTarget,
+  FindInFilesTrigger,
+  FindInFilesGrouping,
 } from './config/app-settings.js';
 export {
   DEFAULT_APP_SETTINGS,
   parseAppSettings,
   // 039 D-4 — the closed value set, shared by the parser and the descriptor so the two cannot drift.
   TERMINAL_RELOAD_MODES,
+  // 043 — the same idiom for the three enumerated Find in Files preferences: one statement of each
+  // set, read by the parse, by the descriptor's `allowedValues` and by the renderer.
+  FIND_IN_FILES_OPEN_TARGETS,
+  FIND_IN_FILES_TRIGGERS,
+  FIND_IN_FILES_GROUPINGS,
 } from './config/app-settings.js';
 // 031 (#227) — the declared-bounds guard, and the guarded read every settings reader should use.
 export {
@@ -333,8 +344,25 @@ export {
   assertInScopeContrast,
   assertSyntaxBodyContrast,
   knownContrastIssues,
+  // Search-match mutual distinctness (043, FR-067).
+  MATCH_SURFACE_PAIRS,
+  MATCH_DISTINCTNESS_THRESHOLD,
+  CLOSEST_MATCH_SURFACE_DELTA,
+  measureMatchDistinctness,
+  matchDistinctnessFailures,
+  closestMatchSurfacePair,
+  assertMatchDistinctness,
 } from './config/theme-quality.js';
-export type { Rgb, Lab, ClosestPair, ContrastPairing, ContrastResult, KnownContrastIssue } from './config/theme-quality.js';
+export type {
+  Rgb,
+  Lab,
+  ClosestPair,
+  ContrastPairing,
+  ContrastResult,
+  KnownContrastIssue,
+  MatchDistinctnessResult,
+  ClosestMatchSurfacePair,
+} from './config/theme-quality.js';
 export { parseFontStack, serializeFontStack } from './config/font-stack.js';
 export type { IconPackManifest, IconAsset, LoadedIconPack } from './config/icon-pack.js';
 export { parseIconPack, resolveIconValue, resolveIconAsset } from './config/icon-pack.js';
@@ -354,12 +382,21 @@ export {
 export type {
   ShippedDefaults,
   ThemeUpgradePlan,
+  ThemeValueUpgrade,
+  SearchMatchColours,
   SettingsLeafUpgrade,
 } from './config/shipped-defaults.js';
 export {
   SHIPPED_DEFAULTS_VERSION,
   // 033 FR-070a — the guarded one-leaf settings migration, and the v4 value it guards on.
   V4_EXCLUDE_GLOBS,
+  // 043 R28 — the guarded VALUE rewrite, and the frozen record of what version 6 shipped that it
+  // compares an installed file against. Copies, never references: see their doc comments.
+  V6_SEARCH_MATCH_COLOURS,
+  V6_FIND_IN_FILES_ICON,
+  V6_SEARCH_IN_FILES_SETTINGS,
+  SEARCH_MATCH_TOKENS,
+  planThemeValueUpgrade,
   planSettingsUpgrade,
   applySettingsUpgrade,
   buildShippedDefaults,
@@ -457,6 +494,7 @@ export type {
   PanelKind,
   PanelConfig,
   EditorPanelConfig,
+  FindInFilesPanelConfig,
   EncodingId,
   LineEndingId,
   SplitNode,
@@ -489,6 +527,7 @@ export {
   encode,
   newDocumentDefaults,
   isProbablyBinary,
+  isDecodableUtf8,
   type SaveConfinementKind,
   type SaveConfinement,
   isWithinTree,
@@ -811,3 +850,53 @@ export * from './failure/index.js';
 // 030 — failure PRESENTATION: display modes, the severity→log-level map, notice subjects and the
 // grouping key. Pure decisions shared by Preferences, the renderer and the main-process logger.
 export * from './notice/index.js';
+// 043 (R1) — the match model, hoisted out of the renderer because a file search runs in MAIN and
+// main cannot import from renderer. `renderer/search/search-model.ts` re-exports it, so no caller
+// moved with it. Case-sensitivity and whole word are the WHOLE vocabulary (FR-039/FR-040).
+export {
+  NO_MODES,
+  NO_MATCHES,
+  editorMatches,
+  indexFrom,
+  stepIndex,
+  countOf,
+  seedFrom,
+} from './search/match-model.js';
+export type { MatchModes, Match, SearchCount } from './search/match-model.js';
+// 043 — the pure file-search model: ordering, grouping, snippets and staleness. The scan that
+// fills these shapes lives in UI main; what the results MEAN is settled here, by unit test.
+export {
+  MAX_ROWS_PER_BATCH,
+  BATCH_FLUSH_MS,
+  MAX_COMMIT_SNIPPET_CHARS,
+  SNIPPET_CONTEXT_CHARS,
+  snippetFor,
+  groupRows,
+  orderGroups,
+  markStale,
+} from './search/file-search.js';
+export type {
+  SearchScope,
+  ResultRow,
+  SnippetView,
+  Grouping,
+  ResultGroup,
+  ScanStatus,
+} from './search/file-search.js';
+// 043 US4 — the pure replace model. `verifyEdits` is FR-054's re-check and `applyReplacements` is
+// FR-055's single backwards pass; both are true over a buffer and over a file, which is why they
+// live here rather than inside the commit service that calls them.
+// `postCommitSnippets` is 043 FR-083b's re-derivation, and it is here for the same reason: the
+// arithmetic between "where each write landed in the old text" and "what its line says now" is
+// identical on both commit paths, and belongs in neither of them.
+export { verifyEdits, applyReplacements, postCommitSnippets } from './search/replace-model.js';
+export type { EditVerification } from './search/replace-model.js';
+// 043 FR-092b — what the Find in Files scope box's text means: root-relative, absolute-inside, or
+// FR-070's refusal. Pure, so the renderer reads it before a scan starts and main never sees raw text.
+export { readScopeInput } from './search/scope-input.js';
+export type { ScopeInput } from './search/scope-input.js';
+// 043 FR-017 — the Find in Files panel type. Registered in `defaultPanelTypeRegistry` so a panel of
+// this kind has a header label and icon, and `offered: false` so the New Panel dialog never lists
+// it: a search panel is opened by a command, not chosen from a dropdown.
+export { FIND_IN_FILES_KIND, findInFilesPanelType } from './find-in-files/panel-type.js';
+export type { FindInFilesValues } from './find-in-files/panel-type.js';

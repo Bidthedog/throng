@@ -45,7 +45,7 @@ import {
 import { registerEditorActions, unregisterEditorActions } from './editor-actions.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import { registerPanelSearch, unregisterPanelSearch } from '../search/search-controller.js';
-import { updateCount } from '../search/search-store.js';
+import { destroyPanelSearch, updateCount } from '../search/search-store.js';
 import {
   createEditorSearchController,
   searchHighlightExtension,
@@ -1615,6 +1615,15 @@ export function disposeEditor(panelId: string): void {
   removePanelLanguage(panelId);
   // The document is gone — don't leak its saved caret (issue 144).
   clearEditorViewState(panelId);
+  /*
+   * …and the find session that was open on it (043 FR-006).
+   *
+   * NOT in the unmount cleanup beside `unregisterPanelSearch`, which is the obvious place and the
+   * wrong one: a panel unmounts when it MOVES — a detach into a sub-workspace, a drag to another
+   * tab — and a session travels with its panel (FR-025b). Only an explicit destroy discards it,
+   * and this function IS the explicit destroy.
+   */
+  destroyPanelSearch(panelId);
   // …nor the status bar's READOUT of that caret (040 FR-006, data-model.md §3.1). Keyed by panel,
   // so a recycled panel id would otherwise inherit a dead document's line and column.
   forgetPanelCaret(panelId);

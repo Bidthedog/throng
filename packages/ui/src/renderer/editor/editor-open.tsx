@@ -17,6 +17,7 @@ import { getEditorActions } from './editor-actions.js';
 import { getEditorState } from './editor-state.js';
 import { getLastActiveEditor, setLastActiveEditor } from './last-active-editor.js';
 import { promptUnsavedOpen } from './unsaved-open-store.js';
+import { revealRangeInEditor, type RevealRange } from './reveal-range.js';
 
 /**
  * Open-from-tree orchestration (006 Phase B, US2/US9, FR-010/011a). Listens for
@@ -129,6 +130,17 @@ export async function openFileInTab(
   tabId: string,
   absPath: string,
   openTarget: EditorOpenTarget = 'lastActive',
+  /**
+   * 043 T073/T074 (FR-038) — the text to SELECT once the file is open, in absolute document
+   * offsets. Absent for every gesture that opens a file without naming a place inside it.
+   *
+   * A parameter here rather than a second call the caller makes afterwards, because the caller does
+   * not know WHICH panel the file landed in: that is decided branch by branch below — the editor
+   * that already held it, the tab's last active one, or a dedicated one created on the spot. A
+   * caller wanting to reveal would have to re-derive that, and would get it wrong in exactly the
+   * case FR-037 is about (a dirty target answered with "New Editor").
+   */
+  range?: RevealRange,
 ): Promise<boolean> {
   // 1) Already open anywhere → focus that one editor (no second buffer, FR-011a / one-doc-one-state
   //    #68). This holds regardless of the open-target preference (US7 / FR-027).
@@ -137,6 +149,10 @@ export async function openFileInTab(
   const decision = await window.throng?.editor?.openInto({ absPath, ownerKind: 'project', ownerProjectId: ws.layout?.projectId });
   if (decision?.action === 'focus') {
     focusPanelIfLocal(ws, decision.panelId);
+    // The one-buffer rule and the reveal are not in tension: the file is already open, so the match
+    // is selected in the editor that holds it (FR-011a with FR-038). A panel in ANOTHER window is
+    // raised by main and revealed there, not here, which is why this is gated on it being local.
+    reveal(ws, decision.panelId, range);
     return true;
   }
   // 041 FR-013 (#327) — throng will not open this file, so NO PANEL IS CREATED, and the refusal goes
@@ -157,7 +173,7 @@ export async function openFileInTab(
   // US7 (#141): with "New Editor", a not-yet-open file lands in a NEW editor panel each time,
   // rather than reusing the tab's last active editor.
   if (openTarget === 'new') {
-    openFileInNewEditor(ws, tabId, absPath);
+    void revealRange(openFileInNewEditor(ws, tabId, absPath), range);
     return true;
   }
 
@@ -168,13 +184,13 @@ export async function openFileInTab(
   const targetId = last && editorsHere.includes(last) ? last : editorsHere[0];
 
   if (!targetId) {
-    createDedicatedEditor(ws, tabId, absPath);
+    void revealRange(createDedicatedEditor(ws, tabId, absPath), range);
     return true;
   }
 
   const actions = getEditorActions(targetId);
   if (!actions) {
-    createDedicatedEditor(ws, tabId, absPath);
+    void revealRange(createDedicatedEditor(ws, tabId, absPath), range);
     return true;
   }
 
@@ -184,7 +200,7 @@ export async function openFileInTab(
     const choice = await promptUnsavedOpen(basename(absPath), editorName);
     if (choice === 'cancel') return false;
     if (choice === 'new') {
-      createDedicatedEditor(ws, tabId, absPath);
+      void revealRange(createDedicatedEditor(ws, tabId, absPath), range);
       return true;
     }
     if (choice === 'save') {
@@ -193,12 +209,36 @@ export async function openFileInTab(
     }
     // 'discard' or a successful 'save' → replace the document.
     await actions.openFile(absPath);
+    void revealRange(targetId, range);
     return true;
   }
 
   await actions.openFile(absPath);
-  void targetId;
+  void revealRange(targetId, range);
   return true;
+}
+
+/**
+ * Start the reveal, without making the open wait for it (043 FR-038).
+ *
+ * Deliberately not awaited by `openFileInTab`: its return value answers "did a file get opened?",
+ * and 033 FR-061 reads that answer to decide whether to remember a Quick Open query. Awaiting a
+ * highlight that polls for a view that has not mounted yet would hold that answer for up to two
+ * seconds, and the open has already happened by then.
+ */
+function revealRange(panelId: string, range: RevealRange | undefined): string {
+  if (range) void revealRangeInEditor(panelId, range);
+  return panelId;
+}
+
+/** The same, for a panel id resolved rather than created — reads as one call at each branch. */
+function reveal(ws: Ws, panelId: string, range: RevealRange | undefined): void {
+  if (!range) return;
+  const layout = ws.layout;
+  if (!layout) return;
+  if (layout.tabs.some((tab) => collectPanels(tab.root).some((p) => p.id === panelId))) {
+    void revealRangeInEditor(panelId, range);
+  }
 }
 
 /**
@@ -266,12 +306,17 @@ export async function openFileInPanel(
  * "New Editor", FR-072). The caller gates on the file not already being open
  * anywhere (app-wide one-buffer, FR-011a), so no focus/reuse path is needed.
  */
-export function openFileInNewEditor(ws: Ws, tabId: string, absPath: string): void {
-  createDedicatedEditor(ws, tabId, absPath);
+export function openFileInNewEditor(ws: Ws, tabId: string, absPath: string): string {
+  return createDedicatedEditor(ws, tabId, absPath);
 }
 
-/** Create the tab's dedicated editor Panel already pointed at `absPath` (FR-010). */
-function createDedicatedEditor(ws: Ws, tabId: string, absPath: string): void {
+/**
+ * Create the tab's dedicated editor Panel already pointed at `absPath` (FR-010).
+ *
+ * Returns the panel it made. 043 FR-038 needs that id: the match has to be selected in the editor
+ * the file actually landed in, and this is the only code that knows which one that is.
+ */
+function createDedicatedEditor(ws: Ws, tabId: string, absPath: string): string {
   const newId = ws.addPanel(tabId);
   // A programmatically opened editor must NOT open in rename mode (that would steal
   // focus from the tree / editor). Only user-added Panels rename-on-add (FR-041).
@@ -280,6 +325,7 @@ function createDedicatedEditor(ws: Ws, tabId: string, absPath: string): void {
   window.throng?.panel?.notifyTyped?.(newId, 'editor', { filePath: absPath });
   ws.setActivePanel(tabId, newId);
   setLastActiveEditor(tabId, newId);
+  return newId;
 }
 
 /** If the given panel is in this window's layout, activate it (local focus). */

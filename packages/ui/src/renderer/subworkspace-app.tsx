@@ -10,6 +10,7 @@ import { PanelRenameSync } from './workspace/panel-rename-sync.js';
 import { PanelDestroySync } from './workspace/panel-destroy-sync.js';
 import { PanelStateSync } from './workspace/panel-state-sync.js';
 import { EditorChrome } from './editor/editor-chrome.js';
+import { FindInFilesChrome } from './find-in-files/find-in-files-chrome.js';
 import { NavigationChrome } from './navigate/navigation-chrome.js';
 import { TransientScrim } from './common/transient-scrim.js';
 import { SearchKeybindings } from './search/search-keybindings.js';
@@ -128,6 +129,9 @@ export function SubWorkspaceApp({ subWorkspaceId }: { subWorkspaceId: string }):
           <PanelDestroySync />
           <PanelStateSync />
           <EditorChrome isSubWorkspace />
+          {/* 043 — the second of this registration's two mounts, for the reason below: a chord live
+              only in the main window would be dead in a sub-workspace. */}
+          <FindInFilesChrome />
           {/* 033 (#219) — the SECOND of the two mounts. A sub-workspace window is its own renderer
               realm, so a chord live only in the main window would be dead here (Assumption 6). */}
           <TransientScrim />

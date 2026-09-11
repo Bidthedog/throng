@@ -21,6 +21,7 @@ export {
   encode,
   newDocumentDefaults,
   isProbablyBinary,
+  isDecodableUtf8,
 } from './text-fidelity.js';
 export {
   type SaveConfinementKind,

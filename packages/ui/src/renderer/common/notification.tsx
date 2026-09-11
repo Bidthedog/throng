@@ -189,6 +189,37 @@ export interface Notice {
    * failure were still live.
    */
   onDismiss?: () => void;
+  /**
+   * THIS notice's own display mode and duration, instead of its severity's (043 FR-082a).
+   *
+   * ══ WHY THE CONTRACT NEEDED WIDENING AT ALL ══
+   *
+   * Everything above this line resolves display from the severity alone, and that is 030's design:
+   * the USER decides how long they need to read something, once, per severity, in Preferences. A
+   * raiser deciding for them is the exact defect #224 reported.
+   *
+   * FR-082 needs one notice — Find in Files' replace summary — to answer to a control of its own
+   * instead, for all three of its outcomes. That is still the user deciding; what changes is WHICH
+   * control they reach for, not whether there is one. The cost is written down rather than left
+   * implicit: a user whose global preference is that errors stay until dismissed does not get that
+   * behaviour from a failed replace.
+   *
+   * ══ OPTIONAL, AND ABSENCE MUST KEEP MEANING WHAT IT ALWAYS MEANT ══
+   *
+   * Every call site that existed before this field omits it, and each one must behave EXACTLY as it
+   * did — which is why this is an added optional field rather than a change to how `severity` is
+   * read. `notice-display-override.test.ts` asserts both halves, and the half about the notices that
+   * carry NO override is the one doing the work: a regression there reaches every failure report in
+   * the application.
+   *
+   * Both members are stated together because they are one decision, exactly as they are in
+   * `notifications.<severity>`: `timeoutMs` is stored whatever the mode says and is consulted only
+   * under `timed`.
+   *
+   * The severity is UNTOUCHED by this. It still decides the colour, the icon, the log level and the
+   * announcement — only the display resolution moves.
+   */
+  display?: SeverityNotificationSettings;
 }
 
 /**
@@ -273,6 +304,19 @@ function panelIdsOf(input: NoticeInput): readonly string[] {
 }
 
 /** Shared empty list, so `mergeAffected`'s "nothing joined" identity check has something to match. */
+/**
+ * Whether two notices list the same details, in the same order (043 T237).
+ *
+ * Absent and empty are the same answer — a notice with no list and one with an empty list say the
+ * same thing. Order counts: a list is what the notice shows, top to bottom, and a caller that lists
+ * the same files in a different order has said something differently.
+ */
+function sameDetails(a: readonly string[] | undefined, b: readonly string[] | undefined): boolean {
+  const left = a ?? [];
+  const right = b ?? [];
+  return left.length === right.length && left.every((line, i) => line === right[i]);
+}
+
 const NO_PANELS: readonly AffectedCasualty[] = [];
 
 /**
@@ -543,7 +587,14 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
     const existing = timers.current.get(id);
     if (existing) {
       clearTimeout(existing);
-      const behaviour = displaySettings.current?.[live.current.find((n) => n.id === id)!.severity];
+      /*
+       * The notice's OWN display first — 043 FR-082a, at the one consulting point `notify` could not
+       * reach (T239). A repeat is absorbed into this card and never passes through `notify`'s
+       * resolution, so reading only the severity-keyed global here cut an overridden notice's dwell
+       * to the global's the moment it recurred: a replace summary set to 30 s went at 3.
+       */
+      const notice = live.current.find((n) => n.id === id)!;
+      const behaviour = notice.display ?? displaySettings.current?.[notice.severity];
       const timeoutMs = behaviour?.timeoutMs ?? DEFAULT_NOTIFICATION_SETTINGS.error.timeoutMs;
       timers.current.set(
         id,
@@ -624,8 +675,22 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
 
   const notify = useCallback(
     (input: NoticeInput) => {
+      /*
+       * WHAT DECIDES THIS NOTICE'S DWELL (030 FR-016; 043 FR-082a).
+       *
+       * The notice's own `display` when it states one, and the severity-keyed global otherwise. It is
+       * resolved ONCE, here, rather than at each of the three places that consult it below — the
+       * silenced shadow, the `never` return and the `timed` timer. Three separate reads of the
+       * override would be three chances for one notice to be shadowed under one mode and rendered
+       * under another.
+       *
+       * Absence is unchanged behaviour by construction: with no `display`, this is byte-for-byte the
+       * expression that was here before FR-082a.
+       */
       const behaviour: SeverityNotificationSettings =
-        displaySettings.current?.[input.severity] ?? DEFAULT_NOTIFICATION_SETTINGS[input.severity];
+        input.display ??
+        displaySettings.current?.[input.severity] ??
+        DEFAULT_NOTIFICATION_SETTINGS[input.severity];
       const now = Date.now();
       // Lazily, on the way in: the shadow's only clock is the next raise, so it owns no timer and is
       // bounded by the distinct silenced events inside one window.
@@ -761,7 +826,15 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
           n.title === input.title &&
           n.action === input.action &&
           n.testId === input.testId &&
-          formatSubject(n.subject ?? { kind: 'none' }) === subject,
+          formatSubject(n.subject ?? { kind: 'none' }) === subject &&
+          /*
+           * 043 T237 — AND WHAT IT LISTS. The details are part of what a notice says: a replace
+           * summary's headline is built from counts alone, so two commits touching DIFFERENT files
+           * with the same counts read as one notice raised twice. The second only pulsed the first
+           * card; its own file list was never shown and its record never written. A notice raised
+           * again with the SAME list is still one event seen twice, and still collapses.
+           */
+          sameDetails(n.details, input.details),
       );
       if (duplicate) {
         // 041 FR-008 — an identical notice, raised again. The other silent `return`, at the notice

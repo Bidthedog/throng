@@ -1,0 +1,472 @@
+/*
+ * The Find in Files panel (043 US3).
+ *
+ * EVERY colour here is a theme token and there is not one literal in the file — not even as a
+ * `var()` fallback. That is stricter than the shipped find bar, which carries fallbacks from 013,
+ * and it is deliberate: a fallback is a hardcoded colour that only shows itself when the token is
+ * missing, which is exactly when nobody is looking. `find-in-files-results.test.ts` fails on any
+ * literal in this file.
+ *
+ * The match highlight REUSES 013's `searchMatch` / `searchMatchCurrent` pair rather than
+ * introducing a parallel one (FR-044, research R15). Those tokens are documented in `theme.ts` as
+ * "one pair of surfaces shared by the editor and the terminal"; a result row is that same idea on
+ * a third surface, and the bundled themes already derive them to keep body text legible through
+ * them.
+ *
+ * TYPOGRAPHY IS THE `paneText` ROLE and is not set here (FR-064). `.fif-panel` joins that role's
+ * selector list in `theme.css`, so family, size and weight arrive by inheritance — which is what
+ * makes the `0.85em` metadata rules below mean "smaller than the panel's body text" rather than
+ * "smaller than `body`". This sheet therefore states NO absolute font size at all. Two deliberate
+ * exceptions, both stated where they are made: `.fif-row__snippet` borrows the editor role's FAMILY
+ * and nothing else (R29), and `.fif-input` says `font: inherit` because a form control does not take
+ * an inherited font without being told to.
+ */
+
+.fif-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--throng-colour-appBg);
+  color: var(--throng-colour-text);
+}
+
+/* Per-panel zoom, the TEXT half (FR-062, research R26).
+
+   `--throng-zoom-fif` is THIS panel's own zoom factor, published on its container by
+   `find-in-files-panel.tsx` — the precedent `editor-panel.tsx` + `editor.css:29` set. It multiplies
+   the ROLE's size rather than restating one, so a user who changes Pane Text still changes this
+   panel's text and the two settings compose instead of competing.
+
+   Only the text goes through a `calc()`, and that is the whole design. The ROW HEIGHT arrives here
+   already rounded to a whole pixel through `--fif-row-height`, because the results list is windowed
+   on it: a `calc(var(--fif-row-height) * var(--throng-zoom-fif))` would hand the browser 26.4px to
+   round by its own rules while the arithmetic rounds by ours, and the sizer multiplies that
+   disagreement by the row index — 250px of drift by the 500th row. Nothing measures a FONT SIZE
+   against an index, so the text is free to be fractional.
+
+   ══ WHY THE SELECTOR IS THE CLASS TWICE ══
+
+   `theme.css` hands `.fif-panel` the Pane Text role, and `theme.css` is imported LAST in `main.tsx`
+   while this sheet arrives through the component graph — so in the built bundle the role rule comes
+   after everything here. Rules of equal specificity are settled by document order, so a plain
+   `.fif-panel { font-size: … }` would lose to it and govern nothing: the same inert declaration
+   FR-079 has just removed from `.fif-btn` a few rules down, and with a requirement behind it this
+   time. Doubling the class names one element twice — same subject, specificity (0,2,0), no
+   dependence on which sheet a bundler emits first. `find-in-files-zoom.test.ts` asserts it. */
+.fif-panel.fif-panel {
+  font-size: calc(var(--throng-font-paneText-size) * var(--throng-zoom-fif, 1));
+}
+
+/* The toolbar reads as GROUPS, the same vocabulary the find bar was given by 043 US2: a wider gap
+   between groups than within one, so the field, the match modes and the grouping controls do not
+   read as one undifferentiated row of squares. */
+.fif-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--throng-colour-border);
+}
+
+.fif-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.fif-controls--field {
+  flex: 1 1 180px;
+  gap: 4px;
+  min-width: 140px;
+}
+
+/* The glyph that labels a field — the term, the replacement, the scope.
+
+   FR-079 again, and this is R31's OTHER symptom. The box used to be a bare `width: 16px`: the icon
+   token's default with no padding to hide behind, so the arithmetic is barer here than in
+   `.fif-btn`'s `16 + 3 + 3`. But this rule sets no `overflow`, so raising `sizes.iconPx` does not
+   clip the glyph — it lets it OVERFLOW and collide with the input beside it, and the icon that is
+   meant to label a field ends up sitting on the text it labels.
+
+   Both axes, so the box is the glyph rather than the glyph's width and whatever the row happens to
+   give it. `.icon` sizes itself from the same token, so the two now move together by construction. */
+.fif-field__icon {
+  flex: 0 0 auto;
+  width: var(--throng-size-icon);
+  height: var(--throng-size-icon);
+  color: var(--throng-colour-textMuted);
+  text-align: center;
+}
+
+/* ── A field, with its Clear inside it (FR-080, FR-080c) ─────────────────── */
+
+/* An `<input>` cannot contain an element, so the control that sits INSIDE the field is positioned
+   against a wrapper around it. One wrapper class for all three fields, because FR-080's whole point
+   is that the term, the replacement and the scope carry the SAME control — three hand-written
+   positionings are how they would quietly stop doing so.
+
+   On the scope row this wrapper is also the line FR-080c draws: the clear is inside it, and the
+   folder chooser stays a SIBLING beside it. A clear acts on the text in the box; a browse acts on
+   the scope. One box for both would claim they are the same kind of thing. */
+.fif-input-wrap {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+}
+
+/* Room for the control, so the text never runs underneath it.
+ *
+ * Derived from `--throng-size-icon` for the same reason the control's own box is (FR-079): a frozen
+ * figure here is the same defect one property along — raise `sizes.iconPx` in the Themes editor and
+ * the glyph would grow over text that had reserved room for the old default.
+ *
+ * The `12px` is the control's own chrome and inset, not a value computed from the token: 4px of
+ * padding-and-border per side (see `.fif-btn`) plus the 2px it sits in from each edge. That is the
+ * distinction `find-in-files-results.test.ts` makes when it excludes `padding` from its frozen-metric
+ * sweep — the breathing space is what the box is derived FROM, not part of the derivation. */
+.fif-input-wrap .fif-input {
+  padding-right: calc(var(--throng-size-icon) + 12px);
+}
+
+/* `font: inherit` is FR-064's other half. A form control does not take the inherited font on its
+   own — a browser gives it a UA face at a UA size — so without this the three fields would render
+   in Arial inside a panel that had otherwise taken the Pane Text role. */
+.fif-input {
+  flex: 1 1 auto;
+  min-width: 80px;
+  padding: 2px 6px;
+  font: inherit;
+  color: var(--throng-colour-text);
+  background: var(--throng-colour-inputSurface);
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 3px;
+  outline: none;
+}
+
+.fif-input:focus {
+  border-color: var(--throng-colour-accent);
+}
+
+/* Every action control is the same box whatever glyph a theme supplies, with visible space between
+   the glyph and the border on all four sides. `hoverSurface`, never a button-TYPE token: these are
+   icon controls, and the typed button tokens belong to text buttons (021 FR-030).
+
+   FR-079 — THE BOX IS DERIVED, NOT RESOLVED BY HAND. This rule used to say `width: 22px;
+   height: 22px; padding: 3px`, and
+
+       16 + 3 + 3 = 22
+
+   is why that was a defect rather than a number: 16 is `sizes.iconPx`'s DEFAULT, `.icon` sizes
+   itself from `--throng-size-icon`, and `overflow: hidden` is right here — so a user who raised that
+   value in the Themes editor got a bigger glyph CLIPPED by a box that had frozen the old default.
+   The token's name appeared nowhere in the rule, which is why no grep for it ever found this.
+
+   FR-079c — AND THAT SUM IS SHORT BY THE BORDER. `16 + 3 + 3 = 22` is the tell that made FR-079
+   findable, and it is itself incomplete: under `box-sizing: border-box` the declared width covers
+   the border too, so a 22px box with 3px of padding and a 1px border holds **14px** of content and
+   clips a 16px glyph by 1px on every side — at the DEFAULT icon size, with nothing changed. That is
+   not a latent defect waiting on a raised token; it is what the control has always looked like.
+   Measured in headless Chromium against these exact declarations rather than reasoned from the
+   spec, because the first correction of this rule wrote the same incomplete sum in `calc()` form and
+   therefore reproduced the defect exactly while satisfying every test that existed for it.
+
+   So the box is the glyph plus everything the border-box spends: padding AND border, both named, on
+   both axes. **The default box grows 22 → 24**, which is where it should have been all along: 24 is
+   exactly `.find-bar-btn` (`find-bar.css`), this control's acknowledged twin, and the 2px by which
+   the two disagreed was never a design decision — it was one of them remembering the border.
+
+   `--fif-btn-pad` and `--fif-btn-border` exist so each figure is written once and the arithmetic is
+   checkable rather than trusted; `find-in-files-results.test.ts` evaluates it at five icon sizes and
+   requires the content box to come out equal to the token at each. */
+.fif-btn {
+  --fif-btn-pad: 3px;
+  --fif-btn-border: 1px;
+
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: calc(var(--throng-size-icon) + (var(--fif-btn-pad) + var(--fif-btn-border)) * 2);
+  height: calc(var(--throng-size-icon) + (var(--fif-btn-pad) + var(--fif-btn-border)) * 2);
+  padding: var(--fif-btn-pad);
+  overflow: hidden;
+  line-height: 1;
+  color: var(--throng-colour-textMuted);
+  text-align: center;
+  cursor: pointer;
+  background: transparent;
+  border: var(--fif-btn-border) solid transparent;
+  border-radius: 3px;
+}
+
+:where(body:not([data-window-blurred])) .fif-btn:hover:not(:disabled) {
+  color: var(--throng-colour-text);
+  background: var(--throng-colour-hoverSurface);
+  border-color: var(--throng-colour-border);
+}
+
+/* The Clear that sits inside a field (FR-080a).
+ *
+ * ══ IT ADDS POSITION AND NOTHING ELSE, AND THAT IS THE REQUIREMENT ══
+ *
+ * `.settings-search__clear` — the ONE rule behind all three shipped clear controls this one copies
+ * its MARKUP from (the settings, keybindings and themes search boxes each wear that class) — is
+ * `width: 20px; height: 20px`, which is a token's resolved default frozen as a number:
+ * exactly the defect FR-079 and FR-079c removed from `.fif-btn` one round earlier. Copying that
+ * rule alongside the markup would have shipped the fix and a fresh instance of the bug in the same
+ * panel, which is why FR-080a is a requirement rather than a review note.
+ *
+ * So this rule declares NO box at all. The box is `.fif-btn`'s, unmodified — already derived from
+ * `--throng-size-icon` and already holding the glyph once `border-box` has taken its border and
+ * padding out. A `width` here, of any spelling, would be a second box free to disagree with it. */
+.fif-btn--clear {
+  position: absolute;
+  right: 2px;
+}
+
+/* An engaged toggle — a match mode, or the grouping in force — reads as SELECTED, which is the
+   `surfaceActive` role rather than the hover one. */
+.fif-btn--on {
+  color: var(--throng-colour-text);
+  background: var(--throng-colour-surfaceActive);
+  border-color: var(--throng-colour-border);
+}
+
+.fif-btn:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+/* ── The replacement row (FR-046) ────────────────────────────────────────── */
+
+.fif-replace {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--throng-colour-border);
+}
+
+/* ── The scope row: where to look, then run, then Replace All (FR-069, FR-068) ── */
+
+/* The row owns the padding and the rule beneath it; the scope control inside it owns only its own
+   contents, so the run and Replace All controls sit ON the same line rather than under it. */
+.fif-scope-row {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--throng-colour-border);
+}
+
+/* ── The scope control (FR-030, FR-030a) ─────────────────────────────────── */
+
+.fif-scope {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* The marking is on the CONTROL and is informational — it changes no row (FR-030a). One attribute
+   for both conditions (FR-070): they are alternatives, and one slot is what keeps the control from
+   carrying two markings at once. */
+.fif-scope[data-scope-notice] .fif-input--scope {
+  border-color: var(--throng-colour-danger);
+}
+
+.fif-scope__missing {
+  flex: 0 0 auto;
+  font-size: 0.85em;
+  color: var(--throng-colour-danger);
+}
+
+/* ── The scan's state, in words (FR-042) ─────────────────────────────────── */
+
+.fif-status {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  padding: 3px 6px;
+  font-size: 0.85em;
+  color: var(--throng-colour-textMuted);
+}
+
+.fif-status[data-state='scopeMissing'] .fif-status__label {
+  color: var(--throng-colour-danger);
+}
+
+/* ── The windowed list ───────────────────────────────────────────────────── */
+
+.fif-results {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  outline: none;
+}
+
+/* The full extent of the result set, so the scrollbar tells the truth about how much there is —
+   the thing a hard cap at N rows cannot do. Its height is set from the row constant in TypeScript;
+   nothing here restates that number. */
+.fif-results__sizer {
+  position: relative;
+}
+
+.fif-results__window {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+}
+
+/* FR-085 — BOTH of these answer a double-click, so both say so.
+ *
+ * The row opens its file (FR-037) and the heading collapses or expands its group (FR-071), and
+ * until this rule neither had anything to announce the gesture: the heading had no affordance at
+ * all, and the row had the hover fill it has always had with no cursor to go with it.
+ *
+ * `cursor` is on the SHARED rule rather than on two, because a heading is not a different kind of
+ * target from a row here — `renderGroup` draws the file heading and the folder heading from one
+ * element, differing only by `data-group-kind`, so there is no narrower scope to choose. Scoping it
+ * to folders would leave the file headings double-clickable and silent, which is worse than today:
+ * the inconsistency would then be INSIDE one list rather than between two surfaces.
+ *
+ * The vocabulary is the explorer tree's (`explorer.css`'s `.tree-row`), matched rather than
+ * re-invented, down to which token and which gate. */
+.fif-group,
+.fif-row {
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 6px;
+  height: var(--fif-row-height);
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* `hoverSurface`, never `surfaceActive`: the latter is the SELECTED/engaged role on this surface —
+   `.fif-btn--on` and the row the reading position is on are its two instances — and borrowing it
+   here would paint "the pointer is over this" and "this is the one you are on" the same colour.
+
+   The gate is not decoration. Left off, a pointer resting here when the window blurs strands its
+   tint until the mouse moves (021 FR-035); `tests/unit/hover-suppression-coverage.test.ts` fails
+   the build for an ungated hover-surface rule anywhere in the renderer. */
+:where(body:not([data-window-blurred])) .fif-group:hover,
+:where(body:not([data-window-blurred])) .fif-row:hover {
+  background: var(--throng-colour-hoverSurface);
+}
+
+/* FR-063 — a file heading reads as a heading. The BASE bold token, not `--throng-font-paneText-weight`:
+   the rows already carry the role's weight, so a role weight here would give the heading exactly what
+   it is meant to stand out from. A literal `600` would be the same class of mistake as a hex colour —
+   021 made weight themeable, and this sheet hardcodes neither. */
+.fif-group__key {
+  overflow: hidden;
+  font-weight: var(--throng-font-weight-bold);
+  color: var(--throng-colour-text);
+  text-overflow: ellipsis;
+}
+
+.fif-group__count,
+.fif-group__stale,
+.fif-row__pos {
+  flex: 0 0 auto;
+  font-size: 0.85em;
+  color: var(--throng-colour-textMuted);
+}
+
+/* FR-045a, on the ONE element that represents a file: its heading. `.fif-row__stale` sat beside
+   this until FR-073 withdrew the folder grouping that was the only shape leaving a row without a
+   file heading above it (043 T147). FR-045b is why nothing here dims, strikes or otherwise takes
+   anything away from what it sits on. */
+.fif-group__stale {
+  padding-left: 0.5em;
+  color: var(--throng-colour-warning);
+}
+
+.fif-row__snippet {
+  overflow: hidden;
+  font-family: var(--throng-font-editor-family);
+  color: var(--throng-colour-text);
+  text-overflow: ellipsis;
+}
+
+.fif-ellipsis {
+  color: var(--throng-colour-textMuted);
+}
+
+/* FR-044 — 013's tokens, on a third surface. */
+.fif-match {
+  color: inherit;
+  background: var(--throng-colour-searchMatch);
+}
+
+/* The row the reader is on. `searchMatchCurrent` is what makes "this one" different from "one of
+   these", exactly as it does in the editor and the terminal. */
+.fif-row[data-current='true'] {
+  background: var(--throng-colour-surfaceActive);
+}
+
+.fif-row[data-current='true'] .fif-match {
+  background: var(--throng-colour-searchMatchCurrent);
+  outline: 1px solid var(--throng-colour-searchMatchCurrentBorder);
+}
+
+/* ── The replace preview (FR-047, FR-046a, FR-051) ───────────────────────────────────────────── */
+
+/* The match as it WOULD be replaced. Struck through rather than dimmed: a strike says "this goes",
+   and dimming says "this is less important", which is a different claim.
+
+   FR-066 adds a RECESSION on top of the strike, and it is `opacity` on purpose. The obvious
+   instrument — a dimmer colour — is unavailable here twice over: this sheet may name no literal, and
+   a token dim enough to recede against one palette is invisible against another. Opacity is relative
+   to whatever the theme already put behind it, so it recedes by the same amount on all fifteen. It
+   fades the match's own highlight along with its text, which is the point: what is going away should
+   read as going away, highlight included. */
+.fif-match--struck {
+  text-decoration: line-through;
+  opacity: 0.6;
+  /* The theme's own de-emphasis, so the strike reads on every palette rather than only on a light
+     one. No hardcoded colour anywhere in this file. */
+  text-decoration-color: var(--throng-colour-textMuted);
+}
+
+/* What would replace it, immediately after the strike so before-and-after reads on one row.
+
+   `accent`/`accentText`, NOT `searchMatchCurrent` (FR-066). The search-match pair says "this is
+   what you looked for", and on the row the reader is on the struck original is already painted
+   `searchMatchCurrent` — so the text going away and the text arriving were the same colour, which is
+   the defect. The replacement is not a match at all: it is the edit being proposed, and `accent` is
+   the token this application already uses for that (`.fif-row--committed`'s rule, just below, marks
+   a COMMITTED edit with the same one). `accentText` comes with it because a highlight strong enough
+   to be distinct is strong enough to swallow the row's text colour, and the pair exists so that
+   never has to be guessed at. */
+.fif-replacement {
+  margin-left: 2px;
+  padding: 0 2px;
+  text-decoration: none;
+  color: var(--throng-colour-accentText);
+  background: var(--throng-colour-accent);
+}
+
+/* FR-051 — already written. Visibly distinguishable from a pending preview, and NOT hidden,
+   disabled or reordered: the user is still entitled to read what they committed. */
+.fif-row--committed {
+  border-left: 2px solid var(--throng-colour-accent);
+}
+
+.fif-row--committed .fif-row__pos {
+  color: var(--throng-colour-accent);
+}

@@ -304,6 +304,79 @@ declare global {
           }) => void,
         ) => () => void;
       };
+      // 043 US3 — the Find in Files scan (contracts/file-search-ipc.md). Starting IS subscribing,
+      // and a second start for the same panel supersedes the first rather than compounding it.
+      fileSearch?: {
+        start: (req: {
+          panelId: string;
+          projectRoot: string;
+          scopeSubPath: string | null;
+          term: string;
+          modes: import('@throng/core').MatchModes;
+        }) => Promise<
+          | { started: true }
+          | { started: false; reason: 'emptyTerm' | 'noProject' | 'scopeMissing' }
+        >;
+        /**
+         * FR-078 — this window is displaying the panel; join the run and be sent what it holds.
+         *
+         * Idempotent, and the only way a window that did not START a scan can see one: a panel
+         * synced into a sub-workspace is the same panel, and it showed an empty list until this
+         * existed (#380).
+         */
+        attach: (panelId: string) => void;
+        cancel: (panelId: string) => void;
+        /**
+         * This window is no longer displaying the panel — leave the run's viewer set.
+         *
+         * The run, its held stamps and its staleness are released on the LAST detach (data-model
+         * §R2). FR-023 is unaffected: closing a panel unmounts it in every window, so every window
+         * drops and the set empties.
+         */
+        drop: (panelId: string) => void;
+        /**
+         * 043 FR-091a — empty the panel's run for EVERY window watching it: they are each told it
+         * has not been run. The panel stays, which is what separates this from `drop`; the rows go
+         * everywhere, which is what separates it from `cancel`.
+         */
+        clear: (panelId: string) => void;
+        /** The one call that writes; the partition and the re-check happen in the main handler. */
+        commit: (req: unknown) => Promise<unknown>;
+        onUpdate: (
+          cb: (evt: {
+            panelId: string;
+            /** Mandatory: the renderer drops any update from a superseded run. */
+            generation: number;
+            status: import('@throng/core').ScanStatus;
+            /**
+             * FR-078a — the run's whole retained state, sent once to a window that has attached.
+             *
+             * `rows` REPLACES rather than appends, and the totals are authoritative. It is the one
+             * update the batch bound does not apply to.
+             */
+            snapshot?: true;
+            /** A batch, at most `MAX_ROWS_PER_BATCH` rows, appended in arrival order. */
+            rows?: import('@throng/core').ResultRow[];
+            totalMatches?: number;
+            filesScanned?: number;
+            /** FR-045f — one count for the whole scan, never a marker per file. */
+            skipped?: number;
+            /** FR-045a — the whole stale set, cumulative; see `FileSearchUpdateEvent`. */
+            staleFiles?: string[];
+            /**
+             * FR-078b — the query these rows came from, sent only to a window that is FOLLOWING.
+             *
+             * Absent for the window driving the search, and that absence is the contract: presence
+             * alone tells a window it is showing somebody else's results and must describe them
+             * with somebody else's query.
+             */
+            adoptQuery?: {
+              term: string;
+              modes: import('@throng/core').MatchModes;
+            };
+          }) => void,
+        ) => () => void;
+      };
       // The OS clipboard (016, FR-013a) — behind the seam, in UI main.
       clipboard?: {
         write: (entry: { text: string; mode: import('@throng/core').ClipboardMode }) => Promise<void>;

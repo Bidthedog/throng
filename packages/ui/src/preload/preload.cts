@@ -547,6 +547,53 @@ contextBridge.exposeInMainWorld('throng', {
       return () => ipcRenderer.removeListener('throng:fileIndex:update', handler);
     },
   },
+  // 043 US3 (contracts/file-search-ipc.md): the Find in Files scan. Starting IS subscribing —
+  // a scan has exactly one consumer and no reason to outlive it — and `start` for a panel that
+  // already has one SUPERSEDES it rather than compounding (FR-043c), so there is no handshake to
+  // get wrong. Results arrive on `onUpdate` in batches of at most 250 rows (FR-041); every update
+  // carries the `generation` the renderer drops superseded runs by.
+  fileSearch: {
+    start: (req: {
+      panelId: string;
+      projectRoot: string;
+      scopeSubPath: string | null;
+      term: string;
+      modes: { caseSensitive: boolean; wholeWord: boolean };
+    }) => ipcRenderer.invoke('throng:fileSearch:start', req),
+    // 043 FR-078 — this window is displaying the panel too. Starting was the only way to subscribe,
+    // so a panel synced into a sub-workspace showed an empty list (#380); attaching joins the run
+    // the parent is watching and is answered with a snapshot of whatever it already holds.
+    attach: (panelId: string) => ipcRenderer.send('throng:fileSearch:attach', { panelId }),
+    cancel: (panelId: string) => ipcRenderer.send('throng:fileSearch:cancel', { panelId }),
+    // The panel itself has gone, not just its scan: release the run and everything it held. Cancel
+    // keeps a partial result set answerable to the staleness watch; this keeps nothing.
+    drop: (panelId: string) => ipcRenderer.send('throng:fileSearch:drop', { panelId }),
+    // 043 FR-091a — the panel stays, its query and results do not: every window watching it is told
+    // it has not been run. Kept distinct from `drop`, which is for a panel that has gone.
+    clear: (panelId: string) => ipcRenderer.send('throng:fileSearch:clear', { panelId }),
+    // The one call that writes. Everything about the partition, the re-check and the write happens
+    // inside the main-side handler, in one turn — the renderer cannot answer "does this file have
+    // an open editor" without a race (research R7).
+    commit: (req: unknown) => ipcRenderer.invoke('throng:fileSearch:commit', req),
+    onUpdate: (
+      cb: (evt: {
+        panelId: string;
+        generation: number;
+        status: 'notRun' | 'running' | 'complete' | 'cancelled' | 'scopeMissing';
+        // FR-078a — the run's WHOLE state, sent to a window that has just attached: `rows` replaces
+        // rather than appends. Absent on every ordinary batch.
+        snapshot?: true;
+        rows?: unknown[];
+        totalMatches?: number;
+        filesScanned?: number;
+        skipped?: number;
+      }) => void,
+    ) => {
+      const handler = (_event: unknown, evt: Parameters<typeof cb>[0]): void => cb(evt);
+      ipcRenderer.on('throng:fileSearch:update', handler);
+      return () => ipcRenderer.removeListener('throng:fileSearch:update', handler);
+    },
+  },
   // The OS clipboard (016, FR-013a): the sandboxed renderer cannot reach it, so it says WHAT to
   // copy and what SHAPE it is, and UI main writes it and remembers. The shape is app-global — one
   // record — which is what lets a block cut in one file paste as a block in another window.

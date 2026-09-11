@@ -26,10 +26,10 @@ import { getActivePane } from '../workspace/active-pane.js';
 import { getPanelSearch } from './search-controller.js';
 import {
   closeFind,
-  closeFindIfNotOn,
   findNext,
   findPrevious,
-  getFindState,
+  followActivePanel,
+  isFindShowingOn,
   openFind,
   replaceAll,
   replaceCurrent,
@@ -66,10 +66,15 @@ export function SearchKeybindings(): null {
     : undefined;
   const activeKind = activePanel?.kind;
 
-  // A bar left open on a panel that is no longer active would act on the wrong panel,
-  // so moving focus elsewhere closes it (spec Edge Cases).
+  /*
+   * The visible bar follows the active panel (043 FR-002 / FR-004).
+   *
+   * A bar left showing on a panel that is no longer active would act on the wrong panel, so moving
+   * focus elsewhere HIDES it — and moving back SHOWS it again, with the session it kept. It used to
+   * close the session outright, which is the half of #220 the user met.
+   */
   useEffect(() => {
-    closeFindIfNotOn(activePanelId);
+    followActivePanel(activePanelId);
   }, [activePanelId]);
 
   useEffect(() => {
@@ -110,7 +115,8 @@ export function SearchKeybindings(): null {
       const controller = getPanelSearch(activePanelId);
       if (!controller) return;
 
-      const findOpen = getFindState().panelId === activePanelId;
+      // Every command below resolves THIS panel — never "the current session" (043 FR-003).
+      const findOpen = isFindShowingOn(activePanelId);
 
       switch (action) {
         case 'search.find':
@@ -130,31 +136,31 @@ export function SearchKeybindings(): null {
         case 'search.close':
           if (!findOpen) return;
           e.preventDefault();
-          closeFind();
+          closeFind(activePanelId);
           return;
 
         case 'search.findNext':
           if (!findOpen) return;
           e.preventDefault();
-          findNext();
+          findNext(activePanelId);
           return;
 
         case 'search.findPrevious':
           if (!findOpen) return;
           e.preventDefault();
-          findPrevious();
+          findPrevious(activePanelId);
           return;
 
         case 'search.replaceCurrent':
           if (!findOpen || activeKind !== 'editor') return;
           e.preventDefault();
-          replaceCurrent();
+          replaceCurrent(activePanelId);
           return;
 
         case 'search.replaceAll':
           if (!findOpen || activeKind !== 'editor') return;
           e.preventDefault();
-          replaceAll();
+          replaceAll(activePanelId);
           return;
 
         default:

@@ -2140,13 +2140,22 @@ textarea,
    reach the sidebar's empty-list messages too (021 follow-up): before this, the empty PANEL placeholder
    answered to Pane Text but the empty Projects / Sub-workspaces lists in the sidebar did not, so "all
    panes share the same body text" was not actually true. It deliberately does NOT reach a pane/panel
-   HEADER — those are the `paneTitle` (sidebar headings) and `panel` (Panel Header) roles. */
+   HEADER — those are the `paneTitle` (sidebar headings) and `panel` (Panel Header) roles.
+
+   `.fif-panel` is the WHOLE Find in Files panel rather than a leaf, and that is the point (043
+   FR-064): the panel shipped subscribing to nothing, so its body text inherited `body` and its
+   secondary rules shrank to `0.85em` against the wrong base. Naming the container makes the role the
+   base every one of those relative sizes is measured from, and the two deliberate exceptions state
+   themselves where they live — the code snippet borrows `--throng-font-editor-family` and only the
+   family (043 R29), and the panel's inputs say `font: inherit` because a form control does not take
+   an inherited font on its own. */
 .panel-box__placeholder,
 .panel-type-form,
 .workspace-empty,
 .pane-explorer__empty,
 .project-list__empty,
-.subworkspace-list__empty {
+.subworkspace-list__empty,
+.fif-panel {
   font-family: var(--throng-font-paneText-family);
   font-size: var(--throng-font-paneText-size);
   font-weight: var(--throng-font-paneText-weight);

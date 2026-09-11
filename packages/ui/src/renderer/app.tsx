@@ -14,6 +14,8 @@ import { EditorChrome } from './editor/editor-chrome.js';
 import { NavigationChrome } from './navigate/navigation-chrome.js';
 import { TransientScrim } from './common/transient-scrim.js';
 import { requestQuickOpen, setNavigationModal } from './navigate/navigation-store.js';
+import { FindInFilesChrome } from './find-in-files/find-in-files-chrome.js';
+import { requestFindInFiles } from './find-in-files/open-find-in-files.js';
 import { SearchKeybindings } from './search/search-keybindings.js';
 import { useCapabilities } from './panel-type/use-capabilities.js';
 import { ProjectsPanel } from './sidebar/projects-panel.js';
@@ -159,6 +161,26 @@ const QUICK_OPEN: ActionId = 'navigate.quickOpen';
 const GOTO_LINE: ActionId = 'navigate.gotoLine';
 
 /**
+ * 043 FR-028/FR-029 (#220, #153) — find in files and replace in files, from any focus context.
+ *
+ * Handled HERE for Quick Open's reason, and the trap is the same one the comment above records:
+ * adding an action to the allowlist below is a SILENT failure to forget. The chord compiles, binds,
+ * resolves — and does nothing at all, with no throw and no log.
+ *
+ * These two carry a sharper version of it. Both are `Ctrl+Shift+<letter>`, which is exactly the
+ * shape that produced the `Ctrl+Shift+T` defect: the dispatcher used to drop Shift for every key
+ * but the backtick and the function keys, so a letter chord arrived at the resolver one modifier
+ * short and matched nothing. `window-chord-manifest.test.ts` is what stops that regression coming
+ * back, and it fails the BUILD unless both appear in the coverage map in `tests/shared/window-chords.ts`.
+ *
+ * Named constants rather than literals for `TABS_OPEN_PICKER`'s reason — the HANDLED gate and the
+ * dispatch below cannot drift apart, and a rename in core's registry fails here rather than leaving
+ * the chord quietly unhandled.
+ */
+const FIND_IN_FILES: ActionId = 'search.findInFiles';
+const REPLACE_IN_FILES: ActionId = 'search.replaceInFiles';
+
+/**
  * The actions the WINDOW owns — intercepted and stopped in the capture phase, so they fire wherever
  * DOM focus happens to be.
  *
@@ -203,6 +225,8 @@ export const WINDOW_HANDLED_ACTIONS: ReadonlySet<string> = new Set([
       TABS_OPEN_PICKER,
       QUICK_OPEN,
       GOTO_LINE,
+      FIND_IN_FILES,
+      REPLACE_IN_FILES,
 ]);
 
 /**
@@ -388,6 +412,27 @@ function KeybindingsHandler({
          */
         case QUICK_OPEN:
           requestQuickOpen();
+          break;
+        /*
+         * 043 (FR-020–FR-022, FR-029d, FR-029e) — find and replace in files.
+         *
+         * ONE command with two entry points, which is FR-029d stated as code: replace in files is
+         * find in files with `replace: true`, so the two cannot drift on which panel they reuse or
+         * how they scope. The route is `chord`, and that is what licenses seeding from the focused
+         * panel's selection (FR-031a) — the toolbar and the folder menu pass their own route and
+         * seed nothing.
+         *
+         * `requestFindInFiles` returns whether anything opened, and `false` is a legitimate outcome
+         * rather than a failure: with no project open there is nothing to search, so the chord is
+         * SWALLOWED and nothing appears, and no notice is raised (FR-029e). Swallowed rather than
+         * passed on, for Quick Open's reason — a chord the application has claimed must not also
+         * reach a shell.
+         */
+        case FIND_IN_FILES:
+          requestFindInFiles({ route: 'chord', replace: false });
+          break;
+        case REPLACE_IN_FILES:
+          requestFindInFiles({ route: 'chord', replace: true });
           break;
         /*
          * 033 US2 (FR-025, A2, A4) — Go To Line, over the ACTIVE editor panel.
@@ -853,6 +898,10 @@ export function App(): ReactElement {
       <PanelNameSync />
             <PanelFocusSync />
             <EditorChrome />
+            {/* 043 — the one registration that turns the two chords, the toolbar control and the
+                folder menu item into an opened panel. A sub-workspace window is its own renderer
+                realm and mounts its own copy. */}
+            <FindInFilesChrome />
             {/* 033 (#219) — the navigation modals. Mounted in BOTH window shells; the
                 sub-workspace's copy is in `subworkspace-app.tsx` (Assumption 6). */}
             <TransientScrim />

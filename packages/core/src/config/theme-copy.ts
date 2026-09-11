@@ -596,6 +596,16 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Find icon',
     description: 'The glyph on the control that opens the find bar over the active panel.',
   },
+  'icons.findInFiles': {
+    label: 'Find in Files icon',
+    description:
+      'The glyph on the toolbar control and folder menu item that searches every file in the project for a piece of text.',
+  },
+  'icons.searchScope': {
+    label: 'Search scope icon',
+    description:
+      'The glyph on the control that shows which folders and files a Find in Files search is looking through, and lets you change them.',
+  },
   'icons.findNext': {
     label: 'Find next icon',
     description: 'The glyph on the control that steps forward to the following match.',

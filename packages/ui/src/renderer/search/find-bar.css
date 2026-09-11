@@ -19,9 +19,30 @@
   box-shadow: 0 2px 6px rgb(0 0 0 / 35%);
 }
 
+/* 043 (FR-010) — the row separates GROUPS, a group separates its own buttons.
+ *
+ * The bar shipped as one flat row at a single 4px gap: seven identical squares in an unbroken
+ * line, with nothing to say that Aa/ab are one idea, ↑/↓ another and replace a third. The two
+ * gaps below are the whole of "distinguishable as groups" — a larger space between the groups
+ * than within one — and they are the pair `find-bar-toolbar.test.ts` compares. Keep the row's
+ * larger than the group's; equal gaps put the wall of squares straight back. */
 .find-bar-row {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.find-bar-group {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+/* The leading cluster — the mode glyph, the field and its counter — is a group like any other, but
+ * they are three DIFFERENT kinds of thing rather than a set of sibling buttons, so 2px reads as
+ * crowding. Its own gap keeps the two rows' fields aligned with each other. */
+.find-bar-group--field {
   gap: 4px;
 }
 
@@ -73,7 +94,11 @@
   box-sizing: border-box;
   width: 24px;
   height: 24px;
-  padding: 0;
+  /* 043 (FR-010) — visible space between the glyph and the border, on all four sides. It was `0`,
+     so every glyph sat hard against its own edge and the control read as a bordered character
+     rather than a button. The box stays 24px because `box-sizing` is border-box, so the padding
+     comes out of the glyph's room rather than out of the row's. */
+  padding: 3px;
   overflow: hidden;
   font-size: 12px;
   line-height: 1;

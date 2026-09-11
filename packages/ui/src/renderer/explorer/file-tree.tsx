@@ -27,16 +27,22 @@ import { setTreeDrag, clearTreeDrag, getTreeDrag, takeTreeDropEffect } from './t
 import { useErrorNotice } from '../common/notification.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
-import { openFileInTab, openFileInNewEditor } from '../editor/editor-open.js';
-import { publishRefusedOpen } from '../editor/refusal-store.js';
-import { getLastActiveEditor } from '../editor/last-active-editor.js';
-import { getEditorState, useDirtyPathKey } from '../editor/editor-state.js';
+/*
+ * 043 FR-087/FR-089 — the "Open In" targets come from here now, not from ninety lines below.
+ *
+ * Six imports went with the block they served: `openFileInTab`, `openFileInNewEditor`,
+ * `publishRefusedOpen`, `getLastActiveEditor`, `getEditorState`, `collectPanels` and
+ * `normaliseFolder`. That this file no longer reaches for any of them is the readable measure of
+ * the extraction — a shared builder that left its callers still importing the editor internals
+ * would not have moved the decision, only copied it.
+ */
+import { describeOpenInTargets, openInMenuActions } from '../editor/open-in-targets.js';
+import { performOpenIn, readOpenInFacts } from '../editor/open-in-perform.js';
+import { useDirtyPathKey } from '../editor/editor-state.js';
 import { useActiveEditorFilePath } from '../editor/active-editor-file.js';
 import { PanelSkeleton } from '../common/loading.js';
 import {
   buildTreeDragPayload,
-  collectPanels,
-  normaliseFolder,
   relPathUnderRoot,
   resolveDragEffect,
   resolveTarget,
@@ -45,6 +51,7 @@ import {
   type TerminalPanelConfig,
 } from '@throng/core';
 import { useFlavours } from '../panel-type/use-flavours.js';
+import { requestFindInFiles } from '../find-in-files/open-find-in-files.js';
 import { focusPanel, requestPanelFocus } from '../workspace/panel-focus.js';
 import type { MenuAction } from '../workspace/context-menu.js';
 
@@ -325,6 +332,22 @@ export function FileTree({
    * renames on add), `notifyTyped` mirrors the typing to other windows, and `setActivePanel` before
    * focus is what lets the terminal's own mount-time focus fire — see the note on `focusPanel` below.
    */
+  /*
+   * 043 FR-090 — the tree's *Open In → Search* route into Find in Files, for a FILE or a folder.
+   *
+   * It goes through `requestFindInFiles`, the SAME opener the chord and the toolbar control use, so
+   * there is one place that decides reuse-or-new (FR-021/FR-022) rather than three that must be kept
+   * in step. The route travels with the request because it is what settles what happens to the
+   * panel: this one RESETS it (FR-091) — boxes and results cleared, scope filled — where the chord
+   * and the toolbar re-run its term.
+   *
+   * It was `findInFolder` and took no disclosure until round five. A file is a scope now (FR-092),
+   * and *Find & Replace* is a second item on the same route (FR-090).
+   */
+  const searchFromTree = useCallback((relPath: string, replace: boolean) => {
+    requestFindInFiles({ route: 'contextMenu', replace, scopeSubPath: relPath });
+  }, []);
+
   const openInTerminal = useCallback(
     (node: TargetNode, flavour: FlavourOption) => {
       const activeTabId = ws.layout?.activeTabId;
@@ -371,95 +394,35 @@ export function FileTree({
   const onContextMenu = useCallback(
     async (node: NodeApi<TreeNodeData>, event: React.MouseEvent) => {
       node.select();
-      // Build the "Open In" editor targets for a file (current-project tabs only),
-      // disabling any target when the file is already open in an editor (FR-011a).
+      /*
+       * The "Open In" editor targets for a file (043 FR-087, FR-089).
+       *
+       * Ninety lines of label composition, two disabled conditions and a hand-rolled `openInto`
+       * gate used to live here. They now live in `editor/open-in-targets.ts` (the pure decision)
+       * and `editor/open-in-perform.ts` (the half that touches the stores), because 043 draws the
+       * SAME three targets on a Find in Files result row — and two surfaces each computing their
+       * own labels and their own disabled conditions are two implementations, of which one drifts.
+       *
+       * NOTHING THIS MENU OFFERS CHANGED. The measure of that is not this comment: it is that
+       * `explorer-open-in-target.test.ts` — which pins the panel-title suffix, both disabled
+       * conditions and the `normaliseFolder` path comparison — passes untouched.
+       *
+       * The hand-rolled gate went with them. 041 FR-013d required it HERE because this was the one
+       * caller of `openFileInNewEditor` that never reached `openInto`. `performOpenIn` routes
+       * through `openFileInTab`, which awaits `openInto` on its first line, so the premise is
+       * removed rather than the rule broken (043 FR-089) — and `openFileInNewEditor` itself is
+       * untouched and still synchronous, which is FR-013d's other half and still stands.
+       */
       let openIn: MenuAction[] | undefined;
       if (node.data.kind === 'file' && node.data.relPath !== '') {
         const absPath = `${rootFolder}/${node.data.relPath}`;
+        // Awaited BEFORE the facts are read, so the whole decision is sampled from one moment
+        // rather than from either side of an await the layout could move across.
         const alreadyOpen = (await window.throng?.editor?.isOpen?.(absPath)) ?? false;
-        const layout = ws.layout;
-        const activeTabId = layout?.activeTabId;
-        const otherTabs = (layout?.tabs ?? []).filter((t) => t.id !== activeTabId);
-        // "This editor" targets the active tab's last active editor. Disable it when
-        // that editor already holds this file (opening would be a no-op, FR-082).
-        const targetEditor = activeTabId ? getLastActiveEditor(activeTabId) : undefined;
-        const activeTab = (layout?.tabs ?? []).find((t) => t.id === activeTabId);
-        const targetPanel =
-          targetEditor && activeTab
-            ? collectPanels(activeTab.root).find((p) => p.id === targetEditor)
-            : undefined;
-        const openInTargetAlready =
-          targetEditor !== undefined &&
-          getEditorState(targetEditor)?.filePath != null &&
-          normaliseFolder(getEditorState(targetEditor)!.filePath as string) === normaliseFolder(absPath);
-        openIn = [
-          {
-            // Replicates the click action: open into the tab's last active editor,
-            // reusing it (FR-082/098). The label names that target panel. Disabled
-            // when that editor already holds the file.
-            label: targetPanel ? `Last Active Editor (${targetPanel.title})` : 'Last Active Editor',
-            icon: 'add',
-            // Every Open In target takes you somewhere — the submenu is single-section and
-            // therefore divider-free (033 US5, contracts §3.8).
-            section: 'navigate',
-            disabled: !activeTabId || openInTargetAlready,
-            onClick: () => {
-              if (activeTabId) void openFileInTab(ws, activeTabId, absPath);
-            },
-          },
-          {
-            // Forces a brand-new dedicated editor Panel — only when the file is not
-            // already open anywhere (app-wide one buffer, FR-011a/FR-072).
-            label: 'New Editor',
-            icon: 'add',
-            section: 'navigate',
-            disabled: alreadyOpen || !activeTabId,
-            /*
-             * 041 FR-013d (#327) — gated HERE, at the call site, not inside `openFileInNewEditor`.
-             *
-             * That function is the one entry point the refusal's compile-time enforcement cannot
-             * reach: it is synchronous and never asks `openInto`, so nothing makes this caller
-             * handle a refusal. And it is the path #327 was reported from.
-             *
-             * The gate goes in the caller because 033 already decided that, in as many words
-             * (`quick-open.tsx`): "That function means force a new panel; making it silently not
-             * force would change a shipped contract under a caller that has already done the check,
-             * and would turn a synchronous call into an asynchronous one for both."
-             *
-             * `openFileInTab` needs no equivalent — it awaits `openInto` on its first line, before
-             * the `openTarget === 'new'` branch reaches this same function.
-             */
-            onClick: () => {
-              if (!activeTabId) return;
-              void (async () => {
-                const decision = await window.throng?.editor?.openInto({ absPath, ownerKind: 'project', ownerProjectId: projectId });
-                if (decision?.action === 'refuse') {
-                  publishRefusedOpen({ absPath, reason: decision.reason });
-                  return;
-                }
-                if (decision?.action === 'focus') {
-                  void openFileInTab(ws, activeTabId, absPath);
-                  return;
-                }
-                openFileInNewEditor(ws, activeTabId, absPath);
-              })();
-            },
-          },
-        ];
-        if (otherTabs.length > 0) {
-          openIn.push({
-            label: 'Other Tab',
-            icon: 'tab',
-            section: 'navigate',
-            submenu: otherTabs.map((t) => ({
-              label: t.title,
-              icon: 'tab',
-              section: 'navigate' as const,
-              disabled: alreadyOpen,
-              onClick: () => void openFileInTab(ws, t.id, absPath),
-            })),
-          });
-        }
+        openIn = openInMenuActions(
+          describeOpenInTargets(readOpenInFacts(ws, absPath, alreadyOpen)),
+          (target) => void performOpenIn({ ws, absPath, target }),
+        );
       }
       const items = buildContextMenuItems({
         node: node.data,
@@ -467,7 +430,7 @@ export function FileTree({
         clipboard,
         // 033 US4 (T091) — both act on the RIGHT-CLICKED node's relative path, which
         // `buildContextMenuItems` closes over from `node`, never on the selection.
-        ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp, openInTerminal, expandChildren, collapseChildren },
+        ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp, openInTerminal, expandChildren, collapseChildren, findInFiles: searchFromTree },
         undoState: { canUndo: canUndoFileOp, canRedo: canRedoFileOp },
         openIn,
         keybindings,
@@ -476,7 +439,7 @@ export function FileTree({
       });
       openMenu(event.clientX, event.clientY, items);
     },
-    [selectedRelPaths, clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, openMenu, ws, rootFolder, createFolder, createFile, keybindings, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp, flavours, openInTerminal, expandChildren, collapseChildren],
+    [selectedRelPaths, clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, openMenu, ws, rootFolder, createFolder, createFile, keybindings, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp, flavours, openInTerminal, expandChildren, collapseChildren, searchFromTree],
   );
 
   // Right-clicking empty space (below the rows) opens a menu targeting the ROOT —
@@ -490,7 +453,7 @@ export function FileTree({
         node: { relPath: '', kind: 'folder' },
         selectedRelPaths: [],
         clipboard,
-        ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp, openInTerminal, expandChildren, collapseChildren },
+        ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp, openInTerminal, expandChildren, collapseChildren, findInFiles: searchFromTree },
         undoState: { canUndo: canUndoFileOp, canRedo: canRedoFileOp },
         keybindings,
         projectRoot: rootFolder,
@@ -498,7 +461,7 @@ export function FileTree({
       });
       openMenu(event.clientX, event.clientY, items);
     },
-    [clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, createFolder, createFile, openMenu, keybindings, rootFolder, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp, flavours, openInTerminal, expandChildren, collapseChildren],
+    [clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, createFolder, createFile, openMenu, keybindings, rootFolder, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp, flavours, openInTerminal, expandChildren, collapseChildren, searchFromTree],
   );
   const cutPaths = useMemo(
     () => new Set(clipboard?.mode === 'cut' ? clipboard.relPaths : []),
@@ -577,6 +540,7 @@ export function FileTree({
         onDelete={() => remove(selectedRelPaths)}
         keybindings={keybindings}
         quickOpenEnabled
+        findInFilesEnabled
       />
       {/* 018 / FR-051 — the second of four copy-pasted error strips. Now the shared model. */}
       <div className="explorer__body" ref={ref} onContextMenu={onEmptyContextMenu}>

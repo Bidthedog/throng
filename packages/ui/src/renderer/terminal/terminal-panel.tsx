@@ -65,7 +65,7 @@ import { useTerminalReconnect } from './use-terminal-reconnect.js';
 import { FindBar } from '../search/find-bar.js';
 import { PanelSkeleton, useDelayedFlag } from '../common/loading.js';
 import { reservedByTerminal } from '../search/search-actions.js';
-import { getFindState, updateCount } from '../search/search-store.js';
+import { isFindShowingOn, updateCount } from '../search/search-store.js';
 import type { SearchCount } from '../search/search-model.js';
 import './terminal.css';
 
@@ -233,7 +233,10 @@ export function TerminalPanel({
           { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey },
           'terminal',
         ),
-        getFindState().panelId === panel.id,
+        // THIS panel's bar, not "whichever bar is up" (043 FR-003/FR-004): Escape and F3 are
+        // throng's only while this terminal is the one showing a find bar, and the shell's
+        // otherwise.
+        isFindShowingOn(panel.id),
         programOwnsKeyboard,
       ),
     [keybindings, panel.id],

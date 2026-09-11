@@ -224,7 +224,14 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * themes are no more alike than they were, the average simply has one more identical term in it.
  * The threshold below is unchanged, which is the part that actually guards against twins.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.198241990668451;
+/**
+ * Re-measured again by 043 FR-067, which moved `searchMatch` in all fifteen themes onto the neutral
+ * axis: 6.198241990668451 → 6.181917223974843, a drop of 0.016. The mean is over ~48 shared tokens,
+ * so one token moving in every theme moves it by construction — and this one moved TOWARDS the
+ * neutral in every theme, which is a small pull together rather than any of the themes becoming
+ * more alike in character. `DISTINCTNESS_THRESHOLD` is untouched at 4.3, with 1.87 of headroom.
+ */
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.181917223974843;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A
@@ -272,6 +279,139 @@ export function assertDistinct(themes: readonly Theme[]): void {
   if (offenders.length) {
     throw new Error(
       `themes too close (< ${DISTINCTNESS_THRESHOLD} mean ΔE00): ${offenders.join('; ')}`,
+    );
+  }
+}
+
+/**
+ * The three pairs that must be mutually distinguishable inside ONE theme (043, FR-067 / R24).
+ *
+ * ══ WHY THESE THREE AND NOT A CONTRAST RATIO ══
+ *
+ * Everything else in this file measures a FOREGROUND on a BACKGROUND and asks whether the text
+ * survives. `SYNTAX_ON_MATCH` does exactly that for these two fills, and it is the whole of what
+ * governed them before FR-067: ten hues on two surfaces at 4.5:1. Nothing asked whether the two
+ * surfaces differ FROM EACH OTHER, so a theme could paint hard-select and soft-select the same
+ * colour and pass the build — which is what the derivation did on the dark themes.
+ *
+ * The instrument is CIEDE2000, not a WCAG ratio, and the choice is not stylistic. A contrast ratio
+ * is a LUMINANCE ratio designed for text legibility: two fills differing mainly in hue or chroma can
+ * be obvious at a glance and still score near 1:1, and a ratio gate would also fight the readability
+ * walk that constrains these surfaces in the first place — that walk IS a luminance constraint, so
+ * gating the same axis leaves the derivation nowhere to go. ΔE00 is the machinery this file already
+ * carries for "are these two colours different enough", used for exactly that question across theme
+ * pairs (`themePairDistance`); FR-067 asks it of three token pairs inside one theme instead.
+ */
+export const MATCH_SURFACE_PAIRS: readonly (readonly [string, string])[] = Object.freeze([
+  Object.freeze(['searchMatch', 'searchMatchCurrent'] as const),
+  Object.freeze(['searchMatch', 'editorBg'] as const),
+  Object.freeze(['searchMatchCurrent', 'editorBg'] as const),
+]);
+
+/**
+ * The measured SMALLEST of the three gaps across every theme in `ALL_DEFAULT_THEMES`, recorded for
+ * audit exactly as `CLOSEST_LEGITIMATE_PAIR_DELTA` is. Confirmed by `theme-match-distinctness.test.ts`.
+ *
+ * Measured 2026-09-09, after the two-axis re-derivation and `throng`'s hand-set literals, over all
+ * fifteen: the smallest gap is **Snake's `searchMatch` ↔ `editorBg` at 3.766**, its second-smallest
+ * is Snake's `searchMatch` ↔ `searchMatchCurrent` at 3.932, and no other theme falls below English
+ * Garden's 5.458. Before the re-derivation the same measurement was **2.85** — below the floor,
+ * which is the shipped defect FR-067 names.
+ *
+ * The binding theme is **Snake**, and it is worth naming why it binds rather than treating the
+ * number as arbitrary. Snake's accent (`#8a9a5b`) and its editor foreground (`#c8d0b0`) are the same
+ * olive family, so the accent ray and the neutral ray point in nearly the same direction and the two
+ * axes buy less separation there than anywhere else; its current match sits only ΔE00 6.80 off its
+ * own page to begin with, because that is as far as the readability walk will tint it. Snake is the
+ * theme to re-measure first if this constant ever has to move.
+ */
+export const CLOSEST_MATCH_SURFACE_DELTA = 3.7658577440969068;
+
+/**
+ * The floor a theme's three match-surface gaps must clear (043, FR-067).
+ *
+ * A MEASUREMENT, and it is calibrated from both ends, which is what stops it being a ratchet:
+ *
+ *   - from ABOVE by the re-derivation — `CLOSEST_MATCH_SURFACE_DELTA` above is the smallest of the
+ *     three gaps across all fifteen bundled themes, taken AFTER the two-axis derivation landed
+ *     (043 M1), never before. The constant follows the measurement, never the other way round;
+ *   - from BELOW by the metric itself — ΔE00 ≈ 2.3 is the standard just-noticeable difference for
+ *     surface colours, so a floor beneath that would permit a pair that is, by the instrument's own
+ *     definition, one colour. That half of the calibration does not come from the themes at all,
+ *     and it is the half that makes this a rule rather than a record of what the themes manage.
+ *
+ * 3.0 sits **0.766 below the measured 3.766** (20% headroom, the same shape as
+ * `DISTINCTNESS_THRESHOLD`'s 4.3 against 6.198) and 0.7 above the just-noticeable difference. It has
+ * never been lowered to accommodate a theme. On the derivation as shipped before 043, Snake failed
+ * it outright at 2.85, and four more themes sat within two units of it — English Garden 4.50,
+ * Bash 4.49, VI-VIM 4.57, Cyberpunk 4.98 — where they now measure 5.458, 6.150, 5.678 and 7.154.
+ */
+export const MATCH_DISTINCTNESS_THRESHOLD = 3.0;
+
+export interface MatchDistinctnessResult {
+  /** the first token of the pair. */
+  a: string;
+  /** the second token of the pair. */
+  b: string;
+  /** measured CIEDE2000 between the two resolved colours. */
+  delta: number;
+  /** the floor the pair must clear. */
+  min: number;
+  pass: boolean;
+}
+
+/** Measure all three FR-067 pairs for one theme (colours resolve within the theme). */
+export function measureMatchDistinctness(theme: Theme): MatchDistinctnessResult[] {
+  return MATCH_SURFACE_PAIRS.map(([a, b]) => {
+    const ca = theme.colours[a];
+    const cb = theme.colours[b];
+    const delta = ca && cb ? ciede2000(rgbToLab(hexToRgb(ca)), rgbToLab(hexToRgb(cb))) : 0;
+    return { a, b, delta, min: MATCH_DISTINCTNESS_THRESHOLD, pass: delta >= MATCH_DISTINCTNESS_THRESHOLD };
+  });
+}
+
+/** The FR-067 pairs a theme fails (empty if all three clear the floor). */
+export function matchDistinctnessFailures(theme: Theme): MatchDistinctnessResult[] {
+  return measureMatchDistinctness(theme).filter((r) => !r.pass);
+}
+
+export interface ClosestMatchSurfacePair {
+  theme: string;
+  a: string;
+  b: string;
+  delta: number;
+}
+
+/** The smallest of the three gaps across the given themes — the measurement M1 records. */
+export function closestMatchSurfacePair(themes: readonly Theme[]): ClosestMatchSurfacePair {
+  let best: ClosestMatchSurfacePair = { theme: '', a: '', b: '', delta: Infinity };
+  for (const theme of themes) {
+    for (const r of measureMatchDistinctness(theme)) {
+      if (r.delta < best.delta) best = { theme: theme.name, a: r.a, b: r.b, delta: r.delta };
+    }
+  }
+  return best;
+}
+
+/**
+ * Hard gate for FR-067: throw if any theme renders an ordinary match and the current match
+ * indistinguishably from each other, or either indistinguishably from the surface behind them.
+ *
+ * Build-blocking, and scoped to whatever it is handed — which callers MUST make
+ * `ALL_DEFAULT_THEMES` and never `DEFAULT_THEMES` (plan D5). Fourteen bundled themes are derived by
+ * `makeTheme` and are maintained by the derivation; `throng` is hand-authored and is not, so a gate
+ * over the derived set would go on passing while the one theme every user sees first drifted.
+ */
+export function assertMatchDistinctness(themes: readonly Theme[]): void {
+  const problems: string[] = [];
+  for (const theme of themes) {
+    for (const f of matchDistinctnessFailures(theme)) {
+      problems.push(`${theme.name}: ${f.a} vs ${f.b} = ΔE00 ${f.delta.toFixed(2)} (needs ${f.min})`);
+    }
+  }
+  if (problems.length) {
+    throw new Error(
+      `search-match surfaces are not mutually distinguishable (< ${MATCH_DISTINCTNESS_THRESHOLD} ΔE00): ${problems.join('; ')}`,
     );
   }
 }

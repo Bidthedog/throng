@@ -61,6 +61,13 @@ export type ActionId =
   | 'search.replace'
   | 'search.replaceCurrent'
   | 'search.replaceAll'
+  // Find in Files (043, FR-028/FR-029). The find bar's counterparts one level up: these search the
+  // PROJECT rather than the active panel's own content, so they are live wherever you are — the
+  // question "where does this string appear" is not one the file tree answers differently from a
+  // terminal. `search.replaceInFiles` is the same command with the replacement row already open
+  // (FR-029d), which is why it gets a chord and no second toolbar control of its own.
+  | 'search.findInFiles'
+  | 'search.replaceInFiles'
   // Terminal scrollback navigation (013, FR-014/FR-016). Resolved only while a
   // terminal panel is active; never delivered as a keystroke to the running program.
   | 'terminal.scrollLineUp'
@@ -139,16 +146,31 @@ export interface Keybindings {
  * NO default: an unscoped command would be live everywhere, which is how a text-editing chord
  * ends up deleting a file.
  */
-export type DispatchScope = 'editor' | 'terminal' | 'explorer';
+export type DispatchScope = 'editor' | 'terminal' | 'explorer' | 'findInFiles';
 
 export type CommandScopes = Readonly<Record<ActionId, ReadonlySet<DispatchScope>>>;
 
-const EVERYWHERE = new Set<DispatchScope>(['editor', 'terminal', 'explorer']);
+const EVERYWHERE = new Set<DispatchScope>(['editor', 'terminal', 'explorer', 'findInFiles']);
 const EDITOR_ONLY = new Set<DispatchScope>(['editor']);
 const TERMINAL_ONLY = new Set<DispatchScope>(['terminal']);
 const EXPLORER_ONLY = new Set<DispatchScope>(['explorer']);
 /** Panels, but not the file tree: a find bar and a save belong to whatever panel is showing. */
 const PANELS = new Set<DispatchScope>(['editor', 'terminal']);
+/**
+ * Every panel kind, INCLUDING the ones that hold no document of their own (043 R14).
+ *
+ * Distinct from {@link PANELS} because the two answer different questions. `PANELS` is "surfaces
+ * with content a command can act on" — a save, a find bar — and a Find in Files panel has neither.
+ * This is "surfaces that are a Panel", which is what `panel.rename` is about: a panel's NAME belongs
+ * to the panel whatever it holds. Widening `PANELS` itself would have made `editor.save` and the
+ * `search.*` bar chords live over a results panel, where they mean nothing.
+ *
+ * It is also half of a defect fix rather than a nicety. `scopeFromKind` falls through to `explorer`
+ * for an unknown kind, so before the fourth scope existed F2 over a Find in Files panel resolved to
+ * `file.rename` and renamed whatever the FILE TREE had selected — the same class of accident as
+ * Delete over a results list.
+ */
+const ANY_PANEL = new Set<DispatchScope>(['editor', 'terminal', 'findInFiles']);
 
 /**
  * The scope of every registered command (016, FR-017b0). Declared here, beside the chords, so a
@@ -163,9 +185,11 @@ export const COMMAND_SCOPES: CommandScopes = {
   'panel.zoomIn': EVERYWHERE,
   'panel.zoomOut': EVERYWHERE,
   'panel.zoomReset': EVERYWHERE,
-  // A panel's NAME belongs to the panel, so this is live in either kind and nowhere else — the file
-  // tree has its own F2 (`file.rename`), and the two never contend because their scopes are disjoint.
-  'panel.rename': PANELS,
+  // A panel's NAME belongs to the panel, so this is live in EVERY panel kind and nowhere else — the
+  // file tree has its own F2 (`file.rename`), and the two never contend because their scopes are
+  // disjoint. `ANY_PANEL` rather than `PANELS`: 043's results panel is renameable like any other,
+  // and on the old set F2 there fell through to the explorer and renamed a FILE (R14).
+  'panel.rename': ANY_PANEL,
   'focus.left': EVERYWHERE,
   'focus.right': EVERYWHERE,
   'focus.up': EVERYWHERE,
@@ -214,6 +238,17 @@ export const COMMAND_SCOPES: CommandScopes = {
   'search.replace': PANELS,
   'search.replaceCurrent': PANELS,
   'search.replaceAll': PANELS,
+  /*
+   * 043 FR-028/FR-029 — EVERYWHERE, and the contrast with the seven above is the point.
+   *
+   * The find bar is `PANELS` because it acts on the content the active panel is showing, so it has
+   * nothing to act on in the file tree. These two act on the PROJECT, which is the same thing from
+   * every surface: a user in a terminal who wants to know where a symbol is defined means exactly
+   * what a user in the tree means. Narrowing them would make the chord answer in some places and
+   * not others, and the user would have to know which — the reasoning `navigate.quickOpen` records.
+   */
+  'search.findInFiles': EVERYWHERE,
+  'search.replaceInFiles': EVERYWHERE,
   // Scrollback navigation is meaningless anywhere but a terminal.
   'terminal.scrollLineUp': TERMINAL_ONLY,
   'terminal.scrollLineDown': TERMINAL_ONLY,
@@ -337,6 +372,18 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'search.replace': ['Ctrl+H'],
     'search.replaceCurrent': ['Alt+Enter'],
     'search.replaceAll': ['Ctrl+Alt+Enter'],
+    /*
+     * Find in Files (043). `Ctrl+Shift+F` / `Ctrl+Shift+H` are the near-universal pair, and both are
+     * free here: the only shipped `Ctrl+Shift+*` chords are `Ctrl+Shift+\``, `Ctrl+Shift+T`,
+     * `Ctrl+Shift+S` and the terminal scroll pair (R13's exhaustive check).
+     *
+     * They do NOT collide with `Ctrl+F` / `Ctrl+H` above, even though both pairs are `search.*` and
+     * both are live in an editor: `chordCollisions` compares normalised TOKENS, and `Ctrl+F` is not
+     * `Ctrl+Shift+F`. Nor is a reserved-key exception needed — the constitution's reserved and
+     * shadowable tiers list `Ctrl+F` and `Ctrl+H`, and the enforcing test matches exact tokens too.
+     */
+    'search.findInFiles': ['Ctrl+Shift+F'],
+    'search.replaceInFiles': ['Ctrl+Shift+H'],
     // Terminal scrollback navigation (013). Shift+Page is the conventional terminal
     // scrollback pair; the line/top/bottom chords follow the same "view, not input" family.
     'terminal.scrollLineUp': ['Ctrl+Shift+ArrowUp'],
@@ -563,11 +610,18 @@ export function columnSelectHeld(
 const SCOPE_NAMES: Record<DispatchScope, string> = {
   editor: 'Editor',
   terminal: 'Terminal',
+  findInFiles: 'Find in Files',
   explorer: 'File Explorer',
 };
 
-/** Canonical order, so two commands with the same scope set always read identically. */
-const SCOPE_ORDER: readonly DispatchScope[] = ['editor', 'terminal', 'explorer'];
+/**
+ * Canonical order, so two commands with the same scope set always read identically.
+ *
+ * Its LENGTH is load-bearing, not just its order: `scopeNames` collapses a full set to the single
+ * word "Everywhere" by comparing sizes, so a scope added here and forgotten in `EVERYWHERE` would
+ * turn every window command's one pill into a list of contexts.
+ */
+const SCOPE_ORDER: readonly DispatchScope[] = ['editor', 'terminal', 'findInFiles', 'explorer'];
 
 /**
  * Where a command's chord is live, in words (016, FR-017b0).

@@ -184,6 +184,52 @@ export interface FieldDescriptor {
    * {@link auditClearable} holds the declaration to that bar.
    */
   clearable?: boolean;
+  /**
+   * This control is LIVE only while another setting holds a particular value (043, FR-082b).
+   *
+   * ══ WHY IT IS DECLARED HERE, HAVING DELIBERATELY NOT BEEN FOR TWO FEATURES ══
+   *
+   * 030 needed it first and wrote it as a regular expression in `settings-tab.tsx` instead, on an
+   * explicit YAGNI argument: a general dependency mechanism whose entire population is eight
+   * descriptors is a framework with one caller, and we did not yet know whether the second would want
+   * equality, a predicate, a hidden state rather than a disabled one, or a dependency on a sibling
+   * rather than an arbitrary key. That file's own comment named the condition for lifting it — "a
+   * second feature adding a third dependency should lift both of these into `FieldDescriptor` rather
+   * than add a third regular expression" — and 043 FR-082 is that second feature.
+   *
+   * The second caller answered the open question, which is the whole reason to wait for one. It wants
+   * equality (not a predicate) and a DISABLED state (not a hidden one) — but it cannot derive the
+   * other key from its own, the way the regular expression did by swapping a final `.timeoutMs` for
+   * `.mode`. `search.inFiles.summaryNoticeTimeoutMs`'s sibling is `…summaryNoticeMode`, so the
+   * dependency has to be STATED. A third regular expression would have had to encode that spelling
+   * too, in the renderer, where no reader of the setting would ever look for it.
+   *
+   * `key` is a FULL descriptor key, not a leaf and not a sibling suffix — the same dotted path the
+   * form already resolves values with, so a dependency across groups is expressible and none of it is
+   * positional.
+   *
+   * Absence means what it has always meant: the control is live whenever it is rendered.
+   */
+  enabledWhen?: { key: string; is: string | number | boolean };
+  /**
+   * Committing THIS VALUE costs the user something they must agree to first (030 FR-008; 043 FR-082b).
+   *
+   * The population is every control that can stop a FAILURE reporting itself: the `error` and
+   * `warning` notice modes, and — this is the one a reading of FR-082 alone would miss — the Find in
+   * Files replace summary, whose notice reports which files could not be written and why. Offering
+   * *Never display* on any of them is defensible only because the user is told, in the moment, that
+   * the event will thereafter reach nothing but the diagnostic log.
+   *
+   * Declared rather than pattern-matched for the same reason as {@link enabledWhen}, and with more at
+   * stake: the gate that was keyed to `^notifications\.` silently did not apply to the new pair, and
+   * the failure mode of missing it is a user silencing failure reporting having consented to nothing.
+   * A descriptor is where a reader learns what a setting is; "choosing this hides failures" is a fact
+   * about the setting, not about the form that draws it.
+   *
+   * It says WHEN to ask, never what to say. The wording belongs to the renderer, which is where the
+   * user's own label for the row lives.
+   */
+  confirmWhen?: { is: string | number | boolean };
 }
 
 export type MetadataRegistry = readonly FieldDescriptor[];

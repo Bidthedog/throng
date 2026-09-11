@@ -48,34 +48,30 @@ const SEARCH_DEBOUNCE_MS = 150;
 /** The shipped record is frozen and pure — build it once for the overridden-test. */
 const SHIPPED = buildShippedDefaults();
 
-/**
- * THE FIRST TWO SETTINGS WHOSE CONTROL DEPENDS ON SOMETHING OTHER THAN ITS OWN VALUE (030 US1,
- * #224) — and the reason they are matched here by key rather than declared in the registry.
+/*
+ * ══ THE TWO REGULAR EXPRESSIONS THAT USED TO BE HERE, AND WHY THEY ARE GONE (043 T204, FR-082b) ══
  *
- * `SETTINGS_METADATA` has no `enabledWhen` and no `confirmWhen`, and adding either is a change to
- * the shared metadata contract that every descriptor, every completeness test and both other
- * registries (keybindings, theme) would then have to live with. Against Principle VIII that is the
- * YAGNI call: a general dependency mechanism whose entire population is the eight descriptors below
- * is a framework built for one caller, and a framework with one caller is guessed, not designed —
- * we do not yet know whether the second dependency will want equality, a predicate, a hidden state
- * rather than a disabled one, or a confirmation keyed on the OLD value rather than the new.
+ * 030 gave this file two rules keyed to `^notifications\.` — one greying an inert duration
+ * (`NOTICE_TIMEOUT_KEY`), one gating the consent FR-008 requires before *Never display* silences a
+ * failure (`SILENCEABLE_FAILURE_KEY`) — and its comment set out both the YAGNI argument for writing
+ * them here and the condition for undoing it: "a second feature adding a third dependency should
+ * lift both of these into `FieldDescriptor` rather than add a third regular expression. Written as
+ * two patterns and two small functions precisely so that lift is a move, not a rewrite."
  *
- * The precedent is fifty lines down: `dynamicOptions` matches `appearance.theme`,
- * `editor.languageByExtension` and `terminals.disabledBuiltins` by key, for exactly this reason —
- * a property of a setting that the registry cannot state stays in the renderer that can.
+ * 043 FR-082 is that second feature, and the lift is that move. Both rules are now DECLARED, on
+ * `FieldDescriptor.enabledWhen` and `FieldDescriptor.confirmWhen`; the two functions below read the
+ * declaration instead of the key's spelling.
  *
- * The honest answer for the LONGER term is still the registry. Config-editor completeness makes the
- * descriptor the single place a reader can learn what a setting is, and "this control is inert
- * unless its sibling says `timed`" is a fact about the setting, not about this form; a second
- * feature adding a third dependency should lift both of these into `FieldDescriptor` rather than
- * add a third regular expression. Written as two patterns and two small functions precisely so that
- * lift is a move, not a rewrite.
+ * The second caller is what settled the design question 030 deliberately left open, which is the
+ * whole reason to wait for one. It wants equality and a disabled state, as 030's did — but its
+ * sibling is not spelled `mode` at all, so a rule that DERIVED the mode key by swapping a
+ * final `.timeoutMs` could never have reached it. The dependency had to become something a
+ * descriptor states rather than something a pattern infers.
  *
- * They are patterns, not four literal keys each, so all four severities are covered by one rule and
- * a fifth severity would need nothing here.
+ * `dynamicOptions` further down still matches three keys by name, and that is not the same thing:
+ * those are values discovered at RUNTIME (the themes on disk, the shells this machine has), which a
+ * static registry cannot hold. A dependency between two settings is not runtime knowledge.
  */
-const NOTICE_TIMEOUT_KEY = /^notifications\.(?:error|warning|info|success)\.timeoutMs$/;
-const SILENCEABLE_FAILURE_KEY = /^notifications\.(?:error|warning)\.mode$/;
 
 /**
  * The one setting whose meaning is taken away by something OUTSIDE the settings file (039 FR-008a).
@@ -93,16 +89,22 @@ const ELEVATION_GATED_KEY = 'terminals.defaultRunAsAdmin';
  * a failed operation will say nothing on screen, and the only record left will be the log. That is
  * the bargain, and it is stated as an OUTCOME — "are you sure?" asks someone to confirm a word.
  *
- * Only `error` and `warning` ask. `info` and `success` report things that already happened and
- * worked, so there is no failure to miss and a prompt would be nagging.
+ * WHICH controls ask is the descriptor's to say (`confirmWhen`), not this file's. Under the old
+ * pattern it was every `notifications.{error,warning}.mode` — `info` and `success` report things that
+ * already happened and worked, so there is no failure to miss and a prompt would be nagging. 043
+ * FR-082 adds one more: the Find in Files replace summary, whose notice reports which files could not
+ * be written and why. The pattern did not reach it, and the whole point of FR-008 is that it must.
+ *
+ * The WORDING stays here. It is built from `d.label` — the setting named the way the user just read
+ * it in the row above — and a descriptor has no business carrying a sentence the form composes.
  *
  * Returns `null` when no consent is needed, so the caller has one branch and not four.
  */
 function silenceConfirmation(d: FieldDescriptor, value: unknown): ConfirmOptions | null {
-  if (value !== 'never' || !SILENCEABLE_FAILURE_KEY.test(d.key)) return null;
+  if (d.confirmWhen === undefined || value !== d.confirmWhen.is) return null;
   return {
-    // `d.label` is "Error notices" / "Warning notices" — the setting named the way the user just
-    // read it in the row above, never a severity token this file re-spells.
+    // `d.label` is "Error notices" / "Warning notices" / "Replace summary notices" — the setting
+    // named the way the user just read it in the row above, never a token this file re-spells.
     title: `Never display ${d.label.toLowerCase()}?`,
     message:
       `${d.label} will not be shown anywhere in the application. When one of these events happens ` +
@@ -273,14 +275,18 @@ export function SettingsTab({
    * stored and preserved, but nothing reads it. Leaving it live invites the user to tune a value
    * that will not be consulted, which is the same class of lie as a button that does nothing.
    *
-   * The sibling is read from `settings`, the same defaults-merged parse the control's own value
-   * comes from, so a `notifications` block missing from the file disables nothing by accident.
+   * WHICH setting it depends on, and on what value, is the descriptor's to say (`enabledWhen`, 043
+   * T204). This used to derive the sibling from the key — swap a final `.timeoutMs` for `.mode` —
+   * which is a rule about one family's spelling that could not reach a second pair spelled any other
+   * way, and FR-082's is (`summaryNoticeMode`).
+   *
+   * The dependency is read from `settings`, the same defaults-merged parse the control's own value
+   * comes from, so a section missing from the file disables nothing by accident.
    */
   const isInert = (d: FieldDescriptor): boolean => {
     if (inertReason(d) !== null) return true;
-    if (!NOTICE_TIMEOUT_KEY.test(d.key)) return false;
-    const modeKey = `${d.key.slice(0, d.key.lastIndexOf('.'))}.mode`;
-    return getAtPath(settings, modeKey) !== 'timed';
+    if (d.enabledWhen === undefined) return false;
+    return getAtPath(settings, d.enabledWhen.key) !== d.enabledWhen.is;
   };
 
   /**

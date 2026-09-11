@@ -34,6 +34,7 @@ import {
   partitionByPathed,
   registerOpen,
   unregisterPanel,
+  verifyEdits,
   type CanonicalChangeMsg,
   type DispatchChangeMsg,
   type Disposable,
@@ -41,17 +42,30 @@ import {
   type EncodingId,
   type IFileWatcher,
   type LineEndingId,
+  type Match,
+  type MatchModes,
   type OpenDecision,
   type ResetDocumentMsg,
   type SaveAllScope,
   type ScopeEditor,
   type SerialisedHistory,
 } from '@throng/core';
+import { ChangeSet, type Text } from '@codemirror/state';
 import { DocumentAuthority } from './document-authority.js';
 import type { DropDecision } from '@throng/core';
 import type { EditorService, LoadResult, SaveResult } from './editor-service.js';
 import type { MovePair } from './files-service.js';
 import type { EditorRecovery, RecoveredDoc, RecoverySnapshot } from './editor-recovery.js';
+
+/**
+ * The view a bulk edit claims to come from (043 T085, research R7).
+ *
+ * Deliberately not a real view id and deliberately stable. `DocumentAuthority` uses the originating
+ * view to let a replica recognise its OWN acknowledgement and apply nothing — so a commit must name
+ * a view no replica answers to, or the one view that happened to share the id would silently skip
+ * the change and drift out of step with its own document.
+ */
+const BULK_EDIT_VIEW_ID = '__throng:bulk-edit__';
 
 /** The mutable per-document state UI main tracks. */
 interface CoordDoc {
@@ -593,6 +607,157 @@ export class EditorCoordinator {
     if (!doc.authority.dirty) doc.diskChanged = false; // clean again → clear any pending notice
     this.scheduleRecovery(doc); // (debounced; independent of dirty — FR-041/053)
     this.deps.relaySync(-1, { panelId: doc.panelId, change: canonical });
+  }
+
+  /**
+   * Apply a replace commit's edits to an OPEN document — from MAIN, with no view involved
+   * (043 T085, FR-052, FR-054, FR-057, research R7).
+   *
+   * ══ WHY THIS EXISTS AT ALL, WHEN `dispatchChange` IS RIGHT THERE ══
+   *
+   * `dispatchChange` is a VIEW's entry point: it takes the meta a mounted replica supplies and the
+   * change that replica has already shown its user. A replace commit has neither. Worse, it cannot
+   * get them for every document it must touch: only the ACTIVE tab's panels are mounted
+   * (`tab-group.tsx` renders `activeTab.root`), and on unmount the view and the replica are torn
+   * down while the document stays alive here. So a file open in a background tab has an authority
+   * and no view — and a commit that went looking for one would skip its buffer edit AND decline its
+   * disk write, because `isOpen()` correctly reports it open. The file would receive NEITHER,
+   * silently. That is the defect research R7 found, and this method is the answer to it.
+   *
+   * ══ WHAT MAKES IT THE SAME KIND OF EDIT AS A KEYSTROKE ══
+   *
+   * Everything below the entry point is `dispatchChange`'s own path: the ChangeSet is built against
+   * `authority.version` so the authority orders and rebases it like any other, and the canonical
+   * result goes out on `relaySync(-1, …)` so EVERY window applies it — a mirrored view of this
+   * document in another window is not a special case here, it is the ordinary one.
+   *
+   * ══ THE TWO ARGUMENTS THAT LOOK LIKE THE COMMIT SERVICE'S JOB ══
+   *
+   * `term` and `modes` are here because FR-054's re-check must have NOTHING between it and the
+   * write. Verifying in the caller and applying here would put an inter-call gap in exactly the
+   * place the requirement forbids one; verifying here is the only arrangement in which the check
+   * and the edit are one turn by construction.
+   *
+   * `mergeClass: null` never merges (`document-sync.ts`), which is what makes a whole file's worth
+   * of replacements ONE undo entry (FR-057) and keeps it from absorbing the keystroke the user
+   * typed a moment earlier. `selectionBefore: null` because there is no cursor to restore: the user
+   * did not make this edit with a caret, and a replica skips the selection when it is absent.
+   *
+   * Returns `null` when no open document holds `absPath` — the caller's cue that it closed under
+   * the commit, which is a different thing from a failure.
+   */
+  bulkReplace(req: {
+    absPath: string;
+    term: string;
+    modes: MatchModes;
+    replacement: string;
+    /*
+     * `applied` names the caller's OWN edits rather than counting them (#378). A caller stepping
+     * through one scan's rows rebases the rows it has not committed yet past the ones it has, and a
+     * count cannot say WHICH those were — a partially refused file would shift every survivor by the
+     * wrong amount, which is how a replacement comes to be written over the middle of the previous
+     * one.
+     */
+    edits: readonly Match[];
+  }): {
+    applied: readonly Match[];
+    applicable: readonly Match[];
+    refused: number;
+    after: Text;
+    /**
+     * WHICH document this was — so the caller can address it by panel id (043 FR-086).
+     *
+     * Returned rather than looked up again, because the caller has only a path and the path→panel
+     * lookup is precisely what can change under it: between a second `openOrFocus` and the save, the
+     * document could have closed, moved, or been re-registered at another panel. The id this call
+     * edited is the only id the follow-up save may name.
+     */
+    documentId: string;
+    /**
+     * Was the document CLEAN immediately before this edit (043 FR-086, FR-086a)?
+     *
+     * ══ WHY THE SAMPLE HAS TO BE TAKEN HERE, AND NOWHERE ELSE ══
+     *
+     * The edit below goes through the authority, which dirties the document. So there is exactly one
+     * instant at which the question has a useful answer — before the dispatch — and a caller asking
+     * afterwards finds EVERY document dirty and saves nothing. It cannot usefully be asked before the
+     * call either: the caller holds a path, not a document, and every `await` between its question
+     * and this method is a window in which the user could type.
+     *
+     * Sampling it inside the same synchronous turn as the dispatch is the only arrangement in which
+     * "was clean" and "is now edited by the commit" are two facts about one moment.
+     */
+    wasClean: boolean;
+  } | null {
+    const at = openOrFocus(this.registry, req.absPath);
+    if (at.action !== 'focus') return null;
+    const doc = this.docs.get(at.panelId);
+    if (!doc) return null;
+
+    // FR-086's sample. Read BEFORE `verifyEdits` and before the dispatch — see the field's own note.
+    const wasClean = !doc.authority.dirty;
+
+    // FR-054, against the authority's CURRENT text — which is the document, not the file. Nothing
+    // separates this from the dispatch below.
+    const checked = verifyEdits(
+      doc.authority.text,
+      req.term,
+      req.modes,
+      req.edits,
+      req.replacement,
+    );
+    if (checked.applicable.length === 0) {
+      return {
+        applied: [],
+        applicable: [],
+        refused: checked.gone.length,
+        after: doc.authority.doc,
+        documentId: doc.panelId,
+        wasClean,
+      };
+    }
+
+    const canonical = doc.authority.dispatch({
+      documentId: doc.panelId,
+      // A synthetic id: no replica answers to it, so every view applies the change rather than one
+      // of them recognising it as its own acknowledgement and applying nothing.
+      viewId: BULK_EDIT_VIEW_ID,
+      changes: ChangeSet.of(
+        checked.applicable.map((m) => ({ from: m.from, to: m.to, insert: req.replacement })),
+        doc.authority.text.length,
+      ).toJSON(),
+      baseVersion: doc.authority.version,
+      selectionBefore: null,
+      mergeClass: null,
+    });
+    if (!canonical) {
+      // The document was REPLACED under this edit. Nothing landed; put every view back in step.
+      this.broadcastReset(doc);
+      return {
+        applied: [],
+        applicable: [],
+        refused: checked.gone.length,
+        after: doc.authority.doc,
+        documentId: doc.panelId,
+        wasClean,
+      };
+    }
+
+    this.scheduleRecovery(doc);
+    this.deps.relaySync(-1, { panelId: doc.panelId, change: canonical });
+    /*
+     * FR-083b — `applicable` and the document AFTER the dispatch, so the commit can say what each
+     * changed line now reads. The authority's own text is the only copy of it: nothing here reads
+     * the file, and the file does not yet hold this edit (FR-053a).
+     */
+    return {
+      applied: checked.applied,
+      applicable: checked.applicable,
+      refused: checked.gone.length,
+      after: doc.authority.doc,
+      documentId: doc.panelId,
+      wasClean,
+    };
   }
 
   /**

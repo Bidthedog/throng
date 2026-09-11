@@ -19,6 +19,7 @@ import { type ReactElement } from 'react';
 import { firstBinding, type Keybindings } from '@throng/core';
 import { Icon } from '../common/icon.js';
 import { requestQuickOpen } from '../navigate/navigation-store.js';
+import { requestFindInFiles } from '../find-in-files/open-find-in-files.js';
 
 export function ExplorerToolbar({
   onExpand,
@@ -27,6 +28,7 @@ export function ExplorerToolbar({
   onDelete,
   keybindings,
   quickOpenEnabled,
+  findInFilesEnabled,
 }: {
   onExpand?: () => void;
   onCollapseAll?: () => void;
@@ -36,8 +38,11 @@ export function ExplorerToolbar({
   keybindings: Keybindings;
   /** V4 — false with no project open: the control is drawn, and disabled. */
   quickOpenEnabled: boolean;
+  /** 043 FR-029a/FR-029e — the same, for Find in Files. Drawn and disabled, never hidden. */
+  findInFilesEnabled: boolean;
 }): ReactElement {
   const chord = firstBinding(keybindings, 'navigate.quickOpen');
+  const findInFilesChord = firstBinding(keybindings, 'search.findInFiles');
   return (
     <div className="explorer-toolbar" data-testid="explorer-toolbar">
       <button
@@ -91,6 +96,42 @@ export function ExplorerToolbar({
         }}
       >
         <Icon token="quickOpen" />
+      </button>
+      {/*
+       * 043 FR-029a — Find in Files, BESIDE Quick Open.
+       *
+       * A deliberate copy of the button above, `IconButton` and all: that component builds `title`
+       * and `aria-label` from one string, and this control needs them apart for the same reason
+       * Quick Open does — the title carries a LIVE chord, so a locator built on the accessible name
+       * would break on the very rebind the title exists to follow (R21).
+       *
+       * The Find in Files PANEL type is absent from the New Panel dialog (FR-017), so this control
+       * and the tree's Open In → Search submenu (FR-090, which replaced FR-029b's folder row) are the
+       * only routes a user can discover (FR-029c). That is
+       * why it is drawn and disabled with no project rather than hidden: a control that vanishes
+       * teaches nothing, and this one has nothing else to teach it.
+       */}
+      <button
+        type="button"
+        className="explorer-toolbar__btn"
+        title={
+          findInFilesEnabled
+            ? `Find in Files${findInFilesChord === undefined ? '' : ` (${findInFilesChord})`}`
+            : 'Find in Files — no project is open'
+        }
+        aria-label="Find in Files"
+        disabled={!findInFilesEnabled}
+        onClick={() => {
+          // FR-031b — the toolbar route SEEDS NOTHING. It is not invoked from a text selection, and
+          // seeding from a stale one would overwrite the live term of a panel being reused.
+          //
+          // FR-029a — and it searches the WHOLE PROJECT, which is what `''` says. It used to send no
+          // scope at all, which the opener reads as "leave it alone": a panel last scoped to a folder
+          // from the tree went on searching that folder with nothing on screen saying so.
+          requestFindInFiles({ route: 'toolbar', replace: false, scopeSubPath: '' });
+        }}
+      >
+        <Icon token="findInFiles" />
       </button>
       <button
         type="button"

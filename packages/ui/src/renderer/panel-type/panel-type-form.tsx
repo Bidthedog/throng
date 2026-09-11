@@ -107,7 +107,9 @@ export function PanelTypeForm({
     () => getDraft(panelId),
   );
 
-  const types = registry.list();
+  // `listOfferable()`, not `list()` (043 FR-017): the registry holds every type so a panel's header
+  // can resolve its label and icon, and this dropdown offers only the ones a user may pick.
+  const types = registry.listOfferable();
   const confirmable = canConfirm(state, deps);
 
   const onConfirm = (): void => {

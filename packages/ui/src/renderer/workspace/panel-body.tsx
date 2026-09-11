@@ -7,11 +7,12 @@ import { PanelTypeForm } from '../panel-type/panel-type-form.js';
 import { TerminalPanel } from '../terminal/terminal-panel.js';
 import { DormantTerminal } from '../terminal/dormant-terminal.js';
 import { EditorPanel } from '../editor/editor-panel.js';
+import { FindInFilesPanel } from '../find-in-files/find-in-files-panel.js';
 import { PanelDropTarget, type DropContext } from '../editor/drop-target.js';
 import { TreeDropTarget } from '../editor/tree-drop-target.js';
 import { openFileInPanel } from '../editor/editor-open.js';
 import { findEditorPanelByPath } from '../editor/editor-state.js';
-import { collectPanels } from '@throng/core';
+import { collectPanels, FIND_IN_FILES_KIND } from '@throng/core';
 import { focusPanel } from './panel-focus.js';
 
 /**
@@ -123,6 +124,41 @@ export function PanelBody({ panel, tabId }: { panel: Panel; tabId: string }): Re
     };
     return (
       <TerminalPanel panel={panel} tabId={tabId} projectRoot={root} rootless={ownedBySub} meta={meta} />
+    );
+  }
+  if (panel.kind === FIND_IN_FILES_KIND) {
+    /*
+     * 043 US3 (FR-018) — wait for the PROJECT LIST, for the editor branch's reason below.
+     *
+     * A Find in Files panel searches exactly one project's tree, and while `loading` is true the
+     * list is empty, so which tree that is cannot be answered yet. Starting a panel now would give
+     * it a null root — a panel with nowhere to search and no way to say so — or, in a
+     * sub-workspace, the wrong project's root entirely.
+     */
+    if (loading) {
+      return (
+        <div
+          className="panel-box__placeholder"
+          data-testid={`find-in-files-loading-${panel.id}`}
+          role="status"
+        >
+          Resolving project…
+        </div>
+      );
+    }
+    return (
+      <FindInFilesPanel
+        panel={panel}
+        projectRoot={root}
+        projectId={originProject?.id ?? activeProject?.id ?? null}
+        /*
+         * 043 FR-027a (T104) — the panel's QUERY into the layout blob, from the one component that
+         * holds the workspace store. `updatePanelConfig` merges and schedules the debounced save,
+         * exactly as an editor panel's evolving `filePath` does; results and previews are not in
+         * what the panel hands over, which is FR-027b/FR-027c holding by construction.
+         */
+        onConfigChange={(config) => ws.updatePanelConfig(panel.id, config)}
+      />
     );
   }
   if (panel.kind === 'editor') {

@@ -244,6 +244,21 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Replace every match in the file as a single undoable step.',
   ),
 
+  // Find in Files (043) — the same section, one level up: these search the whole project rather
+  // than the active panel's content, and are live from any surface.
+  chord(
+    'search.findInFiles',
+    'Search',
+    'Find in files',
+    'Search every file in the project and show the matches in a results panel.',
+  ),
+  chord(
+    'search.replaceInFiles',
+    'Search',
+    'Replace in files',
+    'Search every file in the project with the replacement row already open.',
+  ),
+
   // Terminal scrollback navigation (013) — view-only movement through retained
   // output; these keys are never delivered to the running program.
   chord(

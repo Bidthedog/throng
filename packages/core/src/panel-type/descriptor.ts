@@ -144,6 +144,20 @@ export interface PanelTypeDescriptor<V extends PanelTypeValues = PanelTypeValues
   /** Theme icon token marking this panel type in its header (012). Optional so a
    *  future type can omit it; the renderer falls back to no icon. */
   icon?: string;
+  /**
+   * Whether the New Panel form OFFERS this type. Absent means yes (043 FR-017).
+   *
+   * Registration and offering are two different things, and this field is what separates them. The
+   * registry is also where a panel's header LABEL and ICON come from — `panel-placeholder.tsx` and
+   * `use-panel-display-names.ts` both resolve `registry.get(panel.kind)` — so a type that is only
+   * ever created by a command, never chosen from the dropdown, still has to be registered or its
+   * panels wear a raw kind string and no icon. Leaving it out of the registry would satisfy FR-017
+   * by breaking the header.
+   *
+   * The default is `true` so every existing descriptor means what it already meant, and
+   * `listOfferable()` is the only listing that reads it.
+   */
+  offered?: boolean;
   inputs: PanelTypeInputSpec[];
   defaults(ctx: PanelTypeContext): V;
   validate(values: V, ctx: PanelTypeContext): ValidationResult;

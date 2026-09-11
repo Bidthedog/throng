@@ -11,6 +11,7 @@ import { DEFAULT_ROTATION } from '../diagnostics/rotation.js';
 import {
   DEFAULT_NOTIFICATION_SETTINGS,
   parseNotificationSettings,
+  type DisplayMode,
   type NotificationSettings,
 } from '../notice/display-mode.js';
 import { NOTICE_SEVERITIES } from '../notice/severity.js';
@@ -439,7 +440,112 @@ export interface TabSettings {
   popoverDelayMs: number;
 }
 
-/** In-panel search preferences (013, FR-002a / SC-007). */
+/**
+ * Where a Find in Files search puts its results (043, FR-021): back into the panel that ran the
+ * last one, or into a fresh panel each time.
+ *
+ * Its members coincide with {@link EditorOpenTarget}'s, and it is deliberately NOT that type. The
+ * two answer different questions about different things — "which EDITOR does this file open into"
+ * against "which RESULTS panel does this search open into" — and sharing the alias would mean a
+ * later change to either (a third editor target, say) silently changed the other. Same reasoning as
+ * the icon-token convention in `theme.ts`: a shared spelling is not a shared meaning.
+ */
+export type FindInFilesOpenTarget = 'lastActive' | 'new';
+
+/** The values `search.inFiles.openTarget` accepts, shared by the parser and the descriptor. */
+export const FIND_IN_FILES_OPEN_TARGETS: readonly FindInFilesOpenTarget[] = ['lastActive', 'new'];
+
+/**
+ * What starts a Find in Files scan (043, FR-043a / FR-043b): an explicit **Run**, or typing.
+ *
+ * A closed set rather than a boolean, and rendered as a `select`, for the reason 039 D-4 records
+ * for `terminals.reloadMode` — both states have to describe themselves, and "search as you type:
+ * off" never says that the alternative is a button you press.
+ */
+export type FindInFilesTrigger = 'run' | 'asYouType';
+
+/** The values `search.inFiles.trigger` accepts, shared by the parser and the descriptor. */
+export const FIND_IN_FILES_TRIGGERS: readonly FindInFilesTrigger[] = ['run', 'asYouType'];
+
+/**
+ * How a results panel groups its rows (043, FR-033a): by file, or by folder and file together.
+ *
+ * ══ WHY THERE IS NO `'folder'` (FR-073, R25) ══
+ *
+ * There was, and it was withdrawn: a row under a folder-only heading shows a position and a snippet,
+ * and the file it belongs to reaches the reader only through a `title` attribute — so the list could
+ * not say which file a line came from. Naming the file on the row was offered as the narrower remedy
+ * and declined.
+ *
+ * A stored `'folder'` therefore needs no hand-written coercion, and deliberately has none. This array
+ * is what the descriptor's `allowedValues` points at, and `bounds-guard.ts`'s `correctScalar`
+ * substitutes the default for anything outside it on EVERY read — so the deletion above IS the
+ * migration. `settings-grouping-retired.test.ts` is what holds that claim up.
+ */
+export type FindInFilesGrouping = 'file' | 'fileAndFolder';
+
+/** The values `search.inFiles.defaultGrouping` accepts, shared by the parser and the descriptor. */
+export const FIND_IN_FILES_GROUPINGS: readonly FindInFilesGrouping[] = ['file', 'fileAndFolder'];
+
+/** Find in Files preferences (043, FR-059 — six leaves, and two more at FR-082). */
+export interface FindInFilesSettings {
+  /** Whether a search reuses the last Find in Files panel or opens a new one (FR-021). */
+  openTarget: FindInFilesOpenTarget;
+  /** Whether a scan waits for **Run** or starts as you type (FR-043a, FR-043b). */
+  trigger: FindInFilesTrigger;
+  /**
+   * Quiet period (ms) after the last keystroke before an as-you-type scan starts walking the tree.
+   *
+   * Its own key rather than a second use of {@link SearchSettings.asYouTypeDebounceMs}, which the
+   * find bar reads: 120 ms is tuned for re-scanning ONE buffer that is already in memory, and this
+   * one gates a walk over the whole project (SC-004's corpus is 5,000 files on disk). Sharing the
+   * key would mean a user who wanted a snappier find bar paid for it in disk churn.
+   */
+  settleMs: number;
+  /** How a freshly-opened results panel groups its rows (FR-033a). */
+  defaultGrouping: FindInFilesGrouping;
+  /** Whether a panel's grouping choice outlives the search that set it (FR-033b). */
+  rememberGrouping: boolean;
+  /**
+   * Whether a replace that cannot be undone asks first (FR-057c).
+   *
+   * Defaults to `true`, and the asymmetry is the argument: the cost of the confirmation is one
+   * keystroke, and the cost of its absence is edits across many files with no undo to reach for.
+   */
+  warnIrreversibleCommit: boolean;
+  /**
+   * How the replace summary notice (FR-058) is displayed — ITS OWN mode, not its severity's
+   * (043, FR-082).
+   *
+   * ══ WHY THIS NOTICE HAS A SETTING OF ITS OWN ══
+   *
+   * Everywhere else in the application a notice's dwell comes from `notifications.<severity>`, and
+   * that is 030's whole design: the USER decides how long they need to read something, per severity.
+   * This one notice is the stated exception, and FR-082 records the cost rather than leaving it to be
+   * discovered — a user whose global preference is that errors stay until dismissed does not get that
+   * behaviour from a failed replace. What moves is which control the user reaches for, not whether
+   * there is one.
+   *
+   * It governs ALL THREE outcomes of a commit — success, warning and error. The severity is still
+   * computed per outcome (it decides the colour, the icon and the log level); only the display
+   * resolution comes from here.
+   */
+  summaryNoticeMode: DisplayMode;
+  /**
+   * How long a TIMED replace summary notice stays on screen (043, FR-082).
+   *
+   * Stored whatever {@link summaryNoticeMode} says, and consulted only under `timed` — exactly as
+   * every `notifications.<severity>.timeoutMs` is. That coexistence is deliberate and is why a
+   * `dismiss` mode shipping beside a 5000 ms duration is not self-contradictory: switching the mode
+   * to *Display for* must not present an empty control.
+   *
+   * Bounded by `TIMEOUT_MIN_MS`/`TIMEOUT_MAX_MS` through the DESCRIPTOR, never by a clamp written
+   * here — #227's rule, and the reason `findInFilesSettings` below stays type-tolerance only.
+   */
+  summaryNoticeTimeoutMs: number;
+}
+
+/** In-panel search preferences (013, FR-002a / SC-007; 043 added `inFiles`). */
 export interface SearchSettings {
   /**
    * Quiet period (ms) after the last keystroke before the as-you-type search re-runs.
@@ -447,6 +553,8 @@ export interface SearchSettings {
    * the 1000 ms budget (SC-007). Externalised rather than hardcoded (Principle X).
    */
   asYouTypeDebounceMs: number;
+  /** Find in Files (043) — the panel that searches the project rather than one buffer. */
+  inFiles: FindInFilesSettings;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -550,6 +658,39 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   search: {
     asYouTypeDebounceMs: 120,
+    inFiles: {
+      // Reuse the panel you already have. A user searching repeatedly is refining ONE question, and
+      // a fresh panel per attempt buries the workspace in results they have already read (FR-021).
+      openTarget: 'lastActive',
+      // As-you-type, not an explicit Run (FR-074). The cost argument that shipped the other way is
+      // kept rather than deleted, because it is still true and it LOST rather than being wrong:
+      // this walks the project's tree where the find bar re-scans a buffer already in memory, so a
+      // scan that starts on its own is genuinely more expensive. What pays for it is `settleMs`
+      // below — long enough that a word typed at speed costs ONE walk rather than several — with
+      // the ceiling at four settles (`SETTLE_CEILING_FACTOR`) so a user who never pauses still gets
+      // results rather than none. Explicit Run is now the preference.
+      trigger: 'asYouType',
+      // 500 ms, and deliberately about FOUR times `asYouTypeDebounceMs`. The multiple grew with
+      // FR-074: this interval used to gate a path a user had to opt into, and it now gates the
+      // SHIPPED one — so every keystroke anyone types in this panel is measured against it, and it
+      // has to be long enough that a whole word arrives inside one quiet period rather than merely
+      // long enough not to surprise someone who asked for the behaviour.
+      settleMs: 500,
+      // By file. Grouping by folder AND file is useful once results are broad, and a user who has
+      // just typed a term is usually looking for the file it is in (FR-033a).
+      defaultGrouping: 'file',
+      // A grouping the user chose is a decision about how they are reading these results, and it
+      // survives the next search in the same panel (FR-033b).
+      rememberGrouping: true,
+      warnIrreversibleCommit: true,
+      // Dismiss only, with a 5000 ms duration stored beside it (FR-082) — the same pair `error` and
+      // `warning` already ship, and for the same reason: a summary naming which files changed and
+      // which did not is read, not glanced at, and one that vanished before it was read is
+      // indistinguishable from one that never happened (#224). The 5000 is inert until the mode is
+      // `timed`, and sits exactly on a slider stop (3000 + 4 × 500) so a drag can return to it.
+      summaryNoticeMode: 'dismiss',
+      summaryNoticeTimeoutMs: 5000,
+    },
   },
   diagnostics: {
     logLevel: DEFAULT_LOG_LEVEL,
@@ -631,6 +772,53 @@ function searchSettings(raw: unknown, d: SearchSettings): SearchSettings {
       typeof v.asYouTypeDebounceMs === 'number' && Number.isFinite(v.asYouTypeDebounceMs)
         ? v.asYouTypeDebounceMs
         : d.asYouTypeDebounceMs,
+    inFiles: findInFilesSettings(v.inFiles, d.inFiles),
+  };
+}
+
+/**
+ * Tolerant per-field parse of `search.inFiles` (043). A bad leaf falls back to its own default.
+ *
+ * TYPE tolerance only, and that is the whole rule here — no range on `settleMs`, and no closed-set
+ * check on the three enumerated leaves. Both belong on the DESCRIPTOR, where the Settings form and
+ * `applyDeclaredBounds` read them from one place; a second copy in this function is how
+ * `diagnostics.keepFiles` came to declare 1–20 and accept 1–50 for a year (#227, and 031 T033 which
+ * deleted the last of them).
+ *
+ * So an unrecognised `trigger` is accepted as a string and handed on, exactly as `newTabPosition`
+ * is. It does not survive to a reader: `bounds-guard.ts` substitutes the default for anything
+ * outside the descriptor's `allowedValues`, and the three constants above ARE those `allowedValues`,
+ * so the parser and the form cannot disagree about the set.
+ */
+function findInFilesSettings(raw: unknown, d: FindInFilesSettings): FindInFilesSettings {
+  if (!isRecord(raw)) return { ...d };
+  return {
+    openTarget:
+      typeof raw.openTarget === 'string'
+        ? (raw.openTarget as FindInFilesOpenTarget)
+        : d.openTarget,
+    trigger:
+      typeof raw.trigger === 'string' ? (raw.trigger as FindInFilesTrigger) : d.trigger,
+    settleMs: wholeNumber(raw.settleMs, d.settleMs),
+    defaultGrouping:
+      typeof raw.defaultGrouping === 'string'
+        ? (raw.defaultGrouping as FindInFilesGrouping)
+        : d.defaultGrouping,
+    rememberGrouping:
+      typeof raw.rememberGrouping === 'boolean' ? raw.rememberGrouping : d.rememberGrouping,
+    warnIrreversibleCommit:
+      typeof raw.warnIrreversibleCommit === 'boolean'
+        ? raw.warnIrreversibleCommit
+        : d.warnIrreversibleCommit,
+    // FR-082. Type tolerance only, as above: an unrecognised mode is handed on as a string and
+    // `bounds-guard.ts` substitutes the default for anything outside the descriptor's
+    // `allowedValues` — which IS `DISPLAY_MODES`. A closed-set check here would be the second copy
+    // #227 was about.
+    summaryNoticeMode:
+      typeof raw.summaryNoticeMode === 'string'
+        ? (raw.summaryNoticeMode as DisplayMode)
+        : d.summaryNoticeMode,
+    summaryNoticeTimeoutMs: wholeNumber(raw.summaryNoticeTimeoutMs, d.summaryNoticeTimeoutMs),
   };
 }
 
@@ -1110,7 +1298,12 @@ function structuredCloneSettings(s: AppSettings): AppSettings {
     editor: cloneEditor(s.editor),
     tabs: { ...s.tabs },
     newProject: { ...s.newProject },
-    search: { ...s.search },
+    // 043: `search` stopped being all-scalar when `inFiles` arrived, so the spread now copies an
+    // OBJECT by reference and the nested member has to be re-cloned underneath it — the same trap
+    // `cloneEditor` above spells out at length. Without this line every caller of
+    // `structuredCloneSettings` shares one `inFiles`, and for the defaults path that object is
+    // `DEFAULT_APP_SETTINGS.search.inFiles` itself.
+    search: { ...s.search, inFiles: { ...s.search.inFiles } },
     diagnostics: { ...s.diagnostics },
     // Deep-cloned for the same reason as the indent maps above: `DEFAULT_APP_SETTINGS.notifications`
     // IS the notice module's shipped table, so a shallow spread would hand every caller the same

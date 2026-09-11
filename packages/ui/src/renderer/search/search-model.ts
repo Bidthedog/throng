@@ -1,90 +1,23 @@
 /**
- * Pure search model (013). Match finding, wrap-around index maths, the "N of M"
- * count, and selection seeding — the logic that is identical whether the search
- * runs over an editor document or a terminal's scrollback.
+ * Pure search model (013) — MOVED TO `@throng/core` by 043 (R1), and re-exported from here so
+ * no existing caller or test changed with it.
  *
- * Deliberately free of DOM and of any engine object: CodeMirror's `Text` and
- * `SearchQuery` are pure JS, so the real case / whole-word semantics are settled
- * here (and unit-tested) rather than only observable through the running app.
- */
-import { SearchQuery } from '@codemirror/search';
-import type { Text } from '@codemirror/state';
-import { seedFromSelections } from '@throng/core';
-
-/** The visible, session-persistent match toggles (FR-007). Regex is deferred. */
-export interface MatchModes {
-  caseSensitive: boolean;
-  wholeWord: boolean;
-}
-
-/** One occurrence, as absolute document offsets. */
-export interface Match {
-  from: number;
-  to: number;
-}
-
-/** What the find bar renders as "current of total" (FR-002). */
-export interface SearchCount {
-  current: number;
-  total: number;
-}
-
-export const NO_MODES: MatchModes = { caseSensitive: false, wholeWord: false };
-export const NO_MATCHES: SearchCount = { current: 0, total: 0 };
-
-/**
- * Every match of `term` in the document, in document order. An empty term matches
- * nothing — a search with no term is not a search (FR-009's no-results state is for
- * a real term that misses, not for an empty box).
- */
-export function editorMatches(doc: Text, term: string, modes: MatchModes): Match[] {
-  if (term.length === 0) return [];
-  const query = new SearchQuery({
-    search: term,
-    caseSensitive: modes.caseSensitive,
-    wholeWord: modes.wholeWord,
-    literal: true,
-  });
-  if (!query.valid) return [];
-
-  const out: Match[] = [];
-  const cursor = query.getCursor(doc);
-  for (let it = cursor.next(); !it.done; it = cursor.next()) {
-    out.push({ from: it.value.from, to: it.value.to });
-  }
-  return out;
-}
-
-/**
- * The match the search should land on given the caret/viewport position: the first
- * one at or after `pos`, wrapping to the top when the caret sits past the last match.
- */
-export function indexFrom(matches: Match[], pos: number): number {
-  if (matches.length === 0) return -1;
-  const i = matches.findIndex((m) => m.from >= pos);
-  return i === -1 ? 0 : i;
-}
-
-/** Step the current match forward/back, wrapping at both ends (FR-006 / FR-011). */
-export function stepIndex(current: number, total: number, step: 1 | -1): number {
-  if (total === 0) return -1;
-  return (((current + step) % total) + total) % total;
-}
-
-/** The 1-based count the bar shows; `{0, 0}` is the no-results state (FR-009). */
-export function countOf(matches: Match[], current: number): SearchCount {
-  if (matches.length === 0 || current < 0) return NO_MATCHES;
-  return { current: current + 1, total: matches.length };
-}
-
-/**
- * The term a ONE-range selection seeds the find input with (013 FR-002b) — the Terminal's case,
- * where a selection is always a single range.
+ * The move was forced: 043 scans a project's files from the MAIN process, main never imports
+ * from the renderer, and the match semantics now have a consumer in both. That is the same
+ * situation, and the same resolution, as `packages/core/src/editor/refusal.ts` — a pure domain
+ * decision with cross-process consumers belongs in the platform-abstracted core.
  *
- * The rule itself lives in core ({@link seedFromSelections}), because the EDITOR can now hold a
- * rectangular block or a multi-cursor set, and the decision of what an ambiguous selection seeds
- * (nothing — never an arbitrary row of it, FR-025i) has to be the same rule in both places.
+ * This file is deliberately nothing but the re-export. Anything ADDED to the model goes in
+ * `packages/core/src/search/match-model.ts`; a second definition here would be exactly the
+ * drift between the two find surfaces that FR-040 exists to prevent.
  */
-export function seedFrom(selection: string | null | undefined): string {
-  return seedFromSelections([selection ?? '']);
-}
+export {
+  NO_MODES,
+  NO_MATCHES,
+  editorMatches,
+  indexFrom,
+  stepIndex,
+  countOf,
+  seedFrom,
+} from '@throng/core';
+export type { MatchModes, Match, SearchCount } from '@throng/core';
