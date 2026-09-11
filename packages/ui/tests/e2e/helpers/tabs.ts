@@ -149,6 +149,8 @@ export interface StripState {
   /** The largest legal `scrollLeft`. Past this there is nothing left to reveal. */
   maxScroll: number;
   fades: { left: boolean; right: boolean };
+  /** The drawn width of each edge fade, measured from its pseudo-element (#382). */
+  fadeWidth: number;
 }
 
 /** Measure the strip in content space. */
@@ -179,8 +181,22 @@ export async function stripState(win: Page): Promise<StripState> {
         left: strip.getAttribute('data-fade-left') === 'true',
         right: strip.getAttribute('data-fade-right') === 'true',
       },
+      fadeWidth: parseFloat(getComputedStyle(strip, '::before').width) || 0,
     };
   });
+}
+
+/**
+ * The part of the viewport no SHOWING fade covers, in content space (#382).
+ *
+ * Built from what is drawn — the fade flags and the pseudo-element's measured width — rather than
+ * from the renderer's constant, so a tab asserted "fully visible" is one a user can actually see.
+ */
+export function clearView(s: StripState): { left: number; right: number } {
+  return {
+    left: s.scrollLeft + (s.fades.left ? s.fadeWidth : 0),
+    right: s.scrollLeft + s.viewportWidth - (s.fades.right ? s.fadeWidth : 0),
+  };
 }
 
 export interface Counts {
@@ -216,17 +232,23 @@ export function expectedCounts(s: StripState): Counts {
   };
 }
 
-/** The index of the left-most tab not entirely hidden to the left — the tab the strip sits on. */
+/**
+ * The index of the left-most tab not entirely hidden to the left, or behind the left fade — the tab
+ * the strip sits on. A step lands a tab clear of that fade (#382), so the tab before it is left
+ * showing only under the fade, and is not the one the strip is on.
+ */
 export function anchorIndex(s: StripState): number {
+  const left = clearView(s).left;
   for (let i = 0; i < s.chips.length; i += 1) {
-    if (s.chips[i]!.right > s.scrollLeft + EPS) return i;
+    if (s.chips[i]!.right > left + EPS) return i;
   }
   return s.chips.length - 1;
 }
 
-/** Is this chip entirely inside the viewport? */
+/** Is this chip entirely inside the viewport and clear of any showing fade (#382)? */
 export function isFullyVisible(s: StripState, chip: Chip): boolean {
-  return chip.left >= s.scrollLeft - EPS && chip.right <= s.scrollLeft + s.viewportWidth + EPS;
+  const view = clearView(s);
+  return chip.left >= view.left - EPS && chip.right <= view.right + EPS;
 }
 
 /** Every chip entirely inside the viewport, in strip order. */

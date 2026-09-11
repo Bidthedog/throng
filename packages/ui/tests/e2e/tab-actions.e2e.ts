@@ -28,8 +28,10 @@ import {
   EPS,
   actionBadges,
   anchorIndex,
+  clearView,
   expectCountsInSync,
   expectedCounts,
+  partlyVisibleChips,
   seedOverflowingTabs,
   setScrollLeft,
   stripState,
@@ -277,7 +279,7 @@ test('T045 — the counts follow a reorder and a window resize (S2)', { tag: ['@
   }
 });
 
-test('T046 — a step moves exactly one tab, landing it flush with the left edge (S3)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
+test('T046 — a step moves exactly one tab, landing it clear of the left fade (S3, #382)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await freshProject();
   await seedOverflowingTabs(shared.win, 'actions-step');
   await setScrollLeft(shared.win, 0);
@@ -290,9 +292,11 @@ test('T046 — a step moves exactly one tab, landing it flush with the left edge
   const after = await stripState(shared.win);
   const anchorAfter = anchorIndex(after);
   expect(anchorAfter, 'a step right moves the strip on by exactly one tab').toBe(anchorBefore + 1);
+  // #382 supersedes "flush with the left edge": a tab flush with the edge sits under the left fade.
+  expect(after.fades.left, 'the strip has moved off its start, so the left fade shows').toBe(true);
   expect(
-    Math.abs(after.scrollLeft - after.chips[anchorAfter]!.left),
-    'the revealed tab is flush with the left edge',
+    Math.abs(clearView(after).left - after.chips[anchorAfter]!.left),
+    'the revealed tab starts where the left fade ends',
   ).toBeLessThanOrEqual(1);
 
   // …and back again, which must return the strip to where it started.
@@ -323,4 +327,99 @@ test('T046 — a step control is unavailable when nothing is hidden that way (S4
 
   // Show all is never unavailable: it lists every tab, and there are always tabs.
   await expect(shared.win.getByTestId('tabstrip-show-all')).toBeEnabled();
+});
+
+test('step-left is available as soon as a reveal has moved the strip off its start', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
+  /*
+   * #382 — the reported path: click the tab cut off at the right-hand edge. The reveal shifts the strip by
+   * less than one tab, so the first tab is now cut off on the left and the left fade shows — and
+   * step-left stayed disabled, leaving no control that leads back to the start.
+   */
+  await freshProject();
+  await seedOverflowingTabs(shared.win, 'actions-small-shift');
+  await setScrollLeft(shared.win, 0);
+
+  /*
+   * "If the window is sized just right": the reveal shifts the strip by however much of the
+   * right-hand tab is cut off, and the first tab (the project's default, with a short name) is
+   * narrower than a seeded one. So the window is WIDENED until the right-hand tab is cut off by
+   * CUT px — less than the first tab — rather than trusting the default window size to land there.
+   */
+  const CUT = 20;
+  const start = await stripState(shared.win);
+  const cutAtStart = partlyVisibleChips(start).at(-1);
+  expect(cutAtStart, 'a tab is cut off at the right-hand edge').toBeTruthy();
+  const widenBy = Math.max(0, Math.round(cutAtStart!.right - (start.scrollLeft + start.viewportWidth)) - CUT);
+  const browserWindow = await shared.app.browserWindow(shared.win);
+  const original = await browserWindow.evaluate((w) => w.getSize());
+  try {
+    await browserWindow.evaluate((w, size) => w.setSize(size[0]!, size[1]!), [
+      original[0]! + widenBy,
+      original[1]!,
+    ]);
+    await expect
+      .poll(async () => (await stripState(shared.win)).viewportWidth, {
+        message: 'the track never widened with the window',
+      })
+      .toBeGreaterThanOrEqual(start.viewportWidth + widenBy - 1);
+    await setScrollLeft(shared.win, 0);
+
+    const before = await stripState(shared.win);
+    const cut = partlyVisibleChips(before).at(-1)!;
+    const cutBy = cut.right - (before.scrollLeft + before.viewportWidth);
+    expect(cutBy, 'the right-hand tab is cut off by less than the first tab is wide').toBeLessThan(
+      before.chips[0]!.right,
+    );
+    const box = await shared.win.getByTestId(cut.testId).boundingBox();
+    expect(box, 'the cut-off tab has a box').toBeTruthy();
+    // With the mouse, on the chip's visible part — `locator.click()` would scroll the chip into view
+    // itself before the app had a chance to.
+    await traceScroll(shared.win, () =>
+      shared.win.mouse.click(box!.x + 20, box!.y + box!.height / 2),
+    );
+
+    const after = await stripState(shared.win);
+    expect(after.chips.find((c) => c.testId === cut.testId)?.active, 'the clicked tab is active').toBe(true);
+    expect(after.scrollLeft, 'the reveal moved the strip').toBeGreaterThan(1);
+    expect(after.scrollLeft, 'by less than the first tab').toBeLessThan(after.chips[0]!.right);
+    expect(after.fades.left, 'the left fade marks the cut-off first tab').toBe(true);
+
+    await expect(
+      shared.win.getByTestId('tabstrip-step-left'),
+      'the strip has moved off its start, so step-left must lead back to it',
+    ).toBeEnabled();
+    await traceScroll(shared.win, () => shared.win.getByTestId('tabstrip-step-left').click());
+    expect((await stripState(shared.win)).scrollLeft).toBeLessThanOrEqual(1);
+  } finally {
+    await browserWindow.evaluate((w, size) => w.setSize(size[0]!, size[1]!), original);
+    await expect
+      .poll(async () => (await stripState(shared.win)).viewportWidth, {
+        message: 'the track never returned to its original width',
+      })
+      .toBe(start.viewportWidth);
+  }
+});
+
+test('the step controls ignore a right-click', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
+  // #382 — only the primary button steps.
+  await freshProject();
+  await seedOverflowingTabs(shared.win, 'actions-right-click');
+
+  await setScrollLeft(shared.win, 0);
+  await expect(shared.win.getByTestId('tabstrip-step-right')).toBeEnabled();
+  await traceScroll(shared.win, () =>
+    shared.win.getByTestId('tabstrip-step-right').click({ button: 'right' }),
+  );
+  expect((await stripState(shared.win)).scrollLeft, 'a right-click on step-right moved the strip').toBeLessThanOrEqual(1);
+
+  const state = await stripState(shared.win);
+  await setScrollLeft(shared.win, state.maxScroll);
+  await expect(shared.win.getByTestId('tabstrip-step-left')).toBeEnabled();
+  await traceScroll(shared.win, () =>
+    shared.win.getByTestId('tabstrip-step-left').click({ button: 'right' }),
+  );
+  expect(
+    Math.abs((await stripState(shared.win)).scrollLeft - state.maxScroll),
+    'a right-click on step-left moved the strip',
+  ).toBeLessThanOrEqual(1);
 });

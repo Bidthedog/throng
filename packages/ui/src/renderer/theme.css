@@ -646,6 +646,12 @@ textarea,
  * flow. Anything inserted into the track instead would push every tab to its right the moment tabs
  * were hidden — which is the one thing FR-005 forbids, and the reason this is not just a
  * `border-image` on the first chip.
+ *
+ * The width comes from `--tabstrip-fade-width`, written by the TabGroup component from the same
+ * constant the strip's geometry uses to land a revealed tab clear of the fade (#382). A width set here
+ * alone would let the two drift apart, and the fade would creep back over the tab it was moved clear
+ * of. No file names or dotted words in this comment: the floating-surfaces guard takes the first
+ * dot-prefixed word before the brace as the rule's class, and a file extension here reads as one.
  */
 .tab-strip::before,
 .tab-strip::after {
@@ -653,7 +659,7 @@ textarea,
   position: absolute;
   top: 4px;
   bottom: 0;
-  width: 24px;
+  width: var(--tabstrip-fade-width);
   pointer-events: none;
   opacity: 0;
   transition: opacity 120ms ease;

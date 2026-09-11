@@ -30,6 +30,7 @@ import {
   EPS,
   anchorIndex,
   beginScrollTrace,
+  clearView,
   endScrollTrace,
   expectCountsInSync,
   intermediateSamples,
@@ -331,8 +332,8 @@ test.describe('an eased strip', () => {
       anchorBefore + 2,
     );
     expect(
-      Math.abs(after.scrollLeft - after.chips[anchorBefore + 2]!.left),
-      'the second revealed tab is flush with the left edge',
+      Math.abs(clearView(after).left - after.chips[anchorBefore + 2]!.left),
+      'the second revealed tab starts where the left fade ends',
     ).toBeLessThanOrEqual(1);
   });
 });
@@ -487,7 +488,7 @@ test.describe('a slow strip', () => {
       intermediateSamples(trace, before.scrollLeft, after.scrollLeft),
       'an instant scroll renders no intermediate positions',
     ).toEqual([]);
-    expect(Math.abs(after.scrollLeft - after.chips[anchorBefore + 1]!.left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(clearView(after).left - after.chips[anchorBefore + 1]!.left)).toBeLessThanOrEqual(1);
 
     // A12 — the OS preference is an override, not an edit. Nothing wrote to the settings file.
     expect(
@@ -542,7 +543,7 @@ test.describe('a slow strip', () => {
     ).toBeGreaterThan(0);
     // A14 — it settles AT ITS TARGET, not wherever it had got to.
     expect(
-      Math.abs(after.scrollLeft - after.chips[anchorBefore + 1]!.left),
+      Math.abs(clearView(after).left - after.chips[anchorBefore + 1]!.left),
       'the interrupted scroll finished its journey rather than stopping where it was',
     ).toBeLessThanOrEqual(1);
   });
@@ -731,8 +732,8 @@ test.describe('an unanimated strip', () => {
     const after = await stripState(shared.win);
     expect(anchorIndex(after), 'the step still moves exactly one tab').toBe(anchorBefore + 1);
     expect(
-      Math.abs(after.scrollLeft - after.chips[anchorBefore + 1]!.left),
-      'the revealed tab is flush with the left edge',
+      Math.abs(clearView(after).left - after.chips[anchorBefore + 1]!.left),
+      'the revealed tab starts where the left fade ends',
     ).toBeLessThanOrEqual(1);
     expect(
       intermediateSamples(trace, before.scrollLeft, after.scrollLeft),
