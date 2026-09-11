@@ -130,6 +130,17 @@ export const COVERED: ReadonlyMap<string, string> = new Map([
   ['focus.cycle', 'cycling panel focus both ways'],
   ['focus.cycleBack', 'cycling panel focus both ways'],
   ['view.fullscreen', 'fullscreen'],
+  /*
+   * 043 (#220, #153) — find and replace in files, `Ctrl+Shift+F` and `Ctrl+Shift+H`.
+   *
+   * Both take the LETTER branch, which is the branch that produced this file: `Ctrl+Shift+T`
+   * arrived at the resolver as `Ctrl+T`, matched no binding, and was silently inert. Two more
+   * chords of exactly that shape are exactly what the manifest guard exists to notice, so they are
+   * claimed here rather than exempted — an exemption would have to name a spec that presses them,
+   * and the chord spec IS where they belong.
+   */
+  ['search.findInFiles', 'find in files — the second Ctrl+Shift+<letter> pair'],
+  ['search.replaceInFiles', 'replace in files — the same command with replace pre-enabled'],
 ]);
 
 /**

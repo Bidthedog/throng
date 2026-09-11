@@ -18,6 +18,10 @@ import {
   IN_SCOPE_THEMES,
   BY_DESIGN_LOW_CONTRAST_THEMES,
   SYNTAX_BODY_MIN,
+  MATCH_DISTINCTNESS_THRESHOLD,
+  CLOSEST_MATCH_SURFACE_DELTA,
+  closestMatchSurfacePair,
+  assertMatchDistinctness,
 } from '../../src/config/theme-quality.js';
 import { ALL_DEFAULT_THEMES } from '../../src/config/default-themes/index.js';
 import { THRONG_THEME, type Theme } from '../../src/config/theme.js';
@@ -82,6 +86,33 @@ describe('distinctness (CIEDE2000 mean token-pair)', () => {
     const bash = ALL_DEFAULT_THEMES.Bash;
     const matrix = ALL_DEFAULT_THEMES.Matrix;
     expect(themePairDistance(bash, matrix)).toBeGreaterThanOrEqual(DISTINCTNESS_THRESHOLD);
+  });
+});
+
+/**
+ * M1 (043, plan §"Two measurements") — this file is the command the measurement is taken with, so
+ * the measurement lives here beside `CLOSEST_LEGITIMATE_PAIR_DELTA`'s, in the same shape. The
+ * BEHAVIOUR of the FR-067 gate is covered in `theme-match-distinctness.test.ts`; what is asserted
+ * here is that the recorded constant still equals what the shipped themes actually measure.
+ */
+describe('search-match distinctness — the M1 measurement (FR-067)', () => {
+  const themes = Object.values(ALL_DEFAULT_THEMES);
+
+  it('every bundled theme clears the floor, and the recorded measurement is current', () => {
+    expect(() => assertMatchDistinctness(themes)).not.toThrow();
+    const { theme, a, b, delta } = closestMatchSurfacePair(themes);
+    expect(delta, `closest match-surface pair: ${theme} ${a} vs ${b} = ${delta}`).toBeGreaterThan(
+      MATCH_DISTINCTNESS_THRESHOLD,
+    );
+    expect(CLOSEST_MATCH_SURFACE_DELTA).toBeCloseTo(delta, 6);
+  });
+
+  it('the floor keeps real headroom under the measurement and stays above the JND', () => {
+    // Both ends of the calibration, asserted rather than described: a floor that crept up to meet
+    // the measurement would be a ratchet, and one that sank below ~2.3 ΔE00 would permit a pair the
+    // metric itself calls one colour.
+    expect(CLOSEST_MATCH_SURFACE_DELTA - MATCH_DISTINCTNESS_THRESHOLD).toBeGreaterThan(0.5);
+    expect(MATCH_DISTINCTNESS_THRESHOLD).toBeGreaterThanOrEqual(2.3);
   });
 });
 

@@ -1111,3 +1111,113 @@ describe('Send to Tab moves the panel to the chosen tab (FR-027)', () => {
     });
   });
 });
+
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * 043 T172/T173 (FR-061) — the panel that cannot be renamed
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * A Find in Files panel is not renamable, and the chord needs no special case to say so.
+ *
+ * ══ THE MECHANISM, WHICH IS WHY THIS IS THREE LINES AND NOT A FEATURE ══
+ *
+ * `requestPanelRename` looks the panel up in a module-level registry and returns whether anything
+ * was listening — *"a panel whose header is not mounted (or has already gone) is a no-op, not an
+ * error"* (`panel-rename.ts`). The header registers itself unconditionally today. NOT registering
+ * for this kind makes `panel.rename` inert for it with no branch in `app.tsx` and no new state:
+ * the registry already answers the question, so the fix is an omission rather than a guard.
+ *
+ * ══ WHY THE HEADER'S DOUBLE-CLICK IS ASSERTED TOO ══
+ *
+ * Because FR-061's headline is *"MUST NOT be renamable"*, and there are three routes into the rename
+ * box, not two: the chord, the menu item, and a double-click on the header. Closing the first two
+ * and leaving the third would satisfy every clause of the requirement as written while leaving the
+ * panel renamable by the gesture most users would actually reach for.
+ *
+ * The menu half is `panel-header-zoom-menu.test.ts`, which drives the builder directly. What can
+ * only be seen from a rendered header is what this file asserts: whether the registration happened,
+ * and what a real double-click does.
+ */
+describe('a Find in Files panel is not renamable (FR-061)', () => {
+  const handleOf = (panelId: string): HTMLElement => screen.getByTestId(`panel-handle-${panelId}`);
+
+  it('registers no rename starter, so the chord is a no-op by construction', async () => {
+    const { user } = mount();
+    const ws = await ready();
+    const panelId = panelsIn(ws)[0].id;
+
+    // POSITIVE CONTROL, first and deliberately: this very panel, before it is typed, DOES register.
+    // Without it a broken registry would make the assertion below pass for the wrong reason — and
+    // "nothing was listening" is exactly what a registry that never works looks like.
+    act(() => {
+      expect(requestPanelRename(panelId), 'an untyped panel still registers a rename').toBe(true);
+    });
+    await user.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(screen.queryByTestId(`panel-rename-input-${panelId}`)).toBeNull(),
+    );
+
+    live().setPanelType(panelId, 'findInFiles', {});
+    await waitFor(() =>
+      expect(screen.getByTestId(`panel-title-${panelId}`).textContent?.trim()).toBe(
+        'Find in Files',
+      ),
+    );
+    act(() => {
+      expect(
+        requestPanelRename(panelId),
+        'a Find in Files panel registered a rename starter, so F2 opens a rename box over its search input',
+      ).toBe(false);
+    });
+    expect(screen.queryByTestId(`panel-rename-input-${panelId}`)).toBeNull();
+  });
+
+  it('opens no rename box when its header is double-clicked', async () => {
+    const { user } = mount();
+    const ws = await ready();
+    const panelId = panelsIn(ws)[0].id;
+
+    live().setPanelType(panelId, 'findInFiles', {});
+    await waitFor(() => expect(box(panelId)).toBeInTheDocument());
+
+    await user.dblClick(handleOf(panelId));
+    expect(screen.queryByTestId(`panel-rename-input-${panelId}`)).toBeNull();
+  });
+
+  it('still opens one on a panel that IS renamable, double-clicked the same way', async () => {
+    // The control for the test above: the gesture works, and it is the KIND that decides.
+    const { user } = mount();
+    const ws = await ready();
+    const panelId = panelsIn(ws)[0].id;
+
+    live().setPanelType(panelId, 'editor', { filePath: 'C:/proj/a.txt' });
+    await waitFor(() => expect(box(panelId)).toBeInTheDocument());
+
+    await user.dblClick(handleOf(panelId));
+    expect(await screen.findByTestId(`panel-rename-input-${panelId}`)).toBeInTheDocument();
+  });
+
+  it('heads the panel with what it IS and its term, never with "Panel N" (FR-060)', async () => {
+    // The wiring half of FR-060: `panelDisplayTitle`'s rule is asserted in core, and what this can
+    // see is that the header actually resolves through it for this kind — including the term, which
+    // the panel writes into `Panel.config` as the user types.
+    mount();
+    const ws = await ready();
+    const panelId = panelsIn(ws)[0].id;
+
+    live().setPanelType(panelId, 'findInFiles', {});
+    await waitFor(() =>
+      expect(screen.getByTestId(`panel-title-${panelId}`).textContent?.trim()).toBe(
+        'Find in Files',
+      ),
+    );
+
+    live().updatePanelConfig(panelId, { term: 'needle' });
+    await waitFor(() =>
+      expect(screen.getByTestId(`panel-title-${panelId}`).textContent?.trim()).toBe(
+        'Find in Files: needle',
+      ),
+    );
+  });
+});

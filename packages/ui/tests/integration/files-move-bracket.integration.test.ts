@@ -70,6 +70,7 @@ class GatedFs implements IFileSystem {
   readBytes = (p: string) => this.inner.readBytes(p);
   writeBytes = (p: string, b: Uint8Array) => this.inner.writeBytes(p, b);
   size = (p: string) => this.inner.size(p);
+  modifiedAt = (p: string) => this.inner.modifiedAt(p);
 }
 
 let root: string;

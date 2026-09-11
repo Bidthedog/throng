@@ -16,10 +16,15 @@
  *
  * The E2E launched Electron, started a daemon, made a real temp folder with a real `note.txt`,
  * created a real project, turned a panel into a real CodeMirror editor and renamed it through the
- * real inline rename — in order to read ONE STRING off a menu item. That string is
- * `file-tree.tsx:399`:
+ * real inline rename — in order to read ONE STRING off a menu item. That string is composed in
+ * `editor/open-in-targets.ts`, in `describeOpenInTargets`:
  *
- *     label: targetPanel ? `Last Active Editor (${targetPanel.title})` : 'Last Active Editor'
+ *     label: lastActiveEditorTitle ? `Last Active Editor (${lastActiveEditorTitle})` : 'Last Active Editor'
+ *
+ * It used to be composed inline in `file-tree.tsx`, and these comments used to cite it by LINE
+ * NUMBER. 043 FR-087 moved it into a shared module so the Find in Files result menu could draw the
+ * same three targets, and every one of those line citations went stale silently — nothing failed,
+ * they simply began pointing at unrelated code. They are cited by module and function name now.
  *
  * composed from the layout the workspace store holds and the panel id the `last-active-editor`
  * module store holds. Neither is a filesystem fact, a watcher fact or a rendering fact, so none of
@@ -61,8 +66,10 @@ import { createElement, type ReactElement, type ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   addPanel,
+  addTab,
   createDefaultLayout,
   renamePanel,
+  renameTab,
   type WorkspaceLayout,
 } from '@throng/core';
 import type { ThrongBridge } from '../../src/renderer/state/bridge.js';
@@ -135,7 +142,7 @@ const entry = (name: string, kind: 'file' | 'folder'): FileTreeEntry => ({
   hasChildren: kind === 'folder',
 });
 
-/** One file is all this needs: the menu under test is a FILE's menu (`file-tree.tsx:376`). */
+/** One file is all this needs: the menu under test is a FILE's menu (`onContextMenu` in `file-tree.tsx`). */
 const LISTING: Record<string, FileTreeEntry[]> = {
   '': [entry('note.txt', 'file')],
 };
@@ -225,8 +232,9 @@ async function mount(layout: WorkspaceLayout) {
   const { services, loads } = fakeServices(layout);
 
   // `FileTree` reaches the preload bridge exclusively through optional chaining, so only what it
-  // actually calls needs to exist. `editor.isOpen` is reached at `file-tree.tsx:378` to decide
-  // whether the Open In targets are disabled; false keeps every target enabled.
+  // actually calls needs to exist. `editor.isOpen` is awaited in `onContextMenu` and handed to
+  // `readOpenInFacts` as `alreadyOpen`, which decides whether the Open In targets are disabled;
+  // false keeps every target enabled.
   Reflect.set(window, 'throng', {
     files: {
       setRoot: vi.fn(),
@@ -408,7 +416,7 @@ describe('New Editor is refused once the file is open (FR-011a)', () => {
 
     /*
      * Enabled, not merely present — and the two flags really are independent: `alreadyOpen` is
-     * app-wide, while this target is disabled only by `openInTargetAlready`, which asks whether THIS
+     * app-wide, while this target is disabled only by `lastActiveHoldsFile`, which asks whether THIS
      * panel already holds THIS file. It does not, so the target stands.
      */
     const lastActive = within(flyout).getByTestId('menu-item-Last Active Editor (Scratch)');
@@ -431,11 +439,12 @@ describe('New Editor is refused once the file is open (FR-011a)', () => {
  *
  * The two disabled flags above this block are independent, and the file already says so: `New
  * Editor` is disabled by `alreadyOpen`, which is APP-WIDE, while this target is disabled by
- * `openInTargetAlready`, which asks whether THIS panel holds THIS file (`file-tree.tsx:390`).
+ * `lastActiveHoldsFile`, which asks whether THIS panel holds THIS file (`readOpenInFacts` in
+ * `editor/open-in-perform.ts`, consumed by `describeOpenInTargets`).
  *
  * The existing test at "leaves the OTHER Open In targets alone in both states" proves one direction
  * — app-wide-open does not disable this target. Nothing proved the other: that when the panel really
- * does hold the file, the target goes quiet. A build that never computed `openInTargetAlready` at
+ * does hold the file, the target goes quiet. A build that never computed `lastActiveHoldsFile` at
  * all would pass everything in this file up to here.
  *
  * ══ WHAT IT REPLACES ══
@@ -477,7 +486,7 @@ describe('Last Active Editor goes quiet when that editor holds the file (FR-082)
 
   it('compares the PATHS, not the spellings — Windows calls those the same file', async () => {
     /*
-     * `file-tree.tsx:390` normalises both sides before comparing, and it has to: the tree composes
+     * `readOpenInFacts` normalises both sides before comparing, and it has to: the tree composes
      * its path from the project root while the editor store holds whatever spelling the file was
      * opened with. A raw comparison leaves the row enabled, the user clicks it, and nothing happens —
      * the exact no-op the disabling exists to prevent.
@@ -497,5 +506,102 @@ describe('Last Active Editor goes quiet when that editor holds the file (FR-082)
     const { user, tree } = await mount(oneNamedPanel('Scratch'));
 
     expect(isDisabled(target(await openInFlyout(user, tree)))).toBe(false);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * Other Tab (006 FR-030) — 043 T229
+ *
+ * NOTHING COVERED THIS, AT ANY LAYER, UNTIL NOW. The sweep that went looking found the target's
+ * only appearances outside spec prose were the line that built it and a comment in `tab-group.tsx`:
+ * no component test, no unit test, no E2E. It shipped with 006 and has been drawn ever since on the
+ * strength of nobody reporting it.
+ *
+ * An empty coverage result is a finding rather than a clean bill, and 043 FR-087 is what makes it
+ * worth acting on now: the Find in Files result menu draws this same target from the same
+ * description, so a defect here would appear on two surfaces instead of one.
+ *
+ * `describeOpenInTargets` is pinned in the unit tier — the list, the order, the ids and the
+ * disabling are asserted there against object literals. What can only be shown HERE is that
+ * `readOpenInFacts` reads a REAL layout correctly: that it filters the ACTIVE tab out, and that each
+ * remaining entry carries that tab's own title.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('Other Tab lists the tabs a file could go to instead (006 FR-030)', () => {
+  const isDisabled = (el: HTMLElement): boolean =>
+    el.className.includes('context-menu__item--disabled') ||
+    el.getAttribute('aria-disabled') === 'true';
+
+  /**
+   * Two tabs, with `t1` PUT BACK as the active one — so `t2` is the only "other".
+   *
+   * `activeTabId` is reset by hand because `addTab` makes the tab it adds active
+   * (`operations.ts`, `activeTabId: ids.tab`), which is right for a user adding a tab and wrong for
+   * a fixture. The first version of this test omitted it and failed with the flyout listing
+   * `Tab 1` — which is the correct answer to the question the layout was actually asking, and the
+   * reason the assertion names the expected tab rather than just counting the rows.
+   *
+   * It matters beyond neatness: the rest of this file pins the last-active editor and the panel
+   * titles to `TAB_ID`, so a layout in which `t2` were active would quietly change what every other
+   * assertion here is about.
+   */
+  function twoTabs(secondTitle: string): WorkspaceLayout {
+    const layout = addTab(createDefaultLayout(PROJECT_ID, { tab: TAB_ID, panel: 'p1' }), {
+      tab: 't2',
+      panel: 'p2',
+    });
+    return { ...renameTab(layout, 't2', secondTitle), activeTabId: TAB_ID };
+  }
+
+  /** `mount`, with `editor.isOpen` re-pointed the way the New Editor block does it. */
+  async function mountTabs(secondTitle: string, alreadyOpen: boolean) {
+    const mounted = await mount(twoTabs(secondTitle));
+    const bridge = Reflect.get(window, 'throng') as { editor: { isOpen: () => Promise<boolean> } };
+    bridge.editor.isOpen = () => Promise.resolve(alreadyOpen);
+    return mounted;
+  }
+
+  /** Step into the nested flyout. */
+  async function otherTabs(
+    user: ReturnType<typeof userEvent.setup>,
+    tree: HTMLElement,
+  ): Promise<HTMLElement> {
+    const flyout = await openInFlyout(user, tree);
+    await user.click(within(flyout).getByTestId('menu-item-Other Tab'));
+    return screen.findByTestId('submenu-Other Tab');
+  }
+
+  it('is ABSENT with one tab open — an empty flyout is not a disabled command', async () => {
+    /*
+     * Constitution VI's split, and the one place in this menu that lands on "not drawn": a control
+     * that is temporarily unavailable is drawn and disabled, one that is structurally meaningless is
+     * omitted, and a flyout naming a SET is meaningless over an empty set.
+     *
+     * Asserted as an absence rather than as a disabled row because the two are different bugs — a
+     * disabled "Other Tab" would tell the user other tabs exist and are currently unreachable.
+     */
+    const { user, tree } = await mount(oneNamedPanel('Scratch'));
+    const flyout = await openInFlyout(user, tree);
+
+    expect(within(flyout).queryByTestId('menu-item-Other Tab')).toBeNull();
+  });
+
+  it('names the other tab, and only the other tab', async () => {
+    const { user, tree } = await mountTabs('Docs', false);
+    const tabs = await otherTabs(user, tree);
+
+    // "Docs" and NOT "Tab 1": the active tab is filtered out, so the list never offers to send the
+    // file where an ordinary open would already put it.
+    expect(within(tabs).getByTestId('menu-item-Docs')).toBeVisible();
+    expect(within(tabs).queryByTestId('menu-item-Tab 1')).toBeNull();
+  });
+
+  it('disables every entry once the file is open anywhere — one buffer, app-wide (006 FR-011a)', async () => {
+    const { user, tree } = await mountTabs('Docs', true);
+    const tabs = await otherTabs(user, tree);
+
+    const docs = within(tabs).getByTestId('menu-item-Docs');
+    expect(docs, 'the row stays on the menu — a vanished row teaches nobody why').toBeVisible();
+    expect(isDisabled(docs)).toBe(true);
   });
 });

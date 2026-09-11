@@ -35,6 +35,7 @@ import {
 import { tabContextMenu } from '../../src/renderer/workspace/tab-menu.js';
 import { terminalContentMenu } from '../../src/renderer/terminal/terminal-content-menu.js';
 import { cogMenuItems } from '../../src/renderer/title-bar/cog-menu-items.js';
+import { findInFilesContentMenu } from '../../src/renderer/find-in-files/content-menu.js';
 
 /*
  * Split on the ABSENCE of a section, exactly as `context-menu.tsx` now does. `'separator' in item`
@@ -153,6 +154,8 @@ const explorerOps = {
   // 033 US4 — required on ContextMenuOps; the folder fixture draws both rows from them.
   expandChildren: noop,
   collapseChildren: noop,
+  // 043 FR-029b — required too; the folder fixture draws Find in Files from it.
+  findInFiles: noop,
 };
 
 const explorerFile = (): MenuAction[] =>
@@ -260,6 +263,11 @@ const panelActions = {
   redraw: noop,
   sendToNewTab: noop,
   sendToTab: noop,
+  // 043 FR-015 — the panel's search commands. Required fields, so a builder that grew a row and a
+  // fixture that did not is a compile error rather than a silently unexercised item.
+  find: noop,
+  replace: noop,
+  replaceAll: noop,
   destroy: noop,
 };
 
@@ -322,6 +330,38 @@ const terminalMenu = (over: { link?: string | null; selection?: string; startFai
 const cogMenu = (): MenuAction[] =>
   cogMenuItems({ openPreferences: noop, openLogs: noop, openAbout: noop });
 
+/**
+ * The Find in Files panel's menu (043 FR-025a), in the three states that change its shape:
+ * idle, scanning, and with replace disclosed and its commit granularities live.
+ *
+ * `find-in-files-menu.test.ts` pins the labels, the sections and the state marks; what this
+ * table adds is the GENERIC invariant every menu in the app is held to — that the dividers the
+ * renderer derives land on the section boundaries and nowhere else. A builder missing from this
+ * import list is never checked for that at all, which is why the contract names the omission.
+ */
+const findInFilesMenu = (over: {
+  running?: boolean;
+  replaceEnabled?: boolean;
+  commit?: boolean;
+}): MenuAction[] =>
+  findInFilesContentMenu({
+    running: over.running ?? false,
+    replaceEnabled: over.replaceEnabled ?? false,
+    grouping: 'file',
+    keybindings: DEFAULT_KEYBINDINGS,
+    actions: {
+      run: noop,
+      cancel: noop,
+      toggleReplace: noop,
+      setGrouping: noop,
+      focusScope: noop,
+      setAllCollapsed: noop,
+    },
+    ...(over.commit
+      ? { commit: { replaceAll: noop, replaceInFile: noop, replaceMatch: noop } }
+      : {}),
+  });
+
 const TABLE: { name: string; build: () => MenuAction[] }[] = [
   { name: 'Files & Folders — file row', build: explorerFile },
   { name: 'Files & Folders — folder row', build: explorerFolder },
@@ -352,6 +392,20 @@ const TABLE: { name: string; build: () => MenuAction[] }[] = [
     name: 'Panel header — with sub-workspaces to sync to',
     build: () => panelHeader({ panel: panel({ kind: 'terminal' }), detach: detachFixture }),
   },
+  {
+    /*
+     * 043 FR-061 — the only shape this builder produces whose FIRST section is empty, and the reason
+     * it is in the table rather than only in its own file.
+     *
+     * A Find in Files panel offers no Rename, which is its only `content` row, so the menu now opens
+     * on `destroy`. That is exactly the case the derived-divider rule is easiest to get wrong on: a
+     * builder that emitted a separator where a section USED to be would render a menu that opens on
+     * a rule, and no assertion in `panel-header-zoom-menu.test.ts` — which reads labels — could see
+     * it.
+     */
+    name: 'Panel header — Find in Files panel (its opening section is empty)',
+    build: () => panelHeader({ panel: panel({ kind: 'findInFiles' }) }),
+  },
   { name: 'Tab menu — main window', build: () => tabMenu(true) },
   { name: 'Tab menu — sub-workspace window', build: () => tabMenu(false) },
   { name: 'Terminal content menu — plain', build: () => terminalMenu({}) },
@@ -359,6 +413,12 @@ const TABLE: { name: string; build: () => MenuAction[] }[] = [
   { name: 'Terminal content menu — with a selection', build: () => terminalMenu({ selection: 'ls -al' }) },
   { name: 'Terminal content menu — start failure', build: () => terminalMenu({ startFailure: true }) },
   { name: 'Cog menu', build: cogMenu },
+  { name: 'Find in Files panel menu — idle', build: () => findInFilesMenu({}) },
+  { name: 'Find in Files panel menu — scanning', build: () => findInFilesMenu({ running: true }) },
+  {
+    name: 'Find in Files panel menu — replace disclosed, commit wired',
+    build: () => findInFilesMenu({ replaceEnabled: true, commit: true }),
+  },
 ];
 
 describe('every menu builder declares its sections, and the dividers are derived from them', () => {
@@ -396,6 +456,8 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
    * because it does.
    */
   it('the empty space (root): the whole shape — no Destroy, no Hide, subtree items closing Navigate', () => {
+    // 043 FR-090 — the top-level Find in Files row that closed Navigate here MOVED into
+    // Open In → Search. Moved, not duplicated: its absence is part of this shape, not an omission.
     expect(shapeOf(explorerRoot())).toEqual([
       'Paste',
       'Undo',
@@ -419,7 +481,9 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
    * to the tail of the right group" is exactly the property a count cannot tell from "inserted in
    * the middle of the wrong one".
    */
-  it('a folder row: the whole eighteen-row shape, Collapse/Expand closing Navigate', () => {
+  it('a folder row: the whole eighteen-row shape, the subtree items closing Navigate', () => {
+    // 043 FR-090 — nineteen rows until round five, when the top-level Find in Files row MOVED into
+    // Open In → Search. The dividers do not move: it sat inside Navigate, so no boundary went with it.
     expect(shapeOf(explorerFolder())).toEqual([
       'Rename',
       'Cut',
@@ -457,7 +521,14 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
  * draws every conditional the editor adds.
  */
 describe('the panel header menu draws exactly the shape contracts/menu-sections.md §3.4 describes', () => {
-  it('an untyped panel: Rename · Destroy Panel · Send to Tab · Reset Name, Zoom', () => {
+  it('an untyped panel: Rename · Destroy Panel · Send to Tab · Reset Name', () => {
+    /*
+     * 043 FR-062a — `Zoom` LEFT this shape, and the requirement is what removed it rather than a
+     * tidy-up. The untyped placeholder has no zoom consumer: only `editor-panel.tsx` and
+     * `terminal-panel.tsx` read `panelZoomLevel`, so all three commands moved a persisted integer
+     * that nothing rendered. Constitution VI's disabled-versus-absent rule makes that absence, not a
+     * greyed row, and `panel-header-zoom-menu.test.ts` holds the general correspondence.
+     */
     expect(shapeOf(panelHeader({ panel: panel({}) }))).toEqual([
       'Rename',
       '—',
@@ -466,6 +537,27 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       'Send to Tab',
       '—',
       'Reset Name',
+    ]);
+  });
+
+  it('a Find in Files panel: Destroy Panel · Send to Tab · Zoom — Content empty (FR-061)', () => {
+    /*
+     * The only shape in the table whose FIRST section is empty, which is why it is pinned: the
+     * generic divider rule cannot tell a menu that lost its opening section from one that lost it
+     * and kept a rule where it used to be, and a menu that opens on a divider is what that looks
+     * like on screen.
+     *
+     * `Rename` is this kind's only Content row (FR-061 — the panel's identity is its query, so a
+     * user-chosen name would hide it), and `Reset Name` was its only other View & state row. `Zoom`
+     * stays, and that is FR-062a working in the POSITIVE direction: FR-062 gave this panel real
+     * zoom, so offering the commands is now correct for exactly the reason offering them on the
+     * untyped placeholder is not.
+     */
+    expect(shapeOf(panelHeader({ panel: panel({ kind: 'findInFiles' }) }))).toEqual([
+      'Destroy Panel',
+      '—',
+      'Send to Tab',
+      '—',
       'Zoom',
     ]);
   });
@@ -537,6 +629,11 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       'Save As…',
       'Revert',
       'Reload from disk',
+      // 043 FR-015 — the panel's search commands close the Content group. They act on the panel's
+      // TEXT, which is the same test that put Save and Revert here.
+      'Find',
+      'Replace',
+      'Replace All',
       '—',
       // Destroy, alone, third — the same shape the Files & Folders menu has always had.
       'Destroy Panel',
@@ -550,6 +647,137 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       'Reset Name',
       'Zoom',
     ]);
+  });
+});
+
+/**
+ * Find, Replace and Replace All reach the panel's own menu (043 FR-015).
+ *
+ * ══ THE GAP THIS CLOSES ══
+ *
+ * The constitution requires every discrete panel command to appear in the Panel's menu, and names
+ * `search.find` / `search.replace` / `search.replaceAll` as pre-existing gaps to be closed by tracked
+ * work. Until now the only way to reach any of them was a chord — so a user who had not read the key
+ * bindings could not discover that a panel could search at all, and the panel's menu, which the
+ * constitution calls its canonical index of what it can do, did not index them.
+ *
+ * ══ WHAT IS DELIBERATELY ABSENT ══
+ *
+ * Stepping through matches and closing the bar stay out: FR-015 exempts them as navigational input,
+ * the same exemption scroll and column-select hold. And an UNTYPED panel gets none of the three —
+ * there is nothing to search until it has a kind, which is why the untyped shape above is unchanged.
+ */
+describe('the panel menu indexes the panel’s search commands (043 FR-015)', () => {
+  const labelsIn = (items: MenuAction[], section: MenuSection): string[] =>
+    items.filter((i) => i.section === section).map((i) => i.label ?? '');
+
+  it('an editor panel offers all three, in Content, after the file commands', () => {
+    const items = panelHeader({
+      panel: panel({ kind: 'editor' }),
+      editor: { dirty: false, hasFilePath: true },
+    });
+
+    expect(labelsIn(items, 'content')).toEqual([
+      'Rename',
+      'Save',
+      'Save As…',
+      'Revert',
+      'Reload from disk',
+      'Find',
+      'Replace',
+      'Replace All',
+    ]);
+  });
+
+  it('a terminal panel offers Find and nothing else — its find is read-only (FR-013)', () => {
+    /*
+     * The contrast that makes the row above a decision rather than a list. A terminal can search its
+     * scrollback and cannot rewrite it, so offering Replace there would index a command the panel
+     * does not have — and `search.replace`'s chord is already inert on a terminal.
+     */
+    const items = panelHeader({ panel: panel({ kind: 'terminal' }) });
+
+    expect(labelsIn(items, 'content')).toEqual(['Rename', 'Find']);
+    expect(items.map((i) => i.label)).not.toContain('Replace');
+    expect(items.map((i) => i.label)).not.toContain('Replace All');
+  });
+
+  it('an untyped panel offers none of them', () => {
+    const items = panelHeader({ panel: panel({}) });
+    expect(labelsIn(items, 'content')).toEqual(['Rename']);
+  });
+
+  it('each one SHOWS its bound chord, and shows its own', () => {
+    /*
+     * FR-015 says "showing its bound chord", and `firstBinding` is what makes that the LIVE chord
+     * rather than a string typed into the builder. Asserted per item, because "contains Ctrl" is
+     * true of all three and would pass with Replace showing Find's binding.
+     */
+    const items = panelHeader({
+      panel: panel({ kind: 'editor' }),
+      editor: { dirty: false, hasFilePath: true },
+    });
+
+    expect(
+      ['Find', 'Replace', 'Replace All'].map((l) => [
+        l,
+        items.find((i) => i.label === l)?.shortcut,
+      ]),
+    ).toEqual([
+      ['Find', 'Ctrl+F'],
+      ['Replace', 'Ctrl+H'],
+      ['Replace All', 'Ctrl+Alt+Enter'],
+    ]);
+  });
+
+  it('follows a REBIND, so the menu teaches the key the user actually has', () => {
+    // The half that makes the assertion above evidence rather than a restatement of the defaults
+    // table: a builder that hard-coded "Ctrl+F" passes it and lies to everyone who has rebound find.
+    const rebound = {
+      ...DEFAULT_KEYBINDINGS,
+      bindings: { ...DEFAULT_KEYBINDINGS.bindings, 'search.find': ['Ctrl+Shift+K'] },
+    };
+    const items = panelHeaderMenu({
+      panel: panel({ kind: 'editor' }),
+      panelVerb: 'Destroy',
+      keybindings: rebound,
+      otherTabs: [],
+      editor: { dirty: false, hasFilePath: false },
+      editorFailure: false,
+      detach: null,
+      actions: panelActions,
+    });
+
+    expect(items.find((i) => i.label === 'Find')?.shortcut).toBe('Ctrl+Shift+K');
+  });
+
+  it('runs the panel’s OWN search commands', () => {
+    /*
+     * A menu item that builds correctly and calls nothing is the failure this catches. Each row is
+     * clicked and the action it was given is the one that fires — which is also what proves the
+     * three are three commands rather than one wired up three times.
+     */
+    const fired: string[] = [];
+    const items = panelHeaderMenu({
+      panel: panel({ kind: 'editor' }),
+      panelVerb: 'Destroy',
+      keybindings: DEFAULT_KEYBINDINGS,
+      otherTabs: [],
+      editor: { dirty: false, hasFilePath: false },
+      editorFailure: false,
+      detach: null,
+      actions: {
+        ...panelActions,
+        find: () => fired.push('find'),
+        replace: () => fired.push('replace'),
+        replaceAll: () => fired.push('replaceAll'),
+      },
+    });
+
+    for (const label of ['Find', 'Replace', 'Replace All']) {
+      items.find((i) => i.label === label)?.onClick?.();
+    }
+    expect(fired).toEqual(['find', 'replace', 'replaceAll']);
   });
 });
 

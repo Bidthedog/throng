@@ -19,7 +19,7 @@
  *      handed to the store. This is the wiring hop, and it is why `SearchKeybindings` is mounted here
  *      rather than the store being driven directly: a version that always passed `'editor'` would
  *      defeat guards 3 and 4 at once, and only this hop can see it.
- *   3. `search-store.ts:105` — `replaceShown` is forced false for any non-editor kind.
+ *   3. `search-store.ts` (`openFind`) — `replaceShown` is forced false for any non-editor kind.
  *   4. `find-bar.tsx:156` — the replace row renders only for `isEditor && replaceShown`.
  *
  * ══ WHERE THIS LANDS STRONGER THAN THE E2E DID ══
@@ -222,7 +222,7 @@ describe('a TERMINAL panel', () => {
      * The second guard, independent of the chord. `openFind(…, { replace: true })` is what
      * `search.replace` would call if its editor check were removed, and `showReplace()` is the other
      * door into the same state. Both are refused for a non-editor kind
-     * (`search-store.ts:105` and `:153`), and the bar draws no row either way.
+     * (`search-store.ts`'s `openFind` and `showReplace`), and the bar draws no row either way.
      */
     await mount('terminal');
 
@@ -231,7 +231,7 @@ describe('a TERMINAL panel', () => {
     expect(getFindState().replaceShown).toBe(false);
     expect(screen.queryByTestId('find-replace-row')).toBeNull();
 
-    act(() => showReplace());
+    act(() => showReplace(PANEL));
     expect(getFindState().replaceShown).toBe(false);
     expect(screen.queryByTestId('find-replace-row')).toBeNull();
   });

@@ -42,9 +42,10 @@ async function dismissNoticeIfPresent(win: Page): Promise<void> {
 /*
  * MOVED to `packages/ui/tests/component/explorer-open-in-target.test.ts` (034 FR-045) — one test,
  * one Electron launch, one daemon and one real temp project spent on reading ONE STRING off a menu
- * item. That string is `file-tree.tsx:399`:
+ * item. That string is composed in `describeOpenInTargets` (`editor/open-in-targets.ts`), and was
+ * composed inline in `file-tree.tsx` until 043 FR-087 moved it:
  *
- *     label: targetPanel ? `Last Active Editor (${targetPanel.title})` : 'Last Active Editor'
+ *     label: lastActiveEditorTitle ? `Last Active Editor (${lastActiveEditorTitle})` : 'Last Active Editor'
  *
  * composed from the workspace store’s layout and the `last-active-editor` module store. Not a
  * filesystem fact, not a watcher fact, not a rendering fact — so none of the apparatus that carried

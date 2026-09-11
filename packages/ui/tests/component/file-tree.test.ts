@@ -290,8 +290,9 @@ async function mount(options: MountOptions = {}) {
   // staying empty rather than by throwing.
   const throng: Record<string, unknown> = {
     files,
-    // Reached only when a FILE's context menu is built (`file-tree.tsx:378`), to decide whether
-    // "Open In" targets are disabled. Answering false keeps that menu simple.
+    // Reached only when a FILE's context menu is built — awaited in `onContextMenu` and handed to
+    // `readOpenInFacts` as `alreadyOpen`, to decide whether the "Open In" targets are disabled.
+    // Answering false keeps that menu simple.
     editor: { isOpen: () => Promise.resolve(false) },
   };
   if (options.settings) {

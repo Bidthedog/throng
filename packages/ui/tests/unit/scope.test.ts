@@ -63,6 +63,77 @@ describe('which scope are we in', () => {
     expect(scopeFromKind(undefined)).toBe('explorer');
     expect(scopeFromKind('placeholder')).toBe('explorer');
   });
+
+  it('scopes a Find in Files panel to findInFiles, NOT to the fallback (043 R14)', () => {
+    expect(scopeFromKind('findInFiles')).toBe('findInFiles');
+    expect(currentScope({ tabs: [tabWith('findInFiles')], activeTabId: 't1' })).toBe('findInFiles');
+  });
+});
+
+/**
+ * 043 R14 — the fallback is SAFE for a placeholder and ACTIVELY DANGEROUS for a results panel.
+ *
+ * `scopeFromKind` answers `explorer` for any kind it does not know, and for a placeholder that is
+ * the right answer: nothing is live there that could do damage. A Find in Files panel is a
+ * different proposition, because it is a list the user drives with the arrow keys and Delete. Left
+ * on the fallback, `file.delete` / `file.cut` / `file.copy` / `file.undo` and `file.rename` are all
+ * live over THE FILE TREE'S SELECTION while the user's eyes and hands are on the results list — so
+ * pressing Delete in a results panel deletes a file somewhere else on screen.
+ *
+ * That is the whole reason the fourth scope exists, so it is asserted here rather than inferred
+ * from the mapping above.
+ */
+describe('the file-tree chords are NOT live over a Find in Files panel (043 R14)', () => {
+  const quiet = { transientFocus: false, overlayOpen: false };
+  const over = (kind: string): { tabs: Tab[]; activeTabId: string } => ({
+    tabs: [tabWith(kind)],
+    activeTabId: 't1',
+  });
+
+  type Ev = Parameters<typeof resolveScoped>[1];
+  const DESTRUCTIVE: Array<{ chord: string; ev: Ev; action: string }> = [
+    { chord: 'Delete', ev: { key: 'Delete' }, action: 'file.delete' },
+    { chord: 'Ctrl+X', ev: { key: 'x', ctrl: true }, action: 'file.cut' },
+    { chord: 'Ctrl+C', ev: { key: 'c', ctrl: true }, action: 'file.copy' },
+    { chord: 'Ctrl+Z', ev: { key: 'z', ctrl: true }, action: 'file.undo' },
+    { chord: 'F2', ev: { key: 'F2' }, action: 'file.rename' },
+  ];
+
+  for (const { chord, ev, action } of DESTRUCTIVE) {
+    it(`${chord} does not resolve to ${action} over a results panel`, () => {
+      // The positive half first, so the negative below cannot pass because the chord is unbound.
+      expect(resolveScoped(DEFAULT_KEYBINDINGS, ev, over('placeholder'), quiet)).toBe(action);
+      expect(
+        resolveScoped(DEFAULT_KEYBINDINGS, ev, over('findInFiles'), quiet),
+        `${action} is live over a Find in Files panel — it acts on the FILE TREE’s selection`,
+      ).not.toBe(action);
+    });
+  }
+
+  it('renaming the PANEL is what F2 means there instead (panel.rename)', () => {
+    expect(resolveScoped(DEFAULT_KEYBINDINGS, { key: 'F2' }, over('findInFiles'), quiet)).toBe(
+      'panel.rename',
+    );
+  });
+
+  it('window-level chords are unaffected — a user must still be able to leave the panel', () => {
+    expect(
+      resolveScoped(
+        DEFAULT_KEYBINDINGS,
+        { key: 'ArrowLeft', ctrl: true, alt: true },
+        over('findInFiles'),
+        quiet,
+      ),
+    ).toBe('focus.left');
+    expect(
+      resolveScoped(
+        DEFAULT_KEYBINDINGS,
+        { key: 'T', ctrl: true, shift: true },
+        over('findInFiles'),
+        quiet,
+      ),
+    ).toBe('navigate.quickOpen');
+  });
 });
 
 /**
@@ -191,6 +262,21 @@ describe('the focus guard (FR-017f)', () => {
     expect(isPanelScoped('editor.cutLine')).toBe(true);
     expect(isPanelScoped('editor.indentLines')).toBe(true);
     expect(isPanelScoped('search.find')).toBe(true);
+
+    /*
+     * 043 (#220, #153) — the SAME pairing one namespace along, and the same trap.
+     *
+     * Find in files and replace in files open a panel in the current tab and act on no panel's
+     * content, so a focused transient surface must not suppress them: a terminal's focused element
+     * IS a textarea, and swallowing `Ctrl+Shift+F` there would make the chord dead in the context a
+     * user is likeliest to press it — silently, which is what makes this worth pinning.
+     *
+     * `search.find` above is the counter-case that stops this becoming a `search.` prefix: the find
+     * BAR acts on one panel's content and must keep yielding (FR-017f).
+     */
+    expect(isPanelScoped('search.findInFiles')).toBe(false);
+    expect(isPanelScoped('search.replaceInFiles')).toBe(false);
+    expect(isPanelScoped('search.findNext')).toBe(true);
   });
 });
 

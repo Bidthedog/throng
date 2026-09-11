@@ -10,7 +10,24 @@ const BUTTON_TOKENS = ['confirm', 'cancel', 'destroy'].flatMap((t) =>
 /** 56 pre-refactor − 6 removed + 18 typed button tokens = 68; follow-up dropped `activePaneHighlight`
  *  (consolidated onto `activePanelBorder`) → 67 (D1). */
 // 68 since 024 added `warning` — the amber cue for a warning notice, distinct from `danger`.
+//
+// STILL 68 after 043, and that is a decision rather than an omission (043 R15). Find in Files
+// highlights its matches with `searchMatch` / `searchMatchCurrent` / `searchMatchCurrentBorder`,
+// which `theme.ts` already documents as "one pair of surfaces shared by the editor and the
+// terminal" — a result row is that same idea on a third surface. A new colour token here would
+// need the argument `editorStatusStripBg` records for not reusing `statusBarBg`, and there is none.
 const EXPECTED_COLOUR_TOKEN_COUNT = 68;
+/**
+ * The icon set's counterpart to the colour count above — 63 before 043, plus `findInFiles` and
+ * `searchScope` (FR-029a/FR-029b, FR-030).
+ *
+ * It did not exist until 043 needed to update it, and the gap is worth naming: `ICON_TOKENS` below
+ * is `Object.keys(THRONG_THEME.icons)`, so every icon assertion in this file walks whatever the
+ * shipped set happens to hold. A token silently dropped from it would take its own assertion with
+ * it and the suite would stay green — the exact drift the colour count has been guarding against
+ * since D1, on the half of the theme that had no guard at all.
+ */
+const EXPECTED_ICON_TOKEN_COUNT = 65;
 /** Tokens removed AFTER the fixture was captured — stripped from the fixture before non-drift compare. */
 const REMOVED_SINCE_FIXTURE = ['activePaneHighlight'];
 /**
@@ -97,9 +114,75 @@ describe('DEFAULT_THEMES (FR-044/046, SC-007)', () => {
     for (const token of REMOVED_TOKENS) expect(THRONG_THEME.colours[token], token).toBeUndefined();
   });
 
+  it('THRONG_THEME.icons has exactly the expected token count (043 — no silent drift)', () => {
+    expect(Object.keys(THRONG_THEME.icons)).toHaveLength(EXPECTED_ICON_TOKEN_COUNT);
+    // Named as well as counted: a count alone is satisfied by a token being renamed, and a renamed
+    // icon token renders as NOTHING at its call site with no error anywhere (`icon-tokens-exist`).
+    expect(THRONG_THEME.icons.findInFiles, 'icons.findInFiles').toBeTruthy();
+    expect(THRONG_THEME.icons.searchScope, 'icons.searchScope').toBeTruthy();
+  });
+
+  /*
+   * 043 T182 (FR-065) — the Find in Files toolbar control reads at the same weight as its neighbours.
+   *
+   * ══ WHAT WAS ACTUALLY WRONG, AND WHY IT IS TESTABLE AT ALL ══
+   *
+   * The maintainer reported the control as DWARFED by Quick Open beside it. Both are drawn in the
+   * same 22×22 box at the same 16 px icon size, so the box was never the problem: `findInFiles`
+   * shipped as `'⌕'`, a thin monochrome OUTLINE character that a text font draws at whatever
+   * stroke weight it happens to use, sitting next to `'🔎'`, a colour emoji that fills its
+   * em box. That difference has a name in Unicode — **Emoji_Presentation** — and it is exactly the
+   * property that decides whether a codepoint is rendered by the emoji font at full weight or by the
+   * text font as a hairline. So "reads at the same visual weight" is not a matter of taste here; it
+   * is one derivable property, and this is the layer that can read it.
+   *
+   * `EXPECTED_ICON_TOKEN_COUNT` does NOT move: this is a value change, not a token (plan D6). It
+   * reaches an installed build only through the shipped-defaults version bump (T121/T123/T124), and
+   * only for a theme still holding the version-6 glyph — a user who chose their own keeps it.
+   *
+   * ══ THE CONSTRAINT THAT PREDATES FR-065 AND IS NOT RELAXED BY IT ══
+   *
+   * There are THREE searches in this application, `theme.ts:427-437` says why they are held apart,
+   * and two of them can appear in one toolbar. Making this one heavier must not make it a third
+   * magnifier: the pair 🔍/🔎 differ only in which way the handle tilts, and a third would be told
+   * apart by nothing at 16 px.
+   */
+  it('draws Find in Files at the same weight as the controls beside it (FR-065)', () => {
+    const glyph = THRONG_THEME.icons.findInFiles;
+    expect(
+      /\p{Emoji_Presentation}/u.test(glyph),
+      `icons.findInFiles is ${JSON.stringify(glyph)}, a text-presentation character: it is drawn ` +
+        `as a hairline outline beside quickOpen's ${JSON.stringify(THRONG_THEME.icons.quickOpen)}, ` +
+        `which fills its em box`,
+    ).toBe(true);
+    // The neighbour it is measured against, so this cannot pass by that one becoming thin too.
+    expect(/\p{Emoji_Presentation}/u.test(THRONG_THEME.icons.quickOpen)).toBe(true);
+  });
+
+  it('keeps the three searches distinguishable from one another (FR-065)', () => {
+    const { search, quickOpen, findInFiles } = THRONG_THEME.icons;
+    expect(new Set([search, quickOpen, findInFiles]).size, 'three actions, three glyphs').toBe(3);
+    // And not a third magnifier. The existing pair is told apart by the tilt of one handle; a third
+    // member of that family would be told apart by nothing at all at 16 px.
+    const MAGNIFIERS = ['\u{1F50D}', '\u{1F50E}', '\u{1F52C}'];
+    expect(MAGNIFIERS, 'findInFiles must not be a third lens').not.toContain(findInFiles);
+  });
+
   it('(SC-006′, F2) non-drift: every surviving token keeps its exact pre-refactor value', () => {
     // The ONLY colour changes are the deliberate button derivations. Every other token — across all 15
     // bundled themes — is byte-identical to its pre-refactor value (captured in the fixture).
+    //
+    // 043/FR-067 RE-SEEDED the fixture's `searchMatch` in all fifteen themes, and did so rather than
+    // adding the token to a carve-out list, deliberately. The fixture records WHAT IS SHIPPED, so
+    // re-seeding it is the act of shipping something else — the guarantee this test makes is "you did
+    // not change a colour by accident", not "no colour ever changes". A carve-out would have retired
+    // the token from the guarantee permanently; the re-seed keeps it under guard at its new value.
+    //
+    // The other two search-match tokens did NOT move, and that is worth reading as a result rather
+    // than an omission: `searchMatchCurrent` is the accent ray 016 tuned and FR-067 leaves alone, and
+    // `searchMatchCurrentBorder` is derived from it. Nor did any `syntax*` token move — the final
+    // legibility lift in `syntaxAndSearch` is a no-op whenever the match surfaces are readable, and
+    // the new ordinary match is chosen under exactly that constraint.
     for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
       const expected = { ...(PRE_REFACTOR as Record<string, Record<string, string>>)[name] };
       expect(expected, `fixture missing ${name}`).toBeDefined();
@@ -137,6 +220,7 @@ import {
   relativeLuminance,
   assertDistinct,
   assertInScopeContrast,
+  assertMatchDistinctness,
   assertSyntaxBodyContrast,
 } from '../../src/config/theme-quality.js';
 
@@ -244,6 +328,13 @@ describe('theme-quality guards hold for the shipped set (009, US6)', () => {
   // by-design carve-out — a different pairing set from the one IN_SCOPE_THEMES governs.
   it('every shipped theme renders code legibly on its own editor body', () => {
     expect(() => assertSyntaxBodyContrast(themes)).not.toThrow();
+  });
+  // 043/FR-067: the two match FILLS and the page behind them, measured against each other rather
+  // than against the code drawn on top. `themes` here is ALL_DEFAULT_THEMES, which is the point —
+  // hand-authored `throng` is not maintained by the derivation and is exactly what a gate scoped to
+  // the derived fourteen would miss (plan D5).
+  it('every shipped theme keeps its two search matches distinct from each other and the page', () => {
+    expect(() => assertMatchDistinctness(themes)).not.toThrow();
   });
   it('ships the dismiss icon token distinct from destroy (009 addition)', () => {
     for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {

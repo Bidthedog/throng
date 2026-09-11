@@ -39,6 +39,7 @@
     "explorer.e2e.ts": "FOCUS",
     "failure-copy.e2e.ts": "UNATTRIBUTED",
     "fileop-undo.e2e.ts": "FOCUS",
+    "find-in-files-subworkspace.e2e.ts": "FOCUS",
     "goto-line-keybinding.e2e.ts": "FOCUS",
     "icon-colour.e2e.ts": "FOCUS",
     "icon-packs.e2e.ts": "FOCUS",

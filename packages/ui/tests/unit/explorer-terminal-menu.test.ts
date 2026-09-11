@@ -81,7 +81,9 @@ const terminal = (items: MenuAction[]): MenuAction => {
 describe('Open In → Terminal (033 US3, FR-029/FR-030/FR-035, contract A1–A6)', () => {
   it('A1 — a FOLDER’s "Open In" holds a nested "Terminal" submenu', () => {
     const items = build({ relPath: 'src', kind: 'folder' }, FLAVOURS);
-    expect(openIn(items).submenu?.map((i) => i.label)).toEqual(['OS File Explorer', 'Terminal']);
+    // 043 FR-090 appends Search AFTER Terminal, so Terminal keeps its place and the OS reveal still
+    // leads. Asserted in full rather than with `toContain`, which could not tell appended from inserted.
+    expect(openIn(items).submenu?.map((i) => i.label)).toEqual(['OS File Explorer', 'Terminal', 'Search']);
   });
 
   it('A1 — a FILE’s "Open In" holds it too, after the editor targets', () => {
@@ -90,6 +92,8 @@ describe('Open In → Terminal (033 US3, FR-029/FR-030/FR-035, contract A1–A6)
       'OS File Explorer',
       'New Editor',
       'Terminal',
+      // 043 FR-090 — offered on a FILE too, because FR-092 made a single file a scope.
+      'Search',
     ]);
   });
 

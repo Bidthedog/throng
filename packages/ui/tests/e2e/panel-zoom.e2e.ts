@@ -167,35 +167,63 @@ test('a panel keeps its own zoom across a reload (SC-003)', { tag: ['@extended',
   }
 });
 
+/*
+ * 043 FR-062a CHANGED WHAT THIS TEST MAY DRIVE, and the change is recorded rather than absorbed.
+ *
+ * This test used to run against whatever `firstPanelId` returned on a fresh project — the UNTYPED
+ * PLACEHOLDER — and it passed, because the Zoom submenu was built unconditionally for every panel
+ * kind. That was the defect: three permanently inert commands on a panel that renders no zoom level,
+ * which is precisely what Constitution VI's disabled-versus-absent rule forbids. `KINDS_THAT_ZOOM`
+ * now gates the submenu, so on a placeholder there is no `menu-item-Zoom` to click.
+ *
+ * So the panel is given a type first. The test's subject is unchanged — the MENU route to zoom, as
+ * opposed to the keyboard route the tests above cover — and that subject only ever made sense on a
+ * panel that zooms. `panel-header-zoom-menu.test.ts` is where the placeholder's side of this now
+ * lives, asserting the submenu is ABSENT for it; the two must move together.
+ *
+ * AND THE PROJECT ROOT HAD TO BECOME REAL, which was not obvious and is worth the sentence. This
+ * test passed for years against `C:/c/mz`, a path that does not exist, because it never asked the
+ * application to DO anything with the root — a right-click and three menu clicks need no files. The
+ * moment it types the panel, the missing root raises its "It could not be found" notice, and the
+ * notice's own container sits over the panel-type form and intercepts the click on Confirm. The
+ * failure reads as a broken locator and is nothing of the kind: it is the app correctly reporting a
+ * condition the fixture had always had and never before provoked.
+ */
 test('the panel right-click menu zooms that panel in and out', { tag: ['@extended', '@window'] }, async () => {
-  await runApp(async (_app, win) => {
-    await createProject(win, 'MenuZoom', 'C:/c/mz');
-    const pid = await firstPanelId(win);
+  const root = mkdtempSync(join(tmpdir(), 'throng-pz-menu-'));
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'MenuZoom', root);
+      const pid = await firstPanelId(win);
+      await newEditor(win, pid);
 
-    // Zoom In via the context menu → the panel's level rises.
-    await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-    await win.getByTestId('menu-item-Zoom').click(); // open the flyout
-    await win.getByTestId('menu-item-Zoom In').click();
-    await expect.poll(() => panelZoom(win, pid)).toBeGreaterThan(0);
-    const inLevel = await panelZoom(win, pid);
+      // Zoom In via the context menu → the panel's level rises.
+      await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
+      await win.getByTestId('menu-item-Zoom').click(); // open the flyout
+      await win.getByTestId('menu-item-Zoom In').click();
+      await expect.poll(() => panelZoom(win, pid)).toBeGreaterThan(0);
+      const inLevel = await panelZoom(win, pid);
 
-    // Zoom Out brings it back down.
-    await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-    await win.getByTestId('menu-item-Zoom').click();
-    await win.getByTestId('menu-item-Zoom Out').click();
-    await expect.poll(() => panelZoom(win, pid)).toBeLessThan(inLevel);
+      // Zoom Out brings it back down.
+      await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
+      await win.getByTestId('menu-item-Zoom').click();
+      await win.getByTestId('menu-item-Zoom Out').click();
+      await expect.poll(() => panelZoom(win, pid)).toBeLessThan(inLevel);
 
-    // Reset Zoom returns it to the default (0). Zoom in once more first so reset has
-    // something to undo, then reset.
-    await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-    await win.getByTestId('menu-item-Zoom').click();
-    await win.getByTestId('menu-item-Zoom In').click();
-    await expect.poll(() => panelZoom(win, pid)).toBeGreaterThan(0);
-    await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-    await win.getByTestId('menu-item-Zoom').click();
-    await win.getByTestId('menu-item-Reset Zoom').click();
-    await expect.poll(() => panelZoom(win, pid)).toBe(0);
-  });
+      // Reset Zoom returns it to the default (0). Zoom in once more first so reset has
+      // something to undo, then reset.
+      await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
+      await win.getByTestId('menu-item-Zoom').click();
+      await win.getByTestId('menu-item-Zoom In').click();
+      await expect.poll(() => panelZoom(win, pid)).toBeGreaterThan(0);
+      await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
+      await win.getByTestId('menu-item-Zoom').click();
+      await win.getByTestId('menu-item-Reset Zoom').click();
+      await expect.poll(() => panelZoom(win, pid)).toBe(0);
+    });
+  } finally {
+    cleanupTemp(root);
+  }
 });
 
 test('zooming a terminal recomputes its grid (SC-005)', { tag: ['@extended', '@window'] }, async () => {

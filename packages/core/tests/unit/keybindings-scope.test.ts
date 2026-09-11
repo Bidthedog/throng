@@ -13,6 +13,7 @@ import {
   COMMAND_SCOPES,
   DEFAULT_KEYBINDINGS,
   resolveAction,
+  scopeNames,
   type ActionId,
   type DispatchScope,
 } from '../../src/config/keybindings.js';
@@ -75,9 +76,11 @@ describe('scope-aware resolveAction (FR-017b0)', () => {
     expect(resolveAction(DEFAULT_KEYBINDINGS, chord, 'explorer')).toBeNull();
     // …and the two `navigate.` commands really do differ, so a prefix rule would be wrong.
     expect([...COMMAND_SCOPES['navigate.gotoLine']]).toEqual(['editor']);
+    // EVERYWHERE is the full set by definition, and 043 R14 made that four scopes rather than three.
     expect([...COMMAND_SCOPES['navigate.quickOpen']].sort()).toEqual([
       'editor',
       'explorer',
+      'findInFiles',
       'terminal',
     ]);
   });
@@ -85,6 +88,62 @@ describe('scope-aware resolveAction (FR-017b0)', () => {
   it('does not fire an editor command while a terminal is active', () => {
     expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'Tab' }, 'terminal')).toBeNull();
     expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'Tab' }, 'editor')).toBe('editor.indentLines');
+  });
+});
+
+/**
+ * 043 R14 — the FOURTH scope, and why it is a defect fix rather than an addition.
+ *
+ * `DispatchScope` was a closed three-value union, and the renderer's `scopeFromKind` falls through
+ * to `explorer` for a kind it does not know. So without this scope a Find in Files panel would sit
+ * in the EXPLORER's scope: `file.delete`, `file.cut`, `file.copy`, `file.undo` and `file.rename`
+ * all live, all acting on the file tree's selection, while the user is driving a results list with
+ * the arrow keys. Pressing Delete in a results panel would delete a file.
+ *
+ * The scope declarations are the half of that guard which lives here; `scope.test.ts` in the
+ * renderer asserts the mapping that feeds them.
+ */
+describe('the Find in Files scope (043 R14)', () => {
+  it('is a value of DispatchScope, and the file-tree commands are not live in it', () => {
+    for (const action of ['file.delete', 'file.cut', 'file.copy', 'file.undo', 'file.rename']) {
+      expect(COMMAND_SCOPES[action as ActionId].has('findInFiles'), action).toBe(false);
+    }
+    // Delete and Ctrl+X resolve to nothing at all here — no command claims them in this scope.
+    expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'Delete' }, 'findInFiles')).toBeNull();
+    expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'x', ctrl: true }, 'findInFiles')).toBeNull();
+    expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'z', ctrl: true }, 'findInFiles')).toBeNull();
+  });
+
+  it('keeps every window-level command live — the scope must not strand the user', () => {
+    // `EVERYWHERE` is the full set BY DEFINITION (see its comment), so a fourth scope that is not in
+    // it silently kills zoom, focus movement, the view toggles and Quick Open inside the new panel.
+    for (const action of ['zoom.in', 'focus.left', 'view.fullscreen', 'navigate.quickOpen']) {
+      expect(COMMAND_SCOPES[action as ActionId].has('findInFiles'), action).toBe(true);
+    }
+    expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'T', ctrl: true, shift: true }, 'findInFiles')).toBe(
+      'navigate.quickOpen',
+    );
+  });
+
+  it('renames the PANEL there — F2 is panel.rename, not file.rename (the PANELS widening)', () => {
+    // A panel's name belongs to the panel whatever the panel holds, so `panel.rename` widens to the
+    // new scope. `editor.save*` and the `search.*` bar commands deliberately do NOT: they act on a
+    // document or a find bar, and a results panel has neither.
+    expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'F2' }, 'findInFiles')).toBe('panel.rename');
+    expect(COMMAND_SCOPES['editor.save'].has('findInFiles')).toBe(false);
+    expect(COMMAND_SCOPES['search.find'].has('findInFiles')).toBe(false);
+  });
+
+  it('reads as its own context in the Key Bindings editor, and "Everywhere" still collapses to one pill', () => {
+    // `scopeNames` collapses to a single "Everywhere" pill only when the set holds EVERY scope. A
+    // fourth scope missing from `EVERYWHERE` would quietly turn every window command's one pill into
+    // three, which is how a type widening becomes a UI regression.
+    expect(scopeNames(COMMAND_SCOPES['zoom.in'])).toEqual(['Everywhere']);
+    expect(scopeNames(COMMAND_SCOPES['panel.rename'])).toEqual([
+      'Editor',
+      'Terminal',
+      'Find in Files',
+    ]);
   });
 });
 

@@ -24,7 +24,7 @@ import { describe, expect, it } from 'vitest';
  *
  * ══ WHAT IS ALLOWED, AND WHY EXACTLY ONE THING IS ══
  *
- * `search-model.ts` imports `SearchQuery` — a plain matching object with a `getCursor`. It installs
+ * The match model imports `SearchQuery` — a plain matching object with a `getCursor`. It installs
  * no extension, binds no key and renders nothing. Everything else the package exports does:
  * `search()` mounts the panel extension, `searchKeymap` binds `Mod-Alt-g` to `gotoLine` and
  * `Mod-f` to `openSearchPanel`, and each of those is a second search surface whose controls cannot
@@ -34,12 +34,27 @@ import { describe, expect, it } from 'vitest';
  * lists what is known to be bad today and says nothing about `highlightSelectionMatches`, which
  * would be the next one added; an allow-list fails on anything new and makes whoever adds it say
  * why in the diff.
+ *
+ * ══ WHY THIS NOW SWEEPS CORE AS WELL (043 R1) ══
+ *
+ * The one allowed import used to sit in `renderer/search/search-model.ts`. 043 moved the match
+ * model to `@throng/core` because a file search runs in the MAIN process and main cannot import
+ * from the renderer, so `SearchQuery` moved with it.
+ *
+ * Narrowing the sweep to `ui/src` alone would have left the guard passing while saying nothing:
+ * the whole package would then be importable from core, which every process loads. So the sweep
+ * follows the import. `ui/src` is now expected to reach `@codemirror/search` NOWHERE at all, and
+ * `core/src` may reach exactly `SearchQuery`, in exactly the one file that owns the model.
  */
 
-const SRC = fileURLToPath(new URL('../../src/', import.meta.url));
+const UI_SRC = fileURLToPath(new URL('../../src/', import.meta.url));
+const CORE_SRC = fileURLToPath(new URL('../../../core/src/', import.meta.url));
 
-/** The one binding that may be imported from `@codemirror/search`, and the file that may do it. */
-const ALLOWED = new Map<string, readonly string[]>([['renderer/search/search-model.ts', ['SearchQuery']]]);
+/**
+ * The one binding that may be imported from `@codemirror/search`, and the file that may do it.
+ * Keys are source-root-relative; a root with no entry at all may import nothing.
+ */
+const ALLOWED = new Map<string, readonly string[]>([['search/match-model.ts', ['SearchQuery']]]);
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -72,22 +87,29 @@ function searchImports(src: string): string[] {
 }
 
 describe('FR-028 — no second go-to-line or find surface is installed', () => {
-  const files = walk(SRC);
+  const uiFiles = walk(UI_SRC);
+  const coreFiles = walk(CORE_SRC);
 
-  it('reads a source tree at all — the sweep below is not vacuous', () => {
-    expect(files.length).toBeGreaterThan(100);
-    expect(files.some((f) => f.endsWith('search-model.ts'))).toBe(true);
+  it('reads both source trees at all — the sweep below is not vacuous', () => {
+    expect(uiFiles.length).toBeGreaterThan(100);
+    expect(coreFiles.length).toBeGreaterThan(100);
+    expect(coreFiles.some((f) => f.endsWith('match-model.ts'))).toBe(true);
   });
 
   it('imports NOTHING from @codemirror/search but the matching type', () => {
     const offenders: string[] = [];
-    for (const file of files) {
-      const bindings = searchImports(readFileSync(file, 'utf8'));
-      if (bindings.length === 0) continue;
-      const rel = file.slice(SRC.length).replace(/\\/g, '/');
-      const allowed = ALLOWED.get(rel) ?? [];
-      for (const binding of bindings) {
-        if (!allowed.includes(binding)) offenders.push(`${rel} imports ${binding}`);
+    for (const [root, files] of [
+      [UI_SRC, uiFiles],
+      [CORE_SRC, coreFiles],
+    ] as const) {
+      for (const file of files) {
+        const bindings = searchImports(readFileSync(file, 'utf8'));
+        if (bindings.length === 0) continue;
+        const rel = file.slice(root.length).replace(/\\/g, '/');
+        const allowed = ALLOWED.get(rel) ?? [];
+        for (const binding of bindings) {
+          if (!allowed.includes(binding)) offenders.push(`${rel} imports ${binding}`);
+        }
       }
     }
 
@@ -100,9 +122,19 @@ describe('FR-028 — no second go-to-line or find surface is installed', () => {
   });
 
   it('finds the one import that IS there, so the allow-list is not describing an empty set', () => {
-    // If `search-model.ts` ever stops importing SearchQuery, the test above passes trivially and
+    // If `match-model.ts` ever stops importing SearchQuery, the test above passes trivially and
     // would keep passing after someone added `search()` somewhere and quietly widened ALLOWED.
-    const src = readFileSync(join(SRC, 'renderer/search/search-model.ts'), 'utf8');
+    const src = readFileSync(join(CORE_SRC, 'search/match-model.ts'), 'utf8');
     expect(searchImports(src)).toEqual(['SearchQuery']);
+  });
+
+  it('leaves the renderer reaching @codemirror/search nowhere at all (043 R1)', () => {
+    // The model's old home is now a bare re-export from core. If a renderer file starts importing
+    // the package directly again, that is a second definition of the match vocabulary appearing —
+    // FR-039/FR-040's exact failure — and it fails here before it fails anywhere visible.
+    const reaching = uiFiles
+      .filter((f) => searchImports(readFileSync(f, 'utf8')).length > 0)
+      .map((f) => f.slice(UI_SRC.length).replace(/\\/g, '/'));
+    expect(reaching).toEqual([]);
   });
 });
