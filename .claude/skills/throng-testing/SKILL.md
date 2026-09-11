@@ -21,6 +21,40 @@ whole duration, and — measured — exhausts the interactive desktop heap after
 launches, at which point Windows refuses to start processes at all (`0xC0000142`, surfacing in
 Playwright as *"Process failed to launch"*).
 
+### The commands that are never run locally
+
+Named, because "the full suite" was read as `npm run gate` only — and the run that actually reached
+the workstation was `npm run test:e2e`, which is not the gate, and is 18 minutes of every core.
+
+| Never run locally | Run this instead |
+|---|---|
+| `npm run gate` | `gh workflow run gate.yml --ref <branch>` |
+| `npm run test:e2e` | the individual specs: `npx playwright test <spec>` |
+| `npm run test:e2e:raw`, `npm run test:e2e:admin` | as above |
+| Any `vitest run --project <p>` with **no path** | the same command with the file under the cursor |
+
+**The only thing that lifts this is the user asking for it, in that turn.** Not a plan that concludes
+the run is warranted, not a green set of cheaper layers, not "I expect it to pass". Those are
+arguments for dispatching the gate, which is free and does not touch this machine.
+
+### It binds every agent, subagent and script — and the dispatch is where it breaks
+
+This rule does not get broken by someone reading it. It gets broken **one level down**: an
+orchestrator writes a dispatch, hands a subagent the test baton, and adds *"the full run comes once,
+at the end, as proof"* — and the subagent, correctly, does as it was told. The skill was never
+consulted, because the subagent had an instruction that superseded it.
+
+So:
+
+- **A dispatch may not authorise a command from the table above.** Listing the permitted commands is
+  not enough: a subagent reads a permission list as complete, so the forbidden ones must be named.
+- **A subagent that believes a full local run is warranted says so and stops.** Its report is the
+  right place for that opinion; the run is not its to start.
+- **A script counts too.** A `verify.sh` ending in `npm run test:e2e` is the same violation with a
+  file in front of it.
+- The replacement proof is always the same: land the work, dispatch `gate.yml`, quote the run URL and
+  the SHA.
+
 ### The loop
 
 Red-green-refactor happens **here**. The green bar that says the work is DONE happens **there**.
@@ -153,64 +187,64 @@ step reported success, changed nothing that mattered, and cost a full gate cycle
 You are guessing whenever the sentence in your head is *"it must be X"* rather than *"I measured X"*.
 Both feel the same while you are writing the fix. Only one of them survives the next machine.
 
-## A fixed delay that decides is a deadline, not a debounce
-
-**Waiting a fixed time and then READING state is only safe if the reader can tell "not yet" from
-"no". Where it cannot, the delay has stopped being a debounce and has become a verdict deadline —
-and its value is now a property of the machine rather than of the code.**
-
-This is a sibling of *Never guess* above and not the same failure. That one is about a **tolerance**
-tuned by hand: a ceiling raised until it fits. This one is about **sampling**: a single read of state
-that has not settled, where two different situations produce identical bytes.
-
-### The instance
-
-`missing-file-watcher.tsx` waited `SCAN_DELAY_MS` (300 ms) after a tab activated, then reported every
-editor panel whose `fileMissing` or `unloadable` was true. Both flags are false when the file is
-fine. Both flags are *also* false while the panel's initial `load()` has not come back. The scan read
-those as one state.
-
-The effect re-arms only on a tab change or a settings change, so a panel that answered at 301 ms was
-not reported late — **it was never reported at all**. Not a delay, a silent drop.
-
-On the reference workstation the open answers well inside 300 ms, so it passed everywhere it was ever
-run. On the gate runner (~2.5× slower, cold disk) two restored editors were both still loading when
-the scan fired: the user got a banner in each panel and the file tree's own notice, and the
-consolidated notice that 030 FR-034a requires to **supersede** the tree's was never raised — the exact
-duplicate-notice storm FR-029 exists to end. `notice-a11y.e2e.ts:115` failed 3/3, waiting the full
-90 s for an element that could no longer appear. Filed as #369.
-
-### How to spot it before a slow machine does
-
-Ask two questions of any `setTimeout(…)` that is followed by a read:
-
-1. **Can the reader distinguish "no" from "not yet"?** If the same values mean both, the delay is
-   load-bearing and the code is wrong on some machine you have not met.
-2. **What happens to a late answer?** If the answer is "nothing — there is no second look", the delay
-   is not a debounce. A debounce that fires early costs latency; this costs the report entirely.
-
-### The fix is a third state, never a bigger number
-
-Publishing "this has not decided yet" as a **fact** — here, `EditorUiState.openPending` — lets the
-reader wait for an *answer* rather than for a *duration*. The delay survives as a genuine debounce
-(how soon the first report may go out) and stops deciding whether one goes out at all.
-
-Any larger constant is the same defect with a different threshold, and it will be raised again for
-the next machine. **There is no number that is correct here, which is how you know a number is the
-wrong tool.**
-
-### The trap when fixing it
-
-The obvious repair is to subscribe to the state and report whatever breaks. That reintroduces the
-rule the component exists for: **FR-105 forbids reporting a file deleted under a tab the user is
-already looking at.** The watch has to be scoped to the panels that were *still pending when the scan
-sampled*, each leaving the set as it answers — so a settled panel is never looked at again.
-
-Write the anti-vacuity control for that in the same commit. Without it, "watch the pending ones" and
-"watch everything" are indistinguishable, and the test proving the fix passes under a fix that breaks
-FR-105.
-
-## The thing that catches everyone
+## A fixed delay that decides is a deadline, not a debounce
+
+**Waiting a fixed time and then READING state is only safe if the reader can tell "not yet" from
+"no". Where it cannot, the delay has stopped being a debounce and has become a verdict deadline —
+and its value is now a property of the machine rather than of the code.**
+
+This is a sibling of *Never guess* above and not the same failure. That one is about a **tolerance**
+tuned by hand: a ceiling raised until it fits. This one is about **sampling**: a single read of state
+that has not settled, where two different situations produce identical bytes.
+
+### The instance
+
+`missing-file-watcher.tsx` waited `SCAN_DELAY_MS` (300 ms) after a tab activated, then reported every
+editor panel whose `fileMissing` or `unloadable` was true. Both flags are false when the file is
+fine. Both flags are *also* false while the panel's initial `load()` has not come back. The scan read
+those as one state.
+
+The effect re-arms only on a tab change or a settings change, so a panel that answered at 301 ms was
+not reported late — **it was never reported at all**. Not a delay, a silent drop.
+
+On the reference workstation the open answers well inside 300 ms, so it passed everywhere it was ever
+run. On the gate runner (~2.5× slower, cold disk) two restored editors were both still loading when
+the scan fired: the user got a banner in each panel and the file tree's own notice, and the
+consolidated notice that 030 FR-034a requires to **supersede** the tree's was never raised — the exact
+duplicate-notice storm FR-029 exists to end. `notice-a11y.e2e.ts:115` failed 3/3, waiting the full
+90 s for an element that could no longer appear. Filed as #369.
+
+### How to spot it before a slow machine does
+
+Ask two questions of any `setTimeout(…)` that is followed by a read:
+
+1. **Can the reader distinguish "no" from "not yet"?** If the same values mean both, the delay is
+   load-bearing and the code is wrong on some machine you have not met.
+2. **What happens to a late answer?** If the answer is "nothing — there is no second look", the delay
+   is not a debounce. A debounce that fires early costs latency; this costs the report entirely.
+
+### The fix is a third state, never a bigger number
+
+Publishing "this has not decided yet" as a **fact** — here, `EditorUiState.openPending` — lets the
+reader wait for an *answer* rather than for a *duration*. The delay survives as a genuine debounce
+(how soon the first report may go out) and stops deciding whether one goes out at all.
+
+Any larger constant is the same defect with a different threshold, and it will be raised again for
+the next machine. **There is no number that is correct here, which is how you know a number is the
+wrong tool.**
+
+### The trap when fixing it
+
+The obvious repair is to subscribe to the state and report whatever breaks. That reintroduces the
+rule the component exists for: **FR-105 forbids reporting a file deleted under a tab the user is
+already looking at.** The watch has to be scoped to the panels that were *still pending when the scan
+sampled*, each leaving the set as it answers — so a settled panel is never looked at again.
+
+Write the anti-vacuity control for that in the same commit. Without it, "watch the pending ones" and
+"watch everything" are indistinguishable, and the test proving the fix passes under a fix that breaks
+FR-105.
+
+## The thing that catches everyone
 
 throng's daemon is **designed to outlive its window** (Principle III — terminals keep running when the
 UI closes). So a finished E2E run, or an app you closed, routinely leaves behind:
@@ -233,6 +267,35 @@ Get-CimInstance Win32_Process |
 
 To clear everything, use the sibling skill **throng-clear-dev-state**, which stops those processes in
 the right order (children first, so nothing is orphaned) and removes the dev data folders.
+
+### Never kill by image name
+
+**`taskkill /IM <name>` is machine-wide.** It does not know about your worktree, your test run or
+your session, and every process of that name dies — including the user's.
+
+This is not a hypothetical either. Aiming at a test run that had not started yet:
+
+```bash
+taskkill /F /IM electron.exe /T     # "not found" - nothing was running
+taskkill /F /IM conhost.exe /T      # killed THREE of the user's live Claude sessions
+```
+
+`conhost.exe` is the console host behind **every** console application on Windows, so a blanket kill
+takes out the user's terminals, their editors' integrated shells, and anything running inside the
+throng they actually use. `electron.exe` is no better: the installed throng is Electron, and so is
+every other Electron app on the machine.
+
+The rules:
+
+- **Filter by the worktree path**, always. The `Get-CimInstance` probe above already does — it matches
+  `CommandLine` against the worktree — and killing is the same query with `Stop-Process`.
+- **Prefer stopping the thing that spawned them.** A runaway suite is stopped by stopping the agent or
+  the background task running it; the processes then exit on their own. Reach for a process kill only
+  for what is genuinely orphaned afterwards.
+- **Never `/T` on a shared image.** The tree flag turns one wrong target into a subtree of them.
+- **Look before you kill.** `tasklist` first, and if the count is larger than the run could plausibly
+  have produced, the filter is wrong — not the machine.
+- **`throng-clear-dev-state` already does this correctly.** Use it instead of hand-rolling a kill.
 
 ## Closing the app properly
 
