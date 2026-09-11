@@ -19,6 +19,8 @@
     "build": "tsc -b"
   },
   "dependencies": {
+    "@codemirror/search": "^6.7.1",
+    "@codemirror/state": "^6.4.0",
     "picomatch": "^4.0.5"
   },
   "devDependencies": {
