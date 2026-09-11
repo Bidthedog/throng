@@ -305,6 +305,33 @@ other's edit. In-progress edits and their undo history survive a crash.
 
 **F3** / **Shift+F3** jump between matches; **Escape** closes the bar.
 
+### Find and replace across the whole project
+
+**Ctrl+Shift+F** opens a **Find in Files** panel in the current tab, or reuses the one already there,
+and searches every file in the project. **Ctrl+Shift+H** opens the same panel with the replace row
+showing. If you have a single-line selection in an editor or a terminal, it becomes the search term.
+
+- **It searches as you type.** A moment after you stop typing, results stream in as they are found,
+  grouped by file, or by folder and file (the toolbar switches). There is no cap on how many. If you
+  would rather press **Enter**, switch to explicit run under **Settings → Search · Find in Files**.
+- **The scope box** says where it looks. It is empty for the whole project, or it holds a folder or a
+  single file. Type a path relative to the project, or paste a full one, or use the folder button
+  beside it. A path outside the project is refused on the box and nothing runs.
+- **Double-click a result**, or press **Enter** on it, to open the file with the match selected. It
+  follows your *Open files in* preference. A result's own right-click menu has **Open In** for the
+  last active editor, a new one, or another tab.
+- **Replace** previews each match in place. Commit one match, one file, or everything with
+  **Replace All**. A committed row reads as the file now does. Each file changes as a single undo in
+  its editor. A file with no open editor is written to disk after you confirm the count, and that
+  cannot be undone from throng. An open editor with no unsaved changes is saved for you; one you had
+  already edited keeps the replacement unsaved, beside your own work.
+- **Files that change** after the search are marked on their heading. The list is not rerun under
+  you: search again when you want fresh results.
+
+You can also start here from the tree. Right-click a file or folder and choose **Open In → Search →
+Find** or **Find & Replace**, or use the toolbar's **Find in Files** button for the whole project. The
+panel can't be renamed, and it zooms with **Ctrl+Alt+=** like any other.
+
 ### Open a file without walking to it
 
 **Ctrl+Shift+T** opens **Quick Open** from anywhere. Type any part of a name or a path and press
@@ -348,13 +375,17 @@ query that opened a file, a line you actually went to — fully selected so typi
 values live in memory for the running app only; they are never written to disk, and Quick Open's is
 discarded when you switch project.
 
-### Two things the file tree's menu can do for you
+### Three things the file tree's menu can do for you
 
 Right-click a **folder** and you get, alongside Copy Path:
 
 - **Open In → Terminal**, listing every terminal flavour you have configured. It opens a new terminal
   panel in the current tab, starting in that folder — or, for a right-clicked *file*, in its parent
   folder — with the keyboard already in it, so you can type immediately.
+- **Open In → Search → Find** and **Find & Replace**, on a folder or a single *file*. Either opens the
+  current tab's Find in Files panel — or reuses it — cleared and scoped to what you right-clicked,
+  with the caret in the search box. *Find & Replace* shows the replacement row as well. Nothing is
+  searched until you type.
 - **Collapse All Children** closes everything beneath the folder at every depth while leaving the
   folder itself open, and **Expand All Children** opens its immediate child folders, one level. A
   file's menu shows neither, because a file can never acquire children.
@@ -452,14 +483,15 @@ also the full list.
 | **Ctrl+=** / **Ctrl+-** / **Ctrl+0** | Zoom the whole app in / out / reset (also Ctrl+Wheel) |
 | **Ctrl+Alt+=** / **Ctrl+Alt+-** / **Ctrl+Alt+0** | Zoom **this panel** independently |
 | **Ctrl+F** / **Ctrl+H** | Find / replace in the active panel |
+| **Ctrl+Shift+F** / **Ctrl+Shift+H** | Find / replace **across every file in the project** |
 | **F3** / **Shift+F3** / **Escape** | Next match / previous match / close find |
 | **Ctrl+S** / **Ctrl+Shift+S** / **Ctrl+Alt+S** | Save / Save All / Save As |
 | **F2**, **Delete**, **Ctrl+X/C/V** | Rename, delete, cut/copy/paste — **in the file tree** |
 | **Shift+PageUp/PageDown**, **Ctrl+Home/End** | Scroll a terminal's scrollback |
 | **Ctrl+F5** | Refresh / redraw the focused terminal |
 
-Focus and zoom are **per panel**: each terminal and editor zooms on its own, on top of the app-wide
-zoom, and the setting persists with your layout. Keyboard focus moves *into and out of* terminals
+Focus and zoom are **per panel**: each terminal, editor and Find in Files panel zooms on its own, on
+top of the app-wide zoom, and the setting persists with your layout. Keyboard focus moves *into and out of* terminals
 and editors correctly — throng intercepts its own chords ahead of the shell.
 
 Two entries look like a clash but aren't: **Ctrl+X** is *cut file* in the tree and *cut line* in an

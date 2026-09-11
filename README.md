@@ -55,6 +55,26 @@ goal is to pull all of that into a single, simple customisable workspace.
   per-project hiding, all undoable with Ctrl+Z and persisted across restarts.
 - **In-panel search** — one find bar that adapts to the active panel: find and replace in an editor,
   and a read-only scrollback search in a terminal that never types at the shell.
+- **Find across files** — `Ctrl+Shift+F` searches every file in the project from a panel of its own,
+  scoped to the root, to any folder under it, or to a single file — typed as a project-relative path
+  or a full one. The explorer toolbar searches the whole project, and any file or folder's
+  **Open In → Search → Find** (or **Find & Replace**) opens the panel cleared and pointed at what you
+  clicked, ready for a term. It searches **as you type** by default, results stream
+  in as they are found with no ceiling, grouped by file or by folder and file together, and a
+  double-click opens a match where you were already reading. A result's own menu offers **Open In**
+  when you want it somewhere else — the last active editor, a new one, or another tab, the same three
+  targets the file tree offers, each taking you straight to the match rather than to the top of the
+  file.
+  The panel's header says whether replace is showing: **Find in Files** while it is hidden, **Find &
+  Replace in Files** while it is disclosed, each followed by the term once you have typed one.
+  `Ctrl+Shift+H` opens the same panel with replace showing: every match previews its replacement in
+  place, and you commit one match, one file, or all of them. A row you have committed drops the
+  preview and reads as the file now does; **Replace All** greys out once nothing is left to commit.
+  Files that changed since the search say so, and a write into files that are not open — the one
+  throng cannot undo for you — states how many and asks first. A file whose editor had **no unsaved
+  changes** is saved for you and ends clean; one you had already edited is left dirty, with the
+  replacement pending alongside your own work, so a commit never writes out something you had not
+  saved. Either way the change is a single Ctrl+Z.
 - **Getting there without walking** — Quick Open ranks every file in the project by name or path from
   one chord and says in words where it will open it; Go To Line jumps by number; and the tree's own
   menu opens a terminal in any folder or tidies one branch of the subtree.
@@ -150,6 +170,25 @@ hot-reload. Everything is also editable from the visual **preferences window** (
 which writes those same files and applies changes immediately. The installed-font cache and the
 bundled default-theme source live under `%APPDATA%\throng\`. The config directory is overridable
 via `THRONG_CONFIG_ROOT`.
+
+**Find in Files** is tuned by eight settings under `search.inFiles`, all on the
+**Search · Find in Files** section of the preferences window — the find bar's own settings sit
+beside it under **Search · Find Bar**. They are: `openTarget` (reuse the panel that ran the last
+search, or open a fresh one each time), `trigger` (search once you stop typing, which is what ships,
+or wait for **Run**), `settleMs` (how long that quiet period is — 500 ms as shipped),
+`defaultGrouping` (`file` or `fileAndFolder`), `rememberGrouping` (whether a grouping you switch to
+survives the next search in that panel), `warnIrreversibleCommit` (whether a replace into files
+with no open editor confirms first), and the two that govern the notice reporting what a replace
+changed: `summaryNoticeMode` (*Never display* / *Display for* / *Dismiss only* — **Dismiss only** as
+shipped) and `summaryNoticeTimeoutMs` (how long *Display for* shows it — 5000 ms as shipped, and
+greyed out while the mode is anything else).
+
+**That pair governs the replace summary whether the replace succeeded, partly succeeded or failed**,
+and for that one notice the application-wide **Notifications** settings are not consulted at all — so
+a global preference that errors stay until dismissed does not reach it. The trade is deliberate: a
+control that overrides a global setting sits beside the thing it overrides it for. Choosing *Never
+display* asks you to confirm first, because that notice is also how a failed write reports itself;
+whatever the mode says, the outcome is still written to the log.
 
 **Logs and crash reports** are written to a `logs` folder under the user-data directory (`throng`
 when installed, `throng-dev` for a dev run), so a crash that closes the window leaves evidence
