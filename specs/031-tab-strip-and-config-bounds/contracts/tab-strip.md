@@ -23,6 +23,8 @@ export interface StripMetrics {
   tabOffsets: ReadonlyArray<{ left: number; right: number }>;
   scrollLeft: number;
   viewportWidth: number;
+  /** The edge fade's width (#382, FR-064). Omitted, it is 0. */
+  edgeInset?: number;
 }
 
 export interface StripCounts { hiddenLeft: number; hiddenRight: number; total: number; overflowing: boolean; }
@@ -44,10 +46,14 @@ export function ease(t: number): number;
 |---|---|---|
 | S1 | `hiddenLeft` / `hiddenRight` count only **fully** hidden tabs; `total` is every tab | FR-021 |
 | S2 | Counts recompute on scroll, on tab add/destroy/reorder, and on resize | FR-022 |
-| S3 | A step moves exactly one tab, landing it flush with the left edge | FR-023, FR-024 |
-| S4 | `stepTarget` returns `null` when nothing is hidden that way — the control is then unavailable | FR-025 |
-| S5 | `revealTarget` returns `null` for an already-fully-visible tab, so the strip does not move | FR-029a |
-| S6 | Counts hold in the degenerate case of one tab wider than the viewport | spec Edge Cases |
+| ~~S3~~ | ~~A step moves exactly one tab, landing it flush with the left edge~~ — **SUPERSEDED by S7/S9 (#382)**. Flush with the edge is under the left fade | ~~FR-023, FR-024~~ → FR-063a, FR-064 |
+| ~~S4~~ | ~~`stepTarget` returns `null` when nothing is hidden that way — the control is then unavailable~~ — **SUPERSEDED by S8 (#382)**. A strip scrolled a few pixels into its first tab hid nothing entirely and could not step back | ~~FR-025~~ → FR-063 |
+| S5 | `revealTarget` returns `null` for an already-fully-visible tab, so the strip does not move. "Fully visible" includes clear of any showing fade (S9) | FR-029a, FR-064 |
+| S6 | Counts hold in the degenerate case of one tab wider than the viewport. Stepping there is S8's, not inert | spec Edge Cases, FR-063 |
+| S7 | A step moves to the nearest tab start that way. From part-way into a tab, step-left completes that tab first | FR-063a |
+| S8 | `stepTarget` returns `null` only at the start (left) or the end (right). The counts no longer decide availability | FR-063 |
+| S9 | Given `edgeInset` (the fade width), a step or a reveal lands the tab clear of the fades. No clearance at the start or the end, where no fade is drawn. `edgeInset` omitted is 0 | FR-064, FR-064a |
+| S10 | Only the primary button steps: a right- or middle-click on a step control moves nothing | FR-065 |
 
 ## 3. Scrolling (FR-029–FR-031d)
 
