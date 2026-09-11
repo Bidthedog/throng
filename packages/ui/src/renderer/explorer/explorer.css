@@ -18,20 +18,46 @@
   border-bottom: 1px solid var(--throng-colour-border);
 }
 
+/* FR-079 — THE BOX IS DERIVED, NOT RESOLVED BY HAND.
+
+   This rule used to say `width: 22px; height: 22px; padding: 0`, and
+
+       16 + 3 + 3 = 22
+
+   is why that was a defect rather than a number: 16 is `sizes.iconPx`'s DEFAULT, `.icon` sizes itself
+   from `--throng-size-icon`, and the extra 3 either side is the breathing space the control was
+   drawn with. A user who raises that value in the Themes editor — a shipped control — got a bigger
+   glyph in a box that had frozen the old default.
+
+   The symptom here is OVERFLOW, not clipping, and the difference is one declaration: this rule sets
+   no `overflow`, so the glyph spills over the controls beside it instead of being cut in half. The
+   user reports "the toolbar icons overlap". `.fif-btn` has `overflow: hidden` and clips instead.
+
+   `--explorer-btn-pad` exists so the padding is written once and the box is visibly the token plus
+   it, on both axes. The shipped appearance is unchanged: 16 + 3 + 3 is still 22 at the default. The
+   old `padding: 0` went with the literal — it was only ever consistent with a box the glyph exactly
+   filled, which is the state that made a raised token overflow.
+
+   NOT the themeable-icon NON-NEGOTIABLE, which this control passes in full (an `Icon` from a token, a
+   hover title naming its action, colours from tokens). What was hardcoded is a METRIC equal to a
+   token's resolved default, which makes it Principle X — a setting that governs less than it claims.
+   See research R31. */
 .explorer-toolbar__btn {
+  --explorer-btn-pad: 3px;
+
   display: inline-flex;
+  box-sizing: border-box;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
+  width: calc(var(--throng-size-icon) + var(--explorer-btn-pad) * 2);
+  height: calc(var(--throng-size-icon) + var(--explorer-btn-pad) * 2);
+  padding: var(--explorer-btn-pad);
   border: 0;
   border-radius: 4px;
   background: transparent;
   /* Stronger than textMuted so the icons don't read as faint. */
   color: var(--throng-colour-text);
   cursor: pointer;
-  font-size: 14px;
   line-height: 1;
 }
 

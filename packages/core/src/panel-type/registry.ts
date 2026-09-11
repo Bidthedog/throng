@@ -13,6 +13,15 @@ export interface PanelTypeRegistry {
   register(descriptor: PanelTypeDescriptor): void;
   /** Every registered descriptor, in stable registration order. */
   list(): PanelTypeDescriptor[];
+  /**
+   * The descriptors the New Panel form may OFFER — `list()` minus anything flagged
+   * `offered: false` (043 FR-017). Same order, same descriptors otherwise.
+   *
+   * A separate listing rather than a filter on `list()`, because the two questions have different
+   * answers and different callers: "what may the user pick?" is the form's, "what is this panel?"
+   * is the header's. `list()` deliberately stays every registered type.
+   */
+  listOfferable(): PanelTypeDescriptor[];
   /** Resolve a descriptor by id, or `undefined`. */
   get(id: PanelKind): PanelTypeDescriptor | undefined;
 }
@@ -27,6 +36,10 @@ export function createPanelTypeRegistry(): PanelTypeRegistry {
     },
     list() {
       return [...byId.values()];
+    },
+    listOfferable() {
+      // `!== false`, not truthiness: an absent flag means offered (043 FR-017).
+      return [...byId.values()].filter((d) => d.offered !== false);
     },
     get(id) {
       return byId.get(id);

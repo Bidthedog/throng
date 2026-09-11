@@ -47,6 +47,16 @@ export interface ContextMenuOps {
   expandChildren: (relPath: string) => void;
   /** 033 US4 (FR-039): close every expanded descendant, leaving this folder itself open. */
   collapseChildren: (relPath: string) => void;
+  /**
+   * 043 FR-090: open or reuse the Find in Files panel, reset and scoped to this FILE or folder, with
+   * replace shown when `replace` is true (*Find & Replace*) and hidden when it is false (*Find*).
+   *
+   * Required rather than optional, unlike `openInTerminal`: there is no state in which the tree can
+   * draw a node and this route be unavailable. With no project open there is no tree at all, so the
+   * menu holding it cannot be opened — FR-029e's note records that its disabled surface is, in
+   * practice, the toolbar control alone.
+   */
+  findInFiles: (relPath: string, replace: boolean) => void;
 }
 
 export function buildContextMenuItems(args: {
@@ -165,6 +175,42 @@ export function buildContextMenuItems(args: {
         }))
       : undefined,
   });
+  /*
+   * 043 FR-090 — Search, a third level inside Open In, for files, folders and the root alike.
+   *
+   * LAST in the flyout, after Terminal. `explorer.e2e.ts` clicks the flyout's first row expecting the
+   * OS reveal, and appending keeps that true without it having to know this submenu exists.
+   *
+   * Offered on a FILE because FR-092 made a single file a legitimate scope. It was never offered on
+   * one before only because a scope had to be a directory.
+   *
+   * No shortcut on either leaf: they act on the RIGHT-CLICKED node, and the two chords do not — they
+   * keep their term and search where the panel already looks. Advertising them here would name a
+   * keystroke that does something else, which is the reason the old folder row carried none.
+   *
+   * The labels are the request's own, verbatim. FR-090a records that FR-015 already says "Find" for
+   * the find bar's item, and why that does not collide here: the tree has no find bar, and the
+   * *Search* parent says which search is meant.
+   */
+  openInItems.push({
+    label: 'Search',
+    icon: 'search',
+    section: 'navigate',
+    submenu: [
+      {
+        label: 'Find',
+        icon: 'findInFiles',
+        section: 'navigate',
+        onClick: () => ops.findInFiles(node.relPath, false),
+      },
+      {
+        label: 'Find & Replace',
+        icon: 'replace',
+        section: 'navigate',
+        onClick: () => ops.findInFiles(node.relPath, true),
+      },
+    ],
+  });
   items.push({ label: 'Open In', icon: 'send', section: 'navigate', submenu: openInItems });
 
   // US9 (#156): "Copy Path" submenu, directly below "Open In" in the location group (FR-018a).
@@ -218,6 +264,16 @@ export function buildContextMenuItems(args: {
       section: 'navigate',
       onClick: () => ops.expandChildren(node.relPath),
     });
+    /*
+     * 043 FR-029b's top-level **Find in Files** row closed this group until round five. It is not
+     * here any more because it MOVED — into *Open In → Search*, above — rather than being joined by a
+     * second route to the same command (FR-090; 006 FR-030's precedent for the OS reveal, "removed
+     * from its previous top-level position, no duplication").
+     *
+     * Its comment gave the reason a file never had it: "a file can never become a directory to
+     * search inside". That was only ever the premise that a scope is a directory, and FR-092 withdrew
+     * it — a scope may name a single file — so the submenu is offered on files as well.
+     */
   }
 
   // Hide section (023, #127): the 'hide' token now exists — a circled slash reading as "kept out of

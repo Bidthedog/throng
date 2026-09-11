@@ -11,7 +11,7 @@
  *
  * | Section      | Items                                                                              |
  * |--------------|------------------------------------------------------------------------------------|
- * | Content      | Rename, Save, Save As…, Revert, Reload from disk                                    |
+ * | Content      | Rename, Save, Save As…, Revert, Reload from disk, Find, Replace, Replace All        |
  * | Destroy      | the panel's destroy verb                                                            |
  * | Navigate     | Reveal File in Files & Folders, Open in OS Explorer, Send to Tab, Sync to           |
  * | View & state | Reset Name, Zoom, Try again, Copy details, Clear panel type, Refresh / redraw       |
@@ -21,12 +21,65 @@
  * explicitly. The editor and terminal conditionals are unchanged: an absent item is simply absent
  * from its group, and an empty group draws no divider.
  *
+ * TWO ROWS OF THAT TABLE ARE NOW CONDITIONAL ON THE PANEL'S KIND (043). *Zoom* is offered only where
+ * a component renders the zoom level (FR-062a, `KINDS_THAT_ZOOM`), and *Rename* / *Reset Name* only
+ * where the panel can be renamed at all (FR-061, `isRenamable`). Both are Constitution VI's
+ * disabled-versus-absent rule, and between them they empty a whole section for two kinds — the Find
+ * in Files panel loses `content` entirely, which is the only shape in the app whose FIRST section is
+ * empty. `menu-sections.test.ts` pins it, so "an empty group draws no divider" is asserted on the
+ * shape that actually exercises it rather than only stated here.
+ *
  * The action bodies stay at the call site, because several of them need a confirmation dialog, the
  * clipboard and the workspace store. What moved here is what the menu IS — its labels, icons,
  * shortcuts, conditions and sections — which is precisely what the unit table asserts.
  */
-import { firstBinding, type Keybindings, type Panel } from '@throng/core';
+import { firstBinding, type Keybindings, type Panel, type PanelKind } from '@throng/core';
 import type { MenuAction } from './context-menu.js';
+
+/**
+ * The panel kinds that actually RENDER their zoom level (043 FR-062a, plan D2).
+ *
+ * `Panel.zoom` is persisted for every panel and the three chords resolve to whichever panel is
+ * active, so the question was never whether the store can hold a level — it is whether anything
+ * draws it. Only these read `panelZoomLevel(panel)` and do something visible with the answer:
+ * `editor-panel.tsx` publishes `--throng-zoom-editor` for `editor.css` to multiply with,
+ * `terminal-panel.tsx` rounds the font size by the factor before xterm measures its cells, and —
+ * since FR-062 — `find-in-files-panel.tsx` publishes `--throng-zoom-fif` for its text and rounds its
+ * results list's row height by the same factor.
+ *
+ * Gating the submenu on this set is Constitution VI's disabled-versus-absent rule, and it is stated
+ * as a SET rather than as a `!== undefined` check because the untyped placeholder was only one of the
+ * two offenders. FR-062a is worded generally on purpose: citing it to fix the Find in Files panel
+ * while leaving the identical violation on the placeholder beside it would make the rule mean "this
+ * panel", which is neither what it says nor why it was written.
+ *
+ * A kind that gains a zoom consumer is added here in the same change that adds the consumer;
+ * `panel-header-zoom-menu.test.ts` restates the correspondence by hand and names the consumer for
+ * each, so the two files have to move together.
+ */
+const KINDS_THAT_ZOOM: readonly PanelKind[] = ['editor', 'terminal', 'findInFiles'];
+
+/**
+ * Whether this panel can be renamed at all (043 FR-061).
+ *
+ * Every panel is renamable except one, and the exception is deliberate rather than an oversight: a
+ * Find in Files panel's identity IS its query. FR-019 lets one Tab hold several of them and the
+ * search term is the only thing that tells them apart, so a user-chosen name would hide the one
+ * piece of information the header exists to give.
+ *
+ * ABSENT, not disabled (Constitution VI). Renaming here is not temporarily unavailable — it is never
+ * meaningful — and a greyed row invites the user to work out what would re-enable it. Reset Name
+ * goes with Rename: an undo offered for something that cannot be done is stranger than the thing
+ * itself would have been.
+ *
+ * Exported because `panel-placeholder.tsx` asks the same question about the same panel for the OTHER
+ * two routes into a rename — whether to register a starter for the chord, and whether a double-click
+ * on the header opens the box. Three routes, one answer; a second copy of this predicate is how one
+ * of them stays open.
+ */
+export function isRenamable(panel: Panel): boolean {
+  return panel.kind !== 'findInFiles';
+}
 
 /** The editor state the menu's conditions read. `null` for a panel that is not an editor. */
 export interface PanelHeaderEditorState {
@@ -71,6 +124,12 @@ export interface PanelHeaderMenuActions {
   redraw: () => void;
   sendToNewTab: () => void;
   sendToTab: (tabId: string) => void;
+  /** 043 FR-015 — open this panel's find bar. Editors and terminals both search. */
+  find: () => void;
+  /** 043 FR-015 — open it with the replace row revealed. Editor only (FR-013). */
+  replace: () => void;
+  /** 043 FR-015 — replace every match in this panel's document. Editor only (FR-013). */
+  replaceAll: () => void;
   destroy: () => void;
 }
 
@@ -93,8 +152,10 @@ export interface PanelHeaderMenuArgs {
 export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
   const { panel, panelVerb, keybindings, otherTabs, editor, editorFailure, detach, actions } = args;
 
-  const items: MenuAction[] = [
-    {
+  const items: MenuAction[] = [];
+
+  if (isRenamable(panel)) {
+    items.push({
       label: 'Rename',
       icon: 'rename',
       section: 'content',
@@ -103,18 +164,22 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       // what it can do (constitution v4.3.0).
       shortcut: firstBinding(keybindings, 'panel.rename'),
       onClick: () => actions.beginRename(),
-    },
+    });
     // Undo a rename back to the panel's default name (a terminal then shows its live title
     // again). Disabled when there is nothing to reset.
-    {
+    items.push({
       label: 'Reset Name',
       icon: 'resetName',
       section: 'viewState',
       disabled: !(panel.titleIsCustom ?? false),
       onClick: () => actions.resetName(),
-    },
-    // Per-panel zoom (012) — zoom THIS panel's text independently of others.
-    {
+    });
+  }
+
+  // Per-panel zoom (012) — zoom THIS panel's text independently of others. Offered only on the kinds
+  // that render it (FR-062a): see KINDS_THAT_ZOOM above for why this is a gate and not a comment.
+  if (panel.kind !== undefined && KINDS_THAT_ZOOM.includes(panel.kind)) {
+    items.push({
       label: 'Zoom',
       icon: 'zoomIn',
       section: 'viewState',
@@ -141,8 +206,8 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
           onClick: () => actions.resetZoom(),
         },
       ],
-    },
-  ];
+    });
+  }
 
   if (panel.kind === 'editor') {
     // Editor Panels: Save (== Ctrl+S, FR-076) and Revert-all-changes with a
@@ -276,6 +341,51 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       section: 'viewState',
       shortcut: firstBinding(keybindings, 'terminal.redraw'),
       onClick: () => actions.redraw(),
+    });
+  }
+
+  /*
+   * 043 FR-015 — the panel's SEARCH commands, in the panel's own menu.
+   *
+   * The constitution names `search.find`, `search.replace` and `search.replaceAll` as pre-existing
+   * gaps in "every panel action has a menu item", to be closed by tracked work; this is that work.
+   * Until now each was reachable only by a chord, so a user who had not read the key bindings could
+   * not discover that a panel searched at all — and this menu, which is the panel's canonical index
+   * of what it can do, did not list them.
+   *
+   * `content`, not `viewState`: all three act on the panel's TEXT. Find moves the caret through it
+   * and Replace rewrites it, which is the same test that puts Save and Revert in the same group.
+   *
+   * Only a panel with a kind gets them — there is nothing to search in an untyped placeholder — and
+   * a terminal gets Find alone, because its find is read-only (FR-013) and `search.replace`'s chord
+   * is already inert there. Offering Replace on a terminal would index a command it does not have.
+   *
+   * Stepping through matches and closing the bar are deliberately absent: FR-015 keeps them exempt
+   * as navigational input, the same exemption scroll and column-select hold.
+   */
+  if (panel.kind === 'editor' || panel.kind === 'terminal') {
+    items.push({
+      label: 'Find',
+      icon: 'search',
+      section: 'content',
+      shortcut: firstBinding(keybindings, 'search.find'),
+      onClick: () => actions.find(),
+    });
+  }
+  if (panel.kind === 'editor') {
+    items.push({
+      label: 'Replace',
+      icon: 'replace',
+      section: 'content',
+      shortcut: firstBinding(keybindings, 'search.replace'),
+      onClick: () => actions.replace(),
+    });
+    items.push({
+      label: 'Replace All',
+      icon: 'replaceAll',
+      section: 'content',
+      shortcut: firstBinding(keybindings, 'search.replaceAll'),
+      onClick: () => actions.replaceAll(),
     });
   }
 

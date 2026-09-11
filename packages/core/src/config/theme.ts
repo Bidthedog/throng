@@ -261,7 +261,28 @@ export const THRONG_THEME: Theme = {
     // below the readable floor on the current match — a blue keyword vanishing into a blue
     // highlight is precisely the failure FR-007a forbids. Softening them keeps every hue legible
     // AND leaves the current match MORE visible against the editor surface than it was (1.45:1).
-    searchMatch: '#151e2d',
+    //
+    // ══ HAND-MAINTAINED AGAINST A RULE THE OTHER FOURTEEN SATISFY AUTOMATICALLY (043, FR-067) ══
+    //
+    // `assertMatchDistinctness` (theme-quality.ts) requires an ordinary match, the current match and
+    // the page behind them to be mutually distinguishable — three ΔE00 gaps, each above
+    // `MATCH_DISTINCTNESS_THRESHOLD`. The fourteen bundled themes MEET that by construction:
+    // `makeTheme` re-derives them, so a future change to `searchHighlights` moves all fourteen at
+    // once. `throng` is authored here, by hand, and goes nowhere near `makeTheme` — so the same
+    // change will move fourteen themes and silently leave this one behind, at values that were tuned
+    // against a rule that no longer holds.
+    //
+    // That asymmetry is exactly why the gate runs over `ALL_DEFAULT_THEMES` and never
+    // `DEFAULT_THEMES` (plan D5). It is the only thing that will notice, and the theme it protects is
+    // the one every user sees first. If you move the derivation, MEASURE these two and re-set them.
+    //
+    // `searchMatch` is the neutral lift the derivation now produces for the fourteen —
+    // `blend(editorBg, editorFg, 0.13)`, chosen by hand from the same search, at ΔE00 7.99 from the
+    // current match and 8.07 from the page (the old `#151e2d` measured 6.81 / 6.62, and sat on the
+    // accent ray where the current match already is). `searchMatchCurrent` keeps its 016 FR-007a
+    // value unchanged, because FR-067 leaves the accent ray alone: the current match is what 016
+    // tuned and what `searchMatchCurrentBorder` holds its 3:1 against.
+    searchMatch: '#262a32',
     searchMatchCurrent: '#213049',
     searchMatchCurrentBorder: '#6aa3ff',
     // The ACTIVE-PANE highlight — the outline marking the pane/panel you are working in (012, FR-002;
@@ -399,6 +420,34 @@ export const THRONG_THEME: Theme = {
     search: '🔍',
     findNext: '↓',
     findPrevious: '↑',
+    /* 043 (FR-029a/FR-029b, FR-030). Two more tokens for two more ACTIONS, on the same rule that
+       gave `quickOpen` its own rather than reusing `search`: a new token means a new action, never a
+       glyph reused for a second meaning.
+
+       There are now THREE searches in this application and they answer different questions —
+       `search` finds text in the panel you are looking at, `quickOpen` finds a file by its name, and
+       `findInFiles` finds text across every file in the project. A user meeting two of them in one
+       toolbar has to be able to tell which is which, so the glyphs are held apart as well as the
+       tokens: 🔍 tilts left, 🔎 tilts right, and this one is not a lens at all — it names the
+       CORPUS rather than the act, which is the half that distinguishes it from the other two.
+
+       FR-065 CHANGED THIS GLYPH, and the reason is one derivable property rather than taste. It
+       shipped as `'⌕'`, and the maintainer reported the toolbar control as dwarfed by Quick Open
+       beside it. The box was never at fault — both are the same 22×22 control at the same 16 px icon
+       size. `⌕` is a TEXT-presentation character, so a text font draws it as a hairline outline,
+       while `🔎` is Emoji_Presentation and fills its em box. Same box, half the ink.
+
+       A third magnifier would have fixed the weight and broken the constraint above: 🔍 and 🔎 are
+       already told apart by nothing but the tilt of one handle, and a third lens at 16 px would be
+       told apart by nothing at all. `default-themes.test.ts` holds both halves — Emoji_Presentation,
+       and not a member of the lens family.
+
+       `searchScope` is its neighbour in the same block, and a crosshair rather than a folder: the
+       panel's scope control answers "where does this search look", which is aiming rather than
+       finding, and the answer may be a file or a glob as easily as a folder — so `newFolder` 📁's
+       vocabulary would be wrong as well as borrowed. */
+    findInFiles: '📚',
+    searchScope: '⌖',
     // The two match-mode toggles read as the thing they match on: "Aa" for letter case,
     // "ab" for a whole word. Both are two characters, so the pair reads as a set.
     matchCase: 'Aa',

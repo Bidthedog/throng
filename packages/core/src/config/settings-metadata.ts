@@ -5,7 +5,13 @@
  * test (`settings-metadata.test.ts`) asserts every leaf except the internal
  * `version` marker has exactly one descriptor (FR-047). Pure; zero OS/DOM.
  */
-import { DEFAULT_APP_SETTINGS, TERMINAL_RELOAD_MODES } from './app-settings.js';
+import {
+  DEFAULT_APP_SETTINGS,
+  FIND_IN_FILES_GROUPINGS,
+  FIND_IN_FILES_OPEN_TARGETS,
+  FIND_IN_FILES_TRIGGERS,
+  TERMINAL_RELOAD_MODES,
+} from './app-settings.js';
 import { LOG_LEVELS } from '../diagnostics/log-level.js';
 import {
   DISPLAY_MODES,
@@ -96,6 +102,17 @@ function noticeDescriptors(
        * *Display for* and *Dismiss only*, and this is what makes the control say them too.
        */
       optionLabels: DISPLAY_MODE_LABELS,
+      /*
+       * FR-008's consent, DECLARED — lifted out of `settings-tab.tsx`'s `SILENCEABLE_FAILURE_KEY`
+       * regular expression by 043 T204.
+       *
+       * Only `error` and `warning`. `info` and `success` report things that already happened and
+       * worked, so there is no failure to miss and a prompt on them would be nagging — which is why
+       * this is a conditional rather than a property of the pair.
+       */
+      ...(severity === 'error' || severity === 'warning'
+        ? { confirmWhen: { is: 'never' as const } }
+        : {}),
     },
     {
       key: `notifications.${severity}.timeoutMs`,
@@ -119,6 +136,16 @@ function noticeDescriptors(
       min: TIMEOUT_MIN_MS,
       max: TIMEOUT_MAX_MS,
       step: 500,
+      /*
+       * FR-011's inertness, DECLARED — lifted out of `settings-tab.tsx`'s `NOTICE_TIMEOUT_KEY`
+       * regular expression by 043 T204.
+       *
+       * The regular expression DERIVED this sibling by swapping the key's last segment for `mode`,
+       * which works for exactly this family and for no other. Stating it is what lets a second
+       * mode/duration pair — spelled `summaryNoticeMode`/`summaryNoticeTimeoutMs` — use the same
+       * mechanism instead of needing a third pattern.
+       */
+      enabledWhen: { key: `notifications.${severity}.mode`, is: 'timed' },
     },
   ];
 }
@@ -796,11 +823,174 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Find delay',
     description:
       'How long find waits after you stop typing before it re-runs the search and updates the highlights.',
-    group: 'Search',
+    group: 'Search · Find Bar',
     control: 'slider',
     min: 0,
     max: 1000,
     step: 10,
+  },
+  /*
+   * Find in Files (043, FR-059). Six leaves, in a section of their OWN (FR-076) — and two more at
+   * the end of the block (FR-082), which take the section to eight.
+   *
+   * They shipped in one undivided `Search` section, on the argument that a user looking for "how do
+   * I make searching behave" should find both in one place and that the labels, not the grouping,
+   * would carry the difference. FR-076 decides the same question the other way, and the reason is
+   * that the labels were being asked to do the grouping's job: seven rows under one heading, six of
+   * them beginning "Find in Files", is a section whose own name tells the reader nothing about which
+   * of the two things in front of them any given row governs. The editor's preferences already
+   * answer this — `Editor · Indentation` and `Editor · Navigation` are sub-sections rather than one
+   * flat list — and naming both halves after the parent keeps 021 FR-015's section search working,
+   * so typing "search" still returns every one of these keys.
+   *
+   * A setting appears in BOTH sections only if it genuinely governs both, and none does: the find
+   * bar's debounce times a re-scan of one buffer, and `settleMs` times a walk over the project, and
+   * FR-043b is the decision that they stay two keys.
+   *
+   * Every `allowedValues` below is the CONSTANT from `app-settings.ts`, never a retyped literal:
+   * that array is also what the tolerant parse is written against, and `applyDeclaredBounds` reads
+   * this descriptor to decide what survives a read. One statement of the set, three consumers.
+   */
+  {
+    key: 'search.inFiles.openTarget',
+    label: 'Find in Files results open in',
+    description:
+      'Whether a new search reuses the Find in Files panel that ran the last one, or opens a fresh panel each time and leaves the earlier results where they are.',
+    group: 'Search · Find in Files',
+    control: 'select',
+    allowedValues: FIND_IN_FILES_OPEN_TARGETS,
+    optionLabels: {
+      lastActive: 'The last Find in Files panel',
+      new: 'A new panel',
+    },
+  },
+  {
+    // A select rather than a toggle, for 039 D-4's reason: both states have to name themselves.
+    // "Search as you type: off" describes the option that is switched on only by implication, and
+    // the implication is wrong — what happens instead is a button you press, not nothing.
+    key: 'search.inFiles.trigger',
+    label: 'Find in Files searches',
+    description:
+      'Whether a Find in Files search waits for you to press Run, or starts on its own once you stop typing. Running on its own searches the whole project, so it costs more than the find bar does.',
+    group: 'Search · Find in Files',
+    control: 'select',
+    allowedValues: FIND_IN_FILES_TRIGGERS,
+    optionLabels: {
+      run: 'When you press Run',
+      asYouType: 'As you type',
+    },
+  },
+  {
+    /*
+     * 0–2000 in steps of 50 — a wider range and a coarser step than the find bar's 0–1000/10 in the
+     * section above, and both differences are the same fact about the work being timed. This gates a
+     * walk over the project's tree rather than a re-scan of one buffer, so the useful settings live
+     * further out; and nobody can tell 500 ms from 510 ms of waiting, so ten-millisecond stops would
+     * be two hundred positions of false precision. 50 is 2.5% of the range, comfortably inside the
+     * aimability rule `slider-descriptors.test.ts` enforces, and the shipped 500 (FR-075) sits
+     * exactly on a stop — 500 = 0 + 10 × 50 — so a drag can always return to it.
+     *
+     * That last clause is a claim about the CURRENT default and has to be re-checked whenever the
+     * default moves, which is why FR-075's change re-derived it rather than renumbering the
+     * sentence: a shipped value between two stops is reachable only by typing, so a user who drags
+     * the control can never get back to what the application came with, and nothing in the suite
+     * would say so. `settings-metadata.test.ts` now asserts it, so the arithmetic here is a
+     * statement of a checked property rather than the only place it is claimed.
+     */
+    key: 'search.inFiles.settleMs',
+    label: 'Find in Files delay',
+    description:
+      'How long Find in Files waits after you stop typing before it starts searching, when it is set to search as you type.',
+    group: 'Search · Find in Files',
+    control: 'slider',
+    min: 0,
+    max: 2000,
+    step: 50,
+  },
+  {
+    key: 'search.inFiles.defaultGrouping',
+    label: 'Find in Files groups results by',
+    description:
+      'How a freshly opened Find in Files panel arranges its rows before you change the grouping yourself.',
+    group: 'Search · Find in Files',
+    control: 'select',
+    allowedValues: FIND_IN_FILES_GROUPINGS,
+    optionLabels: {
+      file: 'File',
+      fileAndFolder: 'Folder, then file',
+    },
+  },
+  {
+    key: 'search.inFiles.rememberGrouping',
+    label: 'Keep the grouping you chose',
+    description:
+      'Whether a grouping you switch to in a Find in Files panel stays in force for the next search you run in it, or the panel returns to the grouping above.',
+    group: 'Search · Find in Files',
+    control: 'toggle',
+  },
+  {
+    key: 'search.inFiles.warnIrreversibleCommit',
+    label: 'Ask before a replace that cannot be undone',
+    description:
+      'Whether Find in Files confirms before writing replacements it has no way to take back, such as into files that are not open in an editor.',
+    group: 'Search · Find in Files',
+    control: 'toggle',
+  },
+  /*
+   * The replace summary notice's OWN display mode and timeout (043, FR-082) — the seventh and eighth
+   * leaves of this section.
+   *
+   * ══ WHY THEY ARE HERE AND NOT UNDER `Notifications` ══
+   *
+   * Because they govern one NOTICE, not a severity. The four `notifications.*` pairs below answer
+   * "how long do I need to read an error", once, for the whole application; this pair answers "how
+   * long do I need to read the summary of a replace", and it answers it for all three outcomes of
+   * that one operation. FR-082 is explicit that the global settings are not consulted for this notice
+   * at all, and states the cost: a user whose global preference is that errors stay until dismissed
+   * does not get that behaviour here. A control that overrides the global belongs beside the thing it
+   * overrides it FOR (FR-076), where the user meets it while thinking about Find in Files.
+   *
+   * The vocabulary is the application's, not a parallel one: `DISPLAY_MODES` and
+   * `DISPLAY_MODE_LABELS` themselves, so a fourth mode reaches this dropdown and the four below in
+   * one edit, and the bounds are the parse's own constants for #227's reason.
+   */
+  {
+    key: 'search.inFiles.summaryNoticeMode',
+    label: 'Replace summary notices',
+    description:
+      'Whether the notice reporting what a Find in Files replace changed stays until you dismiss it, disappears on its own, or is never shown. This governs the notice whether the replace succeeded, partly succeeded or failed, and it is used instead of the notification settings for that severity. Whatever this says, the outcome is still written to the log.',
+    group: 'Search · Find in Files',
+    control: 'select',
+    allowedValues: DISPLAY_MODES,
+    optionLabels: DISPLAY_MODE_LABELS,
+    /*
+     * FR-082b, the consent half — and the half the change request did not mention.
+     *
+     * This notice reports FAILURES: which files could not be written, and why. *Never display*
+     * therefore silences a failure report exactly as `notifications.error.mode` does, and 030 FR-008
+     * requires the user be told what that costs before it takes effect. Without this the gate keyed
+     * to `^notifications\.` would simply not have applied here, and a user could switch failure
+     * reporting off having been told nothing at all.
+     */
+    confirmWhen: { is: 'never' },
+  },
+  {
+    key: 'search.inFiles.summaryNoticeTimeoutMs',
+    label: 'Replace summary notice duration',
+    description:
+      'How long the Find in Files replace summary notice stays on screen, in milliseconds. Only used when the setting above is "Display for".',
+    group: 'Search · Find in Files',
+    // Same control, same bounds and the same 500 ms step as every notice duration below — the step
+    // divides 27000 exactly, clears the slider guard's 1% floor (270 ms), and lands ON the shipped
+    // 5000 (3000 + 4 × 500) so a drag can always return to what the application came with.
+    control: 'slider',
+    min: TIMEOUT_MIN_MS,
+    max: TIMEOUT_MAX_MS,
+    step: 500,
+    // FR-082b, the inert half. The sibling is STATED rather than derived by swapping the key's last
+    // segment, which is the whole reason the mechanism moved onto the descriptor: this pair's mode is
+    // `summaryNoticeMode`, and no rule about suffixes reaches it.
+    enabledWhen: { key: 'search.inFiles.summaryNoticeMode', is: 'timed' },
   },
   // Notifications (030 US1, #224)
   //

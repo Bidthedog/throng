@@ -37,6 +37,8 @@ import { useServices } from '../composition-root.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useEditorDirty } from '../editor/editor-state.js';
 import { disposeEditor } from '../editor/use-editor.js';
+import { destroyPanelSearch } from '../search/search-store.js';
+import { destroyFindInFilesPanel } from '../find-in-files/find-in-files-store.js';
 import { useDetach } from './detach-context.js';
 import { useSubWorkspaceWindow } from './subworkspace-window-context.js';
 import { destroySubWorkspace } from './destroy-sub-workspace.js';
@@ -1260,6 +1262,12 @@ export function TabGroup(): ReactElement {
     for (const p of collectPanels(tab.root)) {
       const killsSession = !inSubWorkspace || p.originProjectId === layout.projectId;
       if (p.kind === 'editor' && killsSession) disposeEditor(p.id);
+      // Every panel in the Tab is gone from this window, so every find session on one goes too
+      // (043 FR-006) — terminals included, and regardless of `killsSession`.
+      destroyPanelSearch(p.id);
+      // Closing a Tab destroys every Panel in it, so a Find in Files panel's results go with it
+      // (043 FR-023). Same reasoning, same unconditional application.
+      destroyFindInFilesPanel(p.id);
     }
   };
 

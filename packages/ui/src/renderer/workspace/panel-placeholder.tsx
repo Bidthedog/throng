@@ -17,7 +17,7 @@ import {
   type Panel,
 } from '@throng/core';
 import { PanelBody } from './panel-body.js';
-import { panelHeaderMenu } from './panel-header-menu.js';
+import { isRenamable, panelHeaderMenu } from './panel-header-menu.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useProjects } from '../state/projects-store.js';
 import { useServices } from '../composition-root.js';
@@ -29,6 +29,12 @@ import { usePanelPlace } from '../common/panel-subject.js';
 import { useCopyToClipboard } from '../common/use-copy.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
+import {
+  getFindSession,
+  openFind,
+  replaceAll as replaceAllMatches,
+  type FindPanelKind,
+} from '../search/search-store.js';
 import { requestRedraw } from '../terminal/redraw.js';
 import { focusTerminal } from '../terminal/focus-registry.js';
 import { Icon } from '../common/icon.js';
@@ -52,6 +58,8 @@ import { setLastActiveEditor } from '../editor/last-active-editor.js';
 import { getEditorActions } from '../editor/editor-actions.js';
 import { clearEditorPanelType } from '../editor/clear-editor-panel-type.js';
 import { disposeEditor } from '../editor/use-editor.js';
+import { destroyPanelSearch } from '../search/search-store.js';
+import { destroyFindInFilesPanel } from '../find-in-files/find-in-files-store.js';
 import { clearTerminalViewState } from '../terminal/terminal-view-state.js';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
 import { revealPanelFile } from './reveal-panel-file.js';
@@ -192,10 +200,17 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
 
   // The F2 chord (`panel.rename`) starts the rename. The header owns the box; the window-level
   // keybinding handler owns the chord and knows only which panel is active — so it asks, here.
+  //
+  // 043 FR-061 — a Find in Files panel registers NOTHING, and that is the whole implementation of
+  // "the rename chord must do nothing when such a panel is active". `requestPanelRename` already
+  // returns a no-op for a panel nothing registered (`panel-rename.ts`), so the chord needs no branch
+  // in `app.tsx` and no new state: the registry answers the question it was built to answer.
+  const renamable = isRenamable(panel);
   useEffect(() => {
+    if (!renamable) return;
     registerPanelRename(panel.id, () => setRenaming(true));
     return () => unregisterPanelRename(panel.id);
-  }, [panel.id]);
+  }, [panel.id, renamable]);
 
   // A freshly added Panel opens directly in rename mode (FR-041 / new-panel UX).
   useEffect(() => {
@@ -432,6 +447,24 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
     // this one (`killsSession`). A LOCAL destroy of a *synced* project editor keeps
     // the document alive in the project, so it must NOT dispose (FR-006a / FR-021).
     if (panel.kind === 'editor' && killsSession) disposeEditor(panel.id);
+    // The find session goes with the Panel, whatever kind it was and whether or not this destroy
+    // killed the underlying session (043 FR-006): the Panel is leaving THIS window's layout, so
+    // its bar can never be shown again here. A terminal has no `disposeEditor` to ride on.
+    destroyPanelSearch(panel.id);
+    /*
+     * 043 FR-023 — a Find in Files panel's RESULTS die with the panel, exactly as closing the
+     * application discards them. There is no retention store and no eviction policy to reach for:
+     * the state is dropped here, so a panel opened afterwards starts with none.
+     *
+     * Unconditional, and NOT gated on `killsSession`: a sub-workspace view closing takes this
+     * window's copy of the results with it, and FR-027 keeps the parent panel — which has its own
+     * copy in its own window's store — entirely unaffected.
+     *
+     * That last claim is only true because MAIN keys a scan run by `(webContentsId, panelId)`. A
+     * synced view carries the SAME panel id, so with the id alone as the key this drop would have
+     * released the parent window's run — the scan it was watching run.
+     */
+    destroyFindInFilesPanel(panel.id);
     ws.removePanel(panel.id);
     // Cascade to the sub-workspaces ONLY when destroying from the project (FR-026).
     // A sub-workspace destroy stays local (no broadcast → the project is untouched).
@@ -486,7 +519,11 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
          * tooltip would change meaning as the pointer moved two pixels sideways.
          */
         title={effectiveTitle}
-        onDoubleClick={() => setRenaming(true)}
+        // The THIRD route into a rename, and the one FR-061 does not name — which is exactly why it
+        // is gated on the same predicate rather than left alone. Closing the chord and the menu item
+        // while leaving this open would satisfy every clause of the requirement as written and leave
+        // the panel renamable by the gesture most users reach for first.
+        onDoubleClick={renamable ? () => setRenaming(true) : undefined}
         onContextMenu={(e) => {
           e.preventDefault();
           const others = (ws.layout?.tabs ?? []).filter((t) => t.id !== tabId);
@@ -616,6 +653,40 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 redraw: () => requestRedraw(panel.id, 'manual'),
                 sendToNewTab: () => ws.addTabFromPanel(panel.id),
                 sendToTab: (targetTabId) => ws.movePanelToTab(panel.id, targetTabId),
+                /*
+                 * 043 FR-015 — the SAME store actions the chords run, so the menu is a second door
+                 * onto one command rather than a second implementation of it. `openFind` is what
+                 * `search.find` calls; the `{ replace: true }` form is what `search.replace` calls.
+                 * The menu rows only exist for a panel with a kind, so the cast is over a value the
+                 * builder has already narrowed.
+                 */
+                find: () => {
+                  /*
+                   * `PanelKind` is an OPEN string — custom panel kinds exist — so comparing it to
+                   * the two literals narrows nothing on its own. The membership is captured as a
+                   * value TypeScript can carry into `openFind`, exactly as
+                   * `search-keybindings.tsx` does for the chord route.
+                   */
+                  const findKind: FindPanelKind | null =
+                    panel.kind === 'editor'
+                      ? 'editor'
+                      : panel.kind === 'terminal'
+                        ? 'terminal'
+                        : null;
+                  if (findKind) openFind(panel.id, findKind);
+                },
+                replace: () => openFind(panel.id, 'editor', { replace: true }),
+                /*
+                 * Replace All needs a term and a replacement, and with no bar open there is
+                 * neither. So the menu row OPENS the bar in that case rather than firing a
+                 * replace-all over nothing and reporting no change — the user asked to replace
+                 * all, and this is the first thing they need on screen to do it. With a session
+                 * already up it runs the replacement, exactly as `search.replaceAll` does.
+                 */
+                replaceAll: () => {
+                  if (getFindSession(panel.id)) replaceAllMatches(panel.id);
+                  else openFind(panel.id, 'editor', { replace: true });
+                },
                 destroy: () => void destroyPanel(),
               },
             }),

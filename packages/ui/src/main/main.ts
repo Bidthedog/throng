@@ -83,6 +83,9 @@ import { ExplorerWatcher } from './explorer-watcher.js';
 import { registerFilesIpc } from './files-ipc.js';
 import { ProjectFileIndexService } from './project-file-index.js';
 import { pushFileIndexUpdate, registerFileIndexIpc } from './file-index-ipc.js';
+import { FileSearchService } from './file-search-service.js';
+import { pushFileSearchUpdate, registerFileSearchIpc } from './file-search-ipc.js';
+import { ReplaceCommitService } from './replace-commit-service.js';
 import { EditorService } from './editor-service.js';
 import { EditorRecovery } from './editor-recovery.js';
 import { EditorCoordinator } from './editor-coordinator.js';
@@ -218,7 +221,7 @@ function readThirdPartyLicences(candidates: string[]): ThirdPartyLicence[] {
 /**
  * First run = the settings document doesn't exist yet. Used to choose between
  * seeding the whole user configuration from the shipped-defaults record (010) and
- * running the additive-only upgrade against an existing configuration.
+ * running the startup upgrade against an existing configuration.
  */
 async function isFirstRun(store: IConfigStore): Promise<boolean> {
   try {
@@ -660,10 +663,15 @@ if (isPrimaryInstance)
 
   // Shipped defaults (010): on first run, seed the entire user configuration
   // (settings, keybindings, every built-in theme) plus the version marker from the
-  // authoritative record; otherwise run the additive-only upgrade (add newly-shipped
-  // themes + materialise newly-added theme properties) gated on the version marker —
-  // which NEVER overwrites a value the user already has (a later deletion of a
-  // default sticks; only "Restore All Themes" recreates it).
+  // authoritative record; otherwise run the startup upgrade (add newly-shipped themes,
+  // materialise newly-added theme properties, and carry the enumerated guarded value
+  // changes) gated on the version marker. A later deletion of a default sticks; only
+  // "Restore All Themes" recreates it.
+  //
+  // That upgrade stopped being purely additive at 043 (R28 / plan D1). It still never
+  // overwrites a value the USER set: each guarded rewrite fires only where the on-disk
+  // value is still byte-identical to what a named earlier version shipped. The contract,
+  // in words, is on `ShippedDefaultsService.upgrade()`.
   const configStore = container.get<IConfigStore>(UI_TYPES.ConfigStore);
   const configSettings = container.get<IConfigSettings>(UI_TYPES.ConfigSettings);
   const fileWatcher = container.get<IFileWatcher>(UI_TYPES.FileWatcher);
@@ -1001,8 +1009,21 @@ if (isPrimaryInstance)
   // the file tree stays live-synced with external + in-app edits (US2).
   const explorerWatcher = new ExplorerWatcher(
     new NodeFileWatcher(150),
-    (evt) => {
+    (evt, absRoot) => {
       broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:files:changed', evt);
+      /*
+       * 043 FR-045d — the SECOND consumer of this ONE watch, and no watcher is added.
+       *
+       * `throng:files:changed` was already broadcast to every window and had exactly one
+       * subscriber (research R6), so per-file staleness costs zero new watches — which is what
+       * #272 and #306 are about. The scan service is declared below and this callback only ever
+       * runs after startup, so the reference resolves.
+       *
+       * Fire and forget: the service re-stats the result files it holds under the signalled
+       * directory (the signal reports no filename and no kind, so it is a prompt to look rather
+       * than an answer), and a watcher callback has nowhere to report a failed stat to.
+       */
+      void fileSearch.noteDirectoryChanged(absRoot, evt.relDir);
     },
     // 026 / #186 (FR-010a) — the watch is gone for good. Say so: a tree that has silently stopped
     // updating looks exactly like a project in which nothing is happening, and the user acts on it
@@ -1122,10 +1143,50 @@ if (isPrimaryInstance)
    * and the push at the other end is delivered to nothing. `web-contents-created` catches every
    * window (main, sub-workspace, preferences) without each creation site having to remember.
    */
+  /*
+   * 043 US3 — the Find in Files scan (contracts/file-search-ipc.md, research R2).
+   *
+   * Beside the file index and for the same reasons: UI main is where a walk belongs, and this is
+   * the one place it is ever constructed (Principle IX). It shares the index's two live inputs
+   * READ AS FUNCTIONS rather than captured — the glob setting and the project's own hidden set — so
+   * "the project's existing exclusion rules" (FR-045) means the rules the tree obeys, and there is
+   * no second rule set to drift from the first.
+   *
+   * `editor.maxOpenFileBytes` joins them for the same reason: the scan skips what the EDITOR would
+   * refuse to open, at the editor's limit, rather than declaring a second notion of searchable
+   * (FR-045e).
+   */
+  const fileSearch = new FileSearchService(
+    fileSystem,
+    () => currentSettings.explorer.excludeGlobs,
+    (root) => projectsByRoot.get(normaliseForCompare(root))?.hiddenPaths ?? [],
+    () => currentSettings.editor.maxOpenFileBytes,
+    pushFileSearchUpdate,
+  );
+  /*
+   * The commit half is registered LOWER DOWN, once the editor coordinator exists (043 T094).
+   *
+   * Not an ordering accident: a commit's whole reason for living in main is that it must partition
+   * open documents from unopened ones and edit the open ones through their authority (research R7),
+   * and the coordinator is what owns both. The scan half needs none of that, so it is wired here
+   * with the rest of the walk, and the two halves of one channel are registered at the two points
+   * their collaborators are ready.
+   */
   app.on('web-contents-created', (_event, contents) => {
     contents.once('destroyed', () => projectFileIndex.unsubscribe(contents.id));
   });
+  /*
+   * A window that has gone takes its panels' scans with it.
+   *
+   * Separate from the index's teardown above rather than folded into it, because the two answer
+   * different questions: the index is REFCOUNTED by root and a second window keeps it alive, while
+   * a scan belongs to exactly one panel in exactly one window and has nobody else to serve.
+   */
+  app.on('web-contents-created', (_event, contents) => {
+    contents.once('destroyed', () => fileSearch.release(contents.id));
+  });
   app.once('will-quit', () => projectFileIndex.dispose());
+  app.once('will-quit', () => fileSearch.dispose());
   /*
    * 029 FR-013 — who is holding a folder a file operation could not touch.
    *
@@ -1266,6 +1327,31 @@ if (isPrimaryInstance)
       win.webContents.send('throng:editor:focus', { panelId });
     },
   });
+  /*
+   * 043 US4 — the replace commit, and the whole of `throng:fileSearch:*` (T086, T094).
+   *
+   * Constructed HERE rather than beside the scan service because it needs the coordinator: the
+   * open/unopened partition is the registry's answer, and an open file's edit goes through its
+   * document authority with no view involved (research R7). `currentSettings` is passed as a
+   * function so `search.inFiles.warnIrreversibleCommit` is read at commit time — a safety
+   * preference the user turns on mid-session must bind on the very next commit (FR-057c).
+   */
+  registerFileSearchIpc(
+    fileSearch,
+    (request) =>
+      /*
+       * `fileSearch` is handed over for FR-083c and nothing else: a commit tells the scan service
+       * which files it wrote, so the panel that just made its list agree with the disk is not then
+       * told by its own watch that the list disagrees with it.
+       */
+      new ReplaceCommitService(
+        fileSystem,
+        editorCoordinator,
+        () => currentSettings,
+        fileSearch,
+      ).commit(request),
+  );
+
   /**
    * FR-027c: turning `persistUndoHistory` OFF purges what is ALREADY on disk.
    *

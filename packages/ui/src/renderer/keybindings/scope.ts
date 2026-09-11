@@ -26,6 +26,7 @@ import { transientOverlayOpen } from '../common/transient-overlay.js';
 /** Panel kinds, as the workspace stores them. */
 const EDITOR_KIND = 'editor';
 const TERMINAL_KIND = 'terminal';
+const FIND_IN_FILES_KIND = 'findInFiles';
 
 export interface ScopeInput {
   /** The workspace layout, or null when there is none (no tabs yet). */
@@ -62,6 +63,17 @@ export function currentScope(input: ScopeInput): DispatchScope {
 export function scopeFromKind(kind: string | undefined): DispatchScope {
   if (kind === EDITOR_KIND) return 'editor';
   if (kind === TERMINAL_KIND) return 'terminal';
+  /*
+   * 043 R14 — mapped EXPLICITLY, and the fallback below is exactly why.
+   *
+   * `explorer` is the right answer for a placeholder panel: it is not a text surface, and nothing
+   * live in that scope can do harm from there. A Find in Files panel is the opposite case. It is a
+   * list the user drives with the arrow keys, Delete and F2 — and on the fallback, `file.delete`,
+   * `file.cut`, `file.copy`, `file.undo` and `file.rename` would all be live over THE FILE TREE'S
+   * SELECTION while the user's attention is on the results. Pressing Delete in a results panel
+   * would delete a file elsewhere on screen.
+   */
+  if (kind === FIND_IN_FILES_KIND) return 'findInFiles';
   return 'explorer';
 }
 
@@ -167,7 +179,22 @@ export function isPanelScoped(action: ActionId): boolean {
     // editor's find bar — are exactly the ones this guard would otherwise silence it in.
     // An exact match, NOT a `navigate.` prefix: `navigate.gotoLine` (US2) acts inside one editor's
     // document and is panel-scoped, so a prefix here would silently widen to it.
-    action === 'navigate.quickOpen'
+    action === 'navigate.quickOpen' ||
+    /*
+     * 043 (#220, #153) — find and replace in files are WINDOW commands, for Quick Open's reason.
+     *
+     * They open or reuse a PANEL in the current tab (FR-020) and act on no panel's content, and
+     * their declared scope is `EVERYWHERE`. Without these two lines that declaration is a lie in
+     * the place it matters most: a terminal's focused element IS a textarea, so the transient-input
+     * guard would swallow `Ctrl+Shift+F` in exactly the context a user is likeliest to press it —
+     * and it would do so silently, which is this file's whole failure mode.
+     *
+     * Exact matches, and NOT a `search.` prefix. `search.find`, `search.findNext` and the rest act
+     * on ONE panel's content and must keep yielding to a focused find bar (FR-017f) — a prefix here
+     * would widen to all of them and re-open the defect that guard was written for.
+     */
+    action === 'search.findInFiles' ||
+    action === 'search.replaceInFiles'
   );
 }
 

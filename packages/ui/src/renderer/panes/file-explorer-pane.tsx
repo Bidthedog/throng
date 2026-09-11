@@ -109,7 +109,14 @@ export function FileExplorerPane({
              * explains itself in its hover title.
              */
             <>
-              <ExplorerToolbar keybindings={keybindings} quickOpenEnabled={false} />
+              <ExplorerToolbar
+                keybindings={keybindings}
+                quickOpenEnabled={false}
+                /* 043 FR-029e — the no-project case, and the only place it can be rendered: with no
+                   project `FileTree` is not mounted at all, so this is where Find in Files gets
+                   DRAWN AND DISABLED rather than disappearing. */
+                findInFilesEnabled={false}
+              />
               <div className="pane-explorer__empty" data-testid="file-explorer-empty">
                 <p>No files to display yet.</p>
               </div>

@@ -9,7 +9,13 @@
  * colour token set, so each theme is complete without hand-listing 22 colours.
  */
 import { THRONG_THEME, TOKEN_PARENT, type Theme } from '../theme.js';
-import { contrastRatio, hexToRgb, relativeLuminance } from '../theme-quality.js';
+import {
+  ciede2000,
+  contrastRatio,
+  hexToRgb,
+  relativeLuminance,
+  rgbToLab,
+} from '../theme-quality.js';
 
 /**
  * Derive every carved-out surface role from its parent, reading the parentage from the ONE place it
@@ -84,14 +90,68 @@ function activePanelBorders(accent: string, surface: string, text: string): {
   return { active, inactive };
 }
 
+/** ΔE00 between two hex colours — the same instrument `theme-quality` gates these surfaces with. */
+function deltaE(a: string, b: string): number {
+  return ciede2000(rgbToLab(hexToRgb(a)), rgbToLab(hexToRgb(b)));
+}
+
 /**
- * Search match-highlight surfaces (013, FR-019 / SC-005), derived so every bundled
- * theme is legible without hand-listing them. Both surfaces tint the editor background
- * toward the theme accent — the current match more strongly than an ordinary one — but
- * only as far as keeps the editor's OWN text readable on top (WCAG AA text floor,
- * 4.5:1), because a highlight you cannot read through is worse than none. The outline
- * is the accent pulled toward the text until it clears the non-text floor (3:1) against
- * the current-match fill, so the match you are on stays identifiable on any palette.
+ * The granularity of the ordinary-match search along the neutral axis. Finer than the accent walk's
+ * 0.05 because this search is an OPTIMISATION rather than a first-fit: separation is the scarce
+ * quantity on the tight themes, and a coarse grid throws some of it away. Measured on Snake, which
+ * is the theme with the least of it to spare: **2.860 at a 0.05 step, 3.509 at 0.02, 3.766 at 0.01**,
+ * against a floor of 3.0. The step alone decides whether that theme passes.
+ */
+const ORDINARY_MATCH_GRID = 100;
+
+/** The largest ordinary-match tint considered — the accent walk's own ceiling, on the other axis. */
+const ORDINARY_MATCH_MAX = 70;
+
+/**
+ * Search match-highlight surfaces (013, FR-019 / SC-005; 043 FR-067), derived so every bundled
+ * theme is legible — and now MUTUALLY DISTINGUISHABLE — without hand-listing them. Both surfaces
+ * lift the editor background, but only as far as keeps the editor's OWN text and the theme's ten
+ * syntax hues readable on top (WCAG AA text floor, 4.5:1), because a highlight you cannot read
+ * through is worse than none. The outline is the accent pulled toward the text until it clears the
+ * non-text floor (3:1) against the current-match fill, so the match you are on stays identifiable on
+ * any palette.
+ *
+ * ══ TWO AXES, AND WHY ONE WAS NEVER ENOUGH (043, FR-067 / R24) ══
+ *
+ * This used to put both fills on the SAME ray — `blend(editorBg, accent, strongest)` for the current
+ * match and `strongest * 0.45` for an ordinary one. The 45% is a fraction of a quantity that is
+ * itself small on a dark theme, because `strongest` is capped by the readability walk below, so the
+ * whole separation budget shrank with it: the shipped values had SUBNET's ordinary match ten units
+ * of green off its own page with its blue going the wrong way, and every dark theme rendering
+ * soft-select and hard-select as very nearly one colour. FR-067 forbids that outright.
+ *
+ * So the current match keeps the accent ray exactly as 016 FR-007a tuned it — including
+ * `searchMatchCurrentBorder`'s 3:1 relationship with it — and the ordinary match moves to the
+ * NEUTRAL ray, `blend(editorBg, editorFg, t)`. It then differs from the current match in chroma and
+ * hue as well as lightness, which is where ΔE00 finds separation that a single ray cannot supply,
+ * and it differs from the surface in lightness.
+ *
+ * ══ WHY THE SEARCH MAXIMISES THE SMALLER GAP RATHER THAN TAKING THE LARGEST READABLE TINT ══
+ *
+ * Taking simply the largest readable `t` — the shape the accent walk uses, and the obvious way to
+ * read "searched downward" — is wrong, and measurably so on the two themes whose foreground and
+ * accent are the same family. Measured before this was written: Matrix's largest readable neutral
+ * tint lands at ΔE00 **2.03** from its current match (both are green on black) and Snake's at
+ * **3.06** — worse than the values they ship today. A search that can return a collision is not a
+ * search. So the walk keeps the readable candidate that maximises the SMALLER of the two gaps it
+ * controls (against the current match, and against the surface), with ties going to the larger tint
+ * because the walk runs downward. Matrix then measures 10.66 and Snake 3.77.
+ *
+ * The ordinary match must also stay the WEAKER of the two, which is what the old 45% was protecting.
+ * `weakerThanCurrent` below is that rule, and it is two measurements rather than one because on a
+ * light theme they disagree. A candidate failing either is rejected outright, so an ordinary match
+ * still sits nearer the page and reads as less emphatic. The smallest tint on the grid is always a
+ * candidate, and it is adjacent to the surface, so the walk cannot come back empty.
+ *
+ * NOTE the deliberate absence: this function never reads `MATCH_DISTINCTNESS_THRESHOLD`. A
+ * derivation that searched until it cleared the gate would make the gate a tautology — it would
+ * report only that the search terminated — and would leave the floor with no measurement to follow.
+ * The search maximises separation; `theme-quality` independently measures what it achieved.
  */
 function searchHighlights(
   accent: string,
@@ -117,9 +177,45 @@ function searchHighlights(
     }
   }
   const current = blend(editorBg, accent, strongest);
-  // An ordinary match is the same hue at ~45% of the strength, so it always reads as
-  // weaker than the current one and is at least as legible (it sits nearer the surface).
-  const match = blend(editorBg, accent, strongest * 0.45);
+  const currentFromSurface = deltaE(current, editorBg);
+  const currentAgainstSurface = contrastRatio(current, editorBg);
+
+  /**
+   * "The ordinary match sits nearer the page than the current one", measured BOTH ways — and it has
+   * to be both, because on a light theme they disagree and 016 already shipped a test that reads it
+   * the second way.
+   *
+   * `theme-syntax.test.ts` ("keeps the current match stronger than an ordinary one, so 'the one you
+   * are on' still reads") compares WCAG contrast against `editorBg`. On Light that is a very small
+   * number for the current match — a pale saturated blue on white is barely a luminance step at all,
+   * 1.36:1 — while a neutral grey of the SAME perceptual distance is a much bigger one. Measured:
+   * the first cut of this search, filtering on ΔE00 alone, chose `#ddddde` for Light at 1.357:1
+   * against a current match of 1.327:1, and inverted the two marks by that older rule while
+   * satisfying this one. ΔE00 said the ordinary match was the nearer of the two (7.18 against 12.86)
+   * and it was right about perceived difference; luminance is what "reads as stronger" means for a
+   * highlight, and the two are not the same question.
+   *
+   * So both ceilings apply. FR-067 does not supersede 016 here — it never says the ordinary match
+   * may become the louder one, and R24 restates the opposite.
+   */
+  const weakerThanCurrent = (candidate: string): boolean =>
+    deltaE(candidate, editorBg) <= currentFromSurface &&
+    contrastRatio(candidate, editorBg) < currentAgainstSurface;
+
+  // The ordinary match, on the neutral axis. The score is the smaller of the two gaps the tint
+  // actually moves — against the current match, and against the page.
+  let match = blend(editorBg, editorFg, 1 / ORDINARY_MATCH_GRID);
+  let bestScore = -1;
+  for (let step = ORDINARY_MATCH_MAX; step >= 1; step -= 1) {
+    const candidate = blend(editorBg, editorFg, step / ORDINARY_MATCH_GRID);
+    if (!readable(candidate) || !weakerThanCurrent(candidate)) continue;
+    const score = Math.min(deltaE(candidate, current), deltaE(candidate, editorBg));
+    if (score > bestScore) {
+      bestScore = score;
+      match = candidate;
+    }
+  }
+
   let border = accent;
   for (let t = 0; t <= 1 && contrastRatio(border, current) < 3; t += 0.1) {
     border = blend(accent, editorFg, t);

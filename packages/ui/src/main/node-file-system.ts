@@ -125,6 +125,18 @@ export class NodeFileSystem implements IFileSystem {
   async size(path: string): Promise<number> {
     return (await stat(path)).size;
   }
+
+  /**
+   * 043 FR-045a — the per-file staleness stamp, from ONE `stat`.
+   *
+   * `stat` and not `lstat`: what changed is the CONTENT the scan read, and reading through a
+   * symlink means the target's content. `lstat` would report the link's own timestamp, which does
+   * not move when the file it points at is edited.
+   */
+  async modifiedAt(path: string): Promise<{ mtimeMs: number; size: number }> {
+    const s = await stat(path);
+    return { mtimeMs: s.mtimeMs, size: s.size };
+  }
 }
 
 /** Resolve a symlink's target kind (following it) for the icon; broken → file. */

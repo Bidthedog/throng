@@ -12,7 +12,16 @@ export class ExplorerWatcher {
 
   constructor(
     private readonly watcher: IFileWatcher,
-    private readonly emit: (evt: { relDir: string }) => void,
+    /**
+     * One directory changed under the watched root.
+     *
+     * `absRoot` rides beside the event rather than inside it, and that is 043 FR-045d's whole cost:
+     * the Find in Files scan is a SECOND consumer of this one watch (research R6), and it holds
+     * results per project, so a root-relative directory with no root is unattributable. Keeping it
+     * out of the payload keeps `throng:files:changed` on the wire exactly as it was — the broadcast
+     * site passes `evt` on unchanged and uses the root for itself.
+     */
+    private readonly emit: (evt: { relDir: string }, absRoot: string) => void,
     /**
      * The watch on the active root failed and could not be re-established (026 / #186, FR-010a).
      *
@@ -31,7 +40,7 @@ export class ExplorerWatcher {
     this.current = this.watcher.watch(
       absRoot,
       (changedPath) => {
-        this.emit({ relDir: toRelDir(absRoot, changedPath) });
+        this.emit({ relDir: toRelDir(absRoot, changedPath) }, absRoot);
       },
       // Bound to THIS root by the closure. A failure arriving after `setRoot` moved on is
       // impossible: disposing the old handle latches it, so a stale root can never raise a notice

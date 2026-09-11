@@ -50,4 +50,18 @@ export interface IFileSystem {
   writeBytes(path: string, bytes: Uint8Array): Promise<void>;
   /** File size in bytes (editor large-file guard, 006 FR-062). */
   size(path: string): Promise<number>;
+  /**
+   * Last-write time (epoch ms) AND size, from one stat. Rejects if the path is gone.
+   *
+   * 043 FR-045a — a per-file "has this changed since I read it" stamp. Both halves, deliberately:
+   * an edit that swaps one word for another of the same length moves only the time, and a coarse
+   * filesystem clock can leave two writes inside the same tick, where only the size differs. Either
+   * alone lets a real change look like no change.
+   *
+   * Distinct from {@link size} rather than folded into {@link stat}, because the two answer
+   * different questions: `stat` says WHAT an entry is (and follows the tree's symlink rules), this
+   * says WHEN its content last moved. One call rather than two so the pair cannot be read either
+   * side of a write.
+   */
+  modifiedAt(path: string): Promise<{ mtimeMs: number; size: number }>;
 }

@@ -61,6 +61,41 @@ export type EditorPanelConfig = {
   lineEnding?: LineEndingId;
 };
 
+/**
+ * Configuration captured for a Find in Files Panel (043 / `kind: 'findInFiles'`). Persisted
+ * verbatim inside the layout blob (rides `Panel.config` — no SQLite migration, R11).
+ *
+ * Every field is optional, for the same reason {@link EditorPanelConfig}'s are: a restored panel
+ * with an absent field takes the default, which is what lets a layout blob written before this
+ * feature load unchanged.
+ *
+ * ══ WHAT IS DELIBERATELY NOT HERE ══
+ *
+ * The results, the groups, the scan status and the pending replace preview. Their absence is what
+ * makes FR-023, FR-027b, FR-027c and FR-027d true BY CONSTRUCTION rather than by cleanup code that
+ * has to remember to run — a restored panel has nothing to show because there was nothing to write,
+ * not because something wiped it on the way back in.
+ *
+ * ══ ONE REGISTRATION NOT TO MISS ══
+ *
+ * `scopeSubPath` is ROOT-RELATIVE, so it does NOT belong in `CONFIG_PATH_KEYS`
+ * (`persisted-paths.ts`), which exists to rewrite ABSOLUTE paths. Storing it relative is the point:
+ * it survives the project moving on disk, and rewriting it as though it were absolute would break
+ * exactly that.
+ */
+export type FindInFilesPanelConfig = {
+  /** The search term, restored into the panel's own input. */
+  term?: string;
+  caseSensitive?: boolean;
+  wholeWord?: boolean;
+  /** Root-relative POSIX sub-directory the search was scoped to; `null` for the whole root. */
+  scopeSubPath?: string | null;
+  /** Whether the replace row was disclosed (FR-027a). */
+  replaceShown?: boolean;
+  /** The replacement text — restored, but never applied: a pending preview does not survive. */
+  replacement?: string;
+};
+
 /** A leaf node: one Panel (the atomic, draggable content unit). */
 export interface Panel {
   type: 'panel';

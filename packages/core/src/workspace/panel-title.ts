@@ -19,6 +19,7 @@
  * lacks one), so a restored editor names itself from what was persisted.
  */
 import { editorAutoTitle } from '../editor/path-display.js';
+import { FIND_IN_FILES_KIND, findInFilesPanelType } from '../find-in-files/panel-type.js';
 import { truncateGraphemes } from '../text/grapheme.js';
 import type { Panel } from './model.js';
 
@@ -29,6 +30,16 @@ export interface PanelTitleSources {
   /** The file the editor holds — live editor state first, else the panel's persisted config. */
   editorFilePath?: string | null;
 }
+
+/**
+ * What a Find in Files panel is called while its replace row is DISCLOSED (043 FR-081).
+ *
+ * The panel type's own label — "Find in Files" — is the other half of the pair and stays where it
+ * is, in the type descriptor, because it names the TYPE: it is the New Panel entry's label and the
+ * panel-type icon descriptor's. This one names a panel in one of its states, so it lives here, with
+ * the rule that chooses between them. Title case throughout, matching the shipped label.
+ */
+const FIND_AND_REPLACE_IN_FILES_TITLE = 'Find & Replace in Files';
 
 /** A source counts only when it has visible characters; a blank one would empty the header. */
 function usable(value: unknown): string | null {
@@ -77,6 +88,49 @@ function resolveTitle(panel: Panel, sources: PanelTitleSources): string {
   if (panel.kind === 'editor') {
     const path = usable(sources.editorFilePath);
     return path ? editorAutoTitle(path) : panel.title;
+  }
+
+  /*
+   * Find in Files (043 FR-060) — the one kind whose name never falls through to the placeholder.
+   *
+   * A search panel with no term yet is still plainly a search panel, so "Panel 7" is wrong at every
+   * moment of its life rather than only once a term exists. The label comes from the panel type's
+   * own descriptor, which is already what the header's icon and type label resolve through, so the
+   * name is stated once.
+   *
+   * The term is read from `panel.config` and needs NO new `PanelTitleSources` field (R30): the panel
+   * writes all five query fields there on every change, and the editor branch above already treats
+   * `panel.config` as a legitimate source. A third live source would be a second copy of a value the
+   * panel persists anyway — free to disagree with the one the restore path reads.
+   *
+   * Nothing here truncates the term. `panelDisplayTitle` bounds its RESULT, which is the whole
+   * reason #218 put the rule in one function: a 400-character term is capped by exactly the
+   * mechanism that caps a 400-character shell title.
+   */
+  if (panel.kind === FIND_IN_FILES_KIND) {
+    /*
+     * FR-081 — and the name says whether REPLACE is disclosed.
+     *
+     * Read exactly as the term is, off `panel.config`, and for the same reason (R30): `replaceShown`
+     * is already persisted there — `findInFilesConfigOf` writes it on every change and
+     * `findInFilesQueryFrom` reads it back — so `PanelTitleSources` gains no field and there is no
+     * second live copy free to disagree with the one the restore path uses.
+     *
+     * `=== true` rather than a truthiness test, matching `findInFilesQueryFrom`'s own read: `config`
+     * is `Record<string, unknown>` on disk, and "the replace row is open" is not something to infer
+     * from a non-empty string a restored blob happens to hold.
+     *
+     * The find-and-replace form is a LITERAL rather than a derivation of the type's label, and that
+     * is the point of FR-081's last clause: `findInFilesPanelType.label` is also the New Panel
+     * entry's label and the type icon descriptor's, so it must not move — a menu entry cannot read
+     * "Find & Replace in Files" because some panel elsewhere has its replace row open. The composed
+     * string belongs to the PANEL, so it is composed here, where a panel's name is decided.
+     */
+    const label = panel.config?.replaceShown === true
+      ? FIND_AND_REPLACE_IN_FILES_TITLE
+      : findInFilesPanelType.label;
+    const term = usable(panel.config?.term);
+    return term === null ? label : `${label}: ${term}`;
   }
 
   // Untyped: the placeholder is what the placeholder is FOR.

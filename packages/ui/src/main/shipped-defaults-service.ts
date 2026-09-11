@@ -15,6 +15,7 @@ import {
   parseKeybindings,
   planSettingsUpgrade,
   planThemeUpgrade,
+  planThemeValueUpgrade,
   reservedThemeNames,
   resetBindingValue,
   resetSettingValue,
@@ -279,7 +280,8 @@ export class ShippedDefaultsService {
   }
 
   /**
-   * The SETTINGS half of {@link upgrade} — one leaf, guarded (033 FR-070a/FR-070b).
+   * The SETTINGS half of {@link upgrade} — guarded leaves (033 FR-070a/FR-070b;
+   * 043 FR-074/FR-075). `planSettingsUpgrade` owns which leaves those are and what guards them.
    *
    * Returns the file to write, or `null` when nothing is owed. Reads and rewrites the RAW document
    * rather than a parsed `AppSettings`, so a key the schema does not model survives an upgrade the
@@ -307,14 +309,46 @@ export class ShippedDefaultsService {
   }
 
   /**
-   * FR-015a: additive-only upgrade. Adds newly-shipped themes absent from config
-   * and materialises newly-added theme properties into existing theme files
-   * (built-ins from their shipped value, customs from the base throng default),
-   * NEVER changing a value the user already has. Records the current version.
-   * Idempotent.
+   * FR-015a: the startup upgrade. Adds newly-shipped themes absent from config, materialises
+   * newly-added theme properties into existing theme files (built-ins from their shipped value,
+   * customs from the base throng default), and carries an enumerated set of guarded value changes.
+   * Records the current version. Idempotent.
    *
-   * 033 FR-070a widened it past themes for the first time: one settings leaf,
-   * `explorer.excludeGlobs`, rewritten only when it still deep-equals the value version 4 shipped.
+   * ══ THE CONTRACT, WHICH IS NO LONGER "ADDITIVE-ONLY" ══
+   *
+   * It said *"NEVER changing a value the user already has"* until 043, and that promise is now
+   * narrowed rather than broken (043 plan D1, R28). What it says today:
+   *
+   * > **Additive** for tokens and themes the install does not have; and, for an **enumerated,
+   * > frozen** set of leaves and tokens, a **rewrite** where the on-disk value is still
+   * > byte-identical to what a **named earlier version** shipped.
+   *
+   * **The guard IS the contract.** It is not "additive-only plus an exception", and it is not a
+   * free hand to overwrite: every rewrite compares against a frozen literal record of what a named
+   * version wrote to users' disks — `V4_EXCLUDE_GLOBS`, `V6_SEARCH_MATCH_COLOURS`,
+   * `V6_FIND_IN_FILES_ICON`, `V6_SEARCH_IN_FILES_SETTINGS` — never against the live definitions,
+   * which have moved on. A value the user has touched is left exactly as they set it, always.
+   *
+   * The enumerated set, and the version that added each:
+   *
+   * - **033 FR-070a** — `explorer.excludeGlobs`, when it still deep-equals the v4 list.
+   * - **043 FR-074/FR-075** — `search.inFiles.trigger` and `.settleMs`, when the WHOLE six-leaf
+   *   `search.inFiles` section still equals what v6 shipped. Wider than the leaf itself on purpose:
+   *   `'run'` is both the shipped value and a value a user might have chosen, so the section is the
+   *   only available evidence that nobody has been in there. R28 states it as the proxy it is.
+   * - **043 FR-065/FR-067** — `colours.searchMatch{,Current,CurrentBorder}` and
+   *   `icons.findInFiles`, per token, in BUILT-IN themes only. This is the project's **first
+   *   non-additive theme upgrade**.
+   *
+   * ══ WHY THE NARROWING WAS TAKEN ══
+   *
+   * Without it those four changes reach FRESH INSTALLS ONLY — `seed()` writes the materialised
+   * documents, and v6 already put all four values on every existing disk — and no test in this
+   * repository represents the population that misses out, because every run starts from an empty
+   * config root. The asymmetry decided it: a false positive costs one preference the user restores
+   * in a click, while fresh-install-only reach costs the person who ASKED for the new default the
+   * whole change.
+   *
    * The settings document joins the lock set for the same reason every other document is in it —
    * this is a read-modify-write, and the gap between the read and the write is where a concurrent
    * edit is lost.
@@ -340,14 +374,31 @@ export class ShippedDefaultsService {
       async () => {
         const present = await this.readPresentThemes();
         const plan = planThemeUpgrade({ shipped: this.shipped, present, throngBase: this.shipped.themes.throng });
+        /*
+         * One entry per theme, not one per plan. A theme can be owed BOTH an additive fill and a
+         * 043 value rewrite, and two entries for the same path in one `writeFilesAtomic` is a
+         * defect neither plan function can express — so they are composed here, the value rewrite
+         * applied on top of whatever the additive plan produced. The guard reads `present` (what is
+         * actually on disk), which is the same thing: the additive fill never changes a value that
+         * is already there.
+         */
+        const toWrite = new Map<string, Theme>();
+        for (const { name, theme } of plan.addThemes) toWrite.set(name, theme);
+        for (const { name, theme } of plan.fillThemes) toWrite.set(name, theme);
+        // 043 R28 / FR-065 / FR-067 — the first NON-additive theme upgrade. Built-ins only, per
+        // token, and only where the on-disk value is still byte-identical to what version 6
+        // shipped. Not reported in `filled`, which means what it says: a property that was absent.
+        for (const { name, leaves } of planThemeValueUpgrade({ shipped: this.shipped, present })) {
+          let theme = toWrite.get(name) ?? present[name];
+          if (!theme) continue;
+          for (const leaf of leaves) theme = setAtPath(theme, leaf.path, leaf.value);
+          toWrite.set(name, theme);
+        }
         const files: Array<{ path: string; content: string }> = [];
-        for (const { name, theme } of plan.addThemes) {
+        for (const [name, theme] of toWrite) {
           files.push({ path: this.store.pathOf({ kind: 'theme', name }), content: FileConfigStore.serialize(theme) });
         }
-        for (const { name, theme } of plan.fillThemes) {
-          files.push({ path: this.store.pathOf({ kind: 'theme', name }), content: FileConfigStore.serialize(theme) });
-        }
-        // 033 FR-070a — the one settings leaf, or nothing at all.
+        // 033 FR-070a, 043 FR-074/FR-075 — the guarded settings leaves, or nothing at all.
         const settingsFile = await this.settingsUpgradeFile();
         if (settingsFile) files.push(settingsFile);
         files.push(this.markerFile());
@@ -384,8 +435,11 @@ export class ShippedDefaultsService {
         // Malformed on disk → omit from `present`. A malformed CUSTOM theme is thus
         // left untouched for the user to repair. A malformed BUILT-IN, being absent
         // from `present`, is recreated from the record by planThemeUpgrade.addThemes
-        // — intentional, matching US2.5 (a corrupt built-in is restorable) and still
-        // additive-only (no present value is changed).
+        // — intentional, matching US2.5 (a corrupt built-in is restorable).
+        //
+        // A theme omitted here is also invisible to the 043 value rewrite, which reads `present`.
+        // That is the right outcome and not an accident: a file this method could not parse has no
+        // readable on-disk value, so the guard has nothing to compare against.
       }
     }
     return present;

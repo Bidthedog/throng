@@ -24,9 +24,11 @@
  *    closes, and by no other route (FR-026a). Importing the store to "tidy up" is exactly the
  *    coupling that requirement forbids; a find session is state the user built, and jumping to a
  *    line is not a reason to discard it.
- *  - **the active panel** (S5). Changing it is what would make `closeFindIfNotOn` close a find bar as
- *    a side effect — the same defect arriving by a longer road. This modal is opened over the panel
- *    that is already active and leaves that fact alone.
+ *  - **the active panel** (S5). Changing it is what would make `followActivePanel` hide a find bar
+ *    as a side effect — the same defect arriving by a longer road. (Since 043 that is a hide rather
+ *    than a close, so it would no longer LOSE the session; it would still make the bar vanish under
+ *    the user for no reason they could see.) This modal is opened over the panel that is already
+ *    active and leaves that fact alone.
  */
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement } from 'react';
 import { resolveGotoLine } from '@throng/core';
