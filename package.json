@@ -74,6 +74,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "@codemirror/search": "^6.7.1",
     "@codemirror/state": "^6.4.0",
     "better-sqlite3": "^12.11.1",
     "inversify": "^8.1.1",
