@@ -14,6 +14,25 @@ import { expect, test, _electron as electron } from '@playwright/test';
 import type { ElectronApplication, Locator, Page } from '@playwright/test';
 import { openDatabase, runMigrations, type ThrongDatabase } from '@throng/persistence';
 import { quiesceSampler } from './quiesce-sampler.js';
+/*
+ * IMPORTED, not merely re-exported — see the `export { forceKillProcessTree }` below.
+ *
+ * `export { X } from './y.js'` makes X available to this module's IMPORTERS and does NOT bind it in
+ * this module's own scope. `shutdownApp` calls it, so with only the re-export that call was a
+ * `ReferenceError` at runtime, and had been for as long as the re-export has existed.
+ *
+ * It never fired on a developer machine, which is the whole reason it survived: the call sits on
+ * the force-kill path, reached only when the graceful shutdown exceeds `SHUTDOWN_GRACE_MS`. A fast
+ * box always settles gracefully. A loaded one does not — and then teardown THROWS instead of
+ * killing the app, so the Electron process, its daemon and its shells all survive into the next
+ * test, which is how one slow shutdown becomes a flake in an unrelated spec several tests later.
+ *
+ * Reproduced deliberately: 8 of 12 runs of a single spec failed this way under 17 CPU hogs on a
+ * 20-core box, and 0 of 10 under 14 hogs. TypeScript could not have told anyone — `packages/ui`'s
+ * tsconfig includes only `src/main` and `src/preload`, so nothing under `tests/` is typechecked and
+ * an undefined name here is invisible until it runs.
+ */
+import { forceKillProcessTree } from './process-tree.js';
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
@@ -931,7 +950,7 @@ const SLOW_TEARDOWN_TOTAL_MS = 10_000;
  * Proved by `packages/ui/tests/integration/force-kill-process-tree.integration.test.ts`, which
  * replaced `harness-shutdown.e2e.ts`.
  */
-export { forceKillProcessTree } from './process-tree.js';
+export { forceKillProcessTree };
 
 /**
  * Tear down the Electron app without teardown hangs. Two distinct hazards, both closed here:

@@ -1,7 +1,8 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { settleConfigWrites } from '../../src/renderer/config/write-config.js';
 import {
   applyConfigPatch,
   DEFAULT_APP_SETTINGS,
@@ -220,7 +221,23 @@ function setJson(text: string): void {
   });
 }
 
-afterEach(() => {
+/**
+ * Retire the window BEFORE retiring the bridge, and drain what it left armed.
+ *
+ * `armedWrites` in `write-config.ts` is module-level by design — a component re-rendered rather than
+ * unmounted would otherwise strand its timer — and a module lives for the whole test FILE. So a
+ * debounced write scheduled by one test and not yet fired fires during the NEXT one, resolving
+ * `window.throng` at fire time and landing in that test's recorder. Observed as
+ * `expect(written).toEqual([])` receiving the previous describe block's theme document, with its
+ * `iconColour` still set: an assertion about a test that had made no writes at all, failing on
+ * somebody else's.
+ *
+ * `cleanup()` first, so nothing new is scheduled; `settleConfigWrites()` then fires what is armed
+ * and awaits what is in flight, into the bridge that scheduled it; only then is the bridge removed.
+ */
+afterEach(async () => {
+  cleanup();
+  await settleConfigWrites();
   Reflect.deleteProperty(window, 'throng');
 });
 
@@ -950,6 +967,37 @@ describe('a token edit writes the THEME document (migrated from preferences-them
   const themeWrites = (written: Array<{ id: unknown; json: string }>) =>
     written.filter((w) => (w.id as { kind?: string }).kind === 'theme');
 
+  const lastIconColour = (written: Array<{ id: unknown; json: string }>): string | undefined => {
+    const last = themeWrites(written).at(-1);
+    if (last === undefined) return undefined;
+    return (JSON.parse(last.json) as { colours?: { iconColour?: string } }).colours?.iconColour;
+  };
+
+  /**
+   * Wait for the theme write that carries `hex`, not merely for A theme write.
+   *
+   * Typing one colour does not produce one write. The hex field commits on `change`
+   * (`colour-picker.tsx:336`), and every INTERMEDIATE value that happens to parse commits too:
+   * `iconColour` is a clearable token, so `user.clear()` legitimately commits `''`, and typing
+   * `#123456` passes through `#123` — a valid three-digit hex, committed as `#112233`.
+   * `scheduleWrite` coalesces by document id, so on an idle machine the next keystroke clears the
+   * armed timer and none of them are ever seen. Under load a gap longer than the 150 ms debounce
+   * opens, an intermediate write lands, and a wait for `length > 0` returns on it — after which
+   * `.at(-1)` is `''` or `#112233`, and the assertion reports the edit as never having reached the
+   * write path. That is a much more alarming statement than the truth, which is that the test
+   * looked too early.
+   *
+   * Both shapes were observed: `''` in the full component suite, and `#112233` reproduced on demand.
+   * Waiting for the VALUE makes the wait's condition the same as the assertion's, so no ordering of
+   * the intermediate writes can satisfy one and fail the other.
+   */
+  const writtenIconColour = async (
+    written: Array<{ id: unknown; json: string }>,
+    hex: string,
+  ): Promise<void> => {
+    await waitFor(() => expect(lastIconColour(written)).toBe(hex));
+  };
+
   it('writes the edited colour, addressed to the theme that is ACTIVE', async () => {
     const { user, written } = mount('themes');
     await ready('themes-tab');
@@ -959,10 +1007,9 @@ describe('a token edit writes the THEME document (migrated from preferences-them
     // `applyTheme` schedules the write with a 150 ms debounce (`themes-tab.tsx:324`), so an
     // assertion taken the instant the field blurs reads an empty recorder — and reads it as "the
     // edit never reached the write path", which is a different and much more alarming statement.
-    await waitFor(() => expect(themeWrites(written).length).toBeGreaterThan(0));
+    await writtenIconColour(written, '#123456');
     const writes = themeWrites(written);
     const last = writes[writes.length - 1]!;
-    expect((JSON.parse(last.json) as { colours: { iconColour: string } }).colours.iconColour).toBe('#123456');
     expect(
       (last.id as { name?: string }).name,
       'addressed to the active theme, not to a fixed name',
@@ -976,7 +1023,7 @@ describe('a token edit writes the THEME document (migrated from preferences-them
     await ready('themes-tab');
 
     await editIconColour(user, '#123456');
-    await waitFor(() => expect(themeWrites(written).length).toBeGreaterThan(0));
+    await writtenIconColour(written, '#123456');
 
     expect(written.filter((w) => (w.id as { kind?: string }).kind === 'settings')).toEqual([]);
   });
@@ -991,10 +1038,9 @@ describe('a token edit writes the THEME document (migrated from preferences-them
     const { user, written } = mount('themes');
     await ready('themes-tab');
     await editIconColour(user, '#123456');
-    await waitFor(() => expect(themeWrites(written).length).toBeGreaterThan(0));
+    await writtenIconColour(written, '#123456');
 
-    const doc = JSON.parse(themeWrites(written).at(-1)!.json) as { colours: { iconColour: string } };
-    expect(doc.colours.iconColour, 'the document the next open will read').toBe('#123456');
+    expect(lastIconColour(written), 'the document the next open will read').toBe('#123456');
   });
 });
 

@@ -36,6 +36,41 @@ import { skipIfElevated } from './admin.js';
  */
 test.describe.configure({ mode: 'serial' });
 
+/**
+ * Click a tree row and WAIT until it is the focused tree item, before any chord is sent to it.
+ *
+ * A click and the selection it causes are not the same event. The click is dispatched, React updates
+ * state, and only then does the row take DOM focus — so `click(); keyboard.press('Control+x')` sends
+ * the chord to whatever was focused BEFORE, which on a loaded machine is routinely the previous row
+ * or nothing at all. Ctrl+X then cuts nothing, Ctrl+V pastes nothing, and the test reports a move
+ * that never happened as a broken move: on CI it read `false,true` — the file still at the root,
+ * absent from the folder — thirty seconds later.
+ *
+ * The signal is `[role="treeitem"]:focus`, the same one `explorer-keyboard-selection.e2e.ts` already
+ * uses, and it is a POSITIVE assertion about the row this test is about to act on rather than a
+ * pause hoping the state caught up. Issue #239 is the same defect in another spec, fixed the same
+ * way; this file simply never had it applied.
+ */
+async function selectRow(win: import('@playwright/test').Page, name: string): Promise<void> {
+  const tree = win.getByTestId('file-explorer-tree');
+  await tree.getByText(name, { exact: true }).click();
+  await expect
+    .poll(
+      () =>
+        win.evaluate(() => {
+          const row = document.querySelector(
+            '[data-testid="file-explorer-tree"] [role="treeitem"]:focus',
+          );
+          return (row?.textContent ?? 'no-focused-row').trim();
+        }),
+      {
+        timeout: 8000,
+        message: `"${name}" never became the focused tree row, so a chord sent now would go to whatever was focused before it`,
+      },
+    )
+    .toContain(name);
+}
+
 let shared: OpenApp;
 test.beforeAll(async () => {
   shared = await openApp();
@@ -178,10 +213,11 @@ test('undo reverses a move back out of the folder it went into', { tag: ['@exten
       const tree = win.getByTestId('file-explorer-tree');
       await expect(tree.getByText('moved.txt', { exact: true })).toBeVisible({ timeout: 8000 });
 
-      // Cut + paste into the folder — the move path.
-      await tree.getByText('moved.txt', { exact: true }).click();
+      // Cut + paste into the folder — the move path. Each chord goes to a row this test has
+      // WATCHED take focus, rather than to whatever the click may not have selected yet.
+      await selectRow(win, 'moved.txt');
       await win.keyboard.press('Control+x');
-      await tree.getByText('dst', { exact: true }).click();
+      await selectRow(win, 'dst');
       await win.keyboard.press('Control+v');
       /*
        * Both ends of the move in ONE wait.
@@ -233,6 +269,18 @@ test('undo reverses a move back out of the folder it went into', { tag: ['@exten
        * IPC round-trip. If this ever does flake, the fix is a signal the undo stack itself
        * publishes, not a bigger number here.
        */
+      /*
+       * Reported as a STRING, not a boolean, and that is the difference between a diagnosis and a
+       * shrug. `indentOf` returns NaN for a row that is not rendered, and every comparison with NaN
+       * is false — so when `dst` is collapsed, or the reload has not landed, this polled `false` for
+       * its full thirty seconds and then said "Expected: true, Received: false" about a tree it had
+       * never described. Measured here: 3 failures in 12 under 17 CPU hogs, every one of them
+       * unreadable.
+       *
+       * The string carries both indents, so a failure distinguishes the three cases that all used
+       * to look identical: the row is missing (NaN), the folder is collapsed, or the move genuinely
+       * did not re-parent anything.
+       */
       await expect
         .poll(
           () =>
@@ -244,11 +292,18 @@ test('undo reverses a move back out of the folder it went into', { tag: ['@exten
                 const row = rows.find((r) => (r.textContent ?? '').includes(name));
                 return row ? Number.parseFloat(row.style.paddingLeft || '0') : Number.NaN;
               };
-              return indentOf('moved.txt') > indentOf('dst');
+              const child = indentOf('moved.txt');
+              const parent = indentOf('dst');
+              if (Number.isNaN(parent)) return 'dst is not rendered at all';
+              if (Number.isNaN(child)) return 'moved.txt is not rendered — dst is probably collapsed';
+              return child > parent ? 'nested' : `not nested (moved.txt ${child}, dst ${parent})`;
             }),
-          { timeout: FILE_OP_TIMEOUT_MS },
+          {
+            timeout: FILE_OP_TIMEOUT_MS,
+            message: 'moved.txt never became a child row of dst in the tree',
+          },
         )
-        .toBe(true);
+        .toBe('nested');
       // Undo puts it back at the root, where the user had it — again, both ends together.
       await win.keyboard.press('Control+z');
       await expect

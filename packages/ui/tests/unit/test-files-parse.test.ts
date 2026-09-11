@@ -213,6 +213,27 @@ describe('every test file parses', () => {
      *
      * This number is expected to need raising again. When it does, re-measure rather than doubling
      * it — a budget nobody has measured is the thing this file has already been bitten by twice.
+     *
+     * ══ RAISED 20 s → 60 s ON 2026-09-10, AND RE-MEASURED AS THAT ASKS ══
+     *
+     * Feature 043 added ten test files across three rounds, and the suite this walks has grown from
+     * 356 files to 626. Measured today on a 20-core workstation:
+     *
+     *   isolated          1.35 s, 1.45 s
+     *   under full load   passed twice; FAILED once at 24.8 s, in a run started straight after the
+     *                     component suite — the same machine, minutes apart, either side of 20 s
+     *
+     * That straddle is the whole finding. The cost did not become large, it became VARIABLE across
+     * the budget, so the test reports a red that says "timeout" about a repository that is merely
+     * bigger — and the third time this file has been bitten would be the second time by the same
+     * cause. The isolated figure is what says it is not a defect: 1.4 s of work, and everything
+     * above that is contention for one worker pool.
+     *
+     * 60 s is ~2.4x the observed loaded worst case rather than the original 4.6x, deliberately. The
+     * budget exists to catch a HANG, and a hang is unbounded — so the multiple only has to clear
+     * ordinary contention, and a looser one would take a minute to tell us something a hang would
+     * have told us anyway. It is also the figure the E2E tier already uses for real-process work,
+     * so it is a number this repository can be read as meaning something by.
      */
-  }, 20_000);
+  }, 60_000);
 });
