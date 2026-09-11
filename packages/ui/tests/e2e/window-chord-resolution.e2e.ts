@@ -317,3 +317,56 @@ test('fullscreen still resolves — F11', { tag: ['@extended', '@window', '@rese
     );
   }
 });
+
+test('find and replace in files still resolve — Ctrl+Shift+F and Ctrl+Shift+H (043 T107)', { tag: ['@core', '@window', '@reserve:input'] }, async () => {
+  /*
+   * 043 (#220, #153) — the second `Ctrl+Shift+<letter>` pair, and the reason this file exists.
+   *
+   * Both chords take the LETTER branch of `keepShift`, which is the branch `Ctrl+Shift+T` produced:
+   * before the widening, a shifted letter arrived at the resolver with the Shift dropped, matched
+   * no binding, and did nothing at all — no throw, no log, nothing to see. Two more chords of
+   * exactly that shape are what `window-chords.ts`'s COVERED map claims are pressed here, and this
+   * is the press.
+   *
+   * ══ WHY IT IS IRREDUCIBLE ══
+   *
+   * Real keyboard and input dispatch. The event is BUILT in a window-level capture listener from a
+   * live `KeyboardEvent`'s `key` and modifier flags, and what is under test is whether a real
+   * keystroke survives that construction. `window-chord-manifest.test.ts` already asserts the
+   * allowlist and the branch predicate at the unit layer without pressing anything, which is
+   * exactly why the pressing half has to be here.
+   *
+   * ══ WHY BOTH CHORDS ARE ONE TEST ══
+   *
+   * They are one command (FR-029d): replace in files is find in files with the replacement row
+   * pre-enabled, honouring the same reuse rules. The second press asserted separately would need
+   * its own panel and would then be asserting the reuse rule rather than the dispatch. Pressed in
+   * sequence, the SECOND chord's evidence is that it reached the same panel and moved the caret
+   * into a different field — which no first press could produce.
+   */
+  const win = shared.win;
+  await focusEditorPanel(win);
+
+  // FIND IN FILES — a panel that did not exist appears in this tab, with the caret in its input.
+  // Focus, not merely presence: an inert chord and a chord that opened something the user then has
+  // to click into are different failures, and the second is the one the widening actually caused.
+  await win.keyboard.press(chordFor('search.findInFiles'));
+  const panel = win.locator('[data-testid^="fif-panel-"]');
+  await expect(panel).toHaveCount(1, { timeout: 10_000 });
+  const panelId = (await panel.getAttribute('data-testid'))?.replace('fif-panel-', '') ?? '';
+  expect(panelId).not.toBe('');
+  await expect(win.getByTestId(`fif-term-${panelId}`)).toBeFocused();
+  // Nothing was typed, so nothing was searched: the panel reports "not run" rather than a scan.
+  await expect(win.getByTestId(`fif-status-${panelId}`)).toHaveAttribute('data-state', 'notRun');
+
+  // REPLACE IN FILES — the same command, so the same panel is reused rather than a second opened,
+  // the replacement row is disclosed, and the caret moves to it (FR-029d, FR-031c).
+  await win.keyboard.press(chordFor('search.replaceInFiles'));
+  await expect(panel).toHaveCount(1);
+  await expect(win.getByTestId(`fif-replace-row-${panelId}`)).toBeVisible();
+  await expect(win.getByTestId(`fif-replacement-${panelId}`)).toBeFocused();
+
+  // Leave the tab as this file found it — the panel is empty, so its × asks nothing.
+  await win.getByTestId(`panel-close-${panelId}`).click();
+  await expect(panel).toHaveCount(0);
+});

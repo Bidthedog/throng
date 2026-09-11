@@ -30,7 +30,9 @@ describe('focus.notice (041 FR-020)', () => {
 
   it('is scoped EVERYWHERE, like the rest of the focus family (FR-020a)', () => {
     const scope = COMMAND_SCOPES['focus.notice'];
-    expect([...scope].sort()).toEqual(['editor', 'explorer', 'terminal']);
+    // 043 R14 added a fourth scope, `findInFiles`, and EVERYWHERE is the full set by definition —
+    // a notice can be raised while a Find in Files panel has focus like any other surface.
+    expect([...scope].sort()).toEqual(['editor', 'explorer', 'findInFiles', 'terminal']);
     // Stated as an equality with a SIBLING rather than a literal list, so the two cannot drift: if
     // the family's scope ever widens, this widens with it or fails.
     expect([...scope].sort()).toEqual([...COMMAND_SCOPES['focus.cycle']].sort());

@@ -3,17 +3,15 @@
  * maths, the "N of M" count, and selection seeding. No DOM: CodeMirror's `Text`
  * and `SearchQuery` are pure JS, so the real matching semantics are covered here
  * rather than only in E2E.
+ *
+ * MOVED HERE FROM `packages/ui/tests/unit/search-model.test.ts` by 043 (R1). The model it
+ * covers now lives in core, because a file search runs in the MAIN process and main cannot
+ * import from the renderer. The assertions below are unchanged — that is the point: the
+ * hoist had to be behaviour-preserving, and an edited test could not prove it.
  */
 import { describe, expect, it } from 'vitest';
 import { Text } from '@codemirror/state';
-import {
-  countOf,
-  editorMatches,
-  indexFrom,
-  seedFrom,
-  stepIndex,
-  type MatchModes,
-} from '../../src/renderer/search/search-model.js';
+import { countOf, editorMatches, indexFrom, seedFrom, stepIndex, type MatchModes } from '@throng/core';
 
 const PLAIN: MatchModes = { caseSensitive: false, wholeWord: false };
 const doc = (...lines: string[]): Text => Text.of(lines);

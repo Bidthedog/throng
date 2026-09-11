@@ -70,6 +70,10 @@ describe('Collapse / Expand All Children on a FOLDER (033 US4, E1, FR-038/FR-047
   it('E1 — both are drawn, in the Navigate section, immediately after Copy Path', () => {
     const items = build({ relPath: 'src', kind: 'folder' });
     const navigate = labels(items.filter((i) => i.section === 'navigate'));
+    // 043 FR-029b appended Find in Files here, closing the group. 043 FR-090 MOVED it into
+    // Open In → Search (no duplication, 006 FR-030's precedent), so the group closes on Expand
+    // again. Collapse and Expand still sit immediately after Copy Path, which is what this test
+    // is here to pin.
     expect(navigate).toEqual(['Open In', 'Copy Path', COLLAPSE, EXPAND]);
   });
 
@@ -97,6 +101,7 @@ describe('Collapse / Expand All Children on a FOLDER (033 US4, E1, FR-038/FR-047
       ops: ops(),
     });
     const navigate = labels(items.filter((i) => i.section === 'navigate'));
+    // 043 FR-090 — no Find in Files row here any more; it lives in Open In → Search.
     expect(navigate).toEqual(['Open In', COLLAPSE, EXPAND]);
   });
 

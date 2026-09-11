@@ -1,7 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import {
   createPanelTypeRegistry,
+  defaultPanelTypeRegistry,
   terminalPanelType,
+  FIND_IN_FILES_KIND,
   type FlavourOption,
   type PanelTypeContext,
 } from '@throng/core';
@@ -120,5 +124,41 @@ describe('panel-type form reducer', () => {
     const s = selectKind(initialFormState(), 'nope', d);
     expect(s.selectedKind).toBeNull();
     expect(canConfirm(s, d)).toBe(false);
+  });
+});
+
+/**
+ * 043 FR-017 — Find in Files is registered, and the New Panel dialog never offers it.
+ *
+ * The dropdown is built in `panel-type-form.tsx`, which the unit project cannot render (node env,
+ * no DOM), so the second assertion is a SOURCE guard — the idiom `icon-call-sites.test.ts` and
+ * `panel-identity-key.test.ts` established for exactly this. It is the assertion that matters:
+ * `listOfferable()` filtering correctly is worth nothing while the form still calls `list()`, and
+ * that regression is an EDIT AWAY at all times, with nothing in the type system to catch it — both
+ * methods return `PanelTypeDescriptor[]`.
+ */
+const FORM_SOURCE = fileURLToPath(
+  new URL('../../src/renderer/panel-type/panel-type-form.tsx', import.meta.url),
+);
+
+describe('the New Panel dialog does not offer Find in Files (FR-017)', () => {
+  it('the shared registry offers Terminal and Editor, and resolves — but does not offer — Find in Files', () => {
+    const offered = defaultPanelTypeRegistry.listOfferable().map((d) => d.id);
+    expect(offered).toEqual(['terminal', 'editor']);
+    expect(offered).not.toContain(FIND_IN_FILES_KIND);
+    // …and it is still registered, which is what gives the panel its header label and icon (R17).
+    expect(defaultPanelTypeRegistry.get(FIND_IN_FILES_KIND)?.label).toBe('Find in Files');
+  });
+
+  it('the form sources its options from listOfferable(), never from list()', () => {
+    const code = readFileSync(FORM_SOURCE, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^[ \t]*\/\/.*$/gm, '');
+    expect(code).toMatch(/registry\.listOfferable\(\)/);
+    expect(
+      code,
+      'the New Panel dropdown is built from registry.list(), so every registered type is offered — ' +
+        'including the ones FR-017 says must not be',
+    ).not.toMatch(/registry\.list\(\)/);
   });
 });

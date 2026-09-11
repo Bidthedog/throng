@@ -35,8 +35,15 @@ describe('editorPanelType descriptor (006, contracts/editor-panel-type.md)', () 
   });
 
   it('is registered in the default registry alongside Terminal, in stable order', () => {
+    // 043 added a third registration, `findInFiles`, which `list()` shows because `list()` is every
+    // REGISTERED type. It is `offered: false`, so the dropdown — which reads `listOfferable()` —
+    // still holds exactly these two, in this order.
     const ids = defaultPanelTypeRegistry.list().map((d) => d.id);
-    expect(ids).toEqual(['terminal', 'editor']);
+    expect(ids).toEqual(['terminal', 'editor', 'findInFiles']);
+    expect(defaultPanelTypeRegistry.listOfferable().map((d) => d.id)).toEqual([
+      'terminal',
+      'editor',
+    ]);
     expect(defaultPanelTypeRegistry.get('editor')).toBe(editorPanelType);
   });
 

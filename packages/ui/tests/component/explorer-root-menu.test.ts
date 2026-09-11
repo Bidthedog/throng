@@ -278,6 +278,8 @@ describe('a right-click on the empty space targets the project root (004 FR-097)
       'Copy Path',
       'Collapse All Children',
       'Expand All Children',
+      // 043 FR-029b put a top-level Find in Files row here; FR-090 MOVED it into Open In → Search,
+      // which the flyout test below asserts. Its absence here is the move, not an omission.
     ]);
   });
 
@@ -339,7 +341,9 @@ describe('a right-click on the empty space targets the project root (004 FR-097)
     await user.pointer({ keys: '[MouseRight]', target: body });
     await user.click(await screen.findByTestId('menu-item-Open In'));
 
-    expect(menuLabels('submenu-Open In')).toEqual(['OS File Explorer', 'Terminal']);
+    // 043 FR-090 — Search follows Terminal. The root IS a folder, so it gets the tree's search route
+    // like any other; here it scopes to the whole project, `''`.
+    expect(menuLabels('submenu-Open In')).toEqual(['OS File Explorer', 'Terminal', 'Search']);
   });
 });
 

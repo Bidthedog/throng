@@ -88,10 +88,12 @@ test.afterAll(async () => {
  *
  * That file already drives this exact flyout and already covers the OTHER disabled flag on it. The
  * two are independent and the file says so: `New Editor` is disabled by `alreadyOpen`, which is
- * APP-WIDE, while this target is disabled by `openInTargetAlready`, which asks whether THIS panel
- * holds THIS file (`file-tree.tsx:390`). One direction was proven — app-wide-open leaves this target
- * alone — and the other, that it goes quiet when the panel really does hold the file, was proven
- * nowhere. A build that never computed `openInTargetAlready` at all passed everything.
+ * APP-WIDE, while this target is disabled by `lastActiveHoldsFile`, which asks whether THIS panel
+ * holds THIS file (`readOpenInFacts` in `editor/open-in-perform.ts`; it was `openInTargetAlready`,
+ * inline in `file-tree.tsx`, until 043 FR-087 moved the decision into a module both the explorer
+ * and the Find in Files result menu draw from). One direction was proven — app-wide-open leaves this
+ * target alone — and the other, that it goes quiet when the panel really does hold the file, was
+ * proven nowhere. A build that never computed that flag at all passed everything.
  *
  * Two cases came down that this test could not reach. The comparison NORMALISES both sides, because
  * the tree composes its path from the project root while the editor store holds whatever spelling

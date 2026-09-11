@@ -211,22 +211,26 @@ describe('"Open in OS Explorer" leads the "Open In" flyout, and is nowhere else 
     await user.click(screen.getByTestId('menu-item-Open In'));
 
     // The whole flyout, in order. The E2E asserted only that the first row contained the OS reveal;
-    // pinning all four means an editor target overtaking it is a failure rather than a pass.
+    // pinning all of them means an editor target overtaking it is a failure rather than a pass.
+    // 043 FR-090 appends Search, last — so the OS reveal still leads.
     expect(labels('submenu-Open In')).toEqual([
       'OS File Explorer',
       'Last Active Editor',
       'New Editor',
       'Terminal',
+      'Search',
     ]);
   });
 
-  it('a folder: exactly the OS reveal and Terminal — no editor targets (033 FR-029, SC-011’s one exception)', async () => {
+  it('a folder: the OS reveal, Terminal and Search — no editor targets (033 FR-029, 043 FR-090)', async () => {
     const user = open(explorerFolder());
 
     await user.click(screen.getByTestId('menu-item-Open In'));
 
-    expect(labels('submenu-Open In')).toEqual(['OS File Explorer', 'Terminal']);
-    expect(rows('submenu-Open In')).toHaveLength(2);
+    // Three rows since 043 round five: Search was appended, and no editor target was — a folder
+    // still cannot be opened in an editor, which is the half of this test that has not moved.
+    expect(labels('submenu-Open In')).toEqual(['OS File Explorer', 'Terminal', 'Search']);
+    expect(rows('submenu-Open In')).toHaveLength(3);
   });
 
   it('the flyout draws no rule of its own — every row in it is Navigate', async () => {

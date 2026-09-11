@@ -14,6 +14,8 @@ import {
 import { DEFAULT_APP_SETTINGS } from '../../src/config/app-settings.js';
 import {
   DEFAULT_NOTIFICATION_SETTINGS,
+  DISPLAY_MODES,
+  DISPLAY_MODE_LABELS,
   TIMEOUT_MAX_MS,
   TIMEOUT_MIN_MS,
 } from '../../src/notice/display-mode.js';
@@ -289,5 +291,195 @@ describe('SETTINGS_METADATA new-project + verb changes (011)', () => {
       .filter(([key]) => key.startsWith('confirmations.'))
       .filter(([, d]) => /\bclos(e|ed|ing)\b/i.test(`${d.label} ${d.description ?? ''}`));
     expect(softened.map(([key]) => key)).toEqual([]);
+  });
+});
+
+
+/**
+ * 043 T168 — the shipped defaults (FR-074, FR-075) and the section split (FR-076).
+ *
+ * ══ WHY THE DEFAULTS ARE ASSERTED HERE AND NOT ONLY IN `app-settings.test.ts` ══
+ *
+ * Because a default is carried by the SCHEMA as well as by the constant, and the two can disagree
+ * silently. FR-075 moves `settleMs` onto a slider whose stops are 50 ms apart: a shipped value
+ * BETWEEN two stops is reachable only by typing, so a user who drags the control can never get back
+ * to what the application shipped with. That is a property of the constant and the descriptor
+ * TOGETHER, and neither file's own tests can see it.
+ *
+ * ══ FR-076: A SECTION OF THEIR OWN ══
+ *
+ * The seven leaves shipped in one `Search` group, on the argument that a user asking "how do I make
+ * searching behave" should find them in one place. FR-076 decides the opposite question the same
+ * way the editor's preferences already answer it — `Editor · Indentation` and `Editor · Navigation`
+ * are sub-sections of `Editor`, not one flat list — so the find bar's one key and Find in Files'
+ * eight (six at FR-076, and the two FR-082 adds — the replace summary notice's own display mode and
+ * its own timeout) are separated, and a setting appears in both only if it genuinely governs both.
+ * None does: the settle interval was deliberately NOT made a second use of the find bar's debounce
+ * (FR-043b), and
+ * `settings-inertness-043.test.ts` is what stops that decision being quietly undone.
+ */
+describe('Find in Files ships as-you-type at 500 ms, in its own section (FR-074/075/076)', () => {
+  const byKey = new Map(SETTINGS_METADATA.map((d) => [d.key, d]));
+
+  const FIND_IN_FILES_KEYS = [
+    'search.inFiles.openTarget',
+    'search.inFiles.trigger',
+    'search.inFiles.settleMs',
+    'search.inFiles.defaultGrouping',
+    'search.inFiles.rememberGrouping',
+    'search.inFiles.warnIrreversibleCommit',
+    // The two FR-082 adds. Listed HERE rather than only in their own describe below, because this
+    // array is what holds the section membership for the whole family: a ninth key added to
+    // `search.inFiles` and left out of this list is a row rendered under a heading nobody checked.
+    'search.inFiles.summaryNoticeMode',
+    'search.inFiles.summaryNoticeTimeoutMs',
+  ];
+
+  it('starts a scan as the user types, by default (FR-074)', () => {
+    expect(DEFAULT_APP_SETTINGS.search.inFiles.trigger).toBe('asYouType');
+    // Still a preference, and still a closed set of two — FR-074 moves the default, not the model.
+    expect(byKey.get('search.inFiles.trigger')?.allowedValues).toEqual(['run', 'asYouType']);
+  });
+
+  it('waits 500 ms for typing to settle (FR-075)', () => {
+    expect(DEFAULT_APP_SETTINGS.search.inFiles.settleMs).toBe(500);
+  });
+
+  it('leaves the find bar’s own debounce where it was — the two keys are deliberately distinct', () => {
+    // FR-075 moves this one interval and no other. 120 ms times a re-scan of ONE buffer already in
+    // memory; 500 ms gates a walk over the whole project.
+    expect(DEFAULT_APP_SETTINGS.search.asYouTypeDebounceMs).toBe(120);
+  });
+
+  it('puts the shipped 500 exactly on a slider stop, so a drag can always return to it', () => {
+    const d = byKey.get('search.inFiles.settleMs');
+    expect(d?.control).toBe('slider');
+    expect(d?.min).toBe(0);
+    expect(d?.max).toBe(2000);
+    expect(d?.step).toBe(50);
+    const shipped = DEFAULT_APP_SETTINGS.search.inFiles.settleMs;
+    expect(shipped).toBeGreaterThanOrEqual(d!.min!);
+    expect(shipped).toBeLessThanOrEqual(d!.max!);
+    expect(
+      (shipped - d!.min!) % d!.step!,
+      'a shipped value between two stops is unreachable by dragging',
+    ).toBe(0);
+  });
+
+  it('gives Find in Files a section of its own (FR-076)', () => {
+    for (const key of FIND_IN_FILES_KEYS) {
+      expect(byKey.get(key)?.group, key).toBe('Search · Find in Files');
+    }
+  });
+
+  it('leaves the find bar’s delay in a section of its own (FR-076)', () => {
+    expect(byKey.get('search.asYouTypeDebounceMs')?.group).toBe('Search · Find Bar');
+  });
+
+  it('leaves no descriptor in the undivided "Search" group', () => {
+    // The half a rename is likeliest to leave behind: one key still pointing at the old group name
+    // renders a third section holding a single orphan, and nothing else in the suite would say so.
+    const orphans = SETTINGS_METADATA.filter((d) => d.group === 'Search').map((d) => d.key);
+    expect(orphans).toEqual([]);
+  });
+
+  it('names both sub-sections after the parent, so a search for "search" still returns both', () => {
+    // 021 FR-015 matches a field by its GROUP as a substring, which is the whole reason the editor's
+    // sub-sections are spelled "Editor · Navigation" rather than "Navigation". Splitting the section
+    // must not cost the user the one query that used to reach every one of these keys.
+    const groups = new Set(
+      SETTINGS_METADATA.map((d) => d.group).filter((g) => g.startsWith('Search')),
+    );
+    expect([...groups].sort()).toEqual(['Search · Find Bar', 'Search · Find in Files']);
+    for (const g of groups) expect(g.toLowerCase()).toContain('search');
+  });
+});
+
+/**
+ * 043 T199 — the replace summary notice gets a display mode and a duration OF ITS OWN (FR-082).
+ *
+ * ══ WHY THESE TWO ARE NOT `notifications.*` KEYS ══
+ *
+ * Because they govern ONE notice rather than a severity. FR-082 states the cost of that in as many
+ * words: for this notice the global `notifications.*` settings are not consulted at all, so a user
+ * whose global preference is that errors stay until dismissed does not get that behaviour here. That
+ * is a deliberate override, and the pair therefore belongs in this feature's own section — a
+ * preference that governs only Find in Files, in the group named after it (FR-076).
+ *
+ * ══ WHAT IS ASSERTED, AND WHY EACH ONE ══
+ *
+ *  - The application's EXISTING display vocabulary, not a parallel one. `allowedValues` is
+ *    `DISPLAY_MODES` itself and `optionLabels` is `DISPLAY_MODE_LABELS` itself — identity, not
+ *    equality, because a copied array is exactly how a fourth mode comes to exist in one dropdown
+ *    and not the other.
+ *  - The bounds are `TIMEOUT_MIN_MS`/`TIMEOUT_MAX_MS`, for #227's reason: a descriptor whose bounds
+ *    disagree with the parse's clamp ships a control offering values the parser silently replaces.
+ *  - The shipped default sits exactly ON a slider stop. That is RE-DERIVED here from the shipped
+ *    constants rather than taken on trust from the 5000 that `notifications.*` already ships: a
+ *    value between two stops is reachable only by typing, so a user who drags the control can never
+ *    get back to what the application came with, and this repository has been bitten by it once
+ *    already (the reasoning at `display-mode.ts:44-60`).
+ *
+ * ══ THE DEFAULT IS NOT SELF-CONTRADICTORY ══
+ *
+ * `dismiss` with a 5000 ms timeout is what `error` and `warning` already ship. A timeout is stored
+ * for every severity whatever its mode — so switching to *Display for* never presents an empty
+ * control — and it is consulted only under `timed`. A stored 5000 under `dismiss` is a value waiting
+ * to become meaningful.
+ */
+describe('the replace summary notice has a display mode and a duration of its own (FR-082)', () => {
+  const byKey = new Map(SETTINGS_METADATA.map((d) => [d.key, d]));
+  const MODE_KEY = 'search.inFiles.summaryNoticeMode';
+  const TIMEOUT_KEY = 'search.inFiles.summaryNoticeTimeoutMs';
+
+  it('offers the three modes the rest of the application offers, under their own names', () => {
+    const d = byKey.get(MODE_KEY);
+    expect(d, `${MODE_KEY} has no descriptor`).toBeDefined();
+    expect(d?.control).toBe('select');
+    // Identity: the constant itself, so a fourth mode cannot reach one dropdown and miss this one.
+    expect(d?.allowedValues).toBe(DISPLAY_MODES);
+    expect(d?.optionLabels).toBe(DISPLAY_MODE_LABELS);
+  });
+
+  it('bounds the duration exactly as the parse does, on a slider (FR-082, #227)', () => {
+    const d = byKey.get(TIMEOUT_KEY);
+    expect(d, `${TIMEOUT_KEY} has no descriptor`).toBeDefined();
+    expect(d?.control).toBe('slider');
+    expect(d?.min).toBe(TIMEOUT_MIN_MS);
+    expect(d?.max).toBe(TIMEOUT_MAX_MS);
+    expect(d?.step).toBe(500);
+  });
+
+  it('ships dismiss / 5000 ms — and the 5000 lands ON a stop, re-derived', () => {
+    const shipped = DEFAULT_APP_SETTINGS.search.inFiles;
+    expect(shipped.summaryNoticeMode).toBe('dismiss');
+    expect(shipped.summaryNoticeTimeoutMs).toBe(5000);
+
+    const d = byKey.get(TIMEOUT_KEY);
+    expect(shipped.summaryNoticeTimeoutMs).toBeGreaterThanOrEqual(d!.min!);
+    expect(shipped.summaryNoticeTimeoutMs).toBeLessThanOrEqual(d!.max!);
+    expect(
+      (shipped.summaryNoticeTimeoutMs - d!.min!) % d!.step!,
+      'a shipped value between two stops is unreachable by dragging',
+    ).toBe(0);
+  });
+
+  it('keeps both OUT of the Notifications section (FR-076)', () => {
+    // The section membership itself is asserted once, over the whole eight, by
+    // `FIND_IN_FILES_KEYS` above. This is the other half of that claim and the one a reader is
+    // likeliest to get wrong: a mode-and-timeout pair looks like it belongs beside the four
+    // severities, and putting it there would tell the user it governs them.
+    for (const key of [MODE_KEY, TIMEOUT_KEY]) {
+      expect(byKey.get(key)?.group, key).not.toBe('Notifications');
+    }
+  });
+
+  it('leaves the four global severities exactly as they were — this overrides nothing else', () => {
+    // The discriminating half. FR-082 takes the global settings out of the loop for ONE notice; a
+    // change that reached `notifications.*` would be a far larger one than the requirement asks for.
+    expect(DEFAULT_NOTIFICATION_SETTINGS.error).toEqual({ mode: 'dismiss', timeoutMs: 5000 });
+    expect(DEFAULT_NOTIFICATION_SETTINGS.warning).toEqual({ mode: 'dismiss', timeoutMs: 5000 });
+    expect(DEFAULT_NOTIFICATION_SETTINGS.info).toEqual({ mode: 'timed', timeoutMs: 10000 });
+    expect(DEFAULT_NOTIFICATION_SETTINGS.success).toEqual({ mode: 'timed', timeoutMs: 5000 });
   });
 });
