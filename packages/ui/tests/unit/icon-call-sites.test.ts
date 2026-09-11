@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { stripComments } from './helpers/strip-comments.js';
 
 /**
  * 017 / #54 — structural guards for the icon system.
@@ -53,11 +54,15 @@ const rendererSources = walk(RENDERER, /\.tsx?$/);
  * naming it, necessarily — and a guard that failed on the documentation of its own rule would be
  * one nobody could satisfy, and would train the next author to delete the explanation rather than
  * keep the rule.
+ *
+ * The stripping used to be two regexes here, which guarded the `//` in a URL with an `[^:]` and
+ * nothing else — so a `//` in a UNC path or any other string would have eaten the rest of its line,
+ * and the guard would have stopped reading real code without saying so. It is now the shared
+ * scanner (#379), which knows the difference between code, a string, a template and a regex
+ * literal; `strip-comments.test.ts` holds it to that.
  */
 function code(file: string): string {
-  return readFileSync(file, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1');
+  return stripComments(readFileSync(file, 'utf8'));
 }
 
 describe('no renderer module may bypass the shared <Icon> component (FR-002)', () => {
