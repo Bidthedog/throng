@@ -37,6 +37,16 @@ stores: `renderer/state/` (`workspace-store.tsx`, `projects-store.tsx`, `subwork
   Panel's menu; a status bar control or chord is an accelerator over the menu, not a substitute.
   Continuous/navigational input (scroll, find-next, column-select) is exempt but still rebindable.
   The constitution enumerates the known pre-existing gaps — do not add to them.
+- **One gesture follows a link** (constitution **5.5.0**). A link rendered inside content — terminal
+  output, document text, a preview, a dialog or notice body — follows on **Ctrl+click**, and on
+  **Ctrl+Enter** where it holds a keyboard position; a plain click never navigates. Hover names the
+  gesture, and a panel's menu over a link offers Open Link / Copy Link Address. Tree rows, result
+  rows, tabs, buttons and menu items are not links. Known gap: `about/about-app.tsx` follows its
+  links on a plain click — do not copy it.
+- **A preference picks the default; the menu offers every variant** (constitution **5.5.0**). Where
+  a preference chooses an action's variant, the menu names each variant ("Copy as Plain Text"), and a
+  plain item beside them runs the preference's choice labelled for the action ("Copy"), never for a
+  variant — so it is not a second row naming one command.
 - **Displayed quantities are digit-grouped** (constitution 4.5.0, scope widened by **5.4.0**). Any
   **quantity** the UI renders — on any surface, not just a preference editor — goes through
   `formatGrouped` from `@throng/core`, and anything read back goes through `parseGrouped` — never

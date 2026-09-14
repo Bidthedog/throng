@@ -1,6 +1,59 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 5.4.1 → 5.5.0
+Bump rationale: MINOR, two rules added to an existing principle. Nothing is removed and no rule
+                is redefined; every surface that conformed before still conforms.
+
+Modified sections:
+  - Principle VI → ADDED "One gesture follows a link, everywhere": a link inside content is
+    followed by Ctrl+click (Cmd+click on macOS) or, where it holds a keyboard position,
+    Ctrl+Enter; a plain click never navigates; hover names the gesture; a panel's menu over a link
+    offers Open Link and Copy Link Address. Scoped by definition to references inside content, so
+    tree, list and result rows, tabs, buttons and menu items keep their own click behaviour.
+  - Principle VI → ADDED "A preference picks the default; the menu offers every variant": where a
+    preference chooses an action's variant, the menu names every variant, and a plain item beside
+    them runs the preference's choice under the action's own label.
+  - Principle VI → Rationale extended by one sentence covering both.
+
+Added: nothing beyond the two rules. Removed: nothing.
+
+Why now: the same decision was made three times in three places without a rule to point at —
+         024 FR-019c for terminal links, spec 044 FR-094/FR-096 for preview links, and #394 for
+         file links in editors and terminals — and the default-plus-variants shape twice, in 044
+         FR-035a–c (copy formats) and #394 (link targets), with the maintainer citing #394 as the
+         pattern while clarifying 044. A convention re-derived per feature is one feature away
+         from being derived differently.
+
+Verified against the code on 2026-09-14, not inferred from the specs:
+  (1) Terminal OSC 8 and plain-text URL links already require Ctrl/Cmd+click
+      (terminal/use-terminal.ts, openTerminalLink), and the terminal content menu already offers
+      Open Link / Copy Link Address (terminal/terminal-content-menu.ts).
+  (2) KNOWN GAP: the About window follows its licence, repository and third-party links on a
+      plain click (about/about-app.tsx). 020 FR-003a requires the licence link but names no
+      gesture, so no shipped requirement is contradicted — the gap is recorded IN the rule, per
+      the 4.6.0 / 5.4.0 precedent for a rule the shipped app does not yet fully satisfy.
+  (3) KNOWN GAP: nothing implements Ctrl+Enter on a link yet.
+  (4) The variants rule was checked against the one-row-per-command rule (006 FR-030, and 043's
+      clarification moving Find in Files under Open In → Search). A plain item labelled for the
+      action is a different command from each variant row, and the rule says so explicitly.
+      Open In ▸ on a Files & Folders row and on a Find in Files result already conform; no menu
+      carries a plain item beside named variants today, so nothing shipped is non-compliant.
+
+Templates requiring updates:
+  ✅ .specify/templates/plan-template.md      — no change needed (Constitution Check reads this file)
+  ✅ .specify/templates/spec-template.md      — no change needed (no UX rule enumerated)
+  ✅ .specify/templates/tasks-template.md     — no change needed
+  ✅ .claude/agents/throng-renderer-ui.md     — updated: both rules added to "Rules a UI change must
+                                                satisfy", citing 5.5.0 and the About-window gap
+
+Not updated, deliberately: specs/024 and specs/044 already state these behaviours for their own
+                           surfaces; they are the evidence for the rule, not text it rewrites.
+
+Follow-up TODOs: none deferred. The two gaps are tracked in the rule itself.
+
+---- previous report ----
+
 Version change: 5.4.0 → 5.4.1
 Bump rationale: PATCH. A factual correction to a recorded audit. The rule itself is unchanged in
                 what it requires; only the statement of which menus currently satisfy it moves.
@@ -1588,6 +1641,55 @@ row means.
 - The test is whether **any** future state of the application would enable it. If yes,
   disable it now. If no, do not draw it.
 
+**One gesture follows a link, everywhere.** A link that navigates on a plain click on one
+surface and needs a modifier on another teaches the user to click warily on all of them, and
+a plain click that navigates takes the gesture every content surface already uses to place
+a caret or start a selection.
+
+- A **link**, for this rule, is a reference rendered *inside content*: terminal output,
+  document text, a rendered preview, and the body of a dialog or notice. Tree rows, list and
+  result rows, tabs, buttons and menu items are not links; their click behaviour is their
+  own (a Files & Folders row, for example, follows `editor.openOnClick`).
+- A link MUST be followed by **Ctrl+click** (**Cmd+click** on macOS). A **plain click MUST
+  NOT navigate**: it keeps its ordinary meaning on that surface — placing the caret, starting
+  a selection, or nothing — and a modified click that drags is a selection, not an
+  activation.
+- Where a surface gives a link a **keyboard position** — a focused link, a caret inside a
+  detected reference — **Ctrl+Enter** MUST follow it exactly as Ctrl+click does, through a
+  rebindable command. It MUST NOT take Ctrl+Enter where no link holds that position: a shell
+  keeps the chord (Principle IV, *Terminal keys belong to the terminal*).
+- A link MUST show on hover that it is actionable, and by which gesture, so a plain click
+  that does nothing is never a dead end. A panel's context menu opened over a link MUST
+  offer **Open Link** and **Copy Link Address**, which is the menu route this principle
+  requires for every action.
+- This is an **end-state requirement** delivered incrementally under the Incremental
+  Delivery rule, binding on new work immediately. **Known gaps**, verified against the code
+  on 2026-09-14: the **About window** follows its licence, repository and third-party links
+  on a plain click (`about/about-app.tsx`), and **no surface yet implements Ctrl+Enter** —
+  a terminal link is reachable from the keyboard only through its context menu
+  (024 FR-019d). Terminals already conform on the pointer (024 FR-019c); spec 044
+  (FR-094–FR-096) and #394 add the first Ctrl+Enter.
+
+**A preference picks the default; the menu offers every variant.** When a preference
+decides which variant an action performs — a copy format, where a file or a link opens —
+the preference sets what the plain gesture does, and the menu is where the user overrides
+it once without changing the preference. A default the user cannot step around without a
+trip to Settings is a default they cannot trust.
+
+- The menu that offers such an action MUST list **each variant by name** ("Copy as Plain
+  Text", "New Editor"), each performing that variant whatever the preference says.
+- Where that menu also carries the **plain item** — the row the chord or click performs —
+  it MUST run the preference's current choice and MUST be labelled for the **action**, never
+  for a variant: "Copy", not "Copy as Rich Text". Labelled that way it is a different command
+  from every variant row, so this rule does not put two rows naming one command on a menu,
+  which 006 FR-030 and 043's clarification on the *Open In → Search* row forbid.
+- Where no preference chooses between variants — a submenu of explicit targets with no
+  default, such as **Copy Path ▸** or **Send to Tab ▸** — this rule adds nothing.
+- Conforming today: **Open In ▸** on a Files & Folders row and on a Find in Files result,
+  where the click follows *Open files in* and the submenu names every target. Spec 044's
+  copy formats (FR-035a–c) and #394's link targets are the first to add a plain item beside
+  the named variants.
+
 - The selected project's colour MUST be visually dominant so the active context
   is unambiguous at a glance.
 
@@ -1602,7 +1704,10 @@ letting the status bar and the keyboard be accelerators over it — is what keep
 vocabulary is the same requirement one level down: a menu the user must read end to end
 is not browsable, and grouping only pays if the grouping is the same everywhere, so
 where an item sits is a property of the application rather than a choice each menu makes
-for itself.
+for itself. The link gesture and the default-plus-variants rule are that requirement applied to
+behaviour rather than placement: a gesture learned on one surface, and a menu that always
+offers the alternatives, are what let a user act without first finding out how this surface
+happens to work.
 
 ### VII. Change Review & Approval
 
@@ -1997,7 +2102,7 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 5.4.1 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-09-09
+**Version**: 5.5.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-09-14
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
