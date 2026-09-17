@@ -201,6 +201,10 @@ Only **Command Prompt** actually moves its process working directory when you `c
 from the outside those three appear never to leave the directory they started in. throng therefore
 asks them to report where they are, by adding a prompt hook when the terminal starts.
 
+The same hook lets go of a folder once you `cd` out of it. Windows will not delete a folder a
+running process is sitting in, so with shell integration off, the folder a PowerShell, pwsh or Git
+Bash terminal started in cannot be deleted until that terminal closes.
+
 This is the **Shell integration** setting (Settings → Terminal), **on by default**. It preserves any
 prompt you already have — oh-my-posh, starship, a `$PROFILE` function, an existing
 `PROMPT_COMMAND` — and runs it as normal.
