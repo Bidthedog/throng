@@ -37,6 +37,7 @@ import {
 import type { FailureCause } from '@throng/core';
 import type { SearchCount } from '../search/search-model.js';
 import { shouldDropScrollback } from './clear-detect.js';
+import { TERMINAL_URL_REGEX } from './terminal-url.js';
 import { saveTerminalViewState, takeTerminalViewState } from './terminal-view-state.js';
 import { parseOsc52 } from './osc52.js';
 import { reportTerminalCwd } from './cwd-store.js';
@@ -798,6 +799,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
     // on hover, which is the actionable affordance (FR-019a/c).
     term.loadAddon(
       new WebLinksAddon((event, uri) => openTerminalLink(event, uri), {
+        urlRegex: TERMINAL_URL_REGEX, // #198: keeps a balanced `(…)` in the url
         hover: (event, uri) => setHovered(uri, event),
         leave: () => setHovered(undefined),
       }),

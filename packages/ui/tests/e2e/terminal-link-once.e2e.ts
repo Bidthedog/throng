@@ -318,7 +318,8 @@ test('Ctrl+clicking an OSC 8 link whose text IS the url opens the browser exactl
 
 test('Ctrl+clicking a PLAIN-TEXT url opens exactly once', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-link2-'));
-  const url = 'https://example.com/plain-text-url';
+  // Balanced parentheses belong to the url (#198: Wikipedia's `Bash_(Unix_shell)` opened as `Bash_`).
+  const url = 'https://example.com/wiki/Plain_(text_url)';
   try {
     writePlainScript(root, url);
     await runApp(async (app, win) => {
