@@ -93,13 +93,15 @@ function Write-Summary([string] $line) {
 #
 # The count is printed live on every run because what made the old gap dangerous was silence, not
 # size — nobody can fix an environment limit from inside the repo, but everybody should see it.
+# A notice, not a warning: it is still an annotation on every run's summary, but it describes a
+# known, accepted limit of the hosted runner rather than something wrong with the run.
 if ($env:CI -eq 'true') {
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
   $elevated = (New-Object Security.Principal.WindowsPrincipal($identity)).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator)
   if ($elevated) {
     $guarded = @(Select-String -Path 'packages/ui/tests/e2e/*.e2e.ts' -Pattern 'skipIfElevated' -List).Count
-    Write-Host "::warning::E2E lane $Lane runs WITH administrator rights, so $guarded spec files self-skip via skipIfElevated(). A green E2E stage says nothing about those specs; they are covered by a developer's non-elevated run."
+    Write-Host "::notice::E2E lane $Lane runs WITH administrator rights, so $guarded spec files self-skip via skipIfElevated(). A green E2E stage says nothing about those specs; they are covered by a developer's non-elevated run."
   }
   else {
     Write-Host "${Lane}: running without admin rights — skipIfElevated specs will execute"

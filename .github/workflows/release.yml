@@ -80,8 +80,8 @@ jobs:
       THRONG_E2E_TRACE: ${{ inputs.trace && '1' || '' }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -107,7 +107,7 @@ jobs:
         run: ./scripts/ci-e2e-run.ps1
       - name: Upload traces
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-results-e2e-full
           path: test-results/
@@ -122,8 +122,8 @@ jobs:
     outputs:
       version: ${{ steps.ver.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -151,7 +151,7 @@ jobs:
             echo "ARTIFACT_PATHS_EOF"
           } >> "$GITHUB_OUTPUT"
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: throng-installer
           # 042 FR-012 — every artifact is named. A `*.exe` glob would silently pick up a second
@@ -175,8 +175,8 @@ jobs:
     timeout-minutes: 30
     needs: build-installer
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -185,7 +185,7 @@ jobs:
       - name: Build (@throng/core for the verify harness)
         run: npm run build
       - name: Download installer
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: throng-installer
           path: dist/installer
@@ -221,7 +221,7 @@ jobs:
           cat release-body-preview.md
       - name: Upload verdicts and the rendered body
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: verification-verdict
           path: |
@@ -244,8 +244,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -254,12 +254,12 @@ jobs:
       - name: Build (@throng/core for the gate + checksum)
         run: npm run build
       - name: Download installer
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: throng-installer
           path: dist/installer
       - name: Download verdict
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: verification-verdict
           path: .
