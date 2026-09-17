@@ -106,11 +106,18 @@ export function resolveCommandRecipe(
  * themed prompt (oh-my-posh, starship, a profile function) still renders. It is deliberately free
  * of double quotes and of literal escape characters so it survives being passed as one argv
  * element through node-pty.
+ *
+ * #387 — the same prompt also moves the PROCESS working directory to the provider location. A
+ * process's working directory is an open handle without delete sharing, so a shell left at its
+ * launch directory kept that folder undeletable after the user had `cd`-ed out of it. Only a
+ * FileSystem location is applied; a registry or certificate location has no directory to move to.
  */
 function powershellIntegration(): string {
   return [
     '$__throngPrior = $function:prompt;',
     'function global:prompt {',
+    '$__l = Get-Location;',
+    "if ($__l.Provider.Name -eq 'FileSystem') { try { [System.IO.Directory]::SetCurrentDirectory($__l.ProviderPath) } catch {} };",
     '$__o = if ($__throngPrior) { & $__throngPrior } else { $(Get-Location).Path + [char]62 + [char]32 };',
     '[char]27 + [char]93 + [char]57 + [char]59 + [char]57 + [char]59 + $(Get-Location).ProviderPath + [char]7 + $__o',
     '}',
@@ -134,6 +141,23 @@ function powershellIntegration(): string {
  * Any PROMPT_COMMAND already set is preserved and run after ours.
  */
 /**
+ * #387 — the directory a shell is asked to START in, for a flavour that is spawned somewhere else.
+ *
+ * Git for Windows' `bin\bash.exe` is a launcher: it starts `usr\bin\bash.exe` and waits for it for
+ * the terminal's whole life, sitting in the directory it was spawned in. The real bash follows a
+ * `cd`; the launcher never does, so it alone kept the start folder undeletable. Such a flavour is
+ * spawned in its own install directory instead — already held by the running executable — and the
+ * shell moves itself to the start directory, which it reads from this variable and then unsets.
+ */
+export const START_DIR_ENV = 'THRONG_START_DIR';
+
+/** Flavours whose spawned process stays in its launch directory whatever the shell does. */
+export const LAUNCHER_HOLDS_START_DIR = new Set(['git-bash']);
+
+/** The shell statement a Startup Command is prefixed with when the shell starts elsewhere. */
+export const BASH_ENTER_START_DIR = `cd -- "$${START_DIR_ENV}" && unset ${START_DIR_ENV}`;
+
+/**
  * Git Bash / MSYS reports its directory through PROMPT_COMMAND — delivered as an ENVIRONMENT
  * VARIABLE, never spliced into argv.
  *
@@ -146,8 +170,12 @@ function powershellIntegration(): string {
  * bash applies PROMPT_COMMAND from the environment, and it survives the recipe\'s `exec bash -i`
  * for the same reason -- which is what makes this simpler than the export it replaces, not just
  * safer. Any PROMPT_COMMAND the user already has is preserved and runs after ours.
+ *
+ * #387 — it also carries the one-shot move into {@link START_DIR_ENV}, for a shell spawned in its
+ * launcher's install folder. With the variable unset, that clause is a no-op.
  */
 export const BASH_PROMPT_COMMAND =
+  `if [ -n "$${START_DIR_ENV}" ]; then cd -- "$${START_DIR_ENV}"; unset ${START_DIR_ENV}; fi; ` +
   'printf "\\033]9;9;%s\\007" "$(cygpath -w "$PWD" 2>/dev/null || printf %s "$PWD")"';
 
 /** Per-flavour integration snippets. A flavour absent here needs none. */

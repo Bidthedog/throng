@@ -133,6 +133,24 @@ describe('terminal.list { refreshCwd } (029 FR-013)', () => {
     expect(s.processCwd.reads).toBe(1);
   });
 
+  it('never reads a session spawned away from its start directory (#387)', async () => {
+    const s = makeService();
+    await s.call('terminal.attach', {
+      panelId: 'p1',
+      projectId: 'proj',
+      launch: { ...launch, spawnCwd: 'C:/Git/bin' },
+      cols: 80,
+      rows: 24,
+    });
+    // The launcher's own directory — true of the process, and nothing to do with the terminal.
+    s.processCwd.cwd = 'C:/Git/bin';
+
+    const listed = await s.list({ refreshCwd: true });
+
+    expect(listed.sessions[0]?.cwd).toBe('C:/proj');
+    expect(s.processCwd.reads, 'there was nothing to read').toBe(0);
+  });
+
   it('reports the launch cwd when the OS will not say, rather than dropping the field', async () => {
     const s = makeService();
     await s.attach();

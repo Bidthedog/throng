@@ -5,7 +5,10 @@
  * the project root; a null root (no active project) is refused.
  */
 import {
+  BASH_ENTER_START_DIR,
   COMMAND_PLACEHOLDER,
+  LAUNCHER_HOLDS_START_DIR,
+  START_DIR_ENV,
   expandCommandRecipe,
   isValidCommandRecipe,
   prepareStartupCommand,
@@ -16,7 +19,14 @@ import {
 export interface LaunchSpec {
   file: string;
   args: string[];
+  /** The directory the terminal starts IN — what the panel, the lock and directory memory mean. */
   cwd: string;
+  /**
+   * Where to SPAWN the process, when that is not {@link cwd} (#387). Set only for a flavour whose
+   * launcher never leaves its launch directory; the shell then enters `cwd` itself. The spawned
+   * process's own working directory says nothing about the terminal's, so it is not observed.
+   */
+  spawnCwd?: string;
   /**
    * Environment applied at launch (025 follow-up) — how a shell that cannot be observed is asked
    * to report its directory, when the shell supports it. Nothing parses an environment variable on
@@ -126,16 +136,34 @@ export function resolveLaunchSpec(
   // the developer's disk. Shell integration runs next, so the prompt is reporting before the user's
   // command produces any output — and so a long-running command never delays it. All three travel
   // through the same recipe: to the shell this is simply one script to run.
-  const command = [historyOff, integration, userCommand].filter((part) => part !== '').join('; ');
+  //
+  // #387 — a flavour whose launcher never leaves its launch directory is spawned in its own install
+  // directory, and the shell enters the start directory itself: through the prompt hook, which needs
+  // shell integration, and ahead of a Startup Command, which runs before any prompt. With integration
+  // off nothing could move the shell, so it is spawned in the start directory as before.
+  const spawnCwd =
+    LAUNCHER_HOLDS_START_DIR.has(flavour.id ?? '') && flavour.shellIntegrationEnv !== undefined
+      ? directoryOf(flavour.file)
+      : undefined;
+  const command = [historyOff, integration, spawnCwd && userCommand ? BASH_ENTER_START_DIR : '', userCommand]
+    .filter((part) => part !== '')
+    .join('; ');
+  const finish = (spec: LaunchSpec): LaunchSpec => (spawnCwd ? { ...spec, spawnCwd } : spec);
 
   // Nothing to run → byte-for-byte today's behaviour (FR-006): no extra args, no PTY write.
   const hasEnv =
     flavour.shellIntegrationEnv !== undefined || flavour.historySuppressionEnv !== undefined;
   const env = hasEnv
-    ? { ...flavour.shellIntegrationEnv, ...flavour.historySuppressionEnv }
+    ? {
+        ...flavour.shellIntegrationEnv,
+        ...flavour.historySuppressionEnv,
+        ...(spawnCwd ? { [START_DIR_ENV]: projectRoot } : {}),
+      }
     : undefined;
   if (command === '') {
-    return env ? { file: flavour.file, args, cwd: projectRoot, env } : { file: flavour.file, args, cwd: projectRoot };
+    return finish(
+      env ? { file: flavour.file, args, cwd: projectRoot, env } : { file: flavour.file, args, cwd: projectRoot },
+    );
   }
 
   // A recipe puts the command in argv. It goes LAST so the recipe's terminator (`/K`,
@@ -156,20 +184,29 @@ export function resolveLaunchSpec(
     // with spaces is correct here precisely BECAUSE the parts keep their own quoting: the command
     // arrives exactly as the user wrote it rather than re-escaped into something cmd cannot read.
     if (NEEDS_VERBATIM_COMMAND_LINE.has(flavour.id ?? '')) {
-      return {
+      return finish({
         file: flavour.file,
         args: expanded,
         commandLine: expanded.join(' '),
         cwd: projectRoot,
         ...(env ? { env } : {}),
-      };
+      });
     }
-    return { file: flavour.file, args: expanded, cwd: projectRoot, ...(env ? { env } : {}) };
+    return finish({ file: flavour.file, args: expanded, cwd: projectRoot, ...(env ? { env } : {}) });
   }
 
   // No recipe → the universal fallback (FR-012). Exactly one of the two paths carries the
-  // command, so it can never run twice.
-  return userCommand === ''
-    ? { file: flavour.file, args, cwd: projectRoot, ...(env ? { env } : {}) }
-    : { file: flavour.file, args, cwd: projectRoot, writeOnReady: userCommand, ...(env ? { env } : {}) };
+  // command, so it can never run twice. The command is typed once the shell is READY, so the
+  // prompt hook has already entered the start directory by then.
+  return finish(
+    userCommand === ''
+      ? { file: flavour.file, args, cwd: projectRoot, ...(env ? { env } : {}) }
+      : { file: flavour.file, args, cwd: projectRoot, writeOnReady: userCommand, ...(env ? { env } : {}) },
+  );
+}
+
+/** The directory part of an absolute executable path, or undefined for a bare name. */
+function directoryOf(file: string): string | undefined {
+  const cut = Math.max(file.lastIndexOf('\\'), file.lastIndexOf('/'));
+  return cut > 0 ? file.slice(0, cut) : undefined;
 }
