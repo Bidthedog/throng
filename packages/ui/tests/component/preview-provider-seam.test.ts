@@ -397,6 +397,10 @@ describe('the default open action follows the provider’s kind (FR-050, FR-051,
   /** A Files & Folders click, once the settings are live and the workspace has loaded. */
   async function treeOpen(absPath: string): Promise<void> {
     await waitFor(() => expect(live.ws?.layout).toBeTruthy());
+    // The Probe renders in the same commit as `EditorOpenListener`, whose `addEventListener` is a passive
+    // effect of that commit: flush it before dispatching, or the intent can reach a window with no listener
+    // and be dropped (1 in 20 on React 19; `editor-open-router.test.ts`'s `mountChrome` is the same fix).
+    await act(async () => {});
     await act(async () => {
       const relPath = absPath.slice(ROOT.length + 1);
       window.dispatchEvent(new CustomEvent('throng:open-file', { detail: { projectId: PROJECT, relPath, absPath } }));
