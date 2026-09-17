@@ -136,6 +136,11 @@ const BLOCKED_IMAGE_SELECTOR = 'img[data-throng-alt]';
  * The element that scrolls this body: the chrome's body host (`preview-panel.css`), or the body itself
  * when it is mounted outside a panel.
  */
+/** Whether `scroller` sits at its bottom extent, within the engine's sub-pixel rounding. */
+function atScrollEnd(scroller: HTMLElement): boolean {
+  return scroller.scrollTop >= scroller.scrollHeight - scroller.clientHeight - 1;
+}
+
 function scrollerOf(body: HTMLElement): HTMLElement {
   return body.closest<HTMLElement>('.preview-panel__body') ?? body;
 }
@@ -268,7 +273,19 @@ export function MarkdownBody({
     const scroller = scrollerOf(body);
     const own = ownScrollTop.current;
     ownScrollTop.current = null;
-    if (own !== null && scroller.scrollTop === own) return;
+    // The claim stands while the position is this body's, so a shrink that lands in a later frame is read the
+    // same way as one that lands in this frame.
+    if (own !== null && scroller.scrollTop === own) {
+      ownScrollTop.current = own;
+      return;
+    }
+    if (own !== null && scroller.scrollTop < own && atScrollEnd(scroller)) {
+      // Content that laid out after this body placed itself made the document shorter, and the engine clamped
+      // the position to the new end: still this body's place, not the reader's scroll (hands-on report
+      // 2026-09-17).
+      ownScrollTop.current = own;
+      return;
+    }
     const report = onTopLineChangeRef.current;
     const editorLine = editorLineRef.current;
     if (report === undefined || editorLine === null) return;
@@ -434,6 +451,22 @@ export function MarkdownBody({
         // A newer text, or an unmount, has overtaken this render: drawing it would show stale content.
         if (cancelled || body === null) return;
         const fragment = r.render(text, { panelId, docPath: filePath, projectRoot, remoteImages, frontMatter });
+        // Dressed BEFORE it is inserted, so the place kept or restored below is measured against the layout the
+        // reader will see. The front matter class alone makes its table shorter; dressed after the restore, the
+        // text below moved up under the reader, and at the preview's end the engine's clamp read as the
+        // reader's scroll and pulled the editor up with it (hands-on report 2026-09-17).
+        // Only the table a front matter block rendered — never the document's own first element, which is
+        // what `firstElementChild` is when the block was empty (fix round 1, item 12).
+        const first = fragment.firstElementChild;
+        if (
+          frontMatter &&
+          splitFrontMatter(text).source !== null &&
+          first?.tagName === 'TABLE' &&
+          first.getAttribute('data-source-line') === '0'
+        ) {
+          first.classList.add(FRONT_MATTER_CLASS);
+        }
+        for (const img of fragment.querySelectorAll<HTMLImageElement>(BLOCKED_IMAGE_SELECTOR)) showAltText(img);
         const scroller = scrollerOf(body);
         const file = filePath;
         const previous = shown.current;
@@ -485,18 +518,6 @@ export function MarkdownBody({
         applyPendingSync(scroller);
         shown.current = { text, filePath: file, ...(navigated !== undefined ? { navigationSeq: navigated } : {}) };
 
-        // Only the table a front matter block rendered — never the document's own first element, which is
-        // what `firstElementChild` is when the block was empty (fix round 1, item 12).
-        const first = body.firstElementChild;
-        if (
-          frontMatter &&
-          splitFrontMatter(text).source !== null &&
-          first?.tagName === 'TABLE' &&
-          first.getAttribute('data-source-line') === '0'
-        ) {
-          first.classList.add(FRONT_MATTER_CLASS);
-        }
-        for (const img of body.querySelectorAll<HTMLImageElement>(BLOCKED_IMAGE_SELECTOR)) showAltText(img);
         // FR-118 — a focused link this draw replaced no longer holds focus, and its removal sent no blur.
         const active = body.ownerDocument.activeElement;
         onLinkTargetRef.current?.('focus', active !== null && body.contains(active) ? linkTargetOf(active) : null);

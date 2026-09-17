@@ -1,3 +1,12 @@
+---
+title: Two-way scroll sync
+tags:
+  - sync
+  - preview
+nested:
+  owner: preview
+  version: 1
+---
 # Two-way scroll sync
 
 Headings far apart, one tall code block, and short paragraphs so every block is small.
