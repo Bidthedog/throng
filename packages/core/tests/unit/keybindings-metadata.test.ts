@@ -24,6 +24,16 @@ describe('KEYBINDINGS_METADATA completeness (FR-047/030)', () => {
     }
   });
 
+  it('describes the scroll-sync toggle once, as "Synchronise Scrolling" in Editor (044 FR-122d)', () => {
+    const matches = KEYBINDINGS_METADATA.filter((d) => d.key === 'preview.toggleSyncScroll');
+    expect(matches).toHaveLength(1);
+    expect(matches[0].label).toBe('Synchronise Scrolling');
+    expect(matches[0].group).toBe('Editor');
+    // Beside "Toggle word wrap", the other view toggle in the group.
+    const keys = KEYBINDINGS_METADATA.map((d) => d.key);
+    expect(keys.indexOf('preview.toggleSyncScroll')).toBe(keys.indexOf('editor.toggleWordWrap') + 1);
+  });
+
   it('has unique descriptor keys', () => {
     const seen = new Set<string>();
     for (const d of KEYBINDINGS_METADATA) {

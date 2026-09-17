@@ -5,6 +5,7 @@ import {
   areaForToken,
   assertThemeAreaGroups,
   descriptorForThemeToken,
+  mechanicalCopy,
   themeEditableTokens,
 } from '../../src/config/theme-metadata.js';
 import { assertEveryKeyDescribed, auditRegistry, type FieldDescriptor } from '../../src/config/metadata.js';
@@ -56,6 +57,19 @@ describe('THEME_METADATA completeness (FR-038/047)', () => {
       expect(THEME_METADATA.find((d) => d.key === legacy), legacy).toBeUndefined();
     }
     expect(THEME_METADATA.find((d) => d.key === 'typography.button.family')?.control).toBe('font-family');
+  });
+
+  it('gives icons.syncScroll a written label and description, not the mechanical fallback (044 FR-122c)', () => {
+    const desc = THEME_METADATA.find((d) => d.key === 'icons.syncScroll');
+    expect(desc, 'icons.syncScroll').toBeDefined();
+    const fallback = mechanicalCopy('icons.syncScroll');
+    expect(desc!.label).not.toBe(fallback.label);
+    expect(desc!.description).not.toBe(fallback.description);
+    expect(desc!.label.length).toBeGreaterThan(0);
+    expect(desc!.description.length).toBeGreaterThan(0);
+    // Analyze T1 — on the preview's OWN bar the toggle sits beside Open in Editor / Go to Editor, not beside
+    // a preview button, so the copy must not place it there.
+    expect(desc!.description).not.toContain('beside the preview button');
   });
 
   it('has unique keys and non-empty label/description/group', () => {

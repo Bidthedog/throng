@@ -22,6 +22,7 @@ describe('FilesService mutations confined to the project root (004 T038/T046)', 
         revealed.push({ op: 'open', path: p });
         return '';
       },
+      openExternal: async () => {},
     });
     svc = new FilesService(fs, shell);
     svc.setRoot(root);
@@ -147,6 +148,7 @@ describe('FilesService announces the moves it actually performed (019 / #87)', (
   const shell = new ElectronShellIntegration({
     showItemInFolder: () => {},
     openPath: async () => '',
+    openExternal: async () => {},
   });
 
   /** `fs`, with its mutations logged — and, optionally, made to fail. */

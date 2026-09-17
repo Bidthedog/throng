@@ -240,7 +240,7 @@ function Host({ sidebar = false }: { sidebar?: boolean } = {}): ReactElement {
           keybindings: DEFAULT_KEYBINDINGS,
           otherTabs: [],
           editor: null,
-          editorFailure: false,
+          panelFailure: false,
           detach: {
             subWorkspaces: detach.subWorkspaces.map((s) => ({
               id: s.id,

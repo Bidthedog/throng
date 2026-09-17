@@ -25,6 +25,8 @@ import { EditorPanel } from '../../../src/renderer/editor/editor-panel.js';
 import { getEditorActions } from '../../../src/renderer/editor/editor-actions.js';
 import { EditorNoticeDialog } from '../../../src/renderer/editor/editor-notice-dialog.js';
 import { MissingFileWatcher } from '../../../src/renderer/editor/missing-file-watcher.js';
+import { EditorChrome } from '../../../src/renderer/editor/editor-chrome.js';
+import { PanelPlaceholder } from '../../../src/renderer/workspace/panel-placeholder.js';
 
 /**
  * Mount a REAL CodeMirror editor panel in jsdom, behind a fake `editor.*` bridge.
@@ -74,6 +76,8 @@ export interface EditorHarness {
    * reset would skip all of it and prove nothing about a second open.
    */
   openFile(doc: EditorDoc & { absPath: string }): Promise<void>;
+  /** 044 US7 — make a later load of `doc.absPath` succeed (a Back / Forward step), without opening it now. */
+  serve(doc: EditorDoc & { absPath: string }): void;
   /**
    * Tell the view the file MOVED, as `markMoved` does (019 FR-002).
    *
@@ -127,6 +131,8 @@ export interface EditorHarness {
   /** The document as the view holds it. */
   text(): string;
   readonly calls: Record<string, ReturnType<typeof vi.fn>>;
+  /** Unmount the whole tree — for a test about what its listeners leave behind. */
+  unmount(): void;
 }
 
 const PROJECT = 'proj-editor';
@@ -192,6 +198,25 @@ export function mountEditor(opts: {
    * the document text fails at 1.
    */
   configDelayTicks?: number;
+  /**
+   * 044 — mount the panel the way a window does, for tests about WIRING rather than about the editor:
+   * through `PanelPlaceholder` (its header, its menu, `PanelBody`'s choice of root), with `EditorChrome`
+   * beside it, and the project registered so the panel has an origin project whose root is
+   * `projectRoot`. All off by default; each is a further subject.
+   */
+  withHeader?: boolean;
+  withChrome?: boolean;
+  registerProject?: boolean;
+  /** Keybindings delivered with the settings, as `config.get` would — merged over the defaults. */
+  keybindings?: Record<string, string[]>;
+  /** Extra `window.throng` members (a fake `preview` bridge, say), merged over the harness's own. */
+  throng?: Record<string, unknown>;
+  /** 044 US7 — window-level components mounted beside the panel (a key handler, say), each with its own key. */
+  extras?: ReactElement[];
+  /** 044 US7 — further persisted `config` fields on the panel (its `history`, say), beside `filePath`. */
+  panelConfig?: Record<string, unknown>;
+  /** 044 US7 — mount by a restoring LOAD rather than by adopting a live document (see `restoring`). */
+  restoreByLoad?: boolean;
 }): EditorHarness {
   const panelId = opts.panelId ?? 'p-ed';
   const projectRoot = opts.projectRoot ?? 'C:/proj';
@@ -203,6 +228,12 @@ export function mountEditor(opts: {
   const dispatched: unknown[] = [];
   /** Files this harness will serve to a subsequent `openFile`, keyed by path. */
   const pendingOpens = new Map<string, EditorDoc>();
+  /**
+   * 044 US7 — mount the way a RESTORE does: UI main holds no document for the panel yet, so the first
+   * `getContent` answers `null` and the mount LOADS `config.filePath` (served from `opts.doc`).
+   */
+  let restoring = opts.restoreByLoad === true;
+  if (restoring && opts.doc.absPath) pendingOpens.set(opts.doc.absPath, opts.doc);
   const broadcastReset = (doc: EditorDoc): void => {
     for (const fn of [...listeners]) {
       fn({
@@ -225,6 +256,8 @@ export function mountEditor(opts: {
     reload: vi.fn(() => Promise.resolve({ ok: true })),
     undo: vi.fn(),
     redo: vi.fn(),
+    // The one-buffer oracle (FR-011a): the file is open nowhere else and not refused, unless a test says so.
+    openInto: vi.fn(() => Promise.resolve({ action: 'open' })),
   };
 
   /*
@@ -244,10 +277,10 @@ export function mountEditor(opts: {
     panel: { notifyDestroyed: vi.fn(), notifyRenamed: vi.fn() },
     config: {
       get: () =>
-        afterTicks(
-          opts.configDelayTicks ?? 0,
-          opts.settings ? { settings: opts.settings } : { settings: undefined },
-        ),
+        afterTicks(opts.configDelayTicks ?? 0, {
+          settings: opts.settings,
+          ...(opts.keybindings ? { keybindings: { bindings: opts.keybindings } } : {}),
+        }),
       /*
        * A REAL subscription, not a stub that returns an unsubscribe and forgets the callback.
        *
@@ -272,7 +305,8 @@ export function mountEditor(opts: {
        * new path from it, and re-derives the language BEFORE the reset lands — so the broadcast has
        * to happen inside the same call, not be left to the test to fire afterwards.
        */
-      load: (req: { absPath: string }) => {
+      // Recorded (044 US7): a history step is a load carrying `navigation`, and that request is the claim.
+      load: (calls.load = vi.fn((req: { absPath: string }) => {
         const next = pendingOpens.get(req.absPath);
         if (!next) return Promise.resolve({ ok: false as const, reason: 'io' });
         current = { dirty: false, ...next };
@@ -285,9 +319,11 @@ export function mountEditor(opts: {
           hasBom: next.hasBom ?? false,
           lineEnding: next.lineEnding ?? 'lf',
         });
-      },
+      })),
       getContent: () =>
-        Promise.resolve({
+        restoring
+          ? ((restoring = false), Promise.resolve(null))
+          : Promise.resolve({
           text: current.text,
           version: current.version,
           dirty: current.dirty ?? false,
@@ -307,6 +343,7 @@ export function mountEditor(opts: {
       },
       dispatch: (msg: unknown) => dispatched.push(msg),
     },
+    ...opts.throng,
   });
 
   const panel: Panel = {
@@ -315,7 +352,9 @@ export function mountEditor(opts: {
     originProjectId: PROJECT,
     title: 'Panel 1',
     kind: 'editor',
-    ...(current.absPath ? { config: { filePath: current.absPath } } : {}),
+    ...(current.absPath || opts.panelConfig
+      ? { config: { ...(current.absPath ? { filePath: current.absPath } : {}), ...opts.panelConfig } }
+      : {}),
   };
 
   /*
@@ -344,7 +383,22 @@ export function mountEditor(opts: {
         case 'subworkspace.list':
           return Promise.resolve({ subWorkspaces: [] } as T);
         case 'projects.list':
-          return Promise.resolve({ projects: [] } as T);
+          return Promise.resolve({
+            projects: opts.registerProject
+              ? [
+                  {
+                    id: PROJECT,
+                    name: 'Proj',
+                    colour: '#336699',
+                    rootFolder: projectRoot,
+                    isActive: true,
+                    createdAt: '2026-01-01T00:00:00.000Z',
+                    updatedAt: '2026-01-01T00:00:00.000Z',
+                    hiddenPaths: [],
+                  },
+                ]
+              : [],
+          } as T);
         default:
           return Promise.resolve({} as T);
       }
@@ -404,14 +458,18 @@ export function mountEditor(opts: {
                   createElement(
                     Fragment,
                     null,
-                    createElement(EditorPanel, {
-                      panel,
-                      tabId: 't1',
-                      projectRoot,
-                      rootless: opts.rootless ?? false,
-                    }),
+                    opts.withHeader
+                      ? createElement(PanelPlaceholder, { panel, tabId: 't1' })
+                      : createElement(EditorPanel, {
+                          panel,
+                          tabId: 't1',
+                          projectRoot,
+                          rootless: opts.rootless ?? false,
+                        }),
+                    opts.withChrome ? createElement(EditorChrome, null) : null,
                     opts.withNotices ? createElement(EditorNoticeDialog, null) : null,
                     opts.withMissingFileWatcher ? createElement(MissingFileWatcher, null) : null,
+                    ...(opts.extras ?? []),
                   ),
                 ),
               ),
@@ -421,11 +479,12 @@ export function mountEditor(opts: {
       ),
     );
 
-  render(tree());
+  const rendered = render(tree());
 
   return {
     dispatched,
     calls,
+    unmount: () => rendered.unmount(),
     pushReset(doc: EditorDoc) {
       current = { ...current, ...doc };
       broadcastReset(doc);
@@ -446,6 +505,9 @@ export function mountEditor(opts: {
     },
     settingsLoaded(): boolean {
       return witness.loaded;
+    },
+    serve(doc: EditorDoc & { absPath: string }) {
+      pendingOpens.set(doc.absPath, doc);
     },
     async openFile(doc: EditorDoc & { absPath: string }) {
       pendingOpens.set(doc.absPath, doc);

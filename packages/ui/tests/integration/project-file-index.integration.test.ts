@@ -15,7 +15,7 @@ import { mkdtemp, mkdir, rm, rename, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import type { Disposable, IFileWatcher, WatchOptions } from '@throng/core';
+import { DEFAULT_APP_SETTINGS, type Disposable, type IFileWatcher, type WatchOptions } from '@throng/core';
 import { NodeFileSystem } from '../../src/main/node-file-system.js';
 import { NodeFileWatcher } from '../../src/main/node-file-watcher.js';
 import {
@@ -335,6 +335,38 @@ describe('ProjectFileIndexService over a real tree and a real watcher (033, §2)
       await h.destroy();
     }
   }, 40_000);
+
+  /*
+   * 033 AS-12 / FR-006 at the SHIPPED setting — moved here from `quick-open.e2e.ts` (044 T226).
+   *
+   * The E2E typed `quarantined` into a real Quick Open over the deep tree and expected no rows, because
+   * the only two files carrying that word sit under `.git` and `node_modules`. Every hop of that is
+   * cheaper than a window: main hands this service `currentSettings.explorer.excludeGlobs`
+   * (`main.ts`), the shipped value of that setting is pinned in `app-settings.explorer.test.ts`, and
+   * Quick Open lists only what this service pushes. The one thing no test here said was that the
+   * SHIPPED list, applied by a real walk, keeps both folders out — every case above passes its own
+   * globs. So this one passes the shipped setting and the deep tree's two files, at their paths.
+   *
+   * `quick-open-target.e2e.ts` (SC-018) still types the same query into a real modal, at the same
+   * default, alongside the toggle that brings the files back.
+   */
+  it('AS-12 — at the SHIPPED exclude globs, nothing under .git or node_modules is listed (FR-006, FR-070)', async () => {
+    const h = await Harness.create({ globs: [...DEFAULT_APP_SETTINGS.explorer.excludeGlobs] });
+    try {
+      await mkdir(join(h.root, '.git'));
+      await writeFile(join(h.root, '.git', 'quarantined-object.txt'), 'x');
+      await mkdir(join(h.root, 'node_modules', 'quarantined-pkg'), { recursive: true });
+      await writeFile(join(h.root, 'node_modules', 'quarantined-pkg', 'quarantined-module.ts'), 'x');
+      await mkdir(join(h.root, 'src'));
+      await writeFile(join(h.root, 'src', 'kept.ts'), 'k');
+      h.service.subscribe(1, h.root);
+      const paths = await waitForReady(h, 1);
+      // A positive result beside the absence, so an empty walk cannot pass for an excluding one.
+      expect(paths).toEqual(['src/kept.ts']);
+    } finally {
+      await h.destroy();
+    }
+  }, 30_000);
 
   it('S7 — a reconcile that finds no difference sends nothing at all', async () => {
     const h = await Harness.create({ quietMs: 200, reconcileMaxWaitMs: 800 });

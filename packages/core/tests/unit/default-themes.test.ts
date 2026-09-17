@@ -27,7 +27,13 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 68;
  * it and the suite would stay green — the exact drift the colour count has been guarding against
  * since D1, on the half of the theme that had no guard at all.
  */
-const EXPECTED_ICON_TOKEN_COUNT = 65;
+// 69 since 044 (R17): `preview`, `refresh`, `navigateBack` and `navigateForward` — four new ACTIONS,
+// each deliberately not a reuse (`retry` means "try again", `chevronLeft` steps the tab strip).
+// 70 since 044's 2026-09-16 iteration (FR-122c): `syncScroll`, the Synchronise Scrolling toggle — a
+// new ACTION, so a token of its own rather than a reuse of `preview` or `refresh`.
+const EXPECTED_ICON_TOKEN_COUNT = 70;
+/** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */
+const PREVIEW_ICON_TOKENS = ['preview', 'refresh', 'navigateBack', 'navigateForward'] as const;
 /** Tokens removed AFTER the fixture was captured — stripped from the fixture before non-drift compare. */
 const REMOVED_SINCE_FIXTURE = ['activePaneHighlight'];
 /**
@@ -120,6 +126,40 @@ describe('DEFAULT_THEMES (FR-044/046, SC-007)', () => {
     // icon token renders as NOTHING at its call site with no error anywhere (`icon-tokens-exist`).
     expect(THRONG_THEME.icons.findInFiles, 'icons.findInFiles').toBeTruthy();
     expect(THRONG_THEME.icons.searchScope, 'icons.searchScope').toBeTruthy();
+  });
+
+  it('every bundled theme carries the four 044 preview and navigation icon tokens (R17)', () => {
+    for (const token of PREVIEW_ICON_TOKENS) {
+      expect(THRONG_THEME.icons[token], `THRONG_THEME.icons.${token}`).toBeTruthy();
+    }
+    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
+      for (const token of PREVIEW_ICON_TOKENS) {
+        expect(theme.icons[token], `${name}.icons.${token}`).toBeTruthy();
+      }
+    }
+  });
+
+  it('every bundled theme carries the syncScroll icon token (044 FR-122c)', () => {
+    expect(THRONG_THEME.icons.syncScroll, 'THRONG_THEME.icons.syncScroll').toBeTruthy();
+    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
+      expect(theme.icons.syncScroll, `${name}.icons.syncScroll`).toBeTruthy();
+    }
+    // Its own glyph: it sits beside the preview button on an editor's bar, and beside Open in Editor / Go to
+    // Editor on a preview's.
+    const { syncScroll, preview, refresh, retry } = THRONG_THEME.icons;
+    expect([preview, refresh, retry]).not.toContain(syncScroll);
+  });
+
+  it('draws each 044 action with a glyph of its own, not one another action already wears (R17)', () => {
+    const { preview, refresh, navigateBack, navigateForward, retry, chevronLeft, chevronRight, undo, redo } =
+      THRONG_THEME.icons;
+    expect(new Set([preview, refresh, navigateBack, navigateForward]).size, 'four actions, four glyphs').toBe(4);
+    // `retry` is "try again", beside Refresh while the failure banner is up (030 FR-042c).
+    expect(refresh).not.toBe(retry);
+    // The tab strip's step controls and the editor's undo pair are different actions.
+    for (const other of [chevronLeft, chevronRight, undo, redo]) {
+      expect([navigateBack, navigateForward]).not.toContain(other);
+    }
   });
 
   /*

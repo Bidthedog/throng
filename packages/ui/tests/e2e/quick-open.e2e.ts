@@ -1,7 +1,8 @@
 /**
  * 033 US1 (#219) — Quick Open: the chord, the list, and where a chosen file lands.
  *
- * Covers AS-1 to AS-10, AS-12 to AS-15 and AS-18 of the spec, Q1–Q7 of
+ * Covers AS-1 to AS-10, AS-13 to AS-15 and AS-18 of the spec (AS-12 moved to the file index's
+ * integration test, 044 T226 — see its comment below), Q1–Q7 of
  * `contracts/navigation-modals.md §3`, and SC-001 and SC-004, which no other task names.
  *
  * ══ WHAT IS DELIBERATELY NOT HERE ══
@@ -372,37 +373,20 @@ test('clicking a row opens that file and closes the modal (AS-4)', { tag: ['@ext
  * AS-12, AS-13 — what may never appear in the list (FR-005, FR-006, SC-003)
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('a file inside an excluded folder is never listed (AS-12, FR-006)', { tag: ['@extended', '@editor'] }, async () => {
-  const tree = createDeepTree('throng-qo-excl-');
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'QOExcluded', tree.root);
-
-      await openQuickOpen(win);
-      await win.keyboard.type(DEEP_TREE.excludedQuery);
-
-      /*
-       * A POSITIVE query with an exact expected result, not an absence argued from a long list.
-       *
-       * `quarantined` is carried by exactly two files: one under `.git` and one under
-       * `node_modules`. Since FR-070 the SHIPPED `DEFAULT_EXCLUDE_GLOBS` hides BOTH folders, so the
-       * right answer is zero rows and a leak from either shows up as one.
-       *
-       * This assertion used to expect the `node_modules` file and to say in a comment that
-       * `node_modules` was not excluded by default. That was correct when it was written and FR-070
-       * inverted it deliberately — the change is to a shipped default that governs every project's
-       * file tree, which is the intent rather than a side effect.
-       */
-      await expect(quickOpenRows(win)).toHaveCount(0);
-      await expect(win.getByTestId('quickopen-empty')).toBeVisible();
-
-      await win.keyboard.press('Escape');
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
+/*
+ * MOVED (044 T226) — "a file inside an excluded folder is never listed (AS-12, FR-006)".
+ *
+ * It typed `quarantined` — carried only by `.git/quarantined-object.txt` and
+ * `node_modules/quarantined-pkg/quarantined-module.ts` — and expected zero rows at the shipped
+ * settings. The rows are whatever `ProjectFileIndexService` pushes, and main hands that service
+ * `explorer.excludeGlobs`, so the claim is "the shipped list, applied by a real walk, keeps both
+ * folders out". `integration/project-file-index.integration.test.ts` now says exactly that ("AS-12 —
+ * at the SHIPPED exclude globs…"), over a real tree and a real watcher, and was observed red with
+ * the `node_modules` glob dropped from `DEFAULT_EXCLUDE_GLOBS`; `core/tests/unit/app-settings.explorer.test.ts` pins
+ * that the shipped setting IS that list. `quick-open-target.e2e.ts` (SC-018) still types the same query
+ * into a real modal at the same default, beside the toggle that brings both files back — so the
+ * running-app half was already asserted twice.
+ */
 
 test('with a second project open, no file outside the current project root is listed (AS-13, FR-005)', { tag: ['@extended', '@editor'] }, async () => {
   const tree = createDeepTree('throng-qo-scope-');

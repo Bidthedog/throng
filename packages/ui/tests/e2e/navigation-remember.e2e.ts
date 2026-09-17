@@ -500,10 +500,19 @@ test('both toggles live in Editor · Navigation, ship off, and turning them off 
           .evaluateAll((rows) =>
             rows.map((row) => (row.getAttribute('data-testid') ?? '').slice('setting-'.length)),
           );
+        /*
+         * `historySize` joined this group in 044 FR-108 (#136), which put it in the EXISTING
+         * `Editor · Navigation` group deliberately — 040 FR-037a pins exactly three `Editor · …`
+         * groups, so a fourth sibling was not available. It sits AFTER the two remember toggles, so
+         * FR-059's actual claim — the two are adjacent and beside `quickOpenExcludeHidden`, the
+         * sibling that was already there — is unchanged; this line is a whole-membership assertion,
+         * so a legitimately added row has to be named here rather than the list being loosened.
+         */
         expect(keys).toEqual([
           'editor.navigation.quickOpenExcludeHidden',
           'editor.navigation.rememberQuickOpenQuery',
           'editor.navigation.rememberGotoLineNumber',
+          'editor.navigation.historySize',
         ]);
 
         // Both are toggles, and both are ON here because this app's config root seeded them so.

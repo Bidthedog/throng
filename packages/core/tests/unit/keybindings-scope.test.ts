@@ -76,11 +76,13 @@ describe('scope-aware resolveAction (FR-017b0)', () => {
     expect(resolveAction(DEFAULT_KEYBINDINGS, chord, 'explorer')).toBeNull();
     // …and the two `navigate.` commands really do differ, so a prefix rule would be wrong.
     expect([...COMMAND_SCOPES['navigate.gotoLine']]).toEqual(['editor']);
-    // EVERYWHERE is the full set by definition, and 043 R14 made that four scopes rather than three.
+    // EVERYWHERE is the full set by definition: 043 R14 made that four scopes rather than three, and
+    // 044 R16 made it five with the preview panel's own scope.
     expect([...COMMAND_SCOPES['navigate.quickOpen']].sort()).toEqual([
       'editor',
       'explorer',
       'findInFiles',
+      'preview',
       'terminal',
     ]);
   });

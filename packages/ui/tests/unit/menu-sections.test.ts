@@ -18,10 +18,15 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_KEYBINDINGS,
   MENU_SECTION_ORDER,
+  PREVIEW_KIND,
+  SHIPPED_PREVIEW_PROVIDERS,
   groupBySection,
+  previewAffordance,
+  previewSettingsDefaults,
   type FlavourOption,
   type MenuSection,
   type Panel,
+  type PreviewAffordance,
 } from '@throng/core';
 import type { EditorView } from '@codemirror/view';
 import type { MenuAction, MenuItem } from '../../src/renderer/workspace/context-menu.js';
@@ -31,11 +36,13 @@ import { editorContentMenu } from '../../src/renderer/editor/content-menu.js';
 import {
   panelHeaderMenu,
   type PanelHeaderMenuActions,
+  type PanelHeaderPreviewState,
 } from '../../src/renderer/workspace/panel-header-menu.js';
 import { tabContextMenu } from '../../src/renderer/workspace/tab-menu.js';
 import { terminalContentMenu } from '../../src/renderer/terminal/terminal-content-menu.js';
 import { cogMenuItems } from '../../src/renderer/title-bar/cog-menu-items.js';
 import { findInFilesContentMenu } from '../../src/renderer/find-in-files/content-menu.js';
+import { previewContentMenu } from '../../src/renderer/preview/content-menu.js';
 
 /*
  * Split on the ABSENCE of a section, exactly as `context-menu.tsx` now does. `'separator' in item`
@@ -269,6 +276,16 @@ const panelActions = {
   replace: noop,
   replaceAll: noop,
   destroy: noop,
+  // 044 — Open Preview on an editor (FR-002), Back / Forward on an editor or a preview (FR-111), and a
+  // preview's own Refresh and route back to its source (FR-028, FR-015b).
+  openPreview: noop,
+  navigateBack: noop,
+  navigateForward: noop,
+  refreshPreview: noop,
+  openInEditor: noop,
+  goToEditor: noop,
+  // 044 FR-122 — Synchronise Scrolling, on an editor that offers a preview and on a text preview.
+  toggleSyncScroll: noop,
 };
 
 const detachFixture = {
@@ -283,19 +300,57 @@ const detachFixture = {
 const panelHeader = (over: {
   panel: Panel;
   editor?: { dirty: boolean; hasFilePath: boolean } | null;
-  editorFailure?: boolean;
+  panelFailure?: boolean;
   detach?: typeof detachFixture | null;
+  preview?: PanelHeaderPreviewState | null;
+  history?: { canGoBack: boolean; canGoForward: boolean } | null;
+  openPreview?: PreviewAffordance;
+  panelVerb?: string;
+  syncScroll?: boolean;
 }): MenuAction[] =>
   panelHeaderMenu({
     panel: over.panel,
-    panelVerb: 'Destroy',
+    panelVerb: over.panelVerb ?? 'Destroy',
     keybindings: DEFAULT_KEYBINDINGS,
     otherTabs: [{ id: 't2', title: 'Tab 2' }],
     editor: over.editor ?? null,
-    editorFailure: over.editorFailure ?? false,
+    panelFailure: over.panelFailure ?? false,
     detach: over.detach ?? null,
+    preview: over.preview ?? null,
+    history: over.history ?? null,
+    openPreview: over.openPreview,
+    syncScroll: over.syncScroll ?? false,
     actions: panelActions,
   });
+
+/*
+ * 044 — the affordance an editor's Open Preview is drawn from, computed by the REAL decision
+ * (`previewAffordance`, core) over the shipped registry and its shipped settings, so these fixtures
+ * cannot drift from what the app would hand the builder.
+ */
+const PREVIEW_SETTINGS = previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS);
+const editorAffordance = (over: { previewOpen?: boolean; enabled?: boolean; path?: string } = {}): PreviewAffordance => {
+  const providerId = SHIPPED_PREVIEW_PROVIDERS.list()[0].id;
+  return previewAffordance({
+    registry: SHIPPED_PREVIEW_PROVIDERS,
+    settings: {
+      ...PREVIEW_SETTINGS,
+      providers: {
+        ...PREVIEW_SETTINGS.providers,
+        [providerId]: { ...PREVIEW_SETTINGS.providers[providerId], enabled: over.enabled ?? true },
+      },
+    },
+    absPath: over.path ?? 'D:/project/README.md',
+    projectRoot: 'D:/project',
+    isFolder: false,
+    previewOpen: over.previewOpen ?? false,
+    surface: 'editor',
+  });
+};
+
+const previewPanel = (): Panel => panel({ kind: PREVIEW_KIND, config: { filePath: 'D:/project/README.md' } });
+const textPreview = (parented = false): PanelHeaderPreviewState => ({ providerKind: 'text', parented });
+const binaryPreview: PanelHeaderPreviewState = { providerKind: 'binary', parented: false };
 
 const tabMenu = (detach: boolean): MenuAction[] =>
   tabContextMenu({
@@ -362,13 +417,110 @@ const findInFilesMenu = (over: {
       : {}),
   });
 
+const previewLinkMenu = (): MenuAction[] =>
+  previewContentMenu({
+    link: { kind: 'external', url: 'https://example.test/' },
+    selectionEmpty: true,
+    followChord: 'Ctrl+Enter',
+    actions: { openLink: noop, copyLinkAddress: noop },
+  });
+
+/*
+ * 044 FR-035, FR-035c, FR-015b, FR-015e — the preview body menu in full (contracts/menus-and-controls.md
+ * §4): Contextual over a followable link with nothing selected, Content where the provider draws selectable
+ * text, Navigate for a text provider.
+ */
+const previewBodyMenu = (over: {
+  link?: boolean;
+  selectionEmpty?: boolean;
+  textSelection?: boolean;
+  route?: 'standalone' | 'parented' | 'binary';
+}): MenuAction[] =>
+  previewContentMenu({
+    link: over.link ? { kind: 'external', url: 'https://example.test/' } : null,
+    selectionEmpty: over.selectionEmpty ?? false,
+    followChord: 'Ctrl+Enter',
+    actions: { openLink: noop, copyLinkAddress: noop },
+    content: over.textSelection === false ? null : { copyFormat: 'rich', copy: noop, selectAll: noop },
+    editorRoute: over.route === 'binary' ? null : { parented: over.route === 'parented', run: noop },
+    // 044 FR-122b — every text-provider preview carries Synchronise Scrolling; a binary one does not.
+    syncScroll: over.route === 'binary' ? null : { on: false, toggle: noop },
+  });
+
+/*
+ * 044 FR-122b — the editor content menu of an editor that offers a preview: Open Preview in Navigate
+ * (§3) and Synchronise Scrolling closing View & state, after Word Wrap (§10).
+ */
+const editorMenuWithPreview = (syncOn = true): MenuAction[] =>
+  editorContentMenu({
+    view: {} as EditorView,
+    panelId: 'p1',
+    viewId: 'v1',
+    lineEnding: () => 'lf',
+    wordWrap: { on: true, toggle: noop, chord: 'Alt+Z' },
+    gotoLine: { open: noop, chord: 'Ctrl+G' },
+    openPreview: { affordance: editorAffordance(), open: noop },
+    syncScroll: { on: syncOn, toggle: noop },
+    languageName: 'Markdown',
+  });
+
+/*
+ * 044 FR-003, FR-012, FR-062 — the Files & Folders file row with *Open In → Preview*, from the REAL
+ * decision on the explorer surface, in each of its four states.
+ */
+const explorerAffordance = (over: { previewOpen?: boolean; enabled?: boolean; path?: string } = {}): PreviewAffordance => {
+  const providerId = SHIPPED_PREVIEW_PROVIDERS.list()[0].id;
+  return previewAffordance({
+    registry: SHIPPED_PREVIEW_PROVIDERS,
+    settings: {
+      ...PREVIEW_SETTINGS,
+      providers: {
+        ...PREVIEW_SETTINGS.providers,
+        [providerId]: { ...PREVIEW_SETTINGS.providers[providerId], enabled: over.enabled ?? true },
+      },
+    },
+    absPath: over.path ?? 'D:/project/README.md',
+    projectRoot: 'D:/project',
+    isFolder: false,
+    previewOpen: over.previewOpen ?? false,
+    surface: 'explorer',
+  });
+};
+const explorerFileWithPreview = (affordance: PreviewAffordance): MenuAction[] =>
+  buildContextMenuItems({
+    node: { relPath: 'README.md', kind: 'file' },
+    selectedRelPaths: ['README.md'],
+    clipboard: null,
+    ops: explorerOps,
+    openIn: [
+      { label: 'Last Active Editor', icon: 'add', section: 'navigate', onClick: noop },
+      { label: 'New Editor', icon: 'add', section: 'navigate', onClick: noop },
+    ],
+    preview: { affordance, open: noop },
+    keybindings: DEFAULT_KEYBINDINGS,
+    projectRoot: 'D:/project',
+    undoState: { canUndo: false, canRedo: false },
+  });
+
 const TABLE: { name: string; build: () => MenuAction[] }[] = [
   { name: 'Files & Folders — file row', build: explorerFile },
+  {
+    name: 'Files & Folders — file row with Open In → Preview (044 FR-003)',
+    build: () => explorerFileWithPreview(explorerAffordance()),
+  },
+  {
+    name: 'Files & Folders — file row, Preview disabled while open (044 FR-012)',
+    build: () => explorerFileWithPreview(explorerAffordance({ previewOpen: true })),
+  },
   { name: 'Files & Folders — folder row', build: explorerFolder },
   { name: 'Files & Folders — folder row, Terminal enabled', build: explorerFolderWithTerminal },
   { name: 'Files & Folders — empty space (root)', build: explorerRoot },
   { name: 'Editor content menu', build: () => editorMenu('TypeScript') },
   { name: 'Editor content menu — language undetected', build: () => editorMenu(undefined) },
+  {
+    name: 'Editor content menu — offering a preview, Synchronise Scrolling on (044 FR-122b)',
+    build: () => editorMenuWithPreview(true),
+  },
   { name: 'Panel header — untyped panel', build: () => panelHeader({ panel: panel({}) }) },
   {
     name: 'Panel header — editor panel, saved file',
@@ -381,8 +533,45 @@ const TABLE: { name: string; build: () => MenuAction[] }[] = [
       panelHeader({
         panel: panel({ kind: 'editor' }),
         editor: { dirty: true, hasFilePath: true },
-        editorFailure: true,
+        panelFailure: true,
       }),
+  },
+  {
+    name: 'Panel header — editor panel offering Open Preview, with history (044 FR-002, FR-111)',
+    build: () =>
+      panelHeader({
+        panel: panel({ kind: 'editor' }),
+        editor: { dirty: false, hasFilePath: true },
+        openPreview: editorAffordance(),
+        history: { canGoBack: true, canGoForward: false },
+      }),
+  },
+  {
+    name: 'Panel header — editor offering a preview, banner up, sync on (044 FR-122b, 030 FR-042c)',
+    build: () =>
+      panelHeader({
+        panel: panel({ kind: 'editor' }),
+        editor: { dirty: true, hasFilePath: true },
+        openPreview: editorAffordance(),
+        panelFailure: true,
+        syncScroll: true,
+      }),
+  },
+  {
+    name: 'Panel header — standalone text preview (044 FR-033)',
+    build: () => panelHeader({ panel: previewPanel(), preview: textPreview(false) }),
+  },
+  {
+    name: 'Panel header — parented text preview (044 FR-015d)',
+    build: () => panelHeader({ panel: previewPanel(), preview: textPreview(true), detach: detachFixture }),
+  },
+  {
+    name: 'Panel header — binary preview (044 FR-015e)',
+    build: () => panelHeader({ panel: previewPanel(), preview: binaryPreview }),
+  },
+  {
+    name: 'Panel header — preview with its failure banner up (044 FR-033, 030 FR-042c)',
+    build: () => panelHeader({ panel: previewPanel(), preview: textPreview(false), panelFailure: true }),
   },
   {
     name: 'Panel header — terminal panel',
@@ -412,6 +601,15 @@ const TABLE: { name: string; build: () => MenuAction[] }[] = [
   { name: 'Terminal content menu — link under the pointer', build: () => terminalMenu({ link: 'https://example.test/' }) },
   { name: 'Terminal content menu — with a selection', build: () => terminalMenu({ selection: 'ls -al' }) },
   { name: 'Terminal content menu — start failure', build: () => terminalMenu({ startFailure: true }) },
+  { name: 'Preview body menu — link under the pointer (044 FR-095)', build: () => previewLinkMenu() },
+  {
+    name: 'Preview body menu — text selected, standalone (044 FR-035, FR-015b)',
+    build: () => previewBodyMenu({ route: 'standalone' }),
+  },
+  {
+    name: 'Preview body menu — link, nothing selected, parented (044 FR-095, FR-015d)',
+    build: () => previewBodyMenu({ link: true, selectionEmpty: true, route: 'parented' }),
+  },
   { name: 'Cog menu', build: cogMenu },
   { name: 'Find in Files panel menu — idle', build: () => findInFilesMenu({}) },
   { name: 'Find in Files panel menu — scanning', build: () => findInFilesMenu({ running: true }) },
@@ -504,6 +702,65 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
       '—',
       'Hide in this project',
     ]);
+  });
+});
+
+/*
+ * 044 US2 fix round 1 (item 5) — the Files & Folders file row's Open In flyout with Preview
+ * (contracts/menus-and-controls.md §5). `shapeOf` reads one level, so the flyout is pinned on its own:
+ * Preview after the editor targets and before Terminal, OS File Explorer still first, and the top-level
+ * shape untouched by its presence.
+ */
+describe('044 — Files & Folders Open In → Preview, in each of its four states (FR-003, FR-012, FR-062)', () => {
+  const flyout = (items: MenuAction[]): MenuAction[] => items.find((i) => i.label === 'Open In')?.submenu ?? [];
+  const preview = (items: MenuAction[]): MenuAction | undefined => flyout(items).find((i) => i.label === 'Preview');
+
+  it('enabled: the flyout draws Preview between the editor targets and Terminal', () => {
+    const items = explorerFileWithPreview(explorerAffordance());
+    expect(shapeOf(flyout(items))).toEqual([
+      'OS File Explorer',
+      'Last Active Editor',
+      'New Editor',
+      'Preview',
+      'Terminal',
+      'Search',
+    ]);
+    expect(preview(items)?.section).toBe('navigate');
+    expect(preview(items)?.disabled).toBe(false);
+  });
+
+  it('disabled `preview-open`: the same shape, Preview drawn disabled', () => {
+    const affordance = explorerAffordance({ previewOpen: true });
+    expect(affordance).toMatchObject({ state: 'disabled', reason: 'preview-open' });
+    const items = explorerFileWithPreview(affordance);
+    expect(shapeOf(flyout(items))).toEqual(['OS File Explorer', 'Last Active Editor', 'New Editor', 'Preview', 'Terminal', 'Search']);
+    expect(preview(items)?.disabled).toBe(true);
+  });
+
+  it('disabled `provider-disabled`: the same shape, Preview drawn disabled', () => {
+    const affordance = explorerAffordance({ enabled: false });
+    expect(affordance).toMatchObject({ state: 'disabled', reason: 'provider-disabled' });
+    const items = explorerFileWithPreview(affordance);
+    expect(shapeOf(flyout(items))).toEqual(['OS File Explorer', 'Last Active Editor', 'New Editor', 'Preview', 'Terminal', 'Search']);
+    expect(preview(items)?.disabled).toBe(true);
+  });
+
+  it('absent: no Preview row, and nothing else moves', () => {
+    const affordance = explorerAffordance({ path: 'D:/project/notes.txt' });
+    expect(affordance.state).toBe('absent');
+    const items = explorerFileWithPreview(affordance);
+    expect(shapeOf(flyout(items))).toEqual(['OS File Explorer', 'Last Active Editor', 'New Editor', 'Terminal', 'Search']);
+  });
+
+  it('the top-level file row is the same shape in every state — Preview lives only in the flyout', () => {
+    const shapes = [
+      explorerAffordance(),
+      explorerAffordance({ previewOpen: true }),
+      explorerAffordance({ enabled: false }),
+      explorerAffordance({ path: 'D:/project/notes.txt' }),
+    ].map((a) => shapeOf(explorerFileWithPreview(a)));
+    for (const shape of shapes) expect(shape).toEqual(shapes[0]);
+    expect(separatorIndices(explorerFileWithPreview(explorerAffordance()))).toEqual([6, 9, 11, 14]);
   });
 });
 
@@ -610,7 +867,7 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       keybindings: rebound,
       otherTabs: [],
       editor: null,
-      editorFailure: false,
+      panelFailure: false,
       detach: null,
       actions: panelActions,
     });
@@ -641,6 +898,10 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       // Navigate — the two reveal items exist only for a panel with a file behind it.
       'Reveal File in Files & Folders',
       'Open in OS Explorer',
+      // 044 FR-111 — Back and Forward on every editor, drawn DISABLED at the ends rather than hidden.
+      // No Open Preview here: this fixture hands the builder no affordance, which is `absent`.
+      'Back',
+      'Forward',
       'Send to Tab',
       '—',
       // View & state — Reset Name has left Rename's side, where the constitution names it.
@@ -743,7 +1004,7 @@ describe('the panel menu indexes the panel’s search commands (043 FR-015)', ()
       keybindings: rebound,
       otherTabs: [],
       editor: { dirty: false, hasFilePath: false },
-      editorFailure: false,
+      panelFailure: false,
       detach: null,
       actions: panelActions,
     });
@@ -764,7 +1025,7 @@ describe('the panel menu indexes the panel’s search commands (043 FR-015)', ()
       keybindings: DEFAULT_KEYBINDINGS,
       otherTabs: [],
       editor: { dirty: false, hasFilePath: false },
-      editorFailure: false,
+      panelFailure: false,
       detach: null,
       actions: {
         ...panelActions,
@@ -778,6 +1039,323 @@ describe('the panel menu indexes the panel’s search commands (043 FR-015)', ()
       items.find((i) => i.label === label)?.onClick?.();
     }
     expect(fired).toEqual(['find', 'replace', 'replaceAll']);
+  });
+});
+
+/*
+ * 044 — the header-menu cluster (contracts/menus-and-controls.md §1–§2, plan Sequencing 6).
+ *
+ * Exact shapes, for the same reason the editor's is pinned above: `assertSectioned` would pass a
+ * well-formed menu that put Open in Editor in View & state, or Refresh in Navigate.
+ */
+describe('an editor’s header gains Open Preview, Back and Forward in Navigate (044 FR-002, FR-111)', () => {
+  const row = (items: MenuAction[], label: string): MenuAction | undefined =>
+    items.find((i) => i.label === label);
+
+  it('sits them after Open in OS Explorer and before Send to Tab, in that order', () => {
+    const items = panelHeader({
+      panel: panel({ kind: 'editor' }),
+      editor: { dirty: false, hasFilePath: true },
+      openPreview: editorAffordance(),
+      history: { canGoBack: true, canGoForward: false },
+    });
+    expect(shapeOf(items)).toEqual([
+      'Rename',
+      'Save',
+      'Save As…',
+      'Revert',
+      'Reload from disk',
+      'Find',
+      'Replace',
+      'Replace All',
+      '—',
+      'Destroy Panel',
+      '—',
+      'Reveal File in Files & Folders',
+      'Open in OS Explorer',
+      'Open Preview',
+      'Back',
+      'Forward',
+      'Send to Tab',
+      '—',
+      'Reset Name',
+      'Zoom',
+      // 044 FR-122b — after Zoom, exactly where Open Preview is present (§2).
+      'Synchronise Scrolling',
+    ]);
+  });
+
+  it('draws Synchronise Scrolling after Zoom and before the banner items (044 FR-122b)', () => {
+    const items = panelHeader({
+      panel: panel({ kind: 'editor' }),
+      editor: { dirty: true, hasFilePath: true },
+      openPreview: editorAffordance(),
+      panelFailure: true,
+      syncScroll: true,
+    });
+    expect(shapeOf(items).slice(shapeOf(items).lastIndexOf('—') + 1)).toEqual([
+      'Reset Name',
+      'Zoom',
+      'Synchronise Scrolling ✓',
+      'Try again',
+      'Copy details',
+      'Clear panel type',
+    ]);
+    const sync = row(items, 'Synchronise Scrolling ✓');
+    expect(sync?.section).toBe('viewState');
+    expect(sync?.icon).toBe('syncScroll');
+    expect(sync?.testId).toBe('menu-item-Synchronise Scrolling');
+  });
+
+  it('Synchronise Scrolling is present and ENABLED wherever Open Preview is drawn, and absent where it is not (FR-122a)', () => {
+    const base = { panel: panel({ kind: 'editor' }), editor: { dirty: false, hasFilePath: true } };
+    const sync = (items: MenuAction[]): MenuAction | undefined =>
+      items.find((i) => i.testId === 'menu-item-Synchronise Scrolling');
+    for (const [why, affordance] of [
+      ['enabled', editorAffordance()],
+      ['a preview is open', editorAffordance({ previewOpen: true })],
+      ['the provider is off', editorAffordance({ enabled: false })],
+    ] as const) {
+      const item = sync(panelHeader({ ...base, openPreview: affordance }));
+      expect(item, why).toBeDefined();
+      expect(item?.disabled ?? false, why).toBe(false);
+    }
+    expect(sync(panelHeader({ ...base, openPreview: editorAffordance({ path: 'D:/project/a.ts' }) }))).toBeUndefined();
+    expect(sync(panelHeader(base))).toBeUndefined();
+    // Never on a terminal or an untyped panel.
+    expect(sync(panelHeader({ panel: panel({ kind: 'terminal' }), syncScroll: true }))).toBeUndefined();
+    expect(sync(panelHeader({ panel: panel({}), syncScroll: true }))).toBeUndefined();
+  });
+
+  it('draws Back and Forward enabled exactly where the history has an entry, with their live chords', () => {
+    const items = panelHeader({
+      panel: panel({ kind: 'editor' }),
+      editor: { dirty: false, hasFilePath: true },
+      history: { canGoBack: true, canGoForward: false },
+    });
+    expect(row(items, 'Back')?.disabled ?? false).toBe(false);
+    expect(row(items, 'Forward')?.disabled).toBe(true);
+    expect(row(items, 'Back')?.shortcut).toBe('Alt+ArrowLeft');
+    expect(row(items, 'Forward')?.shortcut).toBe('Alt+ArrowRight');
+    expect(row(items, 'Back')?.section).toBe('navigate');
+
+    // No history known at all: both drawn, both disabled — never hidden (FR-104, FR-111).
+    const none = panelHeader({ panel: panel({ kind: 'editor' }), editor: { dirty: false, hasFilePath: false } });
+    expect(row(none, 'Back')?.disabled).toBe(true);
+    expect(row(none, 'Forward')?.disabled).toBe(true);
+  });
+
+  it('Open Preview follows the affordance: enabled, disabled while one is open or the provider is off, absent otherwise', () => {
+    const base = { panel: panel({ kind: 'editor' }), editor: { dirty: false, hasFilePath: true } };
+
+    const enabled = row(panelHeader({ ...base, openPreview: editorAffordance() }), 'Open Preview');
+    expect(enabled?.disabled ?? false).toBe(false);
+    expect(enabled?.section).toBe('navigate');
+    expect(enabled?.icon).toBe('preview');
+
+    // FR-012 — the file already has its one preview.
+    expect(row(panelHeader({ ...base, openPreview: editorAffordance({ previewOpen: true }) }), 'Open Preview')?.disabled).toBe(true);
+    // FR-062 — the provider is disabled: drawn, and disabled.
+    expect(row(panelHeader({ ...base, openPreview: editorAffordance({ enabled: false }) }), 'Open Preview')?.disabled).toBe(true);
+    // FR-001/FR-004 — no provider claims the file: absent.
+    expect(row(panelHeader({ ...base, openPreview: editorAffordance({ path: 'D:/project/a.ts' }) }), 'Open Preview')).toBeUndefined();
+    expect(row(panelHeader(base), 'Open Preview')).toBeUndefined();
+  });
+
+  it('runs the actions it was given', () => {
+    const fired: string[] = [];
+    const items = panelHeaderMenu({
+      panel: panel({ kind: 'editor' }),
+      panelVerb: 'Destroy',
+      keybindings: DEFAULT_KEYBINDINGS,
+      otherTabs: [],
+      editor: { dirty: false, hasFilePath: true },
+      panelFailure: false,
+      detach: null,
+      openPreview: editorAffordance(),
+      history: { canGoBack: true, canGoForward: true },
+      actions: {
+        ...panelActions,
+        openPreview: () => fired.push('openPreview'),
+        navigateBack: () => fired.push('navigateBack'),
+        navigateForward: () => fired.push('navigateForward'),
+        toggleSyncScroll: () => fired.push('toggleSyncScroll'),
+      },
+    });
+    for (const label of ['Open Preview', 'Back', 'Forward', 'Synchronise Scrolling']) row(items, label)?.onClick?.();
+    expect(fired).toEqual(['openPreview', 'navigateBack', 'navigateForward', 'toggleSyncScroll']);
+  });
+});
+
+describe('a preview panel’s header menu draws exactly contracts/menus-and-controls.md §1 (044 FR-033)', () => {
+  it('a standalone text preview: Close · Navigate with Open in Editor, Back, Forward · Refresh, Zoom, Synchronise Scrolling', () => {
+    expect(shapeOf(panelHeader({ panel: previewPanel(), preview: textPreview(false) }))).toEqual([
+      'Close Panel',
+      '—',
+      'Reveal File in Files & Folders',
+      'Open in OS Explorer',
+      'Open in Editor',
+      'Back',
+      'Forward',
+      'Send to Tab',
+      '—',
+      'Refresh',
+      'Zoom',
+      // 044 FR-122b — every text-provider preview (§1, §10).
+      'Synchronise Scrolling',
+    ]);
+  });
+
+  it('a parented text preview goes to its editor instead, and offers Sync to where the window can', () => {
+    expect(
+      shapeOf(panelHeader({ panel: previewPanel(), preview: textPreview(true), detach: detachFixture })),
+    ).toEqual([
+      'Close Panel',
+      '—',
+      'Reveal File in Files & Folders',
+      'Open in OS Explorer',
+      'Go to Editor',
+      'Back',
+      'Forward',
+      'Send to Tab',
+      'Sync to',
+      '—',
+      'Refresh',
+      'Zoom',
+      'Synchronise Scrolling',
+    ]);
+  });
+
+  it('a binary preview offers no route to an editor, and no Synchronise Scrolling (FR-015e, FR-122a)', () => {
+    expect(shapeOf(panelHeader({ panel: previewPanel(), preview: binaryPreview, syncScroll: true }))).toEqual([
+      'Close Panel',
+      '—',
+      'Reveal File in Files & Folders',
+      'Open in OS Explorer',
+      'Back',
+      'Forward',
+      'Send to Tab',
+      '—',
+      'Refresh',
+      'Zoom',
+    ]);
+  });
+
+  it('its verb is Close whatever the ownership verb would be (011 FR-030)', () => {
+    const labels = panelHeader({ panel: previewPanel(), preview: textPreview(false), panelVerb: 'Destroy' }).map(
+      (i) => i.label,
+    );
+    expect(labels).toContain('Close Panel');
+    expect(labels).not.toContain('Destroy Panel');
+  });
+
+  it('never presents Rename, Reset Name, Save, Save As…, Revert, Reload from disk or Find (FR-030, FR-033)', () => {
+    const labels = panelHeader({ panel: previewPanel(), preview: textPreview(true), panelFailure: true }).map(
+      (i) => i.label,
+    );
+    for (const absent of ['Rename', 'Reset Name', 'Save', 'Save As…', 'Revert', 'Reload from disk', 'Find', 'Replace', 'Replace All']) {
+      expect(labels, absent).not.toContain(absent);
+    }
+  });
+
+  it('carries Try again, Copy details and Clear panel type in View & state while its banner is up', () => {
+    const items = panelHeader({ panel: previewPanel(), preview: textPreview(false), panelFailure: true });
+    expect(shapeOf(items)).toEqual([
+      'Close Panel',
+      '—',
+      'Reveal File in Files & Folders',
+      'Open in OS Explorer',
+      'Open in Editor',
+      'Back',
+      'Forward',
+      'Send to Tab',
+      '—',
+      'Refresh',
+      'Zoom',
+      // 044 FR-122b — after Zoom, before the banner items (maintainer's answer, §1).
+      'Synchronise Scrolling',
+      'Try again',
+      'Copy details',
+      'Clear panel type',
+    ]);
+  });
+
+  it('Synchronise Scrolling is checked while on, carries the syncScroll icon and runs the toggle (FR-122b)', () => {
+    const fired: string[] = [];
+    const items = panelHeaderMenu({
+      panel: previewPanel(),
+      panelVerb: 'Destroy',
+      keybindings: DEFAULT_KEYBINDINGS,
+      otherTabs: [],
+      editor: null,
+      panelFailure: false,
+      detach: null,
+      preview: textPreview(true),
+      syncScroll: true,
+      actions: { ...panelActions, toggleSyncScroll: () => fired.push('toggleSyncScroll') },
+    });
+    const sync = items.find((i) => i.testId === 'menu-item-Synchronise Scrolling');
+    expect(sync).toMatchObject({ label: 'Synchronise Scrolling ✓', icon: 'syncScroll', section: 'viewState' });
+    expect(sync?.disabled ?? false).toBe(false);
+    sync?.onClick?.();
+    expect(fired).toEqual(['toggleSyncScroll']);
+  });
+
+  it('and none of them while it is not', () => {
+    const labels = panelHeader({ panel: previewPanel(), preview: textPreview(false), panelFailure: false }).map(
+      (i) => i.label,
+    );
+    for (const row of ['Try again', 'Copy details', 'Clear panel type']) expect(labels).not.toContain(row);
+  });
+
+  it('draws Back / Forward from the history, Refresh with its icon, and runs its own actions', () => {
+    const fired: string[] = [];
+    const items = panelHeaderMenu({
+      panel: previewPanel(),
+      panelVerb: 'Destroy',
+      keybindings: DEFAULT_KEYBINDINGS,
+      otherTabs: [],
+      editor: null,
+      panelFailure: false,
+      detach: null,
+      preview: textPreview(false),
+      history: { canGoBack: false, canGoForward: true },
+      actions: {
+        ...panelActions,
+        refreshPreview: () => fired.push('refreshPreview'),
+        openInEditor: () => fired.push('openInEditor'),
+        goToEditor: () => fired.push('goToEditor'),
+        navigateBack: () => fired.push('navigateBack'),
+        navigateForward: () => fired.push('navigateForward'),
+        revealInTree: () => fired.push('revealInTree'),
+        openInOsExplorer: () => fired.push('openInOsExplorer'),
+        destroy: () => fired.push('destroy'),
+      },
+    });
+    const find = (label: string): MenuAction | undefined => items.find((i) => i.label === label);
+    expect(find('Back')?.disabled).toBe(true);
+    expect(find('Forward')?.disabled ?? false).toBe(false);
+    expect(find('Refresh')?.icon).toBe('refresh');
+    expect(find('Open in Editor')?.icon).toBe('editorPanel');
+
+    for (const label of ['Refresh', 'Open in Editor', 'Forward', 'Reveal File in Files & Folders', 'Open in OS Explorer', 'Close Panel']) {
+      find(label)?.onClick?.();
+    }
+    expect(fired).toEqual(['refreshPreview', 'openInEditor', 'navigateForward', 'revealInTree', 'openInOsExplorer', 'destroy']);
+
+    const parented = panelHeaderMenu({
+      panel: previewPanel(),
+      panelVerb: 'Destroy',
+      keybindings: DEFAULT_KEYBINDINGS,
+      otherTabs: [],
+      editor: null,
+      panelFailure: false,
+      detach: null,
+      preview: textPreview(true),
+      actions: { ...panelActions, goToEditor: () => fired.push('goToEditor') },
+    });
+    parented.find((i) => i.label === 'Go to Editor')?.onClick?.();
+    expect(fired.at(-1)).toBe('goToEditor');
   });
 });
 
@@ -826,6 +1404,118 @@ describe('the terminal content menu leads with its contextual items (AS-8)', () 
       'Copy details',
       'Clear panel type',
     ]);
+  });
+});
+
+describe('the preview body menu over a link (044 FR-095)', () => {
+  it('is Open Link then Copy Link Address, one section, no divider', () => {
+    expect(shapeOf(previewLinkMenu())).toEqual(['Open Link', 'Copy Link Address']);
+  });
+});
+
+describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)', () => {
+  const labelsOf = (items: MenuAction[]): string[] =>
+    withDividers(items).map((i) => (isSeparator(i) ? '—' : (i.label ?? '')));
+
+  it('with text selected: Content (the three copies and Select All), then Navigate, then View & state', () => {
+    expect(labelsOf(previewBodyMenu({ route: 'standalone' }))).toEqual([
+      'Copy',
+      'Copy as Rich Text',
+      'Copy as Plain Text',
+      'Select All',
+      '—',
+      'Open in Editor',
+      // 044 FR-122b — the View & state section, last (§4, §10).
+      '—',
+      'Synchronise Scrolling',
+    ]);
+  });
+
+  it('over a link with nothing selected: Contextual first; parented reads Go to Editor', () => {
+    expect(labelsOf(previewBodyMenu({ link: true, selectionEmpty: true, route: 'parented' }))).toEqual([
+      'Open Link',
+      'Copy Link Address',
+      '—',
+      'Copy',
+      'Copy as Rich Text',
+      'Copy as Plain Text',
+      'Select All',
+      '—',
+      'Go to Editor',
+      '—',
+      'Synchronise Scrolling',
+    ]);
+  });
+
+  it('Synchronise Scrolling: checked while on, the syncScroll icon, its chord when bound, and the toggle once (FR-122b)', () => {
+    const toggle = { calls: 0 };
+    const build = (on: boolean, chord?: string): MenuAction[] =>
+      previewContentMenu({
+        link: null,
+        selectionEmpty: true,
+        followChord: undefined,
+        actions: { openLink: noop, copyLinkAddress: noop },
+        syncScroll: { on, toggle: () => void (toggle.calls += 1), ...(chord !== undefined ? { chord } : {}) },
+      });
+    const on = build(true, 'Ctrl+Alt+F8');
+    expect(on).toHaveLength(1);
+    expect(on[0]).toMatchObject({
+      label: 'Synchronise Scrolling ✓',
+      testId: 'menu-item-Synchronise Scrolling',
+      icon: 'syncScroll',
+      section: 'viewState',
+      shortcut: 'Ctrl+Alt+F8',
+    });
+    expect(build(false)[0]?.label).toBe('Synchronise Scrolling');
+    expect(build(false)[0]?.shortcut).toBeUndefined();
+    on[0]?.onClick?.();
+    expect(toggle.calls).toBe(1);
+  });
+
+  it('the three copies are disabled while nothing is selected; Select All never is', () => {
+    const items = previewBodyMenu({ selectionEmpty: true, route: 'standalone' });
+    const state = (label: string): boolean | undefined => items.find((i) => i.label === label)?.disabled;
+    expect(state('Copy')).toBe(true);
+    expect(state('Copy as Rich Text')).toBe(true);
+    expect(state('Copy as Plain Text')).toBe(true);
+    expect(state('Select All') ?? false).toBe(false);
+  });
+
+  it('a binary provider with no selectable text draws neither Content nor Navigate', () => {
+    expect(previewBodyMenu({ textSelection: false, route: 'binary' })).toEqual([]);
+  });
+
+  it('the icons are theme tokens: copy for the copies, selectAll, and editorPanel for the route', () => {
+    const items = previewBodyMenu({ route: 'standalone' });
+    expect(items.map((i) => [i.label, i.icon])).toEqual([
+      ['Copy', 'copy'],
+      ['Copy as Rich Text', 'copy'],
+      ['Copy as Plain Text', 'copy'],
+      ['Select All', 'selectAll'],
+      ['Open in Editor', 'editorPanel'],
+      ['Synchronise Scrolling', 'syncScroll'],
+    ]);
+  });
+});
+
+describe('the editor content menu closes with Synchronise Scrolling where it offers a preview (044 FR-122b)', () => {
+  it('draws it after Word Wrap, in View & state, checked while on', () => {
+    expect(shapeOf(editorMenuWithPreview(true))).toEqual([
+      'Cut',
+      'Copy',
+      'Paste',
+      'Select All',
+      'Undo',
+      'Redo',
+      '—',
+      'Go To Line…',
+      'Open Preview',
+      '—',
+      'Set Language… (Markdown)',
+      'Word Wrap ✓',
+      'Synchronise Scrolling ✓',
+    ]);
+    expect(shapeOf(editorMenuWithPreview(false)).at(-1)).toBe('Synchronise Scrolling');
   });
 });
 
@@ -896,7 +1586,7 @@ describe('Send to Tab offers New Tab first, then every other Tab (005 FR-027)', 
       keybindings: DEFAULT_KEYBINDINGS,
       otherTabs,
       editor: null,
-      editorFailure: false,
+      panelFailure: false,
       detach: null,
       actions: { ...panelActions, ...actions },
     });
@@ -979,7 +1669,7 @@ describe('the dormant terminal Reload item (039 FR-024)', () => {
 
   /*
    * FR-029 — dormancy is a state, not a failure. The failure items (Try again / Copy details /
-   * Clear panel type) appear only for `editorFailure`, so a dormant Panel must show Reload
+   * Clear panel type) appear only for `panelFailure`, so a dormant Panel must show Reload
    * WITHOUT them. If Reload ever arrives beside them, dormancy has been routed through the failure
    * surfaces and the 'one condition, one notice' rule has been broken.
    */

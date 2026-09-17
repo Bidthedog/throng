@@ -52,7 +52,7 @@
  *
  * Withhold the `ImmediateResizeObserver` stub below (delete the `beforeAll`). `FileTree` gates its
  * `<Tree>` on `width > 0 && height > 0` from a `ResizeObserver` that jsdom does not implement, so
- * the tree never mounts, `mount()`'s `findByRole('tree')` throws, and **ALL SIX tests in this file
+ * the tree never mounts, `mount()`'s `findByRole('tree')` throws, and **ALL SEVEN tests in this file
  * fail**. Every test goes through `mount()`, and no absence assertion below can be satisfied by an
  * empty document.
  */
@@ -417,5 +417,45 @@ describe('the created item enters inline rename once the watcher reports it (FR-
       { timeout: 3000 },
     );
     expect(tree.querySelector('input.tree-rename')).toHaveFocus();
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * New Folder on a SUBFOLDER row (006 FR-086) — migrated from editor-feedback2.e2e.ts, 044 T163d
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('New Folder on a subfolder row creates inside THAT folder (FR-086)', () => {
+  /*
+   * The E2E right-clicked `sub`, chose New Folder, waited for the rename box and then found
+   * `sub/New folder` on disk. The ROOT case is the empty-space tests above, and the bytes are
+   * `integration/files-service.test.ts` (`newFolder` → `New folder`). What nothing below E2E held
+   * was the subfolder: that a folder row's menu addresses the create to THAT folder rather than to
+   * the root or the selection, and that the rename box then opens on the node inside it — which
+   * needs the folder expanded first, since a node in a collapsed folder has no row to edit.
+   */
+  it('calls newFolder with the right-clicked folder, and opens the rename box on the new node', async () => {
+    const { user, tree, files, notifyChange } = await mount();
+
+    await user.pointer({ keys: '[MouseRight]', target: within(tree).getByText('sub') });
+    await user.click(await screen.findByTestId('menu-item-New Folder'));
+
+    await waitFor(() => expect(files.newFolder).toHaveBeenCalledTimes(1));
+    expect(files.newFolder).toHaveBeenCalledWith('sub');
+    expect(files.newFile).not.toHaveBeenCalled();
+
+    notifyChange();
+
+    await waitFor(
+      () => {
+        const input = tree.querySelector<HTMLInputElement>('input.tree-rename');
+        expect(input, 'no rename box opened on the new folder').not.toBeNull();
+        expect(input!.value).toBe('New folder');
+      },
+      { timeout: 3000 },
+    );
+    // Inside `sub`, not beside it: the box sits on a row one level deeper than `sub`'s own.
+    const subRow = within(tree).getByText('sub').closest<HTMLElement>('[role="treeitem"]');
+    const newRow = tree.querySelector('input.tree-rename')!.closest<HTMLElement>('[role="treeitem"]');
+    expect(Number(newRow?.getAttribute('aria-level'))).toBe(Number(subRow?.getAttribute('aria-level')) + 1);
   });
 });

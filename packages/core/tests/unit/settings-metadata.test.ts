@@ -218,6 +218,47 @@ describe('SETTINGS_METADATA notification leaves (030 US1, #224)', () => {
   });
 });
 
+/**
+ * 044 — the preview settings and the navigation history size are REQUIRED leaves.
+ *
+ * The completeness block at the top already fails in both directions for any leaf of
+ * `DEFAULT_APP_SETTINGS`. What it cannot see is a leaf that never reached the defaults at all: a
+ * preview section wired into the descriptors but not into `EditorSettings` would pass it as
+ * "unknown"-free only by being absent from BOTH sides. So the keys the contract names are listed.
+ */
+describe('editor.previews.* and editor.navigation.historySize are required leaves (044)', () => {
+  const byKey = new Map(SETTINGS_METADATA.map((d) => [d.key, d]));
+  const REQUIRED = [
+    'editor.previews.updateDelayMs',
+    'editor.previews.maxWaitMs',
+    'editor.previews.copyFormat',
+    'editor.previews.providers.markdown.enabled',
+    'editor.previews.providers.markdown.defaultOpenAction',
+    'editor.previews.providers.markdown.loadRemoteImages',
+    'editor.navigation.historySize',
+    // Iteration 2026-09-15 — FR-114 and FR-117.
+    'editor.previews.syncScroll',
+    'editor.previews.providers.markdown.showFrontMatter',
+  ];
+
+  it('counts every one as a configurable leaf with exactly one descriptor', () => {
+    const leaves = settingsLeaves();
+    for (const key of REQUIRED) {
+      expect(leaves, key).toContain(key);
+      expect(SETTINGS_METADATA.filter((d) => d.key === key), key).toHaveLength(1);
+    }
+  });
+
+  it('describes the history size as a 1–100 slider in steps of 1, shipping 10, under Editor · Navigation (FR-108)', () => {
+    const d = byKey.get('editor.navigation.historySize');
+    expect(d).toMatchObject({ control: 'slider', min: 1, max: 100, step: 1, group: 'Editor · Navigation' });
+    expect(d?.subgroup).toBeUndefined();
+    const shipped = DEFAULT_APP_SETTINGS.editor.navigation.historySize;
+    expect(shipped).toBe(10);
+    expect((shipped - d!.min!) % d!.step!, 'the shipped 10 is between two stops').toBe(0);
+  });
+});
+
 describe('terminal-flavour controls are HIDDEN for v1.0.0 (#67 → vNext)', () => {
   const rendered = new Map(SETTINGS_METADATA.map((d) => [d.key, d]));
   const hidden = new Map(HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS.map((d) => [d.key, d]));

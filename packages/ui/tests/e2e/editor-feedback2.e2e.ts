@@ -106,24 +106,19 @@ test.afterAll(async () => {
  * Clicking the target actually loading the file into that editor — the first half of what this test
  * did, and the round trip the second half was set up by.
  */
-test('the Files & Folders context menu has a New Folder action', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    const { win } = shared;
-    await createProject(win, 'Fb2NewFolder', root);
-    const tree = win.getByTestId('file-explorer-tree');
-    await tree.getByText('sub', { exact: true }).click({ button: 'right' });
-    await expect(item(win, 'New Folder')).toBeVisible();
-    await item(win, 'New Folder').click();
-    // A new folder is created (inline rename input appears) and exists on disk.
-    await expect(tree.locator('input.tree-rename')).toBeVisible({ timeout: 6000 });
-    await expect
-      .poll(() => existsSync(join(root, 'sub', 'New folder')), { timeout: FILE_OP_TIMEOUT_MS })
-      .toBe(true);
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * MOVED DOWN (044 T163d): "the Files & Folders context menu has a New Folder action". An
+ * in-document React menu row, a create addressed to a folder, and a rename box. Held below E2E, each
+ * observed failing against a broken implementation before this was deleted:
+ *
+ *   - the row is on a folder's menu, in its section — `packages/ui/tests/unit/menu-sections.test.ts`;
+ *   - New Folder on a SUBFOLDER row creates inside that folder and opens the rename box on the new
+ *     node one level down — `packages/ui/tests/component/explorer-root-menu.test.ts`, "New Folder on
+ *     a subfolder row creates inside THAT folder", added for this move (createFolder addressing the
+ *     root, and createFolder not expanding the destination, both fail it); the root case is the same
+ *     file's "New Folder creates in the root folder";
+ *   - `newFolder` puts a real `New folder` on disk — `packages/ui/tests/integration/files-service.test.ts`.
+ */
 
 test('Save As writes the document to a newly chosen location', { tag: ['@extended', '@editor', '@reserve:native'] }, async () => {
   const root = makeProject();

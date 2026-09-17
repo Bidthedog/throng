@@ -331,68 +331,22 @@ test('the strip DIMS with its panel — it does not stay lit while every other i
   }
 });
 
-test('a persisted language this build no longer knows opens as plain text, WITHOUT error, and is preserved (FR-005b)', { tag: ['@extended', '@editor'] }, async () => {
-  /*
-   * JOINED THE SHARED APP (SC-027) — 4 launches -> 3.
-   *
-   * This kept its own app for a `{ dataDir, userDataDir }` pair that were both freshly
-   * mkdtemp'd and EMPTY. That is write isolation, not pre-launch state: every fact this test
-   * needs is written THROUGH the running app by `document.setState` below, and a shared
-   * database holding other projects' rows cannot answer for this one.
-   *
-   * The one thing that did depend on isolation was `projects.list` -> `projects[0].id`, which
-   * picks the FIRST project rather than this test's once the app has several. It now reads the
-   * ACTIVE row, which `createProject` guarantees is the project it just made.
-   */
-  const root = makeProject();
-  try {
-    await runApp(
-      async (_app, win) => {
-        const errors: string[] = [];
-        win.on('pageerror', (e) => errors.push(e.message));
-        await createProject(win, 'StaleProj', root);
-
-        // Store an override naming a language this build does not have — what a user would have
-        // if a later build removed a language, or an older build has not yet gained one.
-        const projectId = await win
-          .locator('.project-item[data-active="true"]')
-          .evaluate((el) => (el.getAttribute('data-testid') ?? '').replace('project-item-', ''));
-        expect(projectId, 'no active project row to take an id from').not.toBe('');
-        await win.evaluate(
-          ({ id }) =>
-            window.throng?.invoke?.('document.setState', {
-              projectId: id,
-              relPath: 'main.rs',
-              languageId: 'elvish',
-            }),
-          { id: projectId },
-        );
-
-        const pid = await openEditorOn(win, 'main.rs', 'fn main');
-
-        // It FALLS THROUGH to detection rather than failing: the file opens, as Rust, with no error.
-        await expect(win.getByTestId(`editor-language-${pid}`)).toHaveText('Rust', { timeout: 8000 });
-        expect(errors, `a stale id must not raise an error: ${errors.join('; ')}`).toEqual([]);
-
-        // …and the stored id is PRESERVED, not rewritten. A build that reintroduces the language
-        // must find the user's choice still there — silently "repairing" it would destroy it.
-        const stored = await win.evaluate(
-          async ({ id }) => {
-            const env = (await window.throng?.invoke?.('document.getState', {
-              projectId: id,
-              relPath: 'main.rs',
-            })) as { result: { state: { languageId: string } | null } };
-            return env.result.state?.languageId ?? null;
-          },
-          { id: projectId },
-        );
-        expect(stored).toBe('elvish');
-      },
-    );
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * MOVED DOWN (044 T163b): "a persisted language this build no longer knows opens as plain text,
+ * WITHOUT error, and is preserved (FR-005b)". A precedence decision and a persisted value, neither
+ * of which needs a window. Each claim was observed failing below against a broken implementation
+ * before this declaration was deleted:
+ *
+ *   - falls through to detection — `core/tests/unit/language-precedence.test.ts` and
+ *     `ui/tests/integration/language-detect.integration.test.ts` (resolveLanguage accepting any
+ *     override);
+ *   - opens WITHOUT error — `ui/tests/unit/language-loaders.test.ts` (loadLanguage throwing for an
+ *     unknown id);
+ *   - the store keeps the id — `daemon/tests/integration/document-ipc.integration.test.ts`
+ *     (setState refusing the id);
+ *   - opening the file does not rewrite it — `ui/tests/unit/language-override-load.test.ts`, written
+ *     for this move (loadDocumentOverride clearing a stale override on load).
+ */
 
 /*
  * MOVED to `packages/ui/tests/component/status-strip-picker-dismissal.test.ts` (034 FR-045)

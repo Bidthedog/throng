@@ -35,6 +35,8 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
         quickOpenExcludeHidden: true,
         rememberQuickOpenQuery: false,
         rememberGotoLineNumber: false,
+        // 044 FR-108 — each editor and preview panel keeps ten files of history by default.
+        historySize: 10,
       },
       // 040 FR-030/FR-031 — the status-bar readout block, both shipped ON. Here for the same reason
       // the navigation block is: this assertion is exhaustive, which is what makes a silently-added
@@ -42,6 +44,20 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       statusBar: {
         showCursorPosition: true,
         showCounts: true,
+      },
+      // 044 — the preview settings, generated from the shipped provider registry (Markdown alone).
+      // Their derivation and per-leaf parse are asserted in `preview-settings.test.ts`; they appear
+      // here because this assertion is exhaustive.
+      previews: {
+        updateDelayMs: 300,
+        maxWaitMs: 1000,
+        copyFormat: 'rich',
+        // 044 FR-114 (iteration 2026-09-15) — editor → preview scroll sync, shipped ON.
+        syncScroll: true,
+        providers: {
+          // FR-117 (iteration 2026-09-15) — Markdown's own Show front matter, shipped ON.
+          markdown: { enabled: true, defaultOpenAction: 'editor', loadRemoteImages: true, showFrontMatter: true },
+        },
       },
     });
   });
@@ -87,6 +103,55 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       showCursorPosition: true,
       showCounts: true,
     });
+  });
+
+  /*
+   * 044 FR-108 — `editor.navigation.historySize`, key by key.
+   *
+   * The bare parser owns the TYPE and the floor (a history of no entries cannot hold the current
+   * file, so it is meaningless rather than small); the RANGE is the descriptor's, enforced by the
+   * guarded read — #227's split, asserted the same way as the indent width below.
+   */
+  it('parses editor.navigation.historySize (044 FR-108)', () => {
+    expect(parseAppSettings({}).editor.navigation.historySize).toBe(10);
+    expect(parseAppSettings({ editor: { navigation: { historySize: 25 } } }).editor.navigation.historySize).toBe(25);
+    for (const bad of [0, -3, 'ten', null, Number.NaN]) {
+      expect(
+        parseAppSettings({ editor: { navigation: { historySize: bad } } }).editor.navigation.historySize,
+        String(bad),
+      ).toBe(10);
+    }
+    // A neighbour's bad leaf does not cost this one, nor this one its neighbours.
+    const s = parseAppSettings({ editor: { navigation: { historySize: 40, rememberQuickOpenQuery: 'on' } } });
+    expect(s.editor.navigation.historySize).toBe(40);
+    expect(s.editor.navigation.rememberQuickOpenQuery).toBe(false);
+    expect(parseSettingsGuarded({ editor: { navigation: { historySize: 500 } } }).value.editor.navigation.historySize).toBe(100);
+  });
+
+  it('parses editor.previews through the shipped provider registry (044 FR-061)', () => {
+    const s = parseAppSettings({
+      editor: { previews: { updateDelayMs: 150, providers: { markdown: { enabled: false } } } },
+    });
+    expect(s.editor.previews.updateDelayMs).toBe(150);
+    expect(s.editor.previews.maxWaitMs).toBe(1000);
+    expect(s.editor.previews.providers.markdown).toEqual({
+      enabled: false,
+      defaultOpenAction: 'editor',
+      loadRemoteImages: true,
+      showFrontMatter: true,
+    });
+    // FR-114 / FR-117 — an explicit `false` survives both the bare parse and the guarded read.
+    const off = { editor: { previews: { syncScroll: false, providers: { markdown: { showFrontMatter: false } } } } };
+    expect(parseAppSettings(off).editor.previews.syncScroll).toBe(false);
+    expect(parseSettingsGuarded(off).value.editor.previews.syncScroll).toBe(false);
+    expect(parseSettingsGuarded(off).value.editor.previews.providers.markdown.showFrontMatter).toBe(false);
+    // The declared range reaches the preview leaves too, because their descriptors are in the registry.
+    expect(parseSettingsGuarded({ editor: { previews: { updateDelayMs: 99_999 } } }).value.editor.previews.updateDelayMs).toBe(5000);
+    // An unknown provider id survives the guarded read too, not just the bare parse.
+    expect(
+      parseSettingsGuarded({ editor: { previews: { providers: { mermaid: { enabled: false } } } } }).value.editor
+        .previews.providers.mermaid,
+    ).toEqual({ enabled: false });
   });
 
   it('parses warnOnMissingFile (default true; honours an explicit false)', () => {
@@ -154,6 +219,8 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
         quickOpenExcludeHidden: true,
         rememberQuickOpenQuery: false,
         rememberGotoLineNumber: false,
+        // 044 FR-108 — each editor and preview panel keeps ten files of history by default.
+        historySize: 10,
       },
       // 040 FR-030/FR-031 — the status-bar readout block, both shipped ON. Here for the same reason
       // the navigation block is: this assertion is exhaustive, which is what makes a silently-added
@@ -161,6 +228,20 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       statusBar: {
         showCursorPosition: true,
         showCounts: true,
+      },
+      // 044 — the preview settings, generated from the shipped provider registry (Markdown alone).
+      // Their derivation and per-leaf parse are asserted in `preview-settings.test.ts`; they appear
+      // here because this assertion is exhaustive.
+      previews: {
+        updateDelayMs: 300,
+        maxWaitMs: 1000,
+        copyFormat: 'rich',
+        // 044 FR-114 (iteration 2026-09-15) — editor → preview scroll sync, shipped ON.
+        syncScroll: true,
+        providers: {
+          // FR-117 (iteration 2026-09-15) — Markdown's own Show front matter, shipped ON.
+          markdown: { enabled: true, defaultOpenAction: 'editor', loadRemoteImages: true, showFrontMatter: true },
+        },
       },
     });
   });
@@ -319,6 +400,23 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
           .not.toBe(shipped.languageByExtension);
         expect.soft(editor.navigation, 'editor.navigation').not.toBe(shipped.navigation);
         expect.soft(editor.statusBar, 'editor.statusBar').not.toBe(shipped.statusBar);
+        /*
+         * 044 — the SIXTH object-valued member, and the first nested two levels deeper than any
+         * before it. The sweep below checks top-level members only, so `previews` itself being a
+         * copy would pass it while `previews.providers` — and each provider's own record — was still
+         * the shipped object. A settings form toggling `providers.markdown.enabled` in place would
+         * then switch Markdown off in the shipped defaults for the whole process.
+         */
+        expect.soft(editor.previews, 'editor.previews').not.toBe(shipped.previews);
+        expect
+          .soft(editor.previews.providers, 'editor.previews.providers')
+          .not.toBe(shipped.previews.providers);
+        expect
+          .soft(editor.previews.providers.markdown, 'editor.previews.providers.markdown')
+          .not.toBe(shipped.previews.providers.markdown);
+        // FR-114 — the clone copies the primitive beside `providers` (data-model §14.1), rather than
+        // rebuilding `previews` from a hand-listed subset of its members.
+        expect(editor.previews.syncScroll, 'editor.previews.syncScroll').toBe(true);
 
         // …and the copy still says the same thing, so this is a clone and not a reset.
         expect(editor).toEqual(shipped);
@@ -338,8 +436,10 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
         editor.indentByLanguage.go = { style: 'spaces', indentWidth: 99, tabWidth: 99 };
         editor.languageByExtension['.mine'] = 'python';
         editor.navigation.rememberQuickOpenQuery = true;
+        editor.previews.providers.markdown.enabled = false;
 
         // The shipped defaults, the registry table, and the NEXT parse are all untouched.
+        expect(DEFAULT_APP_SETTINGS.editor.previews.providers.markdown.enabled).toBe(true);
         expect(DEFAULT_APP_SETTINGS.editor.indent.indentWidth).toBe(2);
         expect(SHIPPED_INDENT_BY_LANGUAGE.go).toEqual({ style: 'tabs', indentWidth: 4, tabWidth: 4 });
         expect(DEFAULT_APP_SETTINGS.editor.languageByExtension).toEqual({});

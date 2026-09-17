@@ -421,7 +421,8 @@ describe('the open-target preference reaches the routing (US7 / #141)', () => {
    * `openFileInTab`'s fourth argument, and the panel count is how an E2E is forced to observe it.
    *
    * `EditorOpenListener` is the whole of that wiring: it reads the setting through
-   * `useAppSettings()` and hands it to `openFileIntoEditor`, which routes to the active tab. Driving
+   * `useAppSettings()` and hands it to `openFromTree` (044's default-open-action router), which falls
+   * through to `openFileInTab` on the active tab whenever the file's action is not Preview. Driving
    * its `throng:open-file` event with the setting supplied through `ConfigProvider` asserts the same
    * thing one process cheaper — and asserts it on the ROUTE rather than on a rendered side effect,
    * so a regression says which of the two it was.

@@ -57,10 +57,12 @@ describe('registration in the shared registry', () => {
   });
 
   it('list() includes it — list() stays EVERY registered type', () => {
+    // 044 registers `preview` after it, on the same registered-but-not-offered footing.
     expect(defaultPanelTypeRegistry.list().map((d) => d.id)).toEqual([
       'terminal',
       'editor',
       'findInFiles',
+      'preview',
     ]);
   });
 
