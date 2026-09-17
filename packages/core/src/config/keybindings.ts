@@ -132,7 +132,25 @@ export type ActionId =
    * by scope rather than by absence — which is why `Ctrl+G` needs no recorded exception while
    * `navigate.quickOpen`, scoped EVERYWHERE, had to pick a chord no line editor wanted.
    */
-  | 'navigate.gotoLine';
+  | 'navigate.gotoLine'
+  /*
+   * 044 (#10, #136) — previews and per-panel navigation history.
+   *
+   * `preview.open` (FR-005) opens the preview of the focused editor's file or the tree's selection,
+   * and ships UNBOUND: every entry point is a button or a menu item, and no chord was asked for.
+   * `navigate.back` / `navigate.forward` (FR-105) step the focused editor or preview through its
+   * history. `preview.followLink` (FR-096c) is Ctrl+click for the keyboard, on the focused link.
+   */
+  | 'preview.open'
+  | 'navigate.back'
+  | 'navigate.forward'
+  | 'preview.followLink'
+  /*
+   * 044, 2026-09-16 iteration (FR-122d). Flips the ONE global scroll-sync setting, from an editor or a
+   * preview. Every surface that shows the toggle — four menu items, two status-bar buttons — runs this
+   * command, and it ships unbound, as `preview.open` does.
+   */
+  | 'preview.toggleSyncScroll';
 
 export interface Keybindings {
   version: number;
@@ -146,12 +164,24 @@ export interface Keybindings {
  * NO default: an unscoped command would be live everywhere, which is how a text-editing chord
  * ends up deleting a file.
  */
-export type DispatchScope = 'editor' | 'terminal' | 'explorer' | 'findInFiles';
+export type DispatchScope = 'editor' | 'terminal' | 'explorer' | 'findInFiles' | 'preview';
 
 export type CommandScopes = Readonly<Record<ActionId, ReadonlySet<DispatchScope>>>;
 
-const EVERYWHERE = new Set<DispatchScope>(['editor', 'terminal', 'explorer', 'findInFiles']);
+/*
+ * 044 R16 — `preview` is the FIFTH scope, for 043 R14's reason: `scopeFromKind` falls through to
+ * `explorer` for a kind it does not know, and over a preview that would make Delete, F2, Ctrl+X and
+ * Ctrl+C act on the file tree's selection (FR-021). It joins EVERYWHERE because zoom, focus movement
+ * and the view toggles must keep working there (FR-034); it joins neither PANELS (a preview has no
+ * document to save and no find bar) nor ANY_PANEL (a preview cannot be renamed, FR-030).
+ */
+const EVERYWHERE = new Set<DispatchScope>(['editor', 'terminal', 'explorer', 'findInFiles', 'preview']);
 const EDITOR_ONLY = new Set<DispatchScope>(['editor']);
+const PREVIEW_ONLY = new Set<DispatchScope>(['preview']);
+/** The two panel kinds that keep a navigation history (FR-100). */
+const HISTORY_PANELS = new Set<DispatchScope>(['editor', 'preview']);
+/** Where a file whose preview can be opened is focused: its editor, or the tree's selection (FR-005). */
+const PREVIEW_SOURCES = new Set<DispatchScope>(['editor', 'explorer']);
 const TERMINAL_ONLY = new Set<DispatchScope>(['terminal']);
 const EXPLORER_ONLY = new Set<DispatchScope>(['explorer']);
 /** Panels, but not the file tree: a find bar and a save belong to whatever panel is showing. */
@@ -218,6 +248,15 @@ export const COMMAND_SCOPES: CommandScopes = {
   // what keeps the shell's copy of it (SC-007). Deliberately NOT `navigate.*` by prefix: the two
   // commands in this namespace have different scopes on purpose.
   'navigate.gotoLine': EDITOR_ONLY,
+  // 044 — none of the four is live in a terminal, so no shell loses a key (Principle IV). Back and
+  // Forward share ONE chord across both panel kinds that have a history (one command, one chord).
+  'preview.open': PREVIEW_SOURCES,
+  'navigate.back': HISTORY_PANELS,
+  'navigate.forward': HISTORY_PANELS,
+  'preview.followLink': PREVIEW_ONLY,
+  // 044 FR-122d — live exactly where the toggle is shown: an editor or a preview. Never a terminal, so
+  // no shell loses a key even once a user binds it.
+  'preview.toggleSyncScroll': HISTORY_PANELS,
   // The File Explorer's clipboard chords act on FILES, and only while the tree has focus.
   'file.rename': EXPLORER_ONLY,
   'file.cut': EXPLORER_ONLY,
@@ -353,6 +392,22 @@ const WINDOWS_BINDINGS: PlatformBindings = {
      * IV's reserved tier bans a chord being taken from a hosted line editor; nothing is taken here.
      */
     'navigate.gotoLine': ['Ctrl+G'],
+    /*
+     * 044 (contracts/settings-bindings-tokens.md). The spec says "Alt+Left"; the TOKEN is
+     * `Alt+ArrowLeft`, because a token must equal what `eventToToken` builds from a keydown and the
+     * DOM names the key `ArrowLeft` — `Alt+Left` would never match a keypress (the focus.* chords
+     * above are spelled the same way for the same reason).
+     *
+     * None of the three chords is in either constitutional tier, and none is live in a terminal.
+     * `Ctrl+Enter` is unbound elsewhere; `Alt+Enter` / `Ctrl+Alt+Enter` belong to the replace
+     * commands, whose PANELS scope does not include `preview`.
+     */
+    'preview.open': [],
+    'navigate.back': ['Alt+ArrowLeft'],
+    'navigate.forward': ['Alt+ArrowRight'],
+    'preview.followLink': ['Ctrl+Enter'],
+    // FR-122d — unbound, like `preview.open`: every surface is a menu item or a button.
+    'preview.toggleSyncScroll': [],
     'file.rename': ['F2'],
     'file.cut': ['Ctrl+X'],
     'file.copy': ['Ctrl+C'],
@@ -609,6 +664,7 @@ export function columnSelectHeld(
 /** What each context is called, where a user can see it. */
 const SCOPE_NAMES: Record<DispatchScope, string> = {
   editor: 'Editor',
+  preview: 'Preview',
   terminal: 'Terminal',
   findInFiles: 'Find in Files',
   explorer: 'File Explorer',
@@ -621,7 +677,7 @@ const SCOPE_NAMES: Record<DispatchScope, string> = {
  * word "Everywhere" by comparing sizes, so a scope added here and forgotten in `EVERYWHERE` would
  * turn every window command's one pill into a list of contexts.
  */
-const SCOPE_ORDER: readonly DispatchScope[] = ['editor', 'terminal', 'findInFiles', 'explorer'];
+const SCOPE_ORDER: readonly DispatchScope[] = ['editor', 'preview', 'terminal', 'findInFiles', 'explorer'];
 
 /**
  * Where a command's chord is live, in words (016, FR-017b0).

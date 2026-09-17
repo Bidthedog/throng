@@ -42,7 +42,8 @@ import {
   setEditorState,
   removeEditorState,
 } from './editor-state.js';
-import { registerEditorActions, unregisterEditorActions } from './editor-actions.js';
+import { registerEditorActions, unregisterEditorActions, type EditorLoadNavigation } from './editor-actions.js';
+import { setPanelHistory } from '../navigation/history-store.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import { registerPanelSearch, unregisterPanelSearch } from '../search/search-controller.js';
 import { destroyPanelSearch, updateCount } from '../search/search-store.js';
@@ -74,6 +75,7 @@ import {
   takeEditorViewState,
 } from './editor-view-state.js';
 import { forgetPanelCaret, setPanelCaret } from './caret-store.js';
+import { attachEditorScrollRelay, type EditorScrollRelay } from './editor-scroll-relay.js';
 import {
   forgetDocumentMetrics,
   invalidateDocumentMetrics,
@@ -100,6 +102,10 @@ import {
 } from './commands.js';
 import { getPanelLanguage } from './editor-language.js';
 import { editorContentMenu, placeCaretForContextMenu } from './content-menu.js';
+import { currentEditorPreviewAffordance } from './editor-preview.js';
+import { requestPreviewOpen } from '../preview/open-preview.js';
+import { toggleSyncScroll } from '../preview/sync-scroll-toggle.js';
+import { usePreviewProviders } from '../preview/provider-registry-context.js';
 // 033 US2 (FR-027) — the content menu's Go To Line item opens the ONE navigation-modal slot. A leaf
 // store with no imports of its own, so this creates no cycle back into `navigate/`.
 import { setNavigationModal } from '../navigate/navigation-store.js';
@@ -317,6 +323,13 @@ export function useEditor(params: UseEditorParams): void {
   // it can be RE-asserted after the async language/indent reconfigure, which re-renders
   // and would otherwise drop the restored viewport back to the top.
   const pendingScrollAnchorRef = useRef<number | null>(null);
+  /*
+   * 044 FR-121 — this view's scroll relay (`editor-scroll-relay.ts`), and whether its initial placement is
+   * still to settle. A preview's request is HELD until then (R-E4): the #144 restore is re-asserted after
+   * the async language load, and a request applied before that would be scrolled away by it.
+   */
+  const scrollRelayRef = useRef<EditorScrollRelay | null>(null);
+  const placementPendingRef = useRef(false);
   // US8 (#154): the live scroll anchor (updated by the scroll listener) so an in-place open can
   // save the OUTGOING document's position; and a flag set by openFile so the next document RESET
   // applies the US8 scroll policy (reset to top, or restore the incoming document's saved scroll).
@@ -348,6 +361,13 @@ export function useEditor(params: UseEditorParams): void {
     seededFor.current = panel.id;
     configRef.current = (panel.config ?? {}) as EditorPanelConfig;
   }
+  /**
+   * 044 US7 — the panel's LIVE `config.history`, the mirror `HistoryMirrorSync` keeps. `configRef` is the
+   * editor's own record of its document and is rebuilt on every in-place open, so the history is read from
+   * the layout's panel at the moment a load is sent, beside the path it loads (contracts §6).
+   */
+  const liveHistoryRef = useRef<EditorPanelConfig['history']>(undefined);
+  liveHistoryRef.current = (panel.config as EditorPanelConfig | undefined)?.history;
   /**
    * The DOCUMENT this panel is showing right now, named the way the status bar's stores key it
    * (040 FR-007).
@@ -392,6 +412,10 @@ export function useEditor(params: UseEditorParams): void {
 
   const keybindingsRef = useRef(keybindings);
   keybindingsRef.current = keybindings;
+  // 044 FR-002 — the injected preview providers, read by the content menu when it opens.
+  const previewProviders = usePreviewProviders();
+  const previewProvidersRef = useRef(previewProviders);
+  previewProvidersRef.current = previewProviders;
   /**
    * What the DOCUMENT already does, read from its existing lines when it loads (FR-018a).
    *
@@ -753,6 +777,13 @@ export function useEditor(params: UseEditorParams): void {
         pendingScrollAnchorRef.current = null;
         view.dispatch({ effects: EditorView.scrollIntoView(anchor, { y: 'start' }) });
       }
+    }).finally(() => {
+      // 044 FR-121 (R-E4) — the mount's placement has now run (or had nothing to re-assert): a
+      // preview's held request may move this view. Only for the refresh that is still current, whose
+      // re-assert above is the last word on the restored scroll.
+      if (!placementPendingRef.current || !isCurrent()) return;
+      placementPendingRef.current = false;
+      scrollRelayRef.current?.ready();
     });
   };
 
@@ -772,7 +803,7 @@ export function useEditor(params: UseEditorParams): void {
   // Load a file into THIS editor, replacing its current document (open-from-tree).
   // UI main replaces the document and broadcasts the replacement to every view of it,
   // so there is nothing to apply here — this view receives it like any other.
-  const openFile = async (absPath: string): Promise<void> => {
+  const openFile = async (absPath: string, opts?: { navigation?: EditorLoadNavigation }): Promise<void> => {
     // US8 (#154): opening a DIFFERENT file IN PLACE. Save the outgoing document's scroll anchor
     // (only when the pref is on) and flag the incoming document RESET so it applies the scroll
     // policy — restore the incoming file's saved anchor (on), or reset to the top (off).
@@ -782,7 +813,16 @@ export function useEditor(params: UseEditorParams): void {
       if (restore) docScrollByPath.set(outgoing, currentScrollAnchorRef.current);
       pendingOpenScrollRef.current = { path: absPath, restore };
     }
-    const loaded = await win()?.editor?.load({ ...buildMeta(), absPath });
+    // 044 US7 — every load carries the panel's persisted history (main adopts it only when it holds no
+    // record), and a Back / Forward step carries its intent, so main moves the position rather than
+    // recording (contracts/navigation-history.md §3, §6).
+    const history = liveHistoryRef.current;
+    const loaded = await win()?.editor?.load({
+      ...buildMeta(),
+      absPath,
+      ...(history !== undefined ? { history } : {}),
+      ...(opts?.navigation ? { navigation: opts.navigation } : {}),
+    });
     if (loaded && loaded.ok === true) {
       configRef.current = {
         filePath: absPath,
@@ -804,6 +844,25 @@ export function useEditor(params: UseEditorParams): void {
       // broadcasts that replacement as soon as it loads the file, so it can reach this view BEFORE
       // the line above records the new path — and language detection reading the OLD path resolves
       // the OLD language. The file would open with its content and no highlighting.
+      refreshLanguage();
+    } else if (loaded && loaded.ok === false && opts?.navigation && isMissingReason(loaded.reason)) {
+      /*
+       * 044 FR-106d — a Back / Forward step onto a file that is gone or cannot be read. Main has MOVED the
+       * position and replaced the document with an empty, unloadable one at that path (its reset reaches this
+       * view like any other), so this panel now holds THAT file — in the could-not-read state a restore
+       * reaches for the same condition: the banner, naming it, for as long as it is true. The banner is the
+       * condition's one surface, so no second, one-shot notice is raised beside it.
+       */
+      configRef.current = { ...configRef.current, filePath: absPath };
+      ws.updatePanelConfig(panelId, { filePath: absPath });
+      fileMissingRef.current = true;
+      unloadableRef.current = true;
+      unloadableDetailRef.current = missingFileDetail(
+        { filePath: absPath, panelName: metaRef.current.title, reason: loaded.reason },
+        win()?.osName ?? 'windows',
+      );
+      publishState();
+      republishCounts();
       refreshLanguage();
     } else if (loaded && loaded.ok === false) {
       // A deliberate open of a bad/missing file: warn immediately (single file).
@@ -905,8 +964,13 @@ export function useEditor(params: UseEditorParams): void {
       win()?.editor?.dispatch({ ...buildMeta(), ...msg });
     });
     replicaRef.current = replica;
+    /** Set once the view exists (below); the listener can fire only after that. */
+    let scrollRelay: EditorScrollRelay | null = null;
 
     const updateListener = EditorView.updateListener.of((update) => {
+      // 044 FR-121f — the top line can change with no scroll event (lines inserted above the viewport,
+      // a reflow at the top). Its own guard, above the one below, which it must never widen.
+      if (update.docChanged || update.geometryChanged) scrollRelay?.onUpdate(update);
       /*
        * 040 US1 — the status bar's readouts ride THIS listener (FR-008: no figure adds one of its
        * own, in the hottest path in the editor).
@@ -1118,6 +1182,43 @@ export function useEditor(params: UseEditorParams): void {
                     open: () => setNavigationModal({ kind: 'gotoLine', panelId }),
                     chord: firstBinding(keybindingsRef.current, 'navigate.gotoLine'),
                   },
+                  /*
+                   * 044 FR-002 — Open Preview, decided at MENU-OPEN time for Go To Line's reason: the
+                   * file, the provider's enabled setting and whether a preview is already open (in any
+                   * window) all change under a live view, and a captured answer would offer a preview
+                   * that already exists. `rootless` editors belong to no project and are offered none.
+                   */
+                  openPreview: (() => {
+                    const filePath = configRef.current.filePath ?? null;
+                    const meta = metaRef.current;
+                    return {
+                      affordance: currentEditorPreviewAffordance({
+                        registry: previewProvidersRef.current.registry,
+                        settings: meta.settings.previews,
+                        filePath,
+                        projectRoot: meta.rootless ? null : meta.projectRoot,
+                      }),
+                      open: () => {
+                        if (filePath === null) return;
+                        void requestPreviewOpen({
+                          absPath: filePath,
+                          projectId: meta.ownerProjectId ?? panel.originProjectId,
+                          requesterPanelId: panelId,
+                        });
+                      },
+                      chord: firstBinding(keybindingsRef.current, 'preview.open'),
+                    };
+                  })(),
+                  /*
+                   * 044 FR-122b — Synchronise Scrolling, read at menu-open time for the same reason. The
+                   * builder draws it only where Open Preview is drawn (FR-122a); choosing it flips the one
+                   * global setting from the value this window holds NOW.
+                   */
+                  syncScroll: {
+                    on: metaRef.current.settings.previews.syncScroll,
+                    toggle: () => void toggleSyncScroll(metaRef.current.settings.previews.syncScroll),
+                    chord: firstBinding(keybindingsRef.current, 'preview.toggleSyncScroll'),
+                  },
                   // Read at menu-open time, not captured: the language changes under a live view
                   // (detection settling, an override chosen), and a captured copy would name a
                   // language the document has since stopped being.
@@ -1203,6 +1304,19 @@ export function useEditor(params: UseEditorParams): void {
     // The status strip and the language picker live OUTSIDE this view and must be able to
     // reconfigure it when the user picks a language (016).
     registerEditorView(panelId, view);
+    /*
+     * 044 FR-113, FR-121 — two-way scroll sync (`editor-scroll-relay.ts`): publishes this view's top
+     * source line, at most once a frame, for a preview beside it — at once, so a preview that mounted
+     * first finds this view — and registers the scroller a preview's request drives. Requests are held
+     * until `initialise` has placed the view (`placementPendingRef`, released by `refreshLanguage`).
+     */
+    placementPendingRef.current = true;
+    const relay = attachEditorScrollRelay(view, panelId, {
+      raf: (callback) => requestAnimationFrame(callback),
+      caf: (handle) => cancelAnimationFrame(handle),
+    });
+    scrollRelay = relay;
+    scrollRelayRef.current = relay;
     // Register this editor's focus so keyboard move-focus (012) can route DOM focus
     // (and the caret) into it when it becomes the active panel.
     registerPanelFocus(panelId, () => viewRef.current?.focus());
@@ -1258,6 +1372,17 @@ export function useEditor(params: UseEditorParams): void {
        * incoming text schedules its own count through the update listener in the ordinary way.
        */
       invalidateDocumentMetrics(metricsDocKey());
+      /*
+       * …and the replacement may be a DIFFERENT FILE (an in-place open, a Back / Forward step). The view that
+       * asked records the path from its own load's answer, but a second window this panel is synced to never
+       * sees that answer (044 FR-110): without adopting it here, that window's pill, title and banner went on
+       * naming the file that was replaced, over the new document's text. Adopted AFTER the withdrawal above,
+       * which names the outgoing document, and before the publish, language and counts below, which name the
+       * incoming one — the same hop `movedTo` makes for a moved file.
+       */
+      if (typeof reset.filePath === 'string' && reset.filePath !== configRef.current.filePath) {
+        configRef.current = { ...configRef.current, filePath: reset.filePath };
+      }
       replica.reset(reset.version);
       dirtyRef.current = reset.dirty;
       target.dispatch({
@@ -1486,6 +1611,20 @@ export function useEditor(params: UseEditorParams): void {
         // presenting remembered text as the file (027 / #161).
         unloadableRef.current = !!existing.unloadable;
         initialise(existing);
+        /*
+         * 044 T158 — a mount WITHOUT a load (this branch) still has to reach this panel's history: main
+         * adopts the persisted one if it holds no record, and a window opened after the history last changed
+         * (a sub-workspace, a reload) learns it from the answer. A load carries the history itself instead.
+         */
+        const persisted = configRef.current.history;
+        void win()
+          ?.history?.attach({ panelId, panelKind: 'editor', ...(persisted !== undefined ? { persisted } : {}) })
+          .then((h) => {
+            if (!cancelled) setPanelHistory(panelId, h);
+          })
+          .catch(() => {
+            /* No authority to ask (a torn-down window): the next `changed` broadcast seeds it. */
+          });
         // …and CHECK, rather than take the authority's last answer on trust (027 / #161). This
         // branch never touches the disk, so a path that broke while this panel was unmounted — a
         // project switch, a window reload — would otherwise show remembered text as the file with
@@ -1502,7 +1641,12 @@ export function useEditor(params: UseEditorParams): void {
       const recovered = await bridge?.recoverOne?.(panelId);
       const cfg = configRef.current;
       if (cfg.filePath) {
-        const loaded = await bridge?.load({ ...buildMeta(), absPath: cfg.filePath });
+        // 044 US7 — the persisted history rides the restoring load, read with the path it loads (§6).
+        const loaded = await bridge?.load({
+          ...buildMeta(),
+          absPath: cfg.filePath,
+          ...(cfg.history !== undefined ? { history: cfg.history } : {}),
+        });
         if (loaded && loaded.ok === true) {
           configRef.current = {
             ...cfg,
@@ -1593,6 +1737,13 @@ export function useEditor(params: UseEditorParams): void {
       // reverted to whatever its filename implied. Removed in `disposeEditor` instead, with the
       // rest of the explicit teardown.
       unregisterEditorView(panelId);
+      // No mounted view of this editor in this window any more, so nothing for a preview to follow and
+      // nothing for one to drive (FR-113, FR-121a). The relay cancels its frames, forgets the line and
+      // unregisters its scroller.
+      relay.dispose();
+      scrollRelay = null;
+      if (scrollRelayRef.current === relay) scrollRelayRef.current = null;
+      placementPendingRef.current = false;
       replicaRef.current = null;
       view.destroy();
       viewRef.current = null;

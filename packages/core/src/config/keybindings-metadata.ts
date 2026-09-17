@@ -143,6 +143,34 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Go To Line',
     'Jump to a line number in the focused editor. Live in an editor only, so a terminal keeps its own Ctrl+G.',
   ),
+  // 044 (#10, #136). Navigate for the same reason as the two above: each one takes you somewhere —
+  // to a file's rendering, back or forward through a panel's files, or to where a link points.
+  chord(
+    'preview.open',
+    'Navigate',
+    'Open Preview',
+    'Open a rendered preview of the focused editor’s file, or of the file selected in Files & Folders. Unbound by default.',
+  ),
+  chord(
+    'navigate.back',
+    'Navigate',
+    'Back',
+    'Show the previous file in the focused editor or preview’s history. In an editor this takes the key from moving by syntax.',
+  ),
+  chord(
+    'navigate.forward',
+    'Navigate',
+    'Forward',
+    'Show the next file in the focused editor or preview’s history, after going Back.',
+  ),
+  // "Open Link", not "Follow link": the same words as the preview body menu item this accelerates
+  // (FR-095), so the key binder and the menu name one command once.
+  chord(
+    'preview.followLink',
+    'Navigate',
+    'Open Link',
+    'Open the focused link in a preview, exactly as Ctrl+click does. Live in a preview only.',
+  ),
 
   // File Explorer (resolved while the File Explorer pane has focus)
   chord('file.rename', 'File Explorer', 'Rename', 'Rename the selected file or folder.'),
@@ -217,6 +245,14 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Editor',
     'Toggle word wrap',
     "Wrap or unwrap long lines in the focused editor's document (024 US1).",
+  ),
+  // 044 FR-122d — beside the other view toggle, and in the menu item's own words, so the key binder
+  // and the four menus name one command once.
+  chord(
+    'preview.toggleSyncScroll',
+    'Editor',
+    'Synchronise Scrolling',
+    'Turn synchronised scrolling between editors and their previews on or off, everywhere. Live in an editor or a preview. Unbound by default.',
   ),
 
   // Search (013) — one shared find bar routed to the active panel. A terminal

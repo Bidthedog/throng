@@ -34,6 +34,17 @@ export class SubWorkspaceWorkspaceClient extends WorkspaceClient {
     return `subworkspace:${id}`;
   }
 
+  /**
+   * The prefix's own reverse (044 US4 fix round 1, item 2): the sub-workspace id a layout's `projectId`
+   * names, or `null` for a real project's. Lets a shared load path (`WorkspaceProvider`'s restore
+   * filter, `PreviewProviderSync`) tell a sub-workspace's own layout from a project's without a second,
+   * React-context signal that could disagree with the one this class already commits to.
+   */
+  static subWorkspaceIdOf(projectId: string): string | null {
+    const prefix = 'subworkspace:';
+    return projectId.startsWith(prefix) ? projectId.slice(prefix.length) : null;
+  }
+
   override async load(): Promise<WorkspaceLoadResultDto> {
     const { subWorkspaces } = await this.subBridge.invoke<WorkspaceLoadSubsResult>(
       'workspace.loadSubWorkspaces',

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactElement } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactElement } from 'react';
 import {
   SETTINGS_METADATA,
   buildShippedDefaults,
@@ -41,6 +41,16 @@ import { createApplyClient } from './apply-client.js';
  * typed word (name / description / value). Typing is never blocked — the query
  * updates the field immediately and the filter settles after a short debounce.
  */
+
+/**
+ * The descriptors this tab draws (044 FR-070, FR-071, SC-003).
+ *
+ * The app never provides it, so the form draws `SETTINGS_METADATA` exactly as it always has. A test —
+ * SC-003's provider-seam test above all — wraps the tab with descriptors generated from a registry of
+ * its own and sees that registry's rows appear, which is the claim "a new provider needs no edit to the
+ * preferences editor" made observable. One generic seam, never a per-provider branch.
+ */
+export const SettingsMetadataContext = createContext<readonly FieldDescriptor[]>(SETTINGS_METADATA);
 
 /** How long the typeahead waits after the last keystroke before filtering. */
 const SEARCH_DEBOUNCE_MS = 150;
@@ -120,6 +130,7 @@ export function SettingsTab({
   searchDebounceMs?: number;
 } = {}): ReactElement {
   const settings = useAppSettings();
+  const metadata = useContext(SettingsMetadataContext);
   // 039 FR-008a — the daemon capability that gates "Run as administrator by default". The same
   // signal 005 FR-025a requires the per-panel control to use; the renderer never probes the OS.
   const { elevated } = useCapabilities();
@@ -150,8 +161,8 @@ export function SettingsTab({
   };
 
   const matches = useMemo(
-    () => filterFields(applied, SETTINGS_METADATA, (d) => getAtPath(settings, d.key)),
-    [applied, settings],
+    () => filterFields(applied, metadata, (d) => getAtPath(settings, d.key)),
+    [applied, settings, metadata],
   );
   const groups = useMemo(() => groupDescriptors(matches), [matches]);
 

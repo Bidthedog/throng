@@ -111,9 +111,9 @@ export type { FileNode, NodeKind, RenameResult, DedupeStyle, DragModifiers, Drag
 
 // Path identity (019, FR-007): is this the same file, is this file under that folder — asked of
 // paths spelled by different producers (the tree's `/`, `node:path.join`'s `\`). Pure rules.
-export { normaliseForCompare, samePath, isUnderPath } from './fs/path-id.js';
+export { normaliseForCompare, samePath, isUnderPath, remainderUnder } from './fs/path-id.js';
 export { toCanonicalPath, isCanonicalPath, type PathSeparator } from './fs/path-canon.js';
-export { canonicalisePersistedPaths } from './workspace/persisted-paths.js';
+export { canonicalisePersistedPaths, previewPathOf } from './workspace/persisted-paths.js';
 
 // Terminal shell detection (005 Phase B): OS seam.
 export type { IShellDetection, DetectedShell } from './abstractions/shell-detection.js';
@@ -495,6 +495,8 @@ export type {
   PanelConfig,
   EditorPanelConfig,
   FindInFilesPanelConfig,
+  PreviewPanelConfig,
+  PersistedHistory,
   EncodingId,
   LineEndingId,
   SplitNode,
@@ -757,10 +759,12 @@ export {
   panelZoomLevel,
   bumpZoom,
   resetZoom,
+  addPanelBeside,
+  removePanelsWhere,
 } from './workspace/operations.js';
 export type { Edge, NewTabIds } from './workspace/operations.js';
-export { panelDisplayTitle } from './workspace/panel-title.js';
-export type { PanelTitleSources } from './workspace/panel-title.js';
+export { panelDisplayTitle, previewTitleParts, PREVIEW_TITLE_SUFFIX } from './workspace/panel-title.js';
+export type { PanelTitleSources, PreviewTitleParts } from './workspace/panel-title.js';
 export { renameCommit } from './workspace/rename-commit.js';
 export type { RenameCommit } from './workspace/rename-commit.js';
 // 011 FR-030/031 — which verb a Panel's own removal controls wear. Extracted from a ternary inside
@@ -900,3 +904,100 @@ export type { ScopeInput } from './search/scope-input.js';
 // it: a search panel is opened by a command, not chosen from a dropdown.
 export { FIND_IN_FILES_KIND, findInFilesPanelType } from './find-in-files/panel-type.js';
 export type { FindInFilesValues } from './find-in-files/panel-type.js';
+
+// 044 — file previews (#10). The provider seam (descriptor types, the registry and the one decision
+// every affordance is drawn from), the shipped registration, and the pure policies the renderer's
+// sanitiser hook and main's request filter and protocol call.
+export type {
+  PreviewProviderKind,
+  ProviderSettingDeclaration,
+  PreviewProviderDescriptor,
+  PreviewProviderRegistry,
+} from './preview/provider.js';
+export type {
+  PreviewCopyFormat,
+  DefaultOpenAction,
+  ProviderSettings,
+  PreviewSettings,
+} from './preview/settings-types.js';
+export {
+  createPreviewProviderRegistry,
+  providerFor,
+  enabledProviderFor,
+  previewAffordance,
+} from './preview/registry.js';
+export type { PreviewAffordance } from './preview/registry.js';
+export {
+  SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS,
+  SHIPPED_PREVIEW_PROVIDERS,
+  // The Markdown provider's FR-090d heading grammar (fix round 1, item 3): forwarded through the
+  // registration index, the one file outside a provider's own folder allowed to import from it.
+  markdownHeadingLine,
+} from './preview/providers/index.js';
+// The `editor.previews` defaults, descriptors and parse, generated from a registry (data-model §3),
+// and the decisions main and the renderer read from them.
+export {
+  PREVIEW_COPY_FORMATS,
+  DEFAULT_OPEN_ACTIONS,
+  previewSettingsDefaults,
+  previewSettingsDescriptors,
+  parsePreviewSettings,
+  effectiveMaxWaitMs,
+  defaultOpenActionFor,
+  remoteImagesPermitted,
+  providersTurnedOff,
+} from './config/preview-settings.js';
+export {
+  classifyPreviewLink,
+  resolvePreviewImage,
+  headingSlug,
+  languageForFenceInfo,
+} from './preview/links.js';
+export type { PreviewLink, PreviewImage } from './preview/links.js';
+export { decideRendererRequest, resolvePreviewAsset } from './preview/request-policy.js';
+export type { PreviewAssetResolution } from './preview/request-policy.js';
+export { createSettleScheduler } from './preview/settle-scheduler.js';
+export type { SettleClock, SettleScheduler, SettleSchedulerOptions } from './preview/settle-scheduler.js';
+// The shapes that cross the `throng:preview:*` bridge (contracts/preview-ipc.md §1–§2).
+export type {
+  PreviewContent,
+  PreviewNotice,
+  PreviewUpdate,
+  PreviewOpenRequest,
+  PreviewOpenResponse,
+  PreviewAttachRequest,
+  PreviewAttachResponse,
+  PreviewNavigateRequest,
+  PreviewNavigateResponse,
+  PreviewRefreshResponse,
+  PreviewOpenChanged,
+  PreviewPathChanged,
+  PreviewFocusMessage,
+  PreviewPlaceMessage,
+} from './preview/wire-types.js';
+export { splitFrontMatter } from './preview/front-matter.js';
+export type { FrontMatterSplit } from './preview/front-matter.js';
+// Registered in `defaultPanelTypeRegistry`, `offered: false` — the Find in Files arrangement above.
+export { PREVIEW_KIND, previewPanelType } from './preview/panel-type.js';
+export type { PreviewValues } from './preview/panel-type.js';
+
+// 044 — per-panel navigation history (#136): the pure reducer main's authority is built on.
+export {
+  EMPTY_HISTORY,
+  MAX_VIEW_STATE_BYTES,
+  recordOpen,
+  recordJump,
+  moveTo,
+  canGoBack,
+  canGoForward,
+  targetOf,
+  applyCap,
+  rewritePaths,
+  rewriteCurrent,
+  setCurrentViewState,
+  mergeCurrentPlace,
+  recordCurrentPlace,
+  parseHistory,
+  serialiseHistory,
+} from './navigation/history.js';
+export type { NavigationEntry, NavigationHistory } from './navigation/history.js';

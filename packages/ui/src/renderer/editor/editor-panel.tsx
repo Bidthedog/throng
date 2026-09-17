@@ -81,6 +81,9 @@ export function EditorPanel({
           panelId={panel.id}
           projectId={ownerProjectId ?? null}
           relPath={toRelPath(projectRoot, filePath)}
+          // 044 FR-001/FR-004 — the preview button is decided against this editor's own root; a
+          // sub-workspace-owned (rootless) editor has none, and is offered no preview.
+          projectRoot={rootless ? null : projectRoot}
           autoOpenPicker={revealedForPicker}
           onPickerClosed={() => setRevealedForPicker(false)}
         />

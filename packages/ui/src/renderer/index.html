@@ -2,9 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <!-- specs/044-file-previews/contracts/security-policy.md Layer 3, pinned by
+         tests/unit/renderer-csp.test.ts. style-src keeps 'unsafe-inline' because CodeMirror and the
+         theme provider mount <style> elements; connect-src, font-src and media-src stay on
+         default-src. Must precede every script and stylesheet it governs. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: throng-preview:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <title>throng</title>
   </head>

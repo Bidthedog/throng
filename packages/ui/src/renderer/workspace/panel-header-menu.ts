@@ -14,7 +14,8 @@
  * | Content      | Rename, Save, Save As…, Revert, Reload from disk, Find, Replace, Replace All        |
  * | Destroy      | the panel's destroy verb                                                            |
  * | Navigate     | Reveal File in Files & Folders, Open in OS Explorer, Send to Tab, Sync to           |
- * | View & state | Reset Name, Zoom, Try again, Copy details, Clear panel type, Refresh / redraw       |
+ * | View & state | Reset Name, Zoom, Synchronise Scrolling, Try again, Copy details, Clear panel type, |
+ * |              | Refresh / redraw                                                                    |
  *
  * *Destroy Panel* moves from last to the middle — the same shape the Files & Folders menu has always
  * had. *Reset Name* leaves Rename's side for View & state, where the constitution names it
@@ -29,11 +30,30 @@
  * empty. `menu-sections.test.ts` pins it, so "an empty group draws no divider" is asserted on the
  * shape that actually exercises it rather than only stated here.
  *
+ * 044 ADDS A KIND AND THREE ROWS (contracts/menus-and-controls.md §1–§2). An editor gains *Open
+ * Preview*, *Back* and *Forward* in Navigate; a preview panel draws its own shape — no Content at all,
+ * *Close Panel*, the reveal rows, *Open in Editor* / *Go to Editor*, *Back*, *Forward*, the send rows,
+ * then *Refresh* and *Zoom* — and carries the failure banner's three commands while ITS banner is up.
+ * The builder names no provider: a preview's rows read its provider KIND, and Open Preview reads
+ * core's `previewAffordance`, both handed in (preview-provider-seam.md §3).
+ *
+ * 044's 2026-09-16 iteration adds one View & state row to both (§1, §2, §10): *Synchronise Scrolling*,
+ * after *Zoom* and before the banner items, on an editor wherever Open Preview is drawn and on every
+ * text-provider preview (FR-122a, FR-122b).
+ *
  * The action bodies stay at the call site, because several of them need a confirmation dialog, the
  * clipboard and the workspace store. What moved here is what the menu IS — its labels, icons,
  * shortcuts, conditions and sections — which is precisely what the unit table asserts.
  */
-import { firstBinding, type Keybindings, type Panel, type PanelKind } from '@throng/core';
+import {
+  firstBinding,
+  PREVIEW_KIND,
+  type Keybindings,
+  type Panel,
+  type PanelKind,
+  type PreviewAffordance,
+  type PreviewProviderKind,
+} from '@throng/core';
 import type { MenuAction } from './context-menu.js';
 
 /**
@@ -57,7 +77,7 @@ import type { MenuAction } from './context-menu.js';
  * `panel-header-zoom-menu.test.ts` restates the correspondence by hand and names the consumer for
  * each, so the two files have to move together.
  */
-const KINDS_THAT_ZOOM: readonly PanelKind[] = ['editor', 'terminal', 'findInFiles'];
+const KINDS_THAT_ZOOM: readonly PanelKind[] = ['editor', 'terminal', 'findInFiles', PREVIEW_KIND];
 
 /**
  * Whether this panel can be renamed at all (043 FR-061).
@@ -78,7 +98,21 @@ const KINDS_THAT_ZOOM: readonly PanelKind[] = ['editor', 'terminal', 'findInFile
  * of them stays open.
  */
 export function isRenamable(panel: Panel): boolean {
-  return panel.kind !== 'findInFiles';
+  // 044 FR-030 — a preview is the second exception, on 043 FR-061's ground: its name is DERIVED from
+  // the file it shows or the editor it follows (FR-031), and a user-chosen name would hide which.
+  return panel.kind !== 'findInFiles' && panel.kind !== PREVIEW_KIND;
+}
+
+/**
+ * The verb a panel's removal is offered under (011 FR-030).
+ *
+ * A preview is always CLOSED, never destroyed, whoever owns it (044 FR-033): closing it loses nothing
+ * — it owns no document and no session (FR-042) — and "Destroy" would claim otherwise. Every other
+ * kind takes the ownership verb the caller computed. Exported so the header's ✕ and this menu say the
+ * same word.
+ */
+export function removalVerbFor(panel: Panel, ownershipVerb: string): string {
+  return panel.kind === PREVIEW_KIND ? 'Close' : ownershipVerb;
 }
 
 /** The editor state the menu's conditions read. `null` for a panel that is not an editor. */
@@ -131,6 +165,37 @@ export interface PanelHeaderMenuActions {
   /** 043 FR-015 — replace every match in this panel's document. Editor only (FR-013). */
   replaceAll: () => void;
   destroy: () => void;
+  /** 044 FR-002 — an editor's Open Preview (`preview.open`). */
+  openPreview: () => void;
+  /** 044 FR-111 — this panel's Back, on an editor or a preview. */
+  navigateBack: () => void;
+  /** 044 FR-111 — this panel's Forward, on an editor or a preview. */
+  navigateForward: () => void;
+  /** 044 FR-028 — a preview's Refresh. */
+  refreshPreview: () => void;
+  /** 044 FR-015c — a standalone text preview's route to an editor. */
+  openInEditor: () => void;
+  /** 044 FR-015d — a parented text preview's route to its editor. */
+  goToEditor: () => void;
+  /** 044 FR-122 — flip `editor.previews.syncScroll` (`toggleSyncScroll`, the one command body). */
+  toggleSyncScroll: () => void;
+}
+
+/** What a PREVIEW panel's menu reads. `null` for a panel that is not a preview. */
+export interface PanelHeaderPreviewState {
+  /** A binary provider has no editor to open or go to (044 FR-015e, FR-073). */
+  providerKind: PreviewProviderKind;
+  /** Parented → *Go to Editor*; standalone → *Open in Editor* (FR-015c, FR-015d). */
+  parented: boolean;
+}
+
+/**
+ * Whether this panel's navigation history has somewhere to go (044 FR-111). `null` when none is known,
+ * which draws both items DISABLED — they are never hidden on an editor or a preview (FR-104).
+ */
+export interface PanelHeaderHistoryState {
+  canGoBack: boolean;
+  canGoForward: boolean;
 }
 
 export interface PanelHeaderMenuArgs {
@@ -142,17 +207,166 @@ export interface PanelHeaderMenuArgs {
   /** The other Tabs in this window, for Send to Tab. */
   otherTabs: readonly { id: string; title: string }[];
   editor: PanelHeaderEditorState | null;
-  /** True while the editor's failure banner is up — the only state its three commands mean anything. */
-  editorFailure: boolean;
+  /**
+   * True while the panel's `PanelFailureBanner` is up — an editor's OR a preview's (044, renamed from
+   * `editorFailure`, which would now lie about its scope). The only state the banner's three commands
+   * mean anything in.
+   */
+  panelFailure: boolean;
   /** `null` inside a sub-workspace window, where syncing onward is not offered. */
   detach: PanelHeaderDetach | null;
+  /** 044 — a preview's provider kind and parented state. Omitted or `null` for any other kind. */
+  preview?: PanelHeaderPreviewState | null;
+  /** 044 FR-111 — an editor's or preview's history ends. Omitted or `null`: both items disabled. */
+  history?: PanelHeaderHistoryState | null;
+  /**
+   * 044 FR-002 — an editor's Open Preview, drawn from core's `previewAffordance` (never from a named
+   * provider, contracts/preview-provider-seam.md §3). Omitted means `absent`.
+   */
+  openPreview?: PreviewAffordance;
+  /**
+   * 044 FR-122b — whether scroll sync is ON (`editor.previews.syncScroll`), which checks the item. WHERE the
+   * item appears is not this flag's business: an editor shows it exactly where Open Preview is drawn, a
+   * preview exactly when its provider is `text` (FR-122a). Omitted reads as off.
+   */
+  syncScroll?: boolean;
   actions: PanelHeaderMenuActions;
 }
 
+/**
+ * Back and Forward (044 FR-111) — Navigate, with the chords the header buttons show and the enabled
+ * state the history gives. Drawn on every editor and preview, disabled at the ends (FR-104).
+ */
+function historyItems(
+  history: PanelHeaderHistoryState | null | undefined,
+  keybindings: Keybindings,
+  actions: PanelHeaderMenuActions,
+): MenuAction[] {
+  return [
+    {
+      label: 'Back',
+      icon: 'navigateBack',
+      section: 'navigate',
+      shortcut: firstBinding(keybindings, 'navigate.back'),
+      disabled: !(history?.canGoBack ?? false),
+      onClick: () => actions.navigateBack(),
+    },
+    {
+      label: 'Forward',
+      icon: 'navigateForward',
+      section: 'navigate',
+      shortcut: firstBinding(keybindings, 'navigate.forward'),
+      disabled: !(history?.canGoForward ?? false),
+      onClick: () => actions.navigateForward(),
+    },
+  ];
+}
+
+/*
+ * 030 FR-042c — the failure banner's OWN three commands, in the panel's own menu.
+ *
+ * The Constitution binds a feature that adds a panel action to add its menu item in the same
+ * increment: an action reachable only as an icon on a banner is unreachable from where users look for
+ * panel commands, and undiscoverable by anyone who does not recognise the glyph.
+ *
+ * Shown only while the banner is, because that is the only state in which any of them is meaningful —
+ * and the LABELS are the banner's, unchanged (FR-042d), which is what makes them the same command
+ * rather than a second one that looks like it. *Try again* therefore sits beside *Reload from disk*
+ * while a file is unreadable: they run the same re-read, and the duplication is the price of each
+ * surface naming its own command consistently.
+ *
+ * 044 — a preview carries the same three while ITS banner is up (FR-033); what each does on a preview
+ * is the call site's business, through the preview's own paths (contracts/menus-and-controls.md §1).
+ */
+function failureItems(actions: PanelHeaderMenuActions): MenuAction[] {
+  return [
+    {
+      label: 'Try again',
+      icon: 'retry',
+      section: 'viewState',
+      onClick: () => actions.tryAgain(),
+    },
+    {
+      // Copy is not an exception for being "just a copy button". It is a discrete command acting on a
+      // Panel, and a copy control reachable only as a glyph on a banner is unreachable to anyone who
+      // does not recognise the glyph. The text is the BANNER'S, assembled once.
+      label: 'Copy details',
+      icon: 'copy',
+      section: 'viewState',
+      onClick: () => actions.copyDetails(),
+    },
+    {
+      label: 'Clear panel type',
+      icon: 'dismiss',
+      section: 'viewState',
+      onClick: () => actions.clearPanelType(),
+    },
+  ];
+}
+
+/**
+ * Synchronise Scrolling (044 FR-122b; contracts/menus-and-controls.md §10) — View & state, after Zoom and
+ * before the failure-banner items. A checked toggle in the Word Wrap idiom: the ✓ is in the label and the test
+ * id is pinned to the bare label so it survives the state changing. Never disabled (FR-122a).
+ */
+function syncScrollItem(on: boolean, keybindings: Keybindings, actions: PanelHeaderMenuActions): MenuAction {
+  return {
+    label: on ? 'Synchronise Scrolling ✓' : 'Synchronise Scrolling',
+    testId: 'menu-item-Synchronise Scrolling',
+    icon: 'syncScroll',
+    section: 'viewState',
+    shortcut: firstBinding(keybindings, 'preview.toggleSyncScroll'),
+    onClick: () => actions.toggleSyncScroll(),
+  };
+}
+
 export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
-  const { panel, panelVerb, keybindings, otherTabs, editor, editorFailure, detach, actions } = args;
+  const { panel, keybindings, otherTabs, editor, panelFailure, detach, actions } = args;
+  const panelVerb = removalVerbFor(panel, args.panelVerb);
+  const isPreview = panel.kind === PREVIEW_KIND;
 
   const items: MenuAction[] = [];
+
+  /*
+   * 044 FR-033 — a PREVIEW's own rows (contracts/menus-and-controls.md §1).
+   *
+   * Emitted before the Zoom block for one reason: within View & state the contract draws *Refresh*
+   * ahead of *Zoom*, and a section keeps the order its rows were emitted in. Its Navigate rows go here
+   * too — Send to Tab and Sync to are emitted last, so they still close the section.
+   *
+   * Content is EMPTY by construction: a preview is read-only (FR-020) and not renamable (FR-030), so
+   * nothing that edits text or a name belongs to it — Rename, Save, Revert, Reload and Find are all
+   * absent rather than disabled. A preview always shows a file, so the two reveal rows are
+   * unconditional.
+   */
+  if (isPreview) {
+    items.push({
+      label: 'Reveal File in Files & Folders',
+      section: 'navigate',
+      onClick: () => actions.revealInTree(),
+    });
+    items.push({
+      label: 'Open in OS Explorer',
+      section: 'navigate',
+      onClick: () => actions.openInOsExplorer(),
+    });
+    // FR-015b/c/d — the mirror image of an editor's Open Preview. A binary provider has no editor at
+    // all (FR-015e), so neither form is offered for one.
+    if (args.preview?.providerKind === 'text') {
+      items.push(
+        args.preview.parented
+          ? { label: 'Go to Editor', icon: 'editorPanel', section: 'navigate', onClick: () => actions.goToEditor() }
+          : { label: 'Open in Editor', icon: 'editorPanel', section: 'navigate', onClick: () => actions.openInEditor() },
+      );
+    }
+    items.push(...historyItems(args.history, keybindings, actions));
+    items.push({
+      label: 'Refresh',
+      icon: 'refresh',
+      section: 'viewState',
+      onClick: () => actions.refreshPreview(),
+    });
+  }
 
   if (isRenamable(panel)) {
     items.push({
@@ -268,42 +482,43 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     }
 
     /*
-     * 030 FR-042c — the failure banner's OWN three commands, in the panel's own menu.
-     *
-     * The Constitution binds a feature that adds a panel action to add its menu item in the same
-     * increment: an action reachable only as an icon on a banner is unreachable from where users
-     * look for panel commands, and undiscoverable by anyone who does not recognise the glyph.
-     *
-     * Shown only while the banner is, because that is the only state in which any of them is
-     * meaningful — and the LABELS are the banner's, unchanged (FR-042d), which is what makes them
-     * the same command rather than a second one that looks like it. *Try again* therefore sits
-     * beside *Reload from disk* while a file is unreadable: they run the same re-read, and the
-     * duplication is the price of each surface naming its own command consistently.
+     * 044 FR-002 — Open Preview, after the reveal rows and before Send to Tab
+     * (contracts/menus-and-controls.md §2). The affordance is core's decision: `absent` draws nothing
+     * (no provider, no file, outside the project — FR-001, FR-004), either `disabled` reason draws it
+     * greyed (the provider is off, FR-062, or the file already has its one preview, FR-012). It shows
+     * `preview.open`'s chord when one is bound; none ships (FR-005).
      */
-    if (editorFailure) {
+    const openPreview = args.openPreview;
+    if (openPreview !== undefined && openPreview.state !== 'absent') {
       items.push({
-        label: 'Try again',
-        icon: 'retry',
-        section: 'viewState',
-        onClick: () => actions.tryAgain(),
-      });
-      items.push({
-        // Copy is not an exception for being "just a copy button". It is a discrete command acting
-        // on a Panel, and a copy control reachable only as a glyph on a banner is unreachable to
-        // anyone who does not recognise the glyph. The text is the BANNER'S, assembled once.
-        label: 'Copy details',
-        icon: 'copy',
-        section: 'viewState',
-        onClick: () => actions.copyDetails(),
-      });
-      items.push({
-        label: 'Clear panel type',
-        icon: 'dismiss',
-        section: 'viewState',
-        onClick: () => actions.clearPanelType(),
+        label: 'Open Preview',
+        icon: 'preview',
+        section: 'navigate',
+        shortcut: firstBinding(keybindings, 'preview.open'),
+        disabled: openPreview.state === 'disabled',
+        onClick: () => actions.openPreview(),
       });
     }
+    // 044 FR-111 — Back and Forward, on every editor.
+    items.push(...historyItems(args.history, keybindings, actions));
+
+    // 044 FR-122a/b — Synchronise Scrolling, exactly where Open Preview is drawn, disabled or not.
+    if (openPreview !== undefined && openPreview.state !== 'absent') {
+      items.push(syncScrollItem(args.syncScroll ?? false, keybindings, actions));
+    }
+
+    if (panelFailure) items.push(...failureItems(actions));
   }
+
+  // 044 FR-122a/b — a text preview's Synchronise Scrolling, after its Zoom; a binary provider has no editor to
+  // keep in step with, so none.
+  if (isPreview && args.preview?.providerKind === 'text') {
+    items.push(syncScrollItem(args.syncScroll ?? false, keybindings, actions));
+  }
+
+  // 044 FR-033 — a preview's banner commands, after its Zoom (View & state: Refresh · Zoom · Synchronise
+  // Scrolling · banner).
+  if (isPreview && panelFailure) items.push(...failureItems(actions));
 
   /*
    * 028 (issue 163) — Terminal Panels: the deliberate version of the divider nudge users

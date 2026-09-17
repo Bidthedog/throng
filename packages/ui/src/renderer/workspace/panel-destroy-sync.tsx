@@ -1,4 +1,7 @@
 import { useEffect, useRef } from 'react';
+import { collectPanels, PREVIEW_KIND } from '@throng/core';
+import { forgetPreviewPanel } from '../preview/forget-preview-panel.js';
+import { purgePanelHistory } from '../navigation/purge-history.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useDetach } from './detach-context.js';
 import { destroyPanelSearch } from '../search/search-store.js';
@@ -29,6 +32,20 @@ export function PanelDestroySync(): null {
   useEffect(
     () =>
       window.throng?.panel?.onDestroyed?.((id) => {
+        /*
+         * 044 FR-042 — a PREVIEW destroyed elsewhere ends here too: main's run goes (the originating
+         * window has usually said so already; `destroyed` is idempotent) and this window's mirror of it
+         * is forgotten. Asked of the layout BEFORE the removal below takes the panel, and only for a
+         * preview — every other kind has no run to end.
+         */
+        const layout = wsRef.current.layout;
+        const removed = layout?.tabs
+          .flatMap((t) => collectPanels(t.root))
+          .find((p) => p.id === id);
+        if (removed?.kind === PREVIEW_KIND) forgetPreviewPanel(id);
+        // 044 FR-110 — its history goes with it. Idempotent in main, so the window that destroyed the panel
+        // (which purged already) and every window hearing the cascade can all say so.
+        if (removed) purgePanelHistory(removed);
         wsRef.current.removePanel(id);
         // The Panel was destroyed elsewhere, so this window's find session on it goes too
         // (043 FR-006). A no-op when this window never had one.

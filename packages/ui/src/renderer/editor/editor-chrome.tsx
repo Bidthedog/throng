@@ -13,6 +13,11 @@ import { DirtyCloseDialog } from './dirty-close-dialog.js';
 import { EditorNoticeDialog } from './editor-notice-dialog.js';
 import { MissingFileWatcher } from './missing-file-watcher.js';
 import { MovedPathSync } from './moved-path-sync.js';
+import { EditorTitlePublisher } from './editor-title-publisher.js';
+import { PreviewCommands } from '../preview/preview-commands.js';
+import { PreviewProviderSync } from '../preview/preview-provider-sync.js';
+import { PreviewPathSync } from '../preview/preview-path-sync.js';
+import { HistoryMirrorSync } from '../navigation/history-mirror-sync.js';
 
 /**
  * Editor window chrome (006): the editor keybindings (Ctrl+S / Ctrl+Shift+S,
@@ -30,6 +35,16 @@ export function EditorChrome({ isSubWorkspace = false }: { isSubWorkspace?: bool
       {/* Every editor panel in this window follows its file into the persisted layout — including
           the ones in background tabs, which are not mounted to hear it themselves (FR-008). */}
       <MovedPathSync />
+      {/* 044 US7 — main's navigation histories into this window's store and layout, and a preview's shown
+          file into its persisted config: both for every panel the layout holds, mounted or not. */}
+      <HistoryMirrorSync />
+      <PreviewPathSync />
+      {/* 044 FR-005/FR-010/FR-014 — the preview command, main's place/focus messages and the open set,
+          in THIS window; and FR-031 — every editor's displayed name, for the previews titled after it. */}
+      <PreviewCommands />
+      {/* 044 FR-063/FR-064 — a provider turned off closes THIS window's previews of it. */}
+      <PreviewProviderSync isSubWorkspace={isSubWorkspace} />
+      <EditorTitlePublisher />
       <UnsavedOpenDialog />
       <DirtyCloseDialog />
       <EditorNoticeDialog />
@@ -37,8 +52,13 @@ export function EditorChrome({ isSubWorkspace = false }: { isSubWorkspace?: bool
   );
 }
 
-/** Ctrl+S / Ctrl+Shift+S for editors, gated on a workspace Panel being active. */
-function EditorKeybindings({ isSubWorkspace }: { isSubWorkspace: boolean }): null {
+/**
+ * Ctrl+S / Ctrl+Shift+S for editors, gated on a workspace Panel being active.
+ *
+ * Exported so a component test can mount the real save dispatcher on its own (044 FR-021: the save chord
+ * over an active preview must reach nothing) without the rest of the window chrome.
+ */
+export function EditorKeybindings({ isSubWorkspace }: { isSubWorkspace: boolean }): null {
   const keybindings = useKeybindings();
   const ws = useWorkspace();
   const { activeProject } = useProjects();

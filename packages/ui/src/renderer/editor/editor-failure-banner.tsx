@@ -1,6 +1,8 @@
 import { useCallback, type ReactElement } from 'react';
+import { collectPanels, type Panel } from '@throng/core';
 import { PanelFailureBanner } from '../common/panel-failure-banner.js';
 import { useConfirm } from '../confirm-dialog.js';
+import { useSubWorkspaceWindow } from '../workspace/subworkspace-window-context.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { clearEditorPanelType } from './clear-editor-panel-type.js';
 import { getEditorActions } from './editor-actions.js';
@@ -66,6 +68,16 @@ export function EditorFailureBanner({ panelId }: { panelId: string }): ReactElem
   const failure = useEditorFailure(panelId);
   const ws = useWorkspace();
   const confirm = useConfirm();
+  const subWin = useSubWorkspaceWindow();
+  /*
+   * 044 T179 (FR-110) — whether clearing the type here ends the PANEL: `killsSession`'s rule, the one the
+   * destroy routes apply. In a sub-workspace window a PROJECT-owned panel is a second view of a panel the
+   * project window still holds, so its history is not this window's to purge.
+   */
+  const origin = (ws.layout?.tabs ?? [])
+    .flatMap((tab) => collectPanels(tab.root) as Panel[])
+    .find((p) => p.id === panelId)?.originProjectId;
+  const endsPanel = subWin === null || origin === ws.layout?.projectId;
 
   const onRetry = useCallback(
     async (): Promise<boolean> => (await getEditorActions(panelId)?.reloadFromDisk()) ?? false,
@@ -75,10 +87,11 @@ export function EditorFailureBanner({ panelId }: { panelId: string }): ReactElem
     void clearEditorPanelType(panelId, {
       dirty: state?.dirty ?? false,
       name: state?.displayName ?? 'This document',
+      endsPanel,
       confirm,
       clearPanelType: ws.clearPanelType,
     });
-  }, [panelId, state?.dirty, state?.displayName, confirm, ws]);
+  }, [panelId, state?.dirty, state?.displayName, endsPanel, confirm, ws]);
 
   if (!failure) return null;
 

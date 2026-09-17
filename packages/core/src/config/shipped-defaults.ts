@@ -130,7 +130,27 @@ import { setAtPath } from './metadata.js';
 // The trap is the same one recorded four times above, arriving from its third direction: 015/016/018
 // as a token that appears, 033 as a settings key that appears, and now as a value that MOVES. The
 // version is a sequence, not a label.
-export const SHIPPED_DEFAULTS_VERSION = 7;
+//
+// Bumped by 044 (7 → 8): four icon tokens (`preview`, `refresh`, `navigateBack`, `navigateForward`).
+// The THEME tokens are the whole reason. The preview settings and key bindings the same release adds
+// do not need it: `main.ts` reads both documents through `parseSettingsGuarded` / `parseKeybindings`
+// on every startup, and those fill an absent key with its shipped default — the 043 "absence is not
+// malformation" path. Theme files get no such read; they are merged shallowly and reach new tokens
+// only through the additive upgrade this version gates.
+//
+// This is 015/016/018's case again and nothing more: every payload ARRIVES, no existing value moves,
+// so there is no frozen version-7 record to guard a rewrite against. Without the bump an existing
+// install's theme files never receive the tokens, and the preview button and the Back/Forward buttons
+// render as empty boxes for exactly the users no fresh-install test represents.
+//
+// Bumped again by 044's 2026-09-16 iteration (8 → 9): one icon token, `syncScroll`, for the
+// Synchronise Scrolling toggle on both status bars and in four menus (FR-122c). Version 8 has not
+// shipped either, so no released install holds an 8 marker — this is 043's 6 → 7 case exactly, and the
+// population it serves is the same one: every hand-testing build of this branch, whose theme files
+// already carry an 8 and would otherwise never receive the new token. Additive only: no value moves,
+// so there is no frozen version-8 record to guard against. The one new key binding the iteration adds
+// needs no bump, for the reason given above — `parseKeybindings` fills an absent action on every read.
+export const SHIPPED_DEFAULTS_VERSION = 9;
 
 /**
  * `explorer.excludeGlobs` as shipped-defaults version 4 wrote it — the VS Code `files.exclude`

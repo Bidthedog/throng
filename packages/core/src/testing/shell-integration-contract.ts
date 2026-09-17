@@ -10,7 +10,9 @@ import type { IShellIntegration } from '../abstractions/shell-integration.js';
 export interface ShellIntegrationHarness {
   shell: IShellIntegration;
   /** Calls recorded since the last reset, in order. */
-  calls(): ReadonlyArray<{ op: 'reveal' | 'open'; path: string }>;
+  calls(): ReadonlyArray<
+    { op: 'reveal' | 'open'; path: string } | { op: 'openExternal'; url: string }
+  >;
   reset(): void;
 }
 
@@ -31,6 +33,13 @@ export function runShellIntegrationContract(
       h.reset();
       await h.shell.openFolder('C:/proj/src');
       expect(h.calls()).toEqual([{ op: 'open', path: 'C:/proj/src' }]);
+    });
+
+    it('opens an external URL through the OS default handler (044 FR-091 / R10)', async () => {
+      const h = makeHarness();
+      h.reset();
+      await h.shell.openExternal('https://example.com');
+      expect(h.calls()).toEqual([{ op: 'openExternal', url: 'https://example.com' }]);
     });
   });
 }

@@ -1,6 +1,6 @@
 import { EditorSelection } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
-import type { LineEndingId } from '@throng/core';
+import type { LineEndingId, PreviewAffordance } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
 import { isKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { applyPaste, clipboardEntry, cutThrough, ENDINGS } from './commands.js';
@@ -40,6 +40,17 @@ export interface ContentMenuArgs {
    * rule applies to a discrete command acting on a panel's content, which this is.
    */
   gotoLine: { open: () => void; chord?: string };
+  /**
+   * 044 FR-002 — Open Preview: core's affordance for this editor's file, the `preview.open` action and
+   * its chord, all read at menu-open time like Go To Line's. Omitted (or `absent`) draws no item.
+   */
+  openPreview?: { affordance: PreviewAffordance; open: () => void; chord?: string };
+  /**
+   * 044 FR-122b — Synchronise Scrolling: the setting's current value, the toggle (`toggleSyncScroll`) and
+   * `preview.toggleSyncScroll`'s chord, read at menu-open time. Drawn only where Open Preview is drawn
+   * (FR-122a) — the affordance above decides that, so this is omitted or ignored everywhere else.
+   */
+  syncScroll?: { on: boolean; toggle: () => void; chord?: string };
   /** The document's effective language NAME, shown on the Set Language item so the menu states the
    *  current value as well as offering to change it (024 US1 follow-up). */
   languageName?: string;
@@ -151,6 +162,25 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
       shortcut: args.gotoLine.chord,
       onClick: () => args.gotoLine.open(),
     },
+    /*
+     * 044 FR-002 — Open Preview, in Navigate immediately after Go To Line… (contracts/menus-and-controls.md
+     * §3). It moves the user to a rendering of this file rather than changing the file, which is what
+     * puts it beside Go To Line. Absent where a preview means nothing (no provider, no file, outside the
+     * project — FR-001, FR-004); DISABLED while the provider is off (FR-062) or the file already has its
+     * one preview (FR-012). Every panel action has a menu item: this is the one for the status-bar button.
+     */
+    ...(args.openPreview !== undefined && args.openPreview.affordance.state !== 'absent'
+      ? [
+          {
+            label: 'Open Preview',
+            icon: 'preview',
+            section: 'navigate' as const,
+            shortcut: args.openPreview.chord,
+            disabled: args.openPreview.affordance.state === 'disabled',
+            onClick: () => args.openPreview?.open(),
+          },
+        ]
+      : []),
     {
       // The second of the two entry points FR-010 asks for; the status strip is the other, and both
       // open the SAME picker. No keyboard shortcut — it is reachable only from the two menus.
@@ -174,6 +204,24 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
       shortcut: args.wordWrap.chord,
       onClick: () => args.wordWrap.toggle(),
     },
+    /*
+     * 044 FR-122b — Synchronise Scrolling, after Word Wrap and in its idiom (contracts/menus-and-controls.md
+     * §3, §10). Present exactly where Open Preview is — ENABLED even while that item is disabled, because
+     * the setting applies whether or not a preview can be opened right now (FR-122a). Every panel action
+     * has a menu item: this is the one for the status-bar toggle, so a hidden bar strands nothing.
+     */
+    ...(args.syncScroll !== undefined && args.openPreview !== undefined && args.openPreview.affordance.state !== 'absent'
+      ? [
+          {
+            label: args.syncScroll.on ? 'Synchronise Scrolling ✓' : 'Synchronise Scrolling',
+            testId: 'menu-item-Synchronise Scrolling',
+            icon: 'syncScroll',
+            section: 'viewState' as const,
+            shortcut: args.syncScroll.chord,
+            onClick: () => args.syncScroll?.toggle(),
+          },
+        ]
+      : []),
   ];
 }
 

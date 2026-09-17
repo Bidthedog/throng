@@ -24,12 +24,12 @@ import {
   resolveAction,
   type ActionId,
 } from '@throng/core';
-import { useTransientOverlay } from '../common/transient-overlay.js';
+import { transientOverlayOpen, useTransientOverlay } from '../common/transient-overlay.js';
 import { useProjects } from '../state/projects-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { getActivePane } from '../workspace/active-pane.js';
-import { scopeFromKind } from '../keybindings/scope.js';
+import { isPanelScoped, opensTransientOverlay, scopeFromKind, transientInputFocused } from '../keybindings/scope.js';
 import { useSubWorkspaceWindow } from '../workspace/subworkspace-window-context.js';
 import {
   applyRememberSettings,
@@ -42,14 +42,21 @@ import {
 import { useFileIndex } from './use-file-index.js';
 import { QuickOpen } from './quick-open.js';
 import { GotoLine } from './goto-line.js';
+import { navigateFocusedHistory } from '../navigation/navigate-history.js';
 
 const QUICK_OPEN: ActionId = 'navigate.quickOpen';
 const GOTO_LINE: ActionId = 'navigate.gotoLine';
+const NAVIGATE_BACK: ActionId = 'navigate.back';
+const NAVIGATE_FORWARD: ActionId = 'navigate.forward';
 
 export function NavigationChrome(): ReactElement | null {
   const modal = useNavigationModal();
   const { projects, activeProject } = useProjects();
-  const { layout } = useWorkspace();
+  const ws = useWorkspace();
+  const { layout } = ws;
+  // The sub-workspace listener below is installed once; a history step must read the layout as it is then.
+  const wsRef = useRef(ws);
+  wsRef.current = ws;
   const keybindings = useKeybindings();
   const settings = useAppSettings();
   const subWin = useSubWorkspaceWindow();
@@ -244,6 +251,21 @@ export function NavigationChrome(): ReactElement | null {
         { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey },
         scopeFromKind(activeKind),
       );
+      /*
+       * 044 US7b fix round 2, item 2 — the same focus guard `resolveScoped` applies in the main window
+       * (FR-017f). Without it, Alt+Left/Right typed into an editor's find bar, or into Quick Open's own
+       * filter box, stepped the panel underneath instead of moving the caret in the input — and Ctrl+G
+       * opened Go To Line over it. `navigate.quickOpen` is not panel-scoped (`isPanelScoped` excludes it
+       * by name), so it is unaffected and keeps working from inside a focused input, same as `app.tsx`.
+       */
+      if (
+        action &&
+        isPanelScoped(action) &&
+        transientInputFocused() &&
+        !(transientOverlayOpen() && opensTransientOverlay(action))
+      ) {
+        return;
+      }
       if (action === QUICK_OPEN) {
         // Consumed whether or not it opens anything — a chord that reaches a terminal's shell after
         // the application has claimed it is FR-001's failure, not a fallback.
@@ -266,6 +288,18 @@ export function NavigationChrome(): ReactElement | null {
         e.preventDefault();
         e.stopPropagation();
         setNavigationModal({ kind: 'gotoLine', panelId: activePanelIdRef.current });
+        return;
+      }
+      /*
+       * 044 FR-105 — Back and Forward, in a sub-workspace window too. The scope above is the active panel's
+       * kind and the commands are HISTORY_PANELS, so this is reached only over an editor or a preview; the
+       * capture phase is what beats CodeMirror's move-by-syntax on the same keys, as `app.tsx` does in the
+       * main window. `resolveAction` is given Shift, so Shift+Alt+Arrow stays the editor's column select.
+       */
+      if (action === NAVIGATE_BACK || action === NAVIGATE_FORWARD) {
+        e.preventDefault();
+        e.stopPropagation();
+        void navigateFocusedHistory(wsRef.current, action === NAVIGATE_BACK ? 'back' : 'forward');
       }
     };
     window.addEventListener('keydown', onKeyDown, true);
@@ -289,6 +323,8 @@ export function NavigationChrome(): ReactElement | null {
   return (
     <QuickOpen
       root={root}
+      // 044 FR-052 — the project that root is, by the same rule, for a preview a pick may open.
+      projectId={ownedBySub ? null : (originProject?.id ?? activeProject?.id ?? null)}
       index={index}
       invokedFrom={modal.invokedFrom}
       includeHidden={includeHidden}

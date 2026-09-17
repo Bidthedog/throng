@@ -21,6 +21,20 @@ export interface KeybindingOps {
   /** 024 US3 (#85): reverse / re-apply the last file operation. */
   undoFileOp: () => void;
   redoFileOp: () => void;
+  /**
+   * 044 FR-005 — `preview.open` over the tree: the preview of the selected FILE. Its chord is live in
+   * the explorer scope (`COMMAND_SCOPES`), and the selection lives here, so the tree dispatches it.
+   */
+  openPreview?: (node: TargetNode | null) => void;
+}
+
+/**
+ * 044 FR-005 — the file `preview.open` names from the tree's selection, or `null`: a folder, the root
+ * node or no selection has no preview (FR-003's "absent on folders").
+ */
+export function previewTargetFor(node: TargetNode | null, rootFolder: string): string | null {
+  if (node === null || node.kind !== 'file' || node.relPath === '') return null;
+  return `${rootFolder}/${node.relPath}`;
 }
 
 export function useExplorerKeybindings(ops: KeybindingOps): (e: KeyboardEvent) => void {
@@ -42,6 +56,11 @@ export function useExplorerKeybindings(ops: KeybindingOps): (e: KeyboardEvent) =
         { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey },
         'explorer',
       );
+      if (action === 'preview.open' && ops.openPreview) {
+        e.preventDefault();
+        ops.openPreview(ops.primarySelected);
+        return;
+      }
       if (!action || !action.startsWith('file.')) return;
       e.preventDefault();
       switch (action) {

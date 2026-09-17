@@ -59,6 +59,59 @@ export type EditorPanelConfig = {
   hasBom?: boolean;
   /** Line-ending style (new-doc default from `settings.editor.defaultLineEnding`). */
   lineEnding?: LineEndingId;
+  /**
+   * The panel's navigation history (044 FR-109), mirrored from main's authority by the window that
+   * holds the panel. Absent on a layout written before 044 — the editor's first load then records its
+   * first entry, so no migration is needed and `LAYOUT_SCHEMA_VERSION` does not move.
+   */
+  history?: PersistedHistory;
+};
+
+/**
+ * A navigation history as it rides a layout blob (044 FR-109). `v` versions the shape inside the
+ * blob, independently of `LAYOUT_SCHEMA_VERSION`: the field is optional and additive, so the layout
+ * version stays 3 and a reader that finds an unknown `v` treats the history as absent.
+ *
+ * Paths are absolute and in storage canon — `canonicalisePersistedPaths` walks
+ * `entries[].filePath` (FR-068). `viewState` is present only on preview entries (FR-101).
+ */
+export type PersistedHistory = {
+  v: 1;
+  entries: { filePath: string; viewState?: unknown }[];
+  index: number;
+};
+
+/**
+ * Configuration persisted for a Preview Panel (044 / `kind: 'preview'`). Rides `Panel.config`, like
+ * the editor's, so no SQLite migration.
+ *
+ * ══ WHAT IS DELIBERATELY NOT HERE ══
+ *
+ * Whether the preview is parented, the parent's panel id or title, the rendered content, a dirty flag
+ * and the notice. Their absence is what makes FR-066's "derived afresh on restore" and FR-043/FR-044
+ * true by construction (data-model §9).
+ */
+export type PreviewPanelConfig = {
+  /**
+   * The file the preview currently shows. The same key as the editor's, so `CONFIG_PATH_KEYS`
+   * canonicalises it (FR-068). On restore it is a FALLBACK: the current entry of `history` wins when
+   * present — `previewPathOf` is the one reader of that precedence.
+   */
+  filePath?: string;
+  /** Mirror of main's history authority, written by the window (FR-066, FR-109). */
+  history?: PersistedHistory;
+  /**
+   * The `projectId` of the LAYOUT the window that opened this preview was showing — a real project id,
+   * or `subworkspace:<id>`. Written once, when the preview is placed; never rewritten.
+   *
+   * It is what tells a preview a sub-workspace window OPENED (its run is that window's to end) from a
+   * project preview SYNCED into that window (one run, two views — the project still shows it). Both are
+   * project-owned panels inside a `subworkspace:<id>` layout, so nothing else in the layout separates
+   * them, and after a relaunch the window holds no other memory of which it is (044 FR-012, FR-014).
+   * Ownership, not derived state: absent on a layout written before this field, where the origin rule
+   * alone decides, as it did then.
+   */
+  placedInLayoutProjectId?: string;
 };
 
 /**

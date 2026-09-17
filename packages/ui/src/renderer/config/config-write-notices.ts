@@ -30,6 +30,19 @@ import { useNotify } from '../common/notification.js';
  * per keystroke, and a call site with a better message than this one — the settings tab names the
  * individual setting — simply lands afterwards and wins. Two reporters, one notice, the more
  * specific wording surviving.
+ *
+ * ══ WHICH WINDOWS MOUNT IT, AND WHY THE REPORT STAYS WHERE THE WRITE WAS MADE ══
+ *
+ * Three kinds of window write configuration, and each mounts this once: the Preferences window (every
+ * editor in it), the main window (the project list's remembered folder, and the Synchronise Scrolling
+ * toggle), and — since 044 FR-122e — a sub-workspace window, whose editors and previews carry that same
+ * toggle. 032 once recorded that a sub-workspace window wrote nothing and so mounted no subscriber; the
+ * toggle made that false, and this is the widening (044 plan decision 2).
+ *
+ * `onConfigWriteFailed` is module state, and every window is its own renderer realm, so each hears only
+ * the writes IT issued. That is the point rather than a limitation: a failed toggle is reported once, in
+ * the window the user just clicked in. Routing the report to another window would put it behind the one
+ * they are looking at, and a second subscriber anywhere would make one failure two notices.
  */
 export function useConfigWriteFailureNotices(): void {
   const { notify } = useNotify();

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactElement, type RefObject } from 'react';
 import type { NoticeSubject } from '@throng/core';
 import { IconButton } from './icon-button.js';
 import { useNotify } from './notification.js';
@@ -56,7 +56,7 @@ import './panel-failure-banner.css';
  * that reason: a banner that could not say which panel it was about would copy a paragraph the
  * reader cannot place, which is #195 one level down.
  */
-export interface PanelFailureBannerProps {
+interface PanelFailureBannerCommon {
   panelId: string;
   /** The ONE per-type sentence: what could not be done, in this panel type's terms (FR-040). */
   headline: string;
@@ -98,6 +98,24 @@ export interface PanelFailureBannerProps {
    */
   detail?: { path?: string; systemError?: string };
   /**
+   * How many times the SAME condition has been reported again since this banner went up (044 FR-026,
+   * *one condition, one notice*). Each increase flashes this banner — the same element, restarted in
+   * place, so a keyboard user's focus on a control survives it — rather than raising a second one.
+   * Absent or 0: no flash.
+   */
+  flash?: number;
+  /**
+   * Whether a notification was raised for this condition, so the pointer may name it (030 FR-041).
+   * Defaults to `true`, the shipped wording. A condition reported only here and in the diagnostics log
+   * — a preview's file notice, its attach and body failures (044 FR-026 as amended) — passes `false`,
+   * and the pointer offers Copy alone rather than a route that does not exist.
+   */
+  notified?: boolean;
+}
+
+/** The standard three controls: Try again, Copy details, Clear panel type (FR-042). */
+interface PanelFailureBannerRetryProps extends PanelFailureBannerCommon {
+  /**
    * Re-attempt the operation that failed (FR-045).
    *
    * Resolves `true` when the condition cleared — the caller's state drops the banner with it, so
@@ -107,7 +125,23 @@ export interface PanelFailureBannerProps {
   onRetry: () => Promise<boolean>;
   /** Clear the panel's type: back to the panel-type selection screen, panel intact (FR-043/FR-044). */
   onCancel: () => void;
+  onClose?: never;
 }
+
+/**
+ * 044 FR-027 — a condition no retry can clear and no other panel type would suit: a preview whose file
+ * type has no preview. Its ONE action is *Close*: no Try again, no Clear panel type, and no Copy details.
+ * FR-027 (as amended 2026-09-15, US2 review) supersedes 030 FR-042 for this banner alone — the headline
+ * and the path under it are the whole of what there is to know, and nothing but Close resolves it.
+ */
+interface PanelFailureBannerCloseProps extends PanelFailureBannerCommon {
+  /** Close the panel, exactly as its header's Close Panel does. */
+  onClose: () => void;
+  onRetry?: never;
+  onCancel?: never;
+}
+
+export type PanelFailureBannerProps = PanelFailureBannerRetryProps | PanelFailureBannerCloseProps;
 
 /**
  * Where the detail is (FR-041, T069b) — fixed wording, not the implementer's choice.
@@ -117,6 +151,9 @@ export interface PanelFailureBannerProps {
  * false in exactly the case the user most needs it to be true.
  */
 const POINTER = 'Copy the details here, or see the notification.';
+
+/** The pointer where no notification exists (044 FR-026, refining 030 FR-041). Fixed wording too. */
+const POINTER_COPY_ONLY = 'Copy the details here.';
 
 /** Fixed wording, not the implementer's choice (FR-040b) — a test on it is otherwise vacuous. */
 const RETRY_FAILED = 'That did not work — the condition is still there.';
@@ -155,14 +192,36 @@ export function retryPanelFailure(panelId: string): boolean {
   return true;
 }
 
+/**
+ * 044 FR-026 — flash an in-panel notice IN PLACE: each change of `flash` while `active` restarts the
+ * `panel-failure--flash` animation on the same element (cleared, a reflow, restored). Re-keying the root
+ * instead would remount its controls and drop the focus of a keyboard user who has just pressed the
+ * control that reported the repeat. Shared by this banner and the preview's link notice, so the two
+ * in-panel notices flash one way.
+ */
+export function useInPlaceFlash(flash: number, active: boolean): RefObject<HTMLDivElement> {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el === null || !active) return;
+    el.style.animation = 'none';
+    void el.offsetHeight;
+    el.style.animation = '';
+  }, [flash, active]);
+  return ref;
+}
+
 export function PanelFailureBanner({
   panelId,
   headline,
   note,
   subject,
   detail,
+  flash = 0,
+  notified = true,
   onRetry,
   onCancel,
+  onClose,
 }: PanelFailureBannerProps): ReactElement {
   const copy = useCopyToClipboard();
   const { notify } = useNotify();
@@ -174,7 +233,7 @@ export function PanelFailureBanner({
   const inFlight = useRef(false);
 
   const retry = useCallback((): void => {
-    if (inFlight.current) return;
+    if (inFlight.current || onRetry === undefined) return;
     inFlight.current = true;
     setRetrying(true);
     setRetryFailed(false);
@@ -198,16 +257,26 @@ export function PanelFailureBanner({
   // Published for as long as this banner is on screen — the menus' *Try again* runs THIS, so the
   // retry state, the in-flight guard and the failure sentence are shared rather than bypassed.
   useEffect(() => {
+    // A Close banner has nothing to retry, so the menus' Try again finds none for it.
+    if (onRetry === undefined) return undefined;
     MOUNTED_RETRIES.set(panelId, retry);
     return () => {
       // Only if it is still ours: a re-registration for the same id has already replaced it, and
       // deleting unconditionally on the old effect's cleanup would unpublish the live one.
       if (MOUNTED_RETRIES.get(panelId) === retry) MOUNTED_RETRIES.delete(panelId);
     };
-  }, [panelId, retry]);
+  }, [panelId, retry, onRetry]);
+
+  const rootRef = useInPlaceFlash(flash, flash > 0);
 
   return (
-    <div className="panel-failure" data-testid={`panel-failure-${panelId}`} role="status">
+    <div
+      ref={rootRef}
+      className={flash > 0 ? 'panel-failure panel-failure--flash' : 'panel-failure'}
+      data-testid={`panel-failure-${panelId}`}
+      data-flash={flash}
+      role="status"
+    >
       <div className="panel-failure__text">
         <strong className="panel-failure__headline">{headline}</strong>
         {detail?.path ? <span className="panel-failure__path">{detail.path}</span> : null}
@@ -218,7 +287,11 @@ export function PanelFailureBanner({
         */}
         {note ? <span className="panel-failure__note">{note}</span> : null}
         {retryFailed ? <span className="panel-failure__retry-failed">{RETRY_FAILED}</span> : null}
-        <span className="panel-failure__pointer">{POINTER}</span>
+        {/* A Close banner (044 FR-027) has no Copy control, so a pointer to one would name a route that is
+            not there (030 FR-041): it draws none. */}
+        {onClose === undefined ? (
+          <span className="panel-failure__pointer">{notified ? POINTER : POINTER_COPY_ONLY}</span>
+        ) : null}
       </div>
       {/*
         Three controls, in a fixed order, identical in every panel type (FR-042/FR-042d), each a
@@ -226,30 +299,34 @@ export function PanelFailureBanner({
         labels are 029's own, unchanged, which is what keeps the terminal's shipped behaviour and
         its tests describing the same thing they always did.
       */}
-      <IconButton
-        token="retry"
-        title="Try again"
-        className="panel-failure__control"
-        disabled={retrying}
-        onClick={retry}
-      />
+      {onClose === undefined ? (
+        <IconButton
+          token="retry"
+          title="Try again"
+          className="panel-failure__control"
+          disabled={retrying}
+          onClick={retry}
+        />
+      ) : null}
       {/*
         COPY, in the MIDDLE (FR-051). Never a literal glyph: `copy` is a theme token, and the theme
         ships `⎘` for it — a component that hard-coded 📋 would ignore the user's icon pack and
         render something the rest of the application does not use.
       */}
-      <IconButton
-        token="copy"
-        title="Copy details"
-        className="panel-failure__control"
-        onClick={() => copy(panelFailureText({ headline, subject, detail }), subject)}
-      />
-      <IconButton
-        token="dismiss"
-        title="Clear panel type"
-        className="panel-failure__control"
-        onClick={onCancel}
-      />
+      {onClose === undefined ? (
+        <IconButton
+          token="copy"
+          title="Copy details"
+          className="panel-failure__control"
+          onClick={() => copy(panelFailureText({ headline, subject, detail }), subject)}
+        />
+      ) : null}
+      {onClose === undefined ? (
+        <IconButton token="dismiss" title="Clear panel type" className="panel-failure__control" onClick={onCancel} />
+      ) : (
+        // 044 FR-027 — Close, the panel's own removal, in the last slot.
+        <IconButton token="dismiss" title="Close" className="panel-failure__control" onClick={onClose} />
+      )}
     </div>
   );
 }

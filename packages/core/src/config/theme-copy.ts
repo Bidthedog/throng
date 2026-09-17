@@ -724,6 +724,36 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Show all tabs icon',
     description: 'The glyph on the tab strip control that drops open a searchable list of every tab in the window, however many are on screen.',
   },
+  /*
+   * 044 — file previews and panel navigation history. Each description names where the glyph appears,
+   * because two of these sit beside a look-alike action (Refresh beside Try again, Back beside a tab
+   * strip arrow) and the description is how a user re-skinning one knows which one they have.
+   */
+  'icons.preview': {
+    label: 'Preview icon',
+    description:
+      'The glyph on the editor status bar button and menu rows that open a rendered, read-only view of a file such as a Markdown document, and at the head of that preview panel’s title.',
+  },
+  'icons.refresh': {
+    label: 'Refresh preview icon',
+    description:
+      'The glyph on the preview panel menu row that reads the file or its open document again and redraws the preview straight away.',
+  },
+  'icons.navigateBack': {
+    label: 'Navigate back icon',
+    description:
+      'The glyph on the button at the top left of an editor or preview panel, and its menu row, that returns the panel to the file it showed before.',
+  },
+  'icons.navigateForward': {
+    label: 'Navigate forward icon',
+    description:
+      'The glyph on the button at the top left of an editor or preview panel, and its menu row, that moves the panel on again to a file you stepped back from.',
+  },
+  'icons.syncScroll': {
+    label: 'Synchronise scrolling icon',
+    description:
+      "The glyph on the Synchronise Scrolling button on the editor's and the preview's status bars, and on the Synchronise Scrolling menu rows, that turns scrolling an editor and its preview together on or off.",
+  },
   // ── Sizes ─────────────────────────────────────────────────────────────────────────────────────
   'sizes.iconPx': {
     label: 'Icon Size',

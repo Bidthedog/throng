@@ -49,11 +49,22 @@ export function ServicesProvider({
 }
 
 export function useServices(): Services {
-  const services = useContext(ServicesContext);
+  const services = useServicesOptional();
   if (!services) {
     throw new Error('useServices must be used within a ServicesProvider');
   }
   return services;
+}
+
+/**
+ * `useServices()`, without the throw — `null` outside a `ServicesProvider` (044 US4 fix round 1, item
+ * 2). For a component mounted in BOTH a fully-wired window and a component test that stubs only what
+ * that test needs — `WorkspaceProvider` and `PreviewProviderSync` are the two: a sub-workspace's own
+ * destroy route needs `services.subWorkspaces`, but dozens of existing tests mount either without a
+ * `ServicesProvider` at all, and must keep working exactly as before.
+ */
+export function useServicesOptional(): Services | null {
+  return useContext(ServicesContext);
 }
 
 /** Compose the real renderer services and mount the main app. */

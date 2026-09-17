@@ -15,6 +15,10 @@ import {
   type NotificationSettings,
 } from '../notice/display-mode.js';
 import { NOTICE_SEVERITIES } from '../notice/severity.js';
+// 044 — imports neither this module nor `settings-metadata.ts`, so no cycle (see its header).
+import { parsePreviewSettings, previewSettingsDefaults } from './preview-settings.js';
+import { SHIPPED_PREVIEW_PROVIDERS } from '../preview/providers/index.js';
+import type { PreviewSettings } from '../preview/settings-types.js';
 
 /** Confirmation depth for a destroy action: none / single / double (wry second). */
 export type ConfirmLevel = 'none' | 'single' | 'double';
@@ -178,6 +182,14 @@ export interface EditorNavigationSettings {
    * all about wanting the other.
    */
   rememberGotoLineNumber: boolean;
+  /**
+   * 044 FR-108 — how many files each editor and preview panel's Back/Forward history holds. Ships
+   * **10** (#136); the 1–100 range is the descriptor's, enforced by the guarded read (#227).
+   *
+   * Here rather than beside the preview settings because it governs editors too, and the preferences
+   * group it appears in (`Editor · Navigation`) is the shape the user reads it in.
+   */
+  historySize: number;
 }
 
 /**
@@ -268,6 +280,12 @@ export interface EditorSettings {
   statusBar: EditorStatusBarSettings;
   /** 033: the navigation modals' own preferences (`Editor · Navigation`). */
   navigation: EditorNavigationSettings;
+  /**
+   * 044: file previews (`Editor → Previews`) — generated from `SHIPPED_PREVIEW_PROVIDERS` by
+   * `config/preview-settings.ts`, so a registered provider's settings arrive here without this file
+   * naming it (FR-071).
+   */
+  previews: PreviewSettings;
 }
 
 /** Where the new-project folder picker opens (011, FR-041). */
@@ -640,7 +658,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
       quickOpenExcludeHidden: true,
       rememberQuickOpenQuery: false,
       rememberGotoLineNumber: false,
+      // 044 FR-108 — ten files of Back/Forward history per editor or preview panel (#136).
+      historySize: 10,
     },
+    // 044 — DERIVED from the provider registry, as `indentByLanguage` is from the language registry.
+    previews: previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS),
   },
   tabs: {
     smoothScrollMs: 300,
@@ -1069,6 +1091,8 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     showGutter,
     statusBar: statusBarSettings(v.statusBar, fallback.statusBar),
     navigation: navigationSettings(v.navigation, fallback.navigation),
+    // 044 — tolerant per leaf, and it keeps an unknown provider id (see `parsePreviewSettings`).
+    previews: parsePreviewSettings(v.previews, SHIPPED_PREVIEW_PROVIDERS),
   };
 }
 
@@ -1086,7 +1110,7 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
  *
  * THE TRAP, since the spread below is what makes this short: it copies the scalar members and it
  * copies the object-valued ones BY REFERENCE. Every object-valued member of `EditorSettings` must
- * therefore be re-cloned underneath it. There are five (040 added `statusBar`);
+ * therefore be re-cloned underneath it. There are six (040 added `statusBar`, 044 `previews`);
  * `editor-settings.test.ts` asserts identity over the named ones AND sweeps every object-valued
  * member for the same fault, because adding one and forgetting this line compiles.
  */
@@ -1101,6 +1125,16 @@ function cloneEditor(e: EditorSettings): EditorSettings {
     // sweeps for exactly this omission, so adding the block above without adding this line turns a
     // neighbouring test file red for a reason that reads like an unrelated regression.
     statusBar: { ...e.statusBar },
+    // 044: the SIXTH, and the first nested past one level — `providers` and each provider's record
+    // are objects too, so a spread of `previews` alone would still share them with the defaults.
+    // `editor-settings.test.ts` asserts identity down to a provider's record. The spread carries the
+    // section's primitives — `syncScroll` (FR-114) among them — so only `providers` is rebuilt.
+    previews: {
+      ...e.previews,
+      providers: Object.fromEntries(
+        Object.entries(e.previews.providers).map(([id, p]) => [id, { ...p }]),
+      ),
+    },
   };
 }
 
@@ -1138,6 +1172,12 @@ function navigationSettings(
       typeof v.rememberGotoLineNumber === 'boolean'
         ? v.rememberGotoLineNumber
         : fallback.rememberGotoLineNumber,
+    // 044 FR-108. The type and the floor only: a history that cannot hold the current file is
+    // meaningless rather than small. The 1–100 range is the descriptor's (#227).
+    historySize:
+      typeof v.historySize === 'number' && Number.isFinite(v.historySize) && v.historySize >= 1
+        ? Math.round(v.historySize)
+        : fallback.historySize,
   };
 }
 

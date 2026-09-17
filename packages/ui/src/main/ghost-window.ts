@@ -1,4 +1,5 @@
 import { BrowserWindow, ipcMain, screen } from 'electron';
+import type { IShellIntegration } from '@throng/core';
 import { denyRendererWindows } from './window-open-guard.js';
 
 /**
@@ -91,7 +92,7 @@ function shellHtml(): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(doc)}`;
 }
 
-function ensureGhost(): BrowserWindow {
+function ensureGhost(shellIntegration: IShellIntegration): BrowserWindow {
   if (ghost && !ghost.isDestroyed()) return ghost;
   ghost = new BrowserWindow({
     width: SIZE.panel.width,
@@ -112,7 +113,7 @@ function ensureGhost(): BrowserWindow {
   });
   ghost.setIgnoreMouseEvents(true);
   ghost.setAlwaysOnTop(true, 'screen-saver');
-  denyRendererWindows(ghost.webContents); // 024 US7: no in-app browser windows (FR-019b)
+  denyRendererWindows(ghost.webContents, shellIntegration); // 024 US7: no in-app browser windows (FR-019b)
   // Load the shell ONCE; never re-navigate (see file header).
   ghostReady = ghost.webContents.loadURL(shellHtml()).catch(() => {
     /* a destroyed/closing ghost can reject the load; ignore */
@@ -201,10 +202,10 @@ export function disposeGhost(): void {
 }
 
 /** Wire the drag-ghost IPC. Call once at app startup. */
-export function registerGhostIpc(): void {
+export function registerGhostIpc(shellIntegration: IShellIntegration): void {
   ipcMain.on('throng:ghost:start', (_event, payload: GhostPayload) => {
     if (!payload || (payload.kind !== 'panel' && payload.kind !== 'tab')) return;
-    const win = ensureGhost();
+    const win = ensureGhost(shellIntegration);
     const size = SIZE[payload.kind];
     win.setSize(size.width, size.height);
     renderGhost(payload.kind, payload.title ?? '');

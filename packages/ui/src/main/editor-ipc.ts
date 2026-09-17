@@ -8,6 +8,7 @@ import { ipcMain, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
 import type { SaveAllScope, SerialisedHistory } from '@throng/core';
 import { senderWebContentsId } from './broadcast.js';
 import type { EditorCoordinator, DocMeta } from './editor-coordinator.js';
+import { editorLoadHistoryFields } from './navigation-history-ipc.js';
 
 /** A project, as MAIN knows it — from the daemon, not from a renderer's say-so. */
 export interface OwnedProject {
@@ -89,6 +90,9 @@ export function registerEditorIpc(coordinator: EditorCoordinator, deps: EditorIp
     if (!meta) {
       return { ok: false, reason: 'io', error: 'The project list is unavailable, so this file cannot be opened.' };
     }
+    // 044 US7 — the Back/Forward intent, and the layout's `config.history` a restoring load carries so it
+    // is adopted before anything records (contracts/navigation-history.md §3, §6). Malformed → dropped.
+    const { navigation, history } = editorLoadHistoryFields(raw);
     return coordinator.load({
       panelId: meta.panelId,
       windowId: meta.windowId,
@@ -98,6 +102,8 @@ export function registerEditorIpc(coordinator: EditorCoordinator, deps: EditorIp
       allProjectRoots: meta.allProjectRoots,
       tabId: meta.tabId,
       absPath: meta.absPath!,
+      ...(navigation ? { navigation } : {}),
+      ...(history ? { history } : {}),
     });
   });
 

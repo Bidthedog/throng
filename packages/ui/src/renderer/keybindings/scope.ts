@@ -27,6 +27,7 @@ import { transientOverlayOpen } from '../common/transient-overlay.js';
 const EDITOR_KIND = 'editor';
 const TERMINAL_KIND = 'terminal';
 const FIND_IN_FILES_KIND = 'findInFiles';
+const PREVIEW_KIND = 'preview';
 
 export interface ScopeInput {
   /** The workspace layout, or null when there is none (no tabs yet). */
@@ -74,6 +75,12 @@ export function scopeFromKind(kind: string | undefined): DispatchScope {
    * would delete a file elsewhere on screen.
    */
   if (kind === FIND_IN_FILES_KIND) return 'findInFiles';
+  /*
+   * 044 FR-021 — the same case one panel kind along. On the fallback, Delete, F2, Ctrl+X and Ctrl+C
+   * over a preview would act on the FILE TREE's selection while the user reads the rendered page. In
+   * its own scope nothing file-, save- or find-shaped is live, and the window commands still are.
+   */
+  if (kind === PREVIEW_KIND) return 'preview';
   return 'explorer';
 }
 

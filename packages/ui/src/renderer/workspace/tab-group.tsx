@@ -39,6 +39,8 @@ import { useEditorDirty } from '../editor/editor-state.js';
 import { disposeEditor } from '../editor/use-editor.js';
 import { destroyPanelSearch } from '../search/search-store.js';
 import { destroyFindInFilesPanel } from '../find-in-files/find-in-files-store.js';
+import { releasePreviewView } from '../preview/forget-preview-panel.js';
+import { purgePanelHistory } from '../navigation/purge-history.js';
 import { useDetach } from './detach-context.js';
 import { useSubWorkspaceWindow } from './subworkspace-window-context.js';
 import { destroySubWorkspace } from './destroy-sub-workspace.js';
@@ -1262,6 +1264,12 @@ export function TabGroup(): ReactElement {
     for (const p of collectPanels(tab.root)) {
       const killsSession = !inSubWorkspace || p.originProjectId === layout.projectId;
       if (p.kind === 'editor' && killsSession) disposeEditor(p.id);
+      // 044 FR-042/FR-110 — a preview the Tab destroy ends tells main, by the same rule; mounted or
+      // not, since a preview in a background Tab has a run too.
+      releasePreviewView(p, { inSubWorkspace, layoutProjectId: layout.projectId });
+      // 044 FR-110 (US7b fix round 1, item 7) — an editor or preview the Tab destroy ends loses its history,
+      // by the same rule; a synced project panel keeps its one history in the project.
+      if (killsSession) purgePanelHistory(p);
       // Every panel in the Tab is gone from this window, so every find session on one goes too
       // (043 FR-006) — terminals included, and regardless of `killsSession`.
       destroyPanelSearch(p.id);
@@ -1292,6 +1300,10 @@ export function TabGroup(): ReactElement {
       if (!ok) return;
       for (const p of collectPanels(tab.root)) {
         if (panelHasLiveTerminal(p.id)) void window.throng?.terminal?.kill?.(p.id);
+        // 044 — the sub-workspace's own previews end with it; a synced project preview keeps its run.
+        releasePreviewView(p, { inSubWorkspace: true, layoutProjectId: layout.projectId });
+        // 044 FR-110 — and the sub-workspace's own panels' histories; a synced project panel keeps its one.
+        if (p.originProjectId === layout.projectId) purgePanelHistory(p);
       }
       await destroySubWorkspace(services.subWorkspaces, subWin.id);
       return;

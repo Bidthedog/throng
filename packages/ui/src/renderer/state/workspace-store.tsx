@@ -11,12 +11,14 @@ import {
 } from 'react';
 import {
   addPanel as opAddPanel,
+  addPanelBeside as opAddPanelBeside,
   addTab as opAddTab,
   boundLayoutNames,
   movePanelToEdge as opMovePanelToEdge,
   movePanelToTab as opMovePanelToTab,
   addTabFromPanel as opAddTabFromPanel,
   removePanel as opRemovePanel,
+  removePanelsWhere as opRemovePanelsWhere,
   reorderTab as opReorderTab,
   setActiveTab as opSetActiveTab,
   renameTab as opRenameTab,
@@ -41,6 +43,7 @@ import {
   applyReloadMode,
   updatePanelConfig as opUpdatePanelConfig,
   type Edge,
+  type Panel,
   type PanelConfig,
   type PanelKind,
   type WorkspaceLayout,
@@ -48,7 +51,12 @@ import {
 import type { WorkspaceClient } from './workspace-client.js';
 import { registerLayoutFlusher, trackLayoutSave } from './layout-saves.js';
 import { useAppSettings } from '../config/config-store.js';
+import { useServicesOptional } from '../composition-root.js';
 import { beginOperation } from '../workspace/operation.js';
+import { destroySubWorkspace } from '../workspace/destroy-sub-workspace.js';
+import { usePreviewProviders } from '../preview/provider-registry-context.js';
+import { emptiesLayout, isUnrestorablePreview, withoutUnrestorablePreviews } from '../preview/preview-panel-match.js';
+import { SubWorkspaceWorkspaceClient } from './subworkspace-window-client.js';
 
 /**
  * How long an edit sits before it is written (019 FR-010, #86).
@@ -79,13 +87,29 @@ export interface WorkspaceContextValue {
   clearLastAddedPanel(): void;
   /** Returns the new Tab's id so the caller can immediately rename it. */
   addTab(): string;
-  /** Returns the new Panel's id. */
-  addPanel(tabId: string): string;
+  /**
+   * Returns the new Panel's id. It belongs to the layout's project unless `originProjectId` names one —
+   * a sub-workspace window's layout belongs to the sub-workspace, not to the project a command is placing.
+   */
+  addPanel(tabId: string, originProjectId?: string): string;
+  /**
+   * 044 FR-010 / FR-015c — a new untyped Panel split beside `targetId`, belonging to `originProjectId`
+   * when given and to the target's project otherwise. Returns its id, or `null` when this layout does not
+   * hold the target (nothing is added). Unlike `addPanel` it does not open in rename mode: it is always
+   * created by a command.
+   */
+  addPanelBeside(targetId: string, edge: 'left' | 'right', originProjectId?: string): string | null;
   movePanelToEdge(sourceId: string, targetId: string, edge: Edge): void;
   movePanelToTab(sourceId: string, tabId: string): void;
   /** Move a Panel into a brand-new Tab containing only that Panel (FR-027). */
   addTabFromPanel(sourceId: string): void;
   removePanel(panelId: string): void;
+  /**
+   * 044 FR-063/FR-064 — remove every Panel matching `predicate` as closing each by hand would; a match
+   * that is the workspace's last Panel becomes an empty Panel (`removePanelsWhere`). Removes the panels
+   * only: a caller ending a preview first releases it through the preview destroy route.
+   */
+  removePanelsWhere(predicate: (panel: Panel) => boolean): void;
   reorderTab(tabId: string, toIndex: number): void;
   setActiveTab(tabId: string): void;
   /** Activate (highlight) a Panel within a Tab (FR-002). Window-local: selection is
@@ -199,6 +223,24 @@ export function WorkspaceProvider({
    */
   const newTabPosition = useRef(settings.tabs.newTabPosition);
   newTabPosition.current = settings.tabs.newTabPosition;
+  /*
+   * 044 FR-067 — what the restore filter judges a persisted preview against: this window's provider
+   * registry (by injection, FR-070) and the live preview settings. A ref for `reloadMode`'s reason: a
+   * settings change must not reload the project. A provider turned off while the layout is loaded is
+   * `PreviewProviderSync`'s to act on, not a reload's.
+   */
+  const { registry: previewRegistry } = usePreviewProviders();
+  const previewRef = useRef({ registry: previewRegistry, previews: settings.editor.previews });
+  previewRef.current = { registry: previewRegistry, previews: settings.editor.previews };
+  /*
+   * 044 US4 fix round 1, item 2 — for the restore filter's sub-workspace destroy route below. Optional
+   * because dozens of existing tests mount this provider with no `ServicesProvider` at all, and must
+   * keep working exactly as before: without one, this window simply cannot destroy a sub-workspace, and
+   * falls back to the pre-existing empty-panel behaviour.
+   */
+  const services = useServicesOptional();
+  const servicesRef = useRef(services);
+  servicesRef.current = services;
   const boundForSave = useCallback(
     (l: WorkspaceLayout): WorkspaceLayout => boundLayoutNames(l, maxNameLength.current),
     [],
@@ -293,8 +335,47 @@ export function WorkspaceProvider({
          * the workspace FILE and not merely the screen: no transition, no save queued, no rewrite.
          */
         const withReload = applyReloadMode(result.layout, reloadModeRef.current);
-        setLayout(withReload);
-        if (withReload !== result.layout) scheduleSave(withReload);
+        /*
+         * 044 FR-067 — THE RESTORE FILTER, at the same one place every layout load passes through: a
+         * project's here, and a sub-workspace window's too, whose client loads through this same effect
+         * (`subworkspace-window-client.ts`). A persisted preview whose file has no enabled provider — the
+         * provider is disabled, or no longer registered — is removed BEFORE the layout is published, so it
+         * is never mounted and never attaches; it goes as closing it by hand would (FR-064). The result is
+         * written back through the client, so the stored record stops holding it. Identity when nothing
+         * is removed, which keeps an untouched layout from being rewritten.
+         */
+        const restorable = withoutUnrestorablePreviews(
+          withReload,
+          previewRef.current.registry,
+          previewRef.current.previews,
+          newId,
+        );
+        /*
+         * Controller ruling (044 US4 fix round 1, item 2): FR-064 means "exactly as closing by hand".
+         * When the filter above would strip EVERY panel this layout holds, an OPEN sub-workspace window
+         * left with nothing is the same case a hand ✕ on its last Panel diverts to destroying the
+         * sub-workspace (005 FR-029, `panel-placeholder.tsx`) — so the restore filter takes the same
+         * route, with no confirmation, rather than publish or persist a layout holding one empty
+         * placeholder panel. A project layout has no such concept: its last panel still becomes an
+         * empty panel, which `restorable` already computed above.
+         */
+        const subId = SubWorkspaceWorkspaceClient.subWorkspaceIdOf(withReload.projectId);
+        const subClient = servicesRef.current?.subWorkspaces;
+        if (subId !== null && subClient && restorable !== withReload) {
+          const unrestorableIds = new Set(
+            withReload.tabs
+              .flatMap((t) => collectPanels(t.root) as Panel[])
+              .filter((p) => isUnrestorablePreview(p, previewRef.current.registry, previewRef.current.previews))
+              .map((p) => p.id),
+          );
+          if (emptiesLayout(withReload, unrestorableIds)) {
+            void destroySubWorkspace(subClient, subId);
+            setRestoreFailed(false);
+            return;
+          }
+        }
+        setLayout(restorable);
+        if (restorable !== result.layout) scheduleSave(restorable);
         setRestoreFailed(result.restored === false && result.reason === 'corrupt');
         // A layout that was not restored was SYNTHESISED by the repository just now — a default
         // whose panel ids were generated on the spot. Persist it immediately, because until it is
@@ -343,11 +424,27 @@ export function WorkspaceProvider({
         apply((l) => opAddTab(l, { tab, panel: newId() }, newTabPosition.current));
         return tab;
       },
-      addPanel: (tabId) => {
+      addPanel: (tabId, originProjectId) => {
         const panel = newId();
         setLastAddedPanelId(panel);
-        apply((l) => opAddPanel(l, tabId, panel));
+        apply((l) => opAddPanel(l, tabId, panel, originProjectId));
         return panel;
+      },
+      addPanelBeside: (targetId, edge, originProjectId) => {
+        const target = layout?.tabs.flatMap((t) => collectPanels(t.root)).find((p) => p.id === targetId);
+        if (!target) return null;
+        const id = newId();
+        apply((l) => {
+          const count = l.tabs.reduce((n, t) => n + collectPanels(t.root).length, 0);
+          // `addPanel`'s placeholder title; `PanelNameSync` claims a unique one as the panel appears.
+          return opAddPanelBeside(l, targetId, edge, {
+            type: 'panel',
+            id,
+            originProjectId: originProjectId ?? target.originProjectId,
+            title: `Panel ${count + 1}`,
+          });
+        });
+        return id;
       },
       movePanelToEdge: (sourceId, targetId, edge) =>
         apply((l) => opMovePanelToEdge(l, sourceId, targetId, edge)),
@@ -366,6 +463,7 @@ export function WorkspaceProvider({
           if (next === l) return l; // removal refused (last panel) — no change
           return tab && fallback ? opSetActivePanel(next, tab.id, fallback) : next;
         }),
+      removePanelsWhere: (predicate) => apply((l) => opRemovePanelsWhere(l, predicate, newId)),
       reorderTab: (tabId, toIndex) => apply((l) => opReorderTab(l, tabId, toIndex)),
       setActiveTab: (tabId) => apply((l) => opSetActiveTab(l, tabId)),
       setActivePanel: (tabId, panelId) => apply((l) => opSetActivePanel(l, tabId, panelId)),

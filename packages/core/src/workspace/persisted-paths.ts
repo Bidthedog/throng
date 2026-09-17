@@ -10,11 +10,12 @@
  *
  * ## Which fields, and why only these
  *
- * A layout blob carries exactly three absolute paths, all of them produced outside this package:
+ * A layout blob carries exactly four kinds of absolute path, all of them produced outside this package:
  *
  * | Field | Owner | Producer |
  * |---|---|---|
- * | `config.filePath` | Editor Panel (006) | the explorer tree, or a save |
+ * | `config.filePath` | Editor Panel (006), Preview Panel (044) | the explorer tree, a save, a followed link |
+ * | `config.history.entries[].filePath` | Editor and Preview Panels (044 FR-109) | main's history authority |
  * | `config.startDirectory` | Terminal Panel (033) | the folder right-clicked in the tree |
  * | `terminalMemory.lastCwd` | Terminal Panel (025 FR-027) | the daemon's real working directory |
  *
@@ -29,10 +30,50 @@
  * the one this fixes.
  */
 import { toCanonicalPath, type PathSeparator } from '../fs/path-canon.js';
-import { isPanel, type LayoutNode, type Panel, type WorkspaceLayout } from './model.js';
+import { parseHistory } from '../navigation/history.js';
+import {
+  isPanel,
+  type LayoutNode,
+  type Panel,
+  type PreviewPanelConfig,
+  type WorkspaceLayout,
+} from './model.js';
 
-/** Absolute-path fields inside a Panel's open `config` record. */
+/**
+ * Absolute-path fields inside a Panel's open `config` record.
+ *
+ * `filePath` also covers a Preview Panel's file (044 FR-068) — the preview reuses the editor's key
+ * precisely so that this list did not have to grow.
+ */
 const CONFIG_PATH_KEYS = ['filePath', 'startDirectory'] as const;
+
+/**
+ * `config.history` with every `entries[].filePath` canonical (044 FR-109) — the first absolute paths
+ * in a layout blob that sit inside an ARRAY, which is why they need their own walk. Editor and preview
+ * panels both carry one.
+ *
+ * Read as defensively as the keys above: `config` is `Record<string, unknown>` straight off disk, so a
+ * history that is not an object, entries that are not an array, and an entry that is not an object
+ * with a non-empty string path are all left exactly as they were. The same value comes back, by
+ * identity, when nothing changed.
+ */
+function canonicaliseHistory(history: unknown, sep: PathSeparator): unknown {
+  if (typeof history !== 'object' || history === null) return history;
+  const entries = (history as { entries?: unknown }).entries;
+  if (!Array.isArray(entries)) return history;
+
+  let changed = false;
+  const next = entries.map((entry: unknown) => {
+    if (typeof entry !== 'object' || entry === null) return entry;
+    const filePath = (entry as { filePath?: unknown }).filePath;
+    if (typeof filePath !== 'string' || filePath === '') return entry;
+    const canonical = toCanonicalPath(filePath, sep);
+    if (canonical === filePath) return entry;
+    changed = true;
+    return { ...entry, filePath: canonical };
+  });
+  return changed ? { ...history, entries: next } : history;
+}
 
 function canonicalisePanel(panel: Panel, sep: PathSeparator): Panel {
   let next = panel;
@@ -44,6 +85,10 @@ function canonicalisePanel(panel: Panel, sep: PathSeparator): Panel {
       if (typeof value !== 'string' || value === '') continue;
       const canonical = toCanonicalPath(value, sep);
       if (canonical !== value) config = { ...config, [key]: canonical };
+    }
+    if ('history' in config) {
+      const history = canonicaliseHistory(config.history, sep);
+      if (history !== config.history) config = { ...config, history };
     }
     if (config !== next.config) next = { ...next, config };
   }
@@ -82,4 +127,23 @@ export function canonicalisePersistedPaths(
     return root === tab.root ? tab : { ...tab, root };
   });
   return tabs.every((tab, i) => tab === layout.tabs[i]) ? layout : { ...layout, tabs };
+}
+
+/**
+ * The file a persisted preview shows (044 FR-066, FR-067): its history's current entry, else
+ * `filePath`, else `undefined`.
+ *
+ * The ONE reader of that precedence. Attaching a restored preview, filtering a restored layout for
+ * previews whose provider is gone, and purging an unloaded layout when a provider is disabled all ask
+ * "which file is this?", and if any of them read `filePath` while another read the history they would
+ * disagree about the same panel. The history is read with `parseHistory` — exactly as attach reads it —
+ * so a malformed entry or index cannot make this answer differ from the one the preview opens with.
+ * The cap does not matter here (it never drops the current entry), hence `Infinity`.
+ */
+export function previewPathOf(config: PreviewPanelConfig | undefined): string | undefined {
+  if (config === undefined) return undefined;
+  const history = parseHistory(config.history, Number.POSITIVE_INFINITY);
+  const current = history.entries[history.index];
+  if (current !== undefined) return current.filePath;
+  return typeof config.filePath === 'string' && config.filePath !== '' ? config.filePath : undefined;
 }

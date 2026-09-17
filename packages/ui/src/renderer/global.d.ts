@@ -273,6 +273,41 @@ declare global {
         onChange: (cb: (evt: { relDir: string }) => void) => () => void;
         /** 026 / #186 — live sync stopped and could not be restarted (FR-010a). */
         onWatchFailed?: (cb: (evt: { root: string; reason: string }) => void) => () => void;
+        /**
+         * 044 US7 — throng moved these files or folders in-app (contracts/navigation-history.md §3).
+         * Broadcast to every window, after main rewrote its own histories: rewrite `config.history` and a
+         * preview's `config.filePath` for panels this layout holds, mounted or not.
+         */
+        onMoved?: (cb: (evt: { moves: { from: string; to: string }[] }) => void) => () => void;
+      };
+      /**
+       * 044 US7 — per-panel navigation history (contracts/navigation-history.md §2). Main owns every
+       * history; this window mirrors `onChanged` into `history-store` and `config.history` and never
+       * computes one. Recording and moving happen inside `editor.load` (its `navigation` intent) and
+       * `preview.navigate`, so there is no channel for either.
+       */
+      history?: {
+        /**
+         * An EDITOR panel's mount: adopt the panel's record, or create it from `persisted` (the layout's
+         * `config.history`). Answers the record. A preview never calls this — `preview.attach` adopts in main.
+         */
+        attach: (req: {
+          panelId: string;
+          panelKind: 'editor' | 'preview';
+          persisted?: import('@throng/core').PersistedHistory;
+        }) => Promise<import('@throng/core').NavigationHistory>;
+        /** The panel no longer exists — destroyed, closed or type cleared (FR-110). Idempotent. */
+        purge: (panelId: string) => void;
+        /** A preview's reader position on its CURRENT entry (FR-107). Ignored for editors. */
+        setViewState: (panelId: string, viewState: unknown) => void;
+        /**
+         * After every change to any panel's history, and on every attach, to every window. `history` is
+         * `null` once the panel is PURGED — remove `config.history` rather than writing an empty list
+         * (§2, amended). Ignore panels this layout does not hold.
+         */
+        onChanged: (
+          cb: (evt: { panelId: string; history: import('@throng/core').NavigationHistory | null }) => void,
+        ) => () => void;
       };
       /**
        * 033 US1 — the project file index behind Quick Open (contracts/file-index.md §3).
@@ -380,10 +415,56 @@ declare global {
       // The OS clipboard (016, FR-013a) — behind the seam, in UI main.
       clipboard?: {
         write: (entry: { text: string; mode: import('@throng/core').ClipboardMode }) => Promise<void>;
+        /** A preview panel's rich copy (044 FR-035a) — plain text and sanitised HTML in one write. */
+        writeRich: (entry: { text: string; html: string }) => Promise<void>;
         paste: () => Promise<{ text: string; mode: import('@throng/core').ClipboardMode }>;
+      };
+      // 044 — file previews (contracts/preview-ipc.md). Main's PreviewService owns every open preview;
+      // this window is a viewer, identified as the sender of each call.
+      preview?: {
+        /** `focused` with `panelId: null` is a reservation only: already being placed, nothing to look up. */
+        open: (
+          req: import('@throng/core').PreviewOpenRequest,
+        ) => Promise<import('@throng/core').PreviewOpenResponse>;
+        /**
+         * Become a viewer of the panel's run, adopting it if another window attached first (FR-022).
+         * `no-provider` / `disabled` / `outside-project` clear the panel (FR-067); `failed` keeps it.
+         */
+        attach: (
+          req: import('@throng/core').PreviewAttachRequest,
+        ) => Promise<import('@throng/core').PreviewAttachResponse>;
+        /** This window stops viewing the run; the run lives until `destroyed`. */
+        detach: (panelId: string) => void;
+        /** The panel no longer exists (FR-042, FR-110). Never prompts, never touches the document. */
+        destroyed: (panelId: string) => void;
+        navigate: (
+          req: import('@throng/core').PreviewNavigateRequest,
+        ) => Promise<import('@throng/core').PreviewNavigateResponse>;
+        /** FR-028 — re-read the source now, ignoring the update delay. */
+        refresh: (panelId: string) => Promise<import('@throng/core').PreviewRefreshResponse>;
+        isOpen: (absPath: string) => Promise<boolean>;
+        /** Every path with an open preview, in compare form — the window's open-set seed (§1, FR-012/FR-014). */
+        openPaths: () => Promise<string[]>;
+        /** FR-031 — an editor panel's display title, forwarded as its previews' `parent.title`. */
+        publishEditorTitle: (panelId: string, title: string) => void;
+        /** FR-010 — this window's layout does not hold the parent a `place` named. */
+        placeDeclined: (requestId: string) => void;
+        /** FR-091 — open a preview link's `http:`/`https:`/`mailto:` URL; main re-checks the scheme. */
+        openExternal: (url: string) => void;
+        onUpdate: (cb: (update: import('@throng/core').PreviewUpdate) => void) => () => void;
+        onOpenChanged: (cb: (evt: import('@throng/core').PreviewOpenChanged) => void) => () => void;
+        onPathChanged: (cb: (evt: import('@throng/core').PreviewPathChanged) => void) => () => void;
+        onFocus: (cb: (evt: import('@throng/core').PreviewFocusMessage) => void) => () => void;
+        onPlace: (cb: (evt: import('@throng/core').PreviewPlaceMessage) => void) => () => void;
       };
       // Editor panels (006): UI-main-owned editor coordination (peer of files.*).
       editor?: {
+        /**
+         * 044 US7 — besides the document fields, the request may carry `navigation: { kind: 'history';
+         * index; filePath }` (Back/Forward) and `history: PersistedHistory` — the layout's
+         * `config.history`, read at the same moment as `absPath`, which a restoring load must send so main
+         * adopts it before recording (contracts/navigation-history.md §3, §6). Malformed ones are dropped.
+         */
         load: (req: unknown) => Promise<EditorLoadResult>;
         /** The OS path of a dragged-in File. '' for a File the renderer synthesised (018 / US9). */
         getPathForFile: (file: File) => string;

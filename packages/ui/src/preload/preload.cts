@@ -506,6 +506,30 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.on('throng:files:watchFailed', handler);
       return () => ipcRenderer.removeListener('throng:files:watchFailed', handler);
     },
+    // 044 US7 (contracts/navigation-history.md §3): throng moved these files or folders, in-app. Sent to
+    // EVERY window, after main has rewritten its own histories, so each rewrites `config.history` and a
+    // preview's `config.filePath` for the panels its layout holds — mounted or not.
+    onMoved: (cb: (evt: { moves: { from: string; to: string }[] }) => void) => {
+      const handler = (_event: unknown, evt: { moves: { from: string; to: string }[] }): void => cb(evt);
+      ipcRenderer.on('throng:files:moved', handler);
+      return () => ipcRenderer.removeListener('throng:files:moved', handler);
+    },
+  },
+  // 044 US7 (contracts/navigation-history.md §2): per-panel Back/Forward history. Main's
+  // NavigationHistoryService is the one owner; this window mirrors `onChanged` and never computes a
+  // history. Recording and moving have no channel — they happen inside `editor.load` and
+  // `preview.navigate`. A preview never calls `attach`: `preview.attach` adopts its record in main.
+  history: {
+    attach: (req: { panelId: string; panelKind: 'editor' | 'preview'; persisted?: unknown }) =>
+      ipcRenderer.invoke('throng:history:attach', req),
+    purge: (panelId: string) => ipcRenderer.send('throng:history:purge', { panelId }),
+    setViewState: (panelId: string, viewState: unknown) =>
+      ipcRenderer.send('throng:history:setViewState', { panelId, viewState }),
+    onChanged: (cb: (evt: { panelId: string; history: unknown }) => void) => {
+      const handler = (_event: unknown, evt: { panelId: string; history: unknown }): void => cb(evt);
+      ipcRenderer.on('throng:history:changed', handler);
+      return () => ipcRenderer.removeListener('throng:history:changed', handler);
+    },
   },
   // 033 US1 (contracts/file-index.md §3): the project file index that seeds Quick Open. NEW
   // channels rather than additions to `files.*` — that surface carries ONE process-wide root, and
@@ -600,8 +624,56 @@ contextBridge.exposeInMainWorld('throng', {
   clipboard: {
     write: (entry: { text: string; mode: string }) =>
       ipcRenderer.invoke('throng:clipboard:write', entry),
+    /** A preview panel's rich copy (044 FR-035a) — plain text and sanitised HTML in one write. */
+    writeRich: (entry: { text: string; html: string }) =>
+      ipcRenderer.invoke('throng:clipboard:writeRich', entry),
     /** What a paste should insert, and how — decided against the LIVE clipboard, never cached. */
     paste: () => ipcRenderer.invoke('throng:clipboard:paste'),
+  },
+  // 044 (contracts/preview-ipc.md): file previews. Main's PreviewService is the one authority for open
+  // previews; a window asks to open, attaches as a viewer, and applies the updates pushed to it. The
+  // viewing window is always the sender — no call names a window.
+  preview: {
+    open: (req: unknown) => ipcRenderer.invoke('throng:preview:open', req),
+    attach: (req: unknown) => ipcRenderer.invoke('throng:preview:attach', req),
+    detach: (panelId: string) => ipcRenderer.send('throng:preview:detach', { panelId }),
+    /** The panel no longer exists: drops the run and purges its history. Never touches the document. */
+    destroyed: (panelId: string) => ipcRenderer.send('throng:preview:destroyed', { panelId }),
+    navigate: (req: unknown) => ipcRenderer.invoke('throng:preview:navigate', req),
+    refresh: (panelId: string) => ipcRenderer.invoke('throng:preview:refresh', { panelId }),
+    isOpen: (absPath: string) => ipcRenderer.invoke('throng:preview:isOpen', { absPath }),
+    openPaths: () => ipcRenderer.invoke('throng:preview:openPaths'),
+    publishEditorTitle: (panelId: string, title: string) =>
+      ipcRenderer.send('throng:preview:publishEditorTitle', { panelId, title }),
+    placeDeclined: (requestId: string) => ipcRenderer.send('throng:preview:placeDeclined', { requestId }),
+    // FR-091 — a preview link's own channel: main opens http(s) AND mailto: here, where the general
+    // `openExternal` (About, terminal) stays http(s)-only (024 FR-019). The caller is the channel.
+    openExternal: (url: string) => ipcRenderer.send('throng:preview:openExternal', url),
+    onUpdate: (cb: (update: unknown) => void) => {
+      const handler = (_event: unknown, update: unknown): void => cb(update);
+      ipcRenderer.on('throng:preview:update', handler);
+      return () => ipcRenderer.removeListener('throng:preview:update', handler);
+    },
+    onOpenChanged: (cb: (evt: { path: string; open: boolean }) => void) => {
+      const handler = (_event: unknown, evt: { path: string; open: boolean }): void => cb(evt);
+      ipcRenderer.on('throng:preview:openChanged', handler);
+      return () => ipcRenderer.removeListener('throng:preview:openChanged', handler);
+    },
+    onPathChanged: (cb: (evt: { panelId: string; filePath: string }) => void) => {
+      const handler = (_event: unknown, evt: { panelId: string; filePath: string }): void => cb(evt);
+      ipcRenderer.on('throng:preview:pathChanged', handler);
+      return () => ipcRenderer.removeListener('throng:preview:pathChanged', handler);
+    },
+    onFocus: (cb: (evt: { panelId: string; fragment?: string }) => void) => {
+      const handler = (_event: unknown, evt: { panelId: string; fragment?: string }): void => cb(evt);
+      ipcRenderer.on('throng:preview:focus', handler);
+      return () => ipcRenderer.removeListener('throng:preview:focus', handler);
+    },
+    onPlace: (cb: (evt: unknown) => void) => {
+      const handler = (_event: unknown, evt: unknown): void => cb(evt);
+      ipcRenderer.on('throng:preview:place', handler);
+      return () => ipcRenderer.removeListener('throng:preview:place', handler);
+    },
   },
   // Editor panels (006): UI-main-owned editor coordination — a peer of files.*,
   // NOT daemon RPC. The renderer reads/saves and reports edits through here; the

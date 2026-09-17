@@ -21,4 +21,5 @@ export {
 export { runElevationContract } from './elevation-contract.js';
 export { runDeElevatorContract } from './de-elevator-contract.js';
 export { runFontEnumerationContract } from './font-enumeration-contract.js';
-export { runClipboardContract } from './clipboard-contract.js';
+export { runClipboardContract, runClipboardRichContract } from './clipboard-contract.js';
+export type { ClipboardRichHarness } from './clipboard-contract.js';
