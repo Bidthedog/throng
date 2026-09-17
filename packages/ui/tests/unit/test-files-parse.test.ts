@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { transformSync } from 'esbuild';
+import { transformWithOxc } from 'vite';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -11,8 +11,8 @@ import { describe, expect, it } from 'vitest';
  *
  * Nothing in this repository typechecks a test file. `packages/ui/tsconfig.json` compiles only
  * `src/main` and `src/preload`; the renderer goes through Vite; and both Vitest and Playwright
- * transpile with esbuild, which STRIPS types without checking them. So a test file's only gate was
- * the runner that executes it.
+ * transpile without checking types (Vitest through Vite's Oxc transform since Vite 8, Playwright with its
+ * own), stripping them. So a test file's only gate was the runner that executes it.
  *
  * That let four E2E specs be committed carrying a duplicated `const` declaration — a hard syntax
  * error, not a subtle type one — while `npm run lint` AND `npm run typecheck` both reported green.
@@ -99,7 +99,7 @@ describe('every test file parses', () => {
     }
   };
 
-  it('parses each one, so a broken spec fails here and not inside an E2E run', () => {
+  it('parses each one, so a broken spec fails here and not inside an E2E run', async () => {
     const broken: string[] = [];
     const unreadable: string[] = [];
 
@@ -126,19 +126,22 @@ describe('every test file parses', () => {
         unreadable.push(`${relative(testsRoot, file)}: ${(e as Error).message.split('\n')[0]}`);
         continue;
       }
-      const parse = (text: string): string | null => {
+      const parse = async (text: string): Promise<string | null> => {
         try {
-          transformSync(text, {
-            // `loader` from the extension: a `.tsx` parsed as `ts` reports every JSX tag as an error.
-            loader: file.endsWith('.tsx') ? 'tsx' : 'ts',
-            // Parse only. esbuild still reports duplicate declarations, unbalanced braces, and
-            // anything else that stops the file being loaded — which is the whole subject here.
-            format: 'esm',
-            target: 'es2022',
-          });
+          // The transform Vitest itself runs (Vite 8's Oxc). The language comes from the file name, so a
+          // `.tsx` is parsed as TSX and a `.ts` holding JSX is an error. It still reports duplicate
+          // declarations, unbalanced braces, and anything else that stops the file being loaded — which is
+          // the whole subject here. (This was esbuild's `transformSync` until Vite 8 stopped installing it.)
+          await transformWithOxc(text, file, { target: 'es2022' });
           return null;
         } catch (e) {
-          return (e as Error).message.split('\n')[0];
+          // "Transform failed with N errors:" and then the first error — both lines, or the report says nothing.
+          return (e as Error).message
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0)
+            .slice(0, 2)
+            .join(' ');
         }
       };
 
@@ -147,7 +150,7 @@ describe('every test file parses', () => {
        *
        * This guard walks a directory the working tree is actively editing, and a file caught
        * MID-WRITE is returned as a truncated prefix — `readFileSync` does not throw, it succeeds and
-       * hands back less than the file. esbuild then correctly reports that the truncated text does
+       * hands back less than the file. The parser then correctly reports that the truncated text does
        * not parse, and the guard accuses a file that is perfectly fine.
        *
        * Observed three times in one session, and every one of them in the run immediately after a
@@ -161,7 +164,7 @@ describe('every test file parses', () => {
        * The earlier EBUSY/EPERM retry above covers the other half — where the read THROWS instead of
        * lying — and neither replaces the other.
        */
-      const firstError = parse(source);
+      const firstError = await parse(source);
       if (firstError !== null) {
         /*
          * ══ THE FAILURE REPORTS ITS OWN DIAGNOSIS ══
@@ -176,7 +179,7 @@ describe('every test file parses', () => {
          * without ambiguity.
          */
         const second = readWithRetry(file);
-        const secondError = parse(second);
+        const secondError = await parse(second);
         if (secondError !== null) {
           const sizes =
             second.length === source.length
