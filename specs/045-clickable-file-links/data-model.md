@@ -11,7 +11,10 @@ Nothing here is persisted. No SQLite migration, no `LAYOUT_SCHEMA_VERSION` chang
 `SHIPPED_DEFAULTS_VERSION` bump (three settings leaves, no theme token — `shipped-defaults.ts:490`
 clones `DEFAULT_APP_SETTINGS`, so a new leaf ships without a bump).
 
-Channel payloads are in [contracts/link-ipc.md](./contracts/link-ipc.md).
+Channel payloads are in
+[contracts/settings-and-environment.md](./contracts/settings-and-environment.md) §3. (This preamble
+pointed at `contracts/link-ipc.md` until 2026-09-18; no such file was ever written, and §3 is where
+the three `throng:links:*` channels and their I1–I6 policy live.)
 
 ---
 

@@ -35,25 +35,25 @@ whether something works** — load the **running-tests** and **throng-testing** 
 [plan.md](./plan.md) *Reported to the maintainer* raised. Each is written as an **amendment** naming
 what it replaces — never a silent contradiction (CLAUDE.md, *Before you add a requirement*).
 
-- [ ] T001 [P] Create the fixture tree in `packages/ui/tests/fixtures/links/` exactly as
+- [x] T001 [P] Create the fixture tree in `packages/ui/tests/fixtures/links/` exactly as
   [quickstart.md](./quickstart.md) §2 lists it — `test.txt`, `src/foo.ts` (≥ 100 lines so `:42:7` is
   inside it), `docs/a.md` (naming `./b.md`, `packages/core/x.ts`, `src/foo.ts:10`), `docs/b.md`,
   `docs/My File.md`, `packages/core/src/x.ts`, `README.md`, `setup.exe`, `build.bat`, `deploy.ps1`,
   `shortcut.lnk`, `prose.txt` — plus `packages/ui/tests/fixtures/links-outside/elsewhere.txt` for the
   out-of-project cases. The four executable fixtures are inert placeholder bytes and **no test ever
   runs one**; only their extensions are under test. Satisfies SC-001, SC-003, SC-007, SC-010.
-- [ ] T002 [P] Amend `specs/045-clickable-file-links/spec.md` **FR-031** with the FR-031/FR-046
+- [x] T002 [P] Amend `specs/045-clickable-file-links/spec.md` **FR-031** with the FR-031/FR-046
   resolution: Open Link shows the Open Link chord **where one is bound**, so in a terminal — where
   FR-046 binds none — it shows no chord. Cite constitution Principle VI (*One gesture follows a
   link*) as the authority and R10(b) as the derivation. This is a clarification of FR-031, not a
   supersession: neither FR changes meaning. Satisfies FR-031, FR-046.
-- [ ] T003 [P] Amend the *Assumptions* bullet in `specs/045-clickable-file-links/spec.md` that reads
+- [x] T003 [P] Amend the *Assumptions* bullet in `specs/045-clickable-file-links/spec.md` that reads
   "the hover tooltip's wording for file links matches the wording web links use". The shipped wording
   is `Ctrl+Click to open in system browser` (`packages/ui/src/renderer/terminal/use-terminal.ts:311`)
   and is false for `src/foo.ts`. Restate it as: the file-link tooltip matches the **shape** and the
   **delay** (`terminals.linkHoverDelayMs`) of the web-link tooltip and names the gesture — FR-042's
   actual requirement — with the destination wording differing by link kind (R10a). Satisfies FR-042.
-- [ ] T004 [P] Amend `specs/045-clickable-file-links/spec.md` with **FR-035a**, under *Link targets
+- [x] T004 [P] Amend `specs/045-clickable-file-links/spec.md` with **FR-035a**, under *Link targets
   and the link menu*: Open in OS Explorer for a file link is carried by a **third** reveal policy,
   `throng:links:reveal`, confined by FR-037's re-resolution rather than by a path prefix
   (`throng:files:reveal`) or the open-document registry (`throng:files:revealDocument`,
@@ -61,7 +61,7 @@ what it replaces — never a silent contradiction (CLAUDE.md, *Before you add a 
   therefore cannot serve FR-030). State that neither existing confinement is loosened, and that
   the repo now has three reveal policies. Satisfies FR-030, FR-035, FR-037; R8;
   [contracts/settings-and-environment.md](./contracts/settings-and-environment.md) §3.
-- [ ] T005 [P] Amend **FR-091** in `specs/045-clickable-file-links/spec.md`: its premise is already
+- [x] T005 [P] Amend **FR-091** in `specs/045-clickable-file-links/spec.md`: its premise is already
   stale. 044 shipped `preview.followLink` bound to Ctrl+Enter
   (`packages/core/src/config/keybindings.ts:408`, dispatched at
   `packages/ui/src/renderer/preview/preview-commands.tsx:162-167`), so constitution Principle VI's
@@ -69,11 +69,11 @@ what it replaces — never a silent contradiction (CLAUDE.md, *Before you add a 
   correcting **two** statements — that no surface implements Ctrl+Enter (044 does) and that editors
   do not (045 will) — and require the amendment's SYNC IMPACT REPORT to record what it found rather
   than restating the premise. Satisfies FR-091; R16.
-- [ ] T006 [P] Fix the dangling reference in `specs/045-clickable-file-links/data-model.md` — its
+- [x] T006 [P] Fix the dangling reference in `specs/045-clickable-file-links/data-model.md` — its
   preamble points at `contracts/link-ipc.md`, which does not exist. The channel payloads are in
   [contracts/settings-and-environment.md](./contracts/settings-and-environment.md) §3. Artifact
   consistency only; no FR.
-- [ ] T007 Add a **Clarifications** session dated 2026-09-18 to
+- [x] T007 Add a **Clarifications** session dated 2026-09-18 to
   `specs/045-clickable-file-links/spec.md` recording T002–T005 as decisions taken during planning,
   each with its question and its answer, per the repo's clarification-recording rule. Depends on
   T002, T003, T004, T005.

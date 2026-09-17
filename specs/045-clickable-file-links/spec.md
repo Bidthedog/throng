@@ -122,6 +122,38 @@ What the maintainer sees today, and why:
   file hyperlinks follow the same rule as web links and stay active. The switch governs detected
   paths only (FR-060).
 
+### Session 2026-09-18 (decisions taken during planning — recorded as amendments in place)
+
+Each of these was raised by [plan.md](./plan.md) *Reported to the maintainer* as a problem an
+implementer would otherwise resolve the wrong way. Each is written into the requirement it affects as
+a dated amendment naming what it changes, rather than as a silent correction.
+
+- Q: FR-031 requires Open Link to show the Open Link chord; FR-046 requires that chord not to be live
+  in a terminal. Which wins over a terminal file link? → A: **Both, read together.** Open Link shows
+  the chord *where one is bound*, and in a terminal none is — so the terminal's Open Link item shows
+  **no** chord, while the editor's and the preview's show `Ctrl+Enter`. The authority is constitution
+  Principle VI's own wording (*"where one is bound"*); the derivation is R10(b). A clarification of
+  FR-031, **not** a supersession: neither requirement changes meaning. Amendment in **FR-031**.
+- Q: The Assumptions say the file-link hover tooltip matches the wording web links use. The shipped
+  wording is `Ctrl+Click to open in system browser`, which is false for `src/foo.ts`. What did the
+  assumption mean? → A: **The same shape and the same delay, not the same words.** The tooltip names
+  the gesture — FR-042's actual requirement — and its destination wording differs by link kind; the
+  delay (`terminals.linkHoverDelayMs`) is genuinely shared and unchanged. Derivation R10(a).
+  Amendment in **Assumptions**.
+- Q: Which reveal policy carries Open in OS Explorer for a file link? `throng:files:reveal` is
+  confined by a path prefix and `throng:files:revealDocument` refuses any path no panel has open —
+  neither admits a link to a file outside the project that nothing has open, which FR-030 requires.
+  → A: **A third policy, `throng:links:reveal`**, confined by FR-037's re-resolution rather than by a
+  prefix or the open-document registry. Neither existing confinement is loosened, and the repository
+  deliberately ends up with three reveal policies. Derivation R8. Added as **FR-035a**.
+- Q: FR-091 says constitution Principle VI's *Known gaps* sentence needs bringing current on
+  delivery. Is its premise sound? → A: **No — the sentence is already stale.** 044 shipped
+  `preview.followLink` on Ctrl+Enter (`keybindings.ts:408`, dispatched at
+  `preview-commands.tsx:162-167`), so *"no surface yet implements Ctrl+Enter"* is wrong today, before
+  this feature changes anything. FR-091 is restated to correct **two** statements and to require its
+  SYNC IMPACT REPORT to record what it found in the code rather than restating the premise.
+  Derivation R16. Amendment in **FR-091**.
+
 ---
 
 ## User Scenarios & Testing *(mandatory)*
@@ -496,7 +528,8 @@ hyperlinks.
 - **FR-031**: The context menu of a terminal or editor panel, opened over a file link with no text
   selected (by right-click or `menu.open`), MUST begin with a **Contextual** section (Principle VI
   section 0) containing, in this order:
-  - **Open Link**, which runs the default link action (FR-050) and shows the Open Link chord (FR-045);
+  - **Open Link**, which runs the default link action (FR-050) and shows the Open Link chord
+    (FR-045) **where one is bound in that panel type's scope**;
   - each offered link target, by name, in FR-030's order, each performing its target whatever the
     preference says;
   - **Copy Link Address**.
@@ -504,6 +537,20 @@ hyperlinks.
   With text selected, the ordinary menu MUST appear instead (024 FR-019d). Away from a link, the menu
   MUST be unchanged. In a terminal, these items take the place of 024 FR-019d's web-link items only
   over a file link. Over a web link, the menu is unchanged.
+
+  **Amendment 2026-09-18 (clarification of FR-031 — no requirement changes meaning).** As first
+  written, FR-031 said Open Link "shows the Open Link chord (FR-045)" without qualification, while
+  FR-046 requires that chord **not** to be live in a terminal. Read literally the two contradicted
+  each other, and an implementer resolving it the wrong way would draw `Ctrl+Enter` on a terminal's
+  Open Link item — advertising a key that in fact reaches the shell. The words *where one is bound
+  in that panel type's scope* are added above, and the authority is constitution **Principle VI**,
+  which states the rule in as many words: *"A menu item MUST show its command's current chord where
+  one is bound."* The derivation is [research.md](./research.md) **R10(b)**. The consequence: the
+  chord is drawn on the **editor's** and the **preview's** Open Link items and is **not** drawn on
+  the **terminal's**, because `COMMAND_SCOPES['preview.followLink'].has('terminal')` is false
+  (FR-046, [contracts/menus-and-gestures.md](./contracts/menus-and-gestures.md) §4). This is a
+  clarification, not a supersession: neither FR-031 nor FR-046 changes meaning, and no older
+  requirement is replaced.
 - **FR-032**: **Copy Link Address** on a file link MUST copy the resolved target's absolute path as
   plain text, followed by the link's position in the form it was written, if it has one. It MUST copy
   the resolved path for a target outside the project as well. This differs from 044 FR-116's
@@ -519,6 +566,26 @@ hyperlinks.
 - **FR-035**: **Open in OS Explorer** MUST open the OS file manager with the file selected, or with the
   folder open for a folder link. It MUST go through the same platform seam and behave the same as the
   existing Open in OS Explorer items (**023 FR-024**).
+- **FR-035a** *(added 2026-09-18; extends FR-035, supersedes nothing)*: **Open in OS Explorer** for a
+  file link MUST be carried by a **third** reveal policy of its own — the channel
+  `throng:links:reveal` — and MUST NOT reuse either of the two that exist.
+
+  This is an amendment because FR-030 and FR-035 together already require something neither shipped
+  policy can deliver, and the spec did not say which one was meant to stretch. It settles that
+  **neither is loosened**:
+
+  | Policy | What confines it | Why it cannot serve FR-030 |
+  |---|---|---|
+  | `throng:files:reveal` | a **path prefix** — the request is root-relative and the path must lie under the project root (`packages/ui/src/main/files-service.ts`, `reveal`) | FR-030 offers Open in OS Explorer for **every** link, including one outside every project root |
+  | `throng:files:revealDocument` | the **open-document registry** — it refuses any path no Panel is showing (`packages/ui/src/main/files-service.ts:518-528`, `if (!this.isDocumentOpen?.(absPath)) return { error: OUTSIDE }`) | a link names a file nothing has open; every such reveal would be refused |
+  | `throng:links:reveal` *(new)* | **FR-037's re-resolution**: the renderer sends a `LinkResolutionRequest` and never a path, main re-derives the absolute location from `text`, `kind`, `baseDirectory` and `panelId`, and re-checks that it exists before acting | — |
+
+  The confinement is therefore *the link resolved from text the user can actually see in a panel*,
+  which is a bound of a different shape from a prefix or a registry rather than a weaker version of
+  either. Both existing channels keep their own rules, their own tests and their own callers,
+  unchanged. **After this feature the repository has three reveal policies, deliberately**, and any
+  fourth surface must justify itself the same way. Derivation: [research.md](./research.md) **R8**;
+  payloads: [contracts/settings-and-environment.md](./contracts/settings-and-environment.md) §3.
 - **FR-036**: **Open in OS Default Program** MUST open the file in the application the OS associates
   with it, through the platform abstraction. A failure MUST raise one notice naming the file and the
   reason, through the shared failure presentation (030).
@@ -661,10 +728,28 @@ hyperlinks.
   preferences) MUST describe file links, their gestures, the menu, the default link action, the
   detection switches, the refusal to run executables (FR-039) and the hyperlink-advertising setting
   and the environment variable it sets (FR-080), in the same change that ships them.
-- **FR-091**: On delivery, the *Known gaps* sentence in constitution Principle VI (*One gesture
-  follows a link*), which says "no surface yet implements Ctrl+Enter" and that #394 adds the first,
-  MUST be brought current through a PATCH amendment. The amendment is recorded here because it
-  cannot be made before the behaviour ships.
+- **FR-091** *(amended 2026-09-18 — the premise as first written is already stale)*: On delivery, the
+  *Known gaps* paragraph in constitution Principle VI (*One gesture follows a link*) MUST be brought
+  current through a PATCH amendment that corrects **two** statements, not one:
+
+  1. **"no surface yet implements Ctrl+Enter"** — wrong **today**, before this feature changes
+     anything. Spec **044** shipped `preview.followLink` bound to `['Ctrl+Enter']`
+     (`packages/core/src/config/keybindings.ts:408`) and dispatched it in previews
+     (`packages/ui/src/renderer/preview/preview-commands.tsx:162-167`). The paragraph records that
+     it was "verified against the code on 2026-09-14"; it went stale when 044 landed on this branch.
+  2. **"spec 044 … and #394 add the first Ctrl+Enter"** — 044 did not *add the first* alongside
+     #394; it added it, and 045 adds the **second** surface, editors (FR-045).
+
+  The SYNC IMPACT REPORT of that amendment MUST record **what it found in the code** — the two file
+  references above, and the date on which the paragraph's own verification note went stale — rather
+  than restating this requirement's premise. That instruction is the point of the amendment: the
+  paragraph went stale precisely because a prior amendment copied a claim forward instead of
+  re-checking it.
+
+  **What this amendment to FR-091 changes**: FR-091's scope (one statement → two) and the evidence
+  its SYNC IMPACT REPORT must carry. It does **not** change when the constitution amendment happens
+  (still on delivery, still PATCH) and supersedes no other requirement. Derivation:
+  [research.md](./research.md) **R16**.
 
 ### Supersessions
 
@@ -768,7 +853,19 @@ where it is.
   requires.
 - **Label spelling.** "Program" follows the codebase's spelling for software. The issue wrote
   "Programme", and the choice is recorded under *Clarifications*.
-- **The hover tooltip's wording** for file links matches the wording web links use.
+- **The hover tooltip** for a file link matches the **shape** and the **delay** of the web-link
+  tooltip, and names the gesture.
+
+  **Amendment 2026-09-18 (restates this assumption; FR-042 is unchanged).** As first written this
+  bullet read *"The hover tooltip's wording for file links matches the wording web links use."* That
+  is false as stated. The shipped wording is `Ctrl+Click to open in system browser`
+  (`packages/ui/src/renderer/terminal/use-terminal.ts:311`), so matching it verbatim would promise
+  that a Ctrl+click on `src/foo.ts` opens a **browser**. FR-042's actual requirement is narrower —
+  the tooltip must "name the gesture" — and that is what the same *shape* delivers: the modifier,
+  `+Click`, and what it does, with the destination wording differing by link kind (a web link keeps
+  `…to open in system browser`; a file link says `…to open`). The **delay** is genuinely shared and
+  unchanged: both follow `terminals.linkHoverDelayMs` (024 US7, bounded by 031). Derivation:
+  [research.md](./research.md) **R10(a)**.
 - **The settings' home** in the preferences editor is left to planning, provided FR-061 holds.
 - **A terminal link-navigation mode** is out of scope (see *Clarifications*). If it is wanted, it is a
   new issue, and FR-046 would then be revisited.
