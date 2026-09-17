@@ -37,8 +37,8 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -54,8 +54,8 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -128,8 +128,8 @@ jobs:
       # Lets the retry step comment on the tracking issue when an infra fault is auto-retried.
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -196,7 +196,7 @@ jobs:
         run: ./scripts/ci-e2e-run.ps1 -Grep '@core'
       - name: Upload traces
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-results-e2e-core
           path: test-results/
@@ -235,8 +235,8 @@ jobs:
       THRONG_AGENT_CONNECT_TIMEOUT_MS: '8000'
       THRONG_AGENT_READY_TIMEOUT_MS: '8000'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -269,7 +269,7 @@ jobs:
           if ($testsFailed) { throw 'The @admin E2E suite failed.' }
       - name: Upload @admin traces
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-results-admin
           path: test-results/
