@@ -205,6 +205,12 @@ function mount(
 async function ready(tabTestId = 'settings-tab'): Promise<void> {
   await waitFor(() => expect(screen.getByTestId('preferences-window')).toBeInTheDocument());
   await waitFor(() => expect(screen.getByTestId(tabTestId)).toBeInTheDocument());
+  if (tabTestId === 'themes-tab') {
+    // The Themes tab lists its themes and draws its token rows from a load it starts on mount, which React
+    // 19 commits after the tab itself: every themes case reads or drives those rows next.
+    await waitFor(() => expect(screen.getByTestId('theme-select').querySelectorAll('option').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByTestId('theme-reset-colours.accent')).toBeInTheDocument());
+  }
 }
 
 /** Switch to the JSON view of whatever tab is showing. */

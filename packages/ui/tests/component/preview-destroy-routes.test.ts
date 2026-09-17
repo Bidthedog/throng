@@ -457,8 +457,9 @@ describe('a view of a synced preview closed inside a sub-workspace keeps the run
     });
     expect(opened.kind).toBe('placed');
     const id = (opened as { kind: 'placed'; panelId: string }).panelId;
-    // It belongs to the project, as the attach needs (I-1) — the point of the case.
-    expect(allPanels().find((p) => p.id === id)?.originProjectId).toBe(PROJECT);
+    // It belongs to the project, as the attach needs (I-1) — the point of the case. Read once the placement has
+    // rendered: `allPanels()` reads the workspace as of the last render, which React 19 commits a tick later.
+    await waitFor(() => expect(allPanels().find((p) => p.id === id)?.originProjectId).toBe(PROJECT));
     // …and the panel RECORDS that this window placed it, so the rule survives the layout being persisted
     // and restored (review finding 2). Nothing else about the run is persisted, so nothing else can say it.
     expect(allPanels().find((p) => p.id === id)?.config).toMatchObject({ placedInLayoutProjectId: SUB });
