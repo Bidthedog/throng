@@ -12,7 +12,7 @@
  * 044 T192 (iteration 2026-09-15, FR-115) — a followed same-document heading is now a history jump: the
  * heading block below supersedes the old "never reach main" rule.
  */
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PreviewNavigateResponse } from '@throng/core';
 import { captureScrollAnchor } from '../../src/renderer/preview/providers/markdown/scroll-anchor.js';
@@ -155,7 +155,7 @@ describe('same-document headings are history jumps (FR-090f, FR-115)', () => {
     await mountDoc();
     ctrlClick('Nowhere');
     const n = await screen.findByTestId(`preview-link-notice-${panel().id}`);
-    expect(n.getAttribute('data-notice-kind')).toBe('link-missing-heading');
+    expect(n.textContent).toContain('No heading');
     expect(n.textContent).toContain('no-such-heading');
     expect(host().scrollTop).toBe(0);
     await act(() => Promise.resolve());
@@ -257,7 +257,7 @@ describe('outside the project (FR-090e)', () => {
     await mountDoc();
     ctrlClick('Out');
     const n = await screen.findByTestId(`preview-link-notice-${panel().id}`);
-    expect(n.getAttribute('data-notice-kind')).toBe('link-outside');
+    expect(n.textContent).toContain('is outside this project');
     expect(n.textContent).toContain('../outside.md');
     expect(panel().preview.navigate).not.toHaveBeenCalled();
   });
@@ -361,7 +361,7 @@ describe('main’s answers', () => {
     ctrlClick('Setup');
 
     const n = await screen.findByTestId(`preview-link-notice-${panel().id}`);
-    expect(n.getAttribute('data-notice-kind')).toBe('link-missing-heading');
+    expect(n.textContent).toContain('No heading');
     expect(n.textContent).toContain('install');
     expect(screen.getByText('No install section.')).toBeInTheDocument();
     expect(host().scrollTop).toBe(0);
@@ -421,7 +421,7 @@ describe('main’s answers', () => {
     });
     ctrlClick('Gone');
     const n = await screen.findByTestId(`preview-link-notice-${panel().id}`);
-    expect(n.getAttribute('data-notice-kind')).toBe('link-missing-file');
+    expect(n.textContent).toContain('was not found');
     expect(n.textContent).toContain('docs/missing.md');
     expect(screen.getByText('Usage text.')).toBeInTheDocument();
   });
@@ -434,29 +434,34 @@ describe('main’s answers', () => {
     });
     ctrlClick('Gone');
     const first = await screen.findByTestId(`preview-link-notice-${panel().id}`);
-    const flashBefore = Number(first.getAttribute('data-flash'));
+    expect(first.getAttribute('data-pulsing')).toBeNull();
 
     ctrlClick('Gone');
-    await waitFor(() =>
-      expect(Number(screen.getByTestId(`preview-link-notice-${panel().id}`).getAttribute('data-flash'))).toBe(flashBefore + 1),
-    );
+    // FR-123b — the notification system's duplicate rule: the card already showing pulses, IN PLACE.
+    await waitFor(() => expect(screen.getByTestId(`preview-link-notice-${panel().id}`).getAttribute('data-pulsing')).toBe('true'));
     expect(screen.getAllByTestId(`preview-link-notice-${panel().id}`)).toHaveLength(1);
-    expect(screen.getByTestId(`preview-link-notice-${panel().id}`)).toHaveClass('panel-failure--flash');
-    // 044 US2 fix round 1 (item 6) — flashed IN PLACE, as the file banner is: the same element, so the
-    // focus of a keyboard user on its Dismiss control survives the repeat.
     expect(screen.getByTestId(`preview-link-notice-${panel().id}`)).toBe(first);
   });
 
-  it('the notice uses the shared in-panel notice element and is dismissed by its own control', async () => {
+  it('the notice is an application warning, outside the panel, headed with the panel, and dismissed by its own control (FR-123)', async () => {
     await mountDoc();
     ctrlClick('Nowhere');
     const n = await screen.findByTestId(`preview-link-notice-${panel().id}`);
-    expect(n).toHaveClass('panel-failure');
-    expect(n.querySelector('.panel-failure__text .panel-failure__headline')).not.toBeNull();
-    const dismiss = screen.getByTitle('Dismiss');
-    expect(dismiss).toHaveClass('panel-failure__control');
-    fireEvent.click(dismiss);
-    expect(notice()).toBeNull();
+    expect(n).toHaveClass('notice', 'notice--warning');
+    expect(screen.getByTestId('notices').contains(n)).toBe(true);
+    expect(host().closest('.preview-panel')?.contains(n) ?? false).toBe(false);
+    expect(n.textContent).toContain("Couldn't follow the link in");
+    fireEvent.click(within(n).getByTitle('Dismiss'));
+    await waitFor(() => expect(notice()).toBeNull());
+  });
+
+  it('a different condition from the same panel replaces the notice rather than stacking (FR-123b)', async () => {
+    await mountDoc();
+    ctrlClick('Nowhere');
+    await screen.findByTestId(`preview-link-notice-${panel().id}`);
+    ctrlClick('Out');
+    await waitFor(() => expect(notice()?.textContent).toContain('is outside this project'));
+    expect(screen.getAllByTestId(`preview-link-notice-${panel().id}`)).toHaveLength(1);
   });
 });
 
@@ -501,7 +506,7 @@ describe('fix round 2 — an overtaken navigate is ignored; every successful fol
     await act(() => Promise.resolve());
 
     const after = screen.getByTestId(`preview-link-notice-${panel().id}`);
-    expect(after.getAttribute('data-notice-kind')).toBe('link-missing-heading');
+    expect(after.textContent).toContain('No heading');
     expect(after.textContent).toContain('usage');
     expect(after.textContent).not.toContain('install');
     expect(host().scrollTop).toBe(scrollBefore);
@@ -543,7 +548,7 @@ describe('fix round 1 (item 9) — the panel’s revealFragment handle, as main�
       revealPreviewFragment(panel().id, 'nope');
     });
     const n = await screen.findByTestId(`preview-link-notice-${panel().id}`);
-    expect(n.getAttribute('data-notice-kind')).toBe('link-missing-heading');
+    expect(n.textContent).toContain('No heading');
     expect(screen.getAllByTestId(`preview-link-notice-${panel().id}`)).toHaveLength(1);
   });
 

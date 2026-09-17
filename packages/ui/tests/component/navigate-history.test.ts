@@ -453,7 +453,7 @@ describe('a preview (FR-102, FR-107, FR-106b, FR-106c)', () => {
 
     const notices = await screen.findAllByTestId(`preview-link-notice-${id}`);
     expect(notices).toHaveLength(1);
-    expect(notices[0].getAttribute('data-notice-kind')).toBe('history-refused');
+    expect(notices[0].textContent).toContain('could not be shown');
     expect(notices[0].textContent).toContain('setup.md');
     expect(getPreviewState(id)).toBe(before);
     expect(screen.getByText('Two text.')).toBeInTheDocument();

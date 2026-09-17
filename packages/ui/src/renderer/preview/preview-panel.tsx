@@ -59,10 +59,11 @@
  * path, carrying the fragment so the caret can land on the heading (FR-090d); `refused` raises main's
  * notice (FR-090e).
  *
- * ══ LINK NOTICES: ONE CONDITION, ONE NOTICE ══
+ * ══ LINK NOTICES: ONE CONDITION, ONE NOTIFICATION (FR-123) ══
  *
- * A link notice is this panel's own state — no update carries it — and it has one slot. The same
- * condition again flashes the notice already shown; a different one replaces it (`preview-link-notice.tsx`).
+ * A link notice is this panel's own condition — no update carries it — and it is raised as an application
+ * notification, never drawn in the panel. One per panel at a time: the same condition again flashes the
+ * notification already showing; a different one replaces it; a link followed or a step taken clears it.
  *
  * ══ FILE NOTICES: THE RUN'S CONDITION, ONE BANNER ══
  *
@@ -117,7 +118,15 @@ import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { findHeading, linkOf } from './link-dom.js';
 import { linkAddress, previewContentMenu, type PreviewContentSection, type PreviewEditorRouteItem } from './content-menu.js';
-import { isLinkNotice, PreviewLinkNotice, sameLinkNotice, type LinkNotice } from './preview-link-notice.js';
+import {
+  isLinkNotice,
+  linkNoticeAction,
+  linkNoticeMessage,
+  previewLinkNoticeTestId,
+  sameLinkNotice,
+  type LinkNotice,
+} from './preview-link-notice.js';
+import { useNotify } from '../common/notification.js';
 import { registerPreviewPanelHandles } from './preview-panel-handles.js';
 import { PanelFailureBanner } from '../common/panel-failure-banner.js';
 import { panelSubject, usePanelPlace } from '../common/panel-subject.js';
@@ -496,16 +505,41 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
     return () => unregisterPanelFocus(panelId);
   }, [panelId]);
 
-  /* ── Link notices (FR-090e, FR-090f) ─────────────────────────────────────────────────────────── */
+  /* ── Link notices (FR-090e, FR-090f, FR-123) ─────────────────────────────────────────────────── */
 
-  const [linkNotice, setLinkNotice] = useState<{ notice: LinkNotice; flash: number } | null>(null);
-  const raiseLinkNotice = useCallback((notice: LinkNotice): void => {
-    setLinkNotice((current) =>
-      current !== null && sameLinkNotice(current.notice, notice)
-        ? { notice: current.notice, flash: current.flash + 1 }
-        : { notice, flash: 1 },
-    );
-  }, []);
+  /*
+   * FR-123 — an application notification, never an element in the panel. One per panel at a time
+   * (FR-123b): the same condition again goes to `notify`, whose duplicate rule flashes the card already up;
+   * a different one clears the last first; a link followed or a step taken clears it.
+   */
+  const { notify, clear } = useNotify();
+  const linkNoticeTestId = previewLinkNoticeTestId(panelId);
+  const lastLinkNotice = useRef<LinkNotice | null>(null);
+  const projectRootRef = useRef(projectRoot);
+  projectRootRef.current = projectRoot;
+  const raiseLinkNotice = useCallback(
+    (notice: LinkNotice): void => {
+      const last = lastLinkNotice.current;
+      if (last !== null && !sameLinkNotice(last, notice)) clear(linkNoticeTestId);
+      lastLinkNotice.current = notice;
+      notify({
+        severity: 'warning',
+        subject: panelSubject(placeRef.current),
+        action: linkNoticeAction(notice),
+        message: linkNoticeMessage(notice, projectRootRef.current),
+        testId: linkNoticeTestId,
+        onDismiss: () => {
+          if (lastLinkNotice.current !== null && sameLinkNotice(lastLinkNotice.current, notice)) lastLinkNotice.current = null;
+        },
+      });
+    },
+    [notify, clear, linkNoticeTestId],
+  );
+  const clearLinkNotice = useCallback((): void => {
+    if (lastLinkNotice.current === null) return;
+    lastLinkNotice.current = null;
+    clear(linkNoticeTestId);
+  }, [clear, linkNoticeTestId]);
   /** The body's own reports. Only the link notices are a body's to raise (FR-090e/f). */
   const onNotice = useCallback(
     (notice: PreviewNotice): void => {
@@ -555,13 +589,13 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
         // rather than `scrollIntoView`, which would also scroll every scrollable ancestor of the panel.
         host.scrollTop += heading.getBoundingClientRect().top - host.getBoundingClientRect().top;
         // The link was followed: a notice about an earlier one no longer describes anything (item 13).
-        setLinkNotice(null);
+        clearLinkNotice();
         return true;
       }
       raiseLinkNotice({ kind: 'link-missing-heading', target: fragment });
       return false;
     },
-    [raiseLinkNotice],
+    [raiseLinkNotice, clearLinkNotice],
   );
 
   /**
@@ -661,7 +695,7 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
         case 'external':
           // The preview's own channel: main allows `mailto:` there, and keeps the general one http(s)-only.
           window.throng?.preview?.openExternal?.(link.url);
-          setLinkNotice(null);
+          clearLinkNotice();
           return;
         case 'heading':
           if (current) revealFragmentIn(current.filePath, link.fragment, true);
@@ -702,7 +736,7 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
               // describes the later link, which has already been handled: this one does nothing at all, or
               // it would clear the later link's notice and look for this link's heading in its file.
               if (normaliseForCompare(res.update.filePath) !== normaliseForCompare(link.absPath)) return;
-              setLinkNotice(null);
+              clearLinkNotice();
               // A navigation's update for ANOTHER file must carry that file's content. `null` means
               // "unchanged", which here would keep the previous document on screen under the new path
               // — so it is read as nothing to show (fix round 1, item 1; main sends content explicitly).
@@ -716,7 +750,7 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
             }
             case 'openedInEditor':
               // A successful follow: a notice about an earlier link describes nothing now.
-              setLinkNotice(null);
+              clearLinkNotice();
               // FR-090d — exactly as if opened from Files & Folders; the fragment places the caret.
               window.dispatchEvent(
                 new CustomEvent('throng:open-file', {
@@ -733,7 +767,7 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
             default:
               // `focusedOther` — main focused the preview that already shows the file (FR-090c). This one
               // does not change, but the link WAS followed, so an earlier link's notice goes.
-              setLinkNotice(null);
+              clearLinkNotice();
               return;
           }
         })
@@ -750,7 +784,7 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
           );
         });
     },
-    [panelId, raiseLinkNotice, revealFragmentIn, placeLeft],
+    [panelId, raiseLinkNotice, clearLinkNotice, revealFragmentIn, placeLeft],
   );
 
   /* ── Back and Forward (044 US7: FR-102, FR-106b–d, FR-107) ───────────────────────────────────── */
@@ -794,7 +828,7 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
               const applied = applyPreviewUpdate(
                 moved && res.update.content === null ? { ...res.update, content: CLEARED_CONTENT } : res.update,
               );
-              if (applied && moved) setLinkNotice(null);
+              if (applied && moved) clearLinkNotice();
               return;
             }
             case 'refused':
@@ -816,7 +850,7 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
           );
         });
     },
-    [panelId, raiseLinkNotice, placeLeft],
+    [panelId, raiseLinkNotice, clearLinkNotice, placeLeft],
   );
 
   /*
@@ -1207,15 +1241,6 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
           notified={false}
           onRetry={shown.failure.kind === 'attach' ? retryAttach : retryBody}
           onCancel={onClearType}
-        />
-      ) : null}
-      {linkNotice ? (
-        <PreviewLinkNotice
-          panelId={panelId}
-          notice={linkNotice.notice}
-          flash={linkNotice.flash}
-          projectRoot={projectRoot}
-          onDismiss={() => setLinkNotice(null)}
         />
       ) : null}
       <div

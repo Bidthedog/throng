@@ -1,35 +1,29 @@
 /**
- * The preview's LINK notice (044, FR-090e, FR-090f, FR-106c; contracts/menus-and-controls.md §9).
+ * The preview's LINK notice (044, FR-090e, FR-090f, FR-106c, FR-123; contracts/menus-and-controls.md §9).
  *
- * ══ ONE CONDITION, ONE NOTICE ══
+ * ══ AN APPLICATION NOTIFICATION, NOT A PANEL ELEMENT (FR-123) ══
  *
  * A link that cannot be followed — its file missing, outside the project, or its heading not found — and
- * a history step main refused are reported HERE, inline in the panel, and nowhere else: not as a toast,
- * not in the failure banner (which is the file's own condition, FR-026). The panel holds one link notice
- * at a time. A second report of the SAME condition does not add a second element; it flashes this one
- * (`flash` counts the reports, and `useInPlaceFlash` restarts the animation on the same element, so focus
- * on Dismiss survives). A different
- * condition replaces it, because the reader has moved on to a different link.
+ * a history step main refused are reported as a warning in the application's notifications, raised by the
+ * preview panel (`preview-panel.tsx`). Until Session 2026-09-17 this was an inline notice in the panel; the
+ * maintainer asked for it to move. The file's own conditions (FR-026, FR-027) are not these: they stay in
+ * the panel's failure banner, with their actions (`preview-notice.tsx`).
  *
- * ══ STYLED AS THE SHARED IN-PANEL NOTICE ══
+ * ══ ONE CONDITION, ONE NOTIFICATION ══
  *
- * The markup and classes are `panel-failure-banner.css`'s — `.panel-failure`, its text, headline and
- * control classes — so a link notice reads like every other in-panel notice in every theme, and
- * neither `preview.css` (the panel chrome) nor a provider's own stylesheet (e.g. `markdown.css`,
- * T093) ever styles it. The one control is Dismiss: the condition is a moment, not a state the panel
- * stays in, so there is nothing to retry.
+ * The panel holds one link notice at a time. A second report of the SAME condition ({@link sameLinkNotice})
+ * is raised again unchanged, and the notification system's duplicate rule flashes the card already showing.
+ * A different condition clears the last one first, because the reader has moved on to a different link.
+ * Every card a panel raises carries {@link previewLinkNoticeTestId}, which is what clearing addresses.
  *
  * ══ WHAT IT SAYS ══
  *
- * What is wrong, naming the target — never what the reader may not do. A path is shown relative to the
- * project, the way Files & Folders names it.
+ * The heading is what was attempted, in which panel ({@link linkNoticeAction} with the panel subject); the
+ * message is what is wrong, naming the target — never what the reader may not do. A path is shown relative
+ * to the project, the way Files & Folders names it.
  */
-import type { ReactElement } from 'react';
 import { relativeToRoot, type PreviewNotice } from '@throng/core';
-import { IconButton } from '../common/icon-button.js';
-import { useInPlaceFlash } from '../common/panel-failure-banner.js';
 import { stripBidiControls } from './link-dom.js';
-import '../common/panel-failure-banner.css';
 
 /** The notices this surface shows. The file's own conditions (FR-026, FR-027) are the banner's. */
 export type PreviewLinkNoticeKind = 'link-missing-file' | 'link-outside' | 'link-missing-heading' | 'history-refused';
@@ -53,6 +47,19 @@ export function sameLinkNotice(a: LinkNotice, b: LinkNotice): boolean {
   return a.kind === b.kind && a.target === b.target;
 }
 
+/** The test id every link notification a preview panel raises carries — and what clearing it addresses. */
+export function previewLinkNoticeTestId(panelId: string): string {
+  return `preview-link-notice-${panelId}`;
+}
+
+/**
+ * FR-123a — what the reader was trying to do, for the heading: `Couldn't {action} {panel}`. A refused history
+ * step was not a link.
+ */
+export function linkNoticeAction(notice: LinkNotice): string {
+  return notice.kind === 'history-refused' ? 'go back or forward in' : 'follow the link in';
+}
+
 /** The one sentence a link notice says (030 FR-040: never a raw error). */
 export function linkNoticeMessage(notice: LinkNotice, projectRoot: string | null): string {
   // A target comes from a document; no bidi control in it may reorder what the notice says (fix round 2).
@@ -69,34 +76,4 @@ export function linkNoticeMessage(notice: LinkNotice, projectRoot: string | null
     default:
       return 'That link could not be followed.';
   }
-}
-
-export interface PreviewLinkNoticeProps {
-  panelId: string;
-  notice: LinkNotice;
-  /** How many times this condition has been reported; each report after the first flashes. */
-  flash: number;
-  projectRoot: string | null;
-  onDismiss: () => void;
-}
-
-export function PreviewLinkNotice({ panelId, notice, flash, projectRoot, onDismiss }: PreviewLinkNoticeProps): ReactElement {
-  // Each report after the first restarts the flash IN PLACE (044 US2 fix round 1), exactly as the file
-  // banner does, so a keyboard user's focus on Dismiss survives a repeat.
-  const ref = useInPlaceFlash(flash, flash > 1);
-  return (
-    <div
-      ref={ref}
-      className={flash > 1 ? 'panel-failure panel-failure--flash' : 'panel-failure'}
-      data-testid={`preview-link-notice-${panelId}`}
-      data-notice-kind={notice.kind}
-      data-flash={flash}
-      role="status"
-    >
-      <div className="panel-failure__text">
-        <strong className="panel-failure__headline">{linkNoticeMessage(notice, projectRoot)}</strong>
-      </div>
-      <IconButton token="dismiss" title="Dismiss" className="panel-failure__control" onClick={onDismiss} />
-    </div>
-  );
 }

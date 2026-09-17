@@ -253,7 +253,7 @@ packages/ui/src/renderer/preview/                           NEW                 
 ├── open-in-editor.ts                 Open in Editor / Go to Editor (FR-015c, FR-015d)
 ├── preview-status-bar.tsx            the preview's status bar (FR-015a, FR-015e)
 ├── preview-notice.tsx                FR-026 / FR-027 notices over PanelFailureBanner
-├── preview-link-notice.tsx           link and history notices (FR-090e/f, FR-106c)
+├── preview-link-notice.tsx           link and history notices, raised as notifications (FR-090e/f, FR-106c, FR-123)
 ├── copy.ts                           selection → { text, html } via export profile (FR-035a)
 ├── preview.css                       tokens only (FR-083)
 └── providers/markdown/
