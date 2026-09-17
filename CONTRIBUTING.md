@@ -139,6 +139,57 @@ per process boundary (IX); **externalised typed config**, no magic values (X); a
 calls in core** — everything OS-specific sits behind a contract-tested seam (II). Keep the
 renderer sandboxed: it reaches privileged capability only through the preload bridge.
 
+## Adding a preview provider
+
+A preview provider is two files and two registration lines — nothing else in the codebase names a
+provider, and a test holds it to that.
+
+- **The descriptor** — `packages/core/src/preview/providers/<id>.ts`. Pure data, no OS and no DOM:
+  the provider's id and display name, the file extensions it claims, whether it is `text` (its
+  previews can be parented to an editor) or `binary` (always standalone), and any settings of its
+  own.
+- **The view** — `packages/ui/src/renderer/preview/providers/<id>/`. The renderer half: how the
+  provider turns its content into what the preview panel shows, including its own styles. Its body
+  loads lazily, on first use, so registering a provider pulls in none of its libraries **or its
+  stylesheet** — a provider's document CSS lives in its own folder (e.g.
+  `providers/markdown/markdown.css`) and is imported by its body module, not by the shared panel
+  chrome (`preview/preview.css`), so it rides in the provider's own lazily loaded chunk. A body may
+  honour optional props the panel passes it — `syncLine` (the source line to scroll to, for
+  editor/preview scroll sync), `onLinkTarget` (report a hovered or keyboard-focused link's target,
+  for the status-bar readout), `onTopLineChange` (report the top block's own source line as the
+  reader scrolls the preview, for the editor half of two-way scroll sync) and `placePolicy` (where
+  a followed link or a history step should land it) — and a body that ignores any of them still
+  conforms: all are optional, and a provider with no source-line concept, no links, or no opinion on
+  where to land simply never calls them, so its preview just does not drive the editor.
+  A body that honours two-way sync may also read `syncEcho` (the line is where the editor went, so record it and do not scroll), return `false` from `onTopLineChange` (the panel could not act yet; report again on the next `syncLine`) and call `onTopLineRead` (hand the panel a reader for its top block's line, used when an editor is adopted) — all equally optional.
+- **Registration** — one line in each of `packages/core/src/preview/providers/index.ts` (add the
+  descriptor to `SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS`) and
+  `packages/ui/src/renderer/preview/providers/index.ts` (add the view to `PREVIEW_PROVIDER_VIEWS`,
+  keyed by the descriptor's id).
+
+That's the whole surface. The preview panel and its menus, the editor's status bar and menus,
+Files & Folders' **Open In → Preview**, the preferences editor and layout persistence all pick up a
+new provider without being edited.
+
+Two tests enforce it, not a review comment:
+
+- `packages/ui/tests/component/preview-provider-seam.test.ts` injects a throwaway text provider and
+  a throwaway binary provider (`packages/ui/tests/fixtures/preview/test-providers.ts` — test-only,
+  neither ships) and asserts, through the real components and builders, that Files & Folders'
+  **Open In → Preview**, the editor status bar, the default open action, the preview panel and its
+  header menu, the settings tab and layout restore all handle them by kind — including drawing
+  their controls disabled, not hidden, while a provider is turned off.
+- `packages/ui/tests/unit/preview-surfaces-name-no-provider.test.ts` parses every source and
+  stylesheet under `packages/ui/src` and `packages/core/src` outside the provider folders — not a
+  list of known surfaces, so a new file is covered without editing the guard — and fails the build
+  on an import from `preview/providers/` other than the two registration indexes, or on any
+  Markdown-specific token outside comments: a `'markdown'` or `'.md'` literal or **regular
+  expression** (matched by its pattern body, delimiters and flags stripped, so `/\.md$/` is caught
+  the same as the string `'.md'`), an identifier such as `markdownView`, a CSS class. The few
+  legitimate mentions (Markdown the editor language, the `.md` file icon) are allowlisted in the
+  test with a reason each, and an allowance that stops matching fails too — so a surface
+  special-cased to Markdown instead of reading the registry is caught before it merges.
+
 ## Commits, branches, review
 
 - Branch from `master`: `feature/<NNN-slug>` or `fix/<NNN-slug>`, `<NNN>` matching your `specs/` directory and, where practical, the issue.

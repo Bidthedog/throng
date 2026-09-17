@@ -32,13 +32,44 @@ What changed in each release of throng, written for someone deciding whether to 
 ### Added
 - Two new ways to get throng: a **portable** build that runs without installing, and a **zip
   archive** you extract to a folder of your choosing. The per-user installer is unchanged.
+- **File previews** ([#10](https://github.com/Bidthedog/throng/issues/10)): an editor for a
+  supported file type can open a read-only, rendered preview beside it — from its status bar, its
+  right-click menu, or Files & Folders' **Open In → Preview**. It follows the editor's buffer live
+  as you type, or the file on disk when opened on its own, and shares the editor's unsaved dot; a
+  parented preview and its editor now scroll each other **both ways** — whichever side you scroll
+  drives the other to keep pace with whatever block (heading, paragraph, list item, table row) sits
+  at the top of its view, not headings alone — governed by **Synchronise preview and editor
+  scrolling** (on by default), which can now also be switched from either panel's body or header
+  right-click menu, a status-bar button beside each panel's Preview/Editor button, or the new
+  bindable `preview.toggleSyncScroll` command (ships with no chord). Markdown ships as the first
+  provider — headings, tables, task lists, fenced and syntax-highlighted code, YAML front matter
+  as a table (hideable with the provider's own **Show front matter** setting), and Ctrl+click-able
+  links, sanitised and themed throughout — with its own preferences under **Editor → Previews**,
+  including a **default open action** that can make Preview open on a click. Preview body text is
+  selectable and copyable, hovering or focusing a link shows its full target at the left of the
+  preview's status bar, and hovering an image shows its source and title as written in the
+  Markdown. **Copy Link Address** on a preview copies a heading or file link's full path rather
+  than a bare fragment. Built as a provider seam, so the next file type
+  ([#388](https://github.com/Bidthedog/throng/issues/388), PDF) is one provider to add, not a new
+  feature.
+- **Back and Forward for editor and preview panels**
+  ([#136](https://github.com/Bidthedog/throng/issues/136)): every editor and preview panel now
+  keeps its own history of the files it has shown, with Back/Forward buttons at the top left of
+  its title bar, `Alt+Left` / `Alt+Right`, and mouse back/forward buttons. History persists across
+  restarts, and how many entries each panel keeps is configurable under **Editor · Navigation**.
+  In a preview, following a link to a heading in the same document is a step of that same history
+  too — Back returns to where the reader was, then to the previous document, if there was one.
 
 ### Fixed
+- A preview's body text can now be selected with the mouse and copied, the same as an editor's;
+  holding Ctrl to drag from a link selects text without following it.
 - The **+** buttons that add a tab and add a panel are announced by a screen reader as "New tab" and
   "Add panel" rather than as "plus".
 - A command that opens a window — `az login`'s sign-in prompt, a browser-based login, a GUI editor —
   now brings that window to the front, instead of leaving it behind throng where the terminal looks
-  like it has stopped responding.
+  like it has stopped responding. The same handoff now applies to a web link Ctrl+clicked in a
+  terminal or opened from the About window: the browser it opens is left in front rather than
+  reclaimed by throng.
 - When the tab strip overflows, the ‹ and › arrows now work whenever there is more strip in that
   direction, including when the first or last tab is only partly cut off. A tab you go to is shown
   whole rather than partly hidden under the edge fade, and the arrows no longer react to a

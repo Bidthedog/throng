@@ -87,6 +87,24 @@ goal is to pull all of that into a single, simple customisable workspace.
   and icon-pack files that re-skin the whole application live, with contrast guarded automatically.
 - **Failures that name their cause** — errors say what is actually holding a locked file, raise one
   message per underlying problem, and leave a daemon-restart control in the status bar if it stops.
+- **File previews** — a read-only, rendered view of a file beside its editor: opened from the
+  editor's status bar, its right-click menu, or Files & Folders' **Open In → Preview**. It follows
+  the editor's buffer live as you type — no save needed — and the file on disk when opened on its
+  own, with scrolling **synchronised both ways** between a parented preview and its editor —
+  whichever side you scroll drives the other — and at the same block granularity either way:
+  whatever block (heading, paragraph, list item, table row) sits at the top of one's view is what
+  the other keeps at its own top, not headings alone. The sync can be switched off from either
+  panel's body or header right-click menu, a status-bar button next to each panel's Preview/Editor
+  button, or the bindable `preview.toggleSyncScroll` command (unbound by default). Markdown
+  ships as the first provider: headings, tables, task lists, fenced and syntax-highlighted code,
+  YAML front matter as a table, and Ctrl+click-able links, sanitised and themed throughout — body
+  text is selectable and copyable, and hovering or focusing a link shows its target at the left of
+  the preview's status bar. Following a heading link is a Back/Forward step, the same as opening
+  another file. Built as a provider seam, so the next file type is one provider to add, not a new
+  feature.
+- **Back and Forward, per panel** — every editor and preview panel keeps its own history of the
+  files it has shown, with Back/Forward buttons at the top left of its title bar, `Alt+Left` /
+  `Alt+Right`, and the mouse's own back/forward buttons. History persists across restarts.
 
 This list is throng as it exists today. **What's planned lives in the
 [issue tracker](https://github.com/Bidthedog/throng/issues)**, grouped by
@@ -189,6 +207,23 @@ a global preference that errors stay until dismissed does not reach it. The trad
 control that overrides a global setting sits beside the thing it overrides it for. Choosing *Never
 display* asks you to confirm first, because that notice is also how a failed write reports itself;
 whatever the mode says, the outcome is still written to the log.
+
+**Previews** are tuned by settings under **Editor · Previews**: `editor.previews.updateDelayMs`
+(how long after your last keystroke a parented preview catches up — 300 ms as shipped),
+`editor.previews.maxWaitMs` (the ceiling on that wait while you keep typing — 1000 ms as shipped),
+`editor.previews.syncScroll` (**Synchronise preview and editor scrolling** — on as shipped and
+works both directions: scrolling a parented preview scrolls its editor to match, and scrolling the
+editor scrolls the preview; turning it off leaves each where it is. Also switchable from either
+panel's right-click menu, a status-bar button beside each panel's Preview/Editor button, or the
+bindable `preview.toggleSyncScroll` command, which ships with no chord), and
+`editor.previews.copyFormat` (Rich text or Plain text for what Copy puts
+on the clipboard), and, per provider, whether it is enabled and its **default open action** —
+Editor or Preview — plus any settings of its own, such as Markdown's **Load remote images** and
+**Show front matter** (on as shipped; off hides the front-matter table entirely rather than
+rendering it as Markdown). Turning a provider off closes its
+open previews and greys its other settings rather than hiding them. **`editor.navigation.historySize`**
+(under **Editor · Navigation**, 10 as shipped, 1–100) caps how many files each editor or preview
+panel's Back/Forward history remembers.
 
 **Logs and crash reports** are written to a `logs` folder under the user-data directory (`throng`
 when installed, `throng-dev` for a dev run), so a crash that closes the window leaves evidence

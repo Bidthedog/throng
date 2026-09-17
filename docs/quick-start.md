@@ -293,6 +293,59 @@ Saves are confined to the project root. Unsaved changes show a pulsing dot; open
 two windows and they share **one buffer and one undo stack**, so Ctrl+Z in either reverts the
 other's edit. In-progress edits and their undo history survive a crash.
 
+### Preview a file
+
+An editor for a file type with a preview provider — Markdown, to start — shows a **preview** button
+in its status bar, and its right-click menu offers **Open Preview**. Either opens a read-only,
+rendered preview beside the editor: it follows your typing a moment after you pause, without
+saving, and shares the editor's unsaved dot. Click the status-bar button again and the open preview
+is focused, rather than opening a second one.
+
+You don't need the file open in an editor first. Right-click it in **Files & Folders** and choose
+**Open In → Preview** to read it without opening it for editing — the preview follows the file on
+disk instead, and Files & Folders does not show it as open. Open the same file from Files & Folders
+afterwards and the preview, where it stands, adopts that editor and starts following its buffer.
+
+Scrolling either side of a parented pair moves the other to match — whatever block (heading,
+paragraph, list item, table row) sits at the top of one's view lands at the top of the other's, not
+headings alone — governed by **Editor · Previews · Synchronise preview and
+editor scrolling** (on by default). Stepping Back to a document you'd left scrolled to the very top
+lands the preview on the editor's own top line instead, rather than at the top a second time.
+Switch the sync off from either panel's right-click menu (body or header), the status-bar button
+just to the left of the Preview/Editor button, or the **Synchronise Scrolling** command, which
+ships with no chord. Preview text is ordinary, selectable text: drag across it with the mouse and
+Ctrl+C copies it, the same as an editor.
+
+A preview's own status bar carries a button back to the source: **Open in Editor** on a preview
+that stands alone, opening one beside it, or **Go to Editor** on one that already has a parent,
+focusing it. Hovering a link, or reaching it with **Tab**, shows its full target at the left of the
+status bar, and hovering an image shows its source and any title, exactly as written in the
+Markdown. Ctrl+click a link inside a preview to follow it — a link to another file in the project
+opens **in the same preview, in place**; a link to a heading in the same document scrolls to it and
+is a Back/Forward step of its own; a web or `mailto:` link opens in your default browser, which is
+left in front of throng rather than throng reclaiming focus. Tab reaches a link from the keyboard
+and **Ctrl+Enter** follows it. **Copy Link Address**, on the preview's right-click menu, copies a
+web link's URL, a project file's absolute path, or — for a link that names a heading — that path
+followed by `#heading`; a link to a heading in the same document copies the preview's own path.
+The preview's own right-click menu also has **Close Panel**, **Reveal**, **Open in OS Explorer**,
+**Refresh** and **Zoom**, but no Rename — a preview's title always follows its source.
+
+### Step back and forward through a panel's history
+
+Every editor and every preview panel remembers the files it has shown, with **Back** and
+**Forward** buttons at the top left of its title bar — disabled at either end — `Alt+Left` /
+`Alt+Right`, and your mouse's own back/forward buttons if it has them. Opening a file into a panel
+by any other route — Files & Folders, Quick Open, a Find in Files result, or a preview link — drops
+anything ahead of where you are and adds the new file as the newest entry; Back and Forward step
+through that list without changing it. History survives a restart and is dropped when the panel is.
+How many entries each panel remembers is **`Editor · Navigation · Navigation history size`**
+(10 by default, 1–100).
+
+In a preview, following a link to a heading in the same document is a step too: Back returns first
+to where you were reading, then — once you've stepped back through every in-document jump — to the
+previous document, if there was one. Editors are unaffected: their history stays file-level, one
+entry per file shown.
+
 ## 5. Find things
 
 **Ctrl+F** opens one find bar that adapts to whatever panel is active.
@@ -425,6 +478,14 @@ There is a reason, and it is a few paragraphs below.
   a plain-language label. Colour, size and icon pickers are all drawn from the theme itself.
 - **Icon packs** — a `throng` glyph pack and an SVG image pack ship built in, and re-skin the whole
   application live.
+- **Previews** — **Editor → Previews** turns each provider on or off (turning one off closes its
+  open previews and greys its other settings, rather than hiding them) and sets its **default open
+  action**: **Editor**, the shipped default, or **Preview**, which makes a click or Enter open the
+  rendered view directly. The same page holds the update delay, maximum wait, copy format and
+  **Synchronise preview and editor scrolling** (on by default, and works both ways: either side
+  drives the other) that previews use, and any settings a provider adds of its own, such as
+  Markdown's **Load remote images** and **Show front matter**
+  (on by default; off hides the front-matter table entirely rather than rendering it as Markdown).
 
 Every setting, binding and theme is a **human-editable file** under `%USERPROFILE%\.throng\`
 (`settings.json`, `keybindings.json`, `themes\<name>.json`, `icon-packs\<pack>\`) that **hot-reloads**
@@ -487,8 +548,15 @@ also the full list.
 | **F3** / **Shift+F3** / **Escape** | Next match / previous match / close find |
 | **Ctrl+S** / **Ctrl+Shift+S** / **Ctrl+Alt+S** | Save / Save All / Save As |
 | **F2**, **Delete**, **Ctrl+X/C/V** | Rename, delete, cut/copy/paste — **in the file tree** |
+| **Alt+Left** / **Alt+Right** | Back / Forward — in the focused editor or preview panel |
+| Mouse back / forward buttons | Same as Alt+Left / Alt+Right, over an editor or preview panel |
+| **Ctrl+Enter** | Follow the focused link, after Tab — **in a preview** |
 | **Shift+PageUp/PageDown**, **Ctrl+Home/End** | Scroll a terminal's scrollback |
 | **Ctrl+F5** | Refresh / redraw the focused terminal |
+
+**Synchronise Scrolling** (`preview.toggleSyncScroll`) — toggles two-way preview/editor scroll sync
+from the focused editor or preview panel — ships with **no chord**; bind one in
+**Preferences → Key Bindings** if you want it.
 
 Focus and zoom are **per panel**: each terminal, editor and Find in Files panel zooms on its own, on
 top of the app-wide zoom, and the setting persists with your layout. Keyboard focus moves *into and out of* terminals
