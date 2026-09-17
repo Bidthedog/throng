@@ -566,6 +566,29 @@ export function useExplorerData(
     return open;
   }, [treeRef]);
 
+  /**
+   * #386 — the folders whose contents are ON SCREEN: open, under a chain of open ancestors. `null`
+   * before the tree has mounted, when nothing is known to be hidden.
+   *
+   * Unlike {@link snapshotOpen} this stops at a closed folder: a folder that is itself open but sits
+   * inside a collapsed one is remembered as open, and is still not something the user can see.
+   */
+  const visibleOpenRef = useRef<() => Set<string> | null>(() => null);
+  visibleOpenRef.current = (): Set<string> | null => {
+    const api = treeRef.current;
+    if (!api) return null;
+    const shown = new Set<string>();
+    const walk = (node: NodeApi<TreeNodeData>): void => {
+      for (const child of node.children ?? []) {
+        if (child.data.kind !== 'folder' || !child.isOpen) continue;
+        shown.add(child.data.relPath);
+        walk(child);
+      }
+    };
+    walk(api.root);
+    return shown;
+  };
+
   const persist = useCallback(
     (sel: string | null) => {
       if (projectId) savePersisted(projectId, snapshotOpen(), sel);
@@ -623,8 +646,19 @@ export function useExplorerData(
     const loaded = childrenMapRef.current;
     const keys = (dirs ?? [...loaded.keys()]).filter((k) => k === '' || loaded.has(k));
     if (keys.length === 0) return new Set();
+    /*
+     * #386 — a watcher-driven re-read of a folder the user cannot see is SPECULATIVE (026 FR-021).
+     *
+     * Collapsing hides a folder but keeps its listing, so this reload re-reads folders the user closed
+     * long ago; one deleted outside throng then raised "Couldn't list the contents of …" for something
+     * nothing on screen was showing. 004 FR-010 scopes live reflection to the expanded parts of the
+     * tree, and 041 FR-003a's one notice for an EXPANDED folder that vanished still stands. A failed
+     * silent read still drops the folder from the cache below. Explicit `dirs` come from an operation
+     * the user just made, and keep reporting.
+     */
+    const visible = dirs ? null : visibleOpenRef.current();
     const results = await Promise.all(
-      keys.map(async (k) => [k, await fetchRef.current(k)] as const),
+      keys.map(async (k) => [k, await fetchRef.current(k, visible !== null && k !== '' && !visible.has(k))] as const),
     );
     // The child relPaths that EXIST after this re-read, across every dir we reloaded.
     // Returned so callers can bound a stale pending open/select target: a move/rename
@@ -704,10 +738,10 @@ export function useExplorerData(
    * `expandChildren` refuses to open on, which is what keeps FR-043/SC-009 true rather than hopeful.
    */
   const ensureLoaded = useCallback(
-    async (rel: string): Promise<TreeNodeData[] | undefined> => {
+    async (rel: string, silent = false): Promise<TreeNodeData[] | undefined> => {
       const cached = childrenMap.get(rel);
       if (cached !== undefined) return cached;
-      const kids = await fetchRef.current(rel);
+      const kids = await fetchRef.current(rel, silent);
       if (kids) setChildrenMap((p) => new Map(p).set(rel, kids));
       return kids ?? undefined;
     },
@@ -726,19 +760,23 @@ export function useExplorerData(
   // folder open but we have not loaded its children, load them. An unloaded folder
   // thus resolves to its real contents (or provably nothing), and the chevron +
   // glyph always end up agreeing with what is actually shown.
+  //
+  // #386 — a folder open inside a COLLAPSED one is healed silently: nothing on screen shows it, so a
+  // folder that has gone is not the user's problem yet (026 FR-021). A failed silent load changes no
+  // state, so it cannot re-trigger this effect.
   useEffect(() => {
     const api = treeRef.current;
     if (!api) return;
-    const walk = (node: NodeApi<TreeNodeData>): void => {
+    const walk = (node: NodeApi<TreeNodeData>, shown: boolean): void => {
       for (const child of node.children ?? []) {
         const rel = child.data.relPath;
         if (child.data.kind === 'folder' && rel !== '' && child.isOpen && !childrenMap.has(rel)) {
-          void ensureLoaded(rel);
+          void ensureLoaded(rel, !shown);
         }
-        walk(child);
+        walk(child, shown && child.isOpen);
       }
     };
-    walk(api.root);
+    walk(api.root, true);
   }, [data, childrenMap, ensureLoaded, treeRef]);
 
   // #120 — drain the migrated open-state a MOVE queued (see `drop`). Once the node
