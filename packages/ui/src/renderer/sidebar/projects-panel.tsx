@@ -1,4 +1,5 @@
 import {
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -178,18 +179,25 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
 
   // A folder was chosen through the OS dialog: auto-name from its basename when the
   // name is still empty, then select the name for immediate overtyping (FR-026).
+  //
+  // The selection is made after the render that fills the name, not on a timer: a `setTimeout(0)` raced
+  // React's commit, and under React 19's scheduling it could run first, find the field still empty, and
+  // leave the caret after the name — so typing appended to it instead of replacing it.
+  const [selectNameAfter, setSelectNameAfter] = useState(0);
   const applyPickedFolder = (dir: string): void => {
     setDraft((d) =>
       d ? { ...d, name: d.name.trim().length === 0 ? folderBasename(dir) : d.name } : d,
     );
-    setTimeout(() => {
-      const el = nameRef.current;
-      if (el && el.value.trim().length > 0) {
-        el.focus();
-        el.select();
-      }
-    }, 0);
+    setSelectNameAfter((n) => n + 1);
   };
+  useLayoutEffect(() => {
+    if (selectNameAfter === 0) return;
+    const el = nameRef.current;
+    if (el && el.value.trim().length > 0) {
+      el.focus();
+      el.select();
+    }
+  }, [selectNameAfter]);
 
   // The candidate start folder for the new-project picker (011, FR-040/041). The
   // profile fallback for 'profile' mode / empty values is applied in UI-main (it
