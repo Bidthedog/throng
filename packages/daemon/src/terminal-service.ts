@@ -85,6 +85,11 @@ interface Session {
   readonly panelId: string;
   readonly projectId: string;
   readonly cwd: string;
+  /**
+   * Whether the spawned process's working directory is the terminal's (#387). False for a session
+   * spawned away from its start directory, whose process cwd names the launcher's install folder.
+   */
+  readonly processCwdObservable: boolean;
   /** Sub-workspace-owned terminal (no owning project → no root lock, FR-028). */
   readonly rootless: boolean;
   /** The PTY host that owns this session — the local (elevated) host, or the
@@ -250,7 +255,7 @@ export class TerminalService {
     if (!this.processCwd) return;
     const byPid = new Map<number, string>(); // shell pid → panelId
     for (const s of this.sessions.values()) {
-      if (s.status === 'running') byPid.set(s.handle.pid, s.panelId);
+      if (s.status === 'running' && s.processCwdObservable) byPid.set(s.handle.pid, s.panelId);
     }
     if (byPid.size === 0) return;
     let cwds: Map<number, string>;
@@ -504,7 +509,8 @@ export class TerminalService {
         // #209 — build the shell from the LAUNCHER's environment, not this daemon's, which is a
         // snapshot of whichever session first started it and may be days stale.
         ...(launch.baseEnv && typeof launch.baseEnv === 'object' ? { baseEnv: launch.baseEnv } : {}),
-        cwd: launch.cwd,
+        // #387 — a launcher that never leaves its launch directory is spawned elsewhere.
+        cwd: typeof launch.spawnCwd === 'string' ? launch.spawnCwd : launch.cwd,
         cols: startCols,
         rows: startRows,
         runAsAdmin: params.runAsAdmin === true,
@@ -527,6 +533,7 @@ export class TerminalService {
       panelId,
       projectId,
       cwd: launch.cwd,
+      processCwdObservable: typeof launch.spawnCwd !== 'string',
       rootless,
       host,
       handle,

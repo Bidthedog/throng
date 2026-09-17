@@ -86,6 +86,12 @@ export interface LaunchSpecDto {
   args: string[];
   cwd: string;
   /**
+   * #387 — spawn the process here instead of in `cwd`; the shell enters `cwd` itself. Set for a
+   * flavour whose launcher never leaves its launch directory. Such a session's process cwd is not
+   * the terminal's, so the daemon does not poll it.
+   */
+  spawnCwd?: string;
+  /**
    * 025 FR-012 — the universal Startup Command fallback, for a flavour that declares no argv
    * recipe. The daemon writes it into the PTY once the shell has produced output.
    *

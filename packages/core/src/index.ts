@@ -645,6 +645,8 @@ export {
   resolveShellIntegration,
   resolveShellIntegrationEnv,
   BASH_PROMPT_COMMAND,
+  BASH_ENTER_START_DIR,
+  START_DIR_ENV,
   BUILTIN_SHELL_INTEGRATION_ENV,
   flavourReportsDirectory,
   BUILTIN_SHELL_INTEGRATION,
