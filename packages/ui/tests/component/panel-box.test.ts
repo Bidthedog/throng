@@ -861,8 +861,14 @@ describe('a rename whose name was taken elsewhere', () => {
     panelId: string,
     name: string,
   ): Promise<void> {
-    act(() => {
-      expect(requestPanelRename(panelId), 'no rename handler was registered').toBe(true);
+    // The panel registers its rename handler in an effect, which can run after `ready()` resolves (React
+    // 19 flushes passive effects later than 18 did); a request made first finds nothing and does nothing.
+    await waitFor(() => {
+      let started = false;
+      act(() => {
+        started = requestPanelRename(panelId);
+      });
+      expect(started, 'no rename handler was registered').toBe(true);
     });
     const field = await screen.findByTestId(`panel-rename-input-${panelId}`);
     await user.clear(field);
@@ -1003,8 +1009,14 @@ describe('a panel header tooltip shows the title (#57)', () => {
     const ws = await ready();
     const panelId = panelsIn(ws)[0].id;
 
-    act(() => {
-      expect(requestPanelRename(panelId), 'no rename handler was registered').toBe(true);
+    // The panel registers its rename handler in an effect, which can run after `ready()` resolves (React
+    // 19 flushes passive effects later than 18 did); a request made first finds nothing and does nothing.
+    await waitFor(() => {
+      let started = false;
+      act(() => {
+        started = requestPanelRename(panelId);
+      });
+      expect(started, 'no rename handler was registered').toBe(true);
     });
     const field = await screen.findByTestId(`panel-rename-input-${panelId}`);
     await user.clear(field);
