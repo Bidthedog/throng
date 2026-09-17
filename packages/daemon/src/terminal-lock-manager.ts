@@ -6,20 +6,33 @@ import type { IDirectoryLock, LockHandle } from '@throng/core';
  * the OS refuses to delete or move it. The lock is acquired on the project's
  * **first** terminal and released on its **last**. `hasOpenTerminals` backs the
  * root-edit guard (a project's root path can't change while terminals are open).
+ *
+ * #385 — the lock targets the project's ROOT, resolved from the project itself, never the opening
+ * terminal's cwd. Locking the first terminal's cwd parked the lock in whatever sub-folder that
+ * terminal started in (a git worktree, typically), and kept it there until the project's LAST
+ * terminal closed — so the folder stayed undeletable long after its own terminal had gone.
  */
 export class TerminalLockManager {
   private readonly locks = new Map<string, { handle: LockHandle; count: number }>();
 
-  constructor(private readonly directoryLock: IDirectoryLock) {}
+  constructor(
+    private readonly directoryLock: IDirectoryLock,
+    /** The project's root folder, or `null` for a project the daemon does not know. */
+    private readonly rootOf?: (projectId: string) => string | null,
+  ) {}
 
-  /** Register an opened terminal for `projectId`, locking `rootPath` if it's the first. */
-  acquire(projectId: string, rootPath: string): void {
+  /**
+   * Register an opened terminal for `projectId`, locking the project's root if it's the first.
+   * `cwd` is the terminal's own start folder, locked only when the project's root cannot be
+   * resolved — the behaviour before #385, kept for a project the store does not hold.
+   */
+  acquire(projectId: string, cwd: string): void {
     const existing = this.locks.get(projectId);
     if (existing) {
       existing.count += 1;
       return;
     }
-    const handle = this.directoryLock.acquire(rootPath);
+    const handle = this.directoryLock.acquire(this.rootOf?.(projectId) ?? cwd);
     this.locks.set(projectId, { handle, count: 1 });
   }
 
