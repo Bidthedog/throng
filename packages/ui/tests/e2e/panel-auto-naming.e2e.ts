@@ -267,6 +267,11 @@ test('an adjustment landing under an OPEN rename box is not a rename either (#21
         const a = await firstPanelId(win);
         await win.getByTestId(`panel-add-${a}`).click();
         await expect(win.locator('.panel-box')).toHaveCount(2);
+        // The box opens a render AFTER the panel appears (`panel-placeholder`'s last-added effect), so
+        // an Escape sent on the panel count alone can land before it exists and close nothing — seen
+        // twice in a row on the hosted gate, with the box then open for the full 15 s.
+        const addedA = (await panelIds(win)).find((id) => id !== a) ?? '';
+        await expect(win.getByTestId(`panel-rename-input-${addedA}`)).toBeFocused();
         await win.keyboard.press('Escape'); // leave the box without typing — nothing renamed
         await expect(win.locator('[data-testid^="panel-rename-input-"]')).toHaveCount(0);
         // Both of A's panel names have to be ON DISK before B can collide with them — the daemon's
