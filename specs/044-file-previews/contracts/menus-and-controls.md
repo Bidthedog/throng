@@ -194,11 +194,12 @@ One slot per condition class, never both for one condition:
 |---|---|---|
 | Unreadable, deleted, too large, not text (FR-026) | shared `PanelFailureBanner` (no notification pointer) | Try again (= Refresh), Copy details, Clear panel type (030 FR-042) |
 | File type has no preview (FR-027) | shared `PanelFailureBanner` | **Close** |
-| Link target missing / outside / heading not found (FR-090e/f); history target refused (FR-106c) | preview link notice (inline, dismissible) | Dismiss |
+| Link target missing / outside / heading not found (FR-090e/f); history target refused (FR-106c) | ~~preview link notice (inline, dismissible)~~ → **application notification, warning** (FR-123, Session 2026-09-17), test id `preview-link-notice-<panelId>` | Dismiss, Copy (the notification's own) |
 
 A repeat of the same condition flashes the existing notice (`common/notification.tsx:581-646` is the
 flash precedent) rather than raising a second one. Messages say what is wrong, never what the user
-may not do.
+may not do. *(FR-123b: for the link row, a different condition from the same panel clears the last
+notification before raising its own, and a successful follow or step clears it.)*
 
 ## 10. Synchronise Scrolling — every surface *(iteration 2026-09-16, FR-122, FR-122a–e)*
 

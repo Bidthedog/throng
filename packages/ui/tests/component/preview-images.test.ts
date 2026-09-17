@@ -276,7 +276,7 @@ describe('the heading hook: only the pipeline plants a fragment target (FR-090b,
       const link = await screen.findByText('to the spoof', {}, COLD);
       fireEvent.click(link, { ctrlKey: true });
       const notice = await screen.findByTestId(`preview-link-notice-${m.id}`);
-      expect(notice.getAttribute('data-notice-kind')).toBe('link-missing-heading');
+      expect(notice.textContent).toContain('No heading');
       expect(notice.textContent).toContain('spoof');
     } finally {
       m.unmount();

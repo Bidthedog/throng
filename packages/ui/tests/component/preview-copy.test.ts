@@ -338,32 +338,32 @@ function textIn(el: Element): Text {
 }
 
 describe('fix round 1 (item 1) — a copy that starts outside the body still goes through the export profile', () => {
-  it('a selection dragged from the link notice into the document: intercepted, trimmed to the body, cleaned', async () => {
+  it('a selection dragged from the document into the status bar: intercepted, trimmed to the body, cleaned', async () => {
     await mountDoc();
-    m!.preview.navigate.mockResolvedValue({
-      kind: 'refused',
-      notice: { kind: 'link-missing-file', target: 'D:/proj/docs/setup.md' },
+    // The link readout (FR-118) is panel text outside the body, below it; a hovered link puts it on screen. (The
+    // outside text was the link notice, above the body, until FR-123 moved that out of the panel.)
+    act(() => {
+      screen.getByText('setup').dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
     });
-    fireEvent.click(screen.getByText('setup'), { ctrlKey: true });
-    const notice = await screen.findByTestId(`preview-link-notice-${m!.id}`);
-    // Positive control: the notice really sits OUTSIDE the body.
-    expect(host().contains(notice)).toBe(false);
+    const readout = await screen.findByTestId(`preview-status-readout-${m!.id}`);
+    // Positive control: the readout really sits OUTSIDE the body.
+    expect(host().contains(readout)).toBe(false);
 
-    selectRange([textIn(notice), 0], [textIn(screen.getByText('first item')), 5]);
+    selectRange([textIn(screen.getByText('first item')), 6], [textIn(readout), 4]);
     const event = new Event('copy', { bubbles: true, cancelable: true });
     act(() => {
-      // Chromium fires `copy` at the selection's start — here, inside the notice.
-      textIn(notice).parentElement!.dispatchEvent(event);
+      // Dispatched outside the body, as a copy whose selection reaches outside it can be.
+      textIn(readout).parentElement!.dispatchEvent(event);
     });
 
     expect(event.defaultPrevented).toBe(true);
     await waitFor(() => expect(m!.writeRich).toHaveBeenCalledTimes(1));
-    // Trimmed to the body: nothing of the notice travels.
-    const noticeText = textIn(notice).data;
-    expect(noticeText.length).toBeGreaterThan(0);
-    expect(richText()).not.toContain(noticeText);
-    expect(richText()).toContain('Release notes');
-    expect(richText().trimEnd().endsWith('first')).toBe(true);
+    // Trimmed to the body: nothing of the readout travels.
+    const readoutText = textIn(readout).data;
+    expect(readoutText.length).toBeGreaterThan(0);
+    expect(richText()).not.toContain(readoutText);
+    expect(richText().trimStart().startsWith('item')).toBe(true);
+    expect(richText()).toContain('second item');
     expect(richHtml()).not.toMatch(/\sdata-[a-z-]+=/);
     expect(richHtml()).not.toMatch(/\sclass=/);
     expect(richHtml()).not.toContain('D:/proj');

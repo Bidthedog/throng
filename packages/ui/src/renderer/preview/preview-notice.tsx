@@ -12,8 +12,10 @@
  * unchanged) FLASHES this banner in place.
  *
  * The link notice (`preview-link-notice.tsx`) is a different condition — a link that could not be
- * followed while the preview stays where it is — with its own slot; a notice kind belongs to exactly
- * one of the two (`isFileNotice` / `isLinkNotice`).
+ * followed while the preview stays where it is — raised as an application notification (FR-123), not
+ * in the panel; a notice kind belongs to exactly one of the two (`isFileNotice` / `isLinkNotice`). The
+ * file conditions stay here, in the panel, because they are states it stays in and carry actions
+ * (FR-123c).
  *
  * ══ WHAT EACH OFFERS ══
  *

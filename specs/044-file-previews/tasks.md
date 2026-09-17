@@ -2229,3 +2229,37 @@ T237's declaration exists only if T226 has paid for it.
 | `packages/ui/tests/component/preview-scroll-sync.test.ts` | T231 |
 | `packages/ui/tests/e2e/e2e-budget.json` | T226, T237 |
 | `packages/ui/tests/e2e/preview-scroll.e2e.ts` | T237 (and T226 only if the audit picks a declaration in it) |
+
+## Phase 16: Iteration 2026-09-17
+
+Third hands-on round (spec Session 2026-09-17). One defect against FR-121g and one amendment (FR-123).
+
+- [x] T254 [renderer] [US8] Reproduce and fix the editor jumping up while typing at the end of a long
+      document with front matter (defect against FR-121g; no spec change). RED first:
+      `packages/ui/tests/fixtures/preview/sync-two-way.md` gains a front matter block with nested values,
+      and `packages/ui/tests/e2e/preview-scroll.e2e.ts` T237 gains a step writing three lines at the end —
+      red before the fix (`after writing line 2 at the end, the editor's top line went up from 466 …
+      Received: 462`; the existing 1c and end-of-document steps went red too), confirmed by the maintainer.
+      Cause, measured with an instrumented probe on the maintainer's file: the front matter table was
+      dressed (`preview-markdown__front-matter`) after the update restored the place, so the document
+      shrank ~54px under the reader; at the preview's end the engine clamped `scrollTop`, and
+      `reportTopLine` read the clamp as the reader's scroll. Fix in
+      `packages/ui/src/renderer/preview/providers/markdown/markdown-body.tsx`: the fragment is dressed
+      (front matter class, blocked images' alt text) before insertion, and a clamp to the end below the
+      body's own place is not reported (the claim stands across frames). Component case in
+      `packages/ui/tests/component/preview-scroll-sync.test.ts` ("a later shrink that clamps the position
+      requests nothing"), red before the guard.
+- [x] T255 [failure-notices] [US6] FR-123 — raise link and history notices as application notifications.
+      `packages/ui/src/renderer/preview/preview-panel.tsx` raises a warning through `useNotify` (heading
+      `Couldn't follow the link in <panel>` / `Couldn't go back or forward in <panel>`, message
+      `linkNoticeMessage`), test id `preview-link-notice-<panelId>`; the same condition re-raised pulses the
+      card (the notification system's duplicate rule), a different one clears the last first, and every
+      former clear calls `clear(testId)`. `preview-link-notice.tsx` loses its inline component and gains
+      `previewLinkNoticeTestId` and `linkNoticeAction`. File conditions (FR-026, FR-027) are unchanged
+      (FR-123c). Tests: `preview-follow`, `preview-images`, `navigate-history`, `preview-copy` component
+      files updated — kind read from the message, the flash from `data-pulsing`, placement outside the
+      panel, and FR-123b's replacement.
+- [x] T256 [spec-governance] Record Session 2026-09-17 and FR-123 in `spec.md`, the §9 row in
+      `contracts/menus-and-controls.md`, and this phase.
+- [ ] T257 [general] Hosted gate for the final SHA (as T176), and the hands-on checks of T254 and T255 in
+      the PR description.

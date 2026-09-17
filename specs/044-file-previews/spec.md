@@ -375,6 +375,32 @@ Second round of change requests from the maintainer's hands-on testing (`speckit
   already reading *(derived from FR-121h's principle that forming a pair never moves the side the user
   is looking at; not confirmed)*. (FR-121h)
 
+### Session 2026-09-17
+
+Third round of change requests from the maintainer's hands-on testing.
+
+- Q: Where does a link that could not be followed — a missing heading, a missing file, a file outside the
+  project — or a refused history step report itself? → A: **In the application's notifications, not
+  inside the preview.** *"The notification inside the preview should be moved to the app's toastr
+  notifications i.e. `no heading "Spoof" was found`. There should be no reason to have notifications in
+  the preview itself."* (FR-123, supersedes the inline placement in FR-090e, FR-090f and FR-106c)
+- Q: Does that include the preview's own file conditions — unreadable, deleted, too large, not text, no
+  provider (FR-026, FR-027)? → A: **No — those stay in the panel's failure banner.** They are states the
+  panel stays in and they carry actions (Try again, Copy details, Clear panel type, Close), which a
+  notification cannot hold; every other panel kind reports its own file state the same way *(derived from
+  the repository's one-condition-one-notice rule, "inline, not a toast, for anything with an action
+  attached"; not confirmed)*. (FR-123)
+- Q: What does the notification say, and how do repeats behave? → A: **A warning headed with what was
+  attempted and in which preview panel, then the same sentence the inline notice said. The same condition
+  raised again flashes the notification already showing instead of adding a second; a different one
+  replaces it; following a link or stepping successfully clears it** — the inline notice's rules, moved
+  to the new surface *(derived from FR-090e and the notification system's duplicate rule; not
+  confirmed)*. (FR-123)
+- Q: Why did the editor still jump while typing at the bottom of a long document with front matter? → A:
+  **A defect against FR-121g, not a spec change.** The front matter table was styled after the preview
+  had restored its place, so the document shrank under the reader; at the preview's end the resulting
+  clamp was read as the reader's scroll and moved the editor. Fixed without an amendment.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Preview the Markdown file I am writing, beside its source (Priority: P1)
@@ -1405,6 +1431,18 @@ restart; Back again. Repeat in a preview by following links.
   - **FR-122f**: The setting's description in Preferences MUST say that synchronisation works in both
     directions, and name the menu item and status-bar button that also switch it (configuration-editor
     completeness).
+
+- **FR-123**: A link that cannot be followed (FR-090e, FR-090f) and a refused history step (FR-106c)
+  MUST be reported as an application notification, never inside the preview panel. *(Session
+  2026-09-17; supersedes "inline" in FR-090e and "one notice" in FR-106c as to WHERE the notice is shown —
+  what it says and when it is raised are unchanged.)*
+  - **FR-123a**: The notification is a warning. Its heading names what was attempted and the preview
+    panel it happened in; its message is the sentence the inline notice said, naming the target.
+  - **FR-123b**: One condition, one notification: the same condition raised again from the same panel
+    flashes the notification already showing; a different condition from that panel replaces it; a link
+    followed or a history step taken successfully in that panel clears it.
+  - **FR-123c**: The preview's own file conditions (FR-026, FR-027) are not affected: they stay in the
+    panel's failure banner, with their actions.
 
 ### Key Entities
 
