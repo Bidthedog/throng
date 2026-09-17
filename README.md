@@ -122,7 +122,7 @@ An npm-workspaces monorepo whose packages map to the constitution's boundaries:
 | `@throng/persistence` | Embedded SQLite (better-sqlite3) with a `user_version` migration runner and drift repair — projects, per-project layouts, sub-workspaces. |
 | `@throng/ipc-contract` | Shared JSON-RPC message types (`health.*`, `projects.*`, `workspace.*`, `subworkspaces.*`, `terminal.*`, `files.*`). |
 | `@throng/daemon` | The headless, long-lived background process; single SQLite writer and owner of all terminal PTYs. Hosts the named-pipe JSON-RPC router and a streaming events socket. |
-| `@throng/ui` | The Electron client. The renderer is a React 18 + Vite docking app (xterm.js, react-arborist, `@dnd-kit`); the main process owns windowing and bridges the renderer to the daemon. |
+| `@throng/ui` | The Electron client. The renderer is a React 19 + Vite docking app (xterm.js, react-arborist, `@dnd-kit`); the main process owns windowing and bridges the renderer to the daemon. |
 
 The renderer never touches SQLite or the OS directly: renderer → preload `contextBridge` → UI
 main → daemon over a Windows named pipe (newline-delimited JSON-RPC 2.0), with terminal output

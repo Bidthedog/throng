@@ -199,7 +199,7 @@ export function retryPanelFailure(panelId: string): boolean {
  * control that reported the repeat. Shared by this banner and the preview's link notice, so the two
  * in-panel notices flash one way.
  */
-export function useInPlaceFlash(flash: number, active: boolean): RefObject<HTMLDivElement> {
+export function useInPlaceFlash(flash: number, active: boolean): RefObject<HTMLDivElement | null> {
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const el = ref.current;

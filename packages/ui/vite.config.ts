@@ -9,7 +9,7 @@ import react from '@vitejs/plugin-react';
  */
 const SHARED_LEZER = new Set(['common', 'lr', 'highlight']);
 
-// Renderer build pipeline (research D2). The renderer is a React 18 app bundled
+// Renderer build pipeline (research D2). The renderer is a React 19 app bundled
 // by Vite; main and preload stay on `tsc`. Output goes to `dist/renderer` so the
 // Electron main process can `loadFile` it. `base: './'` keeps asset URLs relative
 // for `file://` loading inside Electron.
@@ -29,58 +29,78 @@ export default defineConfig({
     outDir: fileURLToPath(new URL('./dist/renderer', import.meta.url)),
     emptyOutDir: true,
     sourcemap: true,
-    rollupOptions: {
+    /*
+     * Vite 8 bundles with Rolldown. Its `manualChunks` compatibility layer pulls every captured module's
+     * dependencies into the same chunk, which put `@codemirror/view` in `core` and the shared lezer
+     * runtime in whichever grammar came first — making that grammar eager. The native `codeSplitting`
+     * groups with `includeDependenciesRecursively: false` keep each module where the rules below put it;
+     * `strictExecutionOrder` and `preserveEntrySignatures: false` are what Rolldown requires alongside it
+     * so the split chunks still run in import order.
+     */
+    rolldownOptions: {
+      preserveEntrySignatures: false,
       output: {
-        // Split the heavy third-party libs into their own chunks so the app chunk
-        // stays small (and each vendor is cached independently). This also clears
-        // Vite's 500 kB single-chunk warning. Route by module path (not package
-        // name) so shared deps land in exactly one chunk — no empty chunks.
-        manualChunks(id) {
-          // `@throng/core` — the domain layer every window kind shares, most of it the settings and theme
-          // metadata. Its own chunk, like a vendor, so no window's app chunk carries it (044: the workspace
-          // chunk passed 500 kB).
-          if (/\/packages\/core\//.test(id.replace(/\\/g, '/'))) return 'core';
-          if (!id.includes('node_modules')) return undefined;
-          if (id.includes('@xterm')) return 'xterm';
-          if (/\/(react|react-dom|scheduler)\//.test(id)) return 'react';
-          if (id.includes('@dnd-kit')) return 'dnd';
-          // One chunk per language grammar (016, FR-008). The grammars are imported
-          // lazily by id, so a document only ever pays for the language it is in —
-          // but only if each stays a separately-fetchable chunk. Folded into
-          // `vendor` they would all load with the app and blow the 200 ms budget.
-          const grammar = /\/node_modules\/@codemirror\/(lang-[a-z]+)\//.exec(id);
-          if (grammar) return `grammar-${grammar[1]}`;
-          if (id.includes('@codemirror/legacy-modes')) return 'grammar-legacy';
-          /*
-           * A LANGUAGE'S PARSER BELONGS WITH ITS LANGUAGE.
-           *
-           * `@codemirror/lang-x` is a thin wrapper; the actual parse tables live in `@lezer/x`, and
-           * they are the bulk of a grammar by an order of magnitude (the `lang-python` wrapper is
-           * 7 kB, `@lezer/python` is 160 kB of source). Sweeping every `@lezer/*` into one chunk
-           * therefore put FOURTEEN parsers — cpp, markdown, php, javascript, rust, java, python,
-           * sass, html, go, yaml, css, xml, json — into a single 624 kB bundle, which the shared
-           * runtime below pulls in EAGERLY. So the split above was cosmetic: the wrappers were
-           * lazy, and every parser behind them loaded at startup anyway, which is precisely what
-           * the comment above says must not happen.
-           *
-           * Routed to the SAME chunk name as its wrapper, so a language is one file. Parsers shared
-           * between languages (html and javascript are used by php and vue too) land in the chunk
-           * of the language they are named for, and the others import it — one copy, fetched by
-           * whichever arrives first.
-           */
-          const lezerLang = /\/node_modules\/@lezer\/([a-z0-9-]+)\//.exec(id);
-          if (lezerLang && !SHARED_LEZER.has(lezerLang[1])) return `grammar-lang-${lezerLang[1]}`;
-          // The shared parser RUNTIME — the LR engine, the tree model, the highlight tags. Small,
-          // and genuinely needed before any document is open, so this one is eager by design.
-          if (id.includes('@lezer/')) return 'lezer';
-          // The Markdown preview pipeline (R21): loaded by dynamic import on the first preview
-          // mount, so it must not ride in the eagerly-loaded `vendor` chunk. `@lezer/highlight`
-          // stays in the shared `lezer` chunk above — the editor already pays for it eagerly.
-          if (/\/node_modules\/(markdown-it|linkify-it|mdurl|uc\.micro|punycode\.js|entities|dompurify|yaml)\//.test(id))
-            return 'preview';
-          return 'vendor'; // react-arborist (+ its react-dnd deps), inversify, …
+        strictExecutionOrder: true,
+        codeSplitting: {
+          includeDependenciesRecursively: false,
+          groups: [{ name: chunkFor }],
         },
       },
     },
   },
 });
+
+/**
+ * The chunk a module belongs to, or `null` for the app's own code (Rolldown's automatic chunking).
+ *
+ * Split the heavy third-party libs into their own chunks so the app chunk stays small (and each vendor is
+ * cached independently). This also clears Vite's 500 kB single-chunk warning. Route by module path (not
+ * package name) so shared deps land in exactly one chunk — no empty chunks. Ids are normalised to `/`
+ * first: on Windows they can carry backslashes.
+ */
+function chunkFor(rawId: string): string | null {
+  const id = rawId.replace(/\\/g, '/');
+  // `@throng/core` — the domain layer every window kind shares, most of it the settings and theme
+  // metadata. Its own chunk, like a vendor, so no window's app chunk carries it (044: the workspace
+  // chunk passed 500 kB).
+  if (/\/packages\/core\//.test(id)) return 'core';
+  if (!id.includes('node_modules')) return null;
+  if (id.includes('@xterm')) return 'xterm';
+  if (/\/(react|react-dom|scheduler)\//.test(id)) return 'react';
+  if (id.includes('@dnd-kit')) return 'dnd';
+  // One chunk per language grammar (016, FR-008). The grammars are imported
+  // lazily by id, so a document only ever pays for the language it is in —
+  // but only if each stays a separately-fetchable chunk. Folded into
+  // `vendor` they would all load with the app and blow the 200 ms budget.
+  const grammar = /\/node_modules\/@codemirror\/(lang-[a-z]+)\//.exec(id);
+  if (grammar) return `grammar-${grammar[1]}`;
+  if (id.includes('@codemirror/legacy-modes')) return 'grammar-legacy';
+  /*
+   * A LANGUAGE'S PARSER BELONGS WITH ITS LANGUAGE.
+   *
+   * `@codemirror/lang-x` is a thin wrapper; the actual parse tables live in `@lezer/x`, and
+   * they are the bulk of a grammar by an order of magnitude (the `lang-python` wrapper is
+   * 7 kB, `@lezer/python` is 160 kB of source). Sweeping every `@lezer/*` into one chunk
+   * therefore put FOURTEEN parsers — cpp, markdown, php, javascript, rust, java, python,
+   * sass, html, go, yaml, css, xml, json — into a single 624 kB bundle, which the shared
+   * runtime below pulls in EAGERLY. So the split above was cosmetic: the wrappers were
+   * lazy, and every parser behind them loaded at startup anyway, which is precisely what
+   * the comment above says must not happen.
+   *
+   * Routed to the SAME chunk name as its wrapper, so a language is one file. Parsers shared
+   * between languages (html and javascript are used by php and vue too) land in the chunk
+   * of the language they are named for, and the others import it — one copy, fetched by
+   * whichever arrives first.
+   */
+  const lezerLang = /\/node_modules\/@lezer\/([a-z0-9-]+)\//.exec(id);
+  if (lezerLang && !SHARED_LEZER.has(lezerLang[1])) return `grammar-lang-${lezerLang[1]}`;
+  // The shared parser RUNTIME — the LR engine, the tree model, the highlight tags. Small,
+  // and genuinely needed before any document is open, so this one is eager by design.
+  if (id.includes('@lezer/')) return 'lezer';
+  // The Markdown preview pipeline (R21): loaded by dynamic import on the first preview
+  // mount, so it must not ride in the eagerly-loaded `vendor` chunk. `@lezer/highlight`
+  // stays in the shared `lezer` chunk above — the editor already pays for it eagerly.
+  if (/\/node_modules\/(markdown-it|linkify-it|mdurl|uc\.micro|punycode\.js|entities|dompurify|yaml)\//.test(id))
+    return 'preview';
+  return 'vendor'; // react-arborist (+ its react-dnd deps), inversify, …
+}

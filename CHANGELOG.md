@@ -29,6 +29,10 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Changed
+- Updated the libraries throng is built on — among them Electron 43.7, React 19 and SQLite's
+  `better-sqlite3` 13 — clearing every known security advisory in them.
+
 ## 1.0.0-alpha4 — 2026-09-17
 
 ### Added

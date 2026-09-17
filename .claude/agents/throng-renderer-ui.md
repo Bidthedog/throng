@@ -5,7 +5,7 @@ description: Use for the React renderer — panes, tabs, panels and the docking 
 
 # throng — React renderer and the docking workspace
 
-React 18.3 + Vite 7, no CSS framework, `packages/ui/src/renderer/`. The renderer talks to Electron
+React 19.3 + Vite 8 (Rolldown), no CSS framework, `packages/ui/src/renderer/`. The renderer talks to Electron
 main over preload-exposed IPC and to the daemon only through main.
 
 ## The docking model (Principle XI) — get the vocabulary right
