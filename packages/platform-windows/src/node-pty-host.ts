@@ -14,6 +14,7 @@ import {
   type PtyStartOptions,
 } from '@throng/core';
 import { dropInheritedModulePath } from './spawn-env-windows.js';
+import { descendantsOf, type ProcessTreeRow } from './process-tree.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -345,26 +346,19 @@ function descendantPids(rootPid: number): number[] {
   } catch {
     return [];
   }
-  const childrenByParent = new Map<number, number[]>();
+  const childrenByParent = new Map<number, ProcessTreeRow[]>();
   for (const line of csv.split(/\r?\n/)) {
     const comma = line.indexOf(',');
     if (comma < 0) continue;
     const pid = Number(line.slice(0, comma));
     const ppid = Number(line.slice(comma + 1));
     if (!Number.isFinite(pid) || !Number.isFinite(ppid)) continue;
+    const row = { pid, ppid };
     const list = childrenByParent.get(ppid);
-    if (list) list.push(pid);
-    else childrenByParent.set(ppid, [pid]);
+    if (list) list.push(row);
+    else childrenByParent.set(ppid, [row]);
   }
-  const result: number[] = [];
-  const stack = [...(childrenByParent.get(rootPid) ?? [])];
-  while (stack.length > 0) {
-    const pid = stack.pop() as number;
-    result.push(pid);
-    const grandchildren = childrenByParent.get(pid);
-    if (grandchildren) stack.push(...grandchildren);
-  }
-  return result;
+  return descendantsOf(childrenByParent, rootPid).map((row) => row.pid);
 }
 
 /**
@@ -451,15 +445,7 @@ async function readProcessTable(): Promise<Map<number, ChildProcess[]>> {
 /** All live descendants of `rootPid`, walked from the shared snapshot. */
 async function descendantProcesses(rootPid: number): Promise<ChildProcess[]> {
   const byParent = await processSnapshot(Date.now());
-  const result: ChildProcess[] = [];
-  const stack = [...(byParent.get(rootPid) ?? [])];
-  while (stack.length > 0) {
-    const proc = stack.pop() as ChildProcess;
-    result.push(proc);
-    const grandchildren = byParent.get(proc.pid);
-    if (grandchildren) stack.push(...grandchildren);
-  }
-  return result;
+  return descendantsOf(byParent, rootPid);
 }
 
 /**
