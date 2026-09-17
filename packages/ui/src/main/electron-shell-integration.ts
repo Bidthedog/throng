@@ -11,6 +11,8 @@ import type { IShellIntegration } from '@throng/core';
 export interface ElectronShellLike {
   showItemInFolder(fullPath: string): void;
   openPath(path: string): Promise<string>; // resolves '' on success, else an error message
+  /** Opens `url` in the OS default handler (a browser, or the default mail client for `mailto:`). */
+  openExternal(url: string): Promise<void>;
 }
 
 export class ElectronShellIntegration implements IShellIntegration {
@@ -23,5 +25,9 @@ export class ElectronShellIntegration implements IShellIntegration {
   async openFolder(path: string): Promise<void> {
     const error = await this.shell.openPath(path);
     if (error) throw new Error(error);
+  }
+
+  async openExternal(url: string): Promise<void> {
+    await this.shell.openExternal(url);
   }
 }

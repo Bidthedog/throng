@@ -4,7 +4,19 @@ import { join, dirname } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell, type WebContents } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  protocol,
+  screen,
+  session,
+  shell,
+  webContents,
+  type WebContents,
+} from 'electron';
 import {
   DEFAULT_APP_SETTINGS,
   parseKeybindings,
@@ -27,11 +39,15 @@ import {
   type ShippedDefaults,
   type Theme,
   NOT_A_MISSING_FILE,
+  SHIPPED_PREVIEW_PROVIDERS,
+  providersTurnedOff,
 } from '@throng/core';
-import type { IClipboard, IForegroundHandoff } from '@throng/core';
+import type { IClipboard, IForegroundHandoff, IShellIntegration } from '@throng/core';
 import { createUiContainer, UI_TYPES } from './composition-root.js';
 import { appIcon } from './app-icon.js';
-import { isSafeExternalUrl } from './external-url.js';
+import { registerOpenExternalIpc } from './external-url.js';
+import { notifySettingsSubscribers, type SettingsSubscriber } from './settings-subscribers.js';
+import { createInAppMoveCallbacks } from './in-app-moves.js';
 import { ShippedDefaultsService } from './shipped-defaults-service.js';
 import { broadcastToWindows, senderWebContentsId } from './broadcast.js';
 import {
@@ -47,6 +63,14 @@ import { FontCache } from './font-cache.js';
 import { IconPackService } from './icon-pack-service.js';
 import { registerWindowControlsIpc, wireWindowMaximizeEvents } from './window-controls-ipc.js';
 import { denyRendererWindows } from './window-open-guard.js';
+import { installNavigationGuards, installRendererRequestFilter } from './renderer-request-filter.js';
+import { createPreviewProtocolHandler, PREVIEW_SCHEME } from './preview-protocol.js';
+import { PreviewService } from './preview-service.js';
+import { previewPurgePredicate, purgeUnloadedPreviews } from './preview-purge.js';
+import { createPreviewPush, registerPreviewIpc } from './preview-ipc.js';
+import { NavigationHistoryService } from './navigation-history-service.js';
+import { createHistoryPush, registerNavigationHistoryIpc } from './navigation-history-ipc.js';
+import { openInEditorOrPreview } from './open-document-check.js';
 // `isPreferencesOpen` is deliberately no longer imported here: its only two uses in this file were
 // the app-modal `setEnabled(false)` calls that 021 FR-042 superseded (#263). The LAYERING those
 // calls were accidentally providing is now handled app-level inside `preferences-window.ts`.
@@ -88,7 +112,7 @@ import { pushFileSearchUpdate, registerFileSearchIpc } from './file-search-ipc.j
 import { ReplaceCommitService } from './replace-commit-service.js';
 import { EditorService } from './editor-service.js';
 import { EditorRecovery } from './editor-recovery.js';
-import { EditorCoordinator } from './editor-coordinator.js';
+import { EditorCoordinator, type DocumentLifecycleListener } from './editor-coordinator.js';
 import { registerEditorIpc } from './editor-ipc.js';
 import { registerClipboardIpc } from './clipboard-ipc.js';
 import type { ClipboardService } from './clipboard-service.js';
@@ -305,6 +329,7 @@ async function createMainWindow(
   displayInfo: ElectronDisplayInfo,
   statePath: string,
   backgroundColor: string,
+  shellIntegration: IShellIntegration,
 ): Promise<BrowserWindow> {
   const saved = loadWindowState(statePath);
   const window = new BrowserWindow({
@@ -356,7 +381,7 @@ async function createMainWindow(
       else window.webContents.openDevTools({ mode: 'detach' });
     });
   }
-  denyRendererWindows(window.webContents); // 024 US7: no in-app browser windows (FR-019b)
+  denyRendererWindows(window.webContents, shellIntegration); // 024 US7: no in-app browser windows (FR-019b)
   /*
    * NOTHING IS DISABLED HERE (#263).
    *
@@ -433,6 +458,7 @@ interface WindowBounds {
 function createSubWorkspaceWindow(
   id: string,
   backgroundColor: string,
+  shellIntegration: IShellIntegration,
   bounds?: WindowBounds,
 ): BrowserWindow {
   const window = new BrowserWindow({
@@ -455,7 +481,7 @@ function createSubWorkspaceWindow(
     },
   });
   wireWindowMaximizeEvents(window);
-  denyRendererWindows(window.webContents); // 024 US7: no in-app browser windows (FR-019b)
+  denyRendererWindows(window.webContents, shellIntegration); // 024 US7: no in-app browser windows (FR-019b)
   // No `setEnabled(false)` here either — same reason as the main window path above (#263).
   // 021 FR-042 supersedes 007's app-modality, and a sub-workspace is exactly the window the old
   // behaviour stranded.
@@ -474,6 +500,38 @@ function createSubWorkspaceWindow(
 // Electron's per-user data (recovery temps, window state) lives in %APPDATA%\throng
 // — alongside the daemon's throng.db — instead of the dev-default %APPDATA%\Electron.
 app.setName('throng');
+
+/*
+ * The `throng-preview:` scheme (044, contracts/preview-ipc.md §4) — registered at MODULE TOP LEVEL
+ * because Electron accepts `registerSchemesAsPrivileged` only before `app.ready`, and only once. It
+ * is handled with `protocol.handle` inside `whenReady` below.
+ *
+ * Each privilege is a choice, not a copy of a sample:
+ *
+ * - `standard: true` — parse its URLs like `https:` (host, path, relative resolution, dot segments
+ *   collapsed), so `asset` and `source` are hosts and a path cannot smuggle a second authority in.
+ * - `secure: true` — a secure context, so an image served from it in the renderer's `file:` page is
+ *   never treated as mixed content.
+ * - `supportFetchAPI: false` — no `fetch()` of preview bytes from a document. `<img>` is the only
+ *   consumer the asset route has, and the CSP names it only under `img-src`.
+ * - `corsEnabled: false` — no cross-origin reads of these responses from script.
+ * - `stream: true` — the source route can hand a binary provider's media to a streaming element.
+ * - NO `bypassCSP` — the renderer's CSP must still govern this scheme; that is Layer 3's whole point.
+ */
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: PREVIEW_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: false, corsEnabled: false, stream: true },
+  },
+]);
+
+/*
+ * 044 — every renderer document refuses to navigate away from itself (contracts/security-policy.md,
+ * "Navigation guard"). Installed ONCE, here, on `web-contents-created` rather than at each window's
+ * creation site, so a window kind added later cannot miss it (the omission #263 was). Module top level
+ * because the listener must exist before the first window does.
+ */
+installNavigationGuards(app);
 
 /**
  * Dev-instance isolation: an UNPACKAGED run develops throng while a PACKAGED throng is
@@ -720,6 +778,15 @@ if (isPrimaryInstance)
     iconPackService.listIconPacks(),
   );
   let currentSettings = initialPayload.settings;
+  // 044 Layer 4 (contracts/security-policy.md): installed here, before ANY window exists, so no
+  // renderer ever makes a request the filter did not see. The settings getter is read on every request
+  // (FR-092); `rendererDir` is the directory every window's `index.html` loads from.
+  installRendererRequestFilter(
+    session.defaultSession,
+    () => currentSettings,
+    SHIPPED_PREVIEW_PROVIDERS,
+    resolveFromHere('../renderer'),
+  );
   // The active theme, kept fresh by `broadcast` below. Every window's preload pulls
   // it SYNCHRONOUSLY before first paint and applies it to <html>, so no window or
   // modal ever flashes the default theme before the saved one resolves (issue 132).
@@ -756,7 +823,7 @@ if (isPrimaryInstance)
    * The config watcher is started here, but the services that care are built further down (the
    * editor coordinator needs the daemon first), so they subscribe once they exist.
    */
-  const onSettingsChanged: Array<(prev: AppSettings, next: AppSettings) => void> = [];
+  const onSettingsChanged: SettingsSubscriber[] = [];
   // #123 — the log level is the user's, from here on. It started at the shipped default so that a
   // failure BEFORE the settings store existed was still recorded; now that they have been read, it
   // is theirs, and it follows every later change without a restart (Principle X). A user asked to
@@ -780,7 +847,10 @@ if (isPrimaryInstance)
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed()) win.setBackgroundColor(nextBg);
     }
-    for (const react of onSettingsChanged) react(previous, payload.settings);
+    // Isolated: one subscriber that throws must not cost the others, or the broadcast below, their turn.
+    notifySettingsSubscribers(onSettingsChanged, previous, payload.settings, (message, err) =>
+      diagnostics.log.error(`${message} ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`),
+    );
     broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:config', payload);
   };
   startConfigWatcher({
@@ -851,9 +921,15 @@ if (isPrimaryInstance)
   const currentMainWindow = (): BrowserWindow | null =>
     mainWindowRef && !mainWindowRef.isDestroyed() ? mainWindowRef : null;
 
+  // The platform seam behind every window's deny-renderer-windows guard (044 FR-091 / R10) and
+  // behind file-explorer reveal/open (FR-035) — built early because Preferences, About and the drag
+  // ghost all need it below, well before FilesService (which also takes it) is built further down.
+  const shellIntegration = new ElectronShellIntegration(shell);
+
   const preferencesDeps: PreferencesWindowDeps = {
     indexHtml: resolveFromHere('../renderer/index.html'),
     preloadPath: resolveFromHere('../preload/preload.cjs'),
+    shellIntegration,
     backgroundColor: themeBackground,
     // Resolved lazily at open time, so this yields the current main window (FR-013/013a).
     getMainWindow: currentMainWindow,
@@ -896,11 +972,16 @@ if (isPrimaryInstance)
     ]);
     return thirdPartyCache;
   });
-  // The licence link opens in the user's default browser — no in-app navigation, so
-  // the sandboxed About window is never replaced by a view of gnu.org (https only).
-  ipcMain.on('throng:openExternal', (_event, url: unknown) => {
-    if (isSafeExternalUrl(url)) void shell.openExternal(url);
-  });
+  // About and terminal links, and a preview's links, open in the user's default handler through the
+  // platform seam (044 FR-091 / R10), not Electron's `shell` directly — each channel behind its own
+  // caller's scheme policy (024 FR-019: a terminal opens http(s) only; a preview also mailto:).
+  // The handoff (#199) goes with them: after a followed link, the handler's window — not throng's —
+  // is what the user should be looking at (044 FR-119).
+  registerOpenExternalIpc(
+    ipcMain,
+    shellIntegration,
+    container.get<IForegroundHandoff>(UI_TYPES.ForegroundHandoff),
+  );
   // The application menu is set NOW (early), but the main window is created further below — so
   // About resolves its parent through the same nullable ref as Preferences, for the same
   // temporal-dead-zone reason documented where that ref is declared. Until the ref is assigned
@@ -908,6 +989,7 @@ if (isPrimaryInstance)
   const aboutDeps: AboutWindowDeps = {
     indexHtml: resolveFromHere('../renderer/index.html'),
     preloadPath: resolveFromHere('../preload/preload.cjs'),
+    shellIntegration,
     backgroundColor: themeBackground,
     getMainWindow: currentMainWindow,
   };
@@ -990,7 +1072,7 @@ if (isPrimaryInstance)
 
   // Cursor-following drag ghost as an OS window (FR-001) so it stays visible at
   // and beyond the app's edge.
-  registerGhostIpc();
+  registerGhostIpc(shellIntegration);
 
   // File Explorer tree (004): the renderer (sandboxed) reaches the filesystem
   // only through these `files.*` channels. Recycle-Bin + reveal use Electron's
@@ -1004,7 +1086,8 @@ if (isPrimaryInstance)
       ? (originalPath) => restoreFromRecycleBin(originalPath)
       : undefined,
   );
-  const shellIntegration = new ElectronShellIntegration(shell);
+  // shellIntegration is built earlier (before the Preferences/About deps above), which is also
+  // early enough for FilesService here.
   // Watch the active project's root and push change signals to every window so
   // the file tree stays live-synced with external + in-app edits (US2).
   const explorerWatcher = new ExplorerWatcher(
@@ -1266,8 +1349,41 @@ if (isPrimaryInstance)
   // reaches them only through the `editor.*` bridge (peer of `files.*`, no daemon).
   const editorService = new EditorService(fileSystem, () => currentSettings);
   const editorRecovery = new EditorRecovery(join(app.getPath('userData'), 'recovery'));
+  /*
+   * 044 — `PreviewService` observes the coordinator AND reads from it, so the coordinator's one
+   * lifecycle-listener slot is a relay filled the moment the service exists, a few lines below. An
+   * event before then finds no preview to tell, which is simply true: none can exist before
+   * `registerPreviewIpc` runs.
+   */
+  let previewService: PreviewService | null = null;
+  const previewLifecycle: DocumentLifecycleListener = {
+    registered: (absPath, panelId) => previewService?.registered(absPath, panelId),
+    unregistered: (absPath, panelId) => previewService?.unregistered(absPath, panelId),
+    repointed: (from, to, panelId) => previewService?.repointed(from, to, panelId),
+    changed: (panelId) => previewService?.changed(panelId),
+    dirtyChanged: (panelId, dirty) => previewService?.dirtyChanged(panelId, dirty),
+  };
+  /*
+   * 044 US7 — the ONE owner of every editor and preview panel's navigation history (Principle XI,
+   * contracts/navigation-history.md §1). Constructed before the coordinator and `PreviewService`, which
+   * both record into it; every window mirrors it from the `changed` broadcast. The cap is read live, so
+   * a `historySize` change applies to the next append — and to every record at once, below.
+   */
+  const historyPush = createHistoryPush({ all: () => BrowserWindow.getAllWindows() });
+  const historyService = new NavigationHistoryService({
+    cap: () => currentSettings.editor.navigation.historySize,
+    broadcastChanged: historyPush.broadcastChanged,
+  });
+  registerNavigationHistoryIpc(ipcMain, historyService);
+  onSettingsChanged.push((previous, next) => {
+    if (previous.editor.navigation.historySize !== next.editor.navigation.historySize) {
+      historyService.applyCap(next.editor.navigation.historySize);
+    }
+  });
   const editorCoordinator = new EditorCoordinator(editorService, editorRecovery, {
     recoveryDebounceMs: 400,
+    documentLifecycle: previewLifecycle,
+    history: historyService,
     // FR-027c. Read at write time, from the LIVE settings — turning it off must take effect on the
     // very next snapshot, not on the next restart.
     persistUndoHistory: () => currentSettings.editor.persistUndoHistory,
@@ -1327,6 +1443,61 @@ if (isPrimaryInstance)
       win.webContents.send('throng:editor:focus', { panelId });
     },
   });
+  /*
+   * 044 — the one authority for open previews (data-model §10), beside the coordinator it observes.
+   *
+   * It reads a standalone file through `editorService` and its own folder watch — never through the
+   * coordinator's load — so a preview never makes a file count as open in an editor (FR-025, SC-006).
+   * `settings` is the live getter: the update delay, maximum wait, size limit and provider toggles all
+   * apply to the next use. Project roots are main's own, from the daemon cache, never the renderer's.
+   */
+  const previews = new PreviewService({
+    documents: editorCoordinator,
+    reader: editorService,
+    fs: fileSystem,
+    fileWatcher: new NodeFileWatcher(150),
+    settings: () => currentSettings,
+    registry: SHIPPED_PREVIEW_PROVIDERS,
+    projectRoot: async (projectId) => {
+      await refreshProjectsCache();
+      return [...projectsByRoot.values()].find((p) => p.id === projectId)?.rootFolder;
+    },
+    push: createPreviewPush({
+      fromId: (id) => webContents.fromId(id),
+      all: () => BrowserWindow.getAllWindows(),
+    }),
+    history: historyService,
+    windows: {
+      mainWindowId: () => currentMainWindow()?.webContents.id ?? null,
+      raise: (id) => {
+        const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed() && w.webContents.id === id);
+        if (!win) return;
+        if (win.isMinimized()) win.restore();
+        win.focus();
+      },
+    },
+  });
+  previewService = previews;
+  registerPreviewIpc(ipcMain, previews);
+  // A window that has gone views no preview any more; the runs themselves live until `destroyed`.
+  app.on('web-contents-created', (_event, contents) => {
+    contents.once('destroyed', () => previews.releaseWindow(contents.id));
+  });
+  /*
+   * 044 — the `throng-preview:` protocol on the default session (registered privileged at module top
+   * level). The project root and document for a request come from the preview run `previews` holds
+   * for the panel id in the URL, never from the URL itself. Handled here, once the service exists and
+   * well before the first window is created below, so no window can load a preview URL unhandled.
+   */
+  protocol.handle(
+    PREVIEW_SCHEME,
+    createPreviewProtocolHandler({
+      fs: fileSystem,
+      previews,
+      settings: () => currentSettings,
+      registry: SHIPPED_PREVIEW_PROVIDERS,
+    }),
+  );
   /*
    * 043 US4 — the replace commit, and the whole of `throng:fileSearch:*` (T086, T094).
    *
@@ -1399,15 +1570,31 @@ if (isPrimaryInstance)
   // buffer survives so the user can save it back (re-creating the file) or discard.
   filesService.setOnDeleted((absPaths) => editorCoordinator.markDeleted(absPaths));
   // #273 — what confines `revealDocument`, since a rootless sub-workspace panel has no root to be
-  // confined by: a path may be revealed exactly while some Panel, in some window, is showing it.
-  filesService.setOpenDocumentCheck((absPath) => editorCoordinator.isOpen(absPath));
+  // confined by: a path may be revealed exactly while some Panel, in some window, is showing it —
+  // an editor OR a preview (044 FR-033: a standalone preview shows a file no editor has open).
+  filesService.setOpenDocumentCheck(openInEditorOrPreview(editorCoordinator, previews));
   // 024 US3 (#85): the inverse — undoing a delete lets a stranded editor become clean again.
   filesService.setOnRestored((absPaths) => void editorCoordinator.markRestored(absPaths));
   // Moving one that is open re-points it instead (019, #87): the move is BRACKETED — announced
   // before the first `fs.move` and again after the last — so the folder watch can never read the
   // file's absence as a deletion and dirty a buffer nobody edited.
-  filesService.setOnMoveStarted((absPaths) => editorCoordinator.beginMove(absPaths));
-  filesService.setOnMoved((moves) => editorCoordinator.markMoved(moves));
+  //
+  // 044 FR-013c — a standalone preview follows the same bracket. Each setter holds ONE callback, so
+  // each is set once, here, with every consumer in order (contracts/preview-ipc.md §3): the
+  // coordinator first, so a parented preview has already followed its document through `repointed`
+  // by the time `previews.moved` looks.
+  //
+  // 044 US7 (T155, FR-109) — the second callback then rewrites EVERY history once (never from
+  // `markMoved`, which would do it twice) and tells every window, so each rewrites `config.history` and
+  // a preview's `config.filePath` for panels its layout holds, mounted or not.
+  const inAppMoves = createInAppMoveCallbacks({
+    coordinator: editorCoordinator,
+    previews,
+    history: historyService,
+    broadcastFilesMoved: (moves) => historyPush.broadcastFilesMoved(moves),
+  });
+  filesService.setOnMoveStarted(inAppMoves.started);
+  filesService.setOnMoved(inAppMoves.moved);
 
   // Terminal flavours (005 Phase B): UI main owns shell detection (inline, like
   // the FS seams above), merging the machine's built-ins with settings.terminals.
@@ -1509,8 +1696,59 @@ if (isPrimaryInstance)
   // The main window plus every detached sub-workspace window form a single
   // focus/raise group; closing the main window closes them all (Constitution XI).
   const windowManager = new WindowManager();
-  const mainWindow = await createMainWindow(settings, displayInfo, statePath, themeBackground());
+  const mainWindow = await createMainWindow(
+    settings,
+    displayInfo,
+    statePath,
+    themeBackground(),
+    shellIntegration,
+  );
   windowManager.registerMain(mainWindow);
+  /*
+   * 044 FR-063 — a preview provider turned off, MAIN's half (contracts/preview-ipc.md §5).
+   *
+   * `onSettingsChanged` is a list, so this is one more subscriber and replaces none. The transition is
+   * core's `providersTurnedOff` (T014), read here once for main and once per window by
+   * `PreviewProviderSync` for the layout that window holds — neither reads the other's half. For the ids
+   * it returns, main drops every run (each broadcasts `openChanged { open: false }` as its path empties),
+   * and purges the layouts no window holds (O6, `preview-purge.ts`).
+   *
+   * Registered HERE, once the window manager exists, because the purge asks it which sub-workspaces are
+   * held. A settings change before this line has no window and no preview to act on.
+   *
+   * The request filter's `remoteImages` needs nothing: `installRendererRequestFilter` reads the live
+   * settings on every request (FR-092), so a provider turned off stops its remote images at once.
+   */
+  onSettingsChanged.push((previous, next) => {
+    const off = providersTurnedOff(previous.editor.previews, next.editor.previews, SHIPPED_PREVIEW_PROVIDERS);
+    if (off.length === 0) return;
+    for (const id of off) previews.dropProvider(id);
+    void purgeUnloadedPreviews(
+      {
+        call: <T>(method: string, params: unknown) => daemonClient.call<T>(method, params),
+        held: async () => {
+          const { projects } = await daemonClient.call<{ projects: Array<{ id: string; isActive?: boolean }> }>(
+            'projects.list',
+            {},
+          );
+          return {
+            projectIds: new Set(projects.filter((p) => p.isActive === true).map((p) => p.id)),
+            subWorkspaceIds: new Set(windowManager.childIds()),
+          };
+        },
+        newPanelId: () => randomUUID(),
+        // 044 US4 fix round 1, item 1 — the exact broadcast a hand destroy sends
+        // (`destroy-sub-workspace.ts`), so the sidebar's sub-workspace list and an open detach context
+        // refresh even though no window made this edit.
+        notifySubWorkspaceChanged: (id) =>
+          broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:subworkspace:changed:push', id),
+      },
+      previewPurgePredicate(SHIPPED_PREVIEW_PROVIDERS, off),
+    ).catch((error: unknown) => {
+      // Best-effort: a record the walk could not rewrite is still filtered on its next restore (FR-067).
+      diagnostics.log.warn(`[preview] purging unloaded previews failed: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  });
   // When the main window is gone, tear down the drag ghost (#110). The ghost is a real
   // BrowserWindow loaded once and only HIDDEN between drags, so after any drag it outlives
   // every real window and — being hidden, not closed — keeps `window-all-closed` from firing,
@@ -1710,7 +1948,7 @@ if (isPrimaryInstance)
         },
 
         createWindow: (childId, bounds) =>
-          createSubWorkspaceWindow(childId, themeBackground(), bounds),
+          createSubWorkspaceWindow(childId, themeBackground(), shellIntegration, bounds),
 
         registerChild: (childId, win) => windowManager.registerChild(childId, win),
 
@@ -1901,9 +2139,13 @@ if (isPrimaryInstance)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      void createMainWindow(settings, displayInfo, statePath, themeBackground()).then((w) =>
-        windowManager.registerMain(w),
-      );
+      void createMainWindow(
+        settings,
+        displayInfo,
+        statePath,
+        themeBackground(),
+        shellIntegration,
+      ).then((w) => windowManager.registerMain(w));
     }
   });
 });

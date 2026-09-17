@@ -522,6 +522,31 @@ export const THRONG_THEME: Theme = {
     chevronLeft: '‹',
     chevronRight: '›',
     chevronDown: '▾',
+    /* 044 (R17). Four tokens for four ACTIONS, each held apart from the glyph it would otherwise be
+       mistaken for.
+
+       `preview` is the editor status-bar button, Open Preview, Open In → Preview and the preview
+       panel's type icon: reading glasses, because a preview is the file READ rather than edited, and
+       deliberately not `showHidden` 👁 (make hidden entries visible) or `findInFiles` 📚 (a corpus).
+
+       `refresh` is the preview header's Refresh — re-read the source now. It is NOT `retry` ↻, which
+       means "try again" and is offered BESIDE Refresh while the failure banner is up (030 FR-042c), so
+       the two would otherwise sit next to each other wearing the same arrow; nor `resetName` ↺.
+
+       `navigateBack` / `navigateForward` are the header's history buttons and menu items (FR-104,
+       FR-111). Plain horizontal arrows: not `chevronLeft` ‹ / `chevronRight` ›, which step the tab
+       strip, and not `undo` ↩ / `redo` ⤼, which change a document — Back changes which file you are
+       looking at and nothing else. */
+    preview: '👓',
+    refresh: '⟳',
+    navigateBack: '←',
+    navigateForward: '→',
+    /* 044, 2026-09-16 iteration (FR-122c). Synchronise Scrolling — the toggle on both status bars (before
+       the preview button on an editor's, before Open in Editor / Go to Editor on a preview's), and the item
+       in the editor's and the preview's four menus. A pair of
+       opposed vertical arrows: two views moving together, either one leading. Not `moveUp` ↑ /
+       `moveDown` ↓ (reorder a list), nor `replace` ⇄ (swap a match), nor `preview` 👓 beside it. */
+    syncScroll: '⇅',
   },
 };
 

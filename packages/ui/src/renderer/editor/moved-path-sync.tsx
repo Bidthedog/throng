@@ -10,6 +10,10 @@ import { useWorkspace } from '../state/workspace-store.js';
  * writes the result into the layout blob, so a restart reopens each panel on the file where it
  * actually lives.
  *
+ * A document REPLACED by a different file is the same fact arriving by another message (044 FR-110): a
+ * panel synced into two windows that loads another file — an in-place open, a Back / Forward step — in
+ * one of them, carries the new path on its reset, and the other window's layout follows it here.
+ *
  * ## Why it cannot live in the panel
  *
  * `use-editor`'s `onSync` subscription is created by the editor's mount effect and torn down when it
@@ -34,7 +38,10 @@ export function MovedPathSync(): null {
   useEffect(
     () =>
       window.throng?.editor?.onSync?.((msg) => {
-        if (typeof msg.movedTo !== 'string') return;
+        // A move names the new path; so does a REPLACEMENT, which may be a different file put into the
+        // panel from another window it is synced to (044 FR-110) — the same fact about the same panel.
+        const filePath = typeof msg.movedTo === 'string' ? msg.movedTo : msg.reset?.filePath;
+        if (typeof filePath !== 'string') return;
         const { layout, updatePanelConfig } = wsRef.current;
         const panel = layout?.tabs
           .flatMap((tab) => collectPanels(tab.root))
@@ -44,10 +51,12 @@ export function MovedPathSync(): null {
         // schedules a `workspace.save` — so a blind write would have every window persist its whole
         // layout on every move of a file it has never heard of.
         if (!panel || panel.kind !== 'editor') return;
-        if ((panel.config as { filePath?: string } | undefined)?.filePath === msg.movedTo) return;
+        // Every reset names its path, and nearly all of them name the one already held (a revert, a
+        // reload, a resync), so this check is what keeps those from writing anything.
+        if ((panel.config as { filePath?: string } | undefined)?.filePath === filePath) return;
         // The config write rides the store's existing debounced `workspace.save`, exactly as a
         // Save-As's does — this is the same fact about the same panel, arriving by a different door.
-        updatePanelConfig(msg.panelId, { filePath: msg.movedTo });
+        updatePanelConfig(msg.panelId, { filePath });
       }),
     [],
   );

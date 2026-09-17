@@ -20,16 +20,32 @@
  */
 import { editorAutoTitle } from '../editor/path-display.js';
 import { FIND_IN_FILES_KIND, findInFilesPanelType } from '../find-in-files/panel-type.js';
-import { truncateGraphemes } from '../text/grapheme.js';
-import type { Panel } from './model.js';
+import { PREVIEW_KIND } from '../preview/panel-type.js';
+import { countGraphemes, truncateGraphemes } from '../text/grapheme.js';
+import type { Panel, PreviewPanelConfig } from './model.js';
+import { previewPathOf } from './persisted-paths.js';
 
-/** The live values a panel's header can name itself from; both absent is normal. */
+/** The live values a panel's header can name itself from; all absent is normal. */
 export interface PanelTitleSources {
   /** The shell's live OSC 0/2 window title (#89), when one has been announced. */
   terminalTitle?: string | null;
   /** The file the editor holds — live editor state first, else the panel's persisted config. */
   editorFilePath?: string | null;
+  /**
+   * What a PARENTED preview's parent editor currently displays, custom or derived (044 FR-031).
+   * Absent or blank means the preview is standalone. An input rather than a lookup: a preview stores
+   * no link to an editor (FR-013), so whoever knows the parent hands its title in.
+   */
+  previewParentTitle?: string | null;
+  /** The file a preview currently shows — live state first; the persisted config is the fallback. */
+  previewFilePath?: string | null;
 }
+
+/**
+ * What every preview's name ends with (044 FR-031). Never truncated (FR-032): it is the half of the
+ * name that says what the panel IS, and a long file name gives way to it.
+ */
+export const PREVIEW_TITLE_SUFFIX = ' - Preview';
 
 /**
  * What a Find in Files panel is called while its replace row is DISCLOSED (043 FR-081).
@@ -59,6 +75,15 @@ function usable(value: unknown): string | null {
  * Omitting `maxNameLength` leaves the name unbounded, so callers that have no limit to apply — and
  * every caller that predates the setting — behave exactly as they did.
  *
+ * ══ ONE EXCEPTION TO THE BOUND: A PREVIEW AT A SHORT LIMIT (044 FR-032) ══
+ *
+ * A preview's title is `<name> - Preview`, the suffix is never cut, and the name keeps at least one
+ * character. So at a `maxNameLength` of 10 or less — the suffix's own length, and the setting's
+ * minimum is 10 — the result is LONGER than the limit by the name characters that remain. That
+ * supersedes 031 FR-037's hard bound for preview titles only: " - Preview" alone names nothing. A
+ * header that marks truncation must mark the NAME, not the end of the title; it gets the two halves
+ * apart from {@link previewTitleParts}.
+ *
  * Never returns an empty string: every branch ends at `panel.title`, which the layout guarantees,
  * and `truncateGraphemes` cannot empty a non-empty name at any limit of one or more.
  */
@@ -67,8 +92,67 @@ export function panelDisplayTitle(
   sources: PanelTitleSources = {},
   maxNameLength?: number,
 ): string {
+  const parts = previewTitleParts(panel, sources, maxNameLength);
+  if (parts !== null) return `${parts.name}${parts.suffix}`;
   const title = resolveTitle(panel, sources);
   return maxNameLength === undefined ? title : truncateGraphemes(title, maxNameLength);
+}
+
+/** A preview title in its two halves (044 FR-032). */
+export interface PreviewTitleParts {
+  /** The name half, already bounded — the part a truncation marker belongs on. */
+  name: string;
+  /** Always {@link PREVIEW_TITLE_SUFFIX}, whole. */
+  suffix: string;
+  /** Whether `name` was shortened to fit, so the header draws `name… - Preview`. */
+  nameTruncated: boolean;
+}
+
+/**
+ * The halves of the title {@link panelDisplayTitle} gives a preview, or `null` for any panel it does
+ * not compose one for — another kind, a renamed panel, or a preview with no file yet (the
+ * placeholder). `name + suffix` is always exactly `panelDisplayTitle`'s result, which is what lets a
+ * header render the marker between them without deciding anything about the title itself.
+ */
+export function previewTitleParts(
+  panel: Panel,
+  sources: PanelTitleSources = {},
+  maxNameLength?: number,
+): PreviewTitleParts | null {
+  const full = panel.titleIsCustom ? null : previewName(panel, sources);
+  if (full === null) return null;
+  const name = boundPreviewName(full, maxNameLength);
+  return { name, suffix: PREVIEW_TITLE_SUFFIX, nameTruncated: name !== full };
+}
+
+/**
+ * The NAME half of a preview's title (044 FR-031), or `null` when this is not a preview or it has no
+ * file to be named after — which falls through to the placeholder like any other panel.
+ *
+ * Parented: whatever the parent editor displays. Standalone: the name an editor would derive for the
+ * file, from the live path first and the persisted config second — `previewPathOf`, so a restored
+ * preview names itself after the same file it attaches to.
+ */
+function previewName(panel: Panel, sources: PanelTitleSources): string | null {
+  if (panel.kind !== PREVIEW_KIND) return null;
+  const parent = usable(sources.previewParentTitle);
+  if (parent) return parent;
+  const path =
+    usable(sources.previewFilePath) ?? previewPathOf(panel.config as PreviewPanelConfig | undefined);
+  return path ? editorAutoTitle(path) : null;
+}
+
+/**
+ * A preview's NAME half, shortened so that name plus suffix fits `maxNameLength` (044 FR-032).
+ *
+ * The limit applies to the whole title wherever it leaves room for a name at all. At or below the
+ * suffix's own length — and `tabs.maxNameLength`'s minimum, 10, is exactly that length — the name
+ * keeps one character and the title runs over by it, as the amended FR-032 sanctions.
+ */
+function boundPreviewName(name: string, maxNameLength: number | undefined): string {
+  if (maxNameLength === undefined) return name;
+  const budget = Math.max(1, Math.floor(maxNameLength) - countGraphemes(PREVIEW_TITLE_SUFFIX));
+  return truncateGraphemes(name, budget);
 }
 
 /** The unbounded precedence — the #218 rule itself, unchanged by the limit that now wraps it. */

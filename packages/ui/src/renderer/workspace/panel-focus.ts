@@ -67,6 +67,12 @@ export function requestPanelFocus(panelId: string): void {
   if (focusPanel(panelId)) pendingFocusPanelId = null;
 }
 
+/** Tests only: every registration gone, and no focus request left parked. */
+export function __resetPanelFocus(): void {
+  registry.clear();
+  pendingFocusPanelId = null;
+}
+
 /**
  * Move DOM focus into the panel's input surface, if one is registered. Returns
  * whether a focus callback existed (a plain placeholder panel has none — the caller

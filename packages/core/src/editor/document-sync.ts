@@ -78,4 +78,13 @@ export interface ResetDocumentMsg {
   text: string;
   version: number;
   dirty: boolean;
+  /**
+   * The file the replacement document is — absent for a document with no path yet.
+   *
+   * A replacement can be a DIFFERENT file: an in-place open, or a Back / Forward step (044 FR-106d). The
+   * view that asked for it learns the path from its own load's answer; every other view of the panel — a
+   * second window it is synced to (FR-110) — has only this stream, so the path travels with the reset or
+   * that window's pill, title and banner go on naming the file that was replaced.
+   */
+  filePath?: string;
 }

@@ -1,4 +1,4 @@
-import { useCallback, type ReactElement } from 'react';
+import { useCallback, useRef, type ReactElement } from 'react';
 import type { Panel } from '@throng/core';
 import { useProjects } from '../state/projects-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
@@ -12,8 +12,11 @@ import { PanelDropTarget, type DropContext } from '../editor/drop-target.js';
 import { TreeDropTarget } from '../editor/tree-drop-target.js';
 import { openFileInPanel } from '../editor/editor-open.js';
 import { findEditorPanelByPath } from '../editor/editor-state.js';
-import { collectPanels, FIND_IN_FILES_KIND } from '@throng/core';
+import { collectPanels, FIND_IN_FILES_KIND, PREVIEW_KIND } from '@throng/core';
 import { focusPanel } from './panel-focus.js';
+import { PreviewPanel } from '../preview/preview-panel.js';
+import { releasePreviewView } from '../preview/forget-preview-panel.js';
+import { runPreviewEditorRoute } from '../preview/open-in-editor.js';
 
 /**
  * Panel body dispatcher (005 / FR-001/003/014). Routes a Panel's body by its
@@ -27,9 +30,23 @@ import { focusPanel } from './panel-focus.js';
  * The project root is the Panel's origin project (works in the main window and in
  * a sub-workspace where a Panel may belong to another project — FR-008).
  */
-export function PanelBody({ panel, tabId }: { panel: Panel; tabId: string }): ReactElement {
+export function PanelBody({
+  panel,
+  tabId,
+  onDestroy,
+}: {
+  panel: Panel;
+  tabId: string;
+  /**
+   * The header's Close / Destroy Panel flow, for a body control that ends the panel (044 FR-027).
+   * Required, so no body can end its panel by a route that skips that flow's cleanup.
+   */
+  onDestroy: () => void;
+}): ReactElement {
   const { projects, activeProject, loading } = useProjects();
   const ws = useWorkspace();
+  const wsRef = useRef(ws);
+  wsRef.current = ws;
   const { layout } = ws;
   const subWin = useSubWorkspaceWindow();
   const hasOrigin = typeof panel.originProjectId === 'string' && panel.originProjectId.length > 0;
@@ -158,6 +175,39 @@ export function PanelBody({ panel, tabId }: { panel: Panel; tabId: string }): Re
          * what the panel hands over, which is FR-027b/FR-027c holding by construction.
          */
         onConfigChange={(config) => ws.updatePanelConfig(panel.id, config)}
+      />
+    );
+  }
+  if (panel.kind === PREVIEW_KIND) {
+    /*
+     * 044 — the preview panel (T070). No wait for the project list, unlike the editor below: a preview
+     * never judges its own path. It hands main the panel's ORIGIN project id and main resolves the root
+     * and decides containment itself (Principle I, contracts/preview-ipc.md §1). `root` reaches the body
+     * only as context for resolving what it draws.
+     */
+    return (
+      <PreviewPanel
+        panel={panel}
+        projectRoot={root}
+        // FR-067 / FR-064 — main says this preview must not exist here: the panel goes exactly as closing
+        // it by hand would. Clearing the type first means the workspace's LAST panel, which `removePanel`
+        // keeps, is left as an empty panel rather than as a preview of nothing.
+        onRefused={() => {
+          ws.clearPanelType(panel.id);
+          ws.removePanel(panel.id);
+        }}
+        // 030 FR-043 — the banner's Clear panel type: the panel stays. The preview ENDS only where this
+        // view is the preview — a project preview synced into a sub-workspace keeps its run for the
+        // project window (the `killsSession` rule `destroyPanel` follows).
+        onClearType={() => {
+          releasePreviewView(panel, { inSubWorkspace: subWin !== null, layoutProjectId: layout?.projectId });
+          ws.clearPanelType(panel.id);
+        }}
+        // 044 FR-027 — the no-provider notice's Close is the header's Close Panel, not a second route.
+        onClose={onDestroy}
+        // 044 FR-015 — Open in Editor / Go to Editor, the one function the header menu runs too. The store
+        // is read through a ref when it runs: main's answer arrives renders after the click.
+        onEditorRoute={() => runPreviewEditorRoute(panel, () => wsRef.current)}
       />
     );
   }

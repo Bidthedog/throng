@@ -72,3 +72,21 @@
   flex: 0 0 auto;
   color: inherit;
 }
+
+/* 044 FR-090e — the same condition reported again FLASHES the notice already shown rather than raising
+   a second one (one condition, one notice; `common/notification.css`'s pulse is the precedent). An
+   inset ring in the banner's own danger token, so nothing reflows and no colour literal is needed: a
+   zero-width ring is invisible at both ends. The preview's link notice is its first user. */
+.panel-failure--flash {
+  animation: panel-failure-flash 600ms ease-out;
+}
+
+@keyframes panel-failure-flash {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 0 var(--throng-colour-danger);
+  }
+  35% {
+    box-shadow: inset 0 0 0 2px var(--throng-colour-danger);
+  }
+}

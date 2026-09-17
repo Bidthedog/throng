@@ -1,0 +1,51 @@
+/*
+ * The preview panel's own chrome (044 T069 layout; FR-034, FR-070, FR-083; contracts/
+ * settings-bindings-tokens.md §Colour tokens; contracts/preview-provider-seam.md §6).
+ *
+ * ══ CHROME ONLY — A PROVIDER'S DOCUMENT STYLES LIVE WITH THE PROVIDER ══
+ *
+ * Which provider is mounted names nothing here (FR-070): this file lays out the panel and its
+ * scrolling body host, and nothing else. A provider's rendered document brings its own styles from
+ * its own folder — the Markdown body's are `providers/markdown/markdown.css`, imported by
+ * `markdown-body.tsx` so they ride in the provider's lazily loaded chunk, never in this eagerly
+ * loaded stylesheet (`preview-panel.tsx` imports this file statically; fix round 1, item 2).
+ *
+ * The one colour here, `editorBg`, is the body's resting background before any document has painted
+ * it — the same token every provider's document rests on, so there is no flash of a different colour
+ * while a provider's own stylesheet is still loading.
+ *
+ * The link notice is NOT styled here: it uses the shared in-panel notice classes
+ * (`common/panel-failure-banner.css`), like every other notice a panel shows.
+ *
+ * Per-panel zoom (FR-034): `--throng-zoom-preview` is THIS panel's own factor, published on
+ * `.preview-panel` by `preview-panel.tsx`. It multiplies the pane text size, exactly as the Find in
+ * Files panel's `--throng-zoom-fif` does, so a preview's zoom is its own and never its parent editor's.
+ */
+
+.preview-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.preview-panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  background: var(--throng-colour-editorBg);
+  font-size: calc(var(--throng-font-paneText-size) * var(--throng-zoom-preview, 1));
+}
+
+/* 044 FR-118 (iteration 2026-09-15) — the status bar's one readout: the hovered or focused link's full target.
+   The element's text is the whole target; wider than the space the controls group leaves, it is clipped with
+   an ellipsis rather than pushing the button out. No colour: the editor strip's readout class supplies it. */
+.preview-status-bar__readout {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

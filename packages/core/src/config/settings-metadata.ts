@@ -20,6 +20,9 @@ import {
   TIMEOUT_MIN_MS,
 } from '../notice/display-mode.js';
 import { leavesOfDeclared, type FieldDescriptor, type MetadataRegistry } from './metadata.js';
+// 044 — imports neither this module nor `app-settings.ts`, so no cycle (see its header).
+import { previewSettingsDescriptors } from './preview-settings.js';
+import { SHIPPED_PREVIEW_PROVIDERS } from '../preview/providers/index.js';
 
 /** Leaves that are internal bookkeeping, not user-configurable settings. */
 export const SETTINGS_INTERNAL_KEYS: readonly string[] = [
@@ -600,6 +603,15 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     subgroup: 'Status Bar',
     control: 'toggle',
   },
+  /*
+   * Previews (044, FR-061) — generated, not written out.
+   *
+   * The update delay, the maximum wait and the copy format, then each registered provider's enabled
+   * toggle, default open action and own settings, all under `Editor → Previews`. They come from the
+   * provider registry for FR-071's reason: a provider registered tomorrow reaches this form without
+   * this file being edited. The generator is `config/preview-settings.ts`.
+   */
+  ...previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS),
 
   // Navigation (033, FR-069b). Its own group because these govern the Quick Open and Go To Line
   // modals, not an editor panel — the distinction the user reads them by.
@@ -637,6 +649,24 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'Reopen Go To Line with the last line number you actually went to, selected so typing replaces it. Held for this session only — never written to disk.',
     group: 'Editor · Navigation',
     control: 'toggle',
+  },
+  {
+    /*
+     * 044 FR-108 (#136). In the EXISTING `Editor · Navigation` group, which the spec names, rather
+     * than a fourth `Editor · …` sibling (040 FR-037a pins exactly three).
+     *
+     * 1 across 1–100 is 1.01% of the range, just clear of the aimable-slider floor, and the shipped
+     * 10 sits on a stop at 1 + 1×9. The floor is 1 because a history must hold the current file.
+     */
+    key: 'editor.navigation.historySize',
+    label: 'Navigation history size',
+    description:
+      'How many files Back and Forward remember in each editor and preview panel. Older files drop off first, and lowering this trims every open panel at once — never the file it is showing.',
+    group: 'Editor · Navigation',
+    control: 'slider',
+    min: 1,
+    max: 100,
+    step: 1,
   },
   {
     key: 'terminals.showStatusBar',

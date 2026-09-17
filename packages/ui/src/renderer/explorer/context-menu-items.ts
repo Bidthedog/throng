@@ -11,6 +11,7 @@ import {
   pathForms,
   type FlavourOption,
   type Keybindings,
+  type PreviewAffordance,
   type TargetNode,
 } from '@throng/core';
 
@@ -84,8 +85,17 @@ export function buildContextMenuItems(args: {
    * and disabled (FR-035).
    */
   flavours?: readonly FlavourOption[];
+  /**
+   * 044 FR-003, FR-004, FR-012, FR-062 — *Open In → Preview* for a FILE: core's affordance, computed by
+   * `file-tree.tsx` at right-click with `preview.isOpen` awaited, and the `preview.open` request for it.
+   *
+   * Its OWN argument, deliberately not one of the `openIn` targets: those come from
+   * `describeOpenInTargets`, which a Find in Files row also draws, and a result row always opens an
+   * editor (FR-054, contracts/menus-and-controls.md §5). Absent, or an `absent` affordance, draws no row.
+   */
+  preview?: { affordance: PreviewAffordance; open: () => void };
 }): MenuAction[] {
-  const { node, selectedRelPaths, clipboard, ops, openIn, keybindings, projectRoot, undoState, flavours } = args;
+  const { node, selectedRelPaths, clipboard, ops, openIn, keybindings, projectRoot, undoState, flavours, preview } = args;
   // US1 (#125): the first bound chord for an explorer command, or undefined (→ no brackets).
   const sc = (action: string): string | undefined =>
     keybindings ? firstBinding(keybindings, action as never) : undefined;
@@ -149,6 +159,22 @@ export function buildContextMenuItems(args: {
     { label: 'OS File Explorer', icon: 'folderOpen', section: 'navigate', onClick: () => ops.reveal(node.relPath) },
     ...(openIn ?? []),
   ];
+  /*
+   * 044 FR-003 — Preview, after the editor targets and before Terminal. Drawn DISABLED — never hidden —
+   * while the provider is turned off (FR-062) or the file already has its one preview (FR-012): one
+   * setting, or closing that preview, makes it work. Absent where it could never mean anything (a
+   * folder, a type no provider claims, outside the project — FR-003, FR-004).
+   */
+  if (preview !== undefined && node.kind === 'file' && preview.affordance.state !== 'absent') {
+    openInItems.push({
+      label: 'Preview',
+      icon: 'preview',
+      section: 'navigate',
+      shortcut: sc('preview.open'),
+      disabled: preview.affordance.state === 'disabled',
+      onClick: () => preview.open(),
+    });
+  }
   /*
    * 033 US3 (FR-029/FR-030/FR-035) — Terminal, a THIRD level nested inside Open In, for folders and
    * files alike. A file gets one because "open a shell here" means the folder the file lives in,

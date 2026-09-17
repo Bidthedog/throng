@@ -5,6 +5,13 @@
  * without prop-drilling. Non-reactive by design — actions are stable callbacks.
  */
 
+/** A history step's intent on `throng:editor:load` — the entry's index and the file it names. */
+export interface EditorLoadNavigation {
+  kind: 'history';
+  index: number;
+  filePath: string;
+}
+
 export interface EditorActions {
   /** Save this document (Ctrl+S). Resolves true on a successful write. */
   save: () => Promise<boolean>;
@@ -12,8 +19,14 @@ export interface EditorActions {
   saveAs: () => Promise<boolean>;
   /** Whether this document currently has unsaved changes. */
   isDirty: () => boolean;
-  /** Load a file into this editor, replacing its current document (open-from-tree). */
-  openFile: (absPath: string) => Promise<void>;
+  /**
+   * Load a file into this editor, replacing its current document (open-from-tree).
+   *
+   * 044 US7 — `navigation` makes the load a step through this panel's history (Back / Forward): main moves
+   * the position instead of recording a new entry (contracts/navigation-history.md §3). Only
+   * `openIntoEditorPanel` passes it.
+   */
+  openFile: (absPath: string, opts?: { navigation?: EditorLoadNavigation }) => Promise<void>;
   /** Discard all unsaved changes, restoring the loaded/last-saved content (FR-075). */
   revert: () => void;
   /**

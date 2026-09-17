@@ -69,6 +69,11 @@ export default defineConfig({
           // The shared parser RUNTIME — the LR engine, the tree model, the highlight tags. Small,
           // and genuinely needed before any document is open, so this one is eager by design.
           if (id.includes('@lezer/')) return 'lezer';
+          // The Markdown preview pipeline (R21): loaded by dynamic import on the first preview
+          // mount, so it must not ride in the eagerly-loaded `vendor` chunk. `@lezer/highlight`
+          // stays in the shared `lezer` chunk above — the editor already pays for it eagerly.
+          if (/\/node_modules\/(markdown-it|linkify-it|mdurl|uc\.micro|punycode\.js|entities|dompurify|yaml)\//.test(id))
+            return 'preview';
           return 'vendor'; // react-arborist (+ its react-dnd deps), inversify, …
         },
       },

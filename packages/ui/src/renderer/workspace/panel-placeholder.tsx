@@ -1,12 +1,16 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import {
+  canGoBack,
+  canGoForward,
   collectPanels,
   countPanels,
   defaultPanelTypeRegistry,
   editorPathParts,
   panelDisplayTitle,
   panelRemovalVerb,
+  previewTitleParts,
+  PREVIEW_KIND,
   toDisplayPath,
   effectiveActivePanelId,
   panelZoomLevel,
@@ -17,7 +21,16 @@ import {
   type Panel,
 } from '@throng/core';
 import { PanelBody } from './panel-body.js';
-import { isRenamable, panelHeaderMenu } from './panel-header-menu.js';
+import { isRenamable, panelHeaderMenu, removalVerbFor } from './panel-header-menu.js';
+import { usePreviewFailure, usePreviewState } from '../preview/preview-store.js';
+import { usePreviewProviders } from '../preview/provider-registry-context.js';
+import { releasePreviewView } from '../preview/forget-preview-panel.js';
+import { requestPreviewOpen } from '../preview/open-preview.js';
+import { runPreviewEditorRoute } from '../preview/open-in-editor.js';
+import { refreshPreviewPanel } from '../preview/refresh-preview.js';
+import { toggleSyncScroll } from '../preview/sync-scroll-toggle.js';
+import { shownPreviewFailure, shownPreviewFailureFacts } from '../preview/preview-notice.js';
+import { useEditorPreviewAffordance } from '../editor/editor-preview.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useProjects } from '../state/projects-store.js';
 import { useServices } from '../composition-root.js';
@@ -25,7 +38,7 @@ import { useConfirm } from '../confirm-dialog.js';
 import { useNotify } from '../common/notification.js';
 import { panelFailureText } from '../common/notice-text.js';
 import { retryPanelFailure } from '../common/panel-failure-banner.js';
-import { usePanelPlace } from '../common/panel-subject.js';
+import { panelSubject, usePanelPlace } from '../common/panel-subject.js';
 import { useCopyToClipboard } from '../common/use-copy.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
@@ -63,6 +76,10 @@ import { destroyFindInFilesPanel } from '../find-in-files/find-in-files-store.js
 import { clearTerminalViewState } from '../terminal/terminal-view-state.js';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
 import { revealPanelFile } from './reveal-panel-file.js';
+import { BackForwardButtons } from '../navigation/back-forward-buttons.js';
+import { usePanelHistory } from '../navigation/history-store.js';
+import { navigatePanelHistory } from '../navigation/navigate-history.js';
+import { purgePanelHistory } from '../navigation/purge-history.js';
 
 const EDGES: Edge[] = ['top', 'right', 'bottom', 'left'];
 
@@ -184,19 +201,90 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   // The unbounded form is computed alongside purely to decide whether the ellipsis is drawn; the
   // marker itself is a `::after` (FR-037c), so it never enters the value or anything persisted.
   const maxNameLength = settings.tabs.maxNameLength;
-  const titleSources = { terminalTitle, editorFilePath };
+  /*
+   * 044 — what a PREVIEW panel mirrors of its run (`preview-store`, fed by main's updates). Read for
+   * every panel because hooks cannot be conditional; only a preview ever has an entry, and every use
+   * below is gated on the kind as the editor's state is (see the unsaved-dot note).
+   */
+  const isPreview = panel.kind === PREVIEW_KIND;
+  const previewUi = usePreviewState(panel.id);
+  // A preview failure the banner shows that main's update does not carry (attach, body load). Only a
+  // preview ever records one.
+  const previewFailure = usePreviewFailure(panel.id);
+  /*
+   * 044 T123 — the failure the preview's ONE banner slot shows right now: an attach or body failure, or a
+   * file notice (FR-026, FR-027), ranked exactly as the panel ranks them (`shownPreviewFailure`). The header
+   * menu mirrors THAT banner: its three rows appear while it offers them, and Copy details copies its text.
+   */
+  const previewBanner = isPreview ? shownPreviewFailure(previewUi, previewFailure) : null;
+  // The file the preview shows NOW — a followed link moves it — else the one it was opened on.
+  const previewFilePath = isPreview ? (previewUi?.filePath ?? editorFilePath ?? null) : null;
+  const { registry: previewRegistry } = usePreviewProviders();
+  const wsRef = useRef(ws);
+  wsRef.current = ws;
+  /*
+   * 044 FR-100 — only an editor and a preview have a navigation history. Its mirror (`history-store`, fed by
+   * main's broadcast) decides whether Back and Forward are enabled, on the buttons and the menu alike.
+   */
+  const hasHistory = panel.kind === 'editor' || isPreview;
+  const panelHistory = usePanelHistory(panel.id);
+  /**
+   * The mouse X-button pressed over THIS panel and not yet released (FR-105, fix round 1 item 5). Cleared by
+   * any release anywhere: the window's own `mouseup` listener runs after this panel's handler (React listens
+   * at the root, below the window), so a release elsewhere disarms it before a stray release here could fire.
+   */
+  const xButtonPress = useRef<number | null>(null);
+  useEffect(() => {
+    if (!hasHistory) return;
+    const disarm = (): void => {
+      xButtonPress.current = null;
+    };
+    window.addEventListener('mouseup', disarm);
+    return () => window.removeEventListener('mouseup', disarm);
+  }, [hasHistory]);
+  // FR-031 — a standalone preview names itself after the file the RUN shows (a followed link moves it),
+  // falling back to the persisted config inside `panelDisplayTitle`. A PARENTED preview takes its
+  // parent editor's displayed name, which main forwards on each update as `parent.title` (published by
+  // `EditorTitlePublisher`), so it follows a rename of that editor live.
+  const titleSources = {
+    terminalTitle,
+    editorFilePath,
+    ...(isPreview ? { previewFilePath: previewUi?.filePath, previewParentTitle: previewUi?.parent?.title } : {}),
+  };
+  /*
+   * 044 FR-001/FR-002/FR-004 — an editor's Open Preview affordance, against the editor's OWN project
+   * root: a panel whose origin project is not a registered project (a sub-workspace's own) has none,
+   * and is offered no preview. Computed for every panel because hooks cannot be conditional; only an
+   * editor passes it to the menu.
+   */
+  const editorProjectRoot = projects.find((p) => p.id === panel.originProjectId)?.rootFolder ?? null;
+  const editorPreview = useEditorPreviewAffordance(
+    panel.kind === 'editor' ? editorUi?.filePath : null,
+    editorProjectRoot,
+  );
   const fullTitle = panelDisplayTitle(panel, titleSources);
   const effectiveTitle = panelDisplayTitle(panel, titleSources, maxNameLength);
   const titleTruncated = effectiveTitle !== fullTitle;
+  /*
+   * FR-032 — a preview's title in its two halves, so the header's truncation marker lands on the NAME
+   * (`name… - Preview`). The generic `--truncated` class draws its `…` after the whole title, which for
+   * a preview would read `name - Preview…` and mark the one half that is never cut.
+   */
+  const previewTitle = previewTitleParts(panel, titleSources, maxNameLength);
 
   // Removal verb per ownership + location (011, FR-030/031). The rule itself lives in core
   // (`panelRemovalVerb`) with the reasoning and all four combinations asserted there — it is
   // two booleans in, one of two verbs out, and as a ternary here it could only be read by
   // launching the app and hovering a tooltip. This mirrors the owner-label logic above.
-  const panelVerb = panelRemovalVerb({
-    inSubWorkspace: subWin !== null,
-    hasOriginProject: originProject !== null,
-  });
+  // 044 FR-033 — a preview is always Closed; `removalVerbFor` is the menu's own rule, so the ✕ and the
+  // menu cannot name the same action two ways.
+  const panelVerb = removalVerbFor(
+    panel,
+    panelRemovalVerb({
+      inSubWorkspace: subWin !== null,
+      hasOriginProject: originProject !== null,
+    }),
+  );
 
   // The F2 chord (`panel.rename`) starts the rename. The header owns the box; the window-level
   // keybinding handler owns the chord and knows only which panel is active — so it asks, here.
@@ -367,6 +455,9 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
     // an extreme edge with no correctness impact on the session-kill decision here.
     const ownedBySub = inSubWorkspace && panel.originProjectId === ws.layout?.projectId;
     const killsSession = !inSubWorkspace || ownedBySub;
+    // The same question for the preview routes (`viewEndsPreview`), which answer it from the PANEL as
+    // well as the place: a preview this window opened is its to end whichever project it belongs to.
+    const previewPlace = { inSubWorkspace, layoutProjectId: ws.layout?.projectId };
     const activeMessage = killsSession
       ? `Destroy “${panel.title}”? Its running terminal will be terminated.`
       : `Destroy “${panel.title}”? Its terminal keeps running in the project.`;
@@ -391,6 +482,10 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         void window.throng?.terminal?.kill?.(panel.id);
         clearTerminalViewState(panel.id); // the session is gone — don't leak its saved scroll/selection
       }
+      // 044 FR-042/FR-110 — this return skips the per-kind cleanup below, so a preview is ended here.
+      releasePreviewView(panel, previewPlace);
+      // 044 FR-110 (fix round 1, item 7) — and its history, when the sub-workspace owned the panel.
+      if (killsSession) purgePanelHistory(panel);
       await destroySubWorkspace(services.subWorkspaces, subWin.id);
       return;
     }
@@ -447,6 +542,19 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
     // this one (`killsSession`). A LOCAL destroy of a *synced* project editor keeps
     // the document alive in the project, so it must NOT dispose (FR-006a / FR-021).
     if (panel.kind === 'editor' && killsSession) disposeEditor(panel.id);
+    /*
+     * 044 FR-042 — a preview ends with no prompt and without touching its source document: it owns
+     * neither, so there is nothing to ask about (the dirty guard above finds no editor actions for it).
+     * Gated on `killsSession`'s rule for the editor's reason — a LOCAL close of a synced project preview
+     * inside a sub-workspace leaves the preview alive in the project, and main must keep its run.
+     */
+    releasePreviewView(panel, previewPlace);
+    /*
+     * 044 FR-110 — the panel no longer exists, so neither does its history. Under `killsSession`'s rule for
+     * the editor's reason: a LOCAL close of a synced project panel leaves the panel — and its one history —
+     * alive in the project. A preview's `destroyed` above already purges in main; this is idempotent.
+     */
+    if (killsSession) purgePanelHistory(panel);
     // The find session goes with the Panel, whatever kind it was and whether or not this destroy
     // killed the underlying session (043 FR-006): the Panel is leaving THIS window's layout, so
     // its bar can never be shown again here. A terminal has no `disposeEditor` to ride on.
@@ -465,6 +573,12 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
      * released the parent window's run — the scan it was watching run.
      */
     destroyFindInFilesPanel(panel.id);
+    /*
+     * 044 FR-064 — `removePanel` keeps the workspace's LAST panel, which would leave a preview whose run
+     * main has just dropped: a preview of nothing. Clearing its type first makes that case an empty
+     * panel, the same order `panel-body`'s FR-067 refusal uses; any other close removes it as before.
+     */
+    if (isPreview) ws.clearPanelType(panel.id);
     ws.removePanel(panel.id);
     // Cascade to the sub-workspaces ONLY when destroying from the project (FR-026).
     // A sub-workspace destroy stays local (no broadcast → the project is untouched).
@@ -498,6 +612,27 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
          */
         if (panel.kind === 'terminal') focusTerminal(panel.id);
       }}
+      /*
+       * 044 FR-105 — the mouse's back (3) and forward (4) buttons over an editor or a preview step THIS panel,
+       * the one under the pointer, whichever panel has focus. Default-prevented on both press and release, so
+       * nothing else — Chromium's own history navigation included — acts on them. Performed on release, and
+       * only when the PRESS was on this panel too (fix round 1, item 5): a press over one panel released over
+       * another is a gesture that went nowhere, as a click is. `mouseup` rather than `auxclick`, which needs
+       * no press record, because whether Chromium sends `auxclick` for the X-buttons is not something a test
+       * here can establish. Any other panel kind leaves the buttons alone.
+       */
+      onMouseDown={hasHistory ? (e) => {
+        if (e.button !== 3 && e.button !== 4) return;
+        e.preventDefault();
+        xButtonPress.current = e.button;
+      } : undefined}
+      onMouseUp={hasHistory ? (e) => {
+        if (e.button !== 3 && e.button !== 4) return;
+        e.preventDefault();
+        const pressedHere = xButtonPress.current === e.button;
+        xButtonPress.current = null;
+        if (pressedHere) void navigatePanelHistory(wsRef.current, panel.id, e.button === 3 ? 'back' : 'forward');
+      } : undefined}
       // The dominant project/owner colour marks the active panel only while the
       // window is foreground (Principle VI); when the window is background the
       // CSS dimmed-inactive token takes over so no runtime colour hides it.
@@ -551,7 +686,29 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                     // condition.
                     { dirty: editorUi?.dirty ?? false, hasFilePath: !!editorUi?.filePath }
                   : null,
-              editorFailure: editorFailure !== null,
+              // 044 — true while an editor's banner is up, or a preview's banner offering the three commands:
+              // an attach or body failure, or an FR-026 file notice. The FR-027 notice (no preview for this
+              // file type) offers Close alone — the menu's own Close Panel — so none of the three is added.
+              panelFailure: editorFailure !== null || previewBanner?.offers === 'retry',
+              // 044 FR-033 — a preview's provider KIND (never its identity) and whether it is parented.
+              preview: isPreview
+                ? {
+                    // The run's provider once an update has named it; before that, whichever provider
+                    // claims the persisted file (`editorFilePath` reads `config.filePath` for any kind).
+                    providerKind:
+                      (previewUi ? previewRegistry.get(previewUi.providerId) : undefined)?.kind ??
+                      previewRegistry.forPath(previewUi?.filePath ?? editorFilePath ?? '')?.kind ??
+                      'text',
+                    parented: previewUi?.parent != null,
+                  }
+                : null,
+              // 044 FR-002 — an editor's Open Preview, from the same affordance its status-bar button uses.
+              ...(panel.kind === 'editor' ? { openPreview: editorPreview } : {}),
+              // 044 FR-122b — checked from the setting; WHERE it is drawn follows the affordance above (an
+              // editor) or the provider kind (a preview), inside the builder.
+              syncScroll: settings.editor.previews.syncScroll,
+              // 044 FR-111 — Back / Forward enabled exactly as the header buttons are, from the mirrored history.
+              history: hasHistory && panelHistory ? { canGoBack: canGoBack(panelHistory), canGoForward: canGoForward(panelHistory) } : null,
               detach: detach
                 ? {
                     subWorkspaces: detach.subWorkspaces.map((s) => ({
@@ -611,14 +768,16 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 revealInTree: () => {
                   window.dispatchEvent(
                     new CustomEvent('throng:reveal-in-tree', {
-                      detail: { absPath: editorUi?.filePath },
+                      // 044 T123 — a preview reveals the file IT shows; it has no editor state to read.
+                      detail: { absPath: isPreview ? (previewFilePath ?? undefined) : editorUi?.filePath },
                     }),
                   );
                 },
                 // #273 — the panel's OWN absolute path. See `revealPanelFile` for what this used to
-                // do and why a root-relative path was wrong in two directions at once.
+                // do and why a root-relative path was wrong in two directions at once. A preview's is the
+                // file it shows, which main's confinement check accepts (menus-and-controls.md §1).
                 openInOsExplorer: () => {
-                  revealPanelFile(editorUi?.filePath, window.throng?.files);
+                  revealPanelFile(isPreview ? previewFilePath : editorUi?.filePath, window.throng?.files);
                 },
                 /*
                  * The BANNER'S retry, not a second call to the same operation.
@@ -640,12 +799,35 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 copyDetails: () => {
                   if (editorFailure) {
                     copyToClipboard(panelFailureText(editorFailure), editorFailure.subject);
+                  } else if (previewBanner) {
+                    // 044 — the facts of the preview banner ON SCREEN (a failure's, or a file notice's),
+                    // assembled the way that banner assembles them, so the two copies are identical.
+                    const subject = panelSubject(place);
+                    const facts = shownPreviewFailureFacts(previewBanner, previewUi?.filePath, os);
+                    copyToClipboard(panelFailureText({ ...facts, subject }), subject);
                   }
                 },
                 clearPanelType: () => {
+                  /*
+                   * 044 T123 — on a preview, the banner's Clear panel type: no prompt (a preview owns no
+                   * document, FR-042), and `preview.destroyed` FIRST when this view ends the preview, so
+                   * main drops the run and every window hears the file has no preview (FR-012) — then the
+                   * type is cleared and the panel stays (030 FR-043).
+                   */
+                  if (isPreview) {
+                    releasePreviewView(panel, {
+                      inSubWorkspace: subWin !== null,
+                      layoutProjectId: ws.layout?.projectId,
+                    });
+                    ws.clearPanelType(panel.id);
+                    return;
+                  }
                   void clearEditorPanelType(panel.id, {
                     dirty: editorUi?.dirty ?? false,
                     name: editorUi?.displayName ?? panel.title,
+                    // 044 T179 (FR-110) — `killsSession`'s rule, as the preview branch above takes it: a
+                    // synced project panel keeps its history in the window that still holds it.
+                    endsPanel: subWin === null || panel.originProjectId === ws.layout?.projectId,
                     confirm,
                     clearPanelType: ws.clearPanelType,
                   });
@@ -688,6 +870,31 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                   else openFind(panel.id, 'editor', { replace: true });
                 },
                 destroy: () => void destroyPanel(),
+                // 044 FR-002, FR-005 — the one `preview.open` command, from this editor.
+                openPreview: () => {
+                  const filePath = editorUi?.filePath;
+                  if (!filePath) return;
+                  void requestPreviewOpen({ absPath: filePath, projectId: panel.originProjectId, requesterPanelId: panel.id });
+                },
+                // 044 FR-111 — the same command the header buttons, the chord and the mouse run, for THIS panel.
+                navigateBack: () => {
+                  void navigatePanelHistory(wsRef.current, panel.id, 'back');
+                },
+                navigateForward: () => {
+                  void navigatePanelHistory(wsRef.current, panel.id, 'forward');
+                },
+                // 044 FR-028 — re-read the source now, ignoring the update delay.
+                refreshPreview: () => {
+                  void refreshPreviewPanel(panel.id).catch((error: unknown) =>
+                    console.error('[preview] refresh failed', error),
+                  );
+                },
+                // 044 FR-015b — the SAME function the status bar's button and the body menu's row run; it
+                // reads parented-or-standalone from the store when chosen, so both rows reach it.
+                openInEditor: () => runPreviewEditorRoute(panel, () => wsRef.current),
+                goToEditor: () => runPreviewEditorRoute(panel, () => wsRef.current),
+                // 044 FR-122 — the one command body, from the value this window holds when the menu opened.
+                toggleSyncScroll: () => void toggleSyncScroll(settings.editor.previews.syncScroll),
               },
             }),
           );
@@ -695,6 +902,14 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         {...(renaming ? {} : listeners)}
         {...attributes}
       >
+        {/* 044 FR-104 — Back / Forward, top left, before the type icon, on editors and previews only (FR-100). */}
+        {hasHistory ? (
+          <BackForwardButtons
+            panelId={panel.id}
+            onBack={() => void navigatePanelHistory(wsRef.current, panel.id, 'back')}
+            onForward={() => void navigatePanelHistory(wsRef.current, panel.id, 'forward')}
+          />
+        ) : null}
         {/* Panel-type marker (012): a small themeable icon at the head of the title,
             replacing the former "TERMINAL/EDITOR PANEL" text pill. The type and
             flavour move into its hover title. */}
@@ -736,10 +951,22 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
           />
         ) : (
           <span
-            className={`panel-box__title${titleTruncated ? ' panel-box__title--truncated' : ''}`}
+            className={`panel-box__title${titleTruncated && previewTitle === null ? ' panel-box__title--truncated' : ''}`}
             data-testid={`panel-title-${panel.id}`}
           >
-            {effectiveTitle}
+            {previewTitle !== null ? (
+              // 044 FR-032 — the marker on the name half, the suffix whole after it.
+              <>
+                <span
+                  className={`panel-box__title-name${previewTitle.nameTruncated ? ' panel-box__title-name--truncated' : ''}`}
+                >
+                  {previewTitle.name}
+                </span>
+                <span className="panel-box__title-suffix">{previewTitle.suffix}</span>
+              </>
+            ) : (
+              effectiveTitle
+            )}
           </span>
         )}
         {panel.kind === 'terminal' && terminalCwd ? (
@@ -772,8 +999,13 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
          * So a panel that once held a dirty editor and has since been re-typed still HAS that state,
          * and the dot alone was reading it: a terminal wearing another document's unsaved mark,
          * reporting work the user cannot reach from it and cannot save there. Whether the state
-         * survives is the document's business; whether THIS panel displays it is the panel's. */}
-        {panel.kind === 'editor' && editorUi?.dirty ? (
+         * survives is the document's business; whether THIS panel displays it is the panel's.
+         *
+         * 044 FR-040, FR-043 — a PARENTED preview displays its source document's dot too, read from the
+         * update main sent (never editor-state, so the document is still counted once). A standalone
+         * preview never wears it. The editor gate stays spelled out inline, where
+         * `unsaved-dot-call-sites.test.ts` reads it. */}
+        {(panel.kind === 'editor' && editorUi?.dirty) || (isPreview && previewUi?.parent != null && previewUi.dirty) ? (
           <span
             className="throng-unsaved-dot panel-box__unsaved"
             data-testid={`panel-unsaved-${panel.id}`}
@@ -827,7 +1059,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         </span>
       </div>
       <div className="panel-box__body" data-testid={`panel-body-${panel.id}`}>
-        <PanelBody panel={panel} tabId={tabId} />
+        <PanelBody panel={panel} tabId={tabId} onDestroy={() => void destroyPanel()} />
       </div>
       {showZones ? (
         <div className="edge-zones">

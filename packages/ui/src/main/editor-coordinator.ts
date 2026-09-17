@@ -26,10 +26,11 @@ import { dirname } from 'node:path';
 import {
   createOpenRegistry,
   editorsInScope,
+  isMissingReason,
   isOpenAnywhere,
   isUnderPath,
-  normaliseForCompare,
   openOrFocus,
+  remainderUnder,
   samePath,
   partitionByPathed,
   registerOpen,
@@ -45,6 +46,7 @@ import {
   type Match,
   type MatchModes,
   type OpenDecision,
+  type PersistedHistory,
   type ResetDocumentMsg,
   type SaveAllScope,
   type ScopeEditor,
@@ -66,6 +68,90 @@ import type { EditorRecovery, RecoveredDoc, RecoverySnapshot } from './editor-re
  * the change and drift out of step with its own document.
  */
 const BULK_EDIT_VIEW_ID = '__throng:bulk-edit__';
+
+/**
+ * `PreviewService`'s (044 u7) window onto the editor registry — contracts/preview-ipc.md §3
+ * (amended 2026-09-15).
+ *
+ * Optional: with none injected, the coordinator's behaviour and `relaySync` output are identical to
+ * before this existed (`editor-coordinator-lifecycle.integration.test.ts`, parity block).
+ *
+ * ## One call per logical event
+ *
+ * `registered`/`unregistered` and `repointed` are disjoint. `load()` or `register()` putting a
+ * DIFFERENT file into a panel fires `unregistered(old)` then `registered(new)` — the old document is
+ * gone, so a preview parented to it falls back to standalone (FR-013b). `markMoved` and a Save As of a
+ * pathed document fire one `repointed` — the SAME document, wearing a new path (FR-013c) — even though
+ * the one-buffer registry unregisters and re-registers underneath. The first Save As of an UNPATHED
+ * document fires `registered(to)`: a document now exists for that file, and a standalone preview of it
+ * becomes parented (FR-013a). Loading the SAME path into the same panel again announces no identity
+ * change; only the `changed`/`dirtyChanged` it caused. Pairs therefore always balance.
+ *
+ * ## Exactly once per transition
+ *
+ * `changed` fires whenever canonical text changed: an edit, a bulk replace, an undo or redo, AND every
+ * reset (revert, restore recovered, live disk reload, reload from disk, auto-recovery) — and once per
+ * flip of `getContent().contentless` (the document has no content of its file to follow: the FR-106d
+ * stand-in, a restore-time unloadable register, until the path reads), text or no text, because a
+ * parented preview shows FR-026's notice exactly while that holds (adversarial review main item 1, fix
+ * round 1 ruling). A document that was read and then lost its file keeps its buffer and is NOT
+ * contentless, so deleting its file fires no `changed`. `dirtyChanged`
+ * fires exactly once per flip of the document's dirty state, whatever caused it, and never when nothing
+ * flipped. `registered` starts a new baseline: the listener reads a newly registered document's
+ * initial state from `getContent`.
+ *
+ * ## Isolation
+ *
+ * Every call is made after the coordinator's own state and relays have settled, inside a try/catch
+ * that logs. A throwing listener never aborts a save, move, load, destroy or relay.
+ */
+export interface DocumentLifecycleListener {
+  /** A document now exists for `absPath`: load, register with a path, or first Save As of an unpathed one. */
+  registered(absPath: string, documentPanelId: string): void;
+  /** The document at `absPath` is gone: destroyed, or replaced by a different file in its panel. */
+  unregistered(absPath: string, documentPanelId: string): void;
+  /** The SAME document moved from `from` to `to`: an in-app move, or a Save As of a pathed document. */
+  repointed(from: string, to: string, documentPanelId: string): void;
+  /** The document's canonical text changed (an edit, bulk replace, undo/redo, any reset), or `contentless` flipped. */
+  changed(documentPanelId: string): void;
+  /** The document's dirty state flipped. Once per flip, never otherwise. */
+  dirtyChanged(documentPanelId: string, dirty: boolean): void;
+}
+
+/**
+ * `NavigationHistoryService`'s face as the coordinator calls it (044 US7, T152,
+ * contracts/navigation-history.md §3 *Editors*). Optional: with none injected nothing is recorded and
+ * every other behaviour is unchanged.
+ *
+ * NOT a {@link DocumentLifecycleListener}: that slot holds one listener and it is `PreviewService`'s. The
+ * coordinator calls these itself — from `load`, where recording and moving happen, and from the Save-As
+ * re-point in `save`. An in-app move is NOT here: main's combined `onMoved` callback rewrites every
+ * history once, and doing it from `markMoved` as well would do it twice.
+ *
+ * Isolated like the listener: a throwing history never aborts a load or a save.
+ */
+export interface EditorHistoryHooks {
+  /** Adopt-if-absent with no recording — a restoring load that was refused (§6). */
+  attach(panelId: string, kind: 'editor', persisted: PersistedHistory | undefined): unknown;
+  /**
+   * A file opened into the panel by any route but Back and Forward (FR-103, FR-103a). `persisted`, when
+   * a restoring load carries one, is adopted first if the panel has no record (§6, amended).
+   */
+  recordOpen(panelId: string, filePath: string, persisted?: PersistedHistory): void;
+  /** Back or Forward landed: move to `index` if that entry still names `filePath` (FR-102). Adopts as above. */
+  moveTo(panelId: string, index: number, filePath: string, persisted?: PersistedHistory): unknown;
+  /** Save As gave the panel's document a new path: the current entry follows it (R14, FR-109). */
+  rewriteCurrent(panelId: string, filePath: string): void;
+}
+
+/** `throng:editor:load`'s history intent — Back or Forward (contracts/navigation-history.md §3). */
+export interface EditorLoadNavigation {
+  kind: 'history';
+  /** The entry the renderer chose from its mirrored history. */
+  index: number;
+  /** The file it named, which main checks is still what that entry names. */
+  filePath: string;
+}
 
 /** The mutable per-document state UI main tracks. */
 interface CoordDoc {
@@ -101,6 +187,23 @@ interface CoordDoc {
    */
   unloadable?: boolean;
   /**
+   * This document's path has NEVER been read into this panel — the FR-106d stand-in (044), an empty
+   * document put in by Back or Forward onto a file that was already gone, and a restore-time
+   * `register(…, { unloadable: true })` whose file could not be read (027 / #161). Cleared the moment the
+   * path reads (auto-recovery, reload), a save writes it, or recovered text is restored into it — from then
+   * on the document holds content of its own to keep and to follow.
+   *
+   * It exists for the folder watch. `onDiskChange` treats "the path is missing" as FR-099's "the file was
+   * deleted while open" and dirties the document so the buffer the user had is kept. The stand-in never
+   * had that file, so there is no buffer to keep: routing it through `markDeleted` turned it dirty on ANY
+   * event in its folder, wrote a recovery temp for an empty document, and made the next Alt+Right raise a
+   * Save & open prompt whose Save would CREATE the empty file (adversarial review, main item 2).
+   *
+   * Deliberately NOT `fileMissing = true`: that routes the stand-in through `markRestored`'s keep-the-buffer
+   * branch, which cleared its banner over the empty buffer (US7b fix round 2, item 5).
+   */
+  neverRead?: boolean;
+  /**
    * What was true of the buffer at the moment its file went missing (027 / #161).
    *
    * Recorded because `markDeleted` is about to destroy the evidence: it drops `savedText` so the
@@ -118,6 +221,16 @@ interface CoordDoc {
   /** Watch on the doc's folder for external changes (soft detection, FR-028). */
   watch?: Disposable;
   recoveryTimer?: ReturnType<typeof setTimeout>;
+  /**
+   * What the {@link DocumentLifecycleListener} was last told about this panel's document (044 u4).
+   *
+   * Kept whether or not a listener is injected, so the comparison is the same either way. `path` is
+   * what keeps `registered`/`unregistered` balanced; `dirty` is what makes `dirtyChanged` fire once
+   * per flip rather than once per relay that happens to carry a dirty flag; `contentless` does the same
+   * for `changed` on a flip of it. A same-path re-load carries this object over to the replacement
+   * document — it is the same document to the listener.
+   */
+  reported: { path: string | null; dirty: boolean; contentless: boolean };
 }
 
 /** Metadata a renderer supplies when it loads/creates or edits a document. */
@@ -218,6 +331,15 @@ export interface CoordinatorDeps {
    * Omitted in tests that do not exercise it, which is what keeps the existing suite unchanged.
    */
   refusalFor?: (absPath: string, ownership?: OpenOwnership) => Promise<string | undefined>;
+  /**
+   * 044 u4/u7 — `PreviewService`'s observer. Optional (a suite that does not exercise it omits it).
+   * `main.ts` always passes one: a relay built before the coordinator and pointed at `PreviewService` the
+   * moment that exists, so an event before then reaches no preview — there cannot be one yet. See
+   * {@link DocumentLifecycleListener}.
+   */
+  documentLifecycle?: DocumentLifecycleListener;
+  /** 044 US7 — where an editor's navigation history is recorded. See {@link EditorHistoryHooks}. */
+  history?: EditorHistoryHooks;
 }
 
 /**
@@ -272,9 +394,29 @@ export class EditorCoordinator {
     }
   }
 
-  /** Load a file for an editor and register it in the app-wide registry. */
+  /**
+   * Load a file for an editor and register it in the app-wide registry.
+   *
+   * 044 US7 — the load is also where the panel's navigation history is recorded or moved, so no caller
+   * can move a position without the panel's content having changed (contracts/navigation-history.md §3):
+   *
+   * | Outcome        | Without `navigation` | With `navigation`                                  |
+   * |----------------|----------------------|----------------------------------------------------|
+   * | Read succeeded | `recordOpen`         | `moveTo(index)` if the entry still names the file  |
+   * | File missing   | `recordOpen`         | `moveTo(index)` — the panel holds it open (FR-106d)|
+   * | Refused        | nothing              | nothing (FR-106c)                                  |
+   *
+   * `history` is the layout's `config.history`, carried by a RESTORING load (§6, amended 2026-09-15).
+   * It is adopted if the panel has no record BEFORE anything above is recorded — in the same call, one
+   * broadcast — so a separate attach arriving late can no longer find `[file]` and keep it. A refused
+   * load still adopts it (and records nothing), so the next load does not start the panel from scratch.
+   */
   async load(
-    meta: Omit<DocMeta, 'encoding' | 'hasBom' | 'lineEnding' | 'absPath'> & { absPath: string },
+    meta: Omit<DocMeta, 'encoding' | 'hasBom' | 'lineEnding' | 'absPath'> & {
+      absPath: string;
+      navigation?: EditorLoadNavigation;
+      history?: PersistedHistory;
+    },
   ): Promise<LoadResult> {
     // Ownership (FR-036, and 018 / US9 SC-012). This check used to live HERE, and it was three
     // different kinds of wrong: it compared the UNRESOLVED path (so a symlink inside the project
@@ -290,7 +432,51 @@ export class EditorCoordinator {
       ownerKind: meta.ownerKind,
       allProjectRoots: meta.allProjectRoots,
     });
-    if (!result.ok) return result;
+    if (!result.ok) {
+      // A missing file is still an open into the panel — it holds the file open with its could-not-read
+      // banner (041 FR-015) — so it records or moves. A refusal is not: nothing was opened (FR-106c).
+      if (isMissingReason(result.reason)) {
+        /*
+         * 044 FR-106d — a Back / Forward step onto a file that is gone, or cannot be read, MOVES — and the
+         * panel must then show THAT entry's could-not-read state, not keep the previous file on screen under
+         * a position that no longer describes it. So the step replaces the document with an empty,
+         * unloadable one at the target, exactly as a successful step replaces it with the file. An ordinary
+         * open of a missing file (no intent) keeps its existing 041 behaviour.
+         */
+        if (meta.navigation?.kind === 'history' && samePath(meta.navigation.filePath, meta.absPath)) {
+          const previous = this.docs.get(meta.panelId);
+          await this.replaceDoc(
+            meta,
+            {
+              text: '',
+              encoding: previous?.encoding ?? 'utf8',
+              hasBom: previous?.hasBom ?? false,
+              lineEnding: previous?.lineEnding ?? 'lf',
+            },
+            { readable: false },
+          );
+        }
+        this.recordNavigation(meta.panelId, meta.absPath, meta.navigation, meta.history);
+      } else if (meta.history !== undefined) {
+        const persisted = meta.history;
+        this.tellHistory('attach', (h) => h.attach(meta.panelId, 'editor', persisted));
+      }
+      return result;
+    }
+    await this.replaceDoc(meta, result, { readable: true });
+    this.recordNavigation(meta.panelId, meta.absPath, meta.navigation, meta.history);
+    return result;
+  }
+
+  /**
+   * Put a new document into `meta.panelId` at `meta.absPath` — a file read, or (044 FR-106d) the empty,
+   * unloadable stand-in for one a history step found missing — and tell everyone who holds a view of it.
+   */
+  private async replaceDoc(
+    meta: Omit<DocMeta, 'encoding' | 'hasBom' | 'lineEnding' | 'absPath'> & { absPath: string },
+    content: { text: string; encoding: EncodingId; hasBom: boolean; lineEnding: LineEndingId },
+    opts: { readable: boolean },
+  ): Promise<void> {
     // Re-pointing an editor at a new file: drop its previous registry entry so the
     // old path is no longer considered open (and free of a stale one-buffer claim),
     // and DELETE its recovery temp. panelIds are stable across restarts (persisted in
@@ -315,20 +501,45 @@ export class EditorCoordinator {
       allProjectRoots: [...meta.allProjectRoots],
       tabId: meta.tabId,
       absPath: meta.absPath,
-      encoding: result.encoding,
-      hasBom: result.hasBom,
-      lineEnding: result.lineEnding,
-      authority: new DocumentAuthority(meta.panelId, result.text),
+      encoding: content.encoding,
+      hasBom: content.hasBom,
+      lineEnding: content.lineEnding,
+      authority: new DocumentAuthority(meta.panelId, content.text),
+      reported: previous?.reported ?? { path: null, dirty: false, contentless: false },
     };
-    doc.fileMissing = false; // a successful load means the file exists (FR-099)
-    doc.unloadable = false; // …and that the path could be read (027 / #161)
+    // A successful load means the path could be read (027 / #161), which is what draws the editor's
+    // banner; the FR-106d stand-in is the opposite. `fileMissing` is left FALSE either way — it drives
+    // the tab-open "cannot open file" dialog (FR-105 requires that to stay silent on a step), and
+    // setting it true here (fix round 1) also routed the stand-in through `markRestored`'s keep-the-
+    // buffer branch on a later restore: that branch re-reads only when the buffer already equals the
+    // disk text, so it cleared the banner over the empty stand-in before the folder watch ever reloaded
+    // it (fix round 2, item 5). This is the same shape `register()` already uses for a mount that failed
+    // to read its path.
+    doc.fileMissing = false;
+    doc.unloadable = !opts.readable;
+    doc.neverRead = !opts.readable; // the stand-in: nothing FR-099 could keep (see `CoordDoc.neverRead`)
     this.docs.set(meta.panelId, doc);
     registerOpen(this.registry, meta.absPath, { panelId: meta.panelId, windowId: meta.windowId });
     this.watchDoc(doc); // soft external-change detection (FR-028)
     // A new document — every view of this panel adopts it, not just the one that asked. Opening a
     // file from the tree into a MIRRORED editor must change the file in both windows.
     this.broadcastReset(doc);
-    return result;
+    /*
+     * 044 FR-106d, fix round 2 item 1 — `broadcastReset` carries text/version/dirty and the path (`stateOf`), so
+     * a SECOND view of this panel (Sync to a sub-workspace window) adopts the empty replacement but never
+     * learns it is unloadable: the origin window's banner comes from its own `openFile` failure branch in
+     * `use-editor.ts`, which only that one view runs. Relay `unloadable` explicitly, the same shape
+     * `markDeleted`, `pathCameBack` and `verifyPath` already use — `true` for the stand-in, and `false`
+     * when a readable replacement follows one, so a second view's banner clears on Forward too. Sent
+     * AFTER the reset and BEFORE `announceReplacement`, so every view (including the origin, which also
+     * receives its own broadcast) is caught up before anything else is told about the swap.
+     */
+    if (!opts.readable) {
+      this.deps.relaySync(-1, { panelId: doc.panelId, unloadable: true });
+    } else if (previous?.unloadable) {
+      this.deps.relaySync(-1, { panelId: doc.panelId, unloadable: false });
+    }
+    this.announceReplacement(doc, previous);
   }
 
   /**
@@ -341,12 +552,17 @@ export class EditorCoordinator {
   restoreRecovered(panelId: string, text: string, history?: SerialisedHistory): void {
     const doc = this.docs.get(panelId);
     if (!doc) return;
+    const before = doc.authority.doc;
     doc.authority.reset(text, false); // NOT clean: it is precisely what the file does NOT hold
     // The history is adopted AFTER the reset, because `reset` clears it — the entries it holds
     // describe a document that has just been replaced. Here they describe the document we are
     // replacing it WITH, so they are exactly the past the user is entitled to (FR-027a).
     if (history) doc.authority.restoreHistory(history);
+    // The user's own recovered work is content to follow and to keep: no longer `neverRead`, so a parented
+    // preview shows it (FR-022, fix round 1 ruling) and a folder event keeps it as FR-099 keeps any buffer.
+    doc.neverRead = false;
     this.broadcastReset(doc);
+    this.notifyAfterMutation(doc, !doc.authority.doc.eq(before));
   }
 
   /**
@@ -365,6 +581,10 @@ export class EditorCoordinator {
       deletedAbsPaths.some((gone) => isUnderPath(file, gone));
     for (const doc of this.docs.values()) {
       if (!doc.absPath || doc.fileMissing || !isUnder(doc.absPath)) continue;
+      // A document that never had its file in this panel (the FR-106d stand-in, a failed restore) and holds
+      // nothing the user typed has no buffer for FR-099 to keep: an in-app delete leaves it exactly as the
+      // folder watch does (`onDiskChange`). One it WAS typed into is dirty, and kept like any other.
+      if (doc.neverRead && !doc.authority.dirty) continue;
       // BEFORE `markUnsaved` below drops `savedText` — after it, "did this buffer hold the user's
       // own work?" can no longer be answered, and that is the question the recovery turns on
       // (027 / #161, see `missingSince`).
@@ -388,6 +608,7 @@ export class EditorCoordinator {
       void this.snapshot(doc);
       // -1: broadcast to ALL windows (no editing renderer to exclude).
       this.deps.relaySync(-1, { panelId: doc.panelId, deleted: true, dirty: true, unloadable: true });
+      this.notifyAfterMutation(doc, false); // isolated, so one listener throw cannot skip the next doc
     }
   }
 
@@ -425,6 +646,7 @@ export class EditorCoordinator {
       doc.encoding = res.encoding;
       doc.hasBom = res.hasBom;
       doc.lineEnding = res.lineEnding;
+      const before = doc.authority.doc;
       if (res.text === doc.authority.text) {
         // The file is what the buffer holds: the delete was the only thing making this dirty, and
         // it has been undone. `reset` re-establishes savedText, which is what clears the flag.
@@ -438,6 +660,7 @@ export class EditorCoordinator {
         unloadable: false,
         dirty: doc.authority.dirty,
       });
+      this.notifyAfterMutation(doc, !doc.authority.doc.eq(before));
     }
   }
 
@@ -499,6 +722,10 @@ export class EditorCoordinator {
       // -1: every window. A move is a property of the DOCUMENT, so every replica learns it from
       // the one authority rather than each discovering it for itself (Principle XI).
       this.deps.relaySync(-1, { panelId: doc.panelId, movedTo: newAbs });
+      // ONE `repointed`, not the `unregistered`+`registered` pair the registry churn above might
+      // suggest: this is the SAME document, wearing a new path (FR-013c). After the relay, and
+      // isolated, so a throwing listener cannot cost a later document its move.
+      this.announcePath(doc);
     }
   }
 
@@ -512,6 +739,7 @@ export class EditorCoordinator {
    * silently disappears and the editor goes back to presenting remembered text as the file.
    */
   register(meta: DocMeta, text = '', opts: { unloadable?: boolean } = {}): void {
+    const previous = this.docs.get(meta.panelId);
     const doc: CoordDoc = {
       panelId: meta.panelId,
       windowId: meta.windowId,
@@ -525,13 +753,17 @@ export class EditorCoordinator {
       hasBom: meta.hasBom,
       lineEnding: meta.lineEnding,
       authority: new DocumentAuthority(meta.panelId, text),
+      reported: previous?.reported ?? { path: null, dirty: false, contentless: false },
     };
     doc.unloadable = opts.unloadable === true;
+    // A mount that failed to read its path never read it here: nothing of the file's for FR-099 to keep.
+    doc.neverRead = doc.unloadable;
     this.docs.set(meta.panelId, doc);
     if (meta.absPath) {
       registerOpen(this.registry, meta.absPath, { panelId: meta.panelId, windowId: meta.windowId });
       this.watchDoc(doc); // soft external-change detection (FR-028)
     }
+    this.announceReplacement(doc, previous);
   }
 
   /**
@@ -577,6 +809,18 @@ export class EditorCoordinator {
     return isOpenAnywhere(this.registry, absPath);
   }
 
+  /**
+   * The editor document holding `absPath`, and the window the registry recorded for it — or `null`.
+   *
+   * A read of the registry and nothing else (044 u7): `PreviewService` derives "parented" from it
+   * (FR-013) and routes placement to the recorded window (FR-010). Unlike {@link openInto} it never
+   * reads the file and never decides a refusal.
+   */
+  documentFor(absPath: string): { panelId: string; windowId: string } | null {
+    const at = openOrFocus(this.registry, absPath);
+    return at.action === 'focus' ? { panelId: at.panelId, windowId: at.windowId } : null;
+  }
+
   /** Raise/focus the window + Panel that already owns a file (FR-011a). */
   focusExisting(windowId: string, panelId: string): void {
     this.deps.focusEditor?.(windowId, panelId);
@@ -607,6 +851,7 @@ export class EditorCoordinator {
     if (!doc.authority.dirty) doc.diskChanged = false; // clean again → clear any pending notice
     this.scheduleRecovery(doc); // (debounced; independent of dirty — FR-041/053)
     this.deps.relaySync(-1, { panelId: doc.panelId, change: canonical });
+    this.notifyAfterMutation(doc, true);
   }
 
   /**
@@ -745,6 +990,7 @@ export class EditorCoordinator {
 
     this.scheduleRecovery(doc);
     this.deps.relaySync(-1, { panelId: doc.panelId, change: canonical });
+    this.notifyAfterMutation(doc, true);
     /*
      * FR-083b — `applicable` and the document AFTER the dispatch, so the commit can say what each
      * changed line now reads. The authority's own text is the only copy of it: nothing here reads
@@ -787,6 +1033,7 @@ export class EditorCoordinator {
     const saved = doc?.authority.savedText;
     if (!doc || saved === null || saved === undefined) return false;
 
+    const before = doc.authority.doc;
     doc.authority.reset(saved);
     this.broadcastReset(doc);
     if (doc.recoveryTimer) {
@@ -794,6 +1041,7 @@ export class EditorCoordinator {
       doc.recoveryTimer = undefined;
     }
     void this.recovery.remove(doc.panelId);
+    this.notifyAfterMutation(doc, !doc.authority.doc.eq(before));
     return true;
   }
 
@@ -855,7 +1103,9 @@ export class EditorCoordinator {
     doc.lineEnding = res.lineEnding;
     doc.fileMissing = false;
     doc.unloadable = false;
+    doc.neverRead = false;
     doc.diskChanged = false;
+    const before = doc.authority.doc;
     doc.authority.reset(res.text);
     if (doc.recoveryTimer) {
       clearTimeout(doc.recoveryTimer);
@@ -870,6 +1120,7 @@ export class EditorCoordinator {
       deleted: false,
       dirty: doc.authority.dirty,
     });
+    this.notifyAfterMutation(doc, !doc.authority.doc.eq(before));
   }
 
   /**
@@ -906,6 +1157,7 @@ export class EditorCoordinator {
     }
     doc.fileMissing = false;
     doc.unloadable = false;
+    doc.neverRead = false;
     doc.encoding = res.encoding;
     doc.hasBom = res.hasBom;
     doc.lineEnding = res.lineEnding;
@@ -919,6 +1171,8 @@ export class EditorCoordinator {
       doc.diskChanged = true;
       this.deps.relaySync(-1, { panelId: doc.panelId, externalChange: true });
     }
+    // The buffer is kept, so in practice nothing flipped; asked anyway rather than assumed.
+    this.notifyAfterMutation(doc, false);
   }
 
   /**
@@ -973,6 +1227,7 @@ export class EditorCoordinator {
         if (!doc.unloadable) {
           doc.unloadable = true;
           this.deps.relaySync(-1, { panelId: doc.panelId, unloadable: true });
+          this.notifyAfterMutation(doc, false); // reports a `contentless` flip, should this ever make one
         }
         return;
       }
@@ -1002,6 +1257,7 @@ export class EditorCoordinator {
     if (!canonical) return; // nothing left to undo/redo — not an error
     this.scheduleRecovery(doc);
     this.deps.relaySync(-1, { panelId: doc.panelId, change: canonical });
+    this.notifyAfterMutation(doc, true);
   }
 
   /**
@@ -1049,6 +1305,8 @@ export class EditorCoordinator {
       text: doc.authority.text,
       version: doc.authority.version,
       dirty: doc.authority.dirty,
+      // Which file this is — so a view that did not ask for the replacement can follow it (FR-110).
+      ...(doc.absPath !== null ? { filePath: doc.absPath } : {}),
     };
   }
 
@@ -1122,6 +1380,111 @@ export class EditorCoordinator {
     this.deps.relaySync(-1, { panelId: doc.panelId, reset: this.stateOf(doc) });
   }
 
+  // ── Document lifecycle listener (044 u4, contracts/preview-ipc.md §3) ─────────────────────────
+  // Every call site runs these LAST, once the coordinator's own state and relays have settled.
+
+  /**
+   * Call the listener, isolated: a throw is logged and dropped, never propagated. The listener is an
+   * observer; letting it abort a save half-way (registry re-pointed, document still dirty, temp still on
+   * disk) would hand an observer's bug to the user as data loss.
+   */
+  private tell(event: keyof DocumentLifecycleListener, call: (listener: DocumentLifecycleListener) => void): void {
+    const listener = this.deps.documentLifecycle;
+    if (!listener) return;
+    try {
+      call(listener);
+    } catch (err) {
+      console.error(`[editor-coordinator] document lifecycle listener threw on ${event}:`, err);
+    }
+  }
+
+  /** Call the history hooks, isolated exactly as the listener is (044 US7). */
+  private tellHistory(what: keyof EditorHistoryHooks, call: (history: EditorHistoryHooks) => void): void {
+    const history = this.deps.history;
+    if (!history) return;
+    try {
+      call(history);
+    } catch (err) {
+      console.error(`[editor-coordinator] navigation history threw on ${what}:`, err);
+    }
+  }
+
+  /** A load put `absPath` into the panel: record it, or — for Back/Forward — move to it (§3). */
+  private recordNavigation(
+    panelId: string,
+    absPath: string,
+    navigation: EditorLoadNavigation | undefined,
+    persisted: PersistedHistory | undefined,
+  ): void {
+    if (navigation?.kind !== 'history') {
+      this.tellHistory('recordOpen', (h) => h.recordOpen(panelId, absPath, persisted));
+      return;
+    }
+    // The intent names a file; a load of a DIFFERENT one is not that step, so it moves nothing — but a
+    // history it carries is still the panel's, and is adopted.
+    if (!samePath(navigation.filePath, absPath)) {
+      if (persisted !== undefined) this.tellHistory('attach', (h) => h.attach(panelId, 'editor', persisted));
+      return;
+    }
+    this.tellHistory('moveTo', (h) => h.moveTo(panelId, navigation.index, absPath, persisted));
+  }
+
+  /**
+   * After any mutation: `changed` when the canonical text changed OR `contentless` flipped, and
+   * `dirtyChanged` only when the dirty state differs from what the listener was last told — exactly once
+   * per flip, whichever path caused it, and silence when a relay merely restated a flag that did not move.
+   *
+   * `contentless` rides `changed` because it is part of what a parented preview shows (FR-026, adversarial
+   * review main item 1): a document with no content to follow shows that notice, not its empty text. The
+   * path reading again can change no text at all — an empty file under the FR-106d stand-in — so without
+   * this the preview kept the notice for a file the editor had just adopted.
+   */
+  private notifyAfterMutation(doc: CoordDoc, textChanged: boolean): void {
+    const contentless = isContentless(doc);
+    const contentFlipped = contentless !== doc.reported.contentless;
+    doc.reported.contentless = contentless;
+    if (textChanged || contentFlipped) this.tell('changed', (l) => l.changed(doc.panelId));
+    const dirty = doc.authority.dirty;
+    if (dirty === doc.reported.dirty) return;
+    doc.reported.dirty = dirty;
+    this.tell('dirtyChanged', (l) => l.dirtyChanged(doc.panelId, dirty));
+  }
+
+  /**
+   * The SAME document's path moved — `markMoved`, or `save` with a new target. One `repointed` from
+   * the path last announced, or `registered` when none was (the first Save As of an unpathed document).
+   */
+  private announcePath(doc: CoordDoc): void {
+    const from = doc.reported.path;
+    const to = doc.absPath;
+    if (from === to || to === null) return;
+    doc.reported.path = to;
+    if (from === null) this.tell('registered', (l) => l.registered(to, doc.panelId));
+    else this.tell('repointed', (l) => l.repointed(from, to, doc.panelId));
+  }
+
+  /**
+   * `load`/`register` put a NEW authority into a panel. Loading the path the listener already knows for
+   * this panel is the same document to it — a double-click racing its own open, or two mirrored views
+   * mounting at once — so only the text and dirty changes are reported, and the pair stays balanced.
+   * A different path is a different document: `unregistered(old)`, `registered(new)`, and a fresh dirty
+   * baseline the listener reads from `getContent`.
+   */
+  private announceReplacement(doc: CoordDoc, previous: CoordDoc | undefined): void {
+    const told = doc.reported;
+    if (previous && told.path === doc.absPath) {
+      this.notifyAfterMutation(doc, !doc.authority.doc.eq(previous.authority.doc));
+      return;
+    }
+    const oldPath = told.path;
+    const newPath = doc.absPath;
+    told.path = newPath;
+    told.dirty = doc.authority.dirty;
+    told.contentless = isContentless(doc);
+    if (oldPath !== null) this.tell('unregistered', (l) => l.unregistered(oldPath, doc.panelId));
+    if (newPath !== null) this.tell('registered', (l) => l.registered(newPath, doc.panelId));
+  }
+
   /** Save one document's stored content (Ctrl+S). `absPath` sets a new location. */
   async save(payload: {
     panelId: string;
@@ -1171,6 +1534,7 @@ export class EditorCoordinator {
     doc.authority.markSaved();
     doc.fileMissing = false; // the save re-created the file (FR-099)
     doc.unloadable = false; // …and the path is demonstrably writable, so it reads (027 / #161)
+    doc.neverRead = false; // what is on disk now is this buffer
     doc.missingSince = undefined;
     doc.diskChanged = false; // our own write is the current on-disk version (FR-028)
     if (pathChanged || !doc.watch) this.watchDoc(doc); // (re)watch the saved location
@@ -1184,6 +1548,16 @@ export class EditorCoordinator {
     // Mirror the clean state to any other window showing this document, so a synced
     // editor's unsaved dot clears everywhere on save (FR-034). No origin to exclude.
     this.deps.relaySync(-1, { panelId: doc.panelId, dirty: false });
+    // FR-013c / FR-013a — only now, with the save fully settled and relayed. A Save As of a pathed
+    // document is one `repointed`, exactly as an in-app move; the first Save As of an unpathed one is
+    // `registered(target)`, because a document now exists for that file. The relay above carries no
+    // `movedTo` for a save, so this is the only way `PreviewService` learns either (T043).
+    this.announcePath(doc);
+    // R14, FR-109 — a Save As re-points the editor's CURRENT history entry: no second entry, and no stale
+    // one for Back to land on. The first Save As of an unpathed document records it (H8). Called here
+    // rather than through the listener, whose one slot is `PreviewService`'s.
+    if (pathChanged) this.tellHistory('rewriteCurrent', (h) => h.rewriteCurrent(doc.panelId, target));
+    this.notifyAfterMutation(doc, false);
     return result;
   }
 
@@ -1228,6 +1602,11 @@ export class EditorCoordinator {
     // After the delete, so "is anyone still showing this document?" asks about the panels that remain.
     this.forgetWordWrapIfClosed(wrapKey);
     void this.recovery.remove(panelId);
+    // Last, and cleared first: a `load` that awaited across this destroy carries `reported` over,
+    // and must not unregister the same path a second time.
+    const told = doc.reported.path;
+    doc.reported.path = null;
+    if (told !== null) this.tell('unregistered', (l) => l.unregistered(told, panelId));
   }
 
   /**
@@ -1248,6 +1627,13 @@ export class EditorCoordinator {
     fileMissing: boolean;
     /** The path could not be read when this document was adopted (027 / #161). */
     unloadable: boolean;
+    /**
+     * 044 — the document has NO content of its file to follow: its path cannot be read and has never been
+     * read in its panel (the FR-106d stand-in, a restore-time unloadable register). A parented preview shows
+     * FR-026's notice exactly while this holds; a document read and then deleted keeps its buffer and is
+     * not contentless (FR-022 over FR-026, fix round 1 ruling). `changed` fires on every flip of it.
+     */
+    contentless: boolean;
     encoding: EncodingId;
     hasBom: boolean;
     lineEnding: LineEndingId;
@@ -1263,6 +1649,7 @@ export class EditorCoordinator {
       // A REMOUNT reads its state from here and never attempts a load, so the banner survives a
       // tab/project/panel switch only because this is published (027 / #161).
       unloadable: !!doc.unloadable,
+      contentless: isContentless(doc),
       // The FILE's, learnt from its bytes. A mounting view adopts them rather than assuming the app
       // defaults — a mirrored view that assumed LF would show the wrong line ending in its status
       // bar, and offer the wrong one in a Save-As (FR-023).
@@ -1393,7 +1780,10 @@ export class EditorCoordinator {
       // to outlast. A grace period here is the `terminate-all` accident in miniature (FR-011).
       if (doc.movePending) return;
       // Disappeared out from under us (external delete/rename) — same as an in-app
-      // delete: keep the buffer, mark dirty + file-missing (FR-099).
+      // delete: keep the buffer, mark dirty + file-missing (FR-099). `markDeleted` itself leaves an
+      // untyped `neverRead` document alone (the FR-106d stand-in, a failed restore): its file was already
+      // gone, so there is no buffer to keep, and a file that later appears is still adopted by the
+      // `res.ok` branch above. One rule for the watch and for Files & Folders' delete.
       if (!doc.fileMissing) this.markDeleted([doc.absPath]);
       return;
     }
@@ -1430,8 +1820,10 @@ export class EditorCoordinator {
       doc.encoding = res.encoding;
       doc.hasBom = res.hasBom;
       doc.lineEnding = res.lineEnding;
+      const before = doc.authority.doc;
       doc.authority.reset(res.text);
       this.broadcastReset(doc);
+      this.notifyAfterMutation(doc, !doc.authority.doc.eq(before));
     } else if (!doc.diskChanged) {
       // Dirty editor: warn ONCE that the on-disk file diverged (save will overwrite).
       doc.diskChanged = true;
@@ -1482,28 +1874,37 @@ export class EditorCoordinator {
   }
 }
 
+/** No content of its file to follow: unreadable, and never read in its panel (`CoordDoc.neverRead`). */
+function isContentless(doc: CoordDoc): boolean {
+  return doc.unloadable === true && doc.neverRead === true;
+}
+
 /**
  * Where did this document's file go — if it went anywhere? (FR-002/FR-005.)
  *
- * A folder's pair re-points every document beneath it by PREFIX: one pair, N docs. The prefix is
- * measured on the NORMALISED form, because the doc's path is the tree's forward-slashed spelling
- * while the pair's is `node:path.join`'s (FR-007). `normaliseForCompare` rewrites separators in
- * place and drops a trailing one, so slicing at its length always lands on the boundary separator
- * — the remainder therefore begins with one, whichever way it was spelled.
+ * A folder's pair re-points every document beneath it by PREFIX: one pair, N docs. Containment is
+ * decided on the NORMALISED form, because the doc's path is the tree's forward-slashed spelling
+ * while the pair's is `node:path.join`'s (FR-007), and the remainder is cut after the folder's
+ * SEGMENTS (`remainderUnder`) — so it begins with a separator, whichever way it was spelled.
  *
  * The result is spelled the way the DESTINATION is spelled, rather than being a mongrel of the two
  * (`…\dest\pack/one.txt`). Nothing downstream is hurt by a mixed separator — `toDisplayPath`
  * rewrites for the pill and every comparison normalises first — but this path is written into the
  * panel's persisted config verbatim (FR-008), and what lands in the user's config file should be a
  * path they could have typed.
+ *
+ * Exported for `PreviewService` (044 u7), whose standalone previews follow an in-app move by the same
+ * rule — one rule for "where did this file go", not two that must agree.
  */
-function movedPathOf(absPath: string, moves: readonly MovePair[]): string | null {
+export function movedPathOf(absPath: string, moves: readonly MovePair[]): string | null {
   for (const move of moves) {
     if (samePath(absPath, move.from)) return move.to;
-    if (isUnderPath(absPath, move.from)) {
+    // Cut by SEGMENTS (`remainderUnder`), never at `normaliseForCompare(move.from).length`: lower-casing
+    // can lengthen a name (`İ`), and that slice then ate the first letter of the file (adversarial review).
+    const remainder = remainderUnder(absPath, move.from);
+    if (remainder !== null) {
       const to = move.to.replace(/[\\/]+$/, '');
       const sep = to.includes('\\') ? '\\' : '/';
-      const remainder = absPath.slice(normaliseForCompare(move.from).length);
       return to + remainder.replace(/[\\/]/g, sep);
     }
   }

@@ -56,6 +56,7 @@ import { FileExplorerPane } from './panes/file-explorer-pane.js';
 import { usePersistedBool } from './panes/use-persisted-bool.js';
 import { TitleBar } from './title-bar/title-bar.js';
 import { useConfigWriteFailureNotices } from './config/config-write-notices.js';
+import { navigateFocusedHistory } from './navigation/navigate-history.js';
 
 /** Fixed width (px) of a collapsed side-pane rail. Sized so the 22px collapse
  *  button (pinned 5px from the outer edge) has an equal 5px margin on both sides. */
@@ -181,6 +182,17 @@ const FIND_IN_FILES: ActionId = 'search.findInFiles';
 const REPLACE_IN_FILES: ActionId = 'search.replaceInFiles';
 
 /**
+ * 044 FR-105 (#136) — Back and Forward through the focused editor's or preview's history.
+ *
+ * Handled HERE, in the capture phase, because FR-105's last sentence is a precedence rule: in an editor,
+ * Alt+Left and Alt+Right are CodeMirror's `cursorSyntaxLeft` / `cursorSyntaxRight` in `defaultKeymap`, and
+ * only a window listener that runs BEFORE the view's own keydown handler — and stops the event — gets in
+ * front of them. The scope is `HISTORY_PANELS` (editor and preview), so a terminal never loses the chord.
+ */
+const NAVIGATE_BACK: ActionId = 'navigate.back';
+const NAVIGATE_FORWARD: ActionId = 'navigate.forward';
+
+/**
  * The actions the WINDOW owns — intercepted and stopped in the capture phase, so they fire wherever
  * DOM focus happens to be.
  *
@@ -227,6 +239,8 @@ export const WINDOW_HANDLED_ACTIONS: ReadonlySet<string> = new Set([
       GOTO_LINE,
       FIND_IN_FILES,
       REPLACE_IN_FILES,
+      NAVIGATE_BACK,
+      NAVIGATE_FORWARD,
 ]);
 
 /**
@@ -236,8 +250,11 @@ export const WINDOW_HANDLED_ACTIONS: ReadonlySet<string> = new Set([
  * when matching because the default zoom bindings encode the produced character
  * (e.g. "Ctrl++" is Ctrl+Shift+"="). The latest toggle callbacks are read through a
  * ref so the listener isn't re-subscribed on every render.
+ *
+ * Exported so a component test can press a chord through THIS listener over a real editor (044 FR-105: the
+ * capture phase is the whole of Alt+Left's precedence over CodeMirror).
  */
-function KeybindingsHandler({
+export function KeybindingsHandler({
   onToggleProjects,
   onToggleExplorer,
 }: {
@@ -314,9 +331,14 @@ function KeybindingsHandler({
        *    `search-keybindings.tsx` both pass `shift` unconditionally, which is why `Ctrl+Shift+S`
        *    (editor.saveAll) has always worked and this listener had simply never been given a
        *    Shift+letter chord to resolve.
+       *  - **ARROW KEYS (044 US7b fix round 1).** `ArrowLeft` is `ArrowLeft` with or without Shift, so
+       *    the name encodes nothing — and dropping the modifier turned the editor's column select,
+       *    `Shift+Alt+ArrowLeft`, into `Alt+ArrowLeft`: `navigate.back`, a window chord, which this
+       *    capture-phase listener then swallowed before CodeMirror ever saw the key.
        */
       const backtick = isBackquote(e);
-      const keepShift = backtick || /^F\d{1,2}$/.test(e.key) || /^[a-z]$/i.test(e.key);
+      const keepShift =
+        backtick || /^F\d{1,2}$/.test(e.key) || /^[a-z]$/i.test(e.key) || /^Arrow(Left|Right|Up|Down)$/.test(e.key);
       // Window-level chords are live in every scope (012, FR-024b) — including from inside an
       // editor's find bar, so the user can always move focus out of wherever they are. The
       // HANDLED gate below is what keeps this listener to zoom/focus/view and nothing else.
@@ -451,6 +473,17 @@ function KeybindingsHandler({
           }
           break;
         }
+        /*
+         * 044 FR-105 — the FOCUSED editor or preview only. A panel with no older (or newer) entry, or no
+         * history yet, has no target and nothing happens — the chord is still swallowed, so it neither
+         * moves an editor's caret by syntax nor reaches anything else.
+         */
+        case NAVIGATE_BACK:
+          void navigateFocusedHistory(wsRef.current, 'back');
+          break;
+        case NAVIGATE_FORWARD:
+          void navigateFocusedHistory(wsRef.current, 'forward');
+          break;
         case 'view.toggleProjects':
           cbRef.current.onToggleProjects();
           break;

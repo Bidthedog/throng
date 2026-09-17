@@ -29,6 +29,23 @@ export class ClipboardService {
     this.record = { text, mode };
   }
 
+  /**
+   * Write RICH content (plain text + sanitised HTML) to the OS clipboard — a preview panel's Copy
+   * (044 FR-035a). This CLEARS the paste-mode record rather than setting one: a preview is not one of
+   * throng's own verbatim/full-line/rectangular sources, so a later paste of it must read verbatim,
+   * exactly as pasting from any other application would.
+   *
+   * Clearing (not merely leaving the old record alone) matters because `pasteModeFor` compares by
+   * TEXT, not by origin: a rich copy that happens to carry the same text as an earlier full-line or
+   * rectangular copy would otherwise still match that old record, and the next paste would wrongly
+   * reuse its shape — a Ctrl+V mid-line inserting a whole new line instead of splitting in at the
+   * caret. Clearing makes "did a rich write happen since" a fact `pasteModeFor` cannot get wrong.
+   */
+  async writeRich(entry: { text: string; html: string }): Promise<void> {
+    await this.clipboard.writeRich(entry);
+    this.record = null;
+  }
+
   /** The OS clipboard's current text — what a paste will actually insert. */
   read(): string {
     return this.clipboard.readText();

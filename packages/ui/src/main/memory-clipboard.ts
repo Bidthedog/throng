@@ -21,12 +21,31 @@ import type { IClipboard } from '@throng/core';
  */
 export class MemoryClipboard implements IClipboard {
   private text = '';
+  private html = '';
 
   writeText(text: string): void {
     this.text = text;
+    // A plain write is not half-rich: it replaces whatever writeRich() left behind, exactly as the
+    // real OS clipboard replaces every format in one write (044 FR-035a / R12).
+    this.html = '';
+  }
+
+  // R12: "the memory implementation records both" — the plain text AND the HTML — even though
+  // IClipboard#readText() itself stays plain-text-only by design (nothing under E2E reads the HTML
+  // back through the interface). htmlForTesting() below is what plan.md:316's contract suite reads
+  // instead, mirroring ElectronClipboard's own fake module.
+  async writeRich(entry: { text: string; html: string }): Promise<void> {
+    this.text = entry.text;
+    this.html = entry.html;
   }
 
   readText(): string {
     return this.text;
+  }
+
+  /** Test/contract-only: the HTML most recently written by {@link writeRich}. Never called from
+   *  production code — see the class comment on why readText() must not expose it. */
+  htmlForTesting(): string {
+    return this.html;
   }
 }

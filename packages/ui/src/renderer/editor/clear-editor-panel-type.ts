@@ -36,6 +36,13 @@ export async function clearEditorPanelType(
     dirty: boolean;
     /** What to call the document in the question, if one is asked. */
     name: string;
+    /**
+     * 044 T179 (FR-110) — whether clearing the type here ends the PANEL, or only this window's view of a
+     * synced one. `killsSession`'s rule, which the destroy routes already apply: true in the main window,
+     * and in a sub-workspace only for that sub-workspace's own panels. A project editor synced into a
+     * sub-workspace keeps its panel — and its one navigation history — in the project window.
+     */
+    endsPanel: boolean;
     confirm: (options: ConfirmOptions) => Promise<boolean>;
     /** The workspace store's `clearPanelType` — kept as an argument so this stays testable. */
     clearPanelType: (panelId: string) => void;
@@ -52,5 +59,9 @@ export async function clearEditorPanelType(
     if (!ok) return;
   }
   disposeEditor(panelId);
+  // 044 FR-110 — a cleared type ends the panel's navigation history in main; the `config` deletion below
+  // takes the persisted copy (contracts/navigation-history.md §7). Only when this view ends the panel
+  // (T179): a synced project panel keeps its history in the window that still shows it.
+  if (opts.endsPanel) window.throng?.history?.purge(panelId);
   opts.clearPanelType(panelId);
 }

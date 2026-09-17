@@ -77,6 +77,17 @@ export interface IconButtonProps {
    * Deliberately just a ref: it cannot smuggle in another className, child or handler.
    */
   nodeRef?: (element: HTMLButtonElement | null) => void;
+  /**
+   * A TOGGLE-shaped control's pressed state, announced as `aria-pressed` (044 FR-014: the editor's
+   * preview button is pressed while the file has a preview). Omitted for a plain action, which then
+   * carries no `aria-pressed` at all rather than a misleading `false`.
+   */
+  ariaPressed?: boolean;
+  /**
+   * The accessible name, when the hover title says MORE than the action's name (044 FR-104: Back's title is
+   * `Back (Alt+ArrowLeft)`, its name is `Back`). Omitted, the title is both — the common case.
+   */
+  ariaLabel?: string;
 }
 
 export function IconButton({
@@ -96,6 +107,8 @@ export function IconButton({
   onPointerCancel,
   dataAttrs,
   nodeRef,
+  ariaPressed,
+  ariaLabel,
 }: IconButtonProps): ReactElement {
   /*
    * The pill is the SAME class the per-tab panel-count pill wears (031 FR-052b) — reused, not
@@ -115,7 +128,8 @@ export function IconButton({
       className={className}
       data-testid={testId}
       title={title}
-      aria-label={title}
+      aria-label={ariaLabel ?? title}
+      aria-pressed={ariaPressed}
       disabled={disabled}
       onClick={onClick}
       onDoubleClick={onDoubleClick}

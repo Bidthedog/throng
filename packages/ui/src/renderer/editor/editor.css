@@ -228,6 +228,33 @@
   background: var(--throng-colour-editorStatusStripHover, #233047);
 }
 
+/* 044 FR-001/FR-014 — the preview button: an icon control in the strip's own colours. It is drawn
+   like the language indicator, and PRESSED (the file has a preview) holds the hover surface, so the
+   state reads without a colour of its own. Disabled (the provider is off, FR-062) dims and stops
+   inviting a click. */
+.editor-status-strip__preview {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  background: transparent;
+  border: 0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.editor-status-strip__preview:hover:not(:disabled),
+.editor-status-strip__preview[aria-pressed='true'] {
+  background: var(--throng-colour-editorStatusStripHover);
+}
+
+.editor-status-strip__preview:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* 018 / FR-001 — a POPOVER, so it takes the ACTIVE (menu/dropdown) surface, not the PANE one.
    `surface` is the pane/panel body token. This picker is a floating list, so it takes
    `surfaceActive` — the card colour every menu/dropdown shares (021 / FR-023 folded the old

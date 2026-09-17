@@ -20,7 +20,7 @@ import { TreeRow } from './tree-node.js';
 import { useExplorerData, ROOT_ID, type TreeNodeData } from './use-explorer-data.js';
 import { ExplorerRowContext } from './explorer-context.js';
 import { buildContextMenuItems } from './context-menu-items.js';
-import { useExplorerKeybindings } from './explorer-keybindings.js';
+import { previewTargetFor, useExplorerKeybindings } from './explorer-keybindings.js';
 import { registerExplorerCommands, unregisterExplorerCommands } from './explorer-commands.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { setTreeDrag, clearTreeDrag, getTreeDrag, takeTreeDropEffect } from './tree-drag-store.js';
@@ -43,15 +43,19 @@ import { useActiveEditorFilePath } from '../editor/active-editor-file.js';
 import { PanelSkeleton } from '../common/loading.js';
 import {
   buildTreeDragPayload,
+  previewAffordance,
   relPathUnderRoot,
   resolveDragEffect,
   resolveTarget,
   type FlavourOption,
+  type PreviewAffordance,
   type TargetNode,
   type TerminalPanelConfig,
 } from '@throng/core';
+import { usePreviewProviders } from '../preview/provider-registry-context.js';
 import { useFlavours } from '../panel-type/use-flavours.js';
 import { requestFindInFiles } from '../find-in-files/open-find-in-files.js';
+import { requestPreviewOpen } from '../preview/open-preview.js';
 import { focusPanel, requestPanelFocus } from '../workspace/panel-focus.js';
 import type { MenuAction } from '../workspace/context-menu.js';
 
@@ -162,7 +166,16 @@ export function FileTree({
   const { openMenu } = useContextMenu();
   const keybindings = useKeybindings(); // US1 (#125): file.* shortcuts shown on the menu items
   const ws = useWorkspace();
-  const explorerSettings = useAppSettings().explorer;
+  const appSettings = useAppSettings();
+  const explorerSettings = appSettings.explorer;
+  // 044 — what `previewAffordance` reads at right-click: the live preview settings and the INJECTED
+  // provider registry (contracts/preview-provider-seam.md §3). Refs, because the menu is built after an
+  // await and must use the values as they are then.
+  const { registry: previewRegistry } = usePreviewProviders();
+  const previewRegistryRef = useRef(previewRegistry);
+  previewRegistryRef.current = previewRegistry;
+  const previewSettingsRef = useRef(appSettings.editor.previews);
+  previewSettingsRef.current = appSettings.editor.previews;
 
   /*
    * #188 — follow the active editor: whichever file the user is working in is the one selected here,
@@ -312,6 +325,11 @@ export function FileTree({
     remove,
     undoFileOp,
     redoFileOp,
+    // 044 FR-005 — `preview.open` for the selected FILE; a folder has no preview. Main decides the rest.
+    openPreview: (node) => {
+      const absPath = previewTargetFor(node, rootFolder);
+      if (absPath !== null) void requestPreviewOpen({ absPath, projectId });
+    },
   });
 
   /*
@@ -414,15 +432,36 @@ export function FileTree({
        * untouched and still synchronous, which is FR-013d's other half and still stands.
        */
       let openIn: MenuAction[] | undefined;
+      let preview: { affordance: PreviewAffordance; open: () => void } | undefined;
       if (node.data.kind === 'file' && node.data.relPath !== '') {
         const absPath = `${rootFolder}/${node.data.relPath}`;
         // Awaited BEFORE the facts are read, so the whole decision is sampled from one moment
-        // rather than from either side of an await the layout could move across.
-        const alreadyOpen = (await window.throng?.editor?.isOpen?.(absPath)) ?? false;
+        // rather than from either side of an await the layout could move across. 044 FR-012 — main's
+        // answer to "does this file have its one preview?" is asked in the same moment.
+        const [alreadyOpen, previewOpen] = await Promise.all([
+          window.throng?.editor?.isOpen?.(absPath) ?? false,
+          window.throng?.preview?.isOpen?.(absPath) ?? false,
+        ]);
         openIn = openInMenuActions(
           describeOpenInTargets(readOpenInFacts(ws, absPath, alreadyOpen)),
           (target) => void performOpenIn({ ws, absPath, target }),
         );
+        // 044 FR-003, FR-004, FR-062 — core decides; the menu draws. The live settings and the injected
+        // registry are read through refs, so the answer is this moment's rather than the last render's.
+        preview = {
+          affordance: previewAffordance({
+            registry: previewRegistryRef.current,
+            settings: previewSettingsRef.current,
+            absPath,
+            projectRoot: rootFolder,
+            isFolder: false,
+            previewOpen,
+            surface: 'explorer',
+          }),
+          // The one `preview.open` command, with no requester: main places it beside an editor already
+          // showing the file, or standalone (FR-010, FR-011).
+          open: () => void requestPreviewOpen({ absPath, projectId }),
+        };
       }
       const items = buildContextMenuItems({
         node: node.data,
@@ -433,13 +472,14 @@ export function FileTree({
         ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp, openInTerminal, expandChildren, collapseChildren, findInFiles: searchFromTree },
         undoState: { canUndo: canUndoFileOp, canRedo: canRedoFileOp },
         openIn,
+        preview,
         keybindings,
         projectRoot: rootFolder,
         flavours,
       });
       openMenu(event.clientX, event.clientY, items);
     },
-    [selectedRelPaths, clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, openMenu, ws, rootFolder, createFolder, createFile, keybindings, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp, flavours, openInTerminal, expandChildren, collapseChildren, searchFromTree],
+    [selectedRelPaths, clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, openMenu, ws, rootFolder, projectId, createFolder, createFile, keybindings, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp, flavours, openInTerminal, expandChildren, collapseChildren, searchFromTree],
   );
 
   // Right-clicking empty space (below the rows) opens a menu targeting the ROOT —

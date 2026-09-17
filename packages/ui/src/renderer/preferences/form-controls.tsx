@@ -34,9 +34,11 @@ export interface SettingControlProps {
    * Shown rather than hidden on purpose — a control that vanishes takes the explanation with it,
    * and the user cannot see that the duration is still there waiting for the mode that uses it.
    *
-   * Honoured by {@link NumberControl}, which is the only kind anything currently depends on. A
-   * dependency aimed at another control kind means honouring it there too — an ignored `disabled`
-   * would be the same silent degradation the `default:` arm of {@link SettingControl} warns about.
+   * Honoured by {@link NumberControl}, {@link ToggleControl} and {@link SelectControl} — every kind a
+   * dependency is currently aimed at (044 FR-061 added the select: a preview provider's own settings
+   * and Default open action are toggles, selects or numbers). A dependency aimed at another control
+   * kind means honouring it there too — an ignored `disabled` would be the same silent degradation the
+   * `default:` arm of {@link SettingControl} warns about.
    */
   disabled?: boolean;
   /** Apply a valid new value (the tab wires this to the config-write path). */
@@ -153,6 +155,7 @@ function SelectControl({
   value,
   options,
   optionLabels,
+  disabled,
   onCommit,
 }: SettingControlProps): ReactElement {
   // Dynamic option lists (e.g. themes on disk) are real names shown verbatim; static
@@ -178,6 +181,10 @@ function SelectControl({
     <select
       className="ctl ctl--select"
       data-testid={testId(descriptor.key)}
+      // 044 FR-061 — a provider's Default open action is inert while the provider is off. This control
+      // ignored `disabled` until then, so an `enabledWhen` aimed at a select drew it live: a suspended
+      // choice the user could still change, which is the silent degradation the prop's comment warns of.
+      disabled={disabled}
       value={current}
       onChange={(e) => onCommit(e.target.value)}
     >

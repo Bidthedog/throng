@@ -37,6 +37,8 @@ import { Picker, type PickerEntry } from '../common/picker.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { openFileInTab } from '../editor/editor-open.js';
+import { openFromQuickOpen } from '../editor/open-router.js';
+import { usePreviewProviders } from '../preview/provider-registry-context.js';
 import { getLastActiveEditor } from '../editor/last-active-editor.js';
 import { requestPanelFocus } from '../workspace/panel-focus.js';
 import { rememberQuickOpenQuery, rememberedInput } from './navigation-store.js';
@@ -46,6 +48,7 @@ import { QuickOpenHidden } from './quick-open-hidden.js';
 
 export function QuickOpen({
   root,
+  projectId,
   index,
   invokedFrom,
   includeHidden,
@@ -54,6 +57,12 @@ export function QuickOpen({
 }: {
   /** This window's project root, absolute and OS-form. Never null — A5 refuses to open without one. */
   root: string;
+  /**
+   * 044 FR-052 — the project `root` belongs to, which a preview is asked for when the chosen file's
+   * default open action is Preview. Resolved by `NavigationChrome` beside `root`, by the same rule.
+   * Absent, every choice takes the editor route.
+   */
+  projectId?: string | null;
   /**
    * The candidate set, subscribed by `NavigationChrome` for as long as the window has a root.
    *
@@ -81,6 +90,7 @@ export function QuickOpen({
 }): ReactElement {
   const ws = useWorkspace();
   const settings = useAppSettings();
+  const { registry } = usePreviewProviders();
   const openTarget = settings.editor.openTarget;
   // FR-058 — read LIVE, so a toggle takes effect at the next invocation with nothing to notify.
   const remember = settings.editor.navigation.rememberQuickOpenQuery;
@@ -155,11 +165,18 @@ export function QuickOpen({
        * to stop bypassing it — after which `openFileInTab`'s own `openTarget === 'new'` branch calls
        * `openFileInNewEditor`, on the far side of the one-buffer gate, exactly as it always has.
        */
-      const opened = await openFileInTab(
+      /*
+       * 044 FR-052 — through the default open action router, which is still that one call for every
+       * file whose provider does not say Preview: `openFileInTab` is the editor route it takes. A file
+       * whose provider says Preview opens its preview in this window's project instead, and counts as
+       * opened. Without a `projectId` (a sub-workspace's own panel) there is no preview to ask for.
+       */
+      const opened = await openFromQuickOpen(
         ws,
         tabId,
         absPath,
         invokedFrom === null ? openTarget : target.current,
+        { registry, previews: settings.editor.previews, projectId, openInEditor: openFileInTab },
       );
 
       /*

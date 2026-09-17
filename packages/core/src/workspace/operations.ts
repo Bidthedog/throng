@@ -158,9 +158,18 @@ export function addTab(
   return { ...layout, tabs, activeTabId: ids.tab };
 }
 
-/** Add an empty placeholder Panel into a Tab (FR-012a). */
-export function addPanel(layout: WorkspaceLayout, tabId: string, panelId: string): WorkspaceLayout {
-  const panel = makePanel(panelId, layout.projectId, `Panel ${totalPanels(layout) + 1}`);
+/**
+ * Add an empty placeholder Panel into a Tab (FR-012a). It belongs to the layout's own project unless
+ * `originProjectId` names another — a command placing a project's content in a sub-workspace window, whose
+ * layout belongs to `subworkspace:<id>` (044, a preview opened there).
+ */
+export function addPanel(
+  layout: WorkspaceLayout,
+  tabId: string,
+  panelId: string,
+  originProjectId: string = layout.projectId,
+): WorkspaceLayout {
+  const panel = makePanel(panelId, originProjectId, `Panel ${totalPanels(layout) + 1}`);
   return {
     ...layout,
     tabs: layout.tabs.map((tab) =>
@@ -268,6 +277,72 @@ export function removePanel(layout: WorkspaceLayout, panelId: string): Workspace
   });
   if (!removed) return layout;
   return finalize(layout, tabs);
+}
+
+/**
+ * Split an existing Panel's slot and put `panel` beside it (044 FR-010: a preview opens on the RIGHT
+ * of its parent editor; FR-015c: Open in Editor puts the editor on the LEFT of a standalone preview).
+ *
+ * The target's own slot is split, wherever it sits in the tree — the same insertion a drop on a
+ * panel's edge makes (`movePanelToEdge`), so the new pair takes exactly the space the target had and
+ * every sibling keeps its size. Tabs that do not hold the target are returned by identity.
+ *
+ * Returns the same layout for an unknown target, or for a `panel` whose id is already in the layout
+ * (a panel is never duplicated).
+ */
+export function addPanelBeside(
+  layout: WorkspaceLayout,
+  targetId: string,
+  edge: 'left' | 'right',
+  panel: Panel,
+): WorkspaceLayout {
+  if (!findPanel(layout, targetId) || findPanel(layout, panel.id)) return layout;
+  return {
+    ...layout,
+    tabs: layout.tabs.map((tab) =>
+      collectPanels(tab.root).some((p) => p.id === targetId)
+        ? { ...tab, root: insertAtEdge(tab.root, targetId, panel, edge) }
+        : tab,
+    ),
+  };
+}
+
+/**
+ * Remove every Panel matching `predicate` exactly as closing each by hand would (044 FR-063, FR-064,
+ * FR-067): through {@link removePanel}, so a split slot collapses and an emptied Tab closes.
+ *
+ * The one difference from closing by hand is at the very end. `removePanel` REFUSES to remove the
+ * workspace's last panel (002 FR-016) — right for a user's click, wrong here, where the preview has to
+ * go because its provider is gone. So a match that is the last panel is REPLACED by a fresh untyped
+ * placeholder (`newPanelId()`, the default title), and the workspace keeps the Tab and Panel FR-016
+ * requires.
+ *
+ * `newPanelId` is supplied by the caller, as every id in this module is (`NewTabIds`), and is called
+ * only when a replacement is actually needed. Idempotent: the placeholder is untyped, so a second run
+ * with the same predicate matches nothing and returns the layout by identity.
+ */
+export function removePanelsWhere(
+  layout: WorkspaceLayout,
+  predicate: (panel: Panel) => boolean,
+  newPanelId: () => string,
+): WorkspaceLayout {
+  const matches = layout.tabs.flatMap((tab) => collectPanels(tab.root).filter(predicate));
+  let next = layout;
+  for (const match of matches) {
+    if (totalPanels(next) > 1) {
+      next = removePanel(next, match.id);
+      continue;
+    }
+    const id = newPanelId();
+    const placeholder = makePanel(id, next.projectId, 'Panel 1');
+    next = {
+      ...next,
+      tabs: next.tabs.map((tab) =>
+        tab.root.type === 'panel' && tab.root.id === match.id ? { ...tab, root: placeholder, activePanelId: id } : tab,
+      ),
+    };
+  }
+  return next;
 }
 
 /** Reorder a Tab to a new index (FR-012); persisted by the caller. */

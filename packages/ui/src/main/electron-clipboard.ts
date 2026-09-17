@@ -4,6 +4,8 @@ import type { IClipboard } from '@throng/core';
 export interface ElectronClipboardModule {
   writeText(text: string): void;
   readText(): string;
+  /** Electron's `clipboard.write({ text, html })` — both formats in one OS write (044 FR-035a). */
+  write(entry: { text: string; html: string }): void;
 }
 
 /**
@@ -24,6 +26,10 @@ export class ElectronClipboard implements IClipboard {
 
   writeText(text: string): void {
     this.clipboard.writeText(text);
+  }
+
+  async writeRich(entry: { text: string; html: string }): Promise<void> {
+    this.clipboard.write(entry);
   }
 
   readText(): string {

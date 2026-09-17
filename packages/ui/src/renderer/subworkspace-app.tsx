@@ -5,6 +5,7 @@ import { useServices } from './composition-root.js';
 import { TabGroup } from './workspace/tab-group.js';
 import { ThemeProvider } from './theme/theme-provider.js';
 import { useActiveTheme } from './config/config-store.js';
+import { useConfigWriteFailureNotices } from './config/config-write-notices.js';
 import { SubWorkspaceWorkspaceClient } from './state/subworkspace-window-client.js';
 import { PanelRenameSync } from './workspace/panel-rename-sync.js';
 import { PanelDestroySync } from './workspace/panel-destroy-sync.js';
@@ -79,6 +80,10 @@ export function SubWorkspaceApp({ subWorkspaceId }: { subWorkspaceId: string }):
   // Bumped when another window edits THIS sub-workspace (e.g. "Sync to" adds a
   // Tab/Panel) — remounts the workspace so it re-reads the updated content.
   const [reloadKey, setReloadKey] = useState(0);
+  // 044 FR-122e (plan decision 2): this window writes settings too — the Synchronise Scrolling toggle on
+  // an editor or preview held here — and the failure listener is per renderer realm, so a write that
+  // fails in this window is reported in this window, once, or not at all.
+  useConfigWriteFailureNotices();
   useEffect(
     () =>
       window.throng?.subWorkspace?.onChanged((id) => {

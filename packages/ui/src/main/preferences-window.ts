@@ -12,6 +12,7 @@
  * (FR-010).
  */
 import { app, BrowserWindow } from 'electron';
+import type { IShellIntegration } from '@throng/core';
 import { wireWindowMaximizeEvents } from './window-controls-ipc.js';
 import { denyRendererWindows } from './window-open-guard.js';
 import { appIcon } from './app-icon.js';
@@ -90,6 +91,8 @@ export interface PreferencesWindowDeps {
   indexHtml: string;
   /** Absolute path to the sandboxed preload script. */
   preloadPath: string;
+  /** The platform seam this window's `setWindowOpenHandler` routes a safe target through (044 R10). */
+  shellIntegration: IShellIntegration;
   /** The saved theme's app-background colour, resolved lazily at open time so the
    *  window never flashes a hardcoded dark before its themed content paints (issue 132). */
   backgroundColor?: () => string;
@@ -157,7 +160,7 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
   });
   prefsWindow = win;
   wireWindowMaximizeEvents(win);
-  denyRendererWindows(win.webContents); // 024 US7 (FR-019b)
+  denyRendererWindows(win.webContents, deps.shellIntegration); // 024 US7 (FR-019b)
   revealWhenPainted(win);
   // Flag every other window blurred (US10/FR-035) — they are app-modal-disabled behind this window,
   // so any stranded CSS :hover on them must stop painting.

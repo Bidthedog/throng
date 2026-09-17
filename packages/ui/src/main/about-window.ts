@@ -8,6 +8,7 @@
  * throng focuses the one window rather than opening a second.
  */
 import { BrowserWindow } from 'electron';
+import type { IShellIntegration } from '@throng/core';
 import { wireWindowMaximizeEvents } from './window-controls-ipc.js';
 import { denyRendererWindows } from './window-open-guard.js';
 import { appIcon } from './app-icon.js';
@@ -19,6 +20,8 @@ export interface AboutWindowDeps {
   indexHtml: string;
   /** Absolute path to the sandboxed preload script. */
   preloadPath: string;
+  /** The platform seam this window's `setWindowOpenHandler` routes a safe target through (044 R10). */
+  shellIntegration: IShellIntegration;
   /** The saved theme's app-background colour, resolved lazily at open time so the
    *  window never flashes a hardcoded dark before its themed content paints (issue 132). */
   backgroundColor?: () => string;
@@ -83,7 +86,7 @@ export function openAbout(deps: AboutWindowDeps): BrowserWindow {
   });
   aboutWindow = win;
   wireWindowMaximizeEvents(win);
-  denyRendererWindows(win.webContents); // 024 US7 (FR-019b)
+  denyRendererWindows(win.webContents, deps.shellIntegration); // 024 US7 (FR-019b)
   revealWhenPainted(win);
 
   win.on('closed', () => {

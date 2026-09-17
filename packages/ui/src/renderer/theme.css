@@ -1053,6 +1053,35 @@ textarea,
   color: var(--throng-colour-textMuted);
 }
 
+/* 044 FR-104 — Back / Forward, at the very top left: before the type icon, which is itself pinned first. */
+.panel-box__history {
+  flex: 0 0 auto;
+  order: -2;
+  display: flex;
+  gap: 1px;
+  margin-right: 4px;
+}
+
+.panel-box__history button {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.panel-box__history button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+:where(body:not([data-window-blurred])) .panel-box__history button:not(:disabled):hover {
+  color: var(--text);
+  background: var(--throng-colour-hoverSurface);
+}
+
 /* Red-outlined ADMIN pill for an elevated terminal (FR-025d). */
 .panel-box__admin {
   flex: 0 0 auto;
@@ -1817,8 +1846,10 @@ textarea,
  * the stored name, to be copied out of a selection, or to accumulate across successive reductions —
  * which is exactly what `truncateGraphemes` being marker-free buys, and this is the other half of it.
  */
+/* 044 FR-032 — a preview title marks its NAME half (`name… - Preview`); its suffix is never cut. */
 .tab-chip__label--truncated::after,
-.panel-box__title--truncated::after {
+.panel-box__title--truncated::after,
+.panel-box__title-name--truncated::after {
   content: '…';
 }
 

@@ -24,6 +24,12 @@ export function registerClipboardIpc(clipboard: ClipboardService): void {
     clipboard.write(raw.text, asMode(raw.mode));
   });
 
+  /** A preview panel's rich copy (044 FR-035a) — plain text and sanitised HTML in one write. */
+  ipcMain.handle('throng:clipboard:writeRich', async (_event, raw: Record<string, unknown>) => {
+    if (typeof raw?.text !== 'string' || typeof raw?.html !== 'string') return;
+    await clipboard.writeRich({ text: raw.text, html: raw.html });
+  });
+
   /**
    * What a paste should insert, and how.
    *

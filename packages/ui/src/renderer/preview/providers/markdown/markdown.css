@@ -1,0 +1,273 @@
+/*
+ * The Markdown provider's rendered document (044 T100 visuals; FR-034, FR-080 – FR-086, FR-094 –
+ * FR-096b; contracts/settings-bindings-tokens.md §Colour tokens; contracts/preview-provider-seam.md
+ * §6, fix round 1 item 2).
+ *
+ * ══ EVERY COLOUR IS A TOKEN THE THEMES ALREADY MEASURE ══
+ *
+ * No colour literal appears anywhere in this file, not even as a `var()` fallback. And the tokens are not
+ * any tokens: every background is `editorBg`, and every text colour is `editorFg` or a `syntax*` token —
+ * exactly the foregrounds `theme-quality.ts` pairs with `editorBg` on every shipped theme. So a preview is
+ * legible wherever the editor's own Markdown highlighting is, with no new contrast pairing to maintain
+ * (SC-005). Links and block quotes take the colours `highlight-style.ts` gives them in the editor. Rules
+ * and outlines use `border`; `accent` is the focus indicator's outline and nothing else.
+ * `preview-css-tokens.test.ts` (T093) holds this file to all of that, declaration by declaration.
+ *
+ * A theme change rewrites the variables, so the document repaints without being rendered again; code
+ * highlighting uses the editor's highlight style, whose rules are variables too (`highlight-style.ts`).
+ *
+ * ══ LOADED WITH THE PROVIDER, NOT WITH THE CHROME ══
+ *
+ * `markdown-body.tsx` imports this file, so it rides in the lazily loaded `preview` chunk
+ * (`vite.config.ts`) with the renderer it styles — never in `preview/preview.css`, the panel chrome
+ * every preview loads eagerly regardless of provider (FR-070). A new provider's document styles live
+ * the same way, in that provider's own folder.
+ */
+
+.preview-markdown {
+  box-sizing: border-box;
+  min-height: 100%;
+  padding: 0.75em 1em;
+  overflow-wrap: anywhere;
+  color: var(--throng-colour-editorFg);
+  background: var(--throng-colour-editorBg);
+  font-family: var(--throng-font-paneText-family);
+  font-weight: var(--throng-font-paneText-weight);
+  line-height: 1.5;
+}
+
+/*
+ * The document's text is selectable (FR-035, FR-094). `theme.css` sets `user-select: none` on `body` for
+ * the whole application and re-enables it only on the surfaces it names, so without this rule a preview
+ * inherits `none` and Chromium will not start a mouse selection in it — while a Range-API selection (Select
+ * All, every jsdom test) still works, which is how it went unnoticed.
+ *
+ * It lives here rather than in `theme.css` or `preview/preview.css` because whether a body's content can
+ * be selected is its provider's `textSelection`, not the chrome's — and a Markdown class named outside this
+ * folder fails `preview-surfaces-name-no-provider.test.ts`. Pinned by `preview-text-selection-css.test.ts`.
+ */
+.preview-markdown {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* The body takes keyboard focus to scroll (FR-096a); the indicator belongs to the links inside it. */
+.preview-markdown:focus {
+  outline: none;
+}
+
+.preview-markdown > :first-child {
+  margin-top: 0;
+}
+
+/* Headings — the editor's Markdown weights (highlight-style.ts: 700 for h1–h2, 600 below). */
+.preview-markdown h1,
+.preview-markdown h2,
+.preview-markdown h3,
+.preview-markdown h4,
+.preview-markdown h5,
+.preview-markdown h6 {
+  color: var(--throng-colour-editorFg);
+  margin: 1.2em 0 0.5em;
+  line-height: 1.25;
+}
+
+.preview-markdown h1,
+.preview-markdown h2 {
+  font-weight: 700;
+}
+
+.preview-markdown h3,
+.preview-markdown h4,
+.preview-markdown h5,
+.preview-markdown h6 {
+  font-weight: 600;
+}
+
+.preview-markdown h1 {
+  font-size: 1.8em;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid var(--throng-colour-border);
+}
+
+.preview-markdown h2 {
+  font-size: 1.45em;
+  padding-bottom: 0.15em;
+  border-bottom: 1px solid var(--throng-colour-border);
+}
+
+.preview-markdown h3 {
+  font-size: 1.2em;
+}
+
+.preview-markdown h4 {
+  font-size: 1.05em;
+}
+
+.preview-markdown h5,
+.preview-markdown h6 {
+  font-size: 1em;
+}
+
+.preview-markdown p,
+.preview-markdown ul,
+.preview-markdown ol,
+.preview-markdown dl,
+.preview-markdown blockquote,
+.preview-markdown pre,
+.preview-markdown table,
+.preview-markdown details {
+  margin: 0 0 0.9em;
+}
+
+.preview-markdown ul,
+.preview-markdown ol {
+  padding-left: 1.8em;
+}
+
+.preview-markdown li > ul,
+.preview-markdown li > ol {
+  margin-bottom: 0;
+}
+
+/* A task item's checkbox is read-only (FR-080); it sits in the text, not in a column of its own. A loose
+   list wraps the item's text in a paragraph, so the checkbox is found in either place. */
+.preview-markdown li > input[type='checkbox'],
+.preview-markdown li > p > input[type='checkbox'] {
+  margin: 0 0.4em 0 0;
+  vertical-align: middle;
+}
+
+/* The checkbox IS the item's marker, so a task item draws no bullet as well. `:has()` ships in every
+   Chromium Electron 43 carries (Chromium 105+); jsdom applies no stylesheet, so no test depends on it
+   matching there. */
+.preview-markdown li:has(> input[type='checkbox'], > p > input[type='checkbox']) {
+  list-style: none;
+}
+
+.preview-markdown hr {
+  border: 0;
+  border-top: 1px solid var(--throng-colour-border);
+  margin: 1.4em 0;
+}
+
+.preview-markdown del,
+.preview-markdown s {
+  text-decoration: line-through;
+}
+
+/* ── Links (FR-094, FR-096b) ────────────────────────────────────────────────────────────────────── */
+
+/* The editor's link colour, underlined (highlight-style.ts:54). A followable link carries no href, so
+   the pointer is set here; an inert link is ordinary text. */
+.preview-markdown [data-throng-link] {
+  color: var(--throng-colour-syntaxFunction);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* The focus indicator: an outline in the accent token, never a text colour. The class is set by the body
+   on focus, and `:focus-visible` covers a browser that draws focus before the class lands. */
+.preview-markdown [data-throng-link].preview-markdown__link--focused,
+.preview-markdown [data-throng-link]:focus-visible {
+  outline: 2px solid var(--throng-colour-accent);
+  outline-offset: 1px;
+}
+
+/* ── Block quotes ───────────────────────────────────────────────────────────────────────────────── */
+
+/* Somebody else's words: the editor's quote treatment (highlight-style.ts:58), ruled with `border`. */
+.preview-markdown blockquote {
+  color: var(--throng-colour-syntaxComment);
+  font-style: italic;
+  padding: 0 0 0 0.9em;
+  margin-left: 0;
+  border-left: 3px solid var(--throng-colour-border);
+}
+
+/* ── Code (FR-080, FR-086) ──────────────────────────────────────────────────────────────────────── */
+
+.preview-markdown code,
+.preview-markdown kbd,
+.preview-markdown pre {
+  font-family: var(--throng-font-editor-family);
+  font-size: 0.92em;
+}
+
+/* No fill of its own: code sits on the editor background, so every syntax token keeps its measured
+   pairing. A block is outlined instead. */
+.preview-markdown pre {
+  background: var(--throng-colour-editorBg);
+  border: 1px solid var(--throng-colour-border);
+  padding: 0.6em 0.8em;
+  overflow-x: auto;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.preview-markdown pre > code {
+  font-size: 1em;
+}
+
+.preview-markdown :not(pre) > code,
+.preview-markdown kbd {
+  border: 1px solid var(--throng-colour-border);
+  padding: 0 0.25em;
+}
+
+/* ── Tables (FR-080) ────────────────────────────────────────────────────────────────────────────── */
+
+.preview-markdown table {
+  border-collapse: collapse;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.preview-markdown th,
+.preview-markdown td {
+  border: 1px solid var(--throng-colour-border);
+  padding: 0.3em 0.7em;
+  text-align: left;
+  vertical-align: top;
+}
+
+.preview-markdown th {
+  font-weight: 600;
+}
+
+.preview-markdown [data-align='left'] {
+  text-align: left;
+}
+
+.preview-markdown [data-align='center'] {
+  text-align: center;
+}
+
+.preview-markdown [data-align='right'] {
+  text-align: right;
+}
+
+/* ── Front matter (FR-085) ──────────────────────────────────────────────────────────────────────── */
+
+/* A key/value table above the document: keys in their own column, a nested value as its YAML source. */
+.preview-markdown .preview-markdown__front-matter th {
+  white-space: nowrap;
+}
+
+.preview-markdown .preview-markdown__front-matter td > pre {
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+/* ── Images (FR-084) ────────────────────────────────────────────────────────────────────────────── */
+
+.preview-markdown img {
+  max-width: 100%;
+}
+
+/* An image that could not be shown, as its alternative text. */
+.preview-markdown .preview-markdown__alt {
+  font-style: italic;
+}

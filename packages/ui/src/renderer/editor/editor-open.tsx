@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   collectPanels,
   isPanel,
@@ -16,8 +16,16 @@ import { drainRefusedOpens, publishRefusedOpen, useRefusedOpens } from './refusa
 import { getEditorActions } from './editor-actions.js';
 import { getEditorState } from './editor-state.js';
 import { getLastActiveEditor, setLastActiveEditor } from './last-active-editor.js';
-import { promptUnsavedOpen } from './unsaved-open-store.js';
-import { revealRangeInEditor, type RevealRange } from './reveal-range.js';
+import {
+  createDedicatedEditor,
+  focusPanelIfLocal,
+  openDecisionFor,
+  openIntoEditorPanel,
+  replaceInEditorPanel,
+} from './open-into-panel.js';
+import { headingRevealTarget, revealRangeInEditor, type RevealTarget } from './reveal-range.js';
+import { openFromTree } from './open-router.js';
+import { usePreviewProviders } from '../preview/provider-registry-context.js';
 
 /**
  * Open-from-tree orchestration (006 Phase B, US2/US9, FR-010/011a). Listens for
@@ -66,10 +74,40 @@ export function EditorOpenListener(): null {
     }
   }, [refused, reportSubject, osName, projectRoot, projectId]);
 
+  /*
+   * 044 FR-052/FR-053 — the default open action. Read through a ref so a settings change does not
+   * reinstall the listener, and handed to the router with the registry this window draws providers from
+   * (FR-070).
+   */
+  const previews = useAppSettings().editor.previews;
+  const { registry } = usePreviewProviders();
+  const routeRef = useRef({ previews, registry });
+  routeRef.current = { previews, registry };
+
   useEffect(() => {
     const handler = (e: Event): void => {
-      const detail = (e as CustomEvent).detail as { absPath?: string } | undefined;
-      if (detail?.absPath) void openFileIntoEditor(ws, detail.absPath, openTarget);
+      const detail = (e as CustomEvent).detail as
+        | { absPath?: string; projectId?: string; headingFragment?: string }
+        | undefined;
+      // 044 FR-090d — a preview link to a file no preview claims opens here, as from Files & Folders; its
+      // `#heading` places the caret on that heading's line where the file's language can find one.
+      // 044 FR-052 — through the default open action router: a file whose provider says Preview opens its
+      // preview. The link case above can never be one (main sends it here only with no enabled provider).
+      if (detail?.absPath) {
+        void openFromTree(
+          ws,
+          detail.absPath,
+          openTarget,
+          {
+            ...routeRef.current,
+            // The tree names its project. An intent that names none (a preview link's FR-090d route) has
+            // no project to ask a preview for, and a layout's id is not one in a sub-workspace window.
+            projectId: detail.projectId,
+            openInEditor: openFileInTab,
+          },
+          headingRevealTarget(detail.absPath, detail.headingFragment),
+        );
+      }
     };
     window.addEventListener('throng:open-file', handler);
     // UI main raised this window to focus an already-open file's editor (FR-011a).
@@ -84,21 +122,11 @@ export function EditorOpenListener(): null {
 
 type Ws = ReturnType<typeof useWorkspace>;
 
-function basename(p: string): string {
-  const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
-  return i < 0 ? p : p.slice(i + 1);
-}
-
 /** Editor panelIds present in the given tab (in document order). */
 function editorPanelsInTab(root: LayoutNode): string[] {
   return collectPanels(root)
     .filter((p) => getEditorState(p.id) !== undefined || (isPanel(p) && p.kind === 'editor'))
     .map((p) => p.id);
-}
-
-async function openFileIntoEditor(ws: Ws, absPath: string, openTarget: EditorOpenTarget): Promise<void> {
-  const tabId = ws.layout?.activeTabId;
-  if (tabId) await openFileInTab(ws, tabId, absPath, openTarget);
 }
 
 /**
@@ -139,14 +167,17 @@ export async function openFileInTab(
    * that already held it, the tab's last active one, or a dedicated one created on the spot. A
    * caller wanting to reveal would have to re-derive that, and would get it wrong in exactly the
    * case FR-037 is about (a dirty target answered with "New Editor").
+   *
+   * 044 FR-090d: or a resolver, for a place — a heading a preview link named — that can only be found in
+   * the document once the editor holds it.
    */
-  range?: RevealRange,
+  range?: RevealTarget,
 ): Promise<boolean> {
   // 1) Already open anywhere → focus that one editor (no second buffer, FR-011a / one-doc-one-state
   //    #68). This holds regardless of the open-target preference (US7 / FR-027).
   //    Counts as opened: the file the caller asked for is what the user is now looking at, whether
   //    this window raised it or UI-main raised the window holding it.
-  const decision = await window.throng?.editor?.openInto({ absPath, ownerKind: 'project', ownerProjectId: ws.layout?.projectId });
+  const decision = await openDecisionFor(ws, absPath);
   if (decision?.action === 'focus') {
     focusPanelIfLocal(ws, decision.panelId);
     // The one-buffer rule and the reveal are not in tension: the file is already open, so the match
@@ -188,33 +219,17 @@ export async function openFileInTab(
     return true;
   }
 
-  const actions = getEditorActions(targetId);
-  if (!actions) {
+  if (!getEditorActions(targetId)) {
     void revealRange(createDedicatedEditor(ws, tabId, absPath), range);
     return true;
   }
 
-  // 3) Dirty target → the four-choice prompt (US9).
-  if (actions.isDirty()) {
-    const editorName = getEditorState(targetId)?.displayName ?? 'This editor';
-    const choice = await promptUnsavedOpen(basename(absPath), editorName);
-    if (choice === 'cancel') return false;
-    if (choice === 'new') {
-      void revealRange(createDedicatedEditor(ws, tabId, absPath), range);
-      return true;
-    }
-    if (choice === 'save') {
-      const ok = await actions.save();
-      if (!ok) return false; // save failed/cancelled → don't lose the buffer
-    }
-    // 'discard' or a successful 'save' → replace the document.
-    await actions.openFile(absPath);
-    void revealRange(targetId, range);
-    return true;
-  }
-
-  await actions.openFile(absPath);
-  void revealRange(targetId, range);
+  // 3) Replace the target's document — through the ONE in-place flow (044 T156): a dirty target gets the
+  //    four-choice prompt (US9), and Cancel or a failed save opens nothing. The one-buffer decision was
+  //    already taken above, so only the prompt-and-load half runs here.
+  const { outcome, panelId: landed } = await replaceInEditorPanel(ws, targetId, absPath, { kind: 'open' });
+  if (outcome === 'cancelled' || outcome === 'saveFailed') return false;
+  void revealRange(landed, range);
   return true;
 }
 
@@ -226,13 +241,13 @@ export async function openFileInTab(
  * highlight that polls for a view that has not mounted yet would hold that answer for up to two
  * seconds, and the open has already happened by then.
  */
-function revealRange(panelId: string, range: RevealRange | undefined): string {
+function revealRange(panelId: string, range: RevealTarget | undefined): string {
   if (range) void revealRangeInEditor(panelId, range);
   return panelId;
 }
 
 /** The same, for a panel id resolved rather than created — reads as one call at each branch. */
-function reveal(ws: Ws, panelId: string, range: RevealRange | undefined): void {
+function reveal(ws: Ws, panelId: string, range: RevealTarget | undefined): void {
   if (!range) return;
   const layout = ws.layout;
   if (!layout) return;
@@ -259,46 +274,25 @@ export async function openFileInPanel(
   panelId: string,
   absPath: string,
 ): Promise<void> {
-  // 1) Already open anywhere → focus that one editor (no second buffer, FR-011a).
-  const decision = await window.throng?.editor?.openInto({ absPath, ownerKind: 'project', ownerProjectId: ws.layout?.projectId });
-  if (decision?.action === 'focus') {
-    focusPanelIfLocal(ws, decision.panelId);
-    return;
-  }
-  // 041 FR-013 — a drop of a refused file. Note this returns before the `actions` fallback below,
-  // which would otherwise route to `openFileInTab` and create the tab's dedicated editor.
-  if (decision?.action === 'refuse') {
-    publishRefusedOpen({ absPath, reason: decision.reason });
-    return;
-  }
-
-  const actions = getEditorActions(panelId);
-  if (!actions) {
+  if (!getEditorActions(panelId)) {
     // The panel is not an editor yet (or its view has gone). Fall back to the tab-level route rather
-    // than dropping the file on the floor.
+    // than dropping the file on the floor. That route takes the same one-buffer decision first — an
+    // already-open file is focused and a refused one creates no panel (041 FR-013) — so nothing here
+    // needs to ask main before handing over.
     await openFileInTab(ws, tabId, absPath);
     return;
   }
 
-  // 2) Dirty target → the four-choice prompt (US9). Dropping a file onto an editor holding unsaved work
-  //    must not silently discard it just because the gesture was a drag rather than a click.
-  if (actions.isDirty()) {
-    const editorName = getEditorState(panelId)?.displayName ?? 'This editor';
-    const choice = await promptUnsavedOpen(basename(absPath), editorName);
-    if (choice === 'cancel') return;
-    if (choice === 'new') {
-      createDedicatedEditor(ws, tabId, absPath);
-      return;
-    }
-    if (choice === 'save') {
-      const ok = await actions.save();
-      if (!ok) return;
-    }
-  }
-
-  ws.setActivePanel(tabId, panelId);
-  setLastActiveEditor(tabId, panelId);
-  await actions.openFile(absPath);
+  // The ONE in-place flow (044 T156): already open anywhere → that editor is focused (FR-011a); refused →
+  // one notice and nothing opened (041 FR-013); a dirty target → the four-choice prompt (US9), because
+  // dropping a file onto unsaved work must not discard it just because the gesture was a drag. The drop
+  // activates the panel it landed on, once the load is decided.
+  await openIntoEditorPanel(ws, panelId, absPath, { kind: 'open' }, {
+    beforeLoad: () => {
+      ws.setActivePanel(tabId, panelId);
+      setLastActiveEditor(tabId, panelId);
+    },
+  });
 }
 
 /**
@@ -308,36 +302,4 @@ export async function openFileInPanel(
  */
 export function openFileInNewEditor(ws: Ws, tabId: string, absPath: string): string {
   return createDedicatedEditor(ws, tabId, absPath);
-}
-
-/**
- * Create the tab's dedicated editor Panel already pointed at `absPath` (FR-010).
- *
- * Returns the panel it made. 043 FR-038 needs that id: the match has to be selected in the editor
- * the file actually landed in, and this is the only code that knows which one that is.
- */
-function createDedicatedEditor(ws: Ws, tabId: string, absPath: string): string {
-  const newId = ws.addPanel(tabId);
-  // A programmatically opened editor must NOT open in rename mode (that would steal
-  // focus from the tree / editor). Only user-added Panels rename-on-add (FR-041).
-  ws.clearLastAddedPanel();
-  ws.setPanelType(newId, 'editor', { filePath: absPath });
-  window.throng?.panel?.notifyTyped?.(newId, 'editor', { filePath: absPath });
-  ws.setActivePanel(tabId, newId);
-  setLastActiveEditor(tabId, newId);
-  return newId;
-}
-
-/** If the given panel is in this window's layout, activate it (local focus). */
-function focusPanelIfLocal(ws: Ws, panelId: string): void {
-  const layout = ws.layout;
-  if (!layout) return;
-  for (const tab of layout.tabs) {
-    if (collectPanels(tab.root).some((p) => p.id === panelId)) {
-      ws.setActiveTab(tab.id);
-      ws.setActivePanel(tab.id, panelId);
-      setLastActiveEditor(tab.id, panelId);
-      return;
-    }
-  }
 }

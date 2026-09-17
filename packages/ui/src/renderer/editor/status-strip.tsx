@@ -18,6 +18,11 @@ import { useTransientOverlay } from '../common/transient-overlay.js';
 import { useEditorState } from './editor-state.js';
 import { focusPanel } from '../workspace/panel-focus.js';
 import { useAppSettings } from '../config/config-store.js';
+import { IconButton } from '../common/icon-button.js';
+import { previewDisabledTitle, useEditorPreviewAffordance } from './editor-preview.js';
+import { requestPreviewOpen } from '../preview/open-preview.js';
+import { SyncScrollButton } from '../preview/sync-scroll-button.js';
+import { toggleSyncScroll } from '../preview/sync-scroll-toggle.js';
 import {
   wordWrapDocKey,
   useDocumentWordWrap,
@@ -207,6 +212,67 @@ export interface StatusStripProps {
   autoOpenPicker?: boolean;
   /** The picker went from open to closed (chosen, dismissed, or Escaped). */
   onPickerClosed?: () => void;
+  /**
+   * 044 FR-001/FR-004 — the editor's OWN project root, which the preview button is decided against.
+   * Omitted or `null` (a sub-workspace-owned editor) means no preview is offered from this bar.
+   */
+  projectRoot?: string | null;
+}
+
+/**
+ * The preview button (044 FR-001, FR-014, FR-062; contracts/menus-and-controls.md §7).
+ *
+ * Drawn from `previewAffordance`: absent when a preview means nothing here, DISABLED while the provider
+ * is switched off (with the setting named in the tooltip), and otherwise an icon toggle that reads as
+ * PRESSED while the file has a preview in any window. Pressed or not, choosing it runs the one
+ * `preview.open` command: main answers with a new preview or by focusing the one that exists, and never
+ * closes anything (FR-014).
+ *
+ * The scroll-sync toggle (044 FR-122c) is drawn here too, immediately before the button, because its
+ * presence is exactly the button's: rendering both from one affordance is what keeps them from disagreeing.
+ */
+function PreviewButton({
+  panelId,
+  projectId,
+  filePath,
+  projectRoot,
+}: {
+  panelId: string;
+  projectId: string | null;
+  filePath: string | null;
+  projectRoot: string | null;
+}): ReactElement | null {
+  const affordance = useEditorPreviewAffordance(filePath, projectRoot);
+  const syncScroll = useAppSettings().editor.previews.syncScroll;
+  if (affordance.state === 'absent' || filePath === null) return null;
+  const providerOff = affordance.state === 'disabled' && affordance.reason === 'provider-disabled';
+  const pressed = affordance.state === 'disabled' && affordance.reason === 'preview-open';
+  return (
+    <>
+      {/* 044 FR-122c — the scroll-sync toggle, immediately before this button and present exactly when it
+          is; never disabled, whatever the preview button's state (FR-122a). */}
+      <SyncScrollButton
+        testId={`editor-sync-scroll-${panelId}`}
+        on={syncScroll}
+        onToggle={() => void toggleSyncScroll(syncScroll)}
+      />
+      <IconButton
+        token="preview"
+        className="editor-status-strip__preview"
+        testId={`editor-preview-${panelId}`}
+        title={
+          providerOff ? previewDisabledTitle(affordance.provider.displayName) : pressed ? 'Go to Preview' : 'Open Preview'
+        }
+        disabled={providerOff}
+        // No pressed state on a control that cannot be used: it would announce a toggle nobody can flip.
+        ariaPressed={providerOff ? undefined : pressed}
+        onClick={() => {
+          if (projectId === null) return;
+          void requestPreviewOpen({ absPath: filePath, projectId, requesterPanelId: panelId });
+        }}
+      />
+    </>
+  );
 }
 
 export function StatusStrip({
@@ -215,6 +281,7 @@ export function StatusStrip({
   relPath,
   autoOpenPicker = false,
   onPickerClosed,
+  projectRoot = null,
 }: StatusStripProps): ReactElement {
   const resolution = usePanelLanguage(panelId);
   const [pickerOpen, setPickerOpen] = useState(autoOpenPicker);
@@ -508,6 +575,10 @@ export function StatusStrip({
         >
           {wrapOn ? 'Wrap' : 'No Wrap'}
         </button>
+        {/* 044 FR-001, FR-122c — the scroll-sync toggle and the preview button, after the wrap toggle, inside
+            the MEASURED group: their width is subtracted before the readouts are fitted, so width pressure
+            never hides either (040 FR-023/FR-024). */}
+        <PreviewButton panelId={panelId} projectId={projectId} filePath={filePath} projectRoot={projectRoot} />
       </div>
       {/*
         The RULER (040 FR-021, FR-022a). Every present readout, in both label forms, drawn where it

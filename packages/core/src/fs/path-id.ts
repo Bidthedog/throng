@@ -102,3 +102,21 @@ export function isUnderPath(file: string, folder: string): boolean {
   if (PARENT_SEGMENT.test(f) || PARENT_SEGMENT.test(g)) return false;
   return f === g || f.startsWith(g + '/');
 }
+
+/**
+ * What is left of `file` below `folder`, in `file`'s own names — `/sub/a.md` — or `null` when `file` is
+ * not strictly beneath `folder`. Separators in the result are `/`; a caller respells them as it needs.
+ *
+ * ══ CUT BY SEGMENTS, NEVER BY THE NORMALISED LENGTH ══
+ *
+ * The obvious cut is `file.slice(normaliseForCompare(folder).length)`, and it is wrong: lower-casing is
+ * not length-preserving. `'İ'.toLowerCase()` is two UTF-16 units, so a folder named `İx` normalises one
+ * unit LONGER than it is spelled, and the slice ate the first letter of the file name — a move of
+ * `D:/İx` to `D:/y` re-pointed `D:/İx/a.md` at `D:/ya.md`. `normaliseForCompare` never adds or removes a
+ * separator, so the folder's segment count is the same in either spelling, and that is the cut.
+ */
+export function remainderUnder(file: string, folder: string): string | null {
+  if (samePath(file, folder) || !isUnderPath(file, folder)) return null;
+  const depth = normaliseForCompare(folder).split('/').length;
+  return '/' + file.split(/[\\/]/).slice(depth).join('/');
+}
