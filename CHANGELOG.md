@@ -27,9 +27,19 @@ What changed in each release of throng, written for someone deciding whether to 
   did not exist yet.
 -->
 
-## Unreleased
+## 1.0.0-alpha4 — 2026-09-17
 
 ### Added
+- **Find in Files** ([#153](https://github.com/Bidthedog/throng/issues/153)): a search panel of its
+  own, opened with `Ctrl+Shift+F` (or `Ctrl+Shift+H` with replace showing), from the explorer
+  toolbar, or from any file or folder's **Open In → Search**. It searches the whole project, one
+  folder or one file as you type, groups results by file or by folder, and opens a result at its
+  match. Replace previews every match in place and commits one match, one file or everything; an
+  open document changes as a single undoable edit, and a file with no open editor is written only
+  after you confirm how many files will change.
+- The find bar in an editor now belongs to that panel
+  ([#220](https://github.com/Bidthedog/throng/issues/220)), so a term typed in one editor no longer
+  appears in another's, and replace can be folded away without losing its text.
 - Two new ways to get throng: a **portable** build that runs without installing, and a **zip
   archive** you extract to a folder of your choosing. The per-user installer is unchanged.
 - **File previews** ([#10](https://github.com/Bidthedog/throng/issues/10)): an editor for a
@@ -61,6 +71,22 @@ What changed in each release of throng, written for someone deciding whether to 
   too — Back returns to where the reader was, then to the previous document, if there was one.
 
 ### Fixed
+- Terminals could freeze, and on an elevated install all close, when Windows reused a process id
+  inside a terminal's process tree ([#398](https://github.com/Bidthedog/throng/issues/398)).
+- An edit typed into the Preferences JSON view while it was still opening was silently lost
+  ([#399](https://github.com/Bidthedog/throng/issues/399)).
+- Undoing a delete now restores the file when Windows hides known file extensions — the default —
+  and restores the file you asked for rather than a same-named one with a different extension
+  ([#373](https://github.com/Bidthedog/throng/issues/373)).
+- A key pressed while a terminal was being rebuilt after a tab switch, and the typing after it, no
+  longer vanishes ([#374](https://github.com/Bidthedog/throng/issues/374)).
+- Windows PowerShell terminals keep PSReadLine's colouring, history search and completion when
+  throng was started from PowerShell 7 ([#367](https://github.com/Bidthedog/throng/issues/367)).
+- **Open in OS Explorer** on a panel now reveals that panel's own file, including in a
+  sub-workspace window and for a file outside any project.
+- Restoring a project whose folder had been renamed away now always raises its consolidated notice,
+  however slowly the panels answer.
+- The setting that confirms destroying a tab is now labelled as destroying, not closing, a tab.
 - A preview's body text can now be selected with the mouse and copied, the same as an editor's;
   holding Ctrl to drag from a link selects text without following it.
 - The **+** buttons that add a tab and add a panel are announced by a screen reader as "New tab" and

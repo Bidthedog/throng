@@ -1,6 +1,6 @@
 {
   "name": "@throng/ipc-contract",
-  "version": "1.0.0-alpha3",
+  "version": "1.0.0-alpha4",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
