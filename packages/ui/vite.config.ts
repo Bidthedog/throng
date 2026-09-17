@@ -36,6 +36,10 @@ export default defineConfig({
         // Vite's 500 kB single-chunk warning. Route by module path (not package
         // name) so shared deps land in exactly one chunk — no empty chunks.
         manualChunks(id) {
+          // `@throng/core` — the domain layer every window kind shares, most of it the settings and theme
+          // metadata. Its own chunk, like a vendor, so no window's app chunk carries it (044: the workspace
+          // chunk passed 500 kB).
+          if (/\/packages\/core\//.test(id.replace(/\\/g, '/'))) return 'core';
           if (!id.includes('node_modules')) return undefined;
           if (id.includes('@xterm')) return 'xterm';
           if (/\/(react|react-dom|scheduler)\//.test(id)) return 'react';
