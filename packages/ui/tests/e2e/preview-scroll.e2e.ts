@@ -743,6 +743,28 @@ test('scrolling either side of a parented preview moves the other, a caret move 
       expect(typed.editorTop, `after typing ${key} at the end, the editor's top line moved`).toBe(ended.editorTop);
       expect(typed.previewScrollTop, `after typing ${key} at the end, the preview moved`).toBe(ended.previewScrollTop);
     }
+
+    // …and writing new LINES there never sends the editor up (hands-on report 2026-09-17: typing below the last
+    //    heading of a long file, with the preview at its own end, scrolled the editor up to that heading). Each
+    //    line grows the document, so the editor may scroll down to keep its caret in view; it must never go up.
+    let floor = ended.editorTop;
+    for (let n = 1; n <= 3; n += 1) {
+      const words = `typed line ${n}`;
+      await win.keyboard.press('Enter');
+      await win.keyboard.type(words);
+      await expect(preview).toContainText(words, { timeout: 5000 });
+      await frames(win, 30);
+      const wrote = await settledSync(win, editorId, previewId);
+      expect(
+        wrote.editorTop,
+        `after writing line ${n} at the end, the editor's top line went up from ${floor} (preview at its end: ${wrote.previewAtBottom}, preview top block ${wrote.previewTop})`,
+      ).toBeGreaterThanOrEqual(floor);
+      floor = wrote.editorTop;
+    }
+    for (let n = 3; n >= 1; n -= 1) {
+      for (let c = 0; c <= `typed line ${n}`.length; c += 1) await win.keyboard.press('Backspace');
+    }
+    await expect(editor.locator('.cm-content')).not.toContainText('typed line', { timeout: 5000 });
     await win.keyboard.press('Control+s');
     await frames(win, 30);
 

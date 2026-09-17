@@ -76,6 +76,8 @@ function clampHost(): void {
       value = Math.min(Math.max(0, v), max());
     },
   });
+  Object.defineProperty(el, 'clientHeight', { configurable: true, get: () => 400 });
+  Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => max() + 400 });
 }
 
 /** What the editor relay does when the editor view for `editorPanelId` scrolls. */
@@ -441,6 +443,40 @@ describe('the loop guard (FR-121c, FR-121g)', () => {
     await frames(3);
 
     expect(host().scrollTop).toBe(800);
+    expect(ed1).not.toHaveBeenCalled();
+
+    // The reader's own scroll from there still drives the editor (FR-121f).
+    await readerScrolls(600);
+    expect(ed1).toHaveBeenCalledTimes(1);
+    expect(ed1).toHaveBeenCalledWith(30);
+  });
+
+  /*
+   * Hands-on report 2026-09-17. Content that lays out after a draw — a project image that fails and is swapped
+   * for its alternative text — can make the document shorter; at the preview's bottom the engine then clamps
+   * `scrollTop` down. That clamp is not the reader's scroll and must not send the editor up.
+   */
+  it('at the preview’s bottom, a later shrink that clamps the position requests nothing', async () => {
+    await mountParented();
+    clampHost();
+    act(() => publishEditorDocLines('ed-1', 59));
+    editorScrolledTo('ed-1', 50);
+    await waitFor(() => expect(host().scrollTop).toBe(800));
+    host().dispatchEvent(new Event('scroll'));
+    await frames();
+
+    panel().push(previewUpdate({ panelId: panel().id, revision: 3, content: { kind: 'text', text: `${DOC}x` }, parent: PARENT }));
+    await screen.findByText('P29x');
+    host().dispatchEvent(new Event('scroll'));
+    await frames(3);
+    expect(ed1).not.toHaveBeenCalled();
+
+    // The last block loses its height after the draw; the engine clamps the position and says so.
+    screen.getByText('P29x').remove();
+    host().scrollTop = host().scrollTop;
+    expect(host().scrollTop).toBe(760);
+    host().dispatchEvent(new Event('scroll'));
+    await frames(3);
     expect(ed1).not.toHaveBeenCalled();
 
     // The reader's own scroll from there still drives the editor (FR-121f).
