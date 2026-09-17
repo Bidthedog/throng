@@ -226,6 +226,207 @@ describe('a real edit still reports and still arms the save', () => {
 });
 
 /* ────────────────────────────────────────────────────────────────────────── *
+ * The armed timer FIRES, and what it asks for (006 FR-060)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * ══ MOVED DOWN FROM E2E (044 T218, performing T181) ══
+ *
+ * `editor-indicators.e2e.ts`'s `auto-save writes edits within the debounce without Ctrl+S` launched
+ * an Electron app with a seeded `THRONG_CONFIG_ROOT`, typed into a real CodeMirror, and polled a
+ * real file on disk. Its claim decomposes into two halves that already have cheaper homes:
+ *
+ *   1. **the edit arms a save, the timer fires, and the renderer asks the authority to write IN
+ *      PLACE — with no key pressed.** That is this file's subject: one update listener, one timer,
+ *      one request over the `editor.*` bridge. `helpers/mount-editor.ts` mounts the real
+ *      `EditorView` behind that bridge, so the request is observable without a window.
+ *   2. **the request reaches disk with the right bytes, encoding and line ending.** That is
+ *      `integration/editor-service-save.integration.test.ts`, which writes real files through the
+ *      real `EditorService` and asserts BOM/CRLF/encoding preservation — strictly more than the
+ *      E2E's `readFileSync(...).toContain('AUTO')` ever did.
+ *
+ * Nothing in either half needs a window, a daemon or a layout, which is why the E2E declaration is
+ * gone rather than merely duplicated. The block below is the half that did not previously exist:
+ * every auto-save assertion in this file stopped at `setTimeout` HAVING BEEN CALLED, so a timer
+ * whose callback saved nothing was green at every layer.
+ *
+ * ══ OBSERVED FAILING — TWICE, AGAINST TWO DIFFERENT BREAKS ══
+ *
+ * One break cannot show that four cases are all load-bearing, because two of them are CONTROLS and
+ * a control's whole job is to stay green while the feature is broken. So both directions were run:
+ *
+ *   • the timer's body emptied (`if (dirtyRef.current)` → `if (false)`, the arming untouched):
+ *     cases 1 and 3 fail on `toHaveBeenCalledTimes(1)` — the save is never asked for. Cases 2 and 4
+ *     stay green, correctly.
+ *   • the arming guard removed (`settings.autoSave && configRef.current.filePath` → `true`):
+ *     cases 2 and 4 fail — a disabled setting writes, and an untitled buffer opens a save dialog on
+ *     a user who pressed nothing (`chooseSavePath` called with `defaultName: 'Panel 1'`). Cases 1
+ *     and 3 stay green, correctly.
+ *
+ * Every case is red under exactly one of the two, and none is red under both — which is what makes
+ * the set a partition of the behaviour rather than four ways of asserting one thing.
+ */
+
+/** Short enough to elapse inside a test, distinctive enough not to be mistaken for anything else. */
+const FAST_SAVE_MS = 25;
+
+/** A mounted editor whose auto-save debounce actually elapses, with a faithful save result. */
+async function mountedFiring(settings?: { autoSave?: boolean; absPath?: string | null }) {
+  const absPath = settings?.absPath === undefined ? PATH : settings.absPath;
+  const h = mountEditor({
+    panelId: PANEL,
+    doc: { text: DOC, version: 1, absPath },
+    settings: {
+      editor: { autoSave: settings?.autoSave ?? true, autoSaveDebounceMs: FAST_SAVE_MS },
+    },
+  });
+  await waitFor(() => expect(h.view().state.doc.toString()).toBe(DOC));
+  await waitFor(() => expect(h.settingsLoaded()).toBe(true));
+  /*
+   * The harness's default `{ ok: true }` carries no path, and `writeTo` copies `result.absPath`
+   * straight into `configRef`. A save that answered `undefined` would therefore UNPATH the document
+   * it just wrote, and the next edit would arm nothing — a second save could never happen for a
+   * reason that has nothing to do with the subject. Answer as UI main does.
+   */
+  h.calls.save.mockResolvedValue({ ok: true, absPath: PATH, encoding: 'utf8', lineEnding: 'lf' });
+  return h;
+}
+
+/** Comfortably past the debounce, without being a race if the machine is busy. */
+const PAST_FAST_SAVE_MS = FAST_SAVE_MS * 8;
+
+/**
+ * Acknowledge every edit this view has dispatched, exactly as UI main does.
+ *
+ * ══ WHY A TEST ABOUT SAVING HAS TO DO THIS ══
+ *
+ * Neither half of the auto-save path is the view's to decide. `dirtyRef` is set ONLY from an
+ * authority message (`applyChange`, `applyReset`, `msg.dirty`) — the authority derives it from
+ * `version !== savedVersion` and no view may relay it — and `writeTo` awaits
+ * `replica.settled()`, which resolves only when nothing is in flight. So a harness that records
+ * the dispatch and never answers it leaves the timer's guard false AND the save parked forever,
+ * and every assertion below would be about the fake rather than about the feature.
+ *
+ * The echo is the real message: `kind: 'edit'` carrying this view's own `origin`, which the replica
+ * recognises as its own acknowledgement and applies nothing for. Draining in a loop matters because
+ * a second edit typed while the first is in flight is BUFFERED and sent on that acknowledgement —
+ * so one ack begets one more dispatch, which is exactly the debounce case below.
+ */
+function ackEdits(h: ReturnType<typeof mountEditor>, from: number): number {
+  let at = from;
+  while (at < h.dispatched.length) {
+    const sent = h.dispatched[at] as {
+      documentId: string;
+      viewId: string;
+      changes: unknown;
+      baseVersion: number;
+    };
+    at += 1;
+    act(() => {
+      h.pushSync({
+        change: {
+          documentId: sent.documentId,
+          kind: 'edit',
+          changes: sent.changes,
+          version: sent.baseVersion + 1,
+          dirty: true,
+          origin: sent.viewId,
+        },
+      });
+    });
+  }
+  return at;
+}
+
+describe('auto-save writes the edit without Ctrl+S (006 FR-060)', () => {
+  it('asks the authority to save IN PLACE once the debounce elapses, with no key pressed', async () => {
+    const h = await mountedFiring();
+
+    act(() => {
+      h.view().dispatch({ changes: { from: 0, insert: 'AUTO ' } });
+    });
+    ackEdits(h, 0);
+    expect(h.calls.save, 'nothing may be written before the debounce elapses').not.toHaveBeenCalled();
+
+    await waitFor(() => expect(h.calls.save).toHaveBeenCalledTimes(1), { timeout: 2000 });
+
+    const req = h.calls.save.mock.calls[0]?.[0] as { panelId: string; absPath?: string };
+    expect(req.panelId).toBe(PANEL);
+    /*
+     * `absPath` is carried ONLY for a NEW path (`writeTo(absPath, isNewPath)`), so its absence is
+     * what distinguishes "save this file where it lives" from a Save As. An auto-save that asked
+     * for a new path would put a dialog in front of a user who pressed nothing.
+     */
+    expect(req.absPath, 'auto-save saves in place, it does not choose a path').toBeUndefined();
+  });
+
+  it('never fires at all when auto-save is OFF', async () => {
+    // The control. Without it, a timer that fired for EVERY document would satisfy the case above.
+    const h = await mountedFiring({ autoSave: false });
+
+    act(() => {
+      h.view().dispatch({ changes: { from: 0, insert: 'AUTO ' } });
+    });
+    ackEdits(h, 0);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, PAST_FAST_SAVE_MS));
+    });
+
+    expect(h.calls.save, 'a disabled setting must write nothing (FR-061)').not.toHaveBeenCalled();
+  });
+
+  it('DEBOUNCES: two edits inside the window produce one save, not two', async () => {
+    /*
+     * The word "debounce" is the requirement, and a timer that was armed but never cleared would
+     * pass the first case and write twice here — once for each keystroke, on the user's file.
+     */
+    const h = await mountedFiring();
+
+    act(() => {
+      h.view().dispatch({ changes: { from: 0, insert: 'A' } });
+    });
+    act(() => {
+      h.view().dispatch({ changes: { from: 0, insert: 'B' } });
+    });
+    // Both, including the one the replica buffered behind the first (see `ackEdits`).
+    ackEdits(h, ackEdits(h, 0));
+
+    await waitFor(() => expect(h.calls.save).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, PAST_FAST_SAVE_MS));
+    });
+    expect(h.calls.save, 'the second edit must RE-arm the timer, not add one').toHaveBeenCalledTimes(1);
+  });
+
+  it('never auto-writes an UNPATHED document, and never opens a chooser (FR-060, last clause)', async () => {
+    /*
+     * The clause the E2E never reached at all: auto-save must not put a save dialog in front of a
+     * user who pressed nothing, so an untitled buffer is left alone until they choose a location.
+     *
+     * The CHOOSER is the half that makes this case falsifiable. `save()` routes an unpathed document
+     * to `chooseThenSave()`, which never reaches `editor.save` — so an arming guard that dropped the
+     * `filePath` test would fire, open a dialog on a user who pressed nothing, and still leave
+     * `calls.save` untouched. Asserting only the write would call that a pass.
+     */
+    const h = await mountedFiring({ absPath: null });
+    const chooseSavePath = vi.fn(() => Promise.resolve(null));
+    (Reflect.get(window, 'throng') as { editor: Record<string, unknown> }).editor.chooseSavePath =
+      chooseSavePath;
+
+    act(() => {
+      h.view().dispatch({ changes: { from: 0, insert: 'AUTO ' } });
+    });
+    ackEdits(h, 0);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, PAST_FAST_SAVE_MS));
+    });
+
+    expect(h.calls.save, 'an unpathed document has nowhere confined to go').not.toHaveBeenCalled();
+    expect(chooseSavePath, 'and no dialog may appear unasked').not.toHaveBeenCalled();
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
  * The caret is computed IN the invocation, not deferred (FR-008a)
  * ────────────────────────────────────────────────────────────────────────── */
 

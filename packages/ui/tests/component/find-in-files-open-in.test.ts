@@ -41,7 +41,7 @@ import {
   registerResultOpenTargets,
   type ResultOpenRequest,
 } from '../../src/renderer/find-in-files/result-open.js';
-import type { OpenInTarget } from '../../src/renderer/editor/open-in-targets.js';
+import { describeOpenInTargets, type OpenInTarget } from '../../src/renderer/editor/open-in-targets.js';
 import {
   PANEL_ID,
   installFileSearchStub,
@@ -241,6 +241,46 @@ describe('drawn and disabled where the menu names no file (FR-087d)', () => {
     await user.click(screen.getByTestId('menu-item-Open In'));
 
     expect(opened).toEqual([]);
+  });
+});
+
+/*
+ * 044 T105 (FR-054, FR-055) — a regression guard, passing by design: a Find in Files result always
+ * opens an EDITOR, so its Open In never offers Preview. Files & Folders gains Preview through its OWN
+ * argument to `buildContextMenuItems` (contracts/menus-and-controls.md §5); the shared
+ * `describeOpenInTargets` this row draws from is untouched. The lister below is the REAL shared builder
+ * over a Markdown row's facts — a file a preview provider claims — so a Preview added to the shared
+ * builder would appear here and redden this.
+ */
+describe('044 — a result row never offers Preview (FR-054, FR-055)', () => {
+  it('Open In on a Markdown row lists editor targets only, from the real shared builder', async () => {
+    registerResultOpenTargets(async (relPath) => {
+      askedFor.push(relPath);
+      return describeOpenInTargets({
+        activeTabId: 'tab-1',
+        otherTabs: [{ id: 'tab-2', title: 'Docs' }],
+        lastActiveEditorTitle: 'Scratch',
+        lastActiveHoldsFile: false,
+        alreadyOpen: false,
+      });
+    });
+    const user = userEvent.setup();
+    renderFindInFilesPanel();
+    await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle{Enter}');
+    stub.emit({
+      panelId: PANEL_ID,
+      generation: 1,
+      status: 'complete',
+      rows: [resultRow('docs/guide.md', 3, 12)],
+      totalMatches: 1,
+    });
+    await rightClick(user, 'fif-row-docs/guide.md-12');
+    const flyout = await openFlyout(user);
+
+    expect(askedFor).toEqual(['docs/guide.md']);
+    expect(within(flyout).getByTestId('menu-item-New Editor')).toBeTruthy();
+    expect(within(flyout).queryByTestId('menu-item-Preview')).toBeNull();
+    expect(within(flyout).queryByText(/preview/i)).toBeNull();
   });
 });
 

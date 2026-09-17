@@ -320,9 +320,70 @@ test('Reopening About focuses the single window rather than opening a second', {
 test('The About Close button dismisses the window', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const about = await openAboutViaMenu(app);
   await expect(about.getByTestId('about-window')).toBeVisible();
+  const button = about.getByTestId('about-close');
+  await expect(button).toBeVisible();
 
+  /*
+   * ══ WHY THE CLICK MAY REJECT, AND WHY THAT IS STILL A PASS ══
+   *
+   * The button closes the very page the click was dispatched to. Its handler sends the close to main
+   * while the renderer is still inside the click, and main closes the window at once. Playwright's
+   * click resolves only when the renderer ACKNOWLEDGES the input — so whether that acknowledgement
+   * or the window's destruction arrives first is a race, and when destruction wins the click rejects
+   * with "Target page, context or browser has been closed" although it did exactly its job.
+   *
+   * Measured: locally the click resolves within a millisecond of the page closing (36-50 ms after
+   * it starts, 40/40 passes); throttling this renderer's CPU 4x or 20x rejects it 5/5 at each rate,
+   * with main having received the About page's close request before the rejection every time. The
+   * gate run failed the same way.
+   *
+   * So the click is accepted as done in exactly one case: it rejected BECAUSE the page closed, and
+   * main heard the close request from this page. That second condition is what keeps the test
+   * honest — a window that vanished on its own, before or without the click, also rejects a click
+   * with "closed", and must still fail here.
+   */
+  const closeRequests = await watchCloseRequests(app);
   const closed = about.waitForEvent('close');
-  await about.getByTestId('about-close').click();
+  try {
+    await button.click();
+  } catch (err) {
+    if (!/Target page, context or browser has been closed/.test(String(err))) throw err;
+  }
   await closed;
   expect(about.isClosed()).toBe(true);
+  expect(await closeRequests.fromAbout(), 'the window closed without its Close button asking').toBe(1);
 });
+
+/**
+ * Count the window-close requests main receives from an About page, from now on.
+ *
+ * `window.throng.window.close()` is the only thing the About Close button does, and it arrives in
+ * main as `throng:window:close` from the About page's own `webContents` — so this is the observable
+ * that says the BUTTON closed the window, as opposed to the window going away by some other route.
+ * The listener is removed on read, so a shared app does not accumulate them.
+ */
+async function watchCloseRequests(
+  electronApp: ElectronApplication,
+): Promise<{ fromAbout: () => Promise<number> }> {
+  await electronApp.evaluate(({ ipcMain }) => {
+    const g = globalThis as { __aboutCloseWatch?: { count: number; off: () => void } };
+    g.__aboutCloseWatch?.off();
+    const watch = { count: 0, off: () => {} };
+    const onClose = (event: { sender: { getURL: () => string } }): void => {
+      if (event.sender.getURL().includes('about=1')) watch.count += 1;
+    };
+    ipcMain.on('throng:window:close', onClose);
+    watch.off = () => ipcMain.off('throng:window:close', onClose);
+    g.__aboutCloseWatch = watch;
+  });
+  return {
+    fromAbout: () =>
+      electronApp.evaluate(() => {
+        const g = globalThis as { __aboutCloseWatch?: { count: number; off: () => void } };
+        const watch = g.__aboutCloseWatch;
+        watch?.off();
+        g.__aboutCloseWatch = undefined;
+        return watch?.count ?? -1;
+      }),
+  };
+}

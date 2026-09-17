@@ -137,6 +137,55 @@ describe('the file-tree chords are NOT live over a Find in Files panel (043 R14)
 });
 
 /**
+ * 044 FR-021 — a preview panel is its OWN scope, for 043 R14's reason.
+ *
+ * A preview is a document the user reads and scrolls, and the fallback would put it in the
+ * EXPLORER's scope: Delete, F2, Ctrl+X and Ctrl+C would all act on the file tree's selection while
+ * the user's attention is on the rendered page. FR-021 also makes save and find inert there — a
+ * preview has no document of its own to save and no find bar — and both are editor/panel commands,
+ * so the `preview` scope gives them nothing to resolve to.
+ */
+describe('the file, save and find chords resolve to nothing over a preview (044 FR-021)', () => {
+  const quiet = { transientFocus: false, overlayOpen: false };
+  const over = (kind: string): { tabs: Tab[]; activeTabId: string } => ({
+    tabs: [tabWith(kind)],
+    activeTabId: 't1',
+  });
+
+  it('scopes a preview panel to preview, NOT to the explorer fallback', () => {
+    expect(scopeFromKind('preview')).toBe('preview');
+    expect(currentScope({ tabs: [tabWith('preview')], activeTabId: 't1' })).toBe('preview');
+  });
+
+  type Ev = Parameters<typeof resolveScoped>[1];
+  const INERT: Array<{ chord: string; ev: Ev; action: string; live: string }> = [
+    { chord: 'Delete', ev: { key: 'Delete' }, action: 'file.delete', live: 'placeholder' },
+    { chord: 'F2', ev: { key: 'F2' }, action: 'file.rename', live: 'placeholder' },
+    { chord: 'Ctrl+X', ev: { key: 'x', ctrl: true }, action: 'file.cut', live: 'placeholder' },
+    { chord: 'Ctrl+C', ev: { key: 'c', ctrl: true }, action: 'file.copy', live: 'placeholder' },
+    { chord: 'Ctrl+S', ev: { key: 's', ctrl: true }, action: 'editor.save', live: 'editor' },
+    { chord: 'Ctrl+F', ev: { key: 'f', ctrl: true }, action: 'search.find', live: 'editor' },
+  ];
+
+  for (const { chord, ev, action, live } of INERT) {
+    it(`${chord} resolves to ${action} over ${live}, and to NOTHING over a preview`, () => {
+      // The positive half first, so the negative cannot pass because the chord is unbound.
+      expect(resolveScoped(DEFAULT_KEYBINDINGS, ev, over(live), quiet)).toBe(action);
+      expect(
+        resolveScoped(DEFAULT_KEYBINDINGS, ev, over('preview'), quiet),
+        `${chord} resolved over a preview panel`,
+      ).toBeNull();
+    });
+  }
+
+  it('keeps window-level chords live, so the user can still leave the panel', () => {
+    expect(
+      resolveScoped(DEFAULT_KEYBINDINGS, { key: 'ArrowLeft', ctrl: true, alt: true }, over('preview'), quiet),
+    ).toBe('focus.left');
+  });
+});
+
+/**
  * 033 AS-9 / A4 — Go To Line is dead without an editor, and alive with one.
  *
  * MIGRATED FROM `packages/ui/tests/e2e/goto-line.e2e.ts:601` (035 T055) — `test('with no editor

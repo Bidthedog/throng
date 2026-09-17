@@ -33,6 +33,18 @@ describe('hand-written theme token copy (FR-006/007/008/009)', () => {
     expect(THEME_TOKEN_COPY['icons.editVisual']).toBeDefined();
   });
 
+  it('hand-writes a label and description for each 044 preview and navigation icon (R17)', () => {
+    for (const token of ['preview', 'refresh', 'navigateBack', 'navigateForward']) {
+      const key = `icons.${token}`;
+      expect(THRONG_THEME.icons[token], key).toBeTruthy();
+      const entry = THEME_TOKEN_COPY[key];
+      expect(entry, `missing copy for ${key}`).toBeDefined();
+      expect(entry.label.trim().length, key).toBeGreaterThan(0);
+      expect(entry.description.trim().length, key).toBeGreaterThan(0);
+      expect(entry.description, `${key} restates the identifier`).not.toBe(mechanicalCopy(key).description);
+    }
+  });
+
   it('has no entries for unknown tokens', () => {
     const known = new Set(tokens);
     for (const key of Object.keys(THEME_TOKEN_COPY)) {

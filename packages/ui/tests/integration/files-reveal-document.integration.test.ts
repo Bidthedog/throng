@@ -52,6 +52,7 @@ const shell = {
   openFolder: async (abs: string) => {
     openedFolders.push(abs);
   },
+  openExternal: async () => {},
 } as unknown as ConstructorParameters<typeof FilesService>[1];
 
 const watcher = { setRoot: () => {} } as unknown as Parameters<typeof registerFilesIpc>[1];
@@ -167,5 +168,76 @@ describe('#273 — a Panel reveals its own file, not the same relative path unde
   it('refuses an empty path without touching the filesystem', async () => {
     wire([]);
     expect(await revealDocument('')).toEqual({ error: 'Target is outside the project root.' });
+  });
+});
+
+/**
+ * 044 T061 / FR-033 — Open in OS Explorer on a STANDALONE preview.
+ *
+ * A standalone preview shows a file no editor has open (FR-025), so an open-document check that asks
+ * only the editor registry refuses the one path the preview's own menu item names. The check `main.ts`
+ * wires is `openInEditorOrPreview`, and it is exercised here over a real coordinator and a real
+ * `PreviewService` rather than a list of paths, so the test fails if either half stops answering.
+ */
+describe('044 FR-033 — a path only a preview shows may be revealed', () => {
+  async function wireWithPreview(): Promise<{ shown: string; nothing: string; dispose: () => void }> {
+    const { EditorService } = await import('../../src/main/editor-service.js');
+    const { EditorCoordinator } = await import('../../src/main/editor-coordinator.js');
+    const { EditorRecovery } = await import('../../src/main/editor-recovery.js');
+    const { PreviewService } = await import('../../src/main/preview-service.js');
+    const { openInEditorOrPreview } = await import('../../src/main/open-document-check.js');
+    const { DEFAULT_APP_SETTINGS, SHIPPED_PREVIEW_PROVIDERS } = await import('@throng/core');
+
+    const nodeFs = new NodeFileSystem();
+    const editorService = new EditorService(nodeFs, () => DEFAULT_APP_SETTINGS);
+    const coordinator = new EditorCoordinator(editorService, new EditorRecovery(join(dataDir, 'recovery')), {
+      relaySync: () => {},
+      persistUndoHistory: () => false,
+    });
+    const previews = new PreviewService({
+      documents: coordinator,
+      reader: editorService,
+      fs: nodeFs,
+      fileWatcher: { watch: () => ({ dispose: () => {} }) },
+      settings: () => DEFAULT_APP_SETTINGS,
+      registry: SHIPPED_PREVIEW_PROVIDERS,
+      projectRoot: async (id) => (id === 'B' ? projectB : undefined),
+      push: {
+        update: () => {},
+        broadcastOpenChanged: () => {},
+        broadcastPathChanged: () => {},
+        sendFocus: () => {},
+        sendPlace: () => true,
+      },
+      windows: { mainWindowId: () => null, raise: () => {} },
+    });
+
+    const shown = file(projectB, 'readme.md');
+    const nothing = file(projectB, 'other.md');
+    const attached = await previews.attach(2, { panelId: 'v1', projectId: 'B', filePath: shown });
+    expect(attached.ok).toBe(true);
+    // Nothing opened a document for it: the preview is the only thing showing it.
+    expect(coordinator.isOpen(shown)).toBe(false);
+
+    const service = new FilesService(new NodeFileSystem(), shell);
+    service.setOpenDocumentCheck(openInEditorOrPreview(coordinator, previews));
+    registerFilesIpc(service, watcher);
+    return { shown, nothing, dispose: () => previews.destroyed('v1') };
+  }
+
+  it('reveals the file a standalone preview is showing', async () => {
+    const { shown, dispose } = await wireWithPreview();
+
+    expect(await revealDocument(shown)).toEqual({ ok: true });
+    expect(revealed).toEqual([shown]);
+    dispose();
+  });
+
+  it('still refuses a path that neither an editor nor a preview is showing', async () => {
+    const { nothing, dispose } = await wireWithPreview();
+
+    expect(await revealDocument(nothing)).toEqual({ error: 'Target is outside the project root.' });
+    expect(revealed).toEqual([]);
+    dispose();
   });
 });

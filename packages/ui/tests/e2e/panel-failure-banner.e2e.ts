@@ -415,7 +415,7 @@ test.afterAll(async () => {
  * terminal into a real start failure, then right-clicked each and dismissed each menu — to check
  * that three labels were present, twice.
  *
- * Both menus gate those rows on a plain boolean: `editorFailure` for the panel header,
+ * Both menus gate those rows on a plain boolean: `panelFailure` for the panel header,
  * `startFailure` for the terminal content menu. Producing the failure was the expensive half, and it
  * is not the claim.
  *

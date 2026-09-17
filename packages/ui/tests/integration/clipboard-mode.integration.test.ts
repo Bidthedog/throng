@@ -20,6 +20,9 @@ function osClipboard(): IClipboard & { setExternally: (text: string) => void } {
     writeText: (value: string) => {
       text = value;
     },
+    async writeRich(entry: { text: string; html: string }) {
+      text = entry.text;
+    },
     readText: () => text,
     setExternally: (value: string) => {
       text = value;
@@ -108,5 +111,22 @@ describe('ClipboardService — one record, every panel, every window', () => {
     os.setExternally('text from before throng started');
     expect(service.pasteMode()).toBe('verbatim');
     expect(service.currentRecord()).toBeNull();
+  });
+
+  it('a rich copy from a preview clears the earlier full-line record — Ctrl+V mid-line inserts at the caret', async () => {
+    // The exact bug: whole-line-copy "Hello world" in an editor (no selection), then rich-copy the
+    // SAME TEXT from a preview panel. Both writes put identical text on the OS clipboard, so a naive
+    // comparison sees "still our text" and hands back the STALE mode — full-line — which pastes as a
+    // new line above the caret instead of splitting it in at the caret. The preview's copy is not one
+    // of throng's own verbatim/full-line/rectangular sources, so it must read back verbatim.
+    const os = osClipboard();
+    const service = new ClipboardService(os);
+
+    service.write('Hello world', 'full-line'); // the editor's whole-line copy
+    expect(service.pasteMode()).toBe('full-line');
+
+    await service.writeRich({ text: 'Hello world', html: '<p>Hello world</p>' }); // the preview's rich copy
+
+    expect(service.pasteMode()).toBe('verbatim'); // not full-line — a mid-line Ctrl+V must not split a new line in
   });
 });

@@ -80,25 +80,22 @@ async function stubSaveDialog(app: ElectronApplication, picked: string): Promise
   }, picked);
 }
 
-/**
- * ── THE ENABLE/DISABLE RULE MOVED (035 T055) ──
+/*
+ * ── "Open In offers New Editor ... and disables it once the file is open" MOVED DOWN (044 T163a) ──
  *
- * Two of this test's three claims are `file-tree.tsx`'s `disabled: alreadyOpen || !activeTabId`,
- * and they are now `packages/ui/tests/component/explorer-open-in-target.test.ts`: the item is
- * ENABLED while the file is closed, and still OFFERED but disabled once it is open. That harness
- * already stubs `editor.isOpen`, which is where `alreadyOpen` comes from, so both states are one
- * line apart — where this test reached the second by really opening a file in a real editor panel.
+ * All three of its claims are held below this layer, each observed failing against a broken
+ * implementation before the declaration was deleted:
  *
- * The component version also asserts the SCOPE of the refusal, which this could not: with the file
- * open, "Last Active Editor" must stay enabled, because it reuses the buffer that already exists
- * rather than making a second one. A fix that disabled the whole submenu would satisfy every
- * assertion here and take away the one target that still makes sense. Red-proven by
- * disables-siblings, which nothing else reddens.
+ *   - offered and ENABLED while the file is closed, still OFFERED but disabled once it is open —
+ *     `unit/open-in-targets.test.ts` (`describeOpenInTargets`, the `alreadyOpen` rule) and
+ *     `component/explorer-open-in-target.test.ts` (the drawn row in the real FileTree menu);
+ *   - clicking it opens a SECOND editor panel — `component/editor-open-router.test.ts` ("Open In →
+ *     New Editor opens an editor": `performOpenIn` hands `openFileInTab` the `new` target) and
+ *     `component/editor-open-routing.test.ts` ("opens a NEW panel every time when the open target is
+ *     'new'").
  *
- * ── WHAT STAYS ──
- *
- * The middle claim: that clicking New Editor really does produce a second editor panel hosting the
- * file. That is the editor's business, not the menu's, and it is what the rest of this test drives.
+ * What the declaration drove — an in-document React menu and a class on one of its rows — is not in
+ * the E2E reserve, which is why it carried no `@reserve:*` tag.
  */
 /*
  * ── ONE REMOVED (035 T056), AND A WHOLE FILE WITH IT ──
@@ -126,36 +123,6 @@ async function stubSaveDialog(app: ElectronApplication, picked: string): Promise
  * panel-and-tab-swapped (1), notice-names-no-file (2), movedto-ignored (1), save-error-silent (2),
  * one-message-for-both-owners (1).
  */
-test('Open In offers "New Editor" (a second panel) and disables it once the file is open', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'FbProj', root);
-      await newEditor(win);
-
-      const tree = win.getByTestId('file-explorer-tree');
-      await tree.getByText('a.txt', { exact: true }).click({ button: 'right' });
-      await item(win, 'Open In').click();
-      await expect(win.locator('.context-menu__item', { hasText: 'Last Active Editor' }).last()).toBeVisible();
-      // New Editor is available while the file is not open.
-      await expect(item(win, 'New Editor')).toBeVisible();
-      await expect(item(win, 'New Editor')).not.toHaveClass(/context-menu__item--disabled/);
-      await item(win, 'New Editor').click();
-
-      // A second editor panel now hosts the file.
-      await expect(win.locator('.editor-panel')).toHaveCount(2);
-      await expect(win.locator('.cm-content', { hasText: 'A-BODY' }).first()).toBeVisible();
-
-      // Re-open the menu → New Editor is disabled (one buffer per file, FR-011a).
-      await tree.getByText('a.txt', { exact: true }).click({ button: 'right' });
-      await item(win, 'Open In').click();
-      await expect(item(win, 'New Editor')).toHaveClass(/context-menu__item--disabled/);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
 test('panel-header Save saves; Revert discards changes after confirmation', { tag: ['@extended', '@editor'] }, async () => {
   const root = makeProject();
   const savePath = join(root, 'note.txt');

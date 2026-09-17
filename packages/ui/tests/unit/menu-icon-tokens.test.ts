@@ -38,6 +38,7 @@ import { editorContentMenu } from '../../src/renderer/editor/content-menu.js';
 import { terminalContentMenu } from '../../src/renderer/terminal/terminal-content-menu.js';
 import { cogMenuItems } from '../../src/renderer/title-bar/cog-menu-items.js';
 import { panelHeaderMenu } from '../../src/renderer/workspace/panel-header-menu.js';
+import { previewContentMenu } from '../../src/renderer/preview/content-menu.js';
 
 const noop = (): void => {};
 
@@ -232,6 +233,89 @@ describe('the rows #126 shipped blank now carry a glyph (#127)', () => {
   });
 });
 
+/*
+ * 044 FR-122b — Synchronise Scrolling carries the `syncScroll` token on all four menus that offer it
+ * (contracts/menus-and-controls.md §10), and the shipped theme draws that token. Named here rather than
+ * left to a sweep, because a row that named no icon would pass every sweep above.
+ */
+describe('Synchronise Scrolling wears the syncScroll glyph on every menu that offers it (044 FR-122b)', () => {
+  const SYNC = 'menu-item-Synchronise Scrolling';
+  const textPreviewPanel = {
+    type: 'panel',
+    id: 'pv',
+    originProjectId: 'proj',
+    title: 'README.md',
+    kind: 'preview',
+    config: { filePath: 'D:/project/README.md' },
+  } as unknown as Parameters<typeof panelHeaderMenu>[0]['panel'];
+  const editorPanel = {
+    type: 'panel',
+    id: 'ed',
+    originProjectId: 'proj',
+    title: 'README.md',
+    kind: 'editor',
+  } as unknown as Parameters<typeof panelHeaderMenu>[0]['panel'];
+  const header = (panel: Parameters<typeof panelHeaderMenu>[0]['panel'], extra: Partial<Parameters<typeof panelHeaderMenu>[0]>) =>
+    panelHeaderMenu({
+      panel,
+      panelVerb: 'Destroy',
+      keybindings: DEFAULT_KEYBINDINGS,
+      otherTabs: [],
+      editor: null,
+      panelFailure: false,
+      detach: null,
+      syncScroll: true,
+      actions: new Proxy({}, { get: () => noop }) as Parameters<typeof panelHeaderMenu>[0]['actions'],
+      ...extra,
+    });
+  const PREVIEWABLE = { state: 'enabled', provider: { id: 'markdown', displayName: 'Markdown', kind: 'text' } } as unknown as NonNullable<
+    Parameters<typeof panelHeaderMenu>[0]['openPreview']
+  >;
+
+  const SURFACES: { name: string; build: () => MenuAction[] }[] = [
+    {
+      name: 'editor body',
+      build: () =>
+        editorContentMenu({
+          view: {} as EditorView,
+          panelId: 'p1',
+          viewId: 'v1',
+          lineEnding: () => 'lf',
+          wordWrap: { on: true, toggle: noop },
+          gotoLine: { open: noop },
+          openPreview: { affordance: PREVIEWABLE, open: noop },
+          syncScroll: { on: true, toggle: noop },
+        }),
+    },
+    {
+      name: 'preview body',
+      build: () =>
+        previewContentMenu({
+          link: null,
+          selectionEmpty: true,
+          followChord: undefined,
+          actions: { openLink: noop, copyLinkAddress: noop },
+          syncScroll: { on: true, toggle: noop },
+        }),
+    },
+    {
+      name: 'editor header',
+      build: () => header(editorPanel, { editor: { dirty: false, hasFilePath: true }, openPreview: PREVIEWABLE }),
+    },
+    {
+      name: 'preview header',
+      build: () => header(textPreviewPanel, { preview: { providerKind: 'text', parented: false } }),
+    },
+  ];
+
+  it.each(SURFACES)('$name', ({ build }) => {
+    const item = flatten(build()).find((i) => i.testId === SYNC);
+    expect(item, 'no Synchronise Scrolling row').toBeDefined();
+    expect(item?.icon).toBe('syncScroll');
+    expect(glyphFor('syncScroll')?.trim()).toBeTruthy();
+  });
+});
+
 describe('the fixed native chords are advertised on the row (FR-017c)', () => {
   /*
    * These actions keep their native bindings and are deliberately off the rebindable list, so the
@@ -282,26 +366,26 @@ describe('the fixed native chords are advertised on the row (FR-017c)', () => {
  * EMPTY menus and would then prove nothing at all.
  */
 describe('FR-014 — the content menu and the panel-header menu are distinct', () => {
-  const headerMenu = (): MenuAction[] =>
-    panelHeaderMenu({
-      panel: {
-        id: 'p1',
-        kind: 'editor',
-        title: 'app.ts',
-        titleIsCustom: false,
-      } as unknown as Parameters<typeof panelHeaderMenu>[0]['panel'],
-      panelVerb: 'Destroy',
-      keybindings: DEFAULT_KEYBINDINGS,
-      otherTabs: [],
-      editor: { filePath: 'D:/project/src/app.ts', dirty: false } as unknown as Parameters<
-        typeof panelHeaderMenu
-      >[0]['editor'],
-      editorFailure: false,
-      detach: null,
-      actions: new Proxy({}, { get: () => noop }) as Parameters<
-        typeof panelHeaderMenu
-      >[0]['actions'],
-    });
+  const headerMenuArgs = (): Parameters<typeof panelHeaderMenu>[0] => ({
+    panel: {
+      id: 'p1',
+      kind: 'editor',
+      title: 'app.ts',
+      titleIsCustom: false,
+    } as unknown as Parameters<typeof panelHeaderMenu>[0]['panel'],
+    panelVerb: 'Destroy',
+    keybindings: DEFAULT_KEYBINDINGS,
+    otherTabs: [],
+    editor: { filePath: 'D:/project/src/app.ts', dirty: false } as unknown as Parameters<
+      typeof panelHeaderMenu
+    >[0]['editor'],
+    panelFailure: false,
+    detach: null,
+    actions: new Proxy({}, { get: () => noop }) as Parameters<
+      typeof panelHeaderMenu
+    >[0]['actions'],
+  });
+  const headerMenu = (): MenuAction[] => panelHeaderMenu(headerMenuArgs());
 
   const labelsOf = (items: MenuAction[]): string[] =>
     flatten(items)
@@ -336,6 +420,48 @@ describe('FR-014 — the content menu and the panel-header menu are distinct', (
     const header = labelsOf(headerMenu());
     const shared = header.filter((l) => content.has(l));
     expect(shared, `these labels appear in BOTH menus: ${shared.join(', ')}`).toEqual([]);
+  });
+
+  /*
+   * THE EXCEPTIONS, STATED RATHER THAN DODGED (044).
+   *
+   * The fixtures above offer no preview, which is the only reason the rule above holds for them. Where the
+   * editor's file HAS a preview provider, 044 requires two rows in both menus by name: Open Preview (FR-002,
+   * "in its body's right-click menu and in its header's right-click menu") and Synchronise Scrolling
+   * (FR-122b, extended 2026-09-16 to the header menus, checked while the setting is on — so both of its
+   * labels). Those rows are the exceptions, and the only ones: anything else in both menus still fails.
+   */
+  const REQUIRED_IN_BOTH = new Set(['Open Preview', 'Synchronise Scrolling', 'Synchronise Scrolling ✓']);
+  const PREVIEWABLE = {
+    state: 'enabled',
+    provider: { id: 'markdown', displayName: 'Markdown', kind: 'text' },
+  } as unknown as NonNullable<Parameters<typeof panelHeaderMenu>[0]['openPreview']>;
+  const previewableContent = (sync: boolean): MenuAction[] =>
+    editorContentMenu({
+      view: {} as EditorView,
+      panelId: 'p1',
+      viewId: 'v1',
+      lineEnding: () => 'lf',
+      wordWrap: { on: true, toggle: noop, chord: 'Alt+Z' },
+      gotoLine: { open: noop, chord: 'Ctrl+G' },
+      openPreview: { affordance: PREVIEWABLE, open: noop },
+      syncScroll: { on: sync, toggle: noop },
+    });
+  const previewableHeader = (sync: boolean): MenuAction[] =>
+    panelHeaderMenu({
+      ...headerMenuArgs(),
+      openPreview: PREVIEWABLE,
+      syncScroll: sync,
+    });
+
+  it.each([true, false])('with a previewable file (sync %s), ONLY the rows 044 requires in both menus are shared', (sync) => {
+    const content = new Set(labelsOf(previewableContent(sync)));
+    const shared = labelsOf(previewableHeader(sync)).filter((l) => content.has(l));
+    // Not vacuous: both required rows really are in both menus with this fixture.
+    expect(shared).toContain('Open Preview');
+    expect(shared).toContain(sync ? 'Synchronise Scrolling ✓' : 'Synchronise Scrolling');
+    const unexpected = shared.filter((l) => !REQUIRED_IN_BOTH.has(l));
+    expect(unexpected, `these labels appear in BOTH menus without a requirement: ${unexpected.join(', ')}`).toEqual([]);
   });
 });
 
@@ -425,7 +551,7 @@ describe('the Set Language item states the language, not just the offer', () => 
  * driven into a real start failure, two right-clicks and two menu dismissals — to check that three
  * labels are present twice.
  *
- * Both menus gate those rows on a plain boolean: `editorFailure` for the panel header,
+ * Both menus gate those rows on a plain boolean: `panelFailure` for the panel header,
  * `startFailure` for the terminal content menu. Neither needs a broken file or a dead shell to say
  * what it contains; producing the failure was the expensive half, and it is not the claim.
  *
@@ -436,7 +562,7 @@ describe('the Set Language item states the language, not just the offer', () => 
 describe('the failure rows appear only while there is a failure (FR-042c)', () => {
   const FAILURE_ROWS = ['Try again', 'Copy details', 'Clear panel type'];
 
-  const headerLabels = (editorFailure: boolean): string[] =>
+  const headerLabels = (panelFailure: boolean): string[] =>
     flatten(
       panelHeaderMenu({
         panel: {
@@ -451,7 +577,7 @@ describe('the failure rows appear only while there is a failure (FR-042c)', () =
         editor: { filePath: 'D:/project/src/app.ts', dirty: false } as unknown as Parameters<
           typeof panelHeaderMenu
         >[0]['editor'],
-        editorFailure,
+        panelFailure,
         detach: null,
         actions: new Proxy({}, { get: () => noop }) as Parameters<
           typeof panelHeaderMenu

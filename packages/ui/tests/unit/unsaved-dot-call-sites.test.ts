@@ -138,4 +138,21 @@ describe('the panel header gates its dot on the panel being an editor NOW', () =
     ).toContain("panel.kind === 'editor'");
     expect(condition).toContain('dirty');
   });
+
+  it('gates the PREVIEW clause on the panel being a preview, and on it being parented (044 FR-040, FR-043)', () => {
+    /*
+     * 044 added a second clause: a parented preview wears its source document's dot, read from the
+     * preview update. Preview state is keyed by panel id and outlives a clear-type exactly as editor
+     * state does, so a clause reading `previewUi` without the kind test would put a document's mark on
+     * whatever the panel became; one without the parent test would put it on a standalone preview.
+     */
+    const src = readFileSync(join(RENDERER, 'workspace', 'panel-placeholder.tsx'), 'utf8');
+    const idx = src.indexOf('throng-unsaved-dot');
+    const before = src.slice(0, idx);
+    const condition = src.slice(before.lastIndexOf('{'), idx);
+
+    if (!condition.includes('previewUi')) return; // no preview clause: nothing further to pin
+    expect(condition, 'the preview clause is not gated on the panel being a preview').toContain('isPreview');
+    expect(condition, 'the preview clause is not gated on the preview being parented').toContain('parent');
+  });
 });

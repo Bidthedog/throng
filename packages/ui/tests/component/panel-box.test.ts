@@ -18,7 +18,7 @@ import { FileOpUndoClient } from '../../src/renderer/state/fileop-undo-client.js
 import { PanelNameClient } from '../../src/renderer/state/panel-name-client.js';
 import { ServicesProvider, type Services } from '../../src/renderer/composition-root.js';
 import { WorkspaceProvider, useWorkspace } from '../../src/renderer/state/workspace-store.js';
-import { ProjectsProvider } from '../../src/renderer/state/projects-store.js';
+import { ProjectsProvider, useProjects } from '../../src/renderer/state/projects-store.js';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
@@ -77,7 +77,7 @@ const PROJECT = 'proj-1';
  * `workspace.save` is recorded rather than ignored: "the panel was removed" and "the removal was
  * persisted" are two claims, and the migrated E2E could only ever see the first.
  */
-function fakeDaemon() {
+function fakeDaemon(projects: readonly unknown[] = []) {
   const layout = createDefaultLayout(PROJECT, { tab: 't1', panel: 'p1' });
   const saved: WorkspaceLayout[] = [];
   const bridge: ThrongBridge = {
@@ -93,7 +93,7 @@ function fakeDaemon() {
         case 'subworkspace.list':
           return Promise.resolve({ subWorkspaces: [] } as T);
         case 'projects.list':
-          return Promise.resolve({ projects: [] } as T);
+          return Promise.resolve({ projects } as T);
         default:
           // Loud rather than silent: an unexpected RPC resolved to `{}` is how a test starts
           // passing against a code path that no longer exists.
@@ -120,7 +120,7 @@ function servicesOver(bridge: ThrongBridge): Services {
  * ────────────────────────────────────────────────────────────────────────── */
 
 type Ws = ReturnType<typeof useWorkspace>;
-const captured: { ws: Ws | null } = { ws: null };
+const captured: { ws: Ws | null; projectCount: number } = { ws: null, projectCount: 0 };
 
 /**
  * Every panel in the chosen tab, as real `PanelPlaceholder`s.
@@ -133,6 +133,7 @@ const captured: { ws: Ws | null } = { ws: null };
 function Host({ tabIndex = 0 }: { tabIndex?: number }): ReactElement | null {
   const ws = useWorkspace();
   captured.ws = ws;
+  captured.projectCount = useProjects().projects.length;
   const layout = ws.layout;
   if (!layout) return null;
   const tab = layout.tabs[tabIndex];
@@ -146,14 +147,14 @@ function Host({ tabIndex = 0 }: { tabIndex?: number }): ReactElement | null {
   );
 }
 
-function mount(tabIndex = 0) {
+function mount(tabIndex = 0, opts: { projects?: readonly unknown[] } = {}) {
   const user = userEvent.setup();
   // `notifyDestroyed` and `notifyTyped` are optional-chained broadcasts to other windows. Present as
   // spies so a destroy can be asserted to have told them, absent nothing.
   const notifyDestroyed = vi.fn();
   Reflect.set(window, 'throng', { panel: { notifyDestroyed } });
 
-  const daemon = fakeDaemon();
+  const daemon = fakeDaemon(opts.projects);
   const services = servicesOver(daemon.bridge);
 
   // ANTI-VACUITY CONTROL: replace `PanelPlaceholder` in `Host` with `'div'` and every test here
@@ -225,6 +226,7 @@ const resetOnlyActions = {
 
 beforeEach(() => {
   captured.ws = null;
+  captured.projectCount = 0;
 });
 afterEach(() => {
   for (const s of allEditorStates()) removeEditorState(s.panelId);
@@ -621,6 +623,72 @@ describe('an editor titles itself from its open file (migrated from editor-namin
   });
 });
 
+describe('the editor file pill shows the containing folder (migrated from editor-feedback3.e2e.ts, 044 T163c)', () => {
+  /*
+   * The E2E opened a real file in a subfolder and one at the root through the real tree, then read
+   * the pill. Three claims, and the first — WHAT the folder part says for each shape of path — is
+   * `core/tests/unit/path-display.test.ts`'s (`editorPathParts`, `toDisplayPath`). These are the
+   * other two, which no lower test held: that the header actually DRAWS those parts into the two
+   * spans (the folder truncates first, so it must be its own element), and that the hover title is
+   * the full path in NATIVE separators even when the editor state holds forward slashes.
+   *
+   * `window.throng.osName` is absent in this mount, so the pill takes its Windows default — the
+   * platform the migrated test asserted on.
+   *
+   * ══ WHY THE PROJECT IS REAL AND THE EDITOR STATE IS NOT SEEDED ══
+   *
+   * The editor this panel mounts PUBLISHES its own state (`use-editor.ts` `publishState`), and it
+   * takes `ownerRoot` from the project whose id the panel carries. Seeding the state by hand races
+   * that publish: the first version of this block did, and its root-level case read `C:\proj\`
+   * because the editor overwrote the seeded root with `null` a tick later — while the subfolder case
+   * passed only because `\sub\` is a SUBSTRING of `C:\proj\sub\`. So the project comes from
+   * `projects.list`, the root reaches the pill through the same route it takes in the app, and the
+   * folder text is compared exactly.
+   */
+  const PROJECTS = [{ id: PROJECT, name: 'Proj', colour: '#6aa3ff', rootFolder: 'C:/proj' }];
+
+  async function editorOn(panelId: string, absPath: string): Promise<HTMLElement> {
+    // The project must be known before the editor mounts, or its first publish carries no root.
+    await waitFor(() => expect(captured.projectCount).toBe(1));
+    live().setPanelType(panelId, 'editor', { filePath: absPath });
+    return screen.findByTestId(`panel-file-${panelId}`);
+  }
+  const folderOf = (pill: HTMLElement): Element | null => pill.querySelector('.panel-box__file-folder');
+  const nameOf = (pill: HTMLElement): Element | null => pill.querySelector('.panel-box__file-name');
+
+  it('a file in a subfolder: the project-relative folder in its own span, the name in another', async () => {
+    mount(0, { projects: PROJECTS });
+    const ws = await ready();
+    const [first] = panelsIn(ws).map((p) => p.id);
+
+    const pill = await editorOn(first, 'C:/proj/sub/deep.txt');
+
+    await waitFor(() => {
+      expect(folderOf(pill), 'the folder part must be drawn, in its own truncatable span').not.toBeNull();
+      expect(folderOf(pill)?.textContent).toBe('\\sub\\');
+    });
+    expect(nameOf(pill)?.textContent).toBe('deep.txt');
+    // The full path, natively separated — the panel holds forward slashes, so a title that passed
+    // the path through unconverted fails here rather than looking right by accident.
+    expect(pill.getAttribute('title')).toBe('C:\\proj\\sub\\deep.txt');
+  });
+
+  it('a file at the project root: the folder part is the root separator alone', async () => {
+    mount(0, { projects: PROJECTS });
+    const ws = await ready();
+    const [first] = panelsIn(ws).map((p) => p.id);
+
+    const pill = await editorOn(first, 'C:/proj/top.txt');
+
+    await waitFor(() => {
+      expect(folderOf(pill), 'a root-level file still draws its folder part').not.toBeNull();
+      expect(folderOf(pill)?.textContent).toBe('\\');
+    });
+    expect(nameOf(pill)?.textContent).toBe('top.txt');
+    expect(pill.getAttribute('title')).toBe('C:\\proj\\top.txt');
+  });
+});
+
 describe('Reset Name is disabled until there is something to reset (FR-017)', () => {
   it('is disabled on a panel that was never renamed, and enabled after one', async () => {
     /*
@@ -644,7 +712,7 @@ describe('Reset Name is disabled until there is something to reset (FR-017)', ()
         keybindings: DEFAULT_KEYBINDINGS,
         otherTabs: [],
         editor: null,
-        editorFailure: false,
+        panelFailure: false,
         detach: null,
         actions: resetOnlyActions,
       }).find((i) => i.label === 'Reset Name');

@@ -224,6 +224,20 @@ describe('committing and refusing (FR-036, FR-017)', () => {
     await user.clear(field(bounded.key));
     await user.type(field(bounded.key), '999999{Enter}');
     expect(onCommit).not.toHaveBeenCalled();
+    // …and SAYS so. 044 T163e moved `tab-settings.e2e.ts`'s "a value outside a declared range is
+    // refused" here, and that test asserted the marker as well as the unchanged file: a refusal
+    // the user cannot see reads as the field ignoring them.
+    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toBeVisible();
+  });
+
+  it('refuses a value below the declared minimum, and says so', async () => {
+    // The E2E's second half: `tabs.maxNameLength` is the Tabs setting with a non-zero minimum, and
+    // typing under it was refused. The minimum here is 100, so 40 is below it and still a number.
+    const { user, onCommit } = renderControl(bounded, 900);
+    await user.clear(field(bounded.key));
+    await user.type(field(bounded.key), '40{Enter}');
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(screen.getByTestId(`control-${bounded.key}-invalid`)).toBeVisible();
   });
 });
 

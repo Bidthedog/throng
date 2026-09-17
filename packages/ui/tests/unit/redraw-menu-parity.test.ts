@@ -104,7 +104,7 @@ const header = (
     keybindings: over.keybindings ?? DEFAULT_KEYBINDINGS,
     otherTabs: [],
     editor: null,
-    editorFailure: false,
+    panelFailure: false,
     detach: null,
     actions: { ...headerActions, ...(over.redraw ? { redraw: over.redraw } : {}) },
   });

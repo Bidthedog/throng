@@ -98,7 +98,7 @@ export function keyOf(token: string): string {
  * `handledActions()` above would catch the dispatcher being restructured underneath it.
  */
 export function keepsShift(key: string): boolean {
-  return key === '`' || /^F\d{1,2}$/.test(key) || /^[a-z]$/i.test(key);
+  return key === '`' || /^F\d{1,2}$/.test(key) || /^[a-z]$/i.test(key) || /^Arrow(Left|Right|Up|Down)$/.test(key);
 }
 
 /** Every HANDLED action whose shipped chord goes through one of those branches, with those chords. */
@@ -169,6 +169,27 @@ export const COVERED_ELSEWHERE: ReadonlyMap<string, { spec: string; press: strin
    */
   ['focus.notice', { spec: 'notice-focus-chord.e2e.ts', press: 'Control+Alt+M' }],
 ]);
+
+/**
+ * The window chords on ARROW keys, covered by a COMPONENT test that presses them through the real
+ * `KeybindingsHandler` (044 US7b fix round 1).
+ *
+ * The arrow branch of `keepShift` was added to stop `Shift+Alt+ArrowLeft` (column select) resolving as
+ * `Alt+ArrowLeft` (`navigate.back`). It changed how every arrow chord's event is built, so each is claimed
+ * here — at the lowest layer that can press it through the dispatcher, which is jsdom, not Electron. As
+ * with `COVERED_ELSEWHERE`, the claim is checked: the named file must press the key with each modifier.
+ */
+export const COVERED_IN_COMPONENT: ReadonlyMap<string, { test: string; key: string; mods: readonly string[] }> = new Map([
+  ['focus.left', { test: 'window-arrow-chords.test.ts', key: 'ArrowLeft', mods: ['ctrlKey', 'altKey'] }],
+  ['focus.right', { test: 'window-arrow-chords.test.ts', key: 'ArrowRight', mods: ['ctrlKey', 'altKey'] }],
+  ['focus.up', { test: 'window-arrow-chords.test.ts', key: 'ArrowUp', mods: ['ctrlKey', 'altKey'] }],
+  ['focus.down', { test: 'window-arrow-chords.test.ts', key: 'ArrowDown', mods: ['ctrlKey', 'altKey'] }],
+  ['navigate.back', { test: 'window-arrow-chords.test.ts', key: 'ArrowLeft', mods: ['altKey'] }],
+  ['navigate.forward', { test: 'window-arrow-chords.test.ts', key: 'ArrowRight', mods: ['altKey'] }],
+]);
+
+/** Where the component tests live, for resolving a `COVERED_IN_COMPONENT` claim. */
+export const COMPONENT_DIR = fileURLToPath(new URL('../component/', import.meta.url));
 
 /**
  * A file's CODE, with its comments blanked out — offsets and lines preserved.

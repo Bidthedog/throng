@@ -1,9 +1,8 @@
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test, expect, type Page } from '@playwright/test';
-import { openApp, createProject, firstPanelId, cleanupTemp, type OpenApp } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { test, expect } from '@playwright/test';
+import { openApp, createProject, cleanupTemp, type OpenApp } from './harness.js';
 
 // Session 2026-07-06b: editor pill always shows the containing folder (FR-088),
 // context menus stay on-screen (FR-089), and a tree rename commits on blur (FR-090).
@@ -38,8 +37,8 @@ import { skipIfElevated } from './admin.js';
  *    keeps ONE menu open at a time; the rename input commits on blur (FR-090) with its untouched
  *    value, which is a no-op rename.
  *
- *  • `skipIfElevated()` on the first test is unaffected: the skip happens inside the body, after the
- *    shared app is already open, and the other three do not skip.
+ *  • `skipIfElevated()` on the first test was unaffected: the skip happened inside the body, after
+ *    the shared app was already open. (That test has since moved down — see 044 T163c below.)
  *
  * Deliberately NOT `mode: 'serial'`. These four ask four independent questions — what the pill
  * shows, where a menu lands, what a rename selects, what a blur commits — and a first failure that
@@ -54,14 +53,6 @@ function makeProject(): string {
   writeFileSync(join(root, 'sub', 'deep.txt'), 'DEEP\n');
   writeFileSync(join(root, 'top.txt'), 'TOP\n');
   return root;
-}
-
-async function newEditor(win: Page): Promise<string> {
-  const pid = await firstPanelId(win);
-  await win.getByTestId(`panel-type-select-${pid}`).selectOption('editor');
-  await win.getByTestId(`panel-type-confirm-${pid}`).click();
-  await expect(win.getByTestId(`editor-${pid}`)).toBeVisible();
-  return pid;
 }
 
 let shared: OpenApp;
@@ -97,36 +88,20 @@ test.afterAll(async () => {
  *     left every test green, because jsdom does not fire `blur` when a focused element is
  *     unmounted. The claim is narrowed to what actually runs and the gap is stated there.
  */
-test('the editor pill shows the containing folder in brackets (subfolder + root)', { tag: ['@extended', '@editor'] }, async () => {
-  skipIfElevated();
-  const root = makeProject();
-  try {
-    const { win } = shared;
-    await createProject(win, 'Fb3Pill', root);
-    const pid = await newEditor(win);
-    await win.getByTestId(`editor-${pid}`).click();
-    const tree = win.getByTestId('file-explorer-tree');
-
-    // Open a file in a subfolder → pill shows the project-relative path with the
-    // host OS's native separator (Windows '\\', FR-101).
-    await tree.getByTestId('tree-twisty-sub').click(); // #121: the NAME only selects; the twisty expands
-    await tree.getByText('deep.txt', { exact: true }).click();
-    const pill = win.getByTestId(`panel-file-${pid}`);
-    await expect(pill).toContainText('deep.txt', { timeout: 8000 });
-    await expect(pill).toContainText('\\sub\\');
-    // The hover title (full absolute path) is consistently native — no mixed slashes.
-    const title = await pill.getAttribute('title');
-    expect(title).toContain('\\');
-    expect(title).not.toContain('/');
-
-    // Open a root-level file → pill shows "\\<name>" (rooted at the project root).
-    await tree.getByText('top.txt', { exact: true }).click();
-    await expect(pill).toContainText('top.txt', { timeout: 8000 });
-    await expect(pill).toContainText('\\top.txt');
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * MOVED DOWN (044 T163c): "the editor pill shows the containing folder in brackets (subfolder +
+ * root)". Its three claims, each observed failing below against a broken implementation first:
+ *
+ *   - what the folder part SAYS for a subfolder and a root-level file, in native separators —
+ *     `packages/core/tests/unit/path-display.test.ts` (`editorPathParts`);
+ *   - that the header DRAWS it into `.panel-box__file-folder` beside `.panel-box__file-name`, and
+ *   - that the pill's `title` is the full path with back-slashes only —
+ *     `packages/ui/tests/component/panel-box.test.ts`, "the editor file pill shows the containing
+ *     folder", added for this move.
+ *
+ * It was also the file's only `skipIfElevated()` test, so this file no longer loses coverage on an
+ * elevated runner.
+ */
 
 test('a context menu opened near the bottom-right edge stays fully on-screen (FR-089)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();

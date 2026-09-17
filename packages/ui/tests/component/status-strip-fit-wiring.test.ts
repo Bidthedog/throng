@@ -45,6 +45,7 @@ import {
   removePanelLanguage,
   setPanelLanguage,
 } from '../../src/renderer/editor/editor-language.js';
+import { removeEditorState, setEditorState } from '../../src/renderer/editor/editor-state.js';
 
 const PANEL = 'p1';
 const DOC_KEY = `panel:${PANEL}`;
@@ -611,6 +612,34 @@ describe('the two alignment groups (FR-013)', () => {
 /* ────────────────────────────────────────────────────────────────────────── *
  * FR-022b — the language label truncates, and never leaves
  * ────────────────────────────────────────────────────────────────────────── */
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * 044 FR-122c — the scroll-sync toggle is a CONTROL, never fitted away
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('the scroll-sync toggle at the narrowest width (044 FR-122c, 040 FR-024)', () => {
+  const FILE = 'D:/proj/README.md';
+
+  afterEach(() => {
+    removeEditorState(PANEL);
+  });
+
+  it('is inside the measured controls group, and still there when no readout fits', () => {
+    setEditorState(PANEL, { filePath: FILE, ownerProjectId: 'proj-1' });
+    stripWidth = 120;
+    setPanelCaret(PANEL, { line: 412, column: 7 }, 63);
+    render(createElement(StatusStrip, { panelId: PANEL, projectId: 'proj-1', relPath: null, projectRoot: 'D:/proj' }));
+
+    expect(visible()).toEqual([]);
+    const controls = screen.getByTestId(`editor-status-controls-${PANEL}`);
+    expect(controls).toHaveAttribute('data-measure', 'controls');
+    const syncButton = screen.getByTestId(`editor-sync-scroll-${PANEL}`);
+    expect(controls).toContainElement(syncButton);
+    expect(syncButton).toBeVisible();
+    expect(syncButton).not.toHaveAttribute('hidden');
+    expect(syncButton.nextElementSibling).toBe(screen.getByTestId(`editor-preview-${PANEL}`));
+  });
+});
 
 describe('the language label at the narrowest width (FR-022b, FR-024)', () => {
   it('is still present, and still carries its truncating class', () => {

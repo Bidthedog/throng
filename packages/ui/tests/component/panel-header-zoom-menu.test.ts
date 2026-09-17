@@ -31,7 +31,13 @@
  * and splitting one requirement's evidence across two tiers is how half of it stops being run.
  */
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_KEYBINDINGS, FIND_IN_FILES_KIND, type Panel, type PanelKind } from '@throng/core';
+import {
+  DEFAULT_KEYBINDINGS,
+  FIND_IN_FILES_KIND,
+  PREVIEW_KIND,
+  type Panel,
+  type PanelKind,
+} from '@throng/core';
 import type { MenuAction } from '../../src/renderer/workspace/context-menu.js';
 import {
   panelHeaderMenu,
@@ -64,6 +70,13 @@ const panelActions: PanelHeaderMenuActions = {
   replace: noop,
   replaceAll: noop,
   destroy: noop,
+  openPreview: noop,
+  navigateBack: noop,
+  navigateForward: noop,
+  refreshPreview: noop,
+  openInEditor: noop,
+  goToEditor: noop,
+  toggleSyncScroll: noop,
 };
 
 const panel = (over: Partial<Panel> = {}): Panel => ({
@@ -81,8 +94,9 @@ const menuFor = (kind: PanelKind | undefined): MenuAction[] =>
     keybindings: DEFAULT_KEYBINDINGS,
     otherTabs: [],
     editor: kind === 'editor' ? { dirty: false, hasFilePath: true } : null,
-    editorFailure: false,
+    panelFailure: false,
     detach: null,
+    preview: kind === PREVIEW_KIND ? { providerKind: 'text', parented: false } : null,
     actions: panelActions,
   });
 
@@ -141,6 +155,13 @@ const KINDS: { kind: PanelKind | undefined; what: string; zooms: boolean; consum
     zooms: true,
     consumer:
       'find-in-files-panel.tsx publishes --throng-zoom-fif for the text; results-list.tsx rounds the row height by the same factor',
+  },
+  {
+    kind: PREVIEW_KIND,
+    what: 'a preview panel',
+    // 044 FR-034 — a preview's zoom is its own, per panel, and it is offered (043 FR-062a).
+    zooms: true,
+    consumer: 'preview-panel.tsx publishes --throng-zoom-preview; preview.css multiplies the body text with it',
   },
 ];
 
@@ -222,7 +243,8 @@ describe('a Find in Files panel offers no rename in its header menu (FR-061)', (
   });
 
   it('leaves every other kind renamable — the exception is one panel, not a retreat', () => {
-    for (const { kind, what } of KINDS.filter((k) => k.kind !== FIND_IN_FILES_KIND)) {
+    // 044 FR-030 — a preview is the second stated exception, on the same ground; asserted below.
+    for (const { kind, what } of KINDS.filter((k) => k.kind !== FIND_IN_FILES_KIND && k.kind !== PREVIEW_KIND)) {
       const l = labels(menuFor(kind));
       expect(l, `${what} lost Rename`).toContain('Rename');
       expect(l, `${what} lost Reset Name`).toContain('Reset Name');
@@ -244,5 +266,50 @@ describe('a Find in Files panel offers no rename in its header menu (FR-061)', (
     // Zoom stays: FR-062 gave this panel real zoom, so FR-062a now requires the commands rather than
     // forbidding them. Removing rename is not a retreat from the rest of the menu.
     expect(l).toContain('Zoom');
+  });
+});
+
+/**
+ * 044 FR-030 / FR-034 — a preview panel is not renamable, and its zoom is live.
+ *
+ * The header chord and double-click halves of FR-030 are rendered-header claims and live in
+ * `preview-panel-mount.test.ts`; this file keeps the menu half beside Find in Files', whose ground it
+ * shares.
+ */
+describe('a preview panel offers live zoom and no rename in its header menu (044 FR-030, FR-034)', () => {
+  it('offers Zoom In, Zoom Out and Reset Zoom, each with its chord', () => {
+    const zoom = menuFor(PREVIEW_KIND).find((i) => i.label === 'Zoom');
+    expect((zoom?.submenu ?? []).map((i) => [i.label, i.shortcut])).toEqual([
+      ['Zoom In', 'Ctrl+Alt+='],
+      ['Zoom Out', 'Ctrl+Alt+-'],
+      ['Reset Zoom', 'Ctrl+Alt+0'],
+    ]);
+  });
+
+  it('runs the store’s zoom actions — live, not decorative', () => {
+    const fired: string[] = [];
+    const items = panelHeaderMenu({
+      panel: panel({ kind: PREVIEW_KIND }),
+      panelVerb: 'Destroy',
+      keybindings: DEFAULT_KEYBINDINGS,
+      otherTabs: [],
+      editor: null,
+      panelFailure: false,
+      detach: null,
+      preview: { providerKind: 'text', parented: false },
+      actions: {
+        ...panelActions,
+        zoomIn: () => fired.push('in'),
+        zoomOut: () => fired.push('out'),
+        resetZoom: () => fired.push('reset'),
+      },
+    });
+    for (const row of items.find((i) => i.label === 'Zoom')?.submenu ?? []) row.onClick?.();
+    expect(fired).toEqual(['in', 'out', 'reset']);
+  });
+
+  it('omits Rename and Reset Name rather than disabling them', () => {
+    const items = menuFor(PREVIEW_KIND);
+    expect(items.filter((i) => i.label === 'Rename' || i.label === 'Reset Name')).toEqual([]);
   });
 });

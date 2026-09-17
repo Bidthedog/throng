@@ -12,6 +12,7 @@ import { FilesService } from '../../src/main/files-service.js';
 const shell = {
   revealInFileManager: async () => {},
   openFolder: async () => {},
+  openExternal: async () => {},
 } as unknown as ConstructorParameters<typeof FilesService>[1];
 
 let root: string;

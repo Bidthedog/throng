@@ -5,8 +5,16 @@ import {
   type TransactionSpec,
 } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { ClipboardMode, LineEndingId } from '@throng/core';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  DEFAULT_APP_SETTINGS,
+  SHIPPED_PREVIEW_PROVIDERS,
+  previewAffordance,
+  type ClipboardMode,
+  type LineEndingId,
+  type PreviewAffordance,
+  type PreviewSettings,
+} from '@throng/core';
 import { editorContentMenu, placeCaretForContextMenu } from '../../src/renderer/editor/content-menu.js';
 import { asKeyboardMenu } from '../../src/renderer/workspace/keyboard-menu.js';
 import type { MenuAction } from '../../src/renderer/workspace/context-menu.js';
@@ -357,6 +365,204 @@ describe('the editing items act on the caret when nothing is selected (FR-012b)'
 /* ────────────────────────────────────────────────────────────────────────── *
  * Undo and Redo go to the AUTHORITY (FR-026b)
  * ────────────────────────────────────────────────────────────────────────── */
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * 044 T072 — Open Preview (FR-002, FR-004, FR-012, FR-062, SC-001)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('Open Preview, in Navigate after Go To Line… (contracts/menus-and-controls.md §3)', () => {
+  /*
+   * The affordance is computed by the REAL decision over the shipped registry and shipped settings,
+   * so these rows cannot drift from what `use-editor.ts` hands the builder at menu-open time.
+   */
+  const affordance = (over: {
+    path?: string | undefined;
+    root?: string | undefined;
+    enabled?: boolean;
+    previewOpen?: boolean;
+  } = {}): PreviewAffordance => {
+    const settings: PreviewSettings = structuredClone(DEFAULT_APP_SETTINGS.editor.previews);
+    if (over.enabled === false) settings.providers.markdown = { ...settings.providers.markdown, enabled: false };
+    return previewAffordance({
+      registry: SHIPPED_PREVIEW_PROVIDERS,
+      settings,
+      absPath: 'path' in over ? over.path : 'D:/proj/README.md',
+      projectRoot: 'root' in over ? over.root : 'D:/proj',
+      isFolder: false,
+      previewOpen: over.previewOpen ?? false,
+      surface: 'editor',
+    });
+  };
+
+  function menuWith(openPreview: { affordance: PreviewAffordance; open: () => void; chord?: string } | undefined): MenuAction[] {
+    return editorContentMenu({
+      view: make().view,
+      panelId: 'panel-1',
+      viewId: 'view-1',
+      lineEnding: (): LineEndingId => 'lf',
+      wordWrap: { on: false, toggle: () => {} },
+      gotoLine: { open: () => {}, chord: 'Ctrl+G' },
+      ...(openPreview ? { openPreview } : {}),
+    });
+  }
+
+  it('sits immediately after Go To Line…, in the Navigate section, with the preview icon', () => {
+    const items = menuWith({ affordance: affordance(), open: () => {} });
+    const labels = items.map((m) => m.label);
+    const at = labels.indexOf('Open Preview');
+    expect(at).toBe(labels.indexOf('Go To Line…') + 1);
+    expect(items[at]).toMatchObject({ section: 'navigate', icon: 'preview' });
+    expect(items[at]?.disabled).toBeFalsy();
+  });
+
+  it('shows the chord preview.open is bound to, and none when it is unbound (FR-002, FR-005)', () => {
+    const bound = menuWith({ affordance: affordance(), open: () => {}, chord: 'Ctrl+Shift+V' });
+    expect(bound.find((m) => m.label === 'Open Preview')?.shortcut).toBe('Ctrl+Shift+V');
+    const unbound = menuWith({ affordance: affordance(), open: () => {} });
+    expect(unbound.find((m) => m.label === 'Open Preview')?.shortcut).toBeUndefined();
+  });
+
+  it('runs the open action when chosen (SC-001)', () => {
+    const open = vi.fn();
+    menuWith({ affordance: affordance(), open })
+      .find((m) => m.label === 'Open Preview')
+      ?.onClick?.();
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it('is ABSENT for a file no provider claims, with no file on disk, or outside the project (FR-001, FR-004)', () => {
+    for (const [why, a] of [
+      ['no provider', affordance({ path: 'D:/proj/notes.txt' })],
+      ['no file', affordance({ path: undefined })],
+      ['outside the project', affordance({ path: 'E:/other/README.md' })],
+      ['no project root', affordance({ root: undefined })],
+    ] as const) {
+      expect(a.state, why).toBe('absent');
+      expect(menuWith({ affordance: a, open: () => {} }).map((m) => m.label), why).not.toContain('Open Preview');
+    }
+  });
+
+  it('is absent when the builder is handed no preview at all — the pre-044 menu is unchanged', () => {
+    expect(menuWith(undefined).map((m) => m.label)).not.toContain('Open Preview');
+  });
+
+  it('is DISABLED while the provider is turned off (FR-062) — shown, not hidden', () => {
+    const open = vi.fn();
+    const item = menuWith({ affordance: affordance({ enabled: false }), open }).find(
+      (m) => m.label === 'Open Preview',
+    );
+    expect(item?.disabled).toBe(true);
+  });
+
+  it('is DISABLED while the file already has its one preview (FR-012)', () => {
+    const item = menuWith({ affordance: affordance({ previewOpen: true }), open: () => {} }).find(
+      (m) => m.label === 'Open Preview',
+    );
+    expect(item?.disabled).toBe(true);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * 044 T234 — Synchronise Scrolling (FR-122, FR-122a, FR-122b; contracts/menus-and-controls.md §3, §10)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('Synchronise Scrolling, closing View & state after Word Wrap (FR-122b)', () => {
+  const affordance = (over: { path?: string; enabled?: boolean; previewOpen?: boolean } = {}): PreviewAffordance => {
+    const settings: PreviewSettings = structuredClone(DEFAULT_APP_SETTINGS.editor.previews);
+    if (over.enabled === false) settings.providers.markdown = { ...settings.providers.markdown, enabled: false };
+    return previewAffordance({
+      registry: SHIPPED_PREVIEW_PROVIDERS,
+      settings,
+      absPath: over.path ?? 'D:/proj/README.md',
+      projectRoot: 'D:/proj',
+      isFolder: false,
+      previewOpen: over.previewOpen ?? false,
+      surface: 'editor',
+    });
+  };
+
+  const SYNC = 'menu-item-Synchronise Scrolling';
+
+  function menuWith(opts: {
+    affordance?: PreviewAffordance;
+    on?: boolean;
+    toggle?: () => void;
+    chord?: string;
+  }): MenuAction[] {
+    return editorContentMenu({
+      view: make().view,
+      panelId: 'panel-1',
+      viewId: 'view-1',
+      lineEnding: (): LineEndingId => 'lf',
+      wordWrap: { on: false, toggle: () => {} },
+      gotoLine: { open: () => {} },
+      openPreview: { affordance: opts.affordance ?? affordance(), open: () => {} },
+      syncScroll: {
+        on: opts.on ?? true,
+        toggle: opts.toggle ?? (() => {}),
+        ...(opts.chord !== undefined ? { chord: opts.chord } : {}),
+      },
+    });
+  }
+
+  const sync = (items: MenuAction[]): MenuAction | undefined => items.find((m) => m.testId === SYNC);
+
+  it('sits immediately after Word Wrap, in View & state, with the syncScroll icon', () => {
+    const items = menuWith({});
+    const at = items.findIndex((m) => m.testId === SYNC);
+    expect(at).toBe(items.findIndex((m) => m.testId === 'menu-item-Word Wrap') + 1);
+    expect(items[at]).toMatchObject({ section: 'viewState', icon: 'syncScroll' });
+  });
+
+  it('reads “Synchronise Scrolling ✓” while on and the bare label while off', () => {
+    expect(sync(menuWith({ on: true }))?.label).toBe('Synchronise Scrolling ✓');
+    expect(sync(menuWith({ on: false }))?.label).toBe('Synchronise Scrolling');
+  });
+
+  it('shows preview.toggleSyncScroll’s chord when bound, and none when it is not', () => {
+    expect(sync(menuWith({ chord: 'Ctrl+Alt+F8' }))?.shortcut).toBe('Ctrl+Alt+F8');
+    expect(sync(menuWith({}))?.shortcut).toBeUndefined();
+  });
+
+  it('is ABSENT exactly where Open Preview is: no provider, no file, outside the project (FR-122a)', () => {
+    for (const path of ['D:/proj/notes.txt', 'E:/other/README.md']) {
+      const a = affordance({ path });
+      expect(a.state, path).toBe('absent');
+      expect(sync(menuWith({ affordance: a })), path).toBeUndefined();
+    }
+  });
+
+  it('is absent when the builder is handed no preview at all', () => {
+    const items = editorContentMenu({
+      view: make().view,
+      panelId: 'panel-1',
+      viewId: 'view-1',
+      lineEnding: (): LineEndingId => 'lf',
+      wordWrap: { on: false, toggle: () => {} },
+      gotoLine: { open: () => {} },
+      syncScroll: { on: true, toggle: () => {} },
+    });
+    expect(sync(items)).toBeUndefined();
+  });
+
+  it('is PRESENT and ENABLED while Open Preview is disabled, for either reason (FR-122a)', () => {
+    for (const [why, a] of [
+      ['provider off', affordance({ enabled: false })],
+      ['preview open', affordance({ previewOpen: true })],
+    ] as const) {
+      expect(a.state, why).toBe('disabled');
+      const item = sync(menuWith({ affordance: a }));
+      expect(item, why).toBeDefined();
+      expect(item?.disabled ?? false, why).toBe(false);
+    }
+  });
+
+  it('runs the toggle once when chosen', () => {
+    const toggle = vi.fn();
+    sync(menuWith({ toggle }))?.onClick?.();
+    expect(toggle).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('Undo and Redo reach the document authority, not CodeMirror', () => {
   it('Undo calls the bridge, naming this panel and this view', () => {

@@ -135,6 +135,13 @@ describe('addPanel', () => {
     expect(isMainLayoutValid(l)).toBe(true);
   });
 
+  it('gives the new Panel the layout’s project, or the one named', () => {
+    const own = addPanel(base(), 't1', 'p2');
+    expect(collectPanels(own.tabs[0].root).find((p) => p.id === 'p2')?.originProjectId).toBe(own.projectId);
+    const named = addPanel(base(), 't1', 'p2', 'other-project');
+    expect(collectPanels(named.tabs[0].root).find((p) => p.id === 'p2')?.originProjectId).toBe('other-project');
+  });
+
   it('appends into an existing row split rather than nesting endlessly', () => {
     let l = addPanel(base(), 't1', 'p2');
     l = addPanel(l, 't1', 'p3');

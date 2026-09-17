@@ -167,15 +167,31 @@ describe('the three status-bar settings sit together under Editor → Status Bar
   it('moves no other Editor setting into a subsection', () => {
     // FR-037's second sentence. Every other `Editor` descriptor stays flat — a setting that
     // acquired a subgroup here would have moved without anyone asking.
+    //
+    // 044 FR-061 (Finding 7) AMENDS this pin, and only by the one subsection it names: every preview
+    // setting sits under `Editor → Previews`. The pin encoded 040's scope — the status-bar keys — not
+    // a rule that the Editor group has one subsection, so the amendment is a second permitted pair
+    // (the `editor.previews.*` keys, in `Previews`) rather than a loosening. A preview key in any
+    // other subsection, or a non-preview key in `Previews`, is still a stray.
     const strays = SETTINGS_METADATA.filter(
       (d) =>
         d.group === 'Editor' &&
         d.subgroup !== undefined &&
         d.key !== BAR_KEY &&
         d.key !== CURSOR_KEY &&
-        d.key !== COUNTS_KEY,
+        d.key !== COUNTS_KEY &&
+        !(d.subgroup === 'Previews' && d.key.startsWith('editor.previews.')),
     ).map((d) => d.key);
     expect(strays).toEqual([]);
+  });
+
+  it('files every editor.previews.* setting under Editor → Previews (044 FR-061)', () => {
+    const previews = SETTINGS_METADATA.filter((d) => d.key.startsWith('editor.previews.'));
+    expect(previews.length, 'no editor.previews.* descriptor is registered').toBeGreaterThan(0);
+    for (const d of previews) {
+      expect(d.group, d.key).toBe('Editor');
+      expect(d.subgroup, d.key).toBe('Previews');
+    }
   });
 
   it('leaves terminals.showStatusBar directly under Terminal, in no subsection (FR-038)', () => {

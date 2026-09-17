@@ -65,7 +65,11 @@ describe('FilesService failure classification (029 FR-011)', () => {
     root = await mkdtemp(join(tmpdir(), 'throng-cause-'));
     svc = new FilesService(
       new NodeFileSystem((p) => rm(p, { recursive: true, force: true })),
-      new ElectronShellIntegration({ showItemInFolder: () => {}, openPath: async () => '' }),
+      new ElectronShellIntegration({
+        showItemInFolder: () => {},
+        openPath: async () => '',
+        openExternal: async () => {},
+      }),
     );
     svc.setRoot(root);
   });
@@ -126,7 +130,11 @@ describe('FilesService failure classification (029 FR-011)', () => {
     const gone = await mkdtemp(join(tmpdir(), 'throng-gone-'));
     const svc2 = new FilesService(
       new NodeFileSystem((p) => rm(p, { recursive: true, force: true })),
-      new ElectronShellIntegration({ showItemInFolder: () => {}, openPath: async () => '' }),
+      new ElectronShellIntegration({
+        showItemInFolder: () => {},
+        openPath: async () => '',
+        openExternal: async () => {},
+      }),
     );
     svc2.setRoot(gone);
     await rm(gone, { recursive: true, force: true });
@@ -180,7 +188,11 @@ describe('FilesService failure classification (029 FR-011)', () => {
     };
     const service = new FilesService(
       fs,
-      new ElectronShellIntegration({ showItemInFolder: () => {}, openPath: async () => '' }),
+      new ElectronShellIntegration({
+        showItemInFolder: () => {},
+        openPath: async () => '',
+        openExternal: async () => {},
+      }),
     );
     service.setRoot(root);
     return service;

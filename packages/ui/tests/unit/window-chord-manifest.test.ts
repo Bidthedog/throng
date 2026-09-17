@@ -19,8 +19,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  COMPONENT_DIR,
   COVERED,
   COVERED_ELSEWHERE,
+  COVERED_IN_COMPONENT,
   E2E_DIR,
   codeOnly,
   discoverKeepShiftChords,
@@ -47,7 +49,7 @@ describe('the window-chord coverage manifest (SC-021)', () => {
 
   it('covers every discovered chord, and claims none that is no longer reachable', () => {
     const discovered = [...discoverKeepShiftChords().keys()].sort();
-    const claimed = [...COVERED.keys(), ...COVERED_ELSEWHERE.keys()].sort();
+    const claimed = [...COVERED.keys(), ...COVERED_ELSEWHERE.keys(), ...COVERED_IN_COMPONENT.keys()].sort();
     const uncovered = discovered.filter((a) => !claimed.includes(a));
     const stale = claimed.filter((a) => !discovered.includes(a));
 
@@ -80,6 +82,40 @@ describe('the window-chord coverage manifest (SC-021)', () => {
     }
   });
 
+  it('holds every component claim to a test that presses the key with its modifiers (044 US7b)', () => {
+    expect(COVERED_IN_COMPONENT.size, 'no component claims to check — this test has gone vacuous').toBeGreaterThan(0);
+    for (const [action, { test, key, mods }] of COVERED_IN_COMPONENT) {
+      const path = join(COMPONENT_DIR, test);
+      expect(existsSync(path), `${action} is claimed by ${test}, which does not exist`).toBe(true);
+      const code = codeOnly(readFileSync(path, 'utf8'));
+      /*
+       * A press is the key's literal beside EXACTLY the modifiers it needs, on one line of code — not
+       * merely those modifiers PLUS whatever else. Fix round 2, item 3: the loose form (every required
+       * mod present, nothing said about the rest) let an EXTRA-modifier press satisfy a claim that
+       * named fewer — `{ key: 'ArrowLeft', ctrlKey: true, altKey: true }` (`focus.left`'s firing shape)
+       * also has `'ArrowLeft'` and `altKey: true` on one line, which is all `navigate.back`'s claim
+       * (`mods: ['altKey']`) checked for; and `{ key: 'ArrowLeft', altKey: true, shiftKey: true }`
+       * (the column-select must-NOT-fire shape) matches the same way. With only one matching line
+       * required (`.some`), deleting `navigate.back`'s own firing press left either of THOSE lines to
+       * satisfy the check anyway — a coverage claim that had stopped being true still read as covered.
+       * So a candidate line is rejected if it carries any OTHER recognised modifier as `true` that
+       * `mods` does not name — the exact set, not a subset.
+       */
+      const ALL_MODS = ['ctrlKey', 'altKey', 'shiftKey', 'metaKey'] as const;
+      const pressed = code
+        .split('\n')
+        .some(
+          (line) =>
+            line.includes(`'${key}'`) &&
+            mods.every((mod) => new RegExp(String.raw`\b${mod}: true`).test(line)) &&
+            ALL_MODS.filter((mod) => !mods.includes(mod)).every(
+              (extra) => !new RegExp(String.raw`\b${extra}: true`).test(line),
+            ),
+        );
+      expect(pressed, `${action} is claimed by ${test}, which no longer presses ${key} with EXACTLY ${mods.join(' + ')}`).toBe(true);
+    }
+  });
+
   it('strips comments before looking, so prose about a chord is not coverage of it', () => {
     // The defect this function exists for, stated as a test rather than only as a comment.
     const prose = "/* we press Shift+F10 here */\n// keyboard.press('Shift+F10')\n";
@@ -95,6 +131,8 @@ describe('the window-chord coverage manifest (SC-021)', () => {
     expect(keepsShift('T')).toBe(true);
     // The case the widening did NOT change: a produced character already encodes its Shift.
     expect(keepsShift('+')).toBe(false);
+    // 044 US7b — an arrow key's name encodes no Shift, so the dispatcher keeps it.
+    expect(keepsShift('ArrowLeft')).toBe(true);
     expect(keyOf('Ctrl+Shift+T')).toBe('T');
     expect(keyOf('Ctrl++')).toBe('+');
   });

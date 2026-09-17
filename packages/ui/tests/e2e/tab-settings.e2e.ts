@@ -241,33 +241,20 @@ test('T057 — each tab setting is editable by slider and by field, and persists
   );
 });
 
-test('T057 — a value outside a declared range is refused, and the last valid one stands', { tag: ['@extended', '@window'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPreferences(app, win, 'settings');
-
-      // Establish a known-good value first, so "unchanged" is a value this test put there rather
-      // than a default that would have been present either way.
-      const field = prefs.getByTestId('control-tabs.smoothScrollMs');
-      await field.fill('900');
-      await field.press('Enter');
-      await expect.poll(() => readSettings(cfgRoot)?.tabs?.smoothScrollMs, { timeout: FILE_OP_TIMEOUT_MS }).toBe(900);
-
-      // Above the declared maximum: refused, surfaced, not applied.
-      await field.fill('9999');
-      await field.press('Enter');
-      await expect(prefs.getByTestId('control-tabs.smoothScrollMs-invalid')).toBeVisible();
-      expect(readSettings(cfgRoot)?.tabs?.smoothScrollMs).toBe(900);
-
-      // Below the declared minimum, on the setting that has a non-zero one.
-      const limit = prefs.getByTestId('control-tabs.maxNameLength');
-      await limit.fill('4');
-      await limit.press('Enter');
-      await expect(prefs.getByTestId('control-tabs.maxNameLength-invalid')).toBeVisible();
-      expect(readSettings(cfgRoot)?.tabs?.maxNameLength, 'the shipped default stands').toBe(64);
-    },
-  );
-});
+/*
+ * MOVED DOWN (044 T163e): "T057 — a value outside a declared range is refused, and the last valid
+ * one stands". A number control's validation and a value that is therefore never written. Held below
+ * E2E, each observed failing against a broken implementation before this was deleted:
+ *
+ *   - the field refuses a value above the maximum and below the minimum, SHOWS the refusal, and
+ *     commits nothing — `packages/ui/tests/component/preferences-number-control.test.ts` ("refuses a
+ *     value above the declared maximum…", and "refuses a value below the declared minimum, and says
+ *     so", added for this move);
+ *   - the Tabs settings declare those ranges (maxNameLength's minimum of 10 is what refused `4`), and
+ *     a value outside them on disk is clamped back — `packages/core/tests/unit/tabs-settings.test.ts`.
+ *
+ * The file header's account of "the third" test keeping `maxNameLength` at 64 describes this one.
+ */
 
 test('T057 — tabs.openPicker appears in the Key Bindings editor and is rebindable (T6)', { tag: ['@extended', '@window'] }, async () => {
   await runApp(
