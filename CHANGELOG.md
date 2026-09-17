@@ -29,6 +29,14 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Fixed
+- A folder a closed terminal started in — a git worktree, typically — can be deleted again while the
+  project's other terminals stay open ([#385](https://github.com/Bidthedog/throng/issues/385)).
+- A PowerShell, pwsh or Git Bash terminal that has `cd`-ed out of a folder no longer stops that folder
+  being deleted ([#387](https://github.com/Bidthedog/throng/issues/387)).
+- Deleting a folder you had collapsed in Files & Folders no longer raises "Couldn't list the contents
+  of …" ([#386](https://github.com/Bidthedog/throng/issues/386)).
+
 ### Changed
 - Updated the libraries throng is built on — among them Electron 43.7 and React 19 — clearing every
   known security advisory in them.
