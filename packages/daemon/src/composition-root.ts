@@ -187,7 +187,10 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
   // streamed to the UI as JSON-RPC notifications over the events socket. node-pty
   // loads here (plain-Node daemon) — never in the UI/Electron process.
   const terminalEvents = new TerminalEvents();
-  const lockManager = new TerminalLockManager(new WindowsDirectoryLock());
+  const lockManager = new TerminalLockManager(
+    new WindowsDirectoryLock(),
+    (projectId) => projectStore.getById(userContext.currentUser().userId, projectId)?.rootFolder ?? null,
+  );
   // One elevation probe shared by the service (capabilities) and the routing.
   const elevation = new WindowsElevation();
   // Local host: spawns terminals at the daemon's own integrity (elevated when the

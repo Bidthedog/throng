@@ -48,6 +48,24 @@ describe('TerminalLockManager (ref-counted per project, FR-022)', () => {
     expect(mgr.hasOpenTerminals('b')).toBe(true);
   });
 
+  it('locks the project root, not the cwd of the terminal that opened first (#385)', () => {
+    const lock = new FakeLock();
+    const mgr = new TerminalLockManager(lock, (id) => (id === 'proj' ? 'C:/root' : null));
+    mgr.acquire('proj', 'C:/root/.claude/worktrees/wt');
+    mgr.acquire('proj', 'C:/root');
+    expect(lock.acquired).toEqual(['C:/root']);
+    mgr.release('proj');
+    mgr.release('proj');
+    expect(lock.released).toEqual(['C:/root']);
+  });
+
+  it('falls back to the terminal cwd for a project whose root cannot be resolved', () => {
+    const lock = new FakeLock();
+    const mgr = new TerminalLockManager(lock, () => null);
+    mgr.acquire('ghost', 'C:/somewhere');
+    expect(lock.acquired).toEqual(['C:/somewhere']);
+  });
+
   it('release on an unknown project is a safe no-op', () => {
     const lock = new FakeLock();
     const mgr = new TerminalLockManager(lock);
