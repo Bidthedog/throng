@@ -832,6 +832,31 @@ export function useTerminal(opts: UseTerminalOptions): void {
 
     term.open(container);
     focusIfActive(term); // only the active panel grabs focus on mount (issue 144)
+
+    /*
+     * #198 — a Ctrl+click on a link is throng's, not the program's.
+     *
+     * With mouse reporting on (Claude Code's full-screen UI, vim, tmux), xterm's always-on mousedown
+     * listener on `.xterm` forwards the press to the pty — Ctrl is not a modifier that holds it back —
+     * while its Linkifier on `.xterm-screen` ALSO activates the link on mouseup. Claude Code opens a
+     * link it is Ctrl+clicked on, so one click opened two browser tabs.
+     *
+     * So when a link is under the pointer, the press stops at `.xterm-screen`: the Linkifier (whose
+     * listener there was registered by `open()`, before this one) has already armed it, and the
+     * reporting listener on the parent never sees it — which also means no release is reported, since
+     * xterm only listens for one after forwarding a press. A Ctrl+click anywhere else still reaches
+     * the program, so links the program draws itself (Claude's status line) keep working through it.
+     * Windows Terminal behaves the same way.
+     */
+    const screenEl = term.element?.querySelector<HTMLElement>('.xterm-screen') ?? null;
+    const keepLinkClickFromProgram = (ev: MouseEvent): void => {
+      if (ev.button !== 0 || !(ev.ctrlKey || ev.metaKey)) return;
+      if (hoveredLink === null || term.modes.mouseTrackingMode === 'none') return;
+      ev.stopPropagation();
+      ev.preventDefault();
+      term.focus();
+    };
+    screenEl?.addEventListener('mousedown', keepLinkClickFromProgram);
     try {
       fit.fit();
     } catch {
@@ -1272,6 +1297,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       container.removeEventListener('mousedown', swallowRightButton, true);
       container.removeEventListener('mouseup', swallowRightButton, true);
       container.removeEventListener('auxclick', swallowRightButton, true);
+      screenEl?.removeEventListener('mousedown', keepLinkClickFromProgram); // #198
       if (linkTipTimer !== undefined) clearTimeout(linkTipTimer);
       if (linkTipHideTimer !== undefined) clearTimeout(linkTipHideTimer);
       linkTip.remove();

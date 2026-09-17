@@ -981,6 +981,7 @@ if (isPrimaryInstance)
     ipcMain,
     shellIntegration,
     container.get<IForegroundHandoff>(UI_TYPES.ForegroundHandoff),
+    (line) => diagnostics.log.info(line),
   );
   // The application menu is set NOW (early), but the main window is created further below — so
   // About resolves its parent through the same nullable ref as Preferences, for the same

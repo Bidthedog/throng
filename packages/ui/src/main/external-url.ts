@@ -67,8 +67,14 @@ export function registerOpenExternalIpc(
   ipc: OpenExternalIpcMain,
   shell: IShellIntegration,
   foregroundHandoff: IForegroundHandoff,
+  /**
+   * One line per accepted open (#198). A double-opened link left nothing in any log, so a report of
+   * two browser tabs could not say whether throng asked twice or something else opened the second.
+   */
+  log: (line: string) => void = () => {},
 ): void {
   const handOverAndOpen = (url: string): void => {
+    log(`open-external: ${url}`);
     foregroundHandoff.allow();
     void shell.openExternal(url);
   };

@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -10,6 +10,7 @@ import {
   cleanupTemp,
   stayedAbsent,
   TYPE_DELAY,
+  TERMINAL_OUTPUT_TIMEOUT_MS,
   type AppOptions,
   type OpenApp,
 } from './harness.js';
@@ -63,6 +64,14 @@ const createProject = (win: OpenApp['win'], name: string, root: string): Promise
 
 /**
  * 026 / #198 — one Ctrl+click on a terminal link opens the browser exactly once.
+ *
+ * ══ RESOLVED (2026-09-17) — the sixth case at the end of this file ══
+ *
+ * The second open was never throng's. Claude Code's full-screen UI arms mouse reporting and opens a
+ * link it is Ctrl+clicked on, and xterm forwarded that press to it while also activating the link
+ * itself. None of the five cases below armed the mouse, which is why each saw exactly one open. The
+ * sixth does, and asserts the press is no longer forwarded. The history below is kept because it
+ * records what was ruled out, and how.
  *
  * ══ READ THIS BEFORE FIXING #198 ══
  *
@@ -447,6 +456,118 @@ test('Ctrl+clicking a link on the ALTERNATE screen opens exactly once', { tag: [
       // Exactly once, at the seam — the same claim the normal-screen fences make, in the condition
       // the reporter was actually in.
       expect(await opens.urls()).toEqual([uri]);
+    });
+  } finally {
+    cleanupTemp(root);
+  }
+});
+
+/**
+ * #198 — the case the five fences above never drove: a full-screen program that OWNS THE MOUSE.
+ *
+ * Claude Code arms mouse tracking (use-terminal.ts records it re-sending "its screen and mouse modes
+ * after every resize"), and it acts on a click itself. With tracking armed, xterm's always-on
+ * mousedown listener forwards the press to the pty — Ctrl is not a selection-forcing modifier, so
+ * nothing holds it back — while the Linkifier ALSO activates the link on mouseup. One Ctrl+click is
+ * then two opens: throng's, at the `shell.openExternal` seam, and the program's own, from the press
+ * it was sent. The altlink fixture above never armed the mouse, which is why it stayed at one.
+ *
+ * The fixture is terminal-mouse-negotiation.e2e.ts's, in the shape measured to arm through ConPTY
+ * (raw mode first, then 1049 + 1003 + 1006, under windows-powershell), plus an OSC 8 link. Every byte
+ * it receives is logged; a mouse PRESS in that log is the program being asked to act on the click.
+ */
+function writeMouseLinkFixture(root: string, logPath: string, uri: string): void {
+  const ESC = String.fromCharCode(27);
+  const ST = ESC + String.fromCharCode(92);
+  const lines = [
+    "const fs = require('node:fs');",
+    `const LOG = ${JSON.stringify(logPath)};`,
+    'if (process.stdin.isTTY) process.stdin.setRawMode(true);',
+    'process.stdin.resume();',
+    "process.stdin.on('data', (b) => {",
+    "  fs.appendFileSync(LOG, JSON.stringify(b.toString('latin1')) + '\\n');",
+    '});',
+    "process.stdout.write('\\x1b[?1049h');",
+    "process.stdout.write('\\x1b[?1003h');",
+    "process.stdout.write('\\x1b[?1006h');",
+    `process.stdout.write(${JSON.stringify(ESC + '[H' + ESC + ']8;;' + uri + ST + uri + ESC + ']8;;' + ST + '\r\n')});`,
+    "process.stdout.write('MOUSELINK_READY\\r\\n');",
+    'setInterval(() => {}, 1000);',
+  ];
+  writeFileSync(join(root, 'mouselink.js'), lines.join('\n'), 'utf8');
+}
+
+/** Every byte the fixture has received, in order. */
+function receivedBytes(logPath: string): string {
+  let raw = '';
+  try {
+    raw = readFileSync(logPath, 'utf8');
+  } catch {
+    return '';
+  }
+  return raw
+    .split('\n')
+    .filter((l) => l.length > 0)
+    .map((l) => JSON.parse(l) as string)
+    .join('');
+}
+
+/**
+ * SGR mouse PRESSES of the left button (`CSI < b ; x ; y M` with b's motion bit clear and low bits 0),
+ * whatever modifiers are folded into b. Motion reports (1003 sends them on every move) are excluded.
+ */
+function leftPresses(bytes: string): number[] {
+  const out: number[] = [];
+  for (const m of bytes.matchAll(new RegExp(String.fromCharCode(27) + '\\[<(\\d+);\\d+;\\d+M', 'g'))) {
+    const b = Number(m[1]);
+    if ((b & 32) === 0 && (b & 3) === 0) out.push(b);
+  }
+  return out;
+}
+
+test('Ctrl+clicking a link in a program that OWNS THE MOUSE opens it once, not also through the program (#198)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
+  skipIfElevated();
+  const root = mkdtempSync(join(tmpdir(), 'throng-link-mouse-'));
+  const logPath = join(root, 'received.log');
+  const uri = 'https://example.com/mouse-owning-program';
+  writeMouseLinkFixture(root, logPath, uri);
+  try {
+    await runApp(async (app, win) => {
+      const opens = await captureOpens(app);
+      await createProject(win, 'LinkMouse', root);
+      const term = await openTerminal(win, root);
+
+      await term.click();
+      await win.keyboard.type('node mouselink.js', { delay: TYPE_DELAY });
+      await win.keyboard.press('Enter');
+      await expect(term).toContainText('MOUSELINK_READY', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
+
+      /*
+       * ANTI-VACUITY: a PLAIN click must reach the program — that is what arming the mouse means, and
+       * it has to keep working. Without this, a fixture whose mouse modes never survived ConPTY would
+       * make the assertion below pass for free.
+       */
+      await clickLink(win, uri, { ctrl: false });
+      await expect
+        .poll(() => leftPresses(receivedBytes(logPath)).length, {
+          timeout: TERMINAL_OUTPUT_TIMEOUT_MS,
+          message: 'the fixture never armed the mouse — the rest of this test would be vacuous',
+        })
+        .toBe(1);
+      expect(await opens.urls()).toEqual([]);
+
+      await opens.reset();
+      await clickLink(win, uri, { ctrl: true });
+      await expect.poll(() => opens.urls(), { timeout: 5000 }).toEqual([uri]);
+
+      // Fence: a key typed AFTER the click travels the same pipe, so once it has arrived any press the
+      // click produced has arrived too.
+      await win.keyboard.press('q');
+      await expect.poll(() => receivedBytes(logPath), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS }).toContain('q');
+
+      // Exactly one open in total: throng's. The program was not ALSO handed the click to act on.
+      expect(await opens.urls()).toEqual([uri]);
+      expect(leftPresses(receivedBytes(logPath)), 'the Ctrl+click was forwarded to the program as well').toHaveLength(1);
     });
   } finally {
     cleanupTemp(root);
