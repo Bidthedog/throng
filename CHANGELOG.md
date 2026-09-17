@@ -27,6 +27,8 @@ What changed in each release of throng, written for someone deciding whether to 
   did not exist yet.
 -->
 
+## Unreleased
+
 ## 1.0.0-alpha4 — 2026-09-17
 
 ### Added
