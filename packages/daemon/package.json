@@ -13,7 +13,7 @@
     "@throng/ipc-contract": "*",
     "@throng/persistence": "*",
     "@throng/platform-windows": "*",
-    "better-sqlite3": "^13.0.3",
+    "better-sqlite3": "^12.11.1",
     "inversify": "^8.1.1",
     "reflect-metadata": "^0.2.2"
   }
