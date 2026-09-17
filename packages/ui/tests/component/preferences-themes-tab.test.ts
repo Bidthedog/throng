@@ -442,11 +442,16 @@ describe('a user pack re-skins its tokens and falls back for the rest (migrated 
     mountWithPack();
 
     const select = await screen.findByTestId('icon-pack-select');
-    const options = [...select.querySelectorAll('option')].map((o) => o.textContent?.trim());
-    expect(options).toContain(PACK_NAME);
+    const options = () => [...select.querySelectorAll('option')].map((o) => o.textContent?.trim());
+    /*
+     * POLLED, not read once. The dropdown renders as soon as the theme arrives, and under React 19 the
+     * pack list can be committed a tick later — so a single read finds the default option alone. The
+     * hosted gate failed exactly that way while every local run passed.
+     */
+    await waitFor(() => expect(options()).toContain(PACK_NAME));
     // The migrated test asserted the pack's option `toHaveCount(1)` and stopped. The DEFAULT option
     // matters just as much: without it there is no way back to throng's own glyphs.
-    expect(options).toContain('(default glyphs)');
+    expect(options()).toContain('(default glyphs)');
   });
 
   it('renders the pack’s glyph for a token the pack defines', async () => {
