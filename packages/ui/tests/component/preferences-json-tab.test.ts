@@ -39,8 +39,8 @@
  * that a silent no-op in production — the tab still mounts, the notice still renders, and every
  * "X is absent" assertion still holds — so it is precisely the vacuity that would otherwise hide
  * here. Every test goes through `mountLoaded()`, which asserts the seeded document actually reached
- * the editor before the test does anything, so withholding it fails **all 10 `it` declarations /
- * 11 cases** in this file — the `it.each` contributes two.
+ * the editor before the test does anything, so withholding it fails **all 11 `it` declarations /
+ * 12 cases** in this file — the `it.each` contributes two.
  *
  * (A second, blunter control: drop `NotificationProvider` from `mountLoaded`. `JsonTab` reaches
  * `useCopyToClipboard` → `useNotify`, which throws outside it, so all 11 fail on the render itself.)
@@ -241,6 +241,64 @@ describe('FR-017 — when the document is written', () => {
 
     await waitFor(() => expect(h.write).toHaveBeenCalledTimes(1));
     expect(h.write).toHaveBeenCalledWith({ kind: 'settings' }, VALID_MATRIX);
+  });
+
+  it('offers no editor until the document has loaded, so a late load cannot swallow an edit', async () => {
+    /*
+     * The load is a round trip and the tab mounts before it answers. With an editor on screen in that
+     * gap, an edit typed there was replaced by the answer when it landed — and the answer also marked
+     * the buffer clean, so leaving wrote nothing. `preferences-json.e2e.ts:300` failed that way on a
+     * slow runner: the window closed, and settings.json still held the old theme.
+     *
+     * The answer is held here until the test lets it go, which is the only way to make the gap
+     * deterministic. RED against a tab that renders its editor unconditionally: the edit goes in,
+     * the load replaces it, and the leave writes nothing.
+     */
+    const cfg = fakeConfig(SEEDED);
+    let answer!: (raw: string) => void;
+    cfg.bridge.readRaw.mockImplementationOnce(
+      () => new Promise<string>((resolve) => (answer = resolve)),
+    );
+    (window as unknown as { throng?: unknown }).throng = { config: cfg.bridge };
+    render(
+      createElement(
+        NotificationProvider,
+        null,
+        createElement(
+          JsonEditGateProvider,
+          null,
+          createElement(GateHost),
+          createElement(JsonTab, { docId: SETTINGS }),
+        ),
+      ),
+    );
+    await screen.findByTestId('json-tab-settings');
+
+    // The user gets in first, if the tab lets them.
+    const early = screen.queryByTestId('json-editor-settings') as HTMLTextAreaElement | null;
+    if (early) typeDocument(early, VALID_MATRIX);
+
+    await act(async () => {
+      answer(SEEDED.settings);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    if (early) {
+      // What a pre-load editor costs the user: they leave, and their edit is not what lands.
+      fireEvent.click(screen.getByTestId('host-leave'));
+      await settle(50);
+      expect(cfg.write, 'the edit typed before the load answered was lost').toHaveBeenCalledWith(
+        SETTINGS,
+        VALID_MATRIX,
+      );
+    }
+    expect(early, 'the editor was offered before its document had loaded').toBeNull();
+
+    // Once it has, it holds the document — and an edit made now is the one that leaving applies.
+    const editor = (await screen.findByTestId('json-editor-settings')) as HTMLTextAreaElement;
+    expect(editor.value).toBe(SEEDED.settings);
+    typeDocument(editor, VALID_MATRIX);
+    fireEvent.click(screen.getByTestId('host-leave'));
+    await waitFor(() => expect(cfg.write).toHaveBeenCalledWith(SETTINGS, VALID_MATRIX));
   });
 
   it('writes nothing on leaving a buffer the user never touched', async () => {

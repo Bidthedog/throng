@@ -211,6 +211,9 @@ async function ready(tabTestId = 'settings-tab'): Promise<void> {
 async function intoJson(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await user.click(screen.getByTestId('prefs-mode-toggle'));
   await waitFor(() => expect(screen.getByTestId('json-tab-settings')).toBeInTheDocument());
+  // The editor appears only once its document has loaded (json-tab.tsx, `loadedKey`), and every
+  // caller types into it next — so this waits for the thing it hands back, not for its container.
+  await waitFor(() => expect(screen.getByTestId('json-editor-settings')).toBeInTheDocument());
 }
 
 /** Type into the JSON editor through the stub's textarea. */

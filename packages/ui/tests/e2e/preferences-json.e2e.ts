@@ -262,7 +262,7 @@ async function openSettingsJson(app: ElectronApplication, win: Page): Promise<Pa
  * never raises one at all.
  *
  * ANTI-VACUITY CONTROL, and it is why the rest can be believed: deleting the `readRaw` member from
- * the fake config bridge fails ALL ELEVEN component cases. Optional chaining makes that a silent
+ * the fake config bridge fails ALL TWELVE component cases. Optional chaining makes that a silent
  * no-op in production — the tab still mounts and the notice still renders — so every "X is absent"
  * assertion would otherwise have held over a tab with no document in it.
  *
@@ -303,7 +303,16 @@ test('closing the Preferences window applies the JSON buffer (FR-017)', { tag: [
     async (app, win) => {
       const prefs = await openSettingsJson(app, win);
 
-      // A complete, VALID edit — the state a user is in when they have finished and reach for the X.
+      /*
+       * A complete, VALID edit — the state a user is in when they have finished and reach for the X.
+       *
+       * The editor is not on screen until the document it edits has loaded (`json-tab.tsx`,
+       * `loadedKey`), and the typing below waits for it. That ordering is the product's, not this
+       * test's: before it, an edit typed while the load was still in flight was overwritten by the
+       * load and marked clean, so this test failed on a slow runner with the file still reading
+       * `throng`. Reproduced 3/3 by holding the load's answer until after the typing; the component
+       * guard is `preferences-json-tab.test.ts`, "offers no editor until the document has loaded".
+       */
       await setEditorText(prefs, 'settings', '{"appearance":{"theme":"Matrix"}}');
       expect(
         readSettings(cfgRoot)?.appearance?.theme,

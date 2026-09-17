@@ -145,6 +145,23 @@ export function JsonTab({ docId }: JsonTabProps): ReactElement {
    */
   const knownThemesRef = useRef<readonly string[]>([]);
 
+  /**
+   * The document key whose text has ARRIVED — the editor is offered only once it matches `docKey`.
+   *
+   * The load below is a round trip, and the tab mounts before it answers. An editor on screen in
+   * that gap accepts typing, and the answer then lands on top of it: `setText(raw)` replaces the
+   * buffer and clears `dirtyRef`, so the edit is gone from the screen AND leaving writes nothing —
+   * the user's change is lost silently, with every exit still open. It was caught by
+   * `preferences-json.e2e.ts:300` on a slow runner, and reproduced deterministically by holding the
+   * `readRaw` answer until after the typing.
+   *
+   * Same rule, same reason, as the shell's `loaded` gate one level up (#341): nothing is editable
+   * until what it edits is known. Keyed by document rather than a boolean, so a switch to another
+   * document (the Themes tab following the active theme) closes the gap again instead of leaving the
+   * previous document's text editable under the new document's name.
+   */
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+
   /*
    * Fetched once per mount. The list arrives over IPC AFTER the editor is on screen, so until it
    * does nothing is checked — permissive on purpose, because reporting a theme as unknown while the
@@ -181,6 +198,7 @@ export function JsonTab({ docId }: JsonTabProps): ReactElement {
       dirtyRef.current = false;
       setProblems(problemsIn(docId, raw, knownThemesRef.current));
       setExternal(null);
+      setLoadedKey(docKey);
     });
     return () => {
       active = false;
@@ -330,7 +348,9 @@ export function JsonTab({ docId }: JsonTabProps): ReactElement {
 
   return (
     <div className="json-tab" data-testid={`json-tab-${docId.kind}`}>
-      <StandaloneEditor value={text} onChange={onChange} testId={`json-editor-${docId.kind}`} />
+      {loadedKey === docKey ? (
+        <StandaloneEditor value={text} onChange={onChange} testId={`json-editor-${docId.kind}`} />
+      ) : null}
 
       {external !== null ? (
         <div className="json-tab__external" data-testid="json-external-change">
