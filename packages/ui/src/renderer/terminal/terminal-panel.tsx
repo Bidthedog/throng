@@ -22,7 +22,6 @@ import {
   shouldNotifyCaptureOutcome,
   panelZoomLevel,
   readTerminalPanelConfig,
-  relativeToRoot,
   startFailurePreservesPanelType,
   causeMessage,
   toDisplayPath,
@@ -64,7 +63,8 @@ import {
 } from '../workspace/panel-failure-notice.js';
 import { openFileInTab } from '../editor/editor-open.js';
 import { requestPreviewOpen } from '../preview/open-preview.js';
-import { linkFailureMessage } from '../links/link-actions.js';
+import { linkFailureReport, osLinkActions } from '../links/link-actions.js';
+import type { FileLinkMenuContext } from '../links/link-menu-items.js';
 import { hoveredLinkMenuText } from './hovered-link.js';
 import { followTerminalLink, type TerminalLinkDeps } from './terminal-link-activation.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
@@ -251,15 +251,16 @@ export function TerminalPanel({
           requesterPanelId: panel.id,
         });
       },
+      // One condition, one notice, one WORDING — the report is shaped in `link-actions.ts` so the
+      // editor's identical failure cannot read differently (FR-036, FR-037; 032's lesson).
       reportFailure: (outcome) => {
-        reportSubject({
-          subject: outcome.path,
-          reason: outcome.reason,
-          message: linkFailureMessage(outcome),
-          displayPath: relativeToRoot(outcome.path, projectRoot),
-          detail: `${toDisplayPath(outcome.path, osName)} (${outcome.reason})`,
-          projectId: panel.originProjectId,
-        });
+        reportSubject(
+          linkFailureReport(outcome, {
+            projectRoot,
+            osName,
+            ...(panel.originProjectId ? { projectId: panel.originProjectId } : {}),
+          }),
+        );
       },
     }),
     [ws, openTarget, panel.originProjectId, panel.id, reportSubject, projectRoot, osName],
@@ -321,13 +322,42 @@ export function TerminalPanel({
       // 045 FR-011/FR-031: the hovered value is a RECORD now, not a url string. The menu still
       // classifies by scheme — `terminalLinkTarget` is unchanged — and now also tells it whether a
       // `file:` target actually resolved, because a `file:` URI naming nothing is a non-link and
-      // must offer no items at all (FR-013). The full file-link run lands with US4.
+      // must offer no items at all (FR-013).
       const hovered = apiRef.current?.getHoveredLink() ?? null;
       const link = terminalLinkTarget(
         selection,
         hoveredLinkMenuText(hovered),
         hovered?.kind === 'file',
       );
+      /*
+       * 045 US4 — the file-link run (FR-031). It REPLACES the web pair rather than joining it, which
+       * `terminalContentMenu` decides; what this site supplies is the link, the request main will be
+       * re-asked with, and the performers.
+       *
+       * No chord: FR-046 binds none in a terminal, and drawing Ctrl+Enter here would advertise a key
+       * that reaches the shell (FR-031 as amended, R10b).
+       *
+       * Open Link is `followTerminalLink` — the SAME route the Ctrl+click takes — so the item and the
+       * gesture cannot resolve the preference differently (FR-054).
+       */
+      const fileLink: FileLinkMenuContext | null =
+        hovered?.kind === 'file' && selection.length === 0
+          ? {
+              link: hovered.link,
+              request: hovered.request,
+              ...(hovered.position === undefined ? {} : { position: hovered.position }),
+              ...(hovered.positionText === undefined
+                ? {}
+                : { positionText: hovered.positionText }),
+              openLink: () =>
+                void followTerminalLink({
+                  request: hovered.request,
+                  ...(hovered.position === undefined ? {} : { position: hovered.position }),
+                  deps: linkActions,
+                }),
+              deps: { ...linkActions, ...osLinkActions() },
+            }
+          : null;
       // 033 US5 (T063) — the items live in `terminal-content-menu.ts`, which declares their sections;
       // `ContextMenu` derives the dividers from those. Nothing here decides where a divider goes.
       openMenu(
@@ -335,20 +365,15 @@ export function TerminalPanel({
         e.clientY,
         terminalContentMenu({
           link,
+          fileLink,
           selection,
           redrawChord: firstBinding(keybindings, 'terminal.redraw'),
           startFailure: startFailureRef.current !== null,
           actions: {
-            // One route, not two (FR-054): Open Link performs exactly what a Ctrl+click on this
-            // link performs. Only a WEB link reaches the OS url opener — the seam 024 built its
-            // refusal of `file:` into, and the one a file link must never touch (FR-037).
-            openLink: (url) => {
-              if (hovered?.kind === 'file') {
-                void followTerminalLink({ request: hovered.request, deps: linkActions });
-                return;
-              }
-              window.throng?.openExternal?.(url);
-            },
+            // Only a WEB link reaches this pair now: a file link is drawn from `fileLink` above and
+            // carries its own handlers. The OS url opener is the seam 024 built its refusal of
+            // `file:` into, and the one a file link must never touch (FR-037).
+            openLink: (url) => window.throng?.openExternal?.(url),
             copyLinkAddress: (url) => void window.throng?.terminal?.writeClipboard?.(url),
             copySelection: () => {
               void window.throng?.terminal?.writeClipboard?.(selection);

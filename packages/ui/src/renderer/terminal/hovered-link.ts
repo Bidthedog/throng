@@ -1,4 +1,4 @@
-import type { LinkResolutionRequest, ResolvedLink } from '@throng/core';
+import type { LinkPosition, LinkResolutionRequest, ResolvedLink } from '@throng/core';
 
 /**
  * What is under the pointer in a terminal (045 FR-042, FR-043; `data-model.md` §8).
@@ -29,6 +29,17 @@ export type HoveredLink =
       readonly link: ResolvedLink;
       /** What main was asked, kept so a follow can re-ask it rather than trust the answer (FR-037). */
       readonly request: LinkResolutionRequest;
+      /**
+       * FR-004's position, when the span carried one. Absent on an OSC 8 hyperlink, which never does.
+       *
+       * Carried on the HOVERED value, not only on the follow, because the CONTEXT MENU composes from
+       * what the pointer rests on (§5): *Open in Editor* has to land on the line (FR-033) and *Copy
+       * Link Address* has to paste the position back in the form it was written (FR-032), and
+       * neither is reachable from the resolved path alone.
+       */
+      readonly position?: LinkPosition;
+      /** How that position was written, verbatim — FR-032 copies it back exactly (`:42:7`, `(42,7)`). */
+      readonly positionText?: string;
     };
 
 /**

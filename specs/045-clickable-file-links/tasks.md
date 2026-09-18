@@ -465,45 +465,45 @@ first, because that is the surface that already exists — [plan.md](./plan.md) 
 **Independent Test**: right-click an in-project `.ts`, an in-project `.md` with the provider enabled
 and then disabled, an out-of-project file and a folder, and compare the item sets.
 
-- [ ] T077 [P] [US4] RED component `packages/ui/tests/component/terminal-file-link-menu.test.ts` —
+- [x] T077 [P] [US4] RED component `packages/ui/tests/component/terminal-file-link-menu.test.ts` —
   **SC-009**: the FR-031 run over each of the five link shapes; with text selected the ordinary menu
   appears instead (024 FR-019d); away from a link the menu is unchanged; over a **web** link 024's
   two items are unchanged; the keyboard-opened menu (`menu.open`, Shift+F10) offers the same items
   from what the pointer rests on (§5, US4 scenario 8); and the terminal's Open Link shows **no
   chord** (T002). Satisfies FR-030, FR-031, FR-046, SC-009.
-- [ ] T078 [US4] Implement `packages/ui/src/renderer/links/link-menu-items.ts` — core's
+- [x] T078 [US4] Implement `packages/ui/src/renderer/links/link-menu-items.ts` — core's
   `fileLinkMenuItems` shapes → `MenuAction[]`, every item in the `contextual` section (`section` is a
   required field, so an omission is a compile error). Depends on T077, T021. Satisfies FR-031.
-- [ ] T079 [US4] Insert the run in `packages/ui/src/renderer/terminal/terminal-content-menu.ts:49`
+- [x] T079 [US4] Insert the run in `packages/ui/src/renderer/terminal/terminal-content-menu.ts:49`
   — it **replaces** the existing `contextual` Open Link / Copy Link Address pair (`:54-70`) **only
   over a file link**. Depends on T078. Satisfies FR-031.
-- [ ] T080 [P] [US4] RED unit(ui) — add a `shapeOf` pin for the terminal content menu and the editor
+- [x] T080 [P] [US4] RED unit(ui) — add a `shapeOf` pin for the terminal content menu and the editor
   content menu to `packages/ui/tests/unit/menu-sections.test.ts`. Satisfies Principle VI (*One
   section vocabulary for every menu*).
-- [ ] T081 [US4] Make T080 green — no new section name is introduced; the whole run is `contextual`.
+- [x] T081 [US4] Make T080 green — no new section name is introduced; the whole run is `contextual`.
   Depends on T080, T079.
-- [ ] T082 [P] [US4] RED component `packages/ui/tests/component/link-copy-address.test.ts` — Copy
+- [x] T082 [P] [US4] RED component `packages/ui/tests/component/link-copy-address.test.ts` — Copy
   Link Address copies the **resolved** absolute path as plain text, followed by the position **in the
   form it was written** when the link has one, and copies a resolved path for a target **outside** the
   project too (where this differs from 044 FR-116). Satisfies FR-032.
-- [ ] T083 [US4] Implement Copy Link Address in
+- [x] T083 [US4] Implement Copy Link Address in
   `packages/ui/src/renderer/links/link-actions.ts`. Depends on T082. Satisfies FR-032.
-- [ ] T084 [P] [US4] RED component `packages/ui/tests/component/link-target-actions.test.ts` — each
+- [x] T084 [P] [US4] RED component `packages/ui/tests/component/link-target-actions.test.ts` — each
   named item performs its own target **whatever the preference says** (FR-054): Open in Editor via
   `openFileInTab(ws, tabId, absPath, openTarget, …)` honouring *Open files in* and **never**
   `open-router.ts` (FR-033); Open in Preview via
   `requestPreviewOpen({ absPath, projectId, requesterPanelId })` with the link's **position ignored**
   (FR-034); Open in OS Explorer via `throng:links:reveal`; Open in OS Default Program via
   `throng:links:open`. Satisfies FR-033 – FR-036, FR-054.
-- [ ] T085 [US4] Implement the four named targets in
+- [x] T085 [US4] Implement the four named targets in
   `packages/ui/src/renderer/links/link-actions.ts`. Depends on T084. Satisfies FR-033 – FR-036.
-- [ ] T086 [P] [US4] RED component `packages/ui/tests/component/link-failure-notice.test.ts` — a
+- [x] T086 [P] [US4] RED component `packages/ui/tests/component/link-failure-notice.test.ts` — a
   failed OS open, and a target that has gone between hover and follow, each raise **exactly one**
   notice naming the file and the reason, through the shared failure presentation (030). One
   condition, one notice: no second surface reports the same state. Satisfies FR-036, FR-037.
-- [ ] T087 [US4] Implement the notice route from `LinkActionOutcome` in
+- [x] T087 [US4] Implement the notice route from `LinkActionOutcome` in
   `packages/ui/src/renderer/links/link-actions.ts`. Depends on T086. Satisfies FR-036, FR-037.
-- [ ] T088 [P] [US4] Update `docs/quick-start.md` §3 and §4 — the file-link menu's items in both panel
+- [x] T088 [P] [US4] Update `docs/quick-start.md` §3 and §4 — the file-link menu's items in both panel
   types, and which are absent or disabled for which link. Ships with this slice. Satisfies FR-090.
 
 **Checkpoint**: SC-009 holds in a terminal. Every link action is reachable from a menu item, which is

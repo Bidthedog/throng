@@ -126,7 +126,16 @@ function linkFor(
   deps: FileLinkProviderDeps,
 ): ProvidedLink {
   const position = candidate.position;
-  const hovered: HoveredLink = { kind: 'file', link, request };
+  // The position travels on the HOVERED value as well as on the follow: the context menu composes
+  // from what the pointer rests on, and Open in Editor and Copy Link Address both need it (FR-032,
+  // FR-033).
+  const hovered: HoveredLink = {
+    kind: 'file',
+    link,
+    request,
+    ...(position === undefined ? {} : { position }),
+    ...(candidate.positionText === undefined ? {} : { positionText: candidate.positionText }),
+  };
   return {
     // xterm's range is 1-based and INCLUSIVE at both ends; the candidate's is 0-based and half-open.
     range: { start: { x: candidate.start + 1, y }, end: { x: candidate.end, y } },

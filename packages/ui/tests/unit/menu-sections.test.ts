@@ -27,9 +27,11 @@ import {
   type MenuSection,
   type Panel,
   type PreviewAffordance,
+  type ResolvedLink,
 } from '@throng/core';
 import type { EditorView } from '@codemirror/view';
 import type { MenuAction, MenuItem } from '../../src/renderer/workspace/context-menu.js';
+import type { FileLinkMenuContext } from '../../src/renderer/links/link-menu-items.js';
 import { withDividers } from '../../src/renderer/workspace/menu-dividers.js';
 import { buildContextMenuItems } from '../../src/renderer/explorer/context-menu-items.js';
 import { editorContentMenu } from '../../src/renderer/editor/content-menu.js';
@@ -363,9 +365,41 @@ const tabMenu = (detach: boolean): MenuAction[] =>
     actions: { rename: noop, destroyTab: noop, destroyOthers: noop },
   });
 
-const terminalMenu = (over: { link?: string | null; selection?: string; startFailure?: boolean }): MenuAction[] =>
+/**
+ * 045 FR-031 — the file link under the pointer, for the shape pins below.
+ *
+ * Every field is the smallest thing that makes the run drawable: the resolved link decides which
+ * targets are offered, and the performers are never called by a shape test.
+ */
+const fileLinkContext = (over: Partial<ResolvedLink> = {}): FileLinkMenuContext => ({
+  link: {
+    path: 'D:\\project\\src\\foo.ts',
+    kind: 'file',
+    inProject: true,
+    executable: false,
+    preview: 'enabled',
+    ...over,
+  },
+  request: { text: 'src/foo.ts', kind: 'detectedPath', panelId: 'p1' },
+  openLink: noop,
+  deps: {
+    openInEditor: noop,
+    openInPreview: noop,
+    revealInOsExplorer: async () => ({ ok: true }) as const,
+    openInOsDefaultProgram: async () => ({ ok: true }) as const,
+    reportFailure: noop,
+  },
+});
+
+const terminalMenu = (over: {
+  link?: string | null;
+  fileLink?: FileLinkMenuContext | null;
+  selection?: string;
+  startFailure?: boolean;
+}): MenuAction[] =>
   terminalContentMenu({
     link: over.link ?? null,
+    fileLink: over.fileLink ?? null,
     selection: over.selection ?? '',
     redrawChord: 'Ctrl+Shift+R',
     startFailure: over.startFailure ?? false,
@@ -1403,6 +1437,60 @@ describe('the terminal content menu leads with its contextual items (AS-8)', () 
       'Try again',
       'Copy details',
       'Clear panel type',
+    ]);
+  });
+});
+
+/**
+ * 045 T080 — the file-link run is ONE contextual section, in both content menus (FR-031).
+ *
+ * The pin exists for one reason: the run is six rows long and it is the first contextual section the
+ * editor's menu has ever had, so the obvious mistake is to give it a section name of its own —
+ * 'link', say — which would sort it somewhere else in every menu in the app and derive a divider
+ * through the middle of it. `MENU_SECTION_ORDER` is the whole vocabulary and this run adds nothing
+ * to it; what the shape below proves is that one divider sits between the run and Copy/Paste and
+ * none sits inside it.
+ */
+describe('045 — the file-link run is one contextual section (FR-031, Principle VI)', () => {
+  it('the terminal content menu over a file link', () => {
+    expect(shapeOf(terminalMenu({ fileLink: fileLinkContext() }))).toEqual([
+      'Open Link',
+      'Open in Editor',
+      'Open in Preview',
+      'Open in OS Explorer',
+      'Open in OS Default Program',
+      'Copy Link Address',
+      '—',
+      'Copy',
+      'Paste',
+      '—',
+      'Refresh / redraw terminal',
+    ]);
+  });
+
+  it('every row of the run declares `contextual`, and no new section name is introduced', () => {
+    const run = terminalMenu({ fileLink: fileLinkContext() }).filter(
+      (item) => item.section === 'contextual',
+    );
+    expect(run).toHaveLength(6);
+    for (const item of terminalMenu({ fileLink: fileLinkContext() })) {
+      expect(MENU_SECTION_ORDER).toContain(item.section);
+    }
+  });
+
+  it('the editor content menu, with no link under the pointer, is unchanged', () => {
+    expect(shapeOf(editorMenu())).toEqual([
+      'Cut',
+      'Copy',
+      'Paste',
+      'Select All',
+      'Undo',
+      'Redo',
+      '—',
+      'Go To Line…',
+      '—',
+      'Set Language…',
+      'Word Wrap ✓',
     ]);
   });
 });

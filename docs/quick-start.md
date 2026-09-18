@@ -210,6 +210,31 @@ One Ctrl+click follows a link **once**. Full-screen programs such as Claude Code
 they are Ctrl+clicked on themselves, so throng keeps the press to itself when it is over a link it
 recognises, and lets it through everywhere else — so the program's own links keep working too.
 
+### Choosing where a link opens
+
+Ctrl+click picks one destination. **Right-click a link** — with nothing selected — and the menu
+leads with every destination that link has:
+
+| Item | When you see it |
+|---|---|
+| **Open Link** | always — it does exactly what Ctrl+click does |
+| **Open in Editor** | a file inside the project |
+| **Open in Preview** | a file inside the project that a preview provider handles; drawn **greyed** when that provider is switched off, so you can see the destination exists |
+| **Open in OS Explorer** | always — the file is selected in its folder, or the folder is opened |
+| **Open in OS Default Program** | a file (never a folder) |
+| **Copy Link Address** | always — the full path, plus the `:42:7` or `(42,7)` exactly as it was printed |
+
+Each item does its own thing whatever your *Default link action* preference says: the preference
+picks what Ctrl+click and **Open Link** do, and the menu is how you reach the other choices.
+
+An item you do not see is one that could never apply to that link — there is no editor for a folder,
+and nothing outside the project ever opens in a throng editor or preview. Select some text first and
+you get the ordinary Copy/Paste menu instead, whatever the pointer is over.
+
+The menu is also reachable from the keyboard with **Shift+F10**, which offers the items for whatever
+the pointer is resting on. Ctrl+Enter in a terminal is **not** an Open Link shortcut — it reaches
+the shell, as it always has — which is why the terminal's Open Link item shows no shortcut.
+
 ### Reloading terminals
 
 By default, opening a project brings its terminals back: the tab you land on starts its terminals

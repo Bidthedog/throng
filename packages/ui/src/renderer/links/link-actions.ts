@@ -1,3 +1,4 @@
+import { relativeToRoot, toDisplayPath, type OsName } from '@throng/core';
 import type {
   LinkActionOutcome,
   LinkPosition,
@@ -5,6 +6,7 @@ import type {
   LinkTarget,
   ResolvedLink,
 } from '@throng/core';
+import type { SubjectFailureReport } from '../workspace/panel-failure-notice.js';
 
 /**
  * The ONE router both surfaces call to perform a link target (045 FR-033 – FR-037, FR-054, FR-055).
@@ -53,6 +55,55 @@ export function linkFailureMessage(outcome: Extract<LinkActionOutcome, { ok: fal
   return outcome.reason === 'gone'
     ? 'That file or folder is no longer there.'
     : 'That link could not be opened.';
+}
+
+/**
+ * One failed outcome in, one notice's worth of report out (FR-036, FR-037; 030 FR-007/FR-018).
+ *
+ * Shaping rather than raising, because `useReportSubjectFailure` is a hook and neither of the two
+ * places a link is followed from — a terminal's mount effect and a CodeMirror event handler — is a
+ * React render. Each surface holds the hook already; what neither should hold is its own opinion of
+ * how a missing file is worded, which is how one condition ends up with three wordings.
+ */
+export function linkFailureReport(
+  outcome: Extract<LinkActionOutcome, { ok: false }>,
+  context: {
+    /** The owning project's root, where the panel has one — the row shows a path relative to it. */
+    readonly projectRoot?: string | null;
+    readonly osName: OsName;
+    readonly projectId?: string;
+  },
+): SubjectFailureReport {
+  return {
+    subject: outcome.path,
+    reason: outcome.reason,
+    message: linkFailureMessage(outcome),
+    displayPath: relativeToRoot(outcome.path, context.projectRoot),
+    detail: `${toDisplayPath(outcome.path, context.osName)} (${outcome.reason})`,
+    ...(context.projectId ? { projectId: context.projectId } : {}),
+  };
+}
+
+/**
+ * FR-032 — Copy Link Address: the RESOLVED absolute path, plus the position exactly as it was
+ * written.
+ *
+ * The path rather than the clicked text, because `src/foo.ts` pasted anywhere else names nothing;
+ * the position verbatim, because `:42:7` and `(42,7)` are read back by different tools and
+ * normalising one into the other hands the user something their tool cannot parse.
+ *
+ * It copies a path OUTSIDE the project too, which is where this differs from 044 FR-116: the OS
+ * targets beside it will act on such a link, so a copy that produced nothing for exactly those links
+ * would be an item that silently does not work.
+ */
+export async function copyLinkAddress(args: {
+  readonly link: ResolvedLink;
+  /** FR-004's `positionText`, verbatim. Absent when the link carried no position. */
+  readonly positionText?: string;
+}): Promise<void> {
+  const text = `${args.link.path}${args.positionText ?? ''}`;
+  // 'verbatim' — a path is not a line-wise or rectangular selection, so it pastes as written.
+  await window.throng?.clipboard?.write({ text, mode: 'verbatim' });
 }
 
 /**
