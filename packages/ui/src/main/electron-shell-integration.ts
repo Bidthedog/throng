@@ -6,7 +6,9 @@
  * runtime; the OS detail stays behind the IShellIntegration abstraction.
  */
 import { stat } from 'node:fs/promises';
-import type { IShellIntegration } from '@throng/core';
+import { join } from 'node:path';
+import process from 'node:process';
+import { shouldDeElevate, type IShellIntegration } from '@throng/core';
 
 /** The slice of Electron's `shell` this impl needs. */
 export interface ElectronShellLike {
@@ -19,6 +21,30 @@ export interface ElectronShellLike {
 /** What is at a path, as far as `openWithDefaultProgram` needs to care (045 SI1/SI2). */
 export type PathKind = 'file' | 'folder' | null;
 
+/**
+ * 045 FR-038 — the seam that starts a process at the interactive user's privilege from an elevated
+ * host. `WindowsDeElevatedLauncher` satisfies it.
+ *
+ * **Not `IDeElevator`**, and that is a finding rather than an oversight (Open item O2). `IDeElevator`
+ * offers `wrap(spec)`, which rewrites a launch spec for something ELSE to spawn — `NodePtyHost`
+ * spawns the wrapped spec through node-pty. A reveal has no spawner on the other side, so a wrapped
+ * spec would be built and dropped. It also has no concrete implementation anywhere in this
+ * repository: the only value of that type is `passthroughDeElevator`, whose `isAvailable()` is
+ * `false` by construction, so routing FR-038 through it would have left the requirement permanently
+ * inert while looking implemented.
+ */
+export interface DeElevatingLauncher {
+  isAvailable(): boolean;
+  launch(file: string, args: string[], report?: (reason: string) => void): void;
+}
+
+/** 045 FR-038. Supplied by the composition root; absent means "never de-elevate". */
+export interface DeElevationOptions {
+  readonly launcher?: DeElevatingLauncher;
+  /** Injected so the ROUTING is provable without a real high-integrity process. */
+  readonly isElevated?: () => boolean;
+}
+
 async function statKindOnDisk(path: string): Promise<PathKind> {
   try {
     const info = await stat(path);
@@ -26,6 +52,10 @@ async function statKindOnDisk(path: string): Promise<PathKind> {
   } catch {
     return null;
   }
+}
+
+function system32(exe: string): string {
+  return join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', exe);
 }
 
 export class ElectronShellIntegration implements IShellIntegration {
@@ -36,18 +66,26 @@ export class ElectronShellIntegration implements IShellIntegration {
      * default is the real disk, so a caller that does not care gets the real check rather than none.
      */
     private readonly statKind: (path: string) => Promise<PathKind> = statKindOnDisk,
+    private readonly deElevation: DeElevationOptions = {},
   ) {}
 
   async revealInFileManager(path: string): Promise<void> {
+    // FR-035: a FILE is selected in its folder. `/select,<path>` is one argument, comma included —
+    // that is explorer's own syntax and not a typo (see Open item O3 for the cases it strains).
+    if (this.deElevate(system32('explorer.exe'), [`/select,${path}`])) return;
     this.shell.showItemInFolder(path);
   }
 
   async openFolder(path: string): Promise<void> {
+    if (this.deElevate(system32('explorer.exe'), [path])) return;
     const error = await this.shell.openPath(path);
     if (error) throw new Error(error);
   }
 
   async openExternal(url: string): Promise<void> {
+    // Deliberately NOT de-elevated. This opens a URL in the default browser, and 024's policy
+    // already confines it to schemes that cannot name a local program; adding a de-elevated
+    // `rundll32` route here would widen that surface for no requirement.
     await this.shell.openExternal(url);
   }
 
@@ -61,6 +99,7 @@ export class ElectronShellIntegration implements IShellIntegration {
    * not to trust either item.
    *
    * Both rejections carry the path AND a reason, because the notice that reports them names both.
+   * They happen BEFORE the de-elevation decision, so de-elevating cannot weaken either.
    */
   async openWithDefaultProgram(path: string): Promise<void> {
     const kind = await this.statKind(path);
@@ -68,7 +107,32 @@ export class ElectronShellIntegration implements IShellIntegration {
     if (kind === 'folder') {
       throw new Error(`${path} is a folder, and Open in OS Default Program opens a file`);
     }
+    // FR-038. `rundll32 shell32.dll,ShellExec_RunDLL <path>` is the OS's own "open this the way a
+    // double-click would" entry point, which is what `shell.openPath` does from inside the app —
+    // except that this one runs as the interactive user rather than as the elevated host.
+    if (this.deElevate(system32('rundll32.exe'), ['shell32.dll,ShellExec_RunDLL', path])) return;
     const error = await this.shell.openPath(path);
     if (error) throw new Error(`${path} could not be opened: ${error}`);
+  }
+
+  /**
+   * FR-038's gate. `true` when the work was handed to the de-elevating launcher and the caller must
+   * do nothing further.
+   *
+   * Three conditions, and the third is the one worth stating: when the host is elevated but the
+   * launcher is NOT available, this returns `false` and the action proceeds through Electron's
+   * shell. A de-elevation that cannot happen must not become a silent no-op — the user asked for
+   * something to open, and refusing to open it at all would be a worse answer than opening it with
+   * the privilege the app happens to hold. `node-pty-host.ts:99` takes the same view for a terminal.
+   */
+  private deElevate(file: string, args: string[]): boolean {
+    const launcher = this.deElevation.launcher;
+    if (launcher === undefined) return false;
+    const elevated = (this.deElevation.isElevated ?? (() => false))();
+    // `runAsAdmin` is false: no link action has ever been asked to run elevated, and none may be.
+    if (!shouldDeElevate(false, elevated)) return false;
+    if (!launcher.isAvailable()) return false;
+    launcher.launch(file, args);
+    return true;
   }
 }

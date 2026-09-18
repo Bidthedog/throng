@@ -126,7 +126,28 @@ export interface IShellIntegration {
 
 When `shouldDeElevate(...)` (`core/src/terminal/elevation.ts`) says the host is elevated and the
 action was not asked to be, `revealInFileManager` and `openWithDefaultProgram` launch through a
-spec `IDeElevator.wrap` can carry, instead of Electron's `shell.*` (research R7):
+de-elevating launcher instead of Electron's `shell.*` (research R7):
+
+> **Amendment 2026-09-18 — the seam is `WindowsDeElevatedLauncher.launch`, not `IDeElevator.wrap`.**
+>
+> This section originally said both actions "launch through `IDeElevator.wrap({file, args})`".
+> Settling Open item O2 showed that cannot work, for two independent reasons.
+>
+> **`wrap` is the wrong shape.** It *rewrites a spec that something else then spawns* — `NodePtyHost`
+> spawns the wrapped spec through node-pty (`node-pty-host.ts:99`). A reveal has no spawner on the
+> other side, so a wrapped spec would be built and then dropped.
+>
+> **And there is no `IDeElevator` to ask.** The repository contains exactly one value of that type,
+> `passthroughDeElevator`, whose `isAvailable()` is `false` by construction; nothing binds another,
+> in any process. Taking the original text literally would have made FR-038 permanently inert while
+> appearing to be implemented — the worst available outcome for a rule about not launching
+> administrator programs.
+>
+> The mechanism that actually de-elevates is `WindowsDeElevatedLauncher.launch(file, args, report)`
+> (`platform-windows/src/windows-de-elevated-launcher.ts`), which performs the shell-token
+> `CreateProcessWithTokenW` handoff. Its availability is `process.platform === 'win32'` — a property
+> of the platform rather than of being the daemon — so **UI main can do this itself**, and FR-038
+> needs no new RPC. The launch specs in the table below are unchanged; only what carries them is.
 
 | Action | Launch spec |
 |---|---|

@@ -276,7 +276,7 @@ their contract suites. No surface has changed yet.
 either against a renderer-side stand-in would produce the second implementation of FR-010 the whole
 design exists to prevent.
 
-- [ ] T045 Settle **Open item O2** before anything in this phase depends on it: is
+- [x] T045 Settle **Open item O2** before anything in this phase depends on it: is
   `IDeElevator.isAvailable()` true in the **UI main** process? Run
   `packages/platform-windows/tests/contract/windows-de-elevated-launcher.contract.test.ts` and add an
   `@admin` case that asks it from main. Record the answer in
@@ -313,20 +313,20 @@ design exists to prevent.
   `packages/ui/src/main/editor-ipc.ts:71-83`) and never taken from the renderer; a renderer-supplied
   absolute path is refused; and `throng:files:reveal` / `throng:files:revealDocument` keep their own
   confinements unchanged. Satisfies FR-037, FR-055; T004's FR-035a.
-- [ ] T052 [P] RED contract
+- [x] T052 [P] RED contract
   `packages/ui/tests/contract/electron-shell-integration.contract.test.ts` — run the extended
   `runShellIntegrationContract` (SI1–SI3) against `ElectronShellIntegration`. Depends on T031.
   Satisfies FR-036.
-- [ ] T053 Implement `openWithDefaultProgram` in
+- [x] T053 Implement `openWithDefaultProgram` in
   `packages/ui/src/main/electron-shell-integration.ts` — the **non-elevated** path keeps today's
   `shell.openPath` / `shell.showItemInFolder` behaviour verbatim. Depends on T052. Satisfies FR-036.
-- [ ] T054 [P] RED integration (`@admin`)
+- [x] T054 [P] RED integration (`@admin`)
   `packages/ui/tests/integration/link-de-elevated-open.integration.test.ts` — SI4: from an elevated
   host, `revealInFileManager` and `openWithDefaultProgram` launch through
   `IDeElevator.wrap({file, args})` and **neither OS action is performed by the elevated process
   itself**. Meaningless in a non-elevated run and must not assert a hollow baseline there — it is
   `@admin`, not `skipIfElevated()`. Satisfies FR-038.
-- [ ] T055 Implement the de-elevated route in
+- [x] T055 Implement the de-elevated route in
   `packages/ui/src/main/electron-shell-integration.ts` — `explorer.exe /select,<path>`,
   `explorer.exe <path>`, `rundll32.exe shell32.dll,ShellExec_RunDLL <path>`, gated on
   `shouldDeElevate(...)` (`packages/core/src/terminal/elevation.ts`). Depends on T054, T045.

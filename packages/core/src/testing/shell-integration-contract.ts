@@ -39,7 +39,13 @@ export interface ShellIntegrationHarness {
 /** What a de-elevating implementation launched instead of performing the action itself (SI4). */
 export interface DeElevationHarness {
   shell: IShellIntegration;
-  /** The launch specs handed to `IDeElevator.wrap`, in order. */
+  /**
+   * The launch specs handed to the de-elevating launcher, in order.
+   *
+   * Not `IDeElevator.wrap`, which is what this said until 045 Open item O2 was settled: `wrap`
+   * rewrites a spec for a SPAWNER to run, and a reveal has none — see the amendment in
+   * `contracts/platform-ports.md` §3.
+   */
   launched(): ReadonlyArray<{ readonly file: string; readonly args: readonly string[] }>;
   /** The OS calls the process made DIRECTLY. Must stay empty while elevated. */
   directOsCalls(): ReadonlyArray<{ op: string; path: string }>;

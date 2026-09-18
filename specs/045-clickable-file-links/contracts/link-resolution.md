@@ -43,7 +43,7 @@ Main walks the list and takes the first that exists (FR-006, FR-020). `ctx` carr
 | # | Rule | FR |
 |---|---|---|
 | R1 | The list is tried in order and the **first location that exists wins**; an empty list, or a list where none exists, is a non-link | FR-006, FR-024 |
-| R2 | A drive form (`D:\…`, `D:/…`) and a UNC form (`\\s\h\…`, `//s/h/…`) map to themselves, separators normalised by `IPathForms` | FR-003b, FR-003c |
+| R2 | A drive form (`D:\…`, `D:/…`) and a UNC form (`\\s\h\…`, `//s/h/…`) map to themselves, **exactly as written** — see the amendment below | FR-003b, FR-003c |
 | R3 | `/<letter>/…` and `/mnt/<letter>/…` map to that drive, via `IPathForms.fromDriveForm` | FR-025 |
 | R4 | `~/…` maps through `IPathForms.fromHomeForm` | FR-025 |
 | R5 | A **relative** path is tried against `baseDirectory` first, then `projectRoot` | FR-022, FR-023 |
@@ -56,6 +56,43 @@ Main walks the list and takes the first that exists (FR-006, FR-020). `ctx` carr
 
 **Ordering matters and is testable**: R6 before the platform reading is #394's own `/test.txt`
 example; R5's base-directory-first is the compiler-error case (US1 scenario 8).
+
+### Amendment 2026-09-18 — R2 said "separators normalised by `IPathForms`", and that was not buildable
+
+R2 as first written required a native drive or UNC form to come back with its separators normalised
+**by `IPathForms`**. [platform-ports.md](./platform-ports.md) §1 gives that port exactly four
+members — `homeDirectory`, `fromDriveForm`, `fromFileUrl`, `fromHomeForm` — and **none of them
+normalises separators**. So the rule named a mechanism that does not exist, and an implementer had
+two ways to resolve it. This settles which, and it is the second:
+
+**A form the platform already understands is passed through exactly as the user wrote it.**
+`D:/x/foo.ts` resolves to `D:/x/foo.ts`, and `//s/h/foo.ts` to `//s/h/foo.ts`. R2's clause about
+`IPathForms` is kept for the spellings that genuinely need mapping — `/d/x`, `/mnt/d/x`, `~/x` and a
+`file:` URI all come back from the port in the platform's own separators, because the port builds
+those strings. Only the pass-through case changes.
+
+Three reasons, in the order they decided it:
+
+1. **FR-026's second sentence forbids the alternative.** "The shared rules … MUST NOT name an
+   operating system." Rewriting `/` to `\` in `core/src/links/resolve.ts` means naming a separator,
+   which is naming a platform. FR-026's first sentence puts *mapping between spellings* behind the
+   port, and a form that needs no mapping is not an instance of it — `D:/x` and `D:\x` are one
+   spelling the platform accepts two ways, not two spellings one of which must become the other.
+2. **Nothing downstream can be confused by it.** Every comparison that could be — project membership
+   (M6), document identity, the open-file registry, navigation history — already runs through
+   `isUnderPath` / `samePath` / `normaliseForCompare`, which fold separators and case. US1 scenario
+   3's five spellings therefore open one file whatever the resolved string looks like, which is what
+   that scenario actually asks for.
+3. **It is better for FR-032.** Copy Link Address copies the resolved path, and a user who wrote
+   `D:/x/foo.ts` gets back what they were looking at rather than a respelling of it.
+
+**What would have had to change for the other reading**: a fifth member on `IPathForms`, its doc
+comment in §1, PF13 in the contract suite, and the Windows implementation — for a cosmetic
+difference no FR asks for. Adding a port member with one caller and no second in sight is the
+YAGNI half of Principle VIII, so the artifact is corrected rather than the code.
+
+`packages/core/tests/unit/link-resolve.test.ts` asserts the pass-through directly, with this
+reasoning beside it.
 
 ---
 
