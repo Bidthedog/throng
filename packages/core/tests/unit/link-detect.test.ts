@@ -180,6 +180,42 @@ describe('detectPathCandidates — D7/D8: total, pure, and over the given line a
   });
 });
 
+describe('detectPathCandidates — D12: PowerShell’s provider-qualified spelling (FR-003g, FR-107; T139)', () => {
+  /*
+   * Both PowerShells print a network location as `Microsoft.PowerShell.Core\FileSystem::\\s\h\dir`
+   * — in the prompt, in `pwd`, in `Resolve-Path`. The qualifier is not part of the path: the
+   * candidate is the path alone, and its span covers the path alone, so a Ctrl+click on the
+   * qualifier is not a click on a link.
+   */
+  const alone = (line: string, path: string): void => {
+    const found = detectPathCandidates(line, []);
+    expect(
+      found.map((c) => c.text),
+      `candidates in ${JSON.stringify(line)}`,
+    ).toEqual([path]);
+    const [c] = found;
+    expect(line.slice(c.start, c.end)).toBe(path);
+  };
+
+  it('`FileSystem::` before a UNC path yields the path alone', () => {
+    alone('FileSystem::\\\\s\\h\\x', '\\\\s\\h\\x');
+  });
+
+  it('`Microsoft.PowerShell.Core\\FileSystem::` before a drive path yields the path alone', () => {
+    alone('Microsoft.PowerShell.Core\\FileSystem::C:\\x\\y.ts', 'C:\\x\\y.ts');
+  });
+
+  it('the whole prompt yields the network folder alone', () => {
+    alone('PS Microsoft.PowerShell.Core\\FileSystem::\\\\s\\h\\dir> ', '\\\\s\\h\\dir');
+  });
+
+  it('any other `Name::` token is still refused', () => {
+    for (const line of ['std::vector', 'Foo::Bar', 'a::b', 'Other::C:\\x']) {
+      expect(texts(line), line).toEqual([]);
+    }
+  });
+});
+
 describe('detectPathCandidates — SC-003: ordinary prose and log text yields nothing', () => {
   const prose = readFileSync(
     fileURLToPath(new URL('../../../ui/tests/fixtures/links/prose.txt', import.meta.url)),

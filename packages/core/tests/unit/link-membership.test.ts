@@ -88,6 +88,27 @@ describe('isLinkInProject — M5: a symlink is judged on the location it NAMES',
   });
 });
 
+describe('isLinkInProject — M7: a project rooted on a network share (FR-021, FR-106; T137)', () => {
+  const SHARE_ROOT = '\\\\s\\h\\proj';
+
+  it('M7: a file under the share root is in the project, in either separator', () => {
+    expect(isLinkInProject('\\\\s\\h\\proj\\src\\x.ts', SHARE_ROOT)).toBe(true);
+    expect(isLinkInProject('//s/h/proj/src/x.ts', SHARE_ROOT)).toBe(true);
+  });
+
+  it('M7: a sibling on the same share whose name merely STARTS with the root is not', () => {
+    expect(isLinkInProject('\\\\s\\h\\proj-old\\x.ts', SHARE_ROOT)).toBe(false);
+  });
+});
+
+describe('isLinkInProject — M8: a different NAME for the same place is judged as named (FR-106; T137)', () => {
+  it('M8: a mapped drive letter is not inside a project rooted at the share it maps', () => {
+    // `Z:` may well be `\\s\h` — this rule is about strings and cannot know, and FR-106 says a
+    // different name for the same place is outside the project by name, never opened on a guess.
+    expect(isLinkInProject('Z:\\proj\\x.ts', '\\\\s\\h\\proj')).toBe(false);
+  });
+});
+
 describe('isLinkInProject — M6: the comparison is isUnderPath, and no new normaliser is written', () => {
   const source = readFileSync(
     fileURLToPath(new URL('../../src/links/resolve.ts', import.meta.url)),

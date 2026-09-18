@@ -123,6 +123,19 @@ describe('reader 1 — keepLinkClickFromProgram (FR-043, #198 extended to file l
   });
 });
 
+/** A file link outside the project, and a folder — both of which the click rule shows in OS Explorer. */
+const OUT_OF_PROJECT: HoveredLink = {
+  kind: 'file',
+  link: { ...IN_PROJECT, path: 'D:\\elsewhere\\notes.txt', inProject: false },
+  request: { text: 'D:\\elsewhere\\notes.txt', kind: 'detectedPath', panelId: 'panel-1' },
+};
+
+const FOLDER: HoveredLink = {
+  kind: 'file',
+  link: { ...IN_PROJECT, path: 'D:\\p\\src', kind: 'folder' },
+  request: { text: 'src', kind: 'detectedPath', panelId: 'panel-1' },
+};
+
 describe('reader 2 — the hover tooltip is worded by kind (FR-042, T003 amendment)', () => {
   it('keeps the shipped web wording byte for byte', () => {
     expect(hoveredLinkTipText(WEB, 'Ctrl')).toBe('Ctrl+Click to open in system browser');
@@ -138,6 +151,26 @@ describe('reader 2 — the hover tooltip is worded by kind (FR-042, T003 amendme
       expect(hoveredLinkTipText(hovered, 'Ctrl').startsWith('Ctrl+Click')).toBe(true);
       expect(hoveredLinkTipText(hovered, 'Cmd').startsWith('Cmd+Click')).toBe(true);
     }
+  });
+});
+
+/*
+ * 045 FR-105 (T159, amended 2026-09-18 as the supersessions permit): the file wording now follows
+ * the CLICK RULE (FR-110) rather than stopping at "to open", because with the default link action
+ * retired the destination is knowable. The web wording above is unchanged byte for byte.
+ */
+describe('reader 2, amended — a file link’s tooltip says where the click goes (FR-105)', () => {
+  it('an out-of-project file says it shows in OS Explorer', () => {
+    expect(hoveredLinkTipText(OUT_OF_PROJECT, 'Ctrl')).toBe('Ctrl+Click to show in OS Explorer');
+  });
+
+  it('a folder says it shows in OS Explorer', () => {
+    expect(hoveredLinkTipText(FOLDER, 'Ctrl')).toBe('Ctrl+Click to show in OS Explorer');
+  });
+
+  it('an in-project file still says it opens, and macOS still says Cmd', () => {
+    expect(hoveredLinkTipText(FILE, 'Ctrl')).toBe('Ctrl+Click to open');
+    expect(hoveredLinkTipText(OUT_OF_PROJECT, 'Cmd')).toBe('Cmd+Click to show in OS Explorer');
   });
 });
 

@@ -1,19 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { SETTINGS_METADATA } from '../../src/config/settings-metadata.js';
-import { DEFAULT_LINK_ACTIONS } from '../../src/links/default-action.js';
 
 /**
- * 045 FR-061, FR-080c — the four descriptors' CONTENT.
+ * 045 FR-061, FR-080c, and the 2026-09-18 amendment FR-112, FR-120 — the descriptors' CONTENT.
  *
  * `settings-metadata.test.ts` is the completeness gate: it says every leaf has a descriptor and no
  * descriptor names a leaf that does not exist. It cannot say whether a descriptor tells the user
- * anything true. These cases carry the two pieces of descriptor text that a REQUIREMENT depends on:
+ * anything true. These cases carry the pieces of descriptor text that a REQUIREMENT depends on:
  *
- *  - FR-039 and FR-052 are behaviours a user would otherwise report as a bug — a click on an `.exe`
- *    that reveals rather than runs, and a link with a line number that ignores their preference for
- *    previews. If the setting does not say so, the setting is wrong however the code behaves.
+ *  - FR-120 requires the existence-check timeout to say it applies with no restart — a user raising
+ *    it for a slow share must not be left wondering whether anything happened.
  *  - FR-080c requires the hyperlink-advertising switch to SAY that it applies to terminals started
  *    afterwards, because a toggle that silently does nothing to what is on screen reads as broken.
+ *
+ * ══ SUPERSEDED 2026-09-18 (T143) ══
+ *
+ * The `editor.links.defaultAction` block (FR-050's select, its labels, its FR-039 / FR-052
+ * description) is gone with the setting (FR-112). What replaces it asserts the descriptor is ABSENT,
+ * and that the three `Editor · Links` descriptors — the two switches and the new timeout — still sit
+ * together.
  */
 
 const descriptor = (key: string) => {
@@ -22,41 +27,40 @@ const descriptor = (key: string) => {
   return found!;
 };
 
-describe('editor.links.defaultAction (FR-050, FR-061)', () => {
-  const d = () => descriptor('editor.links.defaultAction');
+const LINK_KEYS = [
+  'editor.links.detectInEditors',
+  'editor.links.detectInTerminals',
+  'editor.links.existenceCheckTimeoutMs',
+] as const;
 
-  it('is a select over FR-050’s values, in FR-050’s order', () => {
-    expect(d().control).toBe('select');
-    expect(d().allowedValues).toEqual([...DEFAULT_LINK_ACTIONS]);
+describe('editor.links.defaultAction is retired (FR-112)', () => {
+  it('has no descriptor', () => {
+    expect(SETTINGS_METADATA.find((d) => d.key === 'editor.links.defaultAction')).toBeUndefined();
+  });
+});
+
+describe('editor.links.existenceCheckTimeoutMs (FR-120, FR-061)', () => {
+  const d = () => descriptor('editor.links.existenceCheckTimeoutMs');
+
+  it('is a slider over 250 – 30,000 in steps of 250', () => {
+    expect(d().control).toBe('slider');
+    expect(d().min).toBe(250);
+    expect(d().max).toBe(30_000);
+    expect(d().step).toBe(250);
   });
 
-  it('labels the WHOLE set — all or none (metadata.ts:107-120)', () => {
-    const labels = d().optionLabels;
-    expect(labels).toBeDefined();
-    expect(Object.keys(labels!).sort()).toEqual([...DEFAULT_LINK_ACTIONS].sort());
+  it('is labelled Existence-check timeout', () => {
+    expect(d().label).toBe('Existence-check timeout');
   });
 
-  it('uses the labels the rest of the app already ships, verbatim', () => {
-    expect(d().optionLabels).toEqual({
-      throng: 'Open in throng',
-      editor: 'Open in Editor',
-      preview: 'Open in Preview',
-      osExplorer: 'Open in OS Explorer',
-      osDefaultProgram: 'Open in OS Default Program',
-    });
-  });
-
-  it('FR-052: its description says a link with a line and column always opens an editor', () => {
+  it('says it applies with no restart', () => {
     const text = d().description.toLowerCase();
-    expect(text).toMatch(/line/);
-    expect(text).toMatch(/column/);
-    expect(text).toMatch(/editor/);
+    expect(text).toMatch(/restart/);
+    expect(text).toMatch(/\bno restart\b|without (a )?restart|next check/);
   });
 
-  it('FR-039: its description says a click never runs an executable', () => {
-    const text = d().description.toLowerCase();
-    expect(text).toMatch(/never|not/);
-    expect(text).toMatch(/run/);
+  it('says what it is for — a slow network location', () => {
+    expect(d().description.toLowerCase()).toMatch(/network/);
   });
 });
 
@@ -72,24 +76,16 @@ describe('the two detection switches (FR-060, FR-061)', () => {
   });
 });
 
-describe('FR-061: the three link settings sit together, and the fourth does not', () => {
+describe('FR-061: the three Editor · Links settings sit together, and the hyperlink switch does not', () => {
   it('all three are Editor · Links', () => {
-    for (const key of [
-      'editor.links.defaultAction',
-      'editor.links.detectInEditors',
-      'editor.links.detectInTerminals',
-    ]) {
+    for (const key of LINK_KEYS) {
       expect(descriptor(key).group, key).toBe('Editor');
       expect(descriptor(key).subgroup, key).toBe('Links');
     }
   });
 
   it('they are declared consecutively, because the editor buckets in declaration order', () => {
-    const indices = [
-      'editor.links.defaultAction',
-      'editor.links.detectInEditors',
-      'editor.links.detectInTerminals',
-    ].map((key) => SETTINGS_METADATA.findIndex((d) => d.key === key));
+    const indices = LINK_KEYS.map((key) => SETTINGS_METADATA.findIndex((d) => d.key === key));
     expect(indices.every((i) => i >= 0)).toBe(true);
     expect(Math.max(...indices) - Math.min(...indices)).toBe(indices.length - 1);
   });
