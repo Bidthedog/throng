@@ -1,5 +1,6 @@
 ---
 name: throng-renderer-ui
+model: sonnet
 description: Use for the React renderer — panes, tabs, panels and the docking model, the sidebar, title bar, status bars, explorer tree, context menus, notifications, dialogs, theming and icon controls, focus and keyboard scope, and renderer state clients. Triggers include adding or changing any visible UI, "where does this component go", a context menu or menu item, a theme token or icon, drag/tear-off/sub-workspace behaviour, focus or z-order problems, and any change that must satisfy the themeable-icon-control or every-panel-action-has-a-menu-item rules.
 ---
 
