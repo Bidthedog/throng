@@ -62,6 +62,7 @@ import {
   useReportSubjectFailure,
 } from '../workspace/panel-failure-notice.js';
 import { openFileInTab } from '../editor/editor-open.js';
+import { positionRevealTarget } from '../editor/reveal-range.js';
 import { requestPreviewOpen } from '../preview/open-preview.js';
 import {
   linkFailureReport,
@@ -244,11 +245,14 @@ export function TerminalPanel({
   /** Shared with the start-failure banner below: one reading of the platform per render. */
   const osName = window.throng?.osName ?? 'windows';
   /*
-   * 045 FR-050 – FR-052, SC-008 — the preference, read AT THE GESTURE.
+   * 045 FR-051, FR-052, FR-110 — the file's OWN default open action (044's per-provider setting),
+   * read AT THE GESTURE. There is no link-level default action any more (FR-112 retired it); the
+   * click rule fixes what a click does, and this is the one input it still reads live: whether an
+   * in-project file with no position goes to a preview.
    *
    * `linkActions` below is memoised and the mount effect holds it through a ref, so anything read
-   * into it is read once per panel and never again. A ref rewritten on every render is what makes
-   * the preference live without putting it in the memo's dependencies — which would rebuild the
+   * into it is read once per panel and never again. A ref rewritten on every render is what keeps
+   * that setting live without putting it in the memo's dependencies — which would rebuild the
    * performers, and through them nothing useful, on every unrelated settings change.
    */
   const previewProviders = usePreviewProviders();
@@ -266,11 +270,20 @@ export function TerminalPanel({
   const linkActions = useMemo<TerminalLinkDeps>(
     () => ({
       ...linkRouting(() => routingRef.current),
-      openInEditor: (link) => {
+      openInEditor: (link, position) => {
         const tabId = ws.layout?.activeTabId;
-        // The position is carried this far and placed by US3's `positionRevealTarget` (FR-033,
-        // FR-052); until then a positioned link opens its file at the top rather than not at all.
-        if (tabId) void openFileInTab(ws, tabId, link.path, openTarget);
+        // FR-033, FR-052 — the position is placed by `positionRevealTarget` once the view holds the
+        // text; `openFileInTab` reveals it in the editor that already holds the file too, so a follow
+        // into an open tab moves the caret rather than changing nothing (D2).
+        if (tabId) {
+          void openFileInTab(
+            ws,
+            tabId,
+            link.path,
+            openTarget,
+            position ? positionRevealTarget(position.line, position.column) : undefined,
+          );
+        }
       },
       openInPreview: (link) => {
         void requestPreviewOpen({

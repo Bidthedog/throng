@@ -1078,7 +1078,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
   the layer is wrong, not the bug: step up to a case inside the existing
   `packages/ui/tests/e2e/terminal-links.e2e.ts` declaration, and say so. Covers FR-004, FR-033, FR-052,
   FR-110, SC-016.
-- [ ] T175 [US1] GREEN — fix D2 at the place T174 locates it. The likeliest candidates, in order:
+- [x] T175 [US1] GREEN — fix D2 at the place T174 locates it. The likeliest candidates, in order:
   `packages/ui/src/renderer/links/link-actions.ts` (FR-052's branch against `previewIsDefault`),
   `packages/ui/src/renderer/editor/reveal-range.ts` (`positionRevealTarget`) and the open route for an
   already-open tab, then the terminal and editor surfaces that carry `position`. Depends on T174 and
