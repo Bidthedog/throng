@@ -160,6 +160,28 @@ never elevates anything on its own.
 Confirm, and you have a live shell **at the project root** — or back in the directory this panel
 was last working in, if it has one.
 
+### Links a program prints
+
+Some programs mark up their output with real hyperlinks — the same mechanism Windows Terminal
+supports — and a link whose target is a **file or a folder** is now followable in throng.
+
+Rest the pointer on one and it underlines, with a tooltip after the usual pause (the *Link hover
+tooltip delay* preference). **Ctrl+click** follows it:
+
+- a **folder** opens in Windows' own file manager;
+- a **file inside the project** opens in a throng editor;
+- a **file outside the project** is left to Windows — throng shows it in its folder, or opens it in
+  whatever program the file type belongs to, and never in a throng editor.
+
+A link to something that is not there any more is not a link at all: it does not underline, nothing
+happens if you click it, and its right-click menu has no link items. Web links (`http`/`https`) are
+unchanged — Ctrl+click still opens them in your system browser — and every other kind of target
+(`mailto:`, `javascript:` and anything unrecognised) stays inert exactly as before.
+
+One Ctrl+click follows a link **once**. Full-screen programs such as Claude Code often open links
+they are Ctrl+clicked on themselves, so throng keeps the press to itself when it is over a link it
+recognises, and lets it through everywhere else — so the program's own links keep working too.
+
 ### Reloading terminals
 
 By default, opening a project brings its terminals back: the tab you land on starts its terminals

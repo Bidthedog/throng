@@ -42,6 +42,50 @@ export interface LinkActionDeps {
   reportFailure(outcome: Extract<LinkActionOutcome, { ok: false }>): void;
 }
 
+/**
+ * What the user reads when a link could not be followed (FR-036, FR-037; 030 FR-034).
+ *
+ * Spoken, and about the TARGET rather than about the user's options: a link whose file was deleted
+ * between the hover and the click is a fact about the disk, not a refusal to serve them. One
+ * sentence per reason, so one condition raises one notice with one wording wherever it happens.
+ */
+export function linkFailureMessage(outcome: Extract<LinkActionOutcome, { ok: false }>): string {
+  return outcome.reason === 'gone'
+    ? 'That file or folder is no longer there.'
+    : 'That link could not be opened.';
+}
+
+/**
+ * The two OS destinations, bound to `window.throng.links` (FR-035, FR-035a, FR-036).
+ *
+ * They are the half of `LinkActionDeps` that is the same on every surface, so a caller composes them
+ * with its own editor/preview openers rather than writing the bridge calls out again. Both send the
+ * REQUEST — the link's text and the panel it was seen in — and never a resolved path: main
+ * re-resolves it, derives the owning project from the panel, and re-checks the target still exists
+ * before it acts (FR-037, I1/I2).
+ */
+export function osLinkActions(): Pick<
+  LinkActionDeps,
+  'revealInOsExplorer' | 'openInOsDefaultProgram'
+> {
+  return {
+    revealInOsExplorer: (request) => sendToMain('reveal', request),
+    openInOsDefaultProgram: (request) => sendToMain('open', request),
+  };
+}
+
+async function sendToMain(
+  route: 'reveal' | 'open',
+  request: LinkResolutionRequest,
+): Promise<LinkActionOutcome> {
+  const send = window.throng?.links?.[route];
+  // No bridge means no route out of the renderer at all. Reported rather than swallowed: the user
+  // chose something and nothing happened, which is the one outcome a link must never produce
+  // silently. `text` is all there is to name here — a resolved path is main's to know, not ours.
+  if (send === undefined) return { ok: false, reason: 'refused', path: request.text };
+  return send(request);
+}
+
 export async function performLinkTarget(args: {
   readonly target: LinkTarget;
   readonly link: ResolvedLink;

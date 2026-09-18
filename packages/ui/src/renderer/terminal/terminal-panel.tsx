@@ -22,6 +22,7 @@ import {
   shouldNotifyCaptureOutcome,
   panelZoomLevel,
   readTerminalPanelConfig,
+  relativeToRoot,
   startFailurePreservesPanelType,
   causeMessage,
   toDisplayPath,
@@ -57,7 +58,15 @@ import { terminalContentMenu } from './terminal-content-menu.js';
 import { Icon } from '../common/icon.js';
 import { PanelFailureBanner, retryPanelFailure } from '../common/panel-failure-banner.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
-import { useReportPanelFailure } from '../workspace/panel-failure-notice.js';
+import {
+  useReportPanelFailure,
+  useReportSubjectFailure,
+} from '../workspace/panel-failure-notice.js';
+import { openFileInTab } from '../editor/editor-open.js';
+import { requestPreviewOpen } from '../preview/open-preview.js';
+import { linkFailureMessage } from '../links/link-actions.js';
+import { hoveredLinkMenuText } from './hovered-link.js';
+import { followTerminalLink, type TerminalLinkDeps } from './terminal-link-activation.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import { clearPanelExit, setPanelExit } from './exit-store.js';
 import { useTerminal, type TerminalApi } from './use-terminal.js';
@@ -212,6 +221,50 @@ export function TerminalPanel({
     }),
     [theme],
   );
+  /*
+   * 045 FR-033 – FR-037 — where a link followed in THIS terminal is allowed to open.
+   *
+   * The two OS routes are bridge calls and are composed in below `link-actions.ts`; what a panel has
+   * to supply is the pair that needs a workspace around them, plus the notice. All three are
+   * unreachable from inside `useTerminal`'s mount effect, which is why they arrive as options.
+   *
+   * FR-055 is NOT enforced here: `performLinkTarget` refuses an editor or a preview for anything
+   * outside the owning project once, below every caller, precisely so a call site like this one
+   * cannot forget to.
+   */
+  const openTarget = useAppSettings().editor.openTarget;
+  const reportSubject = useReportSubjectFailure();
+  /** Shared with the start-failure banner below: one reading of the platform per render. */
+  const osName = window.throng?.osName ?? 'windows';
+  const linkActions = useMemo<TerminalLinkDeps>(
+    () => ({
+      openInEditor: (link) => {
+        const tabId = ws.layout?.activeTabId;
+        // The position is carried this far and placed by US3's `positionRevealTarget` (FR-033,
+        // FR-052); until then a positioned link opens its file at the top rather than not at all.
+        if (tabId) void openFileInTab(ws, tabId, link.path, openTarget);
+      },
+      openInPreview: (link) => {
+        void requestPreviewOpen({
+          absPath: link.path,
+          projectId: panel.originProjectId,
+          requesterPanelId: panel.id,
+        });
+      },
+      reportFailure: (outcome) => {
+        reportSubject({
+          subject: outcome.path,
+          reason: outcome.reason,
+          message: linkFailureMessage(outcome),
+          displayPath: relativeToRoot(outcome.path, projectRoot),
+          detail: `${toDisplayPath(outcome.path, osName)} (${outcome.reason})`,
+          projectId: panel.originProjectId,
+        });
+      },
+    }),
+    [ws, openTarget, panel.originProjectId, panel.id, reportSubject, projectRoot, osName],
+  );
+
   // xterm re-reports the result set as output streams in or the buffer is trimmed, so the
   // bar's count stays true to the live scrollback (FR-012).
   const onSearchCount = useCallback(
@@ -265,7 +318,16 @@ export function TerminalPanel({
       // 024 US7 (FR-019d): a link under the pointer, with NO active selection, adds "Open Link" /
       // "Copy Link Address" above Copy/Paste. An active selection takes priority — then the menu is
       // the ordinary Copy menu, whatever the pointer is over.
-      const link = terminalLinkTarget(selection, apiRef.current?.getHoveredLink() ?? null);
+      // 045 FR-011/FR-031: the hovered value is a RECORD now, not a url string. The menu still
+      // classifies by scheme — `terminalLinkTarget` is unchanged — and now also tells it whether a
+      // `file:` target actually resolved, because a `file:` URI naming nothing is a non-link and
+      // must offer no items at all (FR-013). The full file-link run lands with US4.
+      const hovered = apiRef.current?.getHoveredLink() ?? null;
+      const link = terminalLinkTarget(
+        selection,
+        hoveredLinkMenuText(hovered),
+        hovered?.kind === 'file',
+      );
       // 033 US5 (T063) — the items live in `terminal-content-menu.ts`, which declares their sections;
       // `ContextMenu` derives the dividers from those. Nothing here decides where a divider goes.
       openMenu(
@@ -277,7 +339,16 @@ export function TerminalPanel({
           redrawChord: firstBinding(keybindings, 'terminal.redraw'),
           startFailure: startFailureRef.current !== null,
           actions: {
-            openLink: (url) => window.throng?.openExternal?.(url),
+            // One route, not two (FR-054): Open Link performs exactly what a Ctrl+click on this
+            // link performs. Only a WEB link reaches the OS url opener — the seam 024 built its
+            // refusal of `file:` into, and the one a file link must never touch (FR-037).
+            openLink: (url) => {
+              if (hovered?.kind === 'file') {
+                void followTerminalLink({ request: hovered.request, deps: linkActions });
+                return;
+              }
+              window.throng?.openExternal?.(url);
+            },
             copyLinkAddress: (url) => void window.throng?.terminal?.writeClipboard?.(url),
             copySelection: () => {
               void window.throng?.terminal?.writeClipboard?.(selection);
@@ -293,7 +364,7 @@ export function TerminalPanel({
         }),
       );
     },
-    [openMenu, panel.id, keybindings],
+    [openMenu, panel.id, keybindings, linkActions],
   );
 
   useEffect(() => {
@@ -736,6 +807,10 @@ export function TerminalPanel({
     onSearchCount,
     reserveKey,
     linkHoverDelayMs: terminalSettings.linkHoverDelayMs,
+    // 045 FR-023: the terminal's live working directory, read at hover time rather than captured —
+    // a relative path a command printed almost always means the directory that command ran in.
+    linkBaseDirectory: () => peekTerminalCwd(panel.id),
+    linkActions,
     isActive: () => isActivePanelRef.current,
   });
 
@@ -779,7 +854,6 @@ export function TerminalPanel({
    * available for a rootless panel that has never run, and the banner simply omits the line rather
    * than inventing one.
    */
-  const osName = window.throng?.osName ?? 'windows';
   const startFailurePath = projectRoot ?? panel.terminalMemory?.lastCwd ?? null;
   /**
    * What the banner and the menu's *Copy details* both put on the clipboard (030 FR-042c/FR-052).
