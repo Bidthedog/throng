@@ -5,6 +5,7 @@ import type { MenuAction } from '../workspace/context-menu.js';
 import { isKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { applyPaste, clipboardEntry, cutThrough, ENDINGS } from './commands.js';
 import { requestLanguagePicker } from './picker-request.js';
+import { fileLinkMenuActions, type FileLinkMenuContext } from '../links/link-menu-items.js';
 
 /**
  * The editor's CONTENT context menu (016, FR-012) — right-click inside the document.
@@ -54,6 +55,30 @@ export interface ContentMenuArgs {
   /** The document's effective language NAME, shown on the Set Language item so the menu states the
    *  current value as well as offering to change it (024 US1 follow-up). */
   languageName?: string;
+  /**
+   * 045 FR-031 — the file link the menu was opened over, or null.
+   *
+   * These are the FIRST `contextual` items this menu has ever had, and they LEAD it: they are absent
+   * unless the pointer (or the caret, for a keyboard menu) is on a link, which is the constitution's
+   * own test for that section. The run is composed by `fileLinkMenuActions`, shared with the
+   * terminal's menu, because FR-031 requires the two to be the same and two builders are two chances
+   * to disagree.
+   */
+  fileLink?: FileLinkMenuContext | null;
+}
+
+/**
+ * 045 §5 — the document offset the link run is composed from.
+ *
+ * A right-click hit-tests the POINTER. A keyboard-opened menu (Shift+F10) has no pointer at all: its
+ * synthetic event carries the focused element's corner, which is nowhere near the caret — the same
+ * trap {@link placeCaretForContextMenu} was fixed for, and the reason that function already no-ops
+ * for a keyboard menu. So the caret is the answer there, and both answers are a single offset, so
+ * one hit test serves the whole run.
+ */
+export function linkMenuPosition(view: EditorView, event: MouseEvent): number | null {
+  if (isKeyboardMenu()) return view.state.selection.main.head;
+  return view.posAtCoords({ x: event.clientX, y: event.clientY });
 }
 
 /**
@@ -91,6 +116,9 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
   // shortcuts shown here are the literal native bindings the editor is wired to (Ctrl+X/C/V/A and
   // Mod-z / Mod-y in use-editor.ts). They are display-only, matching what the user actually presses.
   return [
+    // 045 FR-031 — the file-link run, ahead of everything. Empty when the pointer is not on a link,
+    // which is every menu this editor drew before this feature.
+    ...fileLinkMenuActions(args.fileLink ?? null),
     // Never disabled for want of a selection (FR-012b): with none, they act on the caret's whole
     // line. A greyed-out Copy on the line the user just right-clicked is a refusal to do the
     // obvious thing.

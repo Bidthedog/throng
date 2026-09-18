@@ -1,7 +1,14 @@
-import { relativeToRoot, toDisplayPath, type OsName } from '@throng/core';
+import {
+  relativeToRoot,
+  resolveDefaultLinkAction,
+  toDisplayPath,
+  type OsName,
+} from '@throng/core';
 import type {
+  DefaultLinkAction,
   LinkActionOutcome,
   LinkPosition,
+  LinkResolution,
   LinkResolutionRequest,
   LinkTarget,
   ResolvedLink,
@@ -170,6 +177,68 @@ export async function performLinkTarget(args: {
       await report(deps, deps.openInOsDefaultProgram(request));
       return;
   }
+}
+
+/**
+ * The performers a SURFACE supplies; the two OS routes come from {@link osLinkActions}.
+ *
+ * One interface for both panel types, because FR-054 puts a terminal's Ctrl+click and an editor's
+ * Open Link chord on the same decision, and a second copy of this shape is a second place for the
+ * preference to be read differently.
+ */
+export interface LinkFollowDeps {
+  readonly openInEditor: LinkActionDeps['openInEditor'];
+  readonly openInPreview: LinkActionDeps['openInPreview'];
+  readonly reportFailure: LinkActionDeps['reportFailure'];
+  /** FR-050's *Default link action*. Absent means the shipped value — US5 wires the live setting. */
+  readonly defaultAction?: DefaultLinkAction;
+  /** FR-051: whether THIS file's own default open action is Preview. Absent means no. */
+  readonly previewIsDefault?: (link: ResolvedLink) => boolean;
+}
+
+/**
+ * FR-040 / FR-054 — follow a link, wherever the gesture came from.
+ *
+ * ONE function for Ctrl+click, the Open Link chord and the plain Open Link item, on both surfaces.
+ * The alternative is six call sites each resolving the preference for itself, five of which would
+ * get it right; the sixth is FR-055, and its failure mode is a file that should not have opened with
+ * nothing on screen to show for it.
+ *
+ * `resolve` is injected rather than imported so this stays free of the cache's `window` dependency:
+ * the terminal passes `askTerminalLink`, the editor passes its own peek. A click that arrives before
+ * the answer does asks again and does nothing, which is FR-071 — never a wait.
+ */
+export async function followLink(args: {
+  readonly request: LinkResolutionRequest;
+  /** FR-004's position, when the span carried one. A hyperlink never carries one. */
+  readonly position?: LinkPosition;
+  readonly resolve: (request: LinkResolutionRequest) => LinkResolution | undefined;
+  readonly deps: LinkFollowDeps;
+}): Promise<void> {
+  const { request, position, resolve, deps } = args;
+  const resolution = resolve(request);
+  if (resolution === undefined || !resolution.ok) return; // FR-006: not a link, so nothing happens
+  const link = resolution.link;
+
+  const target = resolveDefaultLinkAction({
+    setting: deps.defaultAction ?? 'throng',
+    link,
+    hasPosition: position !== undefined,
+    previewIsDefault: deps.previewIsDefault?.(link) ?? false,
+  });
+
+  await performLinkTarget({
+    target,
+    link,
+    request,
+    ...(position === undefined ? {} : { position }),
+    deps: {
+      openInEditor: deps.openInEditor,
+      openInPreview: deps.openInPreview,
+      reportFailure: deps.reportFailure,
+      ...osLinkActions(),
+    },
+  });
 }
 
 /** One outcome in, at most one notice out. */

@@ -372,6 +372,31 @@ Saves are confined to the project root. Unsaved changes show a pulsing dot; open
 two windows and they share **one buffer and one undo stack**, so Ctrl+Z in either reverts the
 other's edit. In-progress edits and their undo history survive a crash.
 
+### Paths in a document are clickable too
+
+An editor recognises the same path forms a terminal does — the list is up in *Paths in terminal
+output are clickable* — anywhere in the text of any file it opens. A path that names a file that is
+really there is **underlined**; anything else is ordinary text.
+
+A relative path is measured from **the open file's own folder** first, then from the project root.
+So in `docs/a.md`, `./b.md` is the file beside it and `packages/core/x.ts` is the one at the root.
+An untitled buffer has no folder of its own, so only the project root is tried.
+
+- **Ctrl+click** a link to follow it. Ctrl+click anywhere else still **adds a cursor**, as it always
+  has, and a Ctrl+click that drags still selects.
+- **Ctrl+Enter** follows the link the caret is sitting inside. With a selection, with more than one
+  cursor, or anywhere else, it inserts a blank line exactly as before.
+- **Right-click** a link for the same menu a terminal gives you — Open Link, the destinations that
+  apply, and Copy Link Address. Here **Open Link** shows its `Ctrl+Enter` shortcut, because in an
+  editor that key really does follow the link.
+
+A path that carries a position — `src/foo.ts:42`, `src/foo.ts:42:7`, `src/foo.ts(42,7)` — opens the
+file **at that line and column**. If the file has since got shorter, the caret lands as close as it
+can rather than refusing.
+
+Detection can be turned off: **Preferences → Editor → Links → Detect file paths in editors**. The
+gestures then go back to their ordinary editor meanings everywhere.
+
 ### Preview a file
 
 An editor for a file type with a preview provider — Markdown, to start — shows a **preview** button
@@ -629,7 +654,7 @@ also the full list.
 | **F2**, **Delete**, **Ctrl+X/C/V** | Rename, delete, cut/copy/paste — **in the file tree** |
 | **Alt+Left** / **Alt+Right** | Back / Forward — in the focused editor or preview panel |
 | Mouse back / forward buttons | Same as Alt+Left / Alt+Right, over an editor or preview panel |
-| **Ctrl+Enter** | Follow the focused link, after Tab — **in a preview** |
+| **Ctrl+Enter** | Follow a link — the focused one in a **preview**, or the one the caret sits inside in an **editor**. A terminal still gets Ctrl+Enter for the shell |
 | **Shift+PageUp/PageDown**, **Ctrl+Home/End** | Scroll a terminal's scrollback |
 | **Ctrl+F5** | Refresh / redraw the focused terminal |
 

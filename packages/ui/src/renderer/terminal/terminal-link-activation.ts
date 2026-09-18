@@ -1,14 +1,11 @@
 import {
   classifyTerminalLinkTarget,
-  resolveDefaultLinkAction,
-  type DefaultLinkAction,
   type LinkPosition,
   type LinkResolution,
   type LinkResolutionRequest,
-  type ResolvedLink,
 } from '@throng/core';
 import { peekLink, requestLink } from '../links/link-cache.js';
-import { osLinkActions, performLinkTarget, type LinkActionDeps } from '../links/link-actions.js';
+import { followLink, type LinkFollowDeps } from '../links/link-actions.js';
 import type { HoveredLink } from './hovered-link.js';
 
 /**
@@ -55,19 +52,14 @@ export interface TerminalLinkSite {
   readonly baseDirectory?: string;
 }
 
-/** The performers this surface supplies; the two OS routes come from {@link osLinkActions}. */
-export interface TerminalLinkDeps {
-  readonly openInEditor: LinkActionDeps['openInEditor'];
-  readonly openInPreview: LinkActionDeps['openInPreview'];
-  readonly reportFailure: LinkActionDeps['reportFailure'];
-  /**
-   * FR-050's *Default link action*. Absent means the shipped value — US5 (T105) wires the live
-   * setting through here, and nothing else about this route changes when it does.
-   */
-  readonly defaultAction?: DefaultLinkAction;
-  /** FR-051: whether THIS file's own default open action is Preview. Absent means no. */
-  readonly previewIsDefault?: (link: ResolvedLink) => boolean;
-}
+/**
+ * The performers this surface supplies; the two OS routes come from {@link osLinkActions}.
+ *
+ * An alias rather than a copy: US3 gave the editor the same three destinations and the same two
+ * optional settings inputs, so the shape moved to `links/link-actions.ts` where both surfaces read
+ * it. The name stays because the terminal's call sites read better for it.
+ */
+export type TerminalLinkDeps = LinkFollowDeps;
 
 /** FR-020 – FR-023: what main is asked about a span of terminal text. */
 export function terminalLinkRequest(args: {
@@ -164,27 +156,10 @@ export async function followTerminalLink(args: {
   readonly deps: TerminalLinkDeps;
 }): Promise<void> {
   const { request, position, deps } = args;
-  const resolution = askTerminalLink(request);
-  if (resolution === undefined || !resolution.ok) return; // FR-006: not a link, so nothing happens
-  const link = resolution.link;
-
-  const target = resolveDefaultLinkAction({
-    setting: deps.defaultAction ?? 'throng',
-    link,
-    hasPosition: position !== undefined,
-    previewIsDefault: deps.previewIsDefault?.(link) ?? false,
-  });
-
-  await performLinkTarget({
-    target,
-    link,
+  await followLink({
     request,
     ...(position === undefined ? {} : { position }),
-    deps: {
-      openInEditor: deps.openInEditor,
-      openInPreview: deps.openInPreview,
-      reportFailure: deps.reportFailure,
-      ...osLinkActions(),
-    },
+    resolve: askTerminalLink,
+    deps,
   });
 }

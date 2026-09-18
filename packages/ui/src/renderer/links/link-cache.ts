@@ -168,6 +168,17 @@ function subscribe(listener: () => void): () => void {
 }
 
 /**
+ * The same subscription, for a reader that is not a React component.
+ *
+ * The editor's decoration plugin is one: it is built by CodeMirror, lives outside the React tree,
+ * and still has to repaint when an answer lands (FR-070). `useSyncExternalStore` is not available to
+ * it, and a poll would be a timer per open editor.
+ */
+export function subscribeLinkCache(listener: () => void): () => void {
+  return subscribe(listener);
+}
+
+/**
  * The React reading of the pair above: peek now, ask if the answer is not here yet, and re-render
  * when it lands. `null` for "there is no link here to ask about", which is what a component passes
  * when the pointer is not over a candidate.

@@ -14,10 +14,16 @@ import {
   type LineEndingId,
   type PreviewAffordance,
   type PreviewSettings,
+  type ResolvedLink,
 } from '@throng/core';
-import { editorContentMenu, placeCaretForContextMenu } from '../../src/renderer/editor/content-menu.js';
+import {
+  editorContentMenu,
+  linkMenuPosition,
+  placeCaretForContextMenu,
+} from '../../src/renderer/editor/content-menu.js';
 import { asKeyboardMenu } from '../../src/renderer/workspace/keyboard-menu.js';
 import type { MenuAction } from '../../src/renderer/workspace/context-menu.js';
+import type { FileLinkMenuContext } from '../../src/renderer/links/link-menu-items.js';
 
 /**
  * The editor's CONTENT context menu — what its items DO (016, FR-012/FR-012a/FR-012b, FR-026b).
@@ -590,5 +596,135 @@ describe('Undo and Redo reach the document authority, not CodeMirror', () => {
 
     expect(redos).toEqual([{ panelId: 'panel-1', viewId: 'view-1' }]);
     expect(v.dispatched).toHaveLength(0);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * 045 US3 (T098) — the file-link run, the first CONTEXTUAL items this menu has had
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * FR-031 requires the two panel types to offer the SAME run over the same link, so what is asserted
+ * here is deliberately the same list `terminal-file-link-menu.test.ts` asserts — with one
+ * difference, and it is the difference the amendment of 2026-09-18 settled: the editor binds
+ * `preview.followLink`, so its Open Link shows the chord, and the terminal's does not because
+ * FR-046 binds none there.
+ *
+ * `linkMenuPosition` is the other half. A right-click hit-tests the POINTER; a keyboard menu has no
+ * pointer at all and its synthetic event carries the focused element's corner, which is nowhere near
+ * the caret — the same trap `placeCaretForContextMenu` above was fixed for. Both answers are a
+ * single document offset, so one hit-test serves the whole run (§5).
+ */
+
+const linkContext = (over: Partial<ResolvedLink> = {}): FileLinkMenuContext => ({
+  link: {
+    path: 'D:\\project\\src\\foo.ts',
+    kind: 'file',
+    inProject: true,
+    executable: false,
+    preview: 'none',
+    ...over,
+  },
+  request: { text: 'src/foo.ts', kind: 'detectedPath', panelId: 'panel-1' },
+  chord: 'Ctrl+Enter',
+  openLink: () => {},
+  deps: {
+    openInEditor: () => {},
+    openInPreview: () => {},
+    revealInOsExplorer: async () => ({ ok: true }) as const,
+    openInOsDefaultProgram: async () => ({ ok: true }) as const,
+    reportFailure: () => {},
+  },
+});
+
+function linkMenu(v: FakeView, fileLink: FileLinkMenuContext | null): MenuAction[] {
+  return editorContentMenu({
+    view: v.view,
+    panelId: 'panel-1',
+    viewId: 'view-1',
+    lineEnding: (): LineEndingId => 'lf',
+    wordWrap: { on: false, toggle: () => {} },
+    gotoLine: { open: () => {} },
+    fileLink,
+  });
+}
+
+const contextualLabels = (items: MenuAction[]): (string | undefined)[] =>
+  items.filter((i) => i.section === 'contextual').map((i) => i.label);
+
+describe('045 — the file-link run leads the editor’s content menu (FR-031, SC-009)', () => {
+  it('an in-project file with no preview provider', () => {
+    expect(contextualLabels(linkMenu(make(), linkContext()))).toEqual([
+      'Open Link',
+      'Open in Editor',
+      'Open in OS Explorer',
+      'Open in OS Default Program',
+      'Copy Link Address',
+    ]);
+  });
+
+  it('an enabled provider adds Open in Preview; a disabled one greys it', () => {
+    expect(contextualLabels(linkMenu(make(), linkContext({ preview: 'enabled' })))).toContain(
+      'Open in Preview',
+    );
+    const disabled = linkMenu(make(), linkContext({ preview: 'disabled' }));
+    expect(disabled.find((i) => i.label === 'Open in Preview')?.disabled).toBe(true);
+  });
+
+  it('an out-of-project file offers neither editor nor preview (FR-055)', () => {
+    expect(
+      contextualLabels(linkMenu(make(), linkContext({ inProject: false, preview: 'enabled' }))),
+    ).toEqual(['Open Link', 'Open in OS Explorer', 'Open in OS Default Program', 'Copy Link Address']);
+  });
+
+  it('a folder offers neither editor, preview nor default program', () => {
+    expect(contextualLabels(linkMenu(make(), linkContext({ kind: 'folder' })))).toEqual([
+      'Open Link',
+      'Open in OS Explorer',
+      'Copy Link Address',
+    ]);
+  });
+
+  it('the editor’s Open Link DOES show the chord — unlike the terminal’s (FR-031, FR-046)', () => {
+    const items = linkMenu(make(), linkContext());
+    expect(items.find((i) => i.label === 'Open Link')?.shortcut).toBe('Ctrl+Enter');
+  });
+
+  it('the run leads, and the editing items follow it unchanged', () => {
+    const items = linkMenu(make(), linkContext());
+    expect(items.slice(0, 5).every((i) => i.section === 'contextual')).toBe(true);
+    expect(items[5]?.label).toBe('Cut');
+  });
+
+  it('with no link under the pointer the menu is byte-for-byte what it was', () => {
+    const v = make();
+    expect(linkMenu(v, null).map((i) => i.label)).toEqual(menu(v).map((i) => i.label));
+  });
+});
+
+describe('045 — where the run is hit-tested from (§5)', () => {
+  it('a right-click composes from posAtCoords', () => {
+    const v = make();
+    v.posAt = 7;
+    expect(linkMenuPosition(v.view, rightClick())).toBe(7);
+  });
+
+  it('a KEYBOARD menu composes from the caret, not from the event’s coordinates', () => {
+    const v = make();
+    v.posAt = 7;
+    v.caret(3);
+
+    let answer: number | null = null;
+    asKeyboardMenu(() => {
+      answer = linkMenuPosition(v.view, rightClick());
+    });
+
+    expect(answer).toBe(3);
+  });
+
+  it('answers null when CodeMirror cannot place the pointer at all', () => {
+    const v = make();
+    v.posAt = null;
+    expect(linkMenuPosition(v.view, rightClick())).toBeNull();
   });
 });

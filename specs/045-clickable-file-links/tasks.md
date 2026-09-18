@@ -518,61 +518,61 @@ half of what Principle VI requires of this feature.
 **Independent Test**: open `packages/ui/tests/fixtures/links/docs/a.md`, Ctrl+click each of `./b.md`,
 `packages/core/x.ts` and `src/foo.ts:10`, and press Ctrl+Enter inside each.
 
-- [ ] T089 [P] [US3] RED component `packages/ui/tests/component/link-decorations.test.ts` — the
+- [x] T089 [P] [US3] RED component `packages/ui/tests/component/link-decorations.test.ts` — the
   `ViewPlugin` decorates **only resolved links** and **only within `view.visibleRanges`** (FR-002,
   FR-073); an unresolved answer draws nothing (FR-071); an invalidation re-requests and then draws
   (FR-070); and the compartment reconfigure turns decoration off **live, with no restart** (FR-060).
   Satisfies FR-002, FR-060, FR-070, FR-071, FR-073.
-- [ ] T090 [US3] Implement `packages/ui/src/renderer/editor/link-decorations.ts` — a `ViewPlugin`
+- [x] T090 [US3] Implement `packages/ui/src/renderer/editor/link-decorations.ts` — a `ViewPlugin`
   building a `RangeSetBuilder` over `view.visibleRanges` and nothing else, on
   `packages/ui/src/renderer/editor/function-highlight.ts:172-222`'s pattern, marking with
   `Decoration.mark({ class: 'cm-throng-link' })`. Depends on T089. Satisfies FR-002, FR-073.
-- [ ] T091 [US3] Add the link compartment in `packages/ui/src/renderer/editor/use-editor.ts`, on
+- [x] T091 [US3] Add the link compartment in `packages/ui/src/renderer/editor/use-editor.ts`, on
   `functionHighlightCompartment`'s and `wrapCompartment`'s pattern (`:462-466`, `:939-952`, `:1254`).
   Depends on T090. Satisfies FR-060.
-- [ ] T092 [P] [US3] RED component `packages/ui/tests/component/editor-link-gestures.test.ts` — G1,
+- [x] T092 [P] [US3] RED component `packages/ui/tests/component/editor-link-gestures.test.ts` — G1,
   G3 and **G4**: Ctrl+click over a resolved link follows; Ctrl+click **anywhere else adds a cursor**,
   unchanged (FR-041); a Ctrl+click that drags selects (FR-040); and the modifier comes from
   `shippedBindingsFor(DEFAULT_BINDING_PLATFORM)` rather than a hard-coded `Ctrl`, so FR-040's
   Cmd-on-macOS clause reads from one place. Satisfies FR-040, FR-041.
-- [ ] T093 [US3] Add a `mousedown` entry to `EditorView.domEventHandlers` in
+- [x] T093 [US3] Add a `mousedown` entry to `EditorView.domEventHandlers` in
   `packages/ui/src/renderer/editor/use-editor.ts` that returns `true` **only** when the modifier is
   held and `view.posAtCoords` lands inside a resolved link — otherwise CodeMirror's own
   multi-cursor handler runs, which is G4 by default. Depends on T092. Satisfies FR-040, FR-041.
-- [ ] T094 [P] [US3] RED component `packages/ui/tests/component/editor-link-chord.test.ts` — G8/G9:
+- [x] T094 [P] [US3] RED component `packages/ui/tests/component/editor-link-chord.test.ts` — G8/G9:
   Ctrl+Enter with a **single caret inside** a link and no selection runs the default link action; with
   a selection, with two carets, or outside a link it inserts a blank line exactly as today, because
   the window handler does not `preventDefault` and the keypress reaches CodeMirror's `defaultKeymap`
   (`use-editor.ts:1232`). Satisfies FR-044, FR-045.
-- [ ] T095 [US3] Dispatch `preview.followLink` for the editor scope at the **window**, in capture
+- [x] T095 [US3] Dispatch `preview.followLink` for the editor scope at the **window**, in capture
   phase, in `packages/ui/src/renderer/app.tsx` — the `navigate.gotoLine` shape (`:466-473`).
   `editorCommandKeymap` (`packages/ui/src/renderer/editor/commands.ts:575-590`) deliberately leaves
   the chord unbound and **must stay that way**. Depends on T094, T038. Satisfies FR-044, FR-045.
-- [ ] T096 [P] [US3] RED unit(ui) `packages/ui/tests/unit/reveal-position.test.ts` —
+- [x] T096 [P] [US3] RED unit(ui) `packages/ui/tests/unit/reveal-position.test.ts` —
   `positionRevealTarget(line, column?)` produces a `RevealResolver` that resolves to document offsets
   once the document is loaded, and **clamps a position beyond the file's end to the nearest valid
   position** rather than erroring. Satisfies FR-033; the *position beyond the file's end* edge case.
-- [ ] T097 [US3] Implement `positionRevealTarget` in
+- [x] T097 [US3] Implement `positionRevealTarget` in
   `packages/ui/src/renderer/editor/reveal-range.ts`, beside `headingRevealTarget` (`:55`), and hand
   it to `openFileInTab` (`editor-open.tsx:156-174`). A link with a position must **not** go through
   `open-router.ts`. Depends on T096. Satisfies FR-033, FR-052; R12.
-- [ ] T098 [P] [US3] RED component — extend
+- [x] T098 [P] [US3] RED component — extend
   `packages/ui/tests/component/editor-content-menu.test.ts` with the new `contextual` run ahead of
   the existing `content` section (the first contextual items this menu has had): the same five link
   shapes as T077, with the editor's Open Link showing the chord; the keyboard-opened menu composing
   from the **caret** and a right-click from `posAtCoords`, since `placeCaretForContextMenu`
   (`content-menu.ts:235`) already no-ops for a keyboard menu. Satisfies FR-031, SC-009.
-- [ ] T099 [US3] Insert the run in `packages/ui/src/renderer/editor/content-menu.ts:86`. Depends on
+- [x] T099 [US3] Insert the run in `packages/ui/src/renderer/editor/content-menu.ts:86`. Depends on
   T098, T078. Satisfies FR-031; S2.
-- [ ] T100 [P] [US3] RED component
+- [x] T100 [P] [US3] RED component
   `packages/ui/tests/component/editor-link-base-directory.test.ts` — a relative path is tried against
   the open file's **own folder** first and then the project root (US3 scenarios 1 and 2), and an
   **untitled buffer** supplies no base directory, so the project root is tried alone. Satisfies
   FR-022; R10.
-- [ ] T101 [US3] Wire the document's own folder (or nothing, for an untitled buffer) into the request
+- [x] T101 [US3] Wire the document's own folder (or nothing, for an untitled buffer) into the request
   in `packages/ui/src/renderer/editor/use-editor.ts` and `link-decorations.ts`. Depends on T100.
   Satisfies FR-022.
-- [ ] T102 [US3] **Constitution PATCH** — amend `.specify/memory/constitution.md` Principle VI, the
+- [x] T102 [US3] **Constitution PATCH** — amend `.specify/memory/constitution.md` Principle VI, the
   *Known gaps* sentence at lines 1666–1671, from v5.5.0 to **v5.5.1**. It corrects **two**
   statements: that no surface implements Ctrl+Enter (044 shipped it) and that editors do not (this
   slice ships it). The About window's plain-click links remain a gap and stay named. The SYNC IMPACT
@@ -581,7 +581,7 @@ half of what Principle VI requires of this feature.
   ✅/⚠, and **say that one of the two statements was already stale before this feature**. This lands
   in the **same change as US3**, because Incremental Delivery forbids amending ahead of the behaviour.
   Depends on T095, T099. Satisfies FR-091; R16.
-- [ ] T103 [P] [US3] Update `docs/quick-start.md` §4 *Edit files* and the **Keyboard reference** —
+- [x] T103 [P] [US3] Update `docs/quick-start.md` §4 *Edit files* and the **Keyboard reference** —
   Ctrl+click and Ctrl+Enter in an editor, and that Ctrl+Enter still reaches the shell in a terminal.
   Ships with this slice. Satisfies FR-090, FR-062.
 

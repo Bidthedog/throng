@@ -57,7 +57,7 @@ import {
   missingFileDetail,
   missingFileMessage,
 } from './editor-missing-notice.js';
-import { useReportPanelFailure } from '../workspace/panel-failure-notice.js';
+import { useReportPanelFailure, useReportSubjectFailure } from '../workspace/panel-failure-notice.js';
 import { buildFileChangedNotice } from './file-changed-notice.js';
 import { throngHighlighting } from './highlight-style.js';
 import {
@@ -101,9 +101,31 @@ import {
   pasteCommand,
 } from './commands.js';
 import { getPanelLanguage } from './editor-language.js';
-import { editorContentMenu, placeCaretForContextMenu } from './content-menu.js';
+import { editorContentMenu, linkMenuPosition, placeCaretForContextMenu } from './content-menu.js';
 import { currentEditorPreviewAffordance } from './editor-preview.js';
 import { requestPreviewOpen } from '../preview/open-preview.js';
+import { openFileInTab } from './editor-open.js';
+import { positionRevealTarget } from './reveal-range.js';
+import { peekLink, requestLink, subscribeLinkCache } from '../links/link-cache.js';
+import {
+  followLink,
+  linkFailureReport,
+  osLinkActions,
+  type LinkFollowDeps,
+} from '../links/link-actions.js';
+import type { FileLinkMenuContext } from '../links/link-menu-items.js';
+import {
+  createLinkPointerHandlers,
+  editorLinkExtension,
+  editorLinkSiteFor,
+  linkAtPosition,
+  linkCompartment,
+  registerPanelLinkDeps,
+  setLinkAnswerSubscriber,
+  unregisterPanelLinkDeps,
+  type EditorLinkDeps,
+  type EditorLinkHit,
+} from './link-decorations.js';
 import { toggleSyncScroll } from '../preview/sync-scroll-toggle.js';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
 // 033 US2 (FR-027) — the content menu's Go To Line item opens the ONE navigation-modal slot. A leaf
@@ -412,6 +434,129 @@ export function useEditor(params: UseEditorParams): void {
 
   const keybindingsRef = useRef(keybindings);
   keybindingsRef.current = keybindings;
+  /*
+   * 045 US3 — file links in THIS editor (FR-002, FR-022, FR-033, FR-040 – FR-044, FR-060).
+   *
+   * Everything is read through refs and through `configRef`, never captured: the open file changes
+   * under a live view (an in-place open, a Save As), and with it the base directory a relative path
+   * is measured from. A captured site would keep resolving `./b.md` against the folder of a file the
+   * panel stopped showing.
+   *
+   * FR-055 is not enforced here — `performLinkTarget` refuses an editor or a preview for anything
+   * outside the owning project once, below every caller, so no call site can forget to.
+   */
+  const reportSubject = useReportSubjectFailure();
+  const linkDepsRef = useRef<EditorLinkDeps | null>(null);
+  linkDepsRef.current = {
+    site: () =>
+      editorLinkSiteFor({
+        panelId: panel.id,
+        filePath: configRef.current.filePath ?? null,
+        ...(metaRef.current.ownerProjectId ?? panel.originProjectId
+          ? { originProjectId: metaRef.current.ownerProjectId ?? panel.originProjectId }
+          : {}),
+      }),
+    ask: askEditorLink,
+    follow: (hit) => void followEditorLink(hit),
+  };
+
+  /** Peek the cache, and ask if the answer is not here yet (FR-070, FR-071). Never waits. */
+  function askEditorLink(request: Parameters<typeof peekLink>[0]): ReturnType<typeof peekLink> {
+    const cached = peekLink(request);
+    if (cached === undefined) requestLink(request);
+    return cached;
+  }
+
+  /** FR-054 — the one route Ctrl+click, the chord and the menu's Open Link all take. */
+  async function followEditorLink(hit: EditorLinkHit): Promise<void> {
+    await followLink({
+      request: hit.request,
+      ...(hit.position === undefined ? {} : { position: hit.position }),
+      resolve: askEditorLink,
+      deps: editorLinkDestinations(),
+    });
+  }
+
+  function editorLinkDestinations(): LinkFollowDeps {
+    const meta = metaRef.current;
+    return {
+      // FR-033 — `openFileInTab`, honouring *Open files in*, and NEVER `open-router.ts`: a link is
+      // always an editor, whatever the file's own default open action (044 FR-055). FR-052's
+      // position is placed by `positionRevealTarget`, which resolves once the view holds the text.
+      openInEditor: (link, position) =>
+        void openFileInTab(
+          ws,
+          meta.tabId,
+          link.path,
+          meta.settings.openTarget,
+          position ? positionRevealTarget(position.line, position.column) : undefined,
+        ),
+      openInPreview: (link) =>
+        void requestPreviewOpen({
+          absPath: link.path,
+          projectId: meta.ownerProjectId ?? panel.originProjectId,
+          requesterPanelId: panel.id,
+        }),
+      // One condition, one notice, one wording — shaped in `link-actions.ts` so the terminal's
+      // identical failure cannot read differently (FR-036, FR-037).
+      reportFailure: (outcome) =>
+        reportSubject(
+          linkFailureReport(outcome, {
+            projectRoot: meta.rootless ? null : meta.projectRoot,
+            osName: window.throng?.osName ?? 'windows',
+            ...(meta.ownerProjectId ?? panel.originProjectId
+              ? { projectId: meta.ownerProjectId ?? panel.originProjectId }
+              : {}),
+          }),
+        ),
+    };
+  }
+
+  /**
+   * The STABLE deps the extension and the DOM handlers hold, delegating through the ref above.
+   *
+   * They are built once and never rebuilt: an extension is installed in a compartment and a handler
+   * is installed on the view, so handing either the render's own closure would freeze this panel's
+   * links at whatever the file, the project and the settings were at mount.
+   */
+  const linkDeps = useRef<EditorLinkDeps>({
+    site: () => linkDepsRef.current!.site(),
+    ask: (request) => linkDepsRef.current!.ask(request),
+    follow: (hit) => linkDepsRef.current!.follow(hit),
+  }).current;
+  const linkPointer = useRef(createLinkPointerHandlers(linkDeps)).current;
+
+  /** FR-060 — detection in editors, read live. `null` empties the compartment. */
+  const detectLinks = settings.links.detectInEditors;
+
+  /**
+   * FR-031 / §5 — the link the content menu should offer, or null.
+   *
+   * The chord IS shown here, unlike in the terminal: `preview.followLink` is live in the editor
+   * scope (FR-045), so Principle VI's "show its chord where one is bound" applies. It is read at
+   * menu-open time so a rebind appears on the next right-click rather than the next restart.
+   */
+  function linkMenuContextFor(view: EditorView, event: MouseEvent): FileLinkMenuContext | null {
+    if (!metaRef.current.settings.links.detectInEditors) return null;
+    // With text selected the ordinary menu appears, as it does in a terminal (024 FR-019d).
+    if (!view.state.selection.main.empty) return null;
+    const pos = linkMenuPosition(view, event);
+    if (pos === null) return null;
+    const hit = linkAtPosition(view.state, pos, linkDeps);
+    if (!hit) return null;
+    return {
+      link: hit.link,
+      request: hit.request,
+      ...(hit.position === undefined ? {} : { position: hit.position }),
+      ...(hit.positionText === undefined ? {} : { positionText: hit.positionText }),
+      ...(firstBinding(keybindingsRef.current, 'preview.followLink')
+        ? { chord: firstBinding(keybindingsRef.current, 'preview.followLink')! }
+        : {}),
+      openLink: () => void followEditorLink(hit),
+      deps: { ...editorLinkDestinations(), ...osLinkActions() },
+    };
+  }
+
   // 044 FR-002 — the injected preview providers, read by the content menu when it opens.
   const previewProviders = usePreviewProviders();
   const previewProvidersRef = useRef(previewProviders);
@@ -464,6 +609,36 @@ export function useEditor(params: UseEditorParams): void {
       effects: wrapCompartment.reconfigure(wordWrapOn ? EditorView.lineWrapping : []),
     });
   }, [wordWrapOn]);
+
+  /*
+   * 045 FR-060 — `editor.links.detectInEditors`, on the LIVE view.
+   *
+   * The same shape as word wrap and the gutter above, and for the same reason: recreating the
+   * `EditorView` would satisfy every content check and take the undo history, the scroll and the
+   * selection with it. Off puts NOTHING in the compartment — not a disabled plugin — so with the
+   * switch off there is no code path left that could decorate.
+   *
+   * The switch never touches an explicit hyperlink, which an editor has none of; in a terminal that
+   * distinction is the whole of §6, and it is stated here so the two read as one rule.
+   */
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: linkCompartment.reconfigure(editorLinkExtension(detectLinks ? linkDeps : null)),
+    });
+  }, [detectLinks, linkDeps]);
+
+  // The decoration plugin lives outside React, so it cannot subscribe to the cache the way a
+  // component does. One module-level wiring, idempotent (FR-070).
+  useEffect(() => {
+    setLinkAnswerSubscriber(subscribeLinkCache);
+  }, []);
+
+  // FR-045 — the Open Link chord is dispatched at the window (it has to be: CodeMirror's own
+  // `defaultKeymap` binds Ctrl+Enter), and the window knows a panel id and nothing else.
+  useEffect(() => {
+    registerPanelLinkDeps(panel.id, linkDeps);
+    return () => unregisterPanelLinkDeps(panel.id);
+  }, [panel.id, linkDeps]);
 
   /**
    * 040 US4: the gutter follows `editor.showGutter` on the LIVE view (FR-043).
@@ -1144,6 +1319,15 @@ export function useEditor(params: UseEditorParams): void {
            * menu, which acts on the panel rather than on the text (FR-014).
            */
           EditorView.domEventHandlers({
+            /*
+             * 045 FR-040, FR-041 — G1, G3 and G4.
+             *
+             * The press is claimed ONLY over a resolved link; otherwise `false` lets CodeMirror's own
+             * multi-cursor handler run, which is FR-041 by default rather than by imitation. The
+             * release decides between a click and a drag — see `link-decorations.ts`.
+             */
+            mousedown: (event, target) => linkPointer.mousedown(event, target),
+            mouseup: (event, target) => linkPointer.mouseup(event, target),
             contextmenu: (event, target) => {
               // Right-clicking INSIDE a selection preserves it — the user is about to act on the
               // thing they right-clicked. Outside it, the caret moves to the click (FR-012a).
@@ -1223,6 +1407,15 @@ export function useEditor(params: UseEditorParams): void {
                   // (detection settling, an override chosen), and a captured copy would name a
                   // language the document has since stopped being.
                   languageName: languageName(getPanelLanguage(panelId)?.languageId ?? 'plaintext'),
+                  /*
+                   * 045 FR-031 — the file-link run, over whatever the menu was opened on. A
+                   * right-click hit-tests the pointer; a keyboard menu hit-tests the CARET, because
+                   * its synthetic event carries the focused element's corner (§5).
+                   *
+                   * Composed at menu-open time for Go To Line's reason: the file, the project and
+                   * the cached resolution all change under a live view.
+                   */
+                  fileLink: linkMenuContextFor(target, event),
                 }),
               );
               event.preventDefault();
@@ -1252,6 +1445,15 @@ export function useEditor(params: UseEditorParams): void {
           // the `variableName` colour underneath. Empty until a legacy language is applied
           // (`applyLanguage` reconfigures it); first-class grammars keep it empty.
           functionHighlightCompartment.of([]),
+          /*
+           * 045 FR-002 / FR-060 — file links, in a compartment so `editor.links.detectInEditors`
+           * can empty it on a live view. AFTER the highlighting, so the underline nests inside the
+           * syntax span rather than wrapping it — the same ordering the function overlay above
+           * needs, and for the same reason.
+           */
+          linkCompartment.of(
+            editorLinkExtension(metaRef.current.settings.links.detectInEditors ? linkDeps : null),
+          ),
           // In-panel find/replace (013): paints the match decorations. The bar drives
           // it through the controller registered below; CodeMirror's own search panel
           // is deliberately not used (its controls could not be theme-token driven).
