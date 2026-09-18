@@ -33,8 +33,24 @@ for that link, which is Principle VI's *absent when meaningless*.
 
 | Panel | Builder | Insertion |
 |---|---|---|
-| Terminal | `ui/src/renderer/terminal/terminal-content-menu.ts:49` (`terminalContentMenu`) | replaces the existing `contextual` Open Link / Copy Link Address pair (`:54-70`) **only over a file link**; over a web link that pair is unchanged |
-| Editor | `ui/src/renderer/editor/content-menu.ts:86` (`editorContentMenu`) | a new `contextual` run, ahead of the existing `content` section — the first contextual items this menu has had |
+| Terminal | `ui/src/renderer/terminal/terminal-content-menu.ts` (`terminalContentMenu`) | replaces the existing `contextual` Open Link / Copy Link Address pair **only over a file link**; over a web link that pair is unchanged |
+| Editor | `ui/src/renderer/editor/content-menu.ts` (`editorContentMenu`) | a new `contextual` run, ahead of the existing `content` section — the first contextual items this menu has had |
+
+**One builder, verified 2026-09-18 (T130).** Both surfaces call `fileLinkMenuActions`
+(`ui/src/renderer/links/link-menu-items.ts`), which maps core's `fileLinkMenuItems` onto `MenuAction`
+rows. The renderer half attaches only the icons, the section and the handlers; the labels, the order,
+the absences and the one disabled state are decided in `core/src/links/menu.ts` and are unit-tested
+clause by clause. Icons follow 023's rule — a token or nothing: `editorPanel`, `preview`,
+`folderOpen` and `copy` exist; *Open Link* and *Open in OS Default Program* carry none.
+
+**A disabled row carries no handler at all** — not a handler guarded by the disabled flag. The menu
+will not invoke one, and leaving it out means there is nothing for a later caller to reach past the
+disabled state and run.
+
+**The terminal suppresses the whole run while text is selected**, before it is composed
+(`selection.length > 0`), which is the same rule as the *Unchanged in every other case* paragraph
+below rather than a second one: with a selection the ordinary Copy/Paste menu appears whatever the
+pointer is over (024 FR-019d).
 
 **Unchanged in every other case** (FR-031): with text selected, the ordinary menu appears
 (024 FR-019d); away from a link, the menu is byte-for-byte what it is today; over a **web** link in a
@@ -46,7 +62,7 @@ terminal, 024's two items are what they are today.
 
 | Item | Route | Rules |
 |---|---|---|
-| **Open Link** | `resolveDefaultLinkAction(...)` then the row below it names | FR-050 – FR-054; FR-039 removes `osDefaultProgram` from reach for an executable |
+| **Open Link** | the surface's own `openLink` — `followLink(...)`, which calls `resolveDefaultLinkAction(...)` and then the row below it names | FR-050 – FR-054; FR-039 removes `osDefaultProgram` from reach for an executable |
 | **Open in Editor** | `openFileInTab(ws, tabId, absPath, openTarget, positionRevealTarget(...))` — **never** `open-router.ts` | FR-033; honours *Open files in* (023 FR-025/FR-026); always an editor whatever the file's default open action (044 FR-055) |
 | **Open in Preview** | `requestPreviewOpen({ absPath, projectId, requesterPanelId })` | FR-034; beside the file's editor, focusing an existing preview (044 FR-005/FR-053); **a position on the link is ignored** |
 | **Open in OS Explorer** | `throng:links:reveal` → `FileLinkResolver.revealInFileManager` | FR-035; file → selected in its folder, folder → opened; de-elevated when the host is elevated (FR-038) |
@@ -76,10 +92,19 @@ that nothing has open, which FR-030 requires.
 | G9 | **Open Link chord**, anywhere else / multiple carets / a selection | editor | the editor's built-in blank-line insert, unchanged | FR-044, edge case |
 | G10 | **Ctrl+Enter** | terminal | reaches the program, including its modified-Enter encoding | FR-046 |
 
-**G5/G6 are inherited, not built.** `keepLinkClickFromProgram`
-(`ui/src/renderer/terminal/use-terminal.ts:838-861`) already implements exactly this, gated on
-`hoveredLink !== null`. Widening what sets `hoveredLink` ([../data-model.md](../data-model.md) §8)
-is the whole change. Its covering test is `ui/tests/e2e/terminal-link-once.e2e.ts:529`.
+**G5/G6 are inherited, not built.** The rule already existed in `use-terminal.ts`'s mousedown
+listener, gated on `hoveredLink !== null`. Widening what sets `hoveredLink`
+([../data-model.md](../data-model.md) §8) is the whole change. It ships as the pure
+`keepsClickFromProgram` (`ui/src/renderer/terminal/hovered-link.ts`) — reconciled 2026-09-18 (T130):
+the predicate moved out of the effect with the type, so it can be driven without an xterm; the
+listener now calls it rather than restating it. Its covering test is
+`ui/tests/e2e/terminal-link-once.e2e.ts`.
+
+**Open Link is the surface's route, passed in.** `FileLinkMenuContext` carries `openLink` —
+the same `followLink` call the surface's Ctrl+click makes — rather than letting the menu resolve the
+preference for itself, so the two can never disagree (FR-054). It also carries `position` and
+`positionText`, which items 2 and 6 need and which the resolved path does not hold; see
+[../data-model.md](../data-model.md) §8.
 
 **G4 requires claiming the event first**: a `mousedown` entry in `EditorView.domEventHandlers` that
 returns `true` **only** when the modifier is held and `view.posAtCoords` lands inside a resolved
@@ -122,10 +147,16 @@ It does, by the **same mechanism 024 already uses**: the terminal's menu compose
 `getHoveredLink()`, which is what the pointer rests on, and `menu.open` does not move it. There is no
 new notion of a keyboard position on a terminal link — FR-046 forbids one.
 
-In the editor, `placeCaretForContextMenu` (`content-menu.ts:235`) already no-ops for a keyboard menu
-(`isKeyboardMenu()`); the link run therefore composes from the **caret's** position for a keyboard
-menu and from `posAtCoords` for a right-click. Both are a single document offset, so one hit-test
-serves.
+In the editor, `placeCaretForContextMenu` already no-ops for a keyboard menu (`isKeyboardMenu()`);
+the link run therefore composes from the **caret's** position for a keyboard menu and from
+`posAtCoords` for a right-click. Both are a single document offset, so one hit-test serves.
+
+**Reconciled 2026-09-18 (T130)**: that choice ships as one exported function,
+`linkMenuPosition(view, event)` in `content-menu.ts` — `isKeyboardMenu()` ? `selection.main.head` :
+`view.posAtCoords(...)`. It is a function rather than an inline branch at the call site because the
+trap it avoids is the one `placeCaretForContextMenu` was already fixed for: a keyboard menu's
+synthetic event carries the focused element's corner, which is nowhere near the caret, so a
+right-click's hit test silently composes the wrong menu for Shift+F10.
 
 ---
 

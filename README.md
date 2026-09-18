@@ -231,8 +231,14 @@ open previews and greys its other settings rather than hiding them. **`editor.na
 (under **Editor · Navigation**, 10 as shipped, 1–100) caps how many files each editor or preview
 panel's Back/Forward history remembers.
 
-**Clickable file links** are tuned by settings under **Editor · Links**.
-`editor.links.defaultAction` decides what a Ctrl+click, the `preview.followLink` chord and the
+**Clickable file links** are tuned by settings under **Editor · Links**, and by one key binding.
+The **Open Link** command (`preview.followLink`, `Ctrl+Enter` as shipped, rebindable in the Key
+Bindings editor) was a preview's; it is now live in **editors** as well, on the same id and the same
+chord, so a rebinding saved before this release still works. It stays dead in a **terminal**, where
+`Ctrl+Enter` reaches the shell — which is also why the terminal's Open Link menu item shows no
+shortcut.
+
+`editor.links.defaultAction` decides what a Ctrl+click, that chord and the
 menu's **Open Link** do, and takes one of five values: `throng` (as shipped — whatever throng would
 normally do with that file), `editor`, `preview`, `osExplorer` or `osDefaultProgram`. Two rules
 outrank it: a link carrying a **line and column** always opens an editor, because a preview cannot

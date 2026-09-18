@@ -29,6 +29,38 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Added
+- **Clickable file links** ([#394](https://github.com/Bidthedog/throng/issues/394),
+  [#198](https://github.com/Bidthedog/throng/issues/198)): a file path printed in a terminal — by a
+  compiler, a test runner, `git status` — is now a link, with no cooperation from the program.
+  Relative, Windows, UNC, `~`, `file://` and the Git Bash and WSL drive forms are all recognised, a
+  trailing `foo.ts:42`, `foo.ts:42:7` or `foo.ts(42,7)` opens the file at that line, and a relative
+  path is measured from the directory the shell is actually in. The same detection runs in editor
+  documents, where a relative path is measured from the open file's own folder first. **A path is
+  only a link if the file is really there**, so prose does not fill with underlines.
+- Hyperlinks a program emits are followable when they point at a **file or a folder**, not only at
+  a web page — the report this work started from.
+- **Ctrl+click** follows a link; **Ctrl+Enter** follows the one the caret is inside, in an editor as
+  well as a preview (same command, same rebindable chord). In a terminal Ctrl+Enter still reaches the
+  shell, so nothing was taken from a running program. A Ctrl+click on a link in a full-screen program
+  that handles the mouse itself now opens the link **once** instead of twice.
+- **Right-click a link** for every destination it has: Open Link, Open in Editor, Open in Preview,
+  Open in OS Explorer, Open in OS Default Program and Copy Link Address — the same run in a terminal
+  and in an editor, with items that could never apply to that link simply absent. Copy Link Address
+  copies the resolved path with the position exactly as it was printed.
+- **Default link action** (Settings → Editor → Links) picks what Ctrl+click, the chord and Open Link
+  do: open in throng, an editor, a preview, OS Explorer or the OS's default program. Two rules
+  outrank it — a link naming a line and column always opens an editor, and **a click never runs an
+  executable, script, shortcut or installer**; it is shown in OS Explorer instead, and running it
+  stays a deliberate menu choice. Changing the setting applies to the next click, with no restart.
+- **Detect file links in editors** and **Detect file links in terminals** (both on as shipped) turn
+  off throng's own detection per panel type. Neither touches a link a program declared, nor a web
+  link.
+- **Tell programs that links are supported** (Settings → Terminal, on as shipped) starts terminals
+  with `FORCE_HYPERLINK=1`, so tools that can print clickable links do. A `FORCE_HYPERLINK` you set
+  yourself is never overridden in either direction, and the setting applies to terminals started
+  afterwards rather than to one already running.
+
 ### Fixed
 - A folder a closed terminal started in — a git worktree, typically — can be deleted again while the
   project's other terminals stay open ([#385](https://github.com/Bidthedog/throng/issues/385)).

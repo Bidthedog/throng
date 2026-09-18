@@ -165,3 +165,43 @@ holds a spawn-a-real-shell-and-read-it test of this shape.
 
 **Hands-on only**: whether Claude Code actually emits OSC 8 under `FORCE_HYPERLINK=1` on this
 Windows build is a property of Claude Code, not of throng — [../quickstart.md](../quickstart.md) §6.
+
+---
+
+## §5 Reconciled against the shipped code — 2026-09-18 (T130)
+
+Read against `core/src/config/settings-metadata.ts`, `core/src/config/keybindings.ts`,
+`ui/src/main/link-ipc.ts` and `core/src/terminal/spawn-env.ts`. §1–§4 hold as written; what follows
+is what the code adds to them.
+
+**§1 — the four descriptors ship with these labels**, and a doc that names a different one is wrong
+rather than merely informal:
+
+| Key | Shipped label |
+|---|---|
+| `editor.links.defaultAction` | **Default link action** |
+| `editor.links.detectInEditors` | **Detect file links in editors** |
+| `editor.links.detectInTerminals` | **Detect file links in terminals** |
+| `terminals.advertiseHyperlinks` | **Tell programs that links are supported** |
+
+The three `Editor · Links` descriptors are declared **consecutively** in `SETTINGS_METADATA`, and
+that adjacency is load-bearing rather than tidy: `groupDescriptors` buckets by group then subgroup in
+declaration order, so a descriptor pushed in between them would split the section in the preferences
+editor with no test of the values noticing. `allowedValues` is spread from `DEFAULT_LINK_ACTIONS`
+rather than restated, so the descriptor, the tolerant parser and `resolveDefaultLinkAction` cannot
+drift apart.
+
+**§2 — the widened scope ships as a named constant**, `LINK_SURFACES` (`editor` + `preview`), which
+**replaces** `PREVIEW_ONLY`: that set had one member and one user, and leaving it in place beside its
+successor is a second definition of the same idea. It is deliberately **not** shared with
+`HISTORY_PANELS`, which holds the same two scopes today by coincidence — folding them together would
+make a later change to one silently move the other.
+
+**Not a settings question, but the fourth switch this feature turned out to need**: xterm's
+`linkHandler.allowNonHttpProtocols`. It is an xterm option, carries no throng setting and is not
+user-visible; without it xterm never hands a `file:` hyperlink over at all. See
+[../data-model.md](../data-model.md) §8.
+
+**The `IPathForms` pass-through** — a form the platform already understands resolves exactly as
+written, rather than being separator-normalised by a port member that does not exist — is recorded
+where the rule lives, in [link-resolution.md](./link-resolution.md) §2's amendment.

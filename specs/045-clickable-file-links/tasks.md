@@ -735,6 +735,9 @@ inside an existing declaration does not raise the count — the counter is a per
 - [ ] T125 Confirm `packages/ui/tests/e2e/terminal-modified-enter.e2e.ts:233` is **untouched and
   green** — Ctrl+Enter still reaches the program in a terminal with its modified-Enter encoding. A
   diff to this file is a defect, not a task. Satisfies FR-046.
+  **Half-confirmed 2026-09-18 (T130/T131 pass): UNTOUCHED.** `git diff 92b29e68..HEAD --
+  packages/ui/tests/e2e/terminal-modified-enter.e2e.ts` is empty. *Green* is the E2E stage of the
+  gate (T132) and is not claimed here.
 
 **Checkpoint**: SC-002 holds under a program that reports mouse events, for both link kinds, at the
 only layer that can show it.
@@ -752,24 +755,38 @@ equivalent is [contracts/menus-and-gestures.md](./contracts/menus-and-gestures.m
 user-facing menu and settings documentation is `docs/quick-start.md` (T068, T076, T088, T103, T111,
 T115, T120).
 
-- [ ] T126 [P] Update `README.md` — *Highlights* (file links in terminals and editors, one gesture,
+- [x] T126 [P] Update `README.md` — *Highlights* (file links in terminals and editors, one gesture,
   the menu) and *Configuration* (the four new settings and the widened Open Link chord).
   Satisfies FR-090.
-- [ ] T127 [P] Update `CONTRIBUTING.md` — `IPathForms` and `IExecutableExtensions` as an extension
+- [x] T127 [P] Update `CONTRIBUTING.md` — `IPathForms` and `IExecutableExtensions` as an extension
   point, with their contract suites in `packages/core/src/testing/` and the pure-throw style a new
   platform implementation must satisfy. Satisfies FR-090; Principle II.
-- [ ] T128 [P] Update `docs/testing.md` — the two extended E2E declarations, and that the budget was
+- [x] T128 [P] Update `docs/testing.md` — the two extended E2E declarations, and that the budget was
   held flat at 570 with zero new declarations. Satisfies FR-090.
-- [ ] T129 [P] Update `CHANGELOG.md` with the user-visible set: clickable file links in terminals and
+- [x] T129 [P] Update `CHANGELOG.md` with the user-visible set: clickable file links in terminals and
   editors, the four link targets and their menu, the default link action, the two detection switches,
   the refusal to run executables, and `FORCE_HYPERLINK`. Satisfies FR-090.
-- [ ] T130 [P] Reconcile [contracts/menus-and-gestures.md](./contracts/menus-and-gestures.md) and
+- [x] T130 [P] Reconcile [contracts/menus-and-gestures.md](./contracts/menus-and-gestures.md) and
   [contracts/settings-and-environment.md](./contracts/settings-and-environment.md) with what actually
   shipped — every menu item, section, state and settings descriptor. A contract that disagrees with
   the code is worse than none. Satisfies FR-031, FR-061.
-- [ ] T131 Close **O1–O6** in `specs/045-clickable-file-links/research.md` with the answers found —
+  **Done 2026-09-18, and it reached two more artifacts than it named**, because the drift was there:
+  [data-model.md](./data-model.md) §4 (`LinkFollowDeps.defaultAction` ships as a **reader**,
+  `() => DefaultLinkAction`, which is what makes SC-008 true), §7 (`peekLink` takes the request, not
+  a `CacheKey`) and §8 (`HoveredLink`'s `file` arm carries `position` and `positionText`, the type
+  lives in `hovered-link.ts`, and xterm's `allowNonHttpProtocols` is what hands a `file:` hyperlink
+  over at all); and [contracts/platform-ports.md](./contracts/platform-ports.md) §2
+  (`IExecutableExtensions` has **two** members — EX6 already required the second). The
+  `IPathForms` pass-through was already recorded in
+  [contracts/link-resolution.md](./contracts/link-resolution.md) §2 and is unchanged; that file gains
+  only the note that an inert OSC 8 scheme now draws xterm's hover underline, which is
+  `allowNonHttpProtocols`' one visible cost.
+- [x] T131 Close **O1–O6** in `specs/045-clickable-file-links/research.md` with the answers found —
   O1 (T069), O2 (T045), O3 (T056), O4 (T121), O5 (T039), O6 (T114) — and delete nothing: an open item
   that turned out differently is recorded as it was and then answered.
+  **Done 2026-09-18.** O1 closed (hover only, structurally — `terminal-file-link-provider.test.ts`,
+  14 passed); O2, O3 and O5 were already closed in place by their own tasks. **O4 and O6 stay open**
+  and say so: both need the running app, both are T121 and T114, and neither gates any code.
 - [ ] T132 Dispatch `npm run gate` against this branch on a hosted runner and quote the **run URL and
   the SHA** when reporting done. A green gate goes stale the moment anything is edited, and a local
   green bar is progress, not done-ness.

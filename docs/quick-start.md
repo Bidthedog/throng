@@ -290,7 +290,7 @@ unaffected either way. The panel header shows the terminal's
 **live working directory**, so you can see where a shell is even when a full-screen program hides
 the prompt.
 
-**Advertise hyperlink support** (Settings → Terminal), also **on by default**, is how programs know
+**Tell programs that links are supported** (Settings → Terminal), also **on by default**, is how programs know
 they can print real hyperlinks in a throng terminal: a terminal throng starts carries
 `FORCE_HYPERLINK=1`, which is the variable the common Rust and Node link libraries read. Two things
 it deliberately does not do. **It never overrides a `FORCE_HYPERLINK` you set yourself** — neither a
@@ -404,7 +404,7 @@ A path that carries a position — `src/foo.ts:42`, `src/foo.ts:42:7`, `src/foo.
 file **at that line and column**. If the file has since got shorter, the caret lands as close as it
 can rather than refusing.
 
-Detection can be turned off: **Preferences → Editor → Links → Detect file paths in editors**. The
+Detection can be turned off: **Preferences → Editor → Links → Detect file links in editors**. The
 gestures then go back to their ordinary editor meanings everywhere.
 
 ### Preview a file
@@ -610,8 +610,8 @@ There is a reason, and it is a few paragraphs below.
   caret on line 42), and **a click never runs an executable, script, shortcut or installer** — it
   shows the file in OS Explorer instead. Running one stays on *Open in OS Default Program*, which
   you have to choose from the menu on purpose.
-  The same page holds two switches, both on as shipped: **Detect file paths in editors** and
-  **Detect file paths in terminals**. Each turns off throng's *guess* that a run of characters is a
+  The same page holds two switches, both on as shipped: **Detect file links in editors** and
+  **Detect file links in terminals**. Each turns off throng's *guess* that a run of characters is a
   path — no underline, no tooltip, no Ctrl+click, and no link items on the right-click menu, in that
   panel type. Neither touches a link something **declared**: a program's own hyperlinks and web
   links go on working in a terminal with detection off, and in an editor Ctrl+click goes back to

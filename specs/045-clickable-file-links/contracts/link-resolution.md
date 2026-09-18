@@ -142,3 +142,17 @@ the quickstart and deliberately not asserted.
 
 A `file:` URI **never** reaches the OS URL opener. `ui/tests/unit/external-url.test.ts` keeps
 `file:` in its `INJECTIONS` list and must not change (FR-037).
+
+### Note 2026-09-18 (T130) — an inert OSC 8 scheme now draws xterm's hover underline
+
+The three inert rows above are unchanged in what they *do*, and changed in what they *look like*.
+Handing a `file:` hyperlink to the link handler at all requires xterm's
+`linkHandler.allowNonHttpProtocols` (see [../data-model.md](../data-model.md) §8), and that option is
+per-handler, not per-scheme: turning it on hands over **every** non-`http(s)` target, so
+`javascript:`, `data:`, `mailto:` and unknown schemes are now underlined on hover where before xterm
+discarded them before it built a range.
+
+They remain inert on every gesture — `classifyTerminalLinkTarget` closes by default, so nothing
+follows them, no link items appear on the menu and nothing reaches the OS URL opener. The underline
+is the whole of the difference, and it is the price of US2 existing at all rather than an oversight:
+without the option the feature's founding report (SC-005) could not be delivered.

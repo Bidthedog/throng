@@ -180,6 +180,33 @@ The decision, in order — each clause is a unit case:
 FR-055 is a consequence rather than a clause: `editor` and `preview` are only ever `offered` for an
 in-project file, so no route reaches them for anything outside the project.
 
+### How the setting reaches it — a reader, not a value (reconciled 2026-09-18, T130)
+
+`resolveDefaultLinkAction` takes the setting as a plain value, and that is unchanged. What the draft
+did not settle is how the **renderer** supplies it, and the shipped shape is a function:
+
+```ts
+// ui/src/renderer/links/link-actions.ts
+export interface LinkFollowDeps {
+  // …
+  readonly defaultAction?: () => DefaultLinkAction;         // absent means the shipped value
+  readonly previewIsDefault?: (link: ResolvedLink) => boolean;
+}
+
+/** Both halves, composed once for BOTH surfaces, over one live read. */
+export function linkRouting(
+  read: () => LinkRoutingInputs,
+): Required<Pick<LinkFollowDeps, 'defaultAction' | 'previewIsDefault'>>;
+```
+
+**SC-008 is why it is a reader.** Both surfaces build their deps **once** and hold them for the
+panel's whole life — the terminal in a `useMemo` its mount effect reaches through a ref, the editor
+in a function the CodeMirror extension closes over — and neither can be rebuilt on a settings change
+without tearing down a live shell or a live view. A captured value would therefore freeze
+`editor.links.defaultAction` at whatever it was when the panel appeared, and SC-008 requires the
+change to land on the **next gesture**, with no restart. `linkRouting` exists so the two surfaces
+cannot read the preference differently, which is the failure FR-054 rules out.
+
 ---
 
 ## 5. The two new ports — `core/src/abstractions/` (FR-025, FR-026, FR-039a)
@@ -248,11 +275,22 @@ pattern (`Map` + `useSyncExternalStore`, one shared bridge subscription).
 ```ts
 type CacheKey = string;   // `${kind}\u0000${text}\u0000${baseDirectory ?? ''}\u0000${panelId}`
 
-export function peekLink(key: CacheKey): LinkResolution | undefined;   // sync; undefined = not yet known
+export const LINK_CACHE_TTL_MS: number;
+export function peekLink(req: LinkResolutionRequest): LinkResolution | undefined; // sync; undefined = not yet known
 export function requestLink(req: LinkResolutionRequest): void;         // fire-and-forget; fills the cache
 export function invalidateLinksUnder(absPath: string): void;           // a watcher event arrived
+export function subscribeLinkCache(listener: () => void): () => void;  // the useSyncExternalStore half
 export function useLinkResolution(req: LinkResolutionRequest | null): LinkResolution | undefined;
+export function __resetLinkCacheForTests(): void;
 ```
+
+**Reconciled 2026-09-18 (T130)**: `peekLink` was drafted taking the `CacheKey` above and ships
+taking the `LinkResolutionRequest` itself; the key stays internal to the module. Handing one out
+would make every caller — the terminal's link provider, the editor's visible-range `ViewPlugin` and
+`followLink`'s injected `resolve` — responsible for spelling the same four-field encoding, which is
+the duplication a cache key exists to remove. `subscribeLinkCache` and `__resetLinkCacheForTests`
+are two exports the draft did not name: the first is the `useSyncExternalStore` half of the pattern
+§7 already cites, the second is test-only.
 
 - **`peekLink` returning `undefined` is FR-071's "treated as not a link until it answers"** — the
   link provider returns no link and the decoration is not drawn.
@@ -264,25 +302,58 @@ export function useLinkResolution(req: LinkResolutionRequest | null): LinkResolu
 
 ---
 
-## 8. The hovered link — `ui/src/renderer/terminal/use-terminal.ts` (R4)
+## 8. The hovered link — `ui/src/renderer/terminal/hovered-link.ts` (R4)
 
-`hoveredLink` changes type. This is the whole of FR-043 for file links.
+`hoveredLink` changes type. This is the whole of FR-043 for file links. The `let hoveredLink` and the
+DOM work stay in `use-terminal.ts`'s mount effect; the **type and every judgement made about it** ship
+in a module of their own, so they can be driven without an xterm, a DOM or a shell
+(`ui/tests/unit/terminal-hovered-link.test.ts`).
 
 ```ts
 // was: let hoveredLink: string | null
-type HoveredLink =
+export type HoveredLink =
   | { readonly kind: 'web'; readonly uri: string }
-  | { readonly kind: 'file'; readonly link: ResolvedLink; readonly request: LinkResolutionRequest };
+  | {
+      readonly kind: 'file';
+      readonly link: ResolvedLink;
+      readonly request: LinkResolutionRequest;
+      /** FR-004's position, when the span carried one. Absent on an OSC 8 hyperlink. */
+      readonly position?: LinkPosition;
+      /** How that position was WRITTEN — FR-032 pastes it back in this form. */
+      readonly positionText?: string;
+    };
 
 let hoveredLink: HoveredLink | null = null;
 ```
 
-| Reader | Line today | Change |
+**Reconciled 2026-09-18 (T130) — the `file` arm carries the position, and the draft's two fields were
+not enough.** §5 makes the terminal's context menu compose from *what the pointer rests on*, and two
+of its items need the position rather than the resolved path: **Open in Editor** must land on the
+line (FR-033), and **Copy Link Address** must paste the position back in the form it was printed
+(FR-032). Neither is recoverable from `link.path`, and re-detecting the span when the menu opens
+would be a second detection pass that could disagree with the one that drew the underline. So the
+hovered value carries what the detector found, and the menu reads it.
+
+| Reader | Where | Change |
 |---|---|---|
-| `keepLinkClickFromProgram` | `:844` | none — `hoveredLink !== null` now also covers file links, which is the fix |
-| the tooltip text | `:311` | wording by kind (R10) |
-| `setHovered`'s `^https?://` filter | `:369` | replaced by `classifyTerminalLinkTarget` (R5) |
-| `getHoveredLink()` → `terminalLinkTarget` | `terminal-panel.tsx:268` | returns the `HoveredLink`, so the menu can compose FR-031 |
+| `keepsClickFromProgram` | `hovered-link.ts` (called from the mousedown listener) | none — `hovered !== null` now also covers file links, which is the fix |
+| `hoveredLinkTipText` | `hovered-link.ts` | wording by kind (R10) |
+| `setHovered`'s `^https?://` filter | `use-terminal.ts` | replaced by `classifyTerminalLinkTarget` (R5) |
+| `hoveredLinkIdentity` | `hovered-link.ts` | the tooltip delay restarts only when the link genuinely changes |
+| `hoveredLinkMenuText` | `hovered-link.ts` | the link's own TEXT for `terminalLinkTarget`, never the resolved path — a `D:\…` path would classify as the scheme `d:` |
+| `getHoveredLink()` | `terminal-panel.tsx` | returns the `HoveredLink`, so the menu can compose FR-031 |
+
+**`allowNonHttpProtocols` — an xterm opt-in the draft did not know about.** xterm's `OscLinkProvider`
+parses every OSC 8 target and **discards anything that is not `http(s)` before it builds a range**,
+unless the link handler asks for the rest. So the whole of US2 was inert in the app — no underline,
+no tooltip, a Ctrl+click that did nothing — while every unit test around it passed, because nothing
+below E2E constructs an xterm `Terminal`. `linkHandler.allowNonHttpProtocols: true`
+(`use-terminal.ts`) is what hands a `file:` hyperlink over at all. xterm's own doc for the option
+asks for "proper protection in `activate`", and that protection is what this feature already built:
+`classifyTerminalLinkTarget` closes by default, so `javascript:`, `data:`, `mailto:` and every
+unknown scheme stay exactly as inert as 024 made them, and a `file:` target goes to main as **text**
+to be re-resolved (FR-037) rather than to the OS url opener. The one visible cost is that an inert
+scheme now draws xterm's hover underline; it still opens nothing, on any gesture.
 
 ---
 

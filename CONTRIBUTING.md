@@ -187,6 +187,45 @@ Two tests enforce it, not a review comment:
   test with a reason each, and an allowance that stops matching fails too — so a surface
   special-cased to Markdown instead of reading the registry is caught before it merges.
 
+## Adding a platform port
+
+Principle II: `packages/core` states the rules, `packages/platform-*` answers the OS questions, and
+a **contract suite** in `packages/core/src/testing/` decides whether an implementation is one. The
+two ports clickable file links added are the current worked example, and a new platform gets links
+working by implementing them and nothing else.
+
+- **`IPathForms`** (`packages/core/src/abstractions/path-forms.ts`) — the four path *spellings* only
+  an OS can map: `homeDirectory()`, `fromDriveForm()` (`/d/x` and `/mnt/d/x`), `fromFileUrl()` (a
+  `file:` URI, percent-decoded, host to UNC) and `fromHomeForm()` (`~`). Every method is **total**
+  and answers `null` rather than throwing when the input is not its form.
+- **`IExecutableExtensions`** (`packages/core/src/abstractions/executable-extensions.ts`) — whether
+  the OS would *run* a file, answered from its extension alone. `isExecutable(path)` is what the
+  feature calls; `executableExtensions()` reports the whole set, which is what lets the test assert
+  that **none** of them runs under a click without hand-copying a list that would go stale.
+
+The Windows implementations are `packages/platform-windows/src/windows-path-forms.ts` and
+`windows-executable-extensions.ts`, bound in the UI composition root under `UI_TYPES.PathForms` and
+`UI_TYPES.ExecutableExtensions`.
+
+**The contract suites are `runPathFormsContract(makeSubject)` and
+`runExecutableExtensionsContract(makeSubject)`**, in `packages/core/src/testing/`. They are written
+in the repo's **pure-throw** style — the file imports nothing, not even a test runner, and signals a
+failure by throwing `IPathForms contract violation: …`. That is what keeps `@throng/core` free of a
+test dependency and lets any layer run the suite; a platform package calls it from one `it(...)`
+(`packages/platform-windows/tests/contract/windows-path-forms.contract.test.ts`).
+
+Two rules a new implementation must satisfy, and they are what the suites actually check:
+
+- **Assert shape and relationship, never a literal path.** The suite says `fromDriveForm('/d/git/x')`
+  names drive `d` and ends in `git` + separator + `x`; it does not say `D:\git\x`. A macOS or Linux
+  implementation therefore passes it without the suite being rewritten.
+- **Totality.** No method throws for any string — an empty one, one carrying a NUL, a very long one,
+  one with mixed separators. Anything the port does not recognise is `null` or `false`.
+
+Nothing under `packages/core/src/links/` may name an operating system, an extension or a drive
+mapping, and `packages/core/tests/unit/links-no-os-names.test.ts` fails the build on one, alongside
+the existing `no-os-imports.test.ts`.
+
 ## Commits, branches, review
 
 - Branch from `master`: `feature/<NNN-slug>` or `fix/<NNN-slug>`, `<NNN>` matching your `specs/` directory and, where practical, the issue.

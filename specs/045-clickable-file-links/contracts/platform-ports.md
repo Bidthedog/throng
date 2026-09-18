@@ -69,8 +69,18 @@ export interface IExecutableExtensions {
    * to the OS's own list takes effect without a restart.
    */
   isExecutable(path: string): boolean;
+
+  /**
+   * Every extension this implementation currently considers executable, each including its leading
+   * dot. Read at the time of the call, for the same reason `isExecutable` is. FR-039a, SC-010.
+   */
+  executableExtensions(): readonly string[];
 }
 ```
+
+**Two members, reconciled 2026-09-18 (T130)**: the draft's block named only `isExecutable`, while
+EX6 below already required the set to be reported. `executableExtensions` is what makes SC-010 a
+test rather than a hand-copied list — see EX6.
 
 ### The rule the Windows implementation states (and core does not)
 

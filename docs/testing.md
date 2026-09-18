@@ -329,6 +329,40 @@ menu — now states its exceptions: with a previewable file, **Open Preview** (F
 Scrolling** (FR-122b, both labels) are required in both, and a fixture that offers a preview proves
 nothing else is shared.
 
+## Spec 045 — clickable file links, and a budget that did not move
+
+Clickable file links (spec 045, #198/#394) added **zero E2E declarations**. `e2e-budget.json` reads
+`"total": 570` and `"@terminal": 107` before the feature and after it, `reserve-tag-debt.json` is
+unchanged, and `parallel-plan.json` gained no entry because the feature created no spec file.
+
+That was a decision made in planning rather than an outcome noticed at the end, and it is worth
+stating why it held. Almost everything this feature does is decidable without a running app: the
+grammar of a path, which of four targets a link has, what the default action resolves to, what the
+menu offers, what a switch gates and what a terminal is spawned with are all pure functions in
+`@throng/core` with unit tests, and the renderer's halves are component tests against the real
+builders. The main-process authority — re-resolve, re-check, act, de-elevate — is covered by contract
+and integration tests over a real filesystem and a real shell. What was left is the handful of
+claims that need a real xterm, a real ConPTY and a real pointer, and **two declarations that already
+existed were the right home for them**:
+
+| Declaration | What 045 added to it |
+|---|---|
+| `terminal-link-once.e2e.ts` — *"Ctrl+clicking a link in a program that OWNS THE MOUSE opens it once, not also through the program (#198)"* (`@extended @terminal @reserve:pty`) | two cases under the same mouse-owning fixture — a **detected path**, and an **OSC 8 `file:` target naming a folder**. Each asserts one Ctrl+click opens exactly once, that the program receives no press, and that a **plain** click still reaches the program (FR-043, SC-002, SC-005) |
+| `terminal-links.e2e.ts` — *"a renderer-opened window is denied and http(s) routed to the OS opener (#159); a detected path underlines on hover and a look-alike does not (045)"* (`@extended @terminal`) | a hover case: a path that names a real file underlines, and a look-alike that names nothing does not (FR-006, FR-042, SC-003) |
+
+**A case inside an existing declaration does not move the ratchet**, because the counter is a
+per-line regex over `test(` declarations — so the right question for each new claim was not "does
+this need an E2E" but "does an E2E that already launches this app, this shell and this fixture
+exist". Both times one did, and the marginal cost of the assertion was a few hundred milliseconds
+rather than another Electron launch.
+
+**One thing only the E2E layer could have caught, and did.** xterm's `OscLinkProvider` discards an
+OSC 8 target that is not `http(s)` before it builds a range unless the link handler sets
+`allowNonHttpProtocols`. Without that option the whole of the `file:`-hyperlink story was inert in
+the running app — no underline, no tooltip, a Ctrl+click that did nothing — while every unit and
+component test around it passed, because **nothing below E2E constructs an xterm `Terminal`**. That
+is the shape of claim this layer is for.
+
 ## The bridge parity guard
 
 `packages/ui/tests/unit/ipc-bridge-parity.test.ts` checks that both ends of the
