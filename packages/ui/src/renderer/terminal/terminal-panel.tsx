@@ -282,6 +282,9 @@ export function TerminalPanel({
   /** FR-060, live for the same reason — the provider is registered once, against a live shell. */
   const detectFileLinksRef = useRef(editorSettings.links.detectInTerminals);
   detectFileLinksRef.current = editorSettings.links.detectInTerminals;
+  /** FR-120 / FR-123 — the existence-check timeout the link provider's held reply waits for. */
+  const linkSettingsRef = useRef(editorSettings.links);
+  linkSettingsRef.current = editorSettings.links;
   const linkActions = useMemo<TerminalLinkDeps>(
     () => ({
       ...linkRouting(() => routingRef.current),
@@ -904,6 +907,7 @@ export function TerminalPanel({
     // FR-060 — read through the routing ref, which this render has just refreshed, so the switch
     // applies to the next hover without re-registering the provider against a live shell.
     detectFileLinks: () => detectFileLinksRef.current,
+    linkSettings: () => linkSettingsRef.current,
     isActive: () => isActivePanelRef.current,
   });
 

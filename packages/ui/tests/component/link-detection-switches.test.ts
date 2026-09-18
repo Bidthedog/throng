@@ -119,7 +119,9 @@ function terminalProvider(): {
     links() {
       let out: ProvidedLink[] = [];
       provider.provideLinks(1, (provided) => {
-        out = (provided ?? []) as ProvidedLink[];
+        // T177: the row's url is served by this provider too now, and FR-060 leaves it working —
+        // only the DETECTED path is this switch's subject, so only file links are counted here.
+        out = (provided ?? []).filter((l) => l.kind === 'file') as ProvidedLink[];
       });
       return out;
     },
@@ -158,6 +160,23 @@ describe('FR-060 — `detectInTerminals` off: a detected path stops being a link
 });
 
 describe('FR-060 — and an EXPLICIT hyperlink is untouched by it', () => {
+  it('a web url on the same row is still drawn with detection off (T177: this provider serves it)', () => {
+    detectInTerminals = false;
+    const provider = createFileLinkProvider({
+      terminal: { buffer: { active: { getLine: () => ({ translateToString: () => ROW }) } } },
+      detect: () => detectInTerminals,
+      site: () => SITE,
+      ask: answer,
+      onHover: () => {},
+      follow: () => {},
+    });
+    let texts: string[] = [];
+    provider.provideLinks(1, (provided) => {
+      texts = (provided ?? []).map((l) => l.text);
+    });
+    expect(texts).toEqual(['https://example.com/x']);
+  });
+
   it('a `file:` OSC 8 target still resolves and still underlines', () => {
     detectInTerminals = false;
     const hovered = hoveredLinkFromUri('file:///D:/p/src/foo.ts', SITE, answer);

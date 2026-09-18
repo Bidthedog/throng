@@ -11,12 +11,14 @@ import {
   decideWheel,
   encodeEnterKey,
   encodeModifiedKey,
+  classifyTerminalLinkTarget,
+  DEFAULT_APP_SETTINGS,
+  type EditorLinkSettings,
   type KittyCsiPrefix,
 } from '@throng/core';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
-import { WebLinksAddon } from '@xterm/addon-web-links';
 
 import { registerPanelSearch, unregisterPanelSearch } from '../search/search-controller.js';
 import {
@@ -36,12 +38,15 @@ import {
   askTerminalLink,
   followTerminalLink,
   hoveredLinkFromUri,
+  terminalLinkRequest,
   type TerminalLinkDeps,
   type TerminalLinkSite,
 } from './terminal-link-activation.js';
-import { createFileLinkProvider } from './file-link-provider.js';
+import { createFileLinkProvider, type ProvidedLink } from './file-link-provider.js';
+import { createLinkIdleScan } from './link-idle-scan.js';
+import { createLinkMarks, type MarkedLink } from './link-marks.js';
+import { subscribeLinkCache } from '../links/link-cache.js';
 import { shouldDropScrollback } from './clear-detect.js';
-import { TERMINAL_URL_REGEX } from './terminal-url.js';
 import { saveTerminalViewState, takeTerminalViewState } from './terminal-view-state.js';
 import { parseOsc52 } from './osc52.js';
 import { reportTerminalCwd } from './cwd-store.js';
@@ -78,6 +83,14 @@ const NO_LINK_DESTINATIONS: TerminalLinkDeps = {
   openInPreview: () => {},
   reportFailure: () => {},
 };
+
+/** xterm's internal OSC 8 link provider, as far as the idle scan reads it. */
+interface OscLinkSource {
+  provideLinks(
+    y: number,
+    callback: (links: readonly { readonly text: string; readonly range: MarkedLink['range'] }[] | undefined) => void,
+  ): void;
+}
 
 export interface TerminalExit {
   code: number | null;
@@ -218,6 +231,11 @@ export interface UseTerminalOptions {
    */
   detectFileLinks?: () => boolean;
   /**
+   * 045 FR-120 / FR-123 — `editor.links`, as a reader: the link provider holds its reply for the
+   * existence-check timeout read here on every ask. Absent: the shipped defaults.
+   */
+  linkSettings?: () => EditorLinkSettings;
+  /**
    * True for a key that belongs to throng (find, scrollback navigation) rather than to
    * the shell. xterm would otherwise handle these itself and write them to the pty;
    * reserving them is what keeps them out of the running program (FR-010 / FR-014).
@@ -283,6 +301,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
   const linkWslRef = useRef(opts.linkWslFlavour);
   const linkActionsRef = useRef(opts.linkActions);
   const detectLinksRef = useRef(opts.detectFileLinks);
+  const linkSettingsRef = useRef(opts.linkSettings);
   onExitRef.current = opts.onExit;
   onErrorRef.current = opts.onError;
   onStillStartingRef.current = opts.onStillStarting;
@@ -299,6 +318,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
   linkWslRef.current = opts.linkWslFlavour;
   linkActionsRef.current = opts.linkActions;
   detectLinksRef.current = opts.detectFileLinks;
+  linkSettingsRef.current = opts.linkSettings;
   // Read the active-panel predicate through a ref so the (async) attach focus below sees the CURRENT
   // active panel, not the one at mount time (issue 144).
   const isActiveRef = useRef(opts.isActive);
@@ -356,6 +376,19 @@ export function useTerminal(opts: UseTerminalOptions): void {
     // link that has RESOLVED — tracked from the link hover callbacks so the context menu can act on
     // it at right-click time and so a Ctrl+press over it stays out of the program (FR-043).
     let hoveredLink: HoveredLink | null = null;
+    /**
+     * 045 FR-131 / FR-135 — the same link as a MARK: its kind, text and cell range, so every row of it
+     * takes the hover state. Null whenever `hoveredLink` is, which is how a dead OSC 8 target gets no
+     * hover state (FR-154).
+     */
+    let hoveredMark: MarkedLink | null = null;
+    /**
+     * The OSC 8 target under the pointer whose `file:` answer has not landed yet — re-judged when it
+     * does, so it becomes the hovered link with no pointer movement (FR-123).
+     */
+    let pendingOscHover: { readonly uri: string; readonly range: MarkedLink['range'] } | null = null;
+    /** Repaints the marks; assigned once they exist (after `term.open`). */
+    let syncMarks = (): void => {};
     /** Where a link seen in THIS panel is judged from (FR-021, FR-023). Read fresh: `cd` moves it. */
     const linkSite = (): TerminalLinkSite => ({
       panelId,
@@ -435,8 +468,10 @@ export function useTerminal(opts: UseTerminalOptions): void {
      * does not exist is not a link at all (FR-006, FR-013), and one that has not answered yet is
      * treated as no link until it does (FR-071).
      */
-    const setHovered = (next: HoveredLink | null, event?: MouseEvent): void => {
+    const setHovered = (next: HoveredLink | null, event?: MouseEvent, mark: MarkedLink | null = null): void => {
       hoveredLink = next;
+      hoveredMark = next === null ? null : mark;
+      syncMarks();
       const key = hoveredLinkIdentity(next);
       if (next === null) {
         if (linkTipTimer !== undefined) {
@@ -463,9 +498,28 @@ export function useTerminal(opts: UseTerminalOptions): void {
       linkTipTimer = setTimeout(() => placeLinkTip(event), delay);
     };
     /** xterm's own hover callbacks hand over a URI; this is what one MEANS (FR-011 – FR-013). */
-    const setHoveredUri = (uri: string | undefined, event?: MouseEvent): void => {
-      setHovered(hoveredLinkFromUri(uri, linkSite(), askTerminalLink), event);
+    const setHoveredUri = (uri: string | undefined, event?: MouseEvent, range?: MarkedLink['range']): void => {
+      const next = hoveredLinkFromUri(uri, linkSite(), askTerminalLink);
+      // FR-154: `next` is null for a dead target — no hover state, no tip, no menu items, and a
+      // Ctrl+click that still reaches the program. A `file:` target still being asked about is
+      // remembered, so its answer can make it the hovered link without the pointer moving (FR-123).
+      pendingOscHover =
+        next === null && uri !== undefined && range !== undefined && classifyTerminalLinkTarget(uri) === 'file'
+          ? { uri, range }
+          : null;
+      setHovered(
+        next,
+        event,
+        uri === undefined || range === undefined ? null : { kind: 'osc8', text: uri, uri, range },
+      );
     };
+    /** A link the provider served, as a mark — the same key the idle scan collects it under. */
+    const markOf = (link: HoveredLink | null, range: ProvidedLink['range'] | undefined): MarkedLink | null =>
+      link === null || range === undefined
+        ? null
+        : link.kind === 'web'
+          ? { kind: 'web', text: link.uri, range }
+          : { kind: 'file', text: link.request.text, range };
     /**
      * 045 FR-011 – FR-013, FR-040 — one route for every terminal link gesture. `http(s)` keeps 024's
      * behaviour byte for byte; a resolving `file:` target follows the file-link route; nothing else
@@ -495,7 +549,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // on Ctrl/Cmd (FR-019c); the main process re-validates the scheme and denies any window.
       linkHandler: {
         activate: (event, uri) => openTerminalLink(event, uri),
-        hover: (event, uri) => setHoveredUri(uri, event),
+        hover: (event, uri, range) => setHoveredUri(uri, event, range),
         leave: () => setHoveredUri(undefined),
         /*
          * 045 FR-011 – FR-013 — without this, xterm never hands over a `file:` hyperlink at all.
@@ -512,8 +566,15 @@ export function useTerminal(opts: UseTerminalOptions): void {
          * `classifyTerminalLinkTarget` closes by default, so `javascript:`, `data:`, `mailto:` and
          * every unknown scheme stay exactly as inert as 024 made them, and a `file:` target never
          * reaches the OS url opener — it goes to main as TEXT, which re-resolves it against the
-         * panel's own project before acting (FR-037). The one visible cost is that an inert scheme
-         * now draws xterm's hover underline; it still opens nothing, on any gesture.
+         * panel's own project before acting (FR-037).
+         *
+         * 045 FR-154 withdrew the cost this used to name ("an inert scheme now draws xterm's hover
+         * underline"). A hyperlink that goes nowhere looks like plain text: `hover` above consults
+         * the click rule's answer (`hoveredLinkFromUri` — the scheme, then the cache for `file:`)
+         * before anything is drawn, so a dead target sets no hovered link, no tip and no menu items,
+         * and its Ctrl+click still reaches the program (#198's guard sees nothing hovered). xterm's
+         * OWN OSC 8 underline and pointer are switched off in `terminal.css`, and the one mark throng
+         * draws (`link-marks.ts`) is only ever drawn for a followable target (O10, research R22).
          */
         allowNonHttpProtocols: true,
       },
@@ -522,6 +583,19 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // PowerShell output. (cls/clear is handled separately via isScreenClear.)
     });
     termRef.current = term;
+    /*
+     * 045 FR-136 / FR-154 — xterm's built-in OSC 8 provider, so the idle scan can mark hyperlinks AT
+     * REST. The public API cannot see an OSC 8 link until the pointer reaches it (`IBufferCell` has
+     * no `urlId`), and xterm registers this provider first, in its constructor, so it is index 0 of
+     * a list that holds nothing else yet. A documented reach into internals (O10, research R22):
+     * guarded, and if a future xterm moves it the only loss is the at-rest mark on OSC 8 links —
+     * hover, click and every other link kind are unaffected.
+     */
+    const oscLinks = (
+      term as unknown as {
+        _core?: { _linkProviderService?: { linkProviders?: readonly OscLinkSource[] } };
+      }
+    )._core?._linkProviderService?.linkProviders?.[0];
 
     // US10 (#89) — surface the live window title the shell/program announces via OSC 0/2. xterm
     // disposes this handler with the terminal (like the other on* handlers here), so no manual
@@ -904,45 +978,36 @@ export function useTerminal(opts: UseTerminalOptions): void {
 
     const fit = new FitAddon();
     term.loadAddon(fit);
-    // 024 US7 (#159): detect plain-text http(s) URLs printed to the terminal (inert until now) and
-    // open them on Ctrl/Cmd+click through the same seam as OSC 8 links. The addon underlines a link
-    // on hover, which is the actionable affordance (FR-019a/c).
-    term.loadAddon(
-      new WebLinksAddon((event, uri) => openTerminalLink(event, uri), {
-        urlRegex: TERMINAL_URL_REGEX, // issue 198: keeps a balanced `(…)` in the url
-        hover: (event, uri) => setHoveredUri(uri, event),
-        leave: () => setHoveredUri(undefined),
-      }),
-    );
     /*
-     * 045 FR-001 — detected PATHS, beside the web scanner rather than inside it.
+     * 045 FR-001, FR-130 – FR-133 — detected PATHS and web URLS, from one provider over the LOGICAL
+     * line (so a link the terminal wrapped is one link on every row it occupies, #326).
      *
-     * A provider rather than an addon because the two questions are different: the web addon scans
-     * for a pattern and is done, while a path is only a link once main says the location exists. The
-     * provider is called for the row under the pointer and for rows being decorated, never for
-     * output as it arrives, which is FR-071 and FR-072 by construction.
-     *
-     * Registered AFTER the web addon so the web links are in place first; overlap is settled by the
-     * claimed ranges the provider passes detection, not by registration order (FR-009).
+     * `WebLinksAddon` is no longer loaded (plan.md Complexity Tracking, second round): its urls now
+     * come from the same `scanLinkLine` that keeps paths out of them (FR-009), and its Ctrl+click
+     * keeps 024's route out of the app (`openTerminalLink` → `openExternal`, FR-019c). The provider is
+     * called for the row under the pointer and by the idle scan, never for output as it arrives,
+     * which is FR-071 and FR-072 by construction.
      */
-    const fileLinks = term.registerLinkProvider(
-      createFileLinkProvider({
-        terminal: term,
-        // FR-060, read per row. An explicit `file:` hyperlink and a web url do not come through
-        // this provider at all, so the switch cannot reach them.
-        detect: () => detectLinksRef.current?.() ?? true,
-        site: linkSite,
-        ask: askTerminalLink,
-        onHover: setHovered,
-        follow: ({ request, position }) => {
-          void followTerminalLink({
-            request,
-            ...(position === undefined ? {} : { position }),
-            deps: linkActionsRef.current ?? NO_LINK_DESTINATIONS,
-          });
-        },
-      }),
-    );
+    const fileLinkProvider = createFileLinkProvider({
+      terminal: term,
+      // FR-060, read per row. It gates GUESSED paths only: a web url and an explicit `file:`
+      // hyperlink are declarations, and keep working with it off.
+      detect: () => detectLinksRef.current?.() ?? true,
+      site: linkSite,
+      ask: askTerminalLink,
+      onHover: (hovered, event, range) => setHovered(hovered, event, markOf(hovered, range)),
+      follow: ({ request, position }) => {
+        void followTerminalLink({
+          request,
+          ...(position === undefined ? {} : { position }),
+          deps: linkActionsRef.current ?? NO_LINK_DESTINATIONS,
+        });
+      },
+      openWeb: (event, uri) => openTerminalLink(event, uri),
+      // FR-123: a held reply waits as long as main may take to answer — the live setting.
+      readLinkSettings: () => linkSettingsRef.current?.() ?? DEFAULT_APP_SETTINGS.editor.links,
+    });
+    const fileLinks = term.registerLinkProvider(fileLinkProvider);
 
     // In-panel find over the retained scrollback (013). Read-only: the addon reads the
     // buffer and moves the viewport, never the pty. Registered against the panel id so
@@ -1009,6 +1074,104 @@ export function useTerminal(opts: UseTerminalOptions): void {
       term.focus();
     };
     screenEl?.addEventListener('mousedown', keepLinkClickFromProgram);
+
+    /*
+     * 045 FR-135 – FR-137, FR-154 — the one link affordance, marked AT REST.
+     *
+     * The idle scan collects every link in VIEW once the output has been quiet for
+     * `LINK_IDLE_SCAN_MS` — this provider's (paths and urls) and xterm's OSC 8 ones — and the marks
+     * draw them: dashed at rest, solid on hover across every row of the hovered link, the hand only
+     * while Ctrl/Cmd is held. Nothing here runs while output streams (FR-072): a write cancels a scan,
+     * and an answer landing mid-stream waits for the quiet that ends it.
+     */
+    let modifierHeld = false;
+    let viewLinks: MarkedLink[] = [];
+    let collecting: MarkedLink[] = [];
+    const marks = createLinkMarks({ terminal: term, cols: () => term.cols, site: linkSite, host: container });
+    syncMarks = () => {
+      if (!disposed) marks.sync(viewLinks, hoveredMark, modifierHeld);
+    };
+    const collectRow = (row: number): void => {
+      const y = row + 1; // xterm's link ranges count buffer lines from 1
+      for (const l of fileLinkProvider.linksOnLine(y)) collecting.push({ kind: l.kind, text: l.text, range: l.range });
+      try {
+        oscLinks?.provideLinks(y, (links) => {
+          for (const l of links ?? []) {
+            collecting.push({ kind: 'osc8', text: l.text, uri: l.text, range: l.range });
+            // FR-154 / T214: a `file:` target joins the scan — it is marked once main says it exists.
+            if (classifyTerminalLinkTarget(l.text) === 'file') {
+              askTerminalLink(terminalLinkRequest({ text: l.text, kind: 'fileHyperlink', site: linkSite() }));
+            }
+          }
+        });
+      } catch {
+        /* xterm's internals moved: OSC 8 links lose only their at-rest mark */
+      }
+    };
+    const idleScan = createLinkIdleScan({
+      onWriteQuiet: (listener, quietMs) => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const arm = (): void => {
+          if (timer !== undefined) clearTimeout(timer);
+          timer = setTimeout(listener, quietMs);
+        };
+        // A scroll or a resize changes which rows are in view; it re-arms the quiet like a write.
+        const subs = [term.onWriteParsed(arm), term.onScroll(arm), term.onResize(arm)];
+        arm();
+        return () => {
+          for (const s of subs) s.dispose();
+          if (timer !== undefined) clearTimeout(timer);
+        };
+      },
+      onWrite: (listener) => {
+        const sub = term.onWriteParsed(listener);
+        return () => sub.dispose();
+      },
+      viewportRows: () => ({
+        top: term.buffer.active.viewportY,
+        bottom: term.buffer.active.viewportY + term.rows - 1,
+      }),
+      scanRow: collectRow,
+      onScanStart: () => {
+        collecting = [];
+      },
+      onScanned: () => {
+        viewLinks = collecting;
+        collecting = [];
+        syncMarks();
+      },
+    });
+    // An answer landing (FR-123) or a cached one dropped: re-collect the view, once per burst. The
+    // scan itself refuses while output is streaming.
+    let rescanQueued = false;
+    const offLinkCache = subscribeLinkCache(() => {
+      if (pendingOscHover !== null && hoveredLink === null) {
+        setHoveredUri(pendingOscHover.uri, undefined, pendingOscHover.range);
+      }
+      if (rescanQueued) return;
+      rescanQueued = true;
+      setTimeout(() => {
+        rescanQueued = false;
+        if (!disposed) idleScan.rescan();
+      }, 0);
+    });
+    // FR-135 — the hand only while the modifier is down, so the pointer says what a click will do.
+    const noteModifier = (ev: KeyboardEvent | MouseEvent): void => {
+      const held = ev.ctrlKey || ev.metaKey;
+      if (held === modifierHeld) return;
+      modifierHeld = held;
+      syncMarks();
+    };
+    const releaseModifier = (): void => {
+      if (!modifierHeld) return;
+      modifierHeld = false;
+      syncMarks();
+    };
+    window.addEventListener('keydown', noteModifier, true);
+    window.addEventListener('keyup', noteModifier, true);
+    window.addEventListener('blur', releaseModifier);
+    screenEl?.addEventListener('mousemove', noteModifier);
+
     try {
       fit.fit();
     } catch {
@@ -1465,6 +1628,14 @@ export function useTerminal(opts: UseTerminalOptions): void {
       void bridge.detach?.(panelId, viewId);
       cleanupSearch?.();
       fileLinks.dispose(); // 045 — the link provider goes with the view that registered it
+      // 045 FR-135 – FR-137 — the scan, the marks and the modifier watch go with it.
+      idleScan.dispose();
+      offLinkCache();
+      marks.dispose();
+      window.removeEventListener('keydown', noteModifier, true);
+      window.removeEventListener('keyup', noteModifier, true);
+      window.removeEventListener('blur', releaseModifier);
+      screenEl?.removeEventListener('mousemove', noteModifier);
       // Remember the scroll offset + selection before the xterm is disposed, so the
       // next mount of this terminal (tab/panel/project switch) can restore them
       // (issue 144, follow-up). Offset is measured from the buffer bottom.

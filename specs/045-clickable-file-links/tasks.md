@@ -913,7 +913,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   link with no `provideLinks` call for another line in between; the wait is governed by the
   existence-check timeout, not an independent constant. The FR-072 structural cases in the file
   stay as they are. Satisfies FR-123.
-- [ ] T150 [US9] GREEN `packages/ui/src/renderer/terminal/file-link-provider.ts` (and
+- [x] T150 [US9] GREEN `packages/ui/src/renderer/terminal/file-link-provider.ts` (and
   `use-terminal.ts` if the chosen mechanism needs the terminal) — settle **O7** and record the
   mechanism in R19. Depends on T149, T144.
 - [ ] T151 [P] [US9] RED component `packages/ui/tests/component/link-decorations.test.ts` — FR-123 in
@@ -1100,7 +1100,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
   two and three rows yield **one** link whose range starts on the first row and ends on the last;
   `provideLinks` for **any** of those rows returns it; a row broken by a real newline is never joined
   (FR-132); the FR-072 zero-check assertions stay. Satisfies FR-130 – FR-133, SC-015.
-- [ ] T177 [US10] GREEN `packages/ui/src/renderer/terminal/file-link-provider.ts` — read the logical
+- [x] T177 [US10] GREEN `packages/ui/src/renderer/terminal/file-link-provider.ts` — read the logical
   line, scan it with `scanLinkLine`, map spans to cells across rows, serve **web** spans too; unload
   `WebLinksAddon` in `packages/ui/src/renderer/terminal/use-terminal.ts` (plan Complexity Tracking).
   `packages/ui/tests/unit/terminal-url.test.ts` stays unchanged and green. Depends on T176, T162.
@@ -1113,7 +1113,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
   scanned, each within the per-line cap; answers land in the same cache hover reads. The edge of
   `LINK_IDLE_SCAN_MS` goes in `packages/core/tests/unit/link-guards.test.ts`. Satisfies FR-137,
   FR-071, FR-072.
-- [ ] T179 [US10] GREEN `packages/ui/src/renderer/terminal/link-idle-scan.ts` (new),
+- [x] T179 [US10] GREEN `packages/ui/src/renderer/terminal/link-idle-scan.ts` (new),
   `packages/core/src/links/limits.ts` (`LINK_IDLE_SCAN_MS`), wiring in `use-terminal.ts`.
   Depends on T178, T177.
 - [ ] T180 [P] [US10] RED component `packages/ui/tests/component/link-decorations.test.ts` (colour
@@ -1131,7 +1131,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
   Depends on T181.
 - [ ] T183 [US10] GREEN `packages/ui/src/renderer/editor/link-decorations.ts` — the mark's theme
   becomes the tokens and the three states; no recolour. Depends on T180, T182, T164.
-- [ ] T184 [US10] Settle **O10** — can xterm's OSC 8 underline take the token's colour and the
+- [x] T184 [US10] Settle **O10** — can xterm's OSC 8 underline take the token's colour and the
   dashed-at-rest / solid-on-hover states, or must throng's decoration draw it instead (FR-139)? A
   read of the pinned `@xterm/xterm` version's renderer options and a spike, recorded in R22. No
   production code.
@@ -1146,7 +1146,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
   in `packages/ui/tests/e2e/terminal-link-once.e2e.ts`'s existing `@reserve:pty` declaration, a
   Ctrl+click on the **second** row of each opens it exactly once. Answers **O9**. Satisfies FR-130,
   FR-131, FR-135, SC-015, SC-017.
-- [ ] T187 [US10] GREEN `packages/ui/src/renderer/terminal/link-marks.ts` (new — xterm decorations
+- [x] T187 [US10] GREEN `packages/ui/src/renderer/terminal/link-marks.ts` (new — xterm decorations
   for at-rest and hover marks), `use-terminal.ts` wiring, `packages/ui/src/renderer/terminal/terminal.css`
   (token variables only, no literal colour), and the OSC 8 route O10 chose. Depends on T184, T185,
   T186, T177, T179, T182.
@@ -1378,7 +1378,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   declaration, no new `test(`**: a program prints the three dead OSC 8 hyperlinks from the corpus; at
   rest and on hover none carries xterm's OSC 8 underline class or throng's mark, and the pointer stays
   the text cursor. Only a real renderer draws xterm's own underline. Satisfies FR-154, FR-139.
-- [ ] T214 [US12] GREEN `packages/ui/src/renderer/terminal/use-terminal.ts` (the OSC 8 `linkHandler`'s
+- [x] T214 [US12] GREEN `packages/ui/src/renderer/terminal/use-terminal.ts` (the OSC 8 `linkHandler`'s
   hover/leave consult the click rule's answer before drawing anything),
   `packages/ui/src/renderer/terminal/link-marks.ts` and the OSC 8 underline route O10 chose (suppressed
   for a dead target), and `packages/ui/src/renderer/terminal/link-idle-scan.ts` (OSC 8 `file:` targets

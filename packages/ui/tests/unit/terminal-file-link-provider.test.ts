@@ -221,7 +221,11 @@ describe('the span it underlines', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    const links = provideOn(terminal, 1) ?? [];
+    // T177: the url itself is now served by this provider too (WebLinksAddon unloaded), so it is
+    // set aside here — the FR-009 question is how many FILE links the line yields.
+    const all = provideOn(terminal, 1) ?? [];
+    expect(all.filter((l) => l.kind === 'web').map((l) => l.text)).toEqual(['https://example.com/src/foo.ts']);
+    const links = all.filter((l) => l.kind === 'file');
     expect(links).toHaveLength(1);
     // The surviving one is the bare path at the end of the line, not the one inside the url.
     expect(links[0]?.range.start.x).toBeGreaterThan('see https://example.com/src/foo.ts'.length);
