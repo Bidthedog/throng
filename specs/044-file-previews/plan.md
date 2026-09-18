@@ -398,7 +398,7 @@ orchestrator; the design already matched two of them and now matches all three.
 Additive only: nothing above is rewritten, and where a decision above is refined the row below says
 so. Inputs: spec.md Clarifications **Session 2026-09-15**, FR-113–FR-120 and their markers on FR-015a,
 FR-085, FR-091, FR-095, FR-101 and Out of Scope; the triage in
-`.superpowers/sdd/tasks/iterate-triage.md`. Research: [research.md](./research.md) R23–R29, Open items
+`session-notes/iterate-triage.md`. Research: [research.md](./research.md) R23–R29, Open items
 O9–O10. Model: [data-model.md](./data-model.md) §14. Tasks: Phase 13, T181–T217.*
 
 ### Scope
@@ -492,7 +492,7 @@ so editors stay file-level.
   document that was saved under a new name — keeping each entry's `viewState`, then applies H2a's
   neighbour merge outside that run.
 - IPC contract changes to `contracts/preview-ipc.md` §1 were **applied** on 2026-09-15 before T201, from
-  `.superpowers/sdd/tasks/iterate-preview-ipc-pending.md` (`preview-ipc.md:137`, `:139`, `:169-175`).
+  `session-notes/iterate-preview-ipc-pending.md` (`preview-ipc.md:137`, `:139`, `:169-175`).
   *(Updated 2026-09-16 by converge; this line still read "pending".)*
 
 **FR-116 — Copy Link Address.** `linkAddress(link, docPath)` in `preview/content-menu.ts`: `external` →

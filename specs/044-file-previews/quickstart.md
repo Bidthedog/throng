@@ -225,7 +225,7 @@ npx playwright test packages/ui/tests/e2e/preview-scroll.e2e.ts   # serial tier;
   `reserve-tag-debt.json`: **116 → 115**.
 - `SHIPPED_DEFAULTS_VERSION` unchanged; no new icon token, colour token or key binding.
 - `contracts/preview-ipc.md` §1 carries the `heading` intent (applied from
-  `.superpowers/sdd/tasks/iterate-preview-ipc-pending.md`).
+  `session-notes/iterate-preview-ipc-pending.md`).
 
 ## 9. Iteration 2026-09-16 (FR-121, FR-122, T222)
 

@@ -4,13 +4,11 @@ This note lets a **brand-new agent continue the 2026-07-08 refinement delta stan
 feature (Phases A–G, T001–T089) is **delivered and green**. This handoff is only about the **delta**
 (Phase 12, **H1–H6**, T090–T120) planned in `plan.md` → *Delta Plan* and tasked in `tasks.md` → *Phase 12*.
 
-## How to continue (bridge context)
+## How to continue
 
-This runs under the **Spec Kit → Superpowers bridge** (`/speckit-superpowers-bridge`). The handoff state is
-`.specify/superpowers-handoff.json` (currently **`executing`**). Discipline: TDD (test-first, RGR),
-per-slice E2E, then `superpowers:requesting-code-review` + `superpowers:finishing-a-development-branch`, then
-set the handoff to `complete` via
-`.specify/extensions/speckit-superpowers-bridge/scripts/powershell/update-handoff.ps1 -Status complete -Actor claude`.
+This runs via Spec Kit's own `/speckit-implement`. Discipline: TDD (test-first, RGR), per-slice
+E2E, then a code review and branch-finishing pass, then mark the delta's tasks complete in
+`tasks.md` → *Phase 12*.
 **Do not push** — the user always pushes manually. Commit locally per slice.
 
 ## Commands

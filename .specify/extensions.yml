@@ -1,6 +1,5 @@
 installed:
 - agent-context
-- speckit-superpowers-bridge
 settings:
   auto_execute_hooks: true
 hooks:
@@ -21,52 +20,4 @@ hooks:
     priority: 10
     prompt: Execute speckit.agent-context.update?
     description: Refresh agent context after planning
-    condition: null
-  before_clarify:
-  - extension: speckit-superpowers-bridge
-    command: speckit.speckit-superpowers-bridge.guard
-    enabled: true
-    optional: false
-    priority: 10
-    prompt: Execute speckit.speckit-superpowers-bridge.guard?
-    description: Prevent Spec Kit contract changes while Superpowers implementation
-      is executing
-    condition: null
-  before_plan:
-  - extension: speckit-superpowers-bridge
-    command: speckit.speckit-superpowers-bridge.guard
-    enabled: true
-    optional: false
-    priority: 10
-    prompt: Execute speckit.speckit-superpowers-bridge.guard?
-    description: Prevent Spec Kit contract changes while Superpowers implementation
-      is executing
-    condition: null
-  before_tasks:
-  - extension: speckit-superpowers-bridge
-    command: speckit.speckit-superpowers-bridge.guard
-    enabled: true
-    optional: false
-    priority: 10
-    prompt: Execute speckit.speckit-superpowers-bridge.guard?
-    description: Prevent Spec Kit contract changes while Superpowers implementation
-      is executing
-    condition: null
-  before_implement:
-  - extension: speckit-superpowers-bridge
-    command: speckit.speckit-superpowers-bridge.guard
-    enabled: true
-    optional: false
-    priority: 10
-    prompt: Execute speckit.speckit-superpowers-bridge.guard?
-    description: Block speckit.implement for features handed off to Superpowers
-    condition: null
-  after_tasks:
-  - extension: speckit-superpowers-bridge
-    command: speckit.speckit-superpowers-bridge.handoff
-    enabled: true
-    optional: false
-    priority: 10
-    prompt: Execute speckit.speckit-superpowers-bridge.handoff?
-    description: Create the Superpowers handoff after Spec Kit task generation
     condition: null

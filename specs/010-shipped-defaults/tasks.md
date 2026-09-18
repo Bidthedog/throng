@@ -2,7 +2,7 @@
 
 **Feature**: `010-shipped-defaults` | **Plan**: [plan.md](./plan.md) | **Spec**: [spec.md](./spec.md)
 
-**Tests**: TDD is mandatory (executed via the Superpowers bridge). Each implementation task is preceded
+**Tests**: TDD is mandatory (test-first, Red-Green-Refactor). Each implementation task is preceded
 by its failing test task. No E2E — this feature ships no UI (Constitution V scopes E2E to UI changes).
 
 **Layout**: pure logic in `packages/core/src/config/shipped-defaults.ts`; I/O in
