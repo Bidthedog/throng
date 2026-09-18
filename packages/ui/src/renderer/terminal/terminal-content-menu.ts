@@ -18,7 +18,11 @@
  * Copy/Paste was rejected as a behaviour regression shipped under a grouping pass.
  */
 import type { MenuAction } from '../workspace/context-menu.js';
-import { fileLinkMenuActions, type FileLinkMenuContext } from '../links/link-menu-items.js';
+import {
+  fileLinkMenuActions,
+  webLinkMenuActions,
+  type FileLinkMenuContext,
+} from '../links/link-menu-items.js';
 
 export interface TerminalContentMenuActions {
   openLink: (url: string) => void;
@@ -67,21 +71,15 @@ export function terminalContentMenu(args: TerminalContentMenuArgs): MenuAction[]
   const fileRun = selection.length > 0 ? [] : fileLinkMenuActions(fileLink ?? null);
   if (fileRun.length > 0) items.push(...fileRun);
   else if (link !== null) {
-    items.push({
-      // No icon: there is no link/open token, and 023's rule is "an icon only where a token
-      // exists". "Copy Link Address" is a copy action, so it carries the shared copy glyph.
-      label: 'Open Link',
-      testId: 'menu-item-Open Link',
-      section: 'contextual',
-      onClick: () => actions.openLink(link),
-    });
-    items.push({
-      label: 'Copy Link Address',
-      icon: 'copy',
-      testId: 'menu-item-Copy Link Address',
-      section: 'contextual',
-      onClick: () => actions.copyLinkAddress(link),
-    });
+    // 024's web pair, from the builder the editor shares (FR-104). No chord: none is bound in a
+    // terminal (FR-046).
+    items.push(
+      ...webLinkMenuActions({
+        uri: link,
+        openLink: () => actions.openLink(link),
+        copyLinkAddress: () => actions.copyLinkAddress(link),
+      }),
+    );
   }
 
   items.push({

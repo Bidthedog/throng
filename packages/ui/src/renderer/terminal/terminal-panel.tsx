@@ -68,6 +68,7 @@ import { requestPreviewOpen } from '../preview/open-preview.js';
 import {
   linkFailureReport,
   linkRouting,
+  openWebLink,
   osLinkActions,
   type LinkRoutingInputs,
 } from '../links/link-actions.js';
@@ -431,8 +432,9 @@ export function TerminalPanel({
           actions: {
             // Only a WEB link reaches this pair now: a file link is drawn from `fileLink` above and
             // carries its own handlers. The OS url opener is the seam 024 built its refusal of
-            // `file:` into, and the one a file link must never touch (FR-037).
-            openLink: (url) => window.throng?.openExternal?.(url),
+            // `file:` into, and the one a file link must never touch (FR-037). The same route the
+            // editor's web links take (FR-104).
+            openLink: (url) => openWebLink(url),
             copyLinkAddress: (url) => void window.throng?.terminal?.writeClipboard?.(url),
             copySelection: () => {
               void window.throng?.terminal?.writeClipboard?.(selection);

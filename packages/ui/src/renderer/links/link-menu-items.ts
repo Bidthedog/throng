@@ -1,6 +1,6 @@
 import { fileLinkMenuItems, type LinkPosition, type LinkResolutionRequest, type LinkTarget, type ResolvedLink } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
-import { copyLinkAddress, performLinkTarget, type LinkActionDeps } from './link-actions.js';
+import { copyLinkAddress, openWebLink, performLinkTarget, type LinkActionDeps } from './link-actions.js';
 
 /**
  * 045 FR-031 — core's file-link shapes, turned into the rows a throng menu draws (T078).
@@ -57,6 +57,58 @@ export interface FileLinkMenuContext {
    */
   readonly openLink: () => void | Promise<void>;
   readonly deps: LinkActionDeps;
+}
+
+/** Everything a menu needs to draw and perform the run over ONE web link (FR-103, S4). */
+export interface WebLinkMenuContext {
+  /** The address exactly as written — what Open Link opens and Copy Link Address copies. */
+  readonly uri: string;
+  /** The chord bound to Open Link in this surface's scope. The terminal passes none (FR-046). */
+  readonly chord?: string;
+  /** The surface's web route — the same one its Ctrl+click takes. Absent: {@link openWebLink}. */
+  readonly openLink?: () => void | Promise<void>;
+  /**
+   * How this surface writes a plain address to the clipboard. Absent: the app clipboard, verbatim.
+   * The terminal passes its own writer, which 024 shipped and this run keeps byte for byte.
+   */
+  readonly copyLinkAddress?: () => void | Promise<void>;
+}
+
+/**
+ * 045 FR-103, FR-104 — the web-link pair, Open Link then Copy Link Address, for BOTH panel types.
+ *
+ * The terminal's pair was written out inline by 024; the editor needs the same two rows over the
+ * same link, so they are built once here and the terminal's menu calls this rather than keeping its
+ * own copy. Labels, test ids, icon and section are 024's, unchanged.
+ */
+export function webLinkMenuActions(context: WebLinkMenuContext | null): MenuAction[] {
+  if (context === null) return [];
+  const { uri, chord } = context;
+  const open = context.openLink ?? ((): void => openWebLink(uri));
+  const copy =
+    context.copyLinkAddress ??
+    (async (): Promise<void> => {
+      // 'verbatim' — an address is not a line-wise or rectangular selection, so it pastes as written.
+      await window.throng?.clipboard?.write({ text: uri, mode: 'verbatim' });
+    });
+  return [
+    {
+      // No icon: there is no link/open token, and 023's rule is "an icon only where a token
+      // exists". "Copy Link Address" is a copy action, so it carries the shared copy glyph.
+      label: 'Open Link',
+      testId: 'menu-item-Open Link',
+      section: 'contextual',
+      ...(chord !== undefined && chord.length > 0 ? { shortcut: chord } : {}),
+      onClick: () => void open(),
+    },
+    {
+      label: 'Copy Link Address',
+      icon: 'copy',
+      testId: 'menu-item-Copy Link Address',
+      section: 'contextual',
+      onClick: () => void copy(),
+    },
+  ];
 }
 
 export function fileLinkMenuActions(context: FileLinkMenuContext | null): MenuAction[] {

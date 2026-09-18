@@ -5,7 +5,12 @@ import type { MenuAction } from '../workspace/context-menu.js';
 import { isKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { applyPaste, clipboardEntry, cutThrough, ENDINGS } from './commands.js';
 import { requestLanguagePicker } from './picker-request.js';
-import { fileLinkMenuActions, type FileLinkMenuContext } from '../links/link-menu-items.js';
+import {
+  fileLinkMenuActions,
+  webLinkMenuActions,
+  type FileLinkMenuContext,
+  type WebLinkMenuContext,
+} from '../links/link-menu-items.js';
 
 /**
  * The editor's CONTENT context menu (016, FR-012) — right-click inside the document.
@@ -65,6 +70,12 @@ export interface ContentMenuArgs {
    * to disagree.
    */
   fileLink?: FileLinkMenuContext | null;
+  /**
+   * 045 FR-103 / S4 — the WEB link the menu was opened over, or null: Open Link (with its chord)
+   * and Copy Link Address, from the builder the terminal's menu shares. At most one of this and
+   * {@link fileLink} is set, because a path candidate never overlaps a web span (FR-009).
+   */
+  webLink?: WebLinkMenuContext | null;
 }
 
 /**
@@ -119,6 +130,7 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
     // 045 FR-031 — the file-link run, ahead of everything. Empty when the pointer is not on a link,
     // which is every menu this editor drew before this feature.
     ...fileLinkMenuActions(args.fileLink ?? null),
+    ...webLinkMenuActions(args.webLink ?? null),
     // Never disabled for want of a selection (FR-012b): with none, they act on the caret's whole
     // line. A greyed-out Copy on the line the user just right-clicked is a refusal to do the
     // obvious thing.

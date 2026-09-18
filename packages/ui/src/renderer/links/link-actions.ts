@@ -1,4 +1,5 @@
 import {
+  classifyTerminalLinkTarget,
   defaultOpenActionFor,
   relativeToRoot,
   resolveDefaultLinkAction,
@@ -143,6 +144,23 @@ export function osLinkActions(): Pick<
   };
 }
 
+/**
+ * 045 FR-103, FR-104 — the ONE route a WEB link takes out of the app, from either panel type.
+ *
+ * 024's terminal route, moved here rather than copied, so a terminal's Ctrl+click, an editor's
+ * Ctrl+click, the chord and both menus' Open Link cannot disagree about what a web link does. Web
+ * links never pass through the click rule (`data-model.md` §13.1): a web link always opens in the
+ * system browser.
+ *
+ * `http`/`https` only (024 FR-019). The scanner already finds nothing else, but this is the seam the
+ * OS url opener sits behind, so it re-checks rather than trusting its caller — a `javascript:` or
+ * `file:` text arriving here is dropped, never opened.
+ */
+export function openWebLink(uri: string): void {
+  if (classifyTerminalLinkTarget(uri) !== 'web') return;
+  window.throng?.openExternal?.(uri);
+}
+
 async function sendToMain(
   route: 'reveal' | 'open',
   request: LinkResolutionRequest,
@@ -215,9 +233,10 @@ export interface LinkFollowDeps {
 }
 
 /**
- * What the LIVE preferences say about where a link opens (FR-050, FR-051).
+ * What the LIVE preview preferences say about a file link (045 FR-051, FR-110 clause 3).
  *
- * The preview halves are here rather than in `@throng/core`'s `resolveDefaultLinkAction` because
+ * With the *Default link action* retired (FR-112) this is the only settings-derived input left to
+ * the click rule. It is here rather than in `@throng/core`'s `resolveDefaultLinkAction` because
  * 044 FR-070 keeps the provider registry out of the pure decision: core is told *whether* this
  * file's default open action is Preview, and never how that was worked out.
  */
@@ -228,8 +247,8 @@ export interface LinkRoutingInputs {
 }
 
 /**
- * The two settings-derived inputs {@link followLink} needs, composed once for BOTH surfaces
- * (FR-050 – FR-052, SC-008).
+ * The settings-derived input {@link followLink} needs, composed once for BOTH surfaces (FR-051,
+ * FR-052, FR-110).
  *
  * One function so the terminal and the editor cannot read the preference differently — the failure
  * FR-054 exists to rule out, and one that would show up as "Ctrl+click does different things in the
@@ -259,8 +278,9 @@ export function linkRouting(
  * nothing on screen to show for it.
  *
  * `resolve` is injected rather than imported so this stays free of the cache's `window` dependency:
- * the terminal passes `askTerminalLink`, the editor passes its own peek. A click that arrives before
- * the answer does asks again and does nothing, which is FR-071 — never a wait.
+ * the terminal passes `askTerminalLink`; the editor passes the answer its decoration drew, so a link
+ * the user can see underlined is the link that is followed (D3). A click that arrives before any
+ * answer does asks again and does nothing, which is FR-071 — never a wait.
  */
 export async function followLink(args: {
   readonly request: LinkResolutionRequest;

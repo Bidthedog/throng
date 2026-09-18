@@ -6,7 +6,7 @@ import {
   type LinkResolutionRequest,
 } from '@throng/core';
 import { peekLink, requestLink } from '../links/link-cache.js';
-import { followLink, type LinkFollowDeps } from '../links/link-actions.js';
+import { followLink, openWebLink, type LinkFollowDeps } from '../links/link-actions.js';
 import type { HoveredLink } from './hovered-link.js';
 
 /**
@@ -163,7 +163,7 @@ export async function activateTerminalHyperlink(args: {
   if (!(event.ctrlKey || event.metaKey)) return;
   const kind = classifyTerminalLinkTarget(uri);
   if (kind === 'web') {
-    window.throng?.openExternal?.(uri);
+    openWebLink(uri);
     return;
   }
   if (kind !== 'file') return;
