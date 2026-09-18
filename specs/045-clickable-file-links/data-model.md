@@ -530,8 +530,9 @@ interface RootState {
 
 A root enters the map when its check loses the timeout race and leaves it when that `stat` settles,
 whichever way. While present, checks under it answer `unreachable` without calling `IFileSystem`.
-While the map is full, a check under a root **not** in it also answers `unreachable` at once rather
-than risking a third stuck thread; a root that answers normally never enters it, so a healthy local
+While the map is full, a check under a **network (UNC)** root not in it also answers `unreachable`
+at once rather than risking a third stuck thread. A local drive root (`C:\`) is never gated by a full
+map — it is stat-ed as usual — and a root that answers normally never enters it, so a healthy local
 drive is never gated.
 
 `FileLinkResolverDeps` gains `readLinkSettings: () => EditorLinkSettings`, on the

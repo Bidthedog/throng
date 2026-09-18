@@ -73,6 +73,11 @@ export interface FileLinkResolverDeps {
   readonly readLinkSettings?: () => EditorLinkSettings;
 }
 
+/** A UNC volume root (`\\server\share\`, `//server/share/`) — the only kind a full stuck map gates. */
+function isNetworkRoot(root: string): boolean {
+  return /^[\\/]{2}/.test(root);
+}
+
 /** What one existence check found — `unreachable` when it lost the timeout race (FR-120). */
 type Existence = 'file' | 'folder' | 'unreachable' | null;
 
@@ -89,8 +94,9 @@ export class FileLinkResolver {
    * FR-121 / FR-122 (data-model §13.5). Volume roots — `node:path`'s `parse(p).root`, `\\server\share\`
    * or `C:\` — whose `stat` outlived the timeout and has not settled. While a root is here, a check
    * under it answers `unreachable` without touching the filesystem; it leaves when that `stat` settles,
-   * whichever way. Bounded by `MAX_TIMED_OUT_LINK_CHECKS`: when full, a check under any OTHER root also
-   * answers `unreachable` rather than risking another stuck thread-pool thread. Main-process memory
+   * whichever way. Bounded by `MAX_TIMED_OUT_LINK_CHECKS`: when full, a check under any other NETWORK
+   * (UNC) root also answers `unreachable` rather than risking another stuck thread-pool thread; a local
+   * drive root is never gated by a full map, because a healthy local drive is never gated. Main-process memory
    * only; the renderer's cache TTL is the back-off (P10).
    */
   private readonly stuckRoots = new Set<string>();
@@ -232,7 +238,9 @@ export class FileLinkResolver {
   private async kindOf(path: string): Promise<Existence> {
     const root = parsePath(path).root.toLowerCase();
     if (this.stuckRoots.has(root)) return 'unreachable';
-    if (this.stuckRoots.size >= MAX_TIMED_OUT_LINK_CHECKS) return 'unreachable';
+    // A full map gates only other NETWORK roots: a healthy local drive is never gated (§13.5), or
+    // every local link would go dead once two shares were offline.
+    if (this.stuckRoots.size >= MAX_TIMED_OUT_LINK_CHECKS && isNetworkRoot(root)) return 'unreachable';
 
     const checking = this.deps.fs.stat(path).then(
       ({ kind }): Existence => kind,

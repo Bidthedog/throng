@@ -189,6 +189,19 @@ describe('P9 — at most two checks may be stuck past the timeout (FR-121)', () 
     expect(third).toEqual({ ok: false, reason: 'unreachable' });
     expect(disk.statCalls.slice(statsBefore), 'a third stuck thread must not be risked').toEqual([]);
   });
+
+  it('with two roots stuck, a healthy LOCAL drive root is still checked and answers normally (§13.5)', async () => {
+    const { resolver } = makeResolver();
+    void resolver.resolve(request(`${STUCK}a.txt`));
+    void resolver.resolve(request(`${STUCK_TWO}b.txt`));
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS);
+
+    // A full stuck-root map gates only other NETWORK roots: a local drive is never gated, or every
+    // local link would go dead the moment two shares went offline.
+    const local = await outcomeAfter(resolver.resolve(request(`${LOCAL}src\\foo.ts`)), 0);
+
+    expect(local).toMatchObject({ ok: true, link: { path: `${LOCAL}src\\foo.ts`, kind: 'file' } });
+  });
 });
 
 describe('P10 — when the stuck stat settles, the root is checked again (FR-122)', () => {
