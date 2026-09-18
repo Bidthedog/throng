@@ -526,10 +526,15 @@ export function useTerminal(opts: UseTerminalOptions): void {
      * is openable at all.
      */
     const openTerminalLink = (event: MouseEvent, uri: string): void => {
+      // The resolved `file:` target the hover is showing, if it is this one — followed should the
+      // cache have dropped the answer since (see `followTerminalLink`'s `drawn`).
+      const shown = hoveredLink;
+      const drawn = shown?.kind === 'file' && shown.request.text === uri ? shown.link : undefined;
       void activateTerminalHyperlink({
         event,
         uri,
         site: linkSite(),
+        ...(drawn === undefined ? {} : { drawn }),
         // Absent only where nothing mounted a workspace around this terminal — the web route and the
         // two OS routes still work, and throng's own two destinations have nowhere to open into.
         deps: linkActionsRef.current ?? NO_LINK_DESTINATIONS,
@@ -996,10 +1001,11 @@ export function useTerminal(opts: UseTerminalOptions): void {
       site: linkSite,
       ask: askTerminalLink,
       onHover: (hovered, event, range) => setHovered(hovered, event, markOf(hovered, range)),
-      follow: ({ request, position }) => {
+      follow: ({ request, position, drawn }) => {
         void followTerminalLink({
           request,
           ...(position === undefined ? {} : { position }),
+          drawn,
           deps: linkActionsRef.current ?? NO_LINK_DESTINATIONS,
         });
       },

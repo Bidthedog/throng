@@ -4,6 +4,7 @@ import {
   type LinkPosition,
   type LinkResolution,
   type LinkResolutionRequest,
+  type ResolvedLink,
 } from '@throng/core';
 import { peekLink, requestLink } from '../links/link-cache.js';
 import { followLink, openWebLink, type LinkFollowDeps } from '../links/link-actions.js';
@@ -156,9 +157,11 @@ export async function activateTerminalHyperlink(args: {
   readonly event: { readonly ctrlKey: boolean; readonly metaKey: boolean };
   readonly uri: string;
   readonly site: TerminalLinkSite;
+  /** The resolved `file:` target the hover showed — see {@link followTerminalLink}'s `drawn`. */
+  readonly drawn?: ResolvedLink;
   readonly deps: TerminalLinkDeps;
 }): Promise<void> {
-  const { event, uri, site, deps } = args;
+  const { event, uri, site, drawn, deps } = args;
   // 024 FR-019c: a plain click keeps its terminal meaning, on every kind of link.
   if (!(event.ctrlKey || event.metaKey)) return;
   const kind = classifyTerminalLinkTarget(uri);
@@ -169,6 +172,7 @@ export async function activateTerminalHyperlink(args: {
   if (kind !== 'file') return;
   await followTerminalLink({
     request: terminalLinkRequest({ text: uri, kind: 'fileHyperlink', site }),
+    ...(drawn === undefined ? {} : { drawn }),
     deps,
   });
 }
@@ -184,13 +188,26 @@ export async function followTerminalLink(args: {
   readonly request: LinkResolutionRequest;
   /** FR-004's position, when the detected span carried one. A hyperlink never carries one. */
   readonly position?: LinkPosition;
+  /**
+   * The answer the gesture was made on — the link the terminal is SHOWING (marked, hovered, the hand
+   * up). Used only when the cache has no answer at all.
+   *
+   * The cache drops an entry on READ once it is older than `LINK_CACHE_TTL_MS`, and nothing re-reads
+   * it while the pointer rests. Without this, a Ctrl+click landing after the entry expired asked
+   * again, heard FR-071's "not a link" and did nothing, while the link was on screen — the second
+   * click worked, because the miss re-asked main. The editor's D3 fix (T216) is the same rule. A
+   * fresh answer still wins, `{ ok: false }` included, and main re-resolves the request and re-checks
+   * the target before any action (FR-037), so nothing is trusted that main does not confirm.
+   */
+  readonly drawn?: ResolvedLink;
   readonly deps: TerminalLinkDeps;
 }): Promise<void> {
-  const { request, position, deps } = args;
+  const { request, position, drawn, deps } = args;
   await followLink({
     request,
     ...(position === undefined ? {} : { position }),
-    resolve: askTerminalLink,
+    resolve: (asked) =>
+      askTerminalLink(asked) ?? (drawn === undefined ? undefined : { ok: true, link: drawn }),
     deps,
   });
 }

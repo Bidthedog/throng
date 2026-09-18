@@ -132,6 +132,8 @@ export interface FileLinkProviderDeps {
   readonly follow: (args: {
     readonly request: LinkResolutionRequest;
     readonly position?: LinkPosition;
+    /** The answer this link was served on — followed if the cache has since dropped it. */
+    readonly drawn: ResolvedLink;
   }) => void;
   /**
    * A Ctrl+click on a web span — 024's route out of the app, gated on the modifier by the caller
@@ -366,7 +368,9 @@ function fileLinkFor(
     activate: (event) => {
       // FR-040: Ctrl/Cmd, or the press belongs to the terminal exactly as it does today.
       if (!(event.ctrlKey || event.metaKey)) return;
-      deps.follow({ request, ...(position === undefined ? {} : { position }) });
+      // `drawn`: the answer this link was SERVED on. The cache may have dropped it since, with the
+      // link still on screen — see `followTerminalLink`.
+      deps.follow({ request, ...(position === undefined ? {} : { position }), drawn: link });
     },
     hover: (event) => deps.onHover(hovered, event, range),
     leave: () => deps.onHover(null),

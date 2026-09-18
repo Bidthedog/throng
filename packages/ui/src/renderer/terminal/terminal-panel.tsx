@@ -413,6 +413,7 @@ export function TerminalPanel({
                 void followTerminalLink({
                   request: hovered.request,
                   ...(hovered.position === undefined ? {} : { position: hovered.position }),
+                  drawn: hovered.link,
                   deps: linkActions,
                 }),
               deps: { ...linkActions, ...osLinkActions() },
