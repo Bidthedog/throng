@@ -1700,6 +1700,10 @@ if (isPrimaryInstance)
     clipboard: container.get<IClipboard>(UI_TYPES.Clipboard),
     // #199: granted from here because only the foreground owner may hand the foreground on.
     foregroundHandoff: container.get<IForegroundHandoff>(UI_TYPES.ForegroundHandoff),
+    // 045 FR-080c: `currentSettings` is the parsed snapshot the config watcher keeps fresh, so the
+    // NEXT terminal to attach sees a change and a running one is untouched — which is what the
+    // requirement asks for and what a process's fixed environment makes true anyway.
+    readTerminalSettings: () => currentSettings.terminals,
   });
   /*
    * 029 / #182 — the daemon supervisor.

@@ -290,6 +290,16 @@ unaffected either way. The panel header shows the terminal's
 **live working directory**, so you can see where a shell is even when a full-screen program hides
 the prompt.
 
+**Advertise hyperlink support** (Settings → Terminal), also **on by default**, is how programs know
+they can print real hyperlinks in a throng terminal: a terminal throng starts carries
+`FORCE_HYPERLINK=1`, which is the variable the common Rust and Node link libraries read. Two things
+it deliberately does not do. **It never overrides a `FORCE_HYPERLINK` you set yourself** — neither a
+`0` you set to switch links off nor a `1` you set to force them on; if the variable is already there
+when throng launches, throng leaves it exactly as it is. And **it applies to terminals started
+afterwards, never to one already running**, because a program's environment is fixed when it starts —
+so switch it and open a new terminal. throng also never pretends to be some other terminal: it sets
+that one variable and nothing else.
+
 Terminals belong to the project, but are managed by the daemon, not the window. **Close throng and
 they keep running**; reopen it and they reattach with their scrollback intact. Closing the app
 offers you a three-way choice about what to do with them, and throng leaves no orphaned processes

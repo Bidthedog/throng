@@ -678,19 +678,19 @@ user set. **Independent of every other story** and may run in parallel from Phas
 **Independent Test**: `echo $FORCE_HYPERLINK` in a new terminal with the setting on, with it off, and
 with the variable already set outside throng.
 
-- [ ] T116 [P] [US7] RED unit(ui) `packages/ui/tests/unit/terminal-attach-env.test.ts` — `doAttach`
+- [x] T116 [P] [US7] RED unit(ui) `packages/ui/tests/unit/terminal-attach-env.test.ts` — `doAttach`
   merges `hyperlinkAdvertisementEnv`'s result into **`launch.env`** and **never** into `baseEnv`
   (a de-elevated terminal never receives `baseEnv`: `daemon/src/pty-agent-host.ts:290` sends only
   `env`, `pty-agent-entry.ts:172-179` forwards only `env`), and the setting is read **per attach**,
   so a change applies to the next terminal and never to a running one. Satisfies FR-080, FR-080c;
   R11.
-- [ ] T117 [US7] Add the injected `readTerminalSettings: () => TerminalSettings` to
+- [x] T117 [US7] Add the injected `readTerminalSettings: () => TerminalSettings` to
   `registerTerminalIpc` (`packages/ui/src/main/terminal-ipc.ts:94-115`) and merge the result into
   `launch.env` in `doAttach`, beside the existing `baseEnv: { ...process.env }` (`:283`). Depends on
   T116, T041. Satisfies FR-080 – FR-080c.
-- [ ] T118 [US7] Wire `readTerminalSettings` from the same `configStore` `ShellDetectionService`
+- [x] T118 [US7] Wire `readTerminalSettings` from the same `configStore` `ShellDetectionService`
   already reads, in `packages/ui/src/main/main.ts:1661-1669`. Depends on T117. Satisfies FR-080c.
-- [ ] T119 [P] [US7] RED integration
+- [x] T119 [P] [US7] RED integration
   `packages/platform-windows/tests/integration/terminal-hyperlink-env.integration.test.ts` — spawn a
   **real shell** that echoes its environment, on the shape
   `packages/platform-windows/tests/integration/shell-history.integration.test.ts` already uses:
@@ -698,7 +698,7 @@ with the variable already set outside throng.
   `0`; with the setting off it sees neither a throng-added value nor a changed user value; and in
   none of the three does the environment carry a `WT_SESSION` or a `TERM_PROGRAM` **throng added**.
   **Not an E2E** — the spec's own Assumptions require this layer. Satisfies FR-080 – FR-080d, SC-011.
-- [ ] T120 [P] [US7] Update `docs/quick-start.md` §3 *Shell integration* and `README.md` *Highlights*
+- [x] T120 [P] [US7] Update `docs/quick-start.md` §3 *Shell integration* and `README.md` *Highlights*
   — the hyperlink-advertising setting, the variable it sets, that it applies to terminals started
   afterwards, and that a value the user set is never overridden. Ships with this slice.
   Satisfies FR-090.

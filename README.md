@@ -105,6 +105,12 @@ goal is to pull all of that into a single, simple customisable workspace.
 - **Back and Forward, per panel** — every editor and preview panel keeps its own history of the
   files it has shown, with Back/Forward buttons at the top left of its title bar, `Alt+Left` /
   `Alt+Right`, and the mouse's own back/forward buttons. History persists across restarts.
+- **Clickable file links** — a path printed by a compiler or a test runner, and a hyperlink a program
+  emits, are both followable from a terminal or an editor with Ctrl+click, `Ctrl+Enter` or a menu
+  that offers every destination the link has. A path is only a link if the file is really there, a
+  `foo.ts:42` lands on line 42, and a click never runs an executable. Terminals throng starts
+  **advertise hyperlink support** (`FORCE_HYPERLINK=1`) so programs print real links, without ever
+  overriding a value you set yourself.
 
 This list is throng as it exists today. **What's planned lives in the
 [issue tracker](https://github.com/Bidthedog/throng/issues)**, grouped by
@@ -232,7 +238,13 @@ normally do with that file), `editor`, `preview`, `osExplorer` or `osDefaultProg
 outrank it: a link carrying a **line and column** always opens an editor, because a preview cannot
 reveal one; and a click **never runs an executable, script, shortcut or installer**, which is
 revealed in OS Explorer instead — running one is only ever reached by choosing *Open in OS Default
-Program* from the menu.
+Program* from the menu. Two more switches live there, `editor.links.detectInEditors` and
+`editor.links.detectInTerminals`, both on as shipped: each turns off throng's *detection* of paths in
+that panel type without touching a link a program declared. `terminals.advertiseHyperlinks` (under
+**Terminal**, on as shipped) starts each terminal with `FORCE_HYPERLINK=1` so programs know they may
+print hyperlinks; a `FORCE_HYPERLINK` the launching environment already carries is never overridden
+in either direction, the setting applies to terminals started afterwards rather than to one already
+running, and throng never sets `WT_SESSION` or a borrowed `TERM_PROGRAM`.
 
 **Logs and crash reports** are written to a `logs` folder under the user-data directory (`throng`
 when installed, `throng-dev` for a dev run), so a crash that closes the window leaves evidence
