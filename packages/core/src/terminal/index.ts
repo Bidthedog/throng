@@ -54,7 +54,7 @@ export {
   terminalExitNotice,
 } from './lifecycle.js';
 export { resolveShellFile, type ShellProbe, type ShellResolver } from './resolve-shell.js';
-export { sanitizeSpawnEnv } from './spawn-env.js';
+export { sanitizeSpawnEnv, hyperlinkAdvertisementEnv } from './spawn-env.js';
 export { canRunAsAdmin, shouldRespawnDaemonElevated, shouldDeElevate } from './elevation.js';
 export {
   KITTY_DISAMBIGUATE,

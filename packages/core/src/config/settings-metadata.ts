@@ -23,6 +23,9 @@ import { leavesOfDeclared, type FieldDescriptor, type MetadataRegistry } from '.
 // 044 — imports neither this module nor `app-settings.ts`, so no cycle (see its header).
 import { previewSettingsDescriptors } from './preview-settings.js';
 import { SHIPPED_PREVIEW_PROVIDERS } from '../preview/providers/index.js';
+// 045 — the descriptor's allowed set comes from the same list the parser and
+// `resolveDefaultLinkAction` read, so the three cannot drift (#394).
+import { DEFAULT_LINK_ACTIONS } from '../links/default-action.js';
 
 /** Leaves that are internal bookkeeping, not user-configurable settings. */
 export const SETTINGS_INTERNAL_KEYS: readonly string[] = [
@@ -613,6 +616,56 @@ export const SETTINGS_METADATA: MetadataRegistry = [
    */
   ...previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS),
 
+  /*
+   * Links (045, FR-061 — #394).
+   *
+   * Three together under `Editor · Links`, because FR-061 requires the default link action and both
+   * detection switches "in one place". The fourth link setting, `terminals.advertiseHyperlinks`,
+   * deliberately sits in the flat Terminal group instead: it changes what a terminal is STARTED
+   * with, which is a property of the terminal rather than of links.
+   *
+   * These three are declared CONSECUTIVELY on purpose. `groupDescriptors` buckets by group then
+   * subgroup in declaration order, so a descriptor pushed in between them would split the section
+   * in the editor without any test of the values noticing.
+   */
+  {
+    key: 'editor.links.defaultAction',
+    label: 'Default link action',
+    description:
+      'What Ctrl+click, the Open Link chord and the plain Open Link menu item do to a file link. The named items in the link menu always do what they say, whatever this is set to. Two rules override it: a link that carries a line and column always opens an editor, because a preview cannot reveal a position; and a link to a file the operating system would run is never run by a click — it is shown in the file manager instead, and runs only through Open in OS Default Program.',
+    group: 'Editor',
+    subgroup: 'Links',
+    control: 'select',
+    allowedValues: [...DEFAULT_LINK_ACTIONS],
+    // The whole set, all or none (metadata.ts). Title-Casing `osDefaultProgram` reads wrong, and a
+    // partial map renders one dropdown in two registers.
+    optionLabels: {
+      throng: 'Open in throng',
+      editor: 'Open in Editor',
+      preview: 'Open in Preview',
+      osExplorer: 'Open in OS Explorer',
+      osDefaultProgram: 'Open in OS Default Program',
+    },
+  },
+  {
+    key: 'editor.links.detectInEditors',
+    label: 'Detect file links in editors',
+    description:
+      'Underline paths in editor documents that name a file or folder that exists, so Ctrl+click and the Open Link chord follow them. When off, Ctrl+click and Ctrl+Enter keep their ordinary editor meanings everywhere.',
+    group: 'Editor',
+    subgroup: 'Links',
+    control: 'toggle',
+  },
+  {
+    key: 'editor.links.detectInTerminals',
+    label: 'Detect file links in terminals',
+    description:
+      'Underline paths in terminal output that name a file or folder that exists, so Ctrl+click follows them. This governs paths throng recognises for itself: web links, and the explicit hyperlinks a program chose to emit, keep working when it is off.',
+    group: 'Editor',
+    subgroup: 'Links',
+    control: 'toggle',
+  },
+
   // Navigation (033, FR-069b). Its own group because these govern the Quick Open and Go To Line
   // modals, not an editor panel — the distinction the user reads them by.
   {
@@ -750,6 +803,14 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     min: 0,
     max: 2000,
     step: 50,
+  },
+  {
+    key: 'terminals.advertiseHyperlinks',
+    label: 'Tell programs that links are supported',
+    description:
+      'Start terminal programs with FORCE_HYPERLINK=1, so tools that can emit clickable links — Claude Code among them — do. This applies to terminals started afterwards and does not change one that is already running, because a program’s environment is fixed when it starts. A FORCE_HYPERLINK you have set yourself is never overridden, in either direction. Turning this off does not stop throng recognising paths a program prints as plain text.',
+    group: 'Terminal',
+    control: 'toggle',
   },
 
   // Indentation (016, FR-018/FR-022). The order of precedence is the requirement: what the FILE

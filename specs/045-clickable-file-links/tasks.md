@@ -210,17 +210,17 @@ mapping (FR-026, FR-039a). T022 fails the build on one.
 
 ### 2c. Settings, the chord, and the terminal environment
 
-- [ ] T033 [P] RED unit(core) `packages/core/tests/unit/app-settings.links.test.ts` — the four leaves
+- [x] T033 [P] RED unit(core) `packages/core/tests/unit/app-settings.links.test.ts` — the four leaves
   (`editor.links.defaultAction` shipping `'throng'`, `editor.links.detectInEditors` and
   `editor.links.detectInTerminals` shipping `true`, `terminals.advertiseHyperlinks` shipping `true`):
   defaults, tolerant parse of a wrong type and an unknown enum value, **and a clone round-trip for
   every one** — a field missing from `cloneEditor`/`cloneTerminals` is silently dropped on write
   (`packages/core/src/config/app-settings.ts:1017-1019`). Satisfies FR-050, FR-060, FR-080b.
-- [ ] T034 Implement the four leaves in `packages/core/src/config/app-settings.ts` — interface field,
+- [x] T034 Implement the four leaves in `packages/core/src/config/app-settings.ts` — interface field,
   `DEFAULT_APP_SETTINGS` entry, tolerant parse line and the `clone…` field, four edits each. **No
   `SHIPPED_DEFAULTS_VERSION` bump** (`shipped-defaults.ts:490` clones `DEFAULT_APP_SETTINGS`).
   Depends on T033. Satisfies FR-050, FR-060, FR-080b.
-- [ ] T035 [P] RED unit(core) `packages/core/tests/unit/settings-metadata-links.test.ts` — the four
+- [x] T035 [P] RED unit(core) `packages/core/tests/unit/settings-metadata-links.test.ts` — the four
   descriptors' content, beyond what `settings-metadata.test.ts` already enforces:
   `editor.links.defaultAction` carries `optionLabels` for the **whole** set (all-or-none,
   `metadata.ts:107-120`) with the FR-050 labels verbatim, and its description states that a link
@@ -229,39 +229,39 @@ mapping (FR-026, FR-039a). T022 fails the build on one.
   started afterwards and never overrides a `FORCE_HYPERLINK` the user set (FR-080a, FR-080c); and the
   three link settings share `group: 'Editor'` + `subgroup: 'Links'` while the fourth sits in the flat
   Terminal group. Satisfies FR-061, FR-080c.
-- [ ] T036 Implement the four descriptors in `packages/core/src/config/settings-metadata.ts`.
+- [x] T036 Implement the four descriptors in `packages/core/src/config/settings-metadata.ts`.
   `packages/core/tests/unit/settings-metadata.test.ts` (the completeness gate) must go green without
   being edited. Depends on T035. Satisfies FR-061.
-- [ ] T037 [P] RED unit(core) — edit `packages/core/tests/unit/keybindings-preview.test.ts` at
+- [x] T037 [P] RED unit(core) — edit `packages/core/tests/unit/keybindings-preview.test.ts` at
   `:42-45` (scope is now editor **and** preview), `:56-59` (Ctrl+Enter now resolves in an editor) and
   `:119` (the scope-name column). **Leave `:61-67` exactly as they are** — Ctrl+Enter resolving to
   nothing in a terminal is FR-046. These three ranges are the only edits S3 permits. Satisfies
   FR-045, FR-046, FR-062.
-- [ ] T038 Widen `COMMAND_SCOPES['preview.followLink']` from `PREVIEW_ONLY` to a set containing
+- [x] T038 Widen `COMMAND_SCOPES['preview.followLink']` from `PREVIEW_ONLY` to a set containing
   `editor` and `preview` in `packages/core/src/config/keybindings.ts` (`:147`, `:180`, `:256`; the
   `['Ctrl+Enter']` default at `:408` is unchanged and the **ActionId is not renamed** — a rename
   silently drops every rebinding saved since 044), and rewrite its description in
   `packages/core/src/config/keybindings-metadata.ts:166-173` so it no longer says *"Live in a preview
   only."*. Depends on T037. Satisfies FR-045, FR-062; S3.
-- [ ] T039 Settle **Open item O5** — run `packages/core/tests/unit/keybindings-collision.test.ts`
+- [x] T039 Settle **Open item O5** — run `packages/core/tests/unit/keybindings-collision.test.ts`
   and `packages/core/tests/unit/keybindings-scope.test.ts` against the widened scope and record the
   answer in `specs/045-clickable-file-links/research.md`'s Open items table. Depends on T038.
   Satisfies FR-045.
-- [ ] T040 [P] RED unit(core) `packages/core/tests/unit/spawn-env-hyperlinks.test.ts` — E1–E7 of
+- [x] T040 [P] RED unit(core) `packages/core/tests/unit/spawn-env-hyperlinks.test.ts` — E1–E7 of
   [contracts/settings-and-environment.md](./contracts/settings-and-environment.md) §4 over a fake
   `baseEnv`: absent → `{ FORCE_HYPERLINK: '1' }`; `0`, `1`, a lower-case key and a set-but-empty
   value all → `undefined`; `advertise === false` → `undefined` whatever `baseEnv` holds; and **E7 —
   the result has at most one key and it is `FORCE_HYPERLINK`**, which is FR-080d by construction.
   Satisfies FR-080 – FR-080d, SC-011.
-- [ ] T041 Implement `hyperlinkAdvertisementEnv` in `packages/core/src/terminal/spawn-env.ts`.
+- [x] T041 Implement `hyperlinkAdvertisementEnv` in `packages/core/src/terminal/spawn-env.ts`.
   Depends on T040. Satisfies FR-080 – FR-080d.
-- [ ] T042 [P] RED unit(core) — edit `packages/core/tests/unit/terminal-link-menu.test.ts:20`, the
+- [x] T042 [P] RED unit(core) — edit `packages/core/tests/unit/terminal-link-menu.test.ts:20`, the
   **only** change supersession S1 permits there: a `file:` hyperlink target that **resolves** now has
   a link target, while one that does not, and every `javascript:`/`data:`/`mailto:`/unknown scheme,
   stays inert. Satisfies FR-011, FR-013; S1.
-- [ ] T043 Make `terminalLinkTarget` in `packages/core/src/terminal/link-menu.ts` file-aware, over
+- [x] T043 Make `terminalLinkTarget` in `packages/core/src/terminal/link-menu.ts` file-aware, over
   `classifyTerminalLinkTarget`. Depends on T042, T011. Satisfies FR-011, FR-013.
-- [ ] T044 Export every new module — `links/{types,detect,classify,resolve,targets,default-action,
+- [x] T044 Export every new module — `links/{types,detect,classify,resolve,targets,default-action,
   menu}`, `abstractions/{path-forms,executable-extensions}`, `testing/{path-forms-contract,
   executable-extensions-contract}` — from `packages/core/src/index.ts`. Depends on T009–T043.
 

@@ -192,6 +192,8 @@ export type {
   // 039 FR-020 (#293) — automatic vs manual terminal reload.
   TerminalReloadMode,
   EditorSettings,
+  // 045 FR-050/FR-060 (#394) — the `Editor · Links` block.
+  EditorLinkSettings,
   EditorNavigationSettings,
   EditorOpenOnClick,
   EditorOpenTarget,
@@ -695,6 +697,9 @@ export {
   type ShellProbe,
   type ShellResolver,
   sanitizeSpawnEnv,
+  // 045 FR-080 – FR-080d (#394): what to add to a terminal's environment so programs know throng
+  // renders hyperlinks. At most one key, and it is FORCE_HYPERLINK.
+  hyperlinkAdvertisementEnv,
   canRunAsAdmin,
   shouldRespawnDaemonElevated,
   shouldDeElevate,
@@ -1022,3 +1027,11 @@ export type { IExecutableExtensions } from './abstractions/executable-extensions
 export { detectPathCandidates } from './links/detect.js';
 export { classifyTerminalLinkTarget } from './links/classify.js';
 export type { TerminalLinkKind } from './links/classify.js';
+export { resolveCandidate, isLinkInProject } from './links/resolve.js';
+export type { LinkResolutionContext } from './links/resolve.js';
+export { LINK_TARGETS, linkTargetStates } from './links/targets.js';
+export type { LinkTarget, TargetState } from './links/targets.js';
+export { DEFAULT_LINK_ACTIONS, resolveDefaultLinkAction } from './links/default-action.js';
+export type { DefaultLinkAction } from './links/default-action.js';
+export { fileLinkMenuItems } from './links/menu.js';
+export type { FileLinkMenuItem } from './links/menu.js';
