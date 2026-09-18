@@ -10,6 +10,7 @@ import {
   type OpenApp,
   TERMINAL_OUTPUT_TIMEOUT_MS,
 } from './harness.js';
+import { osc8HalfRuns } from './admin.js';
 
 /*
  * #326 — a wrapped terminal hyperlink was underlined only on its first row.
@@ -145,7 +146,15 @@ test('a wrapped OSC 8 hyperlink is underlined on every row it occupies, as a wra
     })
     .toBeGreaterThan(1);
 
-  // ══ THE DEFECT: the same URL, delivered as an OSC 8 hyperlink ══
+  /*
+   * ══ THE DEFECT: the same URL, delivered as an OSC 8 hyperlink ══
+   *
+   * Only where the OS's ConPTY carries the hyperlink around its text (`osc8HalfRuns`, admin.ts). Below
+   * build 22000 it wraps nothing, and because this link's TEXT is its url, the plain-url provider
+   * would mark every row anyway — the assertion would pass having measured the control twice. So it
+   * is reported NOT RUN there instead.
+   */
+  if (!osc8HalfRuns('the wrapped OSC 8 hover mark (#326)')) return;
   await expect
     .poll(() => hoverMarkedRowsAfterHoveringLink(win, pid, OSC8_URL), {
       timeout: 10_000,

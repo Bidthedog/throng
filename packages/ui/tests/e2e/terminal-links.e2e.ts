@@ -50,8 +50,11 @@ import {
   charPoint,
   firstPanelId,
   linkMarkedText,
+  narrowTerminalWindow,
+  runTypedCommand,
   TERMINAL_OUTPUT_TIMEOUT_MS,
 } from './harness.js';
+import { osc8HalfRuns } from './admin.js';
 
 /**
  * One row carrying both tokens, so they are judged under identical conditions — same panel, same
@@ -198,10 +201,10 @@ test('a renderer-opened window is denied and http(s) routed to the OS opener (#1
 
       await createProject(win, 'LinkHover', root);
       const term = await openTerminal(win, root);
-      await term.click();
-      await win.keyboard.type('powershell -NoProfile -ExecutionPolicy Bypass -File .\\links.ps1');
-      await win.keyboard.press('Enter');
-      await expect(term).toContainText(MARKER, { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
+      await runTypedCommand(win, term, 'powershell -NoProfile -ExecutionPolicy Bypass -File .\\links.ps1', {
+        echoed: 'links.ps1',
+        output: MARKER,
+      });
 
       // `.last()` is the OUTPUT row rather than the echoed command line, which carries neither token.
       const row = win.locator('.xterm-rows > div', { hasText: MARKER }).last();
@@ -307,20 +310,12 @@ test('a renderer-opened window is denied and http(s) routed to the OS opener (#1
        * ══ T186 — each link kind, soft-wrapped, is marked on EVERY row it occupies ══
        *
        * The window is narrowed to its minimum so each fixture link wraps, and the screen cleared so
-       * the whole fixture is in view — the idle scan marks what is IN VIEW (FR-136).
+       * the whole fixture is in view — the idle scan marks what is IN VIEW (FR-136). The narrowing
+       * waits for the pty to take the new width and the prompt to answer at it before anything is
+       * typed; see `narrowTerminalWindow`. This test owns its app, so nothing needs restoring.
        */
-      await app.evaluate(({ BrowserWindow }) => {
-        const [w] = BrowserWindow.getAllWindows();
-        if (!w) return;
-        // A maximized window ignores a resize, and the links would then not wrap at all.
-        if (w.isMaximized()) w.unmaximize();
-        const [, height] = w.getContentSize();
-        w.setContentSize(600, height);
-      });
-      await term.click();
-      await win.keyboard.type('Clear-Host; node marks.js');
-      await win.keyboard.press('Enter');
-      await expect(term).toContainText('MARKS_DONE', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
+      await narrowTerminalWindow(app, win, term, 600, 'WIDTHSETTLED1');
+      await runTypedCommand(win, term, 'Clear-Host; node marks.js', { echoed: 'marks.js', output: 'MARKS_DONE' });
       await win.mouse.move(2, 2);
 
       const rows = win.locator('.xterm-rows > div');
@@ -334,11 +329,21 @@ test('a renderer-opened window is denied and http(s) routed to the OS opener (#1
         return Array.from({ length: end - start - 1 }, (_, i) => start + 1 + i);
       };
 
+      /*
+       * The OSC 8 case, and all of T213 below, run only where the OS's ConPTY carries a hyperlink
+       * around its text (`osc8HalfRuns` in admin.ts). Below build 22000 it wraps nothing: the OSC 8
+       * case would fail for the OS's reason, and — worse — every DEAD hyperlink would "show no mark"
+       * because no hyperlink arrived at all, a pass that proves nothing. Asked once, so the reason is
+       * printed once.
+       */
+      const oscRuns = osc8HalfRuns('the wrapped OSC 8 mark (T186) and the dead-hyperlink cases with their live control (T213)');
       const cases = [
         { name: 'a web url', from: 'WRAPWEB_BEGIN', to: 'WRAPPATH_BEGIN', text: WRAPPED.web },
         { name: 'a detected path', from: 'WRAPPATH_BEGIN', to: 'WRAPOSC_BEGIN', text: WRAPPED.path },
-        { name: 'an OSC 8 hyperlink', from: 'WRAPOSC_BEGIN', to: 'WRAP_END', text: WRAPPED.oscText },
-      ] as const;
+        ...(oscRuns
+          ? [{ name: 'an OSC 8 hyperlink', from: 'WRAPOSC_BEGIN', to: 'WRAP_END', text: WRAPPED.oscText }]
+          : []),
+      ];
       for (const c of cases) {
         const indices = await rowsBetween(c.from, c.to);
         // ANTI-VACUITY: the link really did wrap. One row would make "every row" true for free.
@@ -367,7 +372,9 @@ test('a renderer-opened window is denied and http(s) routed to the OS opener (#1
        *
        * The live `file:` hyperlink is the control, and it goes first: once it is marked, main has
        * answered the idle scan's `file:` requests, so an unmarked dead one is judged, not pending.
+       * The whole block is the OSC 8 half — see `oscRuns` above.
        */
+      if (!oscRuns) return;
       const rowOf = (text: string): Locator => win.locator('.xterm-rows > div', { hasText: text }).last();
       const liveRow = rowOf(LIVE_TEXT);
       await expect

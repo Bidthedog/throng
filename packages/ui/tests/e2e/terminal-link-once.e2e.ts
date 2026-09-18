@@ -10,14 +10,16 @@ import {
   charPoint,
   cleanupTemp,
   linkMarkedText,
+  narrowTerminalWindow,
   openedPaths,
+  runTypedCommand,
   stayedAbsent,
   TYPE_DELAY,
   TERMINAL_OUTPUT_TIMEOUT_MS,
   type AppOptions,
   type OpenApp,
 } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { osc8HalfRuns, skipIfElevated } from './admin.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -231,12 +233,17 @@ async function openTerminal(win: Page, root: string): Promise<Locator> {
  * The script must still be a FILE — see `writeLinkScript` above for why typing the sequence at the
  * prompt breaks the test. This changes only HOW it is launched, and deliberately keeps the URL out
  * of the typed command line, which is the property that docblock depends on.
+ *
+ * Typed through `runTypedCommand`, which waits for the shell to echo the script's NAME before it
+ * presses Enter — so `script` must be a name this terminal has not shown yet, or that wait is met by
+ * an earlier line.
  */
-async function runScript(win: Page, term: Locator, printed: string): Promise<void> {
-  await term.click();
-  await win.keyboard.type('powershell -NoProfile -ExecutionPolicy Bypass -File .\\lnk.ps1');
-  await win.keyboard.press('Enter');
-  await expect(term).toContainText(printed, { timeout: 25_000 });
+async function runScript(win: Page, term: Locator, printed: string, script = 'lnk.ps1'): Promise<void> {
+  await runTypedCommand(win, term, `powershell -NoProfile -ExecutionPolicy Bypass -File .\\${script}`, {
+    echoed: script,
+    output: printed,
+    timeout: 25_000,
+  });
 }
 
 /**
@@ -294,6 +301,14 @@ async function clickLink(win: Page, text: string, opts: { ctrl: boolean }): Prom
   if (opts.ctrl) await win.keyboard.up('Control');
 }
 
+/*
+ * Why this one passes on the gate's Server 2022 runner, whose ConPTY carries no OSC 8 around its text
+ * (`osc8HalfRuns` in admin.ts): the link TEXT is the url, so the plain-text provider finds the same
+ * url in the same cells and the Ctrl+click opens it once all the same. Its claim — exactly ONE open
+ * for a url that both mechanisms could match — holds either way, so it is not guarded. The cases
+ * below whose text is NOT the url (`CLICKTHELABEL`, the alt screen, the mouse-owning program) are
+ * `skipIfElevated`, and every GitHub runner is elevated, which is why they have never failed there.
+ */
 test('Ctrl+clicking an OSC 8 link whose text IS the url opens the browser exactly once', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-link1-'));
   const url = 'https://example.com/osc8-same-text';
@@ -375,8 +390,10 @@ async function ctrlClickSecondRows(
   const web = `https://example.com/wrapped/${'uvwxyzabcd'.repeat(9)}`;
   const oscUri = 'https://example.com/osc8-wrapped-target';
   const oscText = `OSCWRAP_${'klmnopqrst'.repeat(10)}`;
+  // A name of its own: `runScript` waits for the shell to echo it, and `lnk.ps1` is already on screen.
+  const script = 'lnk2w.ps1';
   writeFileSync(
-    join(root, 'lnk.ps1'),
+    join(root, script),
     [
       '$e=[char]27',
       "Clear-Host",
@@ -391,16 +408,11 @@ async function ctrlClickSecondRows(
     ].join('\n'),
   );
 
-  const original = await app.evaluate(({ BrowserWindow }) => {
-    const [w] = BrowserWindow.getAllWindows();
-    const maximized = w.isMaximized();
-    if (maximized) w.unmaximize();
-    const size = w.getContentSize();
-    w.setContentSize(600, size[1]);
-    return { maximized, size };
-  });
+  // Narrowed, and returned only once the pty has taken the new width and the prompt has answered at
+  // it — typing straight into the resize lost the whole line on the gate runner (see the helper).
+  const restore = await narrowTerminalWindow(app, win, term, 600, 'WIDTHSETTLED2');
   try {
-    await runScript(win, term, 'WRAP2END');
+    await runScript(win, term, 'WRAP2END', script);
     await win.mouse.move(2, 2);
     const rows = win.locator('.xterm-rows > div');
     const texts = (await rows.allTextContents()).map((t) => t.replace(/\u00a0/g, ' ').trimEnd());
@@ -452,24 +464,25 @@ async function ctrlClickSecondRows(
     await ctrlPressHere();
     await expect.poll(() => openedPaths(app), { timeout: 5000 }).toHaveLength(1);
 
-    // An OSC 8 hyperlink: its TARGET, never its text.
-    await opens.reset();
-    await armSecondRow(secondRow('WRAP2OSC'), 'the OSC 8 hyperlink');
-    await ctrlPressHere();
-    await expect.poll(() => opens.urls(), { timeout: 5000 }).toEqual([oscUri]);
+    // An OSC 8 hyperlink: its TARGET, never its text. Only where the OS's ConPTY carries the
+    // hyperlink around its text at all — below build 22000 it wraps nothing, so there is no link on
+    // that row to follow, and the half is reported NOT RUN rather than failed or passed.
+    const oscRuns = osc8HalfRuns('the wrapped OSC 8 second-row follow (T186)');
+    if (oscRuns) {
+      await opens.reset();
+      await armSecondRow(secondRow('WRAP2OSC'), 'the OSC 8 hyperlink');
+      await ctrlPressHere();
+      await expect.poll(() => opens.urls(), { timeout: 5000 }).toEqual([oscUri]);
+    }
 
     // A SECOND, later open of any of them would still be caught — see fenceOnEcho's doc comment.
     await fenceOnEcho(win, term, 'LINKFENCE2W');
-    expect(await opens.urls()).toEqual([oscUri]);
+    expect(await opens.urls()).toEqual([oscRuns ? oscUri : web]);
     const followed = await openedPaths(app);
     expect(followed, 'the wrapped detected path was followed more than once').toHaveLength(1);
     expect(samePathish(followed[0], outsideFile), `the wrapped path opened ${followed[0]}, not ${outsideFile}`).toBe(true);
   } finally {
-    await app.evaluate(({ BrowserWindow }, o) => {
-      const [w] = BrowserWindow.getAllWindows();
-      w.setContentSize(o.size[0], o.size[1]);
-      if (o.maximized) w.maximize();
-    }, original);
+    await restore();
     cleanupTemp(outside);
   }
 }
@@ -907,7 +920,10 @@ test('Ctrl+clicking a link in a program that OWNS THE MOUSE opens it once, not a
        * The second kind: an OSC 8 hyperlink whose target is a `file:` URI naming a FOLDER — the
        * maintainer's status line, and the report the feature started from (SC-005). A folder offers
        * only the file manager (FR-030), so one Ctrl+click is exactly one `openPath`.
+       *
+       * Only where the OS's ConPTY carries a hyperlink around its text — `osc8HalfRuns` in admin.ts.
        */
+      if (!osc8HalfRuns('the OSC 8 file: folder hyperlink in a mouse-owning program (T122)')) return;
       const folderAt = await armFileLink(win, folderText);
       await resetOpenedPaths(app);
 

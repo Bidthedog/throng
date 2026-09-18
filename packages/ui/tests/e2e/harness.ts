@@ -1448,6 +1448,132 @@ export async function linkMarkedText(row: Locator, opts: { hover?: boolean } = {
 }
 
 /**
+ * What throng's own counters say about one terminal panel — attached to a failure so a red on a
+ * machine nobody can reach says WHERE the typing stopped: never written (the renderer dropped it),
+ * written but not acknowledged (the daemon or the pty), or acknowledged and simply never echoed (the
+ * shell). Best-effort: a page that refuses to evaluate yields a note, never a second failure.
+ */
+export async function terminalEvidence(win: Page, term: Locator): Promise<string> {
+  try {
+    const panelId = ((await term.getAttribute('data-testid')) ?? '').replace(/^terminal-/, '');
+    const snapshot = await win.evaluate((pid) => {
+      const fn = (window as unknown as { __throngTerminalDiagnostics?: () => Record<string, unknown> })
+        .__throngTerminalDiagnostics;
+      const entry = fn?.()[pid] as { input?: unknown; writes?: string[] } | undefined;
+      return entry === undefined ? null : { input: entry.input, lastWrites: (entry.writes ?? []).slice(-16) };
+    }, panelId);
+    const screen = await term.locator('.xterm-screen').boundingBox();
+    return JSON.stringify({ panelId, screenWidth: screen?.width ?? null, diagnostics: snapshot });
+  } catch (err) {
+    return `(no terminal evidence: ${String(err)})`;
+  }
+}
+
+/** Run `step`, and if it fails, fail with the terminal's own evidence attached. */
+async function withTerminalEvidence(win: Page, term: Locator, what: string, step: () => Promise<void>): Promise<void> {
+  try {
+    await step();
+  } catch (cause) {
+    throw new Error(`${what}\nterminal evidence: ${await terminalEvidence(win, term)}`, { cause });
+  }
+}
+
+/**
+ * Type a command line at a live shell prompt and run it — in three observed steps, not one gesture.
+ *
+ *   1. Click the terminal, and type at {@link TYPE_DELAY}: at zero delay keystrokes race the pty and
+ *      can arrive scrambled (see `fenceOnEcho` in `terminal-link-once.e2e.ts`).
+ *   2. Wait for the shell to ECHO `echoed` BEFORE pressing Enter. That is the proof the keystrokes
+ *      reached a shell that was reading them; without it, an Enter sent into a line that never
+ *      arrived fails later, on the output wait, with a message that blames the feature under test.
+ *   3. Press Enter and wait for `output`.
+ *
+ * `echoed` must be text the command line contains and nothing on screen already does — otherwise
+ * step 2 is satisfied by an earlier line. Each step's failure carries {@link terminalEvidence}.
+ */
+export async function runTypedCommand(
+  win: Page,
+  term: Locator,
+  command: string,
+  expected: { readonly echoed: string; readonly output: string; readonly timeout?: number },
+): Promise<void> {
+  const timeout = expected.timeout ?? TERMINAL_OUTPUT_TIMEOUT_MS;
+  await term.click();
+  await win.keyboard.type(command, { delay: TYPE_DELAY });
+  await withTerminalEvidence(win, term, `the shell never echoed the typed ${JSON.stringify(expected.echoed)}`, () =>
+    expect(term).toContainText(expected.echoed, { timeout }),
+  );
+  await win.keyboard.press('Enter');
+  await withTerminalEvidence(win, term, `${JSON.stringify(command)} never printed ${JSON.stringify(expected.output)}`, () =>
+    expect(term).toContainText(expected.output, { timeout }),
+  );
+}
+
+/**
+ * Narrow the window so terminal output wraps, returning only once the terminal has CONFORMED to the
+ * new width AND its PowerShell prompt has answered at that width. Resolves to a restore function.
+ *
+ * ══ WHY NOT JUST RESIZE AND TYPE ══
+ *
+ * A window resize reaches the shell by a chain of hops — the renderer's ResizeObserver (debounced),
+ * the daemon's grid, the pty, and ConPTY's repaint of the viewport, which PSReadLine then redraws its
+ * line over. Typing straight after `setContentSize` sends the keystrokes into the middle of that
+ * chain. On the gate's Server 2022 runner (build 20348) that sequence lost the whole typed line 3/4
+ * — the prompt stayed empty for 25s, the command never even echoed (gate run 35384128802) — while
+ * it passed 4/4 on the run before (35381378387) and every time on Windows 11. WHICH hop swallowed
+ * the line is a HYPOTHESIS, not a measurement: nothing on that runner recorded throng's input
+ * counters, which is why every step here now fails with {@link terminalEvidence} attached. What is
+ * known is that the line was typed into a resize in flight, and that is the part this removes.
+ * So the wait is on two positive facts, never a duration:
+ *   - the xterm's screen got narrower: xterm sizes itself ONLY from the grid the daemon broadcasts
+ *     back after resizing the pty (`conformGrid` in `use-terminal.ts`), so this is the pty resized;
+ *   - a command typed at the new width is echoed AND executed: `echo ('A'+'B')` prints `AB`, a
+ *     string its own command line does not contain, so the wait cannot be met by the echo alone.
+ */
+export async function narrowTerminalWindow(
+  app: ElectronApplication,
+  win: Page,
+  term: Locator,
+  width: number,
+  token: string,
+): Promise<() => Promise<void>> {
+  const screen = term.locator('.xterm-screen');
+  const before = (await screen.boundingBox())?.width ?? 0;
+  const original = await app.evaluate(({ BrowserWindow }, w) => {
+    const [bw] = BrowserWindow.getAllWindows();
+    const maximized = bw.isMaximized();
+    // A maximized window ignores a resize, and the output would then not wrap at all.
+    if (maximized) bw.unmaximize();
+    const size = bw.getContentSize();
+    bw.setContentSize(w, size[1]);
+    return { maximized, size };
+  }, width);
+  const restore = async (): Promise<void> => {
+    await app.evaluate(({ BrowserWindow }, o) => {
+      const [bw] = BrowserWindow.getAllWindows();
+      bw.setContentSize(o.size[0], o.size[1]);
+      if (o.maximized) bw.maximize();
+    }, original);
+  };
+  try {
+    await withTerminalEvidence(win, term, `the terminal never conformed to a ${width}px window`, () =>
+      expect
+        .poll(async () => (await screen.boundingBox())?.width ?? before, { timeout: TERMINAL_OUTPUT_TIMEOUT_MS })
+        .toBeLessThan(before),
+    );
+    const half = Math.ceil(token.length / 2);
+    await runTypedCommand(win, term, `echo ('${token.slice(0, half)}'+'${token.slice(half)}')`, {
+      echoed: `'${token.slice(half)}')`,
+      output: token,
+    });
+  } catch (err) {
+    await restore();
+    throw err;
+  }
+  return restore;
+}
+
+/**
  * The rendered text of something that redraws, read once it has STOPPED redrawing (034 FR-019).
  *
  * `geom()` is this idea applied to geometry; this is the same idea applied to text, and it exists
