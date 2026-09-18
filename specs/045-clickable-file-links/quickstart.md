@@ -125,6 +125,26 @@ asserts (FR-072).
 
 Also record: the FR-073 visible-range scan cost on the largest fixture document (Open item O6).
 
+### Measured 2026-09-18, commit `3cb9c18c`, Windows 11 workstation
+
+A program streaming **50,000 lines** into a `windows-powershell` panel, every line carrying four path
+shapes (`src/pkg/fileN.ts:L:7`, a workspace path, a `D:/…` absolute and a `./` relative) — the worst
+case for a detector, since every line holds candidates. Timed from the keystroke that starts the
+program to its completion marker appearing, driven through the app.
+
+| Detection | Run 1 | Run 2 |
+|---|---|---|
+| **On** | 5730 ms | 5216 ms |
+| **Off** | 5237 ms | 5221 ms |
+
+Within noise of each other — the spread between the two *on* runs is larger than the gap between on
+and off — so SC-004 holds: streaming output costs the same with file links on.
+
+**One measurement trap, recorded because it produced a confident wrong answer first.** The completion
+marker must be unique per run. With a fixed marker, the previous run's copy is still on screen and
+the wait returns immediately, which read as 626 ms against 4539 ms and looked exactly like a 7×
+regression. The alternation across runs — fast, slow, fast — is the tell.
+
 ## 6. The one thing only a hands-on session can answer
 
 **Does Claude Code emit OSC 8 in a throng terminal under `FORCE_HYPERLINK=1`?** That is a property

@@ -658,7 +658,7 @@ switches have nothing to gate until the surfaces exist, so in practice T112 foll
   `packages/ui/src/renderer/terminal/file-link-provider.ts` on the terminal switch, and reconfigure
   the link compartment in `packages/ui/src/renderer/editor/use-editor.ts` on the editor switch. A
   switch **never** touches an explicit hyperlink. Depends on T112, T071, T091. Satisfies FR-060.
-- [ ] T114 [P] [US6] Record the **SC-004** measurement in
+- [x] T114 [P] [US6] Record the **SC-004** measurement in
   `specs/045-clickable-file-links/quickstart.md` §5 — streaming ≥ 50,000 lines with the switch on and
   off, expecting ≤ 5% — and the FR-073 visible-range scan cost on the largest fixture document,
   closing **Open item O6**. This is measured and annotated, never asserted: a wall-clock bound on a
