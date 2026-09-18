@@ -150,6 +150,16 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The band that follows the pointer down a list of entries. Leave it empty and it takes the open project’s own colour.',
   },
+  'colours.linkUnderline': {
+    label: 'Link Underline',
+    description:
+      'The dashed underline that marks a link in an editor or a terminal. Unset, it follows the accent colour.',
+  },
+  'colours.linkUnderlineHover': {
+    label: 'Link Hover Underline',
+    description:
+      'The solid underline a link takes while the pointer is over it. Unset, it follows the link underline.',
+  },
   'colours.accentText': {
     label: 'Highlighted Option Text',
     description: 'The text of a menu or dropdown option while it is hovered or selected.',

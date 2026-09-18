@@ -91,8 +91,10 @@ describe('planThemeUpgrade (010, FR-015a)', () => {
  * hand-testing build of this branch) draws the new toggle as an empty box. 043's 6 → 7 is the precedent.
  */
 describe('shipped-defaults version 9 — the syncScroll icon (044 FR-122c)', () => {
-  it('is version 9', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(9);
+  // 045 FR-138 moved the version on to 10 (`theme-link-tokens.test.ts` pins it); what this block
+  // guards is that the syncScroll fill is still inside the sequence.
+  it('is at least version 9', () => {
+    expect(SHIPPED_DEFAULTS_VERSION).toBeGreaterThanOrEqual(9);
   });
 
   /** A theme as a version-8 install holds it: everything shipped, except the token 9 adds. */

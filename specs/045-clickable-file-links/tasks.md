@@ -885,7 +885,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   retired values and a junk one yields no `defaultAction` and the other leaves intact, **and parse →
   serialise → parse → serialise is a fixed point** — the idempotent re-run (FR-113). One task
   because both halves edit the same two files. Satisfies FR-061, FR-112, FR-113, FR-120.
-- [ ] T144 [US9] GREEN `packages/core/src/config/app-settings.ts` (interface, default, `linkSettings`,
+- [x] T144 [US9] GREEN `packages/core/src/config/app-settings.ts` (interface, default, `linkSettings`,
   `cloneEditor`: − `defaultAction`, + `existenceCheckTimeoutMs`) and
   `packages/core/src/config/settings-metadata.ts` (− the descriptor, with a retirement comment on the
   `explorer.openMode` pattern at `:353`; + the timeout descriptor, the three `Editor · Links`
@@ -937,7 +937,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   `previewIsDefault` with no position and an enabled provider, else `editor`; an in-project
   executable → `editor` (FR-114); and a type-level assertion (`expectTypeOf`) that the result type
   excludes `'osDefaultProgram'` (FR-111). Satisfies FR-110, FR-111, FR-114.
-- [ ] T156 [US8] GREEN `packages/core/src/links/default-action.ts` (`ClickTarget`, − `DefaultLinkAction`,
+- [x] T156 [US8] GREEN `packages/core/src/links/default-action.ts` (`ClickTarget`, − `DefaultLinkAction`,
   − `DEFAULT_LINK_ACTIONS`, − the fallback) and `packages/core/src/index.ts` exports. Depends on T155.
   **One commit with T144 and T158.**
 - [ ] T157 [P] [US8] RED component — update, as the supersessions permit,
@@ -968,7 +968,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   `packages/ui/tests/unit/terminal-url.test.ts`, run against core's `WEB_URL_REGEX`, plus
   `detectWebLinks` spans and `scanLinkLine`: web spans and path candidates together, no path
   candidate overlapping a web span (D9 – D11). Satisfies FR-009, FR-102, FR-104.
-- [ ] T162 [US8] GREEN `packages/core/src/links/web-url.ts` (moved byte-for-byte),
+- [x] T162 [US8] GREEN `packages/core/src/links/web-url.ts` (moved byte-for-byte),
   `packages/core/src/links/scan-line.ts`, `packages/core/src/index.ts`;
   `packages/ui/src/renderer/terminal/terminal-url.ts` re-exports core's pattern;
   `packages/ui/src/renderer/terminal/file-link-provider.ts` takes its claims from `scanLinkLine`.
@@ -1126,7 +1126,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
   shipped theme's token set, each has exactly one descriptor, both sit in the **General** area
   (`assertThemeAreaGroups`, `assertEveryKeyDescribed`), and the shipped-defaults version test sees the
   bump. Satisfies FR-138.
-- [ ] T182 [US10] GREEN `packages/core/src/config/theme.ts`, `packages/core/src/config/theme-metadata.ts`,
+- [x] T182 [US10] GREEN `packages/core/src/config/theme.ts`, `packages/core/src/config/theme-metadata.ts`,
   and `SHIPPED_DEFAULTS_VERSION` in `packages/core/src/config/shipped-defaults.ts` per its own rule.
   Depends on T181.
 - [ ] T183 [US10] GREEN `packages/ui/src/renderer/editor/link-decorations.ts` — the mark's theme

@@ -189,6 +189,10 @@ export const THRONG_THEME: Theme = {
     text: '#e6ebf2',
     textMuted: '#93a0b4',
     accent: '#6aa3ff',
+    /* 045 FR-138 — the underline that marks a link in an editor or a terminal: dashed at rest, solid
+       on hover. The link's TEXT keeps its own colour. Both follow `accent` (see TOKEN_PARENT). */
+    linkUnderline: '#6aa3ff',
+    linkUnderlineHover: '#6aa3ff',
     danger: '#e5534b',
     /* 018 follow-up — an ERROR NOTICE has its own surface.
      *
@@ -630,12 +634,17 @@ export const OPTIONAL_THEME_COLOUR_TOKENS: readonly string[] = Object.freeze([
 export const TOKEN_PARENT: Readonly<Record<string, string>> = Object.freeze({
   inputSurface: 'surface',
   hoverSurface: 'surface',
+  // 045 FR-138 — the link underline. A theme authored before these tokens underlines its links in its
+  // own accent, and one that sets only the at-rest colour gets it on hover too. The first chain two
+  // deep, which is why `resolveSplitColour` walks rather than looking one step up.
+  linkUnderline: 'accent',
+  linkUnderlineHover: 'linkUnderline',
 });
 
 /**
  * Resolve one colour token, honouring the split's parent fallback:
  *
- *     theme.colours[token] ?? theme.colours[parent] ?? THRONG_THEME.colours[token]
+ *     theme.colours[token] ?? theme.colours[parent] ?? theme.colours[grandparent] ?? … ?? THRONG_THEME.colours[token]
  *
  * Every consumer must go through this — not just `toCssVariables()`. The terminal panel reads
  * `theme.colours.*` straight from TypeScript, and the drag-ghost window resolves colours in the main
@@ -657,9 +666,14 @@ export function resolveSplitColour(theme: Theme, token: string): string | undefi
   const own = colours[token];
   if (set(own)) return own;
 
-  const parent = TOKEN_PARENT[token];
-  const inherited = parent === undefined ? undefined : colours[parent];
-  if (set(inherited)) return inherited;
+  // Walk the chain: `linkUnderlineHover` → `linkUnderline` → `accent`. Bounded by the map's size, so
+  // a cycle written into TOKEN_PARENT by mistake ends rather than spins.
+  let parent = TOKEN_PARENT[token];
+  for (let hops = 0; parent !== undefined && hops < Object.keys(TOKEN_PARENT).length; hops += 1) {
+    const inherited = colours[parent];
+    if (set(inherited)) return inherited;
+    parent = TOKEN_PARENT[parent];
+  }
 
   return THRONG_THEME.colours[token];
 }
