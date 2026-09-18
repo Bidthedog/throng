@@ -81,8 +81,16 @@ export interface LinkResolutionRequest {
   readonly kind: 'detectedPath' | 'fileHyperlink';
   /** FR-022 / FR-023: the editor's own folder, or the terminal's live cwd. Absent when unknown. */
   readonly baseDirectory?: string;
-  /** The panel the link was seen in. Main derives the OWNING PROJECT from it — never the renderer. */
+  /** The panel the link was seen in. Identifies the asker; carries no authority of its own. */
   readonly panelId: string;
+  /**
+   * FR-021 / I2 (added 2026-09-18). The project the panel belongs to, as an **ID** — main derives
+   * the ROOT from it. See the amendment in
+   * [contracts/settings-and-environment.md](./contracts/settings-and-environment.md) §3: main holds
+   * no panel→project map, and the `authoritative()` precedent takes an id and replaces the root.
+   * Absent for a panel with no owning project, which judges every target outside one (M3).
+   */
+  readonly originProjectId?: string;
 }
 
 export interface ResolvedLink {
@@ -203,7 +211,9 @@ export class FileLinkResolver {
     readonly fs: IFileSystem;
     readonly pathForms: IPathForms;
     readonly executables: IExecutableExtensions;
-    readonly projectRootFor: (panelId: string) => string | null;   // the authoritative() precedent
+    // The authoritative() precedent: an ID in, a ROOT out (amended 2026-09-18 — it took a panelId,
+    // and main has no panel→project map).
+    readonly projectRootFor: (originProjectId: string | undefined) => string | null;
     readonly previewRegistry: PreviewProviderRegistry;
     readonly readPreviewSettings: () => PreviewSettings;
   });

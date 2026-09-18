@@ -40,8 +40,20 @@ export interface LinkResolutionRequest {
   readonly kind: 'detectedPath' | 'fileHyperlink';
   /** FR-022 / FR-023: the editor's own folder, or the terminal's live cwd. Absent when unknown. */
   readonly baseDirectory?: string;
-  /** The panel the link was seen in. Main derives the OWNING PROJECT from it — never the renderer. */
+  /** The panel the link was seen in. Identifies the asker; carries no authority of its own. */
   readonly panelId: string;
+  /**
+   * FR-021 / I2. The project the panel belongs to (`Panel.originProjectId`), as an **ID**.
+   *
+   * The renderer names the id and **main derives the ROOT from it** — the `authoritative()`
+   * precedent (`ui/src/main/editor-ipc.ts:71-83`), where a renderer's `ownerProjectId` is accepted
+   * and its `ownerRoot` is replaced by main's own. The distinction is the whole confinement: an id
+   * is a claim main can check against its project cache, while a root would be a claim main could
+   * only take on trust, and a renderer that could name a root could name `C:\`.
+   *
+   * Absent for a panel with no owning project, which judges every target outside one (M3).
+   */
+  readonly originProjectId?: string;
 }
 
 export interface ResolvedLink {

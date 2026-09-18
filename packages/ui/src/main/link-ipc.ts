@@ -41,10 +41,14 @@ export interface LinkIpcService {
 const KINDS = new Set(['detectedPath', 'fileHyperlink']);
 
 /**
- * I1/I2. Rebuild the request from the four fields it is allowed to have, or `null`.
+ * I1/I2. Rebuild the request from the five fields it is allowed to have, or `null`.
  *
  * Written as a whitelist rather than a delete-list on purpose: a delete-list has to be updated every
  * time someone invents a new field to smuggle, and it fails open when nobody does.
+ *
+ * `originProjectId` is an **ID and not a root**, and the difference is the confinement: main looks
+ * the id up in its own project cache, so a renderer naming one it does not own gets nothing, while
+ * a renderer able to name a ROOT could name `C:\`. Same reasoning as `authoritative()`.
  */
 function sanitise(payload: unknown): LinkResolutionRequest | null {
   if (typeof payload !== 'object' || payload === null) return null;
@@ -59,6 +63,9 @@ function sanitise(payload: unknown): LinkResolutionRequest | null {
     // FR-022's "an untitled buffer supplies none" is already the handled case.
     baseDirectory: typeof raw.baseDirectory === 'string' ? raw.baseDirectory : undefined,
     panelId: raw.panelId,
+    // Absent rather than wrong, and absent means "no owning project" — which judges every target
+    // outside one (M3), the safe reading of a claim main could not parse.
+    originProjectId: typeof raw.originProjectId === 'string' ? raw.originProjectId : undefined,
   };
 }
 

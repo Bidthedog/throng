@@ -42,7 +42,14 @@ import {
   SHIPPED_PREVIEW_PROVIDERS,
   providersTurnedOff,
 } from '@throng/core';
-import type { IClipboard, IFileSystem, IForegroundHandoff, IShellIntegration } from '@throng/core';
+import type {
+  IClipboard,
+  IExecutableExtensions,
+  IFileSystem,
+  IForegroundHandoff,
+  IPathForms,
+  IShellIntegration,
+} from '@throng/core';
 import { createUiContainer, UI_TYPES } from './composition-root.js';
 import { appIcon } from './app-icon.js';
 import { registerOpenExternalIpc } from './external-url.js';
@@ -94,6 +101,8 @@ import { registerGhostIpc, setGhostTheme, disposeGhost } from './ghost-window.js
 import { revealWhenPainted } from './reveal-when-painted.js';
 import { WindowManager } from './window-manager.js';
 import { pickFolder } from './pick-folder.js';
+import { FileLinkResolver } from './file-link-resolver.js';
+import { registerLinkIpc } from './link-ipc.js';
 import { openSubWorkspace } from './subworkspace-open.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { TerminalReconnect } from './terminal-reconnect.js';
@@ -1202,6 +1211,35 @@ if (isPrimaryInstance)
   void refreshProjectsCache().then((changed) => {
     for (const root of changed) projectFileIndex.refresh(root);
   });
+  /*
+   * 045 (#394) — the ONE file-link authority, and the three channels both surfaces reach it by.
+   *
+   * It is built HERE rather than in the container because its collaborators are: the project cache
+   * above, the shell integration, the preview registry and the live settings are all in this scope
+   * already, and nothing inside the resolver reaches for any of them itself. That is 043's recorded
+   * continuation, unchanged and unwidened — the container owns the SEAMS (`FileSystem`,
+   * `PathForms`, `ExecutableExtensions`), and this file owns the graph built from them.
+   *
+   * `projectRootFor` is the whole of I2. The renderer names a project ID — `Panel.originProjectId`,
+   * which it legitimately owns — and this closure turns it into a root from MAIN's own daemon-fed
+   * cache. An id main does not recognise answers `null`, which judges every target outside a
+   * project (M3): a lookup that failed cannot prove a file is in scope, and a check that gives up
+   * and says yes is not a check. It is the same shape, and the same reasoning, as `authoritative()`
+   * in `editor-ipc.ts`.
+   */
+  const fileLinkResolver = new FileLinkResolver({
+    fs: fileSystem,
+    pathForms: container.get<IPathForms>(UI_TYPES.PathForms),
+    executables: container.get<IExecutableExtensions>(UI_TYPES.ExecutableExtensions),
+    projectRootFor: (originProjectId) =>
+      originProjectId === undefined
+        ? null
+        : ([...projectsByRoot.values()].find((p) => p.id === originProjectId)?.rootFolder ?? null),
+    previewRegistry: SHIPPED_PREVIEW_PROVIDERS,
+    readPreviewSettings: () => currentSettings.editor.previews,
+  });
+  fileLinkResolver.setShell(shellIntegration);
+  registerLinkIpc(ipcMain, fileLinkResolver);
   /*
    * FR-069c's other half: an `explorer.excludeGlobs` change must reach the INDEX, not only the tree.
    *

@@ -69,8 +69,36 @@ Three channels, all `ipcRenderer.invoke`, all registered in `ui/src/main/link-ip
 
 | # | Rule |
 |---|---|
-| I1 | The request carries a **link**, never a resolved path. Main resolves it from `text`, `kind`, `baseDirectory` and `panelId`. |
-| I2 | The owning project root comes from `panelId` in **main** (the `authoritative()` precedent, `editor-ipc.ts:71-83`), never from the renderer. |
+| I1 | The request carries a **link**, never a resolved path. Main resolves it from `text`, `kind`, `baseDirectory`, `panelId` and `originProjectId`. |
+| I2 | The owning project **root** is derived in **main** from the `originProjectId` the renderer names (the `authoritative()` precedent, `editor-ipc.ts:71-83`). The renderer never supplies a root. |
+
+### Amendment 2026-09-18 — the request carries `originProjectId`, and I2 says which way round
+
+I1/I2 originally said main derives the owning project root "from `panelId`". It cannot: **main holds
+no panel→project map.** `editor-coordinator` knows `ownerProjectId` for *editor* panels only, and a
+terminal panel — the surface this feature exists for — appears in no main-side registry at all. The
+`authoritative()` precedent the rule cites does not work that way either: it takes a renderer-supplied
+**`ownerProjectId`** and replaces the renderer's `ownerRoot` with main's own.
+
+So `LinkResolutionRequest` gains a fifth field, `originProjectId`, and the rule is stated the way the
+precedent actually works:
+
+- **The renderer names an ID** — `Panel.originProjectId`, which it legitimately owns and which main
+  can check against its daemon-fed project cache.
+- **Main derives the ROOT.** An id main does not recognise answers `null`, which judges every target
+  outside a project (M3) — a lookup that failed cannot prove a file is in scope, and a check that
+  gives up and says yes is not a check.
+
+The confinement is unchanged in strength and is arguably clearer: a renderer able to name a *root*
+could name `C:\`, while one naming an *id* can only ever reach a project that exists and whose root
+main already knows. A `projectRoot` field sent alongside is dropped by the handler's whitelist, and
+`link-ipc.contract.test.ts` asserts exactly that.
+
+The alternative considered and rejected was a panel→project registry in main, kept current as panels
+open, close, move between windows and are torn off into sub-workspaces — a second source of truth for
+something the renderer's workspace model already owns, which is what Principle XI warns about.
+
+`panelId` stays on the request. It identifies the asker and carries no authority of its own.
 | I3 | Existence is re-checked at action time. A path that has gone answers `{ ok: false, reason: 'gone', path }`, which raises **one** notice naming the path — the *one condition, one notice* rule. |
 | I4 | A `file:` URI is converted to a path in main and **never** handed to the OS URL opener. |
 | I5 | `throng:openExternal` and `throng:preview:openExternal` are **untouched**, and `isSafeExternalUrl` keeps `file:` in its `INJECTIONS` list (`ui/tests/unit/external-url.test.ts`). 024 FR-019b's denial of renderer-opened windows is unchanged. |

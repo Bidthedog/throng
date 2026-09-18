@@ -136,7 +136,7 @@ describe('throng:links:* \u2014 what each handler forwards, and what it answers'
 });
 
 describe('throng:links:* \u2014 I1/I2: the request carries a LINK, never a path or a root', () => {
-  it('forwards only text, kind, baseDirectory and panelId', async () => {
+  it('forwards only text, kind, baseDirectory, panelId and originProjectId', async () => {
     const ipc = fakeIpc();
     const { service, seen } = fakeService();
     registerLinkIpc(ipc, service);
@@ -151,9 +151,34 @@ describe('throng:links:* \u2014 I1/I2: the request carries a LINK, never a path 
     expect(Object.keys(seen[0].request).sort()).toEqual([
       'baseDirectory',
       'kind',
+      'originProjectId',
       'panelId',
       'text',
     ]);
+  });
+
+  it('forwards the project ID, which is the renderer\u2019s to name \u2014 and never a root', async () => {
+    // I2, exactly as `authoritative()` does it (`editor-ipc.ts:71-83`): the renderer names the
+    // project its panel belongs to, which it legitimately owns, and MAIN turns that id into a root.
+    // A `projectRoot` alongside it is dropped, so naming one buys nothing.
+    const ipc = fakeIpc();
+    const { service, seen } = fakeService();
+    registerLinkIpc(ipc, service);
+    await ipc.handles.get('throng:links:resolve')!(event(1), {
+      ...REQUEST,
+      originProjectId: 'proj-1',
+      projectRoot: 'C:\\',
+    });
+    expect(seen[0].request.originProjectId).toBe('proj-1');
+    expect(seen[0].request).not.toHaveProperty('projectRoot');
+  });
+
+  it('a non-string originProjectId is dropped, leaving the panel with no project', async () => {
+    const ipc = fakeIpc();
+    const { service, seen } = fakeService();
+    registerLinkIpc(ipc, service);
+    await ipc.handles.get('throng:links:resolve')!(event(1), { ...REQUEST, originProjectId: 42 });
+    expect(seen[0].request.originProjectId).toBeUndefined();
   });
 
   it('a request with no panelId is refused rather than resolved against nothing', async () => {

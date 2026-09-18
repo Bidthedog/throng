@@ -28,10 +28,11 @@ import {
  *
  * ══ THE RENDERER NEVER HANDS OVER A PATH ══
  *
- * Every method takes a `LinkResolutionRequest` — the TEXT, its kind, a base directory and a panel id
- * — and never a resolved path (I1). The owning project root is derived HERE from `panelId` (I2, the
- * `authoritative()` precedent in `editor-ipc.ts`), so a renderer cannot widen its own confinement by
- * naming a root it does not own. And every action re-resolves from scratch and re-checks existence
+ * Every method takes a `LinkResolutionRequest` — the TEXT, its kind, a base directory, a panel id
+ * and a project ID — and never a resolved path (I1). The owning project ROOT is derived HERE from
+ * that id (I2, the `authoritative()` precedent in `editor-ipc.ts`), so a renderer cannot widen its
+ * own confinement: it may say which project its panel belongs to, which main can check against its
+ * own cache, and it may not say where that project lives. And every action re-resolves and re-checks
  * before touching the OS (FR-037), because the file that was there when the link was underlined may
  * be gone by the time it is clicked.
  *
@@ -49,8 +50,15 @@ export interface FileLinkResolverDeps {
   readonly fs: IFileSystem;
   readonly pathForms: IPathForms;
   readonly executables: IExecutableExtensions;
-  /** I2: main's own answer, derived from the panel. Never the renderer's claim. */
-  readonly projectRootFor: (panelId: string) => string | null;
+  /**
+   * I2. The owning project's ROOT, derived by main from the project ID the renderer named.
+   *
+   * A function rather than a service, which is the shape `PreviewService` and
+   * `NavigationHistoryService` already take, and what keeps this testable without Electron. It
+   * takes an ID and answers a root precisely because the renderer may name the former and must
+   * never name the latter — the `authoritative()` precedent (`editor-ipc.ts:71-83`).
+   */
+  readonly projectRootFor: (originProjectId: string | undefined) => string | null;
   readonly previewRegistry: PreviewProviderRegistry;
   readonly readPreviewSettings: () => PreviewSettings;
 }
@@ -118,7 +126,7 @@ export class FileLinkResolver {
    * before the reading without it, and whichever is real decides what the trailing `:42:7` was.
    */
   private async locate(request: LinkResolutionRequest): Promise<ResolvedLink | null> {
-    const projectRoot = this.deps.projectRootFor(request.panelId);
+    const projectRoot = this.deps.projectRootFor(request.originProjectId);
     for (const candidate of this.readingsOf(request)) {
       const attempts = resolveCandidate(candidate, {
         baseDirectory: request.baseDirectory,

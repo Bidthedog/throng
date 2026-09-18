@@ -341,7 +341,7 @@ design exists to prevent.
   pattern. Binding `IFileSystem` closes one named item of 043's recorded Principle IX exception
   (`new NodeFileSystem(...)` at `main.ts:1082`, no `UI_TYPES` entry today). Depends on T026, T030.
   Satisfies Principle IX.
-- [ ] T058 Construct `FileLinkResolver` beside its collaborators and call `registerLinkIpc` in
+- [x] T058 Construct `FileLinkResolver` beside its collaborators and call `registerLinkIpc` in
   `packages/ui/src/main/main.ts`. The construction site is `main.ts` rather than the container —
   043's recorded continuation, unchanged and unwidened. Depends on T057, T049.
 - [x] T059 [P] RED unit(ui) `packages/ui/tests/unit/link-cache.test.ts` — `peekLink` returning

@@ -39,7 +39,11 @@ function fakeIpc(): LinkIpcMain & { handles: Map<string, Listener> } {
   };
 }
 
-const PANELS = new Map<string, string | null>();
+/**
+ * Main's own project cache, keyed by project ID — the same shape `authoritative()` reads
+ * (`editor-ipc.ts:71-83`). The renderer names an ID; the ROOT is looked up here and nowhere else.
+ */
+const PROJECT_ROOTS = new Map<string, string>();
 
 function wired() {
   const settings: PreviewSettings = {
@@ -54,9 +58,10 @@ function wired() {
     fs: new NodeFileSystem(async () => {}),
     pathForms: new WindowsPathForms(),
     executables: new WindowsExecutableExtensions(),
-    // I2: main's own answer. The renderer never supplies this, and there is no parameter by which
-    // it could.
-    projectRootFor: (panelId) => PANELS.get(panelId) ?? null,
+    // I2: main's own answer. The renderer names a project ID it legitimately owns; the ROOT is
+    // derived here, and there is no parameter by which a renderer could supply one.
+    projectRootFor: (projectId) =>
+      projectId === undefined ? null : (PROJECT_ROOTS.get(projectId) ?? null),
     previewRegistry: SHIPPED_PREVIEW_PROVIDERS,
     readPreviewSettings: () => settings,
   });
@@ -77,8 +82,7 @@ beforeAll(() => {
   base = mkdtempSync(join(tmpdir(), 'throng-link-confine-'));
   root = join(base, 'project');
   cpSync(FIXTURES, root, { recursive: true });
-  PANELS.set('inProject', root);
-  PANELS.set('rootless', null);
+  PROJECT_ROOTS.set('proj-1', root);
 });
 
 afterAll(() => {
@@ -95,7 +99,8 @@ describe('I1 \u2014 the request carries a LINK, and a renderer-supplied path is 
     await ipc.handles.get('throng:links:reveal')!(event, {
       text: 'test.txt',
       kind: 'detectedPath',
-      panelId: 'inProject',
+      panelId: 'p1',
+      originProjectId: 'proj-1',
       // What a renderer would send if the channel took a path. It does not.
       absPath: 'C:\\Windows\\System32\\drivers\\etc\\hosts',
       path: 'C:\\Windows\\System32',
@@ -108,7 +113,8 @@ describe('I1 \u2014 the request carries a LINK, and a renderer-supplied path is 
     const answer = (await ipc.handles.get('throng:links:resolve')!(event, {
       text: 'src/foo.ts',
       kind: 'detectedPath',
-      panelId: 'inProject',
+      panelId: 'p1',
+      originProjectId: 'proj-1',
       path: 'C:\\somewhere\\else.ts',
     })) as { ok: true; link: { path: string } };
     expect(answer.ok).toBe(true);
@@ -116,27 +122,44 @@ describe('I1 \u2014 the request carries a LINK, and a renderer-supplied path is 
   });
 });
 
-describe('I2 \u2014 the owning project root comes from the PANEL, in main', () => {
-  it('a renderer-claimed project root changes nothing about the verdict', async () => {
+describe('I2 \u2014 the renderer names a project ID; MAIN derives the root', () => {
+  it('a renderer-claimed project ROOT changes nothing about the verdict', async () => {
     const { ipc } = wired();
     const answer = (await ipc.handles.get('throng:links:resolve')!(event, {
       text: 'test.txt',
       kind: 'detectedPath',
-      panelId: 'rootless',
-      // A renderer trying to acquire a project it does not have.
+      panelId: 'p2',
+      // A renderer trying to acquire a project by naming its root outright. The only field that
+      // buys anything is `originProjectId`, and this request names none.
       projectRoot: root,
       inProject: true,
     })) as { ok: boolean; link?: { inProject: boolean } };
-    // `rootless` has no project, so a relative path resolves against nothing at all.
+    // No project id, so no root, so a relative path resolves against nothing at all.
     expect(answer.ok).toBe(false);
   });
 
-  it('a panel main has never heard of gets no root, and no membership', async () => {
+  it('naming the right project ID DOES resolve \u2014 the id is the renderer\u2019s to give', async () => {
+    // The other half of the rule, and the one that keeps it honest: if nothing a renderer sent ever
+    // mattered, the first case above would pass for the wrong reason.
+    const { ipc } = wired();
+    const answer = (await ipc.handles.get('throng:links:resolve')!(event, {
+      text: 'test.txt',
+      kind: 'detectedPath',
+      panelId: 'p2',
+      originProjectId: 'proj-1',
+    })) as { ok: true; link: { path: string; inProject: boolean } };
+    expect(answer.ok).toBe(true);
+    expect(answer.link.path).toBe(join(root, 'test.txt'));
+    expect(answer.link.inProject).toBe(true);
+  });
+
+  it('a project ID main has never heard of gets no root, and no membership', async () => {
     const { ipc } = wired();
     const answer = (await ipc.handles.get('throng:links:resolve')!(event, {
       text: join(root, 'test.txt'),
       kind: 'detectedPath',
-      panelId: 'not-a-panel',
+      panelId: 'p3',
+      originProjectId: 'no-such-project',
     })) as { ok: true; link: { inProject: boolean } };
     expect(answer.ok).toBe(true);
     expect(answer.link.inProject, 'FR-055 depends on this being false').toBe(false);
@@ -164,7 +187,8 @@ describe('FR-035a \u2014 the third reveal policy, and what it deliberately does 
     const answer = await ipc.handles.get('throng:links:reveal')!(event, {
       text: outsideFile,
       kind: 'detectedPath',
-      panelId: 'inProject',
+      panelId: 'p1',
+      originProjectId: 'proj-1',
     });
     expect(answer).toEqual({ ok: true });
     expect(revealed).toEqual([outsideFile]);
@@ -175,7 +199,8 @@ describe('FR-035a \u2014 the third reveal policy, and what it deliberately does 
     const answer = await ipc.handles.get('throng:links:reveal')!(event, {
       text: 'C:\\Windows\\System32\\throng-no-such-thing.dll',
       kind: 'detectedPath',
-      panelId: 'inProject',
+      panelId: 'p1',
+      originProjectId: 'proj-1',
     });
     expect(answer).toMatchObject({ ok: false, reason: 'gone' });
     expect(revealed).toEqual([]);
@@ -187,14 +212,17 @@ describe('FR-055 \u2014 nothing outside the project is ever reported as inside i
     const { ipc } = wired();
     const outsideFile = join(base, 'outside.txt');
     cpSync(join(root, 'test.txt'), outsideFile);
-    for (const panelId of ['inProject', 'rootless', 'not-a-panel']) {
+    // A panel in the fixture project, one with no project at all, and one naming a project main
+    // has never heard of — the three shapes `originProjectId` can arrive in.
+    for (const originProjectId of ['proj-1', undefined, 'no-such-project']) {
       for (const text of [outsideFile, outsideFile.replace(/\\/g, '/')]) {
         const answer = (await ipc.handles.get('throng:links:resolve')!(event, {
           text,
           kind: 'detectedPath',
-          panelId,
+          panelId: 'p1',
+          originProjectId,
         })) as { ok: boolean; link?: { inProject: boolean } };
-        if (answer.ok) expect(answer.link!.inProject, `${panelId} / ${text}`).toBe(false);
+        if (answer.ok) expect(answer.link!.inProject, `${originProjectId} / ${text}`).toBe(false);
       }
     }
   });

@@ -19,8 +19,9 @@ import { FileLinkResolver } from '../../src/main/file-link-resolver.js';
  *
  * `projectRootFor` is a function rather than a service, which is the shape `PreviewService` and
  * `NavigationHistoryService` already take, and the reason the resolver is testable without Electron.
- * It is also the whole of I2: **the owning project root is derived in MAIN from `panelId`**, and a
- * renderer cannot widen its own confinement by naming one.
+ * It is also the whole of I2: **the renderer names a project ID, and MAIN derives the ROOT from
+ * it**. An id is a claim main can check against its own cache; a root would be one it could only
+ * take on trust, and a renderer able to name a root could name `C:\`.
  */
 
 const FIXTURES = fileURLToPath(new URL('../fixtures/links', import.meta.url));
@@ -30,8 +31,11 @@ let root = '';
 let outside = '';
 const roots: string[] = [];
 
-/** Every panel the cases below name, and the project root main derives for it. */
-const PANELS = new Map<string, string | null>();
+/**
+ * Main's own project cache: project ID to root. The renderer names an ID (`Panel.originProjectId`);
+ * the ROOT is looked up here and nowhere else — the `authoritative()` precedent.
+ */
+const PROJECT_ROOTS = new Map<string, string>();
 
 function makeResolver(over: { previewSettings?: Partial<PreviewSettings> } = {}) {
   // The SHIPPED registry, not one invented here: FR-030's `preview` field has to mean what the app
@@ -49,17 +53,28 @@ function makeResolver(over: { previewSettings?: Partial<PreviewSettings> } = {})
     fs: new NodeFileSystem(async () => {}),
     pathForms: new WindowsPathForms(),
     executables: new WindowsExecutableExtensions(),
-    projectRootFor: (panelId) => PANELS.get(panelId) ?? null,
+    projectRootFor: (projectId) =>
+      projectId === undefined ? null : (PROJECT_ROOTS.get(projectId) ?? null),
     previewRegistry: registry,
     readPreviewSettings: () => settings,
   });
 }
 
-const link = (text: string, over: { baseDirectory?: string; panelId?: string; kind?: 'detectedPath' | 'fileHyperlink' } = {}) => ({
+const link = (
+  text: string,
+  over: {
+    baseDirectory?: string;
+    panelId?: string;
+    originProjectId?: string | null;
+    kind?: 'detectedPath' | 'fileHyperlink';
+  } = {},
+) => ({
   text,
   kind: over.kind ?? ('detectedPath' as const),
   baseDirectory: over.baseDirectory,
-  panelId: over.panelId ?? 'inProject',
+  panelId: over.panelId ?? 'p1',
+  // `null` means "a panel with no owning project" explicitly; omitted means the fixture project.
+  originProjectId: over.originProjectId === null ? undefined : (over.originProjectId ?? 'proj-1'),
 });
 
 beforeAll(() => {
@@ -70,12 +85,10 @@ beforeAll(() => {
   cpSync(FIXTURES, root, { recursive: true });
   cpSync(OUTSIDE_FIXTURES, outside, { recursive: true });
 
-  PANELS.set('inProject', root);
-  PANELS.set('rootless', null);
-  // M4: a sub-workspace panel judges against its ORIGINAL project, which is the root main looks up
-  // for it — there is no second root hiding anywhere.
-  PANELS.set('subWorkspace', root);
-  PANELS.set('otherProject', outside);
+  PROJECT_ROOTS.set('proj-1', root);
+  // M4: a sub-workspace panel judges against its ORIGINAL project — it names that project's id, and
+  // main looks up the same root it would for any other panel. There is no second root anywhere.
+  PROJECT_ROOTS.set('other-project', outside);
 });
 
 afterAll(() => {
@@ -134,8 +147,8 @@ describe('FileLinkResolver.resolve — R5/R6: the orderings, over real files', (
   it('R11: a panel with no project resolves an ABSOLUTE form and nothing relative', async () => {
     const abs = join(root, 'test.txt');
     const resolver = makeResolver();
-    expect((await resolver.resolve(link(abs, { panelId: 'rootless' }))).ok).toBe(true);
-    expect(await resolver.resolve(link('test.txt', { panelId: 'rootless' }))).toEqual({ ok: false });
+    expect((await resolver.resolve(link(abs, { originProjectId: null }))).ok).toBe(true);
+    expect(await resolver.resolve(link('test.txt', { originProjectId: null }))).toEqual({ ok: false });
   });
 });
 
@@ -192,23 +205,23 @@ describe('FileLinkResolver.resolve — FR-021 membership, from the RESOLVED path
   });
 
   it('M3: a panel with no project judges EVERYTHING outside', async () => {
-    const answer = await makeResolver().resolve(link(join(root, 'test.txt'), { panelId: 'rootless' }));
+    const answer = await makeResolver().resolve(link(join(root, 'test.txt'), { originProjectId: null }));
     expect(answer.ok && answer.link.inProject).toBe(false);
   });
 
   it('M4: a sub-workspace panel judges against its origin project', async () => {
     const answer = await makeResolver().resolve(
-      link(join(root, 'test.txt'), { panelId: 'subWorkspace' }),
+      link(join(root, 'test.txt'), { originProjectId: 'proj-1' }),
     );
     expect(answer.ok && answer.link.inProject).toBe(true);
     const foreign = await makeResolver().resolve(
-      link(join(root, 'test.txt'), { panelId: 'otherProject' }),
+      link(join(root, 'test.txt'), { originProjectId: 'other-project' }),
     );
     expect(foreign.ok && foreign.link.inProject).toBe(false);
   });
 
-  it('I2: a panel main has never heard of gets no project root, not a guessed one', async () => {
-    const answer = await makeResolver().resolve(link(join(root, 'test.txt'), { panelId: 'invented' }));
+  it('I2: a project ID main has never heard of gets no root, not a guessed one', async () => {
+    const answer = await makeResolver().resolve(link(join(root, 'test.txt'), { originProjectId: 'invented' }));
     expect(answer.ok && answer.link.inProject).toBe(false);
   });
 
