@@ -1,14 +1,17 @@
-import { waitFor } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EditorView } from '@codemirror/view';
-import type { LinkPosition, LinkResolution, LinkResolutionRequest, Panel, ResolvedLink } from '@throng/core';
+import { EditorView } from '@codemirror/view';
+import { collectPanels, type LinkPosition, type LinkResolution, type LinkResolutionRequest, type Panel, type ResolvedLink } from '@throng/core';
 import { mountEditor, type EditorHarness } from './helpers/mount-editor.js';
 import { TerminalPanel } from '../../src/renderer/terminal/terminal-panel.js';
 import { createFileLinkProvider, type ProvidedLink } from '../../src/renderer/terminal/file-link-provider.js';
 import { followLink, type LinkFollowDeps } from '../../src/renderer/links/link-actions.js';
 import { followLinkInPanel } from '../../src/renderer/editor/link-decorations.js';
 import { __resetLinkCacheForTests } from '../../src/renderer/links/link-cache.js';
+import { useWorkspace } from '../../src/renderer/state/workspace-store.js';
+import { EditorPanel } from '../../src/renderer/editor/editor-panel.js';
+import { disposeEditor } from '../../src/renderer/editor/use-editor.js';
 
 /**
  * 045 T174 — REPRODUCTION of D2: a position suffix is not honoured (FR-004, FR-033, FR-052, FR-110,
@@ -241,6 +244,145 @@ describe.each(CASES)('D2 from a TERMINAL — $name', (c) => {
       const h = harness;
       await waitFor(() => expect(h.view().state.doc.toString(), 'the editor holds the linked file').toBe(c.text));
       await waitFor(() => expect(caret(h.view()), 'the caret lands where the link said').toEqual({ line: 3, column: 5 }));
+    });
+  }
+});
+
+/**
+ * The corpus probe's editor rows #30 / #31: with *Open files in* = New Editor, Ctrl+click the link, close
+ * the panel it opened, Ctrl+click the SAME link again — the probe read the second panel's caret as 1:1
+ * (`test.md:3`) and 3:1 (`test.md:3:5`). Driven here with every new panel really mounted (each one a
+ * live CodeMirror view behind the fake authority), closed the way the panel header's Destroy closes it
+ * (`removePanel` + `disposeEditor`), and followed from an editor and from a terminal.
+ *
+ * ══ NOT A REPRODUCTION: THE PROBE CLICKED THE LINE ABOVE ══
+ *
+ * These pass against the unchanged product, and so did the real app (a throwaway Playwright probe with
+ * fresh geometry per click: 3:1 and 3:5 on each of three follows). The probe's own capture explains
+ * it — its "middle" point on row #30 hovered `./test.md` (row #29), and on row #31 hovered the link of
+ * row #30, and each follow opened exactly what was under the pointer. Kept as the guard that a second
+ * follow of the same link, after the first panel is gone, still lands where the link says; a mutation
+ * dropping every second open's position turns all four red.
+ */
+const workspaceRef = vi.hoisted(() => ({ ws: null as null | { removePanel(id: string): void; layout: unknown } }));
+
+/** Renders every editor panel `openFileInTab` adds to the layout, beside the harness's own `p-ed`. */
+function OpenedEditors(): ReturnType<typeof createElement> {
+  const ws = useWorkspace();
+  workspaceRef.ws = ws as unknown as typeof workspaceRef.ws;
+  const panels = ws.layout ? ws.layout.tabs.flatMap((t) => collectPanels(t.root)) : [];
+  return createElement(
+    'div',
+    { className: 'opened-editors' },
+    ...panels
+      .filter((p) => p.id !== 'p-ed' && p.kind === 'editor')
+      .map((p) => createElement('div', { key: p.id, 'data-panel': p.id }, createElement(EditorPanel, { panel: p, tabId: 't1', projectRoot: ROOT }))),
+  );
+}
+
+/** The live view of a mounted panel other than `p-ed`. */
+function viewOf(panelId: string): EditorView {
+  const el = document.querySelector<HTMLElement>(`[data-panel="${panelId}"] .cm-editor`);
+  const view = el ? EditorView.findFromDOM(el) : null;
+  if (!view) throw new Error(`panel ${panelId} has no live editor yet`);
+  return view;
+}
+
+function openedIds(): string[] {
+  return [...document.querySelectorAll<HTMLElement>('[data-panel]')].map((el) => el.dataset.panel!);
+}
+
+describe('D2 twice — New Editor, close, follow the same link again (corpus probe rows #30, #31)', () => {
+  const c = CASES[1]!; // test.md, default open action Editor
+  const LINES = `./test.md\ntest.md:3\ntest.md:3:5\n`;
+
+  async function mountWithNewTarget(): Promise<EditorHarness> {
+    const h = mountEditor({
+      doc: { text: LINES, version: 1, absPath: NOTES },
+      projectRoot: ROOT,
+      registerProject: true,
+      settings: { ...settingsFor(c), editor: { ...(settingsFor(c).editor as object), openTarget: 'new' } },
+      throng: { links: linksBridge(c), terminal: {} },
+      extras: [
+        createElement(OpenedEditors, { key: 'opened' }),
+        createElement(TerminalPanel, {
+          key: 'term',
+          panel: { type: 'panel', id: 'p-term', originProjectId: 'proj-editor', title: 'Terminal', kind: 'terminal', config: { flavourId: 'cmd' } } as Panel,
+          tabId: 't1',
+          projectRoot: ROOT,
+        }),
+      ],
+    });
+    // One authority, per panel: `p-ed` keeps the harness's document, every panel opened later holds test.md.
+    const editor = (window as unknown as { throng: { editor: Record<string, unknown> } }).throng.editor;
+    const original = editor.getContent as (id: string) => Promise<unknown>;
+    editor.getContent = (id: string) =>
+      id === 'p-ed'
+        ? original(id)
+        : Promise.resolve({ text: c.text, version: 1, dirty: false, absPath: c.path, fileMissing: false, unloadable: false, encoding: 'utf8', hasBom: false, lineEnding: 'lf' });
+    await waitFor(() => expect(h.view().state.doc.toString()).toBe(LINES));
+    await waitFor(() => expect(h.settings().editor.openTarget).toBe('new'));
+    await waitFor(() => expect(captured.terminal?.linkActions).toBeDefined());
+    return h;
+  }
+
+  /** Follow, wait for the ONE new panel it opens, read its caret once it has settled, then close it. */
+  async function followAndClose(follow: () => unknown): Promise<{ line: number; column: number }> {
+    const before = openedIds();
+    await follow();
+    let id = '';
+    await waitFor(() => {
+      const added = openedIds().filter((p) => !before.includes(p));
+      expect(added, 'exactly one new editor panel').toHaveLength(1);
+      id = added[0]!;
+      expect(viewOf(id).state.doc.toString()).toBe(c.text);
+    });
+    // Long enough for the reveal (it polls every 25 ms) AND for anything that would move the caret after it.
+    await new Promise((r) => setTimeout(r, 300));
+    const at = caret(viewOf(id));
+    act(() => {
+      disposeEditor(id);
+      workspaceRef.ws!.removePanel(id);
+    });
+    await waitFor(() => expect(openedIds()).not.toContain(id));
+    return at;
+  }
+
+  for (const [label, written, expected] of [
+    ['test.md:3', 'test.md:3', { line: 3, column: 1 }],
+    ['test.md:3:5', 'test.md:3:5', { line: 3, column: 5 }],
+  ] as const) {
+    it(`from an EDITOR, ${label}: both follows land at ${expected.line}:${expected.column}`, async () => {
+      harness = await mountWithNewTarget();
+      const h = harness;
+      const at = LINES.indexOf(`${written}\n`) + 2;
+      // The Open Link chord — the same `followEditorLink` a Ctrl+click reaches. Retried only until the
+      // decoration pass has an answer to claim with; the first claim IS the follow.
+      const chord = () =>
+        waitFor(() => {
+          h.view().dispatch({ selection: { anchor: at } });
+          expect(followLinkInPanel('p-ed', h.view()), 'the chord claims the link').toBe(true);
+        });
+      const first = await followAndClose(chord);
+      const second = await followAndClose(chord);
+      expect({ first, second }).toEqual({ first: expected, second: expected });
+    });
+
+    it(`from a TERMINAL, ${label}: both follows land at ${expected.line}:${expected.column}`, async () => {
+      harness = await mountWithNewTarget();
+      const lineCase = { ...c, line: `see ${written} here` };
+      const viaTerminal = () => {
+        const [f] = terminalCtrlClick(lineCase);
+        void followLink({
+          request: f!.request,
+          ...(f!.position === undefined ? {} : { position: f!.position }),
+          resolve: () => ({ ok: true, link: resolvedFor(c) }),
+          deps: captured.terminal!.linkActions as LinkFollowDeps,
+        });
+      };
+      const first = await followAndClose(viaTerminal);
+      const second = await followAndClose(viaTerminal);
+      expect({ first, second }).toEqual({ first: expected, second: expected });
     });
   }
 });
