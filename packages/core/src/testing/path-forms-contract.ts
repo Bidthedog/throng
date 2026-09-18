@@ -40,31 +40,20 @@ function endsWithSegments(path: string, segments: readonly string[]): boolean {
 /**
  * 045 T203 / T210 — the four members `contracts/platform-ports.md` §6.1 adds (FR-151 – FR-153).
  *
- * Declared here as OPTIONAL and looked up at run time, because the port does not carry them yet
- * (T204 adds them to `abstractions/path-forms.ts` and then folds this type away). Written that way so
- * `@throng/core` still type-checks while the suite is red: a missing member fails as a contract
- * violation naming the member, not as a compile error that stops every other package building.
+ * The port declares them (T204). They are still looked up at run time, so a subject built without
+ * the type checker's help — a hand-rolled fake, a JavaScript implementation — fails as a contract
+ * violation naming the missing member rather than as a bare `TypeError`.
  */
-interface ThirdRoundPathForms {
-  fromMountTable?: (posixPath: string) => string | null;
-  qualifyRooted?: (rootedPath: string, anchor: string) => string | null;
-  fileUrlLocalPath?: (url: string) => string | null;
-  loopbackFromFileUrl?: (url: string) => string | null;
-}
-
-type ThirdRoundMember = keyof ThirdRoundPathForms;
+type ThirdRoundMember = 'fromMountTable' | 'qualifyRooted' | 'fileUrlLocalPath' | 'loopbackFromFileUrl';
 
 /** The member, bound to its subject — or a contract violation naming the one that is missing. */
-function member<K extends ThirdRoundMember>(
-  subject: IPathForms,
-  name: K,
-): NonNullable<ThirdRoundPathForms[K]> {
-  const found = (subject as IPathForms & ThirdRoundPathForms)[name];
+function member<K extends ThirdRoundMember>(subject: IPathForms, name: K): IPathForms[K] {
+  const found: unknown = subject[name];
   assert(
     typeof found === 'function',
     `IPathForms.${name} must exist (platform-ports.md §6.1); the subject has no such member`,
   );
-  return (found as (...args: never[]) => unknown).bind(subject) as NonNullable<ThirdRoundPathForms[K]>;
+  return (found as (...args: never[]) => unknown).bind(subject) as IPathForms[K];
 }
 
 /**

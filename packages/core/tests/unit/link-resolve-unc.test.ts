@@ -42,6 +42,11 @@ const fakePathForms: IPathForms = {
   fromDriveForm: () => null,
   fromFileUrl: () => null,
   fromHomeForm: () => null,
+  // 045 T204 gave the port four more members; the fake answers null to each, as it does above.
+  fromMountTable: () => null,
+  qualifyRooted: () => null,
+  fileUrlLocalPath: () => null,
+  loopbackFromFileUrl: () => null,
 };
 
 const candidate = (text: string): LinkCandidate => ({ text, start: 0, end: text.length });

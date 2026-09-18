@@ -22,6 +22,7 @@ import {
   NodeUserContext,
   WindowsForegroundHandoff,
   WindowsPathForms,
+  WindowsShellDetection,
 } from '@throng/platform-windows';
 import { NodeFileSystem } from './node-file-system.js';
 import { restoreFromRecycleBin } from './recycle-bin-restore.js';
@@ -152,7 +153,14 @@ export function createUiContainer(): Container {
    * bound at this boundary because main is the process that asks them — the renderer has no
    * filesystem and the daemon is not involved in a link at all.
    */
-  container.bind<IPathForms>(UI_TYPES.PathForms).toConstantValue(new WindowsPathForms());
+  //
+  // FR-151: Git Bash's mount table needs Git's install root, which the shell detection already finds
+  // (005 FR-024). Handed over as a function so that probe — a registry query at worst — runs on the
+  // first rooted path a link asks about, not on the startup path.
+  const gitDetection = new WindowsShellDetection();
+  container
+    .bind<IPathForms>(UI_TYPES.PathForms)
+    .toConstantValue(new WindowsPathForms({ gitRoot: () => gitDetection.gitInstallRoot() }));
   container
     .bind<IExecutableExtensions>(UI_TYPES.ExecutableExtensions)
     .toConstantValue(new WindowsExecutableExtensions());

@@ -841,7 +841,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   output to the maintainer and touch no production code until they confirm it reproduces what they
   saw** (the replicating-bugs gate). Record the answer as O8 in [research.md](./research.md).
   Covers D1 against FR-003c, FR-022, FR-023, FR-024.
-- [ ] T136 [US9] GREEN — fix `join` in `packages/core/src/links/resolve.ts`: a base beginning with two
+- [x] T136 [US9] GREEN — fix `join` in `packages/core/src/links/resolve.ts`: a base beginning with two
   separators keeps both, and its first two segments are a root `..` cannot pop (contract R12). Use
   the `UNC_FORM` shape the file already holds; name no OS (FR-026 — `links-no-os-names.test.ts` must
   stay green). Depends on T135 and the maintainer's confirmation. Makes T135's join cases green.
@@ -850,15 +850,17 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   `\\s\h\proj-old\x.ts`; **M8**: `Z:\proj\x.ts` is not in a project rooted at `\\s\h\proj` (FR-106).
   If M7 passes on first run it is recorded as a characterisation pin and T138 is skipped.
   Satisfies FR-021, FR-106.
-- [ ] T138 [US9] GREEN, only if T137 is red — the fix goes in `packages/core/src/fs/path-id.ts`
+- [x] T138 [US9] GREEN, only if T137 is red — the fix goes in `packages/core/src/fs/path-id.ts`
   (`isUnderPath` / `normaliseForCompare`), never in `links/` (M6), with a case added to
   `packages/core/tests/unit/path-id.test.ts`. Depends on T137.
+  **Skipped 2026-09-18** — T137's M7/M8 passed on first run (`96b5baac`), so they stand as a
+  characterisation pin and there is nothing to fix; no production file was touched.
 - [ ] T139 [P] [US9] RED unit(core) `packages/core/tests/unit/link-detect.test.ts` — **D12**:
   `FileSystem::\\s\h\x`, `Microsoft.PowerShell.Core\FileSystem::C:\x\y.ts` and the whole prompt
   `PS Microsoft.PowerShell.Core\FileSystem::\\s\h\dir> ` each yield one candidate spanning the path
   alone; `std::vector`, `Foo::Bar`, `a::b` and `Other::C:\x` yield none; the SC-003 prose fixture
   still yields zero. Satisfies FR-003g, FR-107, SC-003.
-- [ ] T140 [US9] GREEN — strip the qualifier in `packages/core/src/links/detect.ts` before a token is
+- [x] T140 [US9] GREEN — strip the qualifier in `packages/core/src/links/detect.ts` before a token is
   judged, keeping `::` a refusal everywhere else. Depends on T139.
 - [ ] T141 [P] [US9] RED integration (`@admin`)
   `packages/ui/tests/integration/file-link-resolver.integration.test.ts` — against a **real**
@@ -1283,7 +1285,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   (`MAX_PATH_SPACE_WORDS`, with the edge in `packages/core/tests/unit/link-guards.test.ts`); the
   SC-003 prose fixture, **extended with spaced prose after a path**, still yields zero candidates that
   are not anchored. Satisfies FR-150, SC-003, SC-020.
-- [ ] T200 [US12] GREEN `packages/core/src/links/detect.ts` (`emitReadings` gains the extension) and
+- [x] T200 [US12] GREEN `packages/core/src/links/detect.ts` (`emitReadings` gains the extension) and
   `packages/core/src/links/limits.ts` (`MAX_PATH_SPACE_WORDS`, Complexity Tracking third round).
   `links-no-os-names.test.ts` stays green. Depends on T199.
 - [ ] T201 [P] [US12] RED integration `packages/ui/tests/integration/file-link-resolver.integration.test.ts`
@@ -1306,7 +1308,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   `fromDriveForm`'s), no Git install → `null` for every input; and drive qualification — `\tmp`
   against a base on `D:` → `D:\tmp`, against no base → `null`. Total: `null`, never a throw, for
   junk. Satisfies FR-151, FR-152, FR-026.
-- [ ] T204 [US12] GREEN `packages/core/src/abstractions/path-forms.ts` (the two questions),
+- [x] T204 [US12] GREEN `packages/core/src/abstractions/path-forms.ts` (the two questions),
   `packages/core/src/testing/path-forms-contract.ts`, and
   `packages/platform-windows/src/windows-path-forms.ts` — the Git install root from the shell
   detection that already finds Git Bash (`packages/platform-windows/src/windows-shell-detection.ts`,
@@ -1326,6 +1328,11 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   `packages/ui/src/main/file-link-resolver.ts`, and the terminal site that already asks T189's "is this
   flavour WSL?" (`packages/ui/src/renderer/terminal/terminal-panel.tsx`), sending it in the link
   request. Depends on T205, T204, T189.
+  *Progress 2026-09-18:* the `resolve.ts` half is in (R13 step, R14 qualification,
+  `LinkResolutionContext.wslFlavour`). Open: `file-link-resolver.ts` passing the request's
+  `wslFlavour` into the context, and `terminal-panel.tsx` sending it — with T205's contract half.
+  Two T205 cases stay red on a spec conflict (`/test.txt` with no anchor: R13 keeps Git's reading,
+  T205 says `[]`), awaiting the maintainer.
 - [ ] T207 [P] [US12] RED integration `packages/ui/tests/integration/file-link-resolver.integration.test.ts`
   — against the **real** Git for Windows on the machine: `/usr/bin/bash.exe` and `/etc/hosts` resolve
   to files under the detected install, `/tmp` resolves to a folder; a WSL-flavour request for
@@ -1346,7 +1353,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   for "decoded path, and whether it is drive-qualified", answered totally; the existing `fromFileUrl`
   cases (`file://localhost/D:/x` = `file:///D:/x`, hosted ≠ hostless) stay exactly as they are.
   Satisfies FR-153, FR-026.
-- [ ] T211 [US12] GREEN `packages/core/src/links/resolve.ts` (the `file:` branch re-enters the
+- [x] T211 [US12] GREEN `packages/core/src/links/resolve.ts` (the `file:` branch re-enters the
   leading-`/` rules; the loopback reading) and the port method T210 needs. Depends on T209, T210, and
   on T206 (same file, serialised).
 
