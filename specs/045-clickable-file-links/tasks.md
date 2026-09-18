@@ -950,7 +950,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   `window.throng.links.open` records **zero** calls from any gesture or plain Open Link, and exactly
   one from each explicit *Open in OS Default Program*. Satisfies FR-110, FR-111, FR-114, SC-010,
   SC-013.
-- [ ] T158 [US8] GREEN `packages/ui/src/renderer/links/link-actions.ts` (− the `defaultAction` reader
+- [x] T158 [US8] GREEN `packages/ui/src/renderer/links/link-actions.ts` (− the `defaultAction` reader
   from `LinkFollowDeps` and `linkRouting`), `packages/ui/src/renderer/terminal/terminal-panel.tsx`
   and `packages/ui/src/renderer/editor/use-editor.ts` (their callers). Depends on T157, T156.
   **One commit with T144 and T156.**
@@ -958,7 +958,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   three wordings, and `Cmd` on macOS; and edit `packages/ui/tests/unit/terminal-hovered-link.test.ts`
   (permitted) so the terminal's file wording follows the click result while its web wording is
   byte-identical. Satisfies FR-105.
-- [ ] T160 [US8] GREEN `packages/core/src/links/hover-text.ts` (`linkHoverText`), delegated to from
+- [x] T160 [US8] GREEN `packages/core/src/links/hover-text.ts` (`linkHoverText`), delegated to from
   `packages/ui/src/renderer/terminal/hovered-link.ts` and used by the editor's tooltip in
   `packages/ui/src/renderer/editor/link-decorations.ts`. Depends on T159, T156.
 
@@ -980,7 +980,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   resolved targets; one in-project file spelled every FR-106 way opens in throng from both. If the
   editor's per-line function cannot be called without a view, this task moves to the component layer
   and says so. Depends on T134, T162. Satisfies FR-104, FR-106, SC-012.
-- [ ] T164 [US8] GREEN `packages/ui/src/renderer/editor/link-decorations.ts` — per-line spans from
+- [x] T164 [US8] GREEN `packages/ui/src/renderer/editor/link-decorations.ts` — per-line spans from
   `scanLinkLine`; web spans decorated with no request to main; the decoration carries its kind
   (data-model §13.2). Depends on T163.
 - [ ] T165 [P] [US8] RED component `packages/ui/tests/component/editor-web-links.test.ts` — G11 – G14
@@ -990,7 +990,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   with a selection or two carets inserts a line; no `throng:links:resolve` request is made for a web
   span; with `editor.links.detectInEditors` off, web links still work (FR-101). Satisfies FR-101,
   FR-103, SC-012.
-- [ ] T166 [US8] GREEN `packages/ui/src/renderer/editor/use-editor.ts` (the `mousedown` handler and
+- [x] T166 [US8] GREEN `packages/ui/src/renderer/editor/use-editor.ts` (the `mousedown` handler and
   the window chord recognise web spans) and `packages/ui/src/renderer/links/link-actions.ts` (one web
   route both surfaces call — the terminal's existing open-external call, moved, not copied).
   Depends on T165, T164.
@@ -1000,7 +1000,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   pin for the editor menu over a web link in `packages/ui/tests/unit/menu-sections.test.ts`.
   `packages/ui/tests/component/editor-content-menu.test.ts`'s existing cases stay green.
   Satisfies FR-103, S4.
-- [ ] T168 [US8] GREEN `packages/ui/src/renderer/links/link-menu-items.ts` (`webLinkMenuActions`),
+- [x] T168 [US8] GREEN `packages/ui/src/renderer/links/link-menu-items.ts` (`webLinkMenuActions`),
   `packages/ui/src/renderer/editor/content-menu.ts`, and
   `packages/ui/src/renderer/terminal/terminal-content-menu.ts` (calls the shared builder; its output
   is unchanged item for item). Depends on T167, T166.
@@ -1129,7 +1129,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
 - [x] T182 [US10] GREEN `packages/core/src/config/theme.ts`, `packages/core/src/config/theme-metadata.ts`,
   and `SHIPPED_DEFAULTS_VERSION` in `packages/core/src/config/shipped-defaults.ts` per its own rule.
   Depends on T181.
-- [ ] T183 [US10] GREEN `packages/ui/src/renderer/editor/link-decorations.ts` — the mark's theme
+- [x] T183 [US10] GREEN `packages/ui/src/renderer/editor/link-decorations.ts` — the mark's theme
   becomes the tokens and the three states; no recolour. Depends on T180, T182, T164.
 - [x] T184 [US10] Settle **O10** — can xterm's OSC 8 underline take the token's colour and the
   dashed-at-rest / solid-on-hover states, or must throng's decoration draw it instead (FR-139)? A
@@ -1395,7 +1395,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   replicating-bugs gate). If every case passes, the layer is wrong, not the bug: step up to a case
   inside an existing editor E2E declaration and say so; if that cannot reproduce it either, record what
   was tried and the missing condition in O11 as a note — not a fix. Covers FR-040, FR-100, FR-110.
-- [ ] T216 [US3] GREEN — fix D3 where T215 locates it; the likeliest places, in order:
+- [x] T216 [US3] GREEN — fix D3 where T215 locates it; the likeliest places, in order:
   `packages/ui/src/renderer/editor/use-editor.ts` (the `mousedown` handler's span lookup at a span's
   start boundary) and `packages/ui/src/renderer/editor/link-decorations.ts` (the span set the handler
   reads against the one drawn). Depends on T215 and the maintainer's confirmation.

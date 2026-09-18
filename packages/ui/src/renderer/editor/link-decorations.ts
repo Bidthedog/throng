@@ -9,7 +9,9 @@ import {
 import {
   DEFAULT_BINDING_PLATFORM,
   MAX_LINK_CANDIDATES_PER_LINE,
-  detectPathCandidates,
+  linkHoverText,
+  resolveDefaultLinkAction,
+  scanLinkLine,
   shippedBindingsFor,
   type LinkCandidate,
   type LinkPosition,
@@ -20,11 +22,12 @@ import {
 } from '@throng/core';
 
 /**
- * File links in an EDITOR (045 FR-002, FR-022, FR-040 – FR-044, FR-060, FR-071, FR-073).
+ * File and web links in an EDITOR (045 FR-002, FR-022, FR-040 – FR-044, FR-060, FR-071, FR-073,
+ * FR-100 – FR-105).
  *
  * The terminal's half of this feature is an xterm link provider; CodeMirror has no such thing, so
  * the editor's half is a decoration plugin plus three gesture handlers. What they share is
- * everything that matters — the grammar (`detectPathCandidates`), the resolution cache, and the one
+ * everything that matters — the line scan (`scanLinkLine`), the resolution cache, and the one
  * router that performs a target — so the two surfaces cannot disagree about what a link is or where
  * it opens.
  *
@@ -54,8 +57,9 @@ export interface EditorLinkSite {
   readonly baseDirectory?: string;
 }
 
-/** A resolved link the pointer or the caret is on, with everything an action needs. */
+/** A resolved FILE link the pointer or the caret is on, with everything an action needs. */
 export interface EditorLinkHit {
+  readonly kind: 'file';
   readonly link: ResolvedLink;
   readonly request: LinkResolutionRequest;
   readonly position?: LinkPosition;
@@ -65,24 +69,47 @@ export interface EditorLinkHit {
   readonly to: number;
 }
 
+/**
+ * A WEB link in the document (045 FR-100 – FR-103). Never resolved by main (contract §6.1): the
+ * address is the whole of what an action needs, and it opens in the system browser.
+ */
+export interface EditorWebLinkHit {
+  readonly kind: 'web';
+  /** The address exactly as written. */
+  readonly uri: string;
+  readonly from: number;
+  readonly to: number;
+}
+
+/**
+ * Whatever link is at a place in the document — data-model §13.2's `EditorLinkAt`. The decoration,
+ * the `mousedown` handler, the chord and the menu all read the kind from here, so none of them has
+ * to tell a web span from a file link for itself.
+ */
+export type EditorLinkAt = EditorLinkHit | EditorWebLinkHit;
+
 export interface EditorLinkDeps {
   /**
    * FR-060 — `editor.links.detectInEditors`, read PER SCAN. Absent means on.
    *
-   * The compartment above already removes the decoration plugin from a live view, which is the
-   * switch's structural half. This is the other half, and it is the one a user would notice: the
-   * pointer gestures and the Open Link chord are installed on the view itself, not in the
+   * The pointer gestures and the Open Link chord are installed on the view itself, not in the
    * compartment, so without a gate here a Ctrl+click would keep following a link that no longer
    * underlines. It sits on the scan because everything — the marks, both gestures and the menu —
    * asks {@link linkHitsBetween} what is there, so one gate closes all four at once.
+   *
+   * It gates GUESSED PATHS only. A web url is a declaration, not a guess, and FR-101 keeps web links
+   * working with the switch off — in an editor exactly as in a terminal.
    */
   detect?(): boolean;
   /** Read per scan, never captured: a Save As moves the base directory under a live view. */
   site(): EditorLinkSite;
   /** Peek the cache, and ask if the answer is not here yet. `undefined` means NOT a link. */
   ask(request: LinkResolutionRequest): LinkResolution | undefined;
-  /** FR-054 — the surface's default-action route, shared with the menu's Open Link. */
-  follow(hit: EditorLinkHit): void;
+  /**
+   * FR-054 / FR-103 — the surface's route, shared with the menu's Open Link: a file link through the
+   * click rule, a web link to the system browser. The hit is the one the decoration drew.
+   */
+  follow(hit: EditorLinkAt): void;
 }
 
 /** As much of an `EditorView` as a scan needs — which is deliberately not a browser. */
@@ -98,36 +125,74 @@ export interface LinkPointerView extends LinkScanView {
 }
 
 /**
- * FR-060's switch, as compartment CONTENT.
+ * The link extension, as compartment CONTENT.
  *
  * The same mechanism `wrapCompartment` and `gutterCompartment` use, and for the same reason: the
  * alternative is recreating the `EditorView`, which takes the undo history, the scroll and the
- * selection with it. `editorLinkExtension(null)` is empty, so turning detection off removes the
- * plugin from a live view rather than leaving it installed and asking it to do nothing.
+ * selection with it. `editorLinkExtension(null)` is empty. FR-060's switch reconfigures it too, so
+ * the marks are rebuilt the moment the switch moves; the switch itself is read inside the scan.
  */
 export const linkCompartment = new Compartment();
 
 /**
- * FR-042 — underlined, with a tooltip naming the gesture.
+ * FR-042 / FR-105 — the mark, with a tooltip naming the gesture AND where it goes.
  *
- * The wording stops at "to open" for the terminal tooltip's reason: a file link ends up in an editor,
- * a preview, the file manager or the OS's own program depending on the link and the *Default link
- * action*, and naming one of them would be wrong for the other three.
+ * The wording is core's `linkHoverText`, the function the terminal's tooltip delegates to, fed the
+ * same inputs the terminal feeds it — the click rule's answer for a file link, `null` for a web link
+ * — so one link reads identically in both panel types (FR-104). One mark per wording, reused across
+ * builds, and every one carries the same class: a file link and a web link wear the SAME mark
+ * (FR-136); the kind is data on it, not a look.
  */
-const linkMark = Decoration.mark({
-  class: 'cm-throng-link',
-  attributes: { title: `${linkModifierLabel()}+Click to open` },
-});
+const marks = new Map<string, Decoration>();
+
+function markFor(at: EditorLinkAt): Decoration {
+  const title =
+    at.kind === 'web'
+      ? linkHoverText('web', null, linkModifierLabel())
+      : linkHoverText(
+          'file',
+          resolveDefaultLinkAction({
+            link: at.link,
+            hasPosition: at.position !== undefined,
+            previewIsDefault: false,
+          }),
+          linkModifierLabel(),
+        );
+  const key = `${at.kind}|${title}`;
+  let mark = marks.get(key);
+  if (mark === undefined) {
+    mark = Decoration.mark({
+      class: 'cm-throng-link',
+      attributes: { title, 'data-link-kind': at.kind },
+    });
+    marks.set(key, mark);
+  }
+  return mark;
+}
+
+/** On the editor root while Ctrl/Cmd is held — the only time a click on a link follows it. */
+const MODIFIER_HELD_CLASS = 'cm-throng-linkHeld';
 
 /**
- * The underline, from theme tokens. No literal colour: `tokens.css` publishes the active theme's
- * accent as a CSS variable, so re-theming repaints this with no rebuild.
+ * FR-135 – FR-138 — the ONE link affordance, the terminal's (`terminal.css`, `link-marks.ts`) drawn
+ * in CodeMirror's terms: a DASHED underline in `linkUnderline` at rest, SOLID in `linkUnderlineHover`
+ * under the pointer, and the text's own colour left alone — an editor's syntax colours win (FR-008).
+ *
+ * The hand pointer is not part of the mark. It appears only while the modifier is held, because only
+ * then does a click follow (FR-040); a hand at rest would promise a follow a plain click never makes.
+ * The selector names `.cm-content` so the rule is qualified by the held state and nothing looser.
  */
 const linkTheme = EditorView.theme({
   '.cm-throng-link': {
-    textDecoration: 'underline',
+    textDecoration: 'underline dashed var(--throng-colour-linkUnderline)',
+    textDecorationThickness: '1px',
     textUnderlineOffset: '2px',
-    color: 'var(--throng-colour-accent)',
+  },
+  '.cm-throng-link:hover': {
+    textDecorationStyle: 'solid',
+    textDecorationColor: 'var(--throng-colour-linkUnderlineHover)',
+  },
+  [`&.${MODIFIER_HELD_CLASS} .cm-content .cm-throng-link`]: {
     cursor: 'pointer',
   },
 });
@@ -169,41 +234,100 @@ export function editorLinkRequest(text: string, site: EditorLinkSite): LinkResol
 }
 
 /**
- * Every RESOLVED link on the lines `from..to` touches.
+ * Every link on the lines `from..to` touches: web spans, and path candidates that RESOLVED.
  *
  * Line by line, because the grammar is a line scanner in both surfaces — a path does not span a line
- * break, and scanning the joined text would let one begin on one line and end on the next.
+ * break, and scanning the joined text would let one begin on one line and end on the next. Each line
+ * is read by core's `scanLinkLine`, the same scan the terminal's provider reads (FR-104): the web
+ * spans are found first and claimed, so no path candidate overlaps one (FR-009), and the spans come
+ * back in line order, as the terminal's do.
  */
 export function linkHitsBetween(
   state: EditorState,
   from: number,
   to: number,
   deps: EditorLinkDeps,
-): EditorLinkHit[] {
-  // FR-060. Everything that can act on a link in an editor comes through here, so an empty answer
-  // is the whole switch: no marks, no hit for a gesture to claim, nothing for the menu to offer.
-  if (deps.detect?.() === false) return [];
-  const site = deps.site();
-  const hits: EditorLinkHit[] = [];
-  const claimed: never[] = [];
+): EditorLinkAt[] {
+  // FR-060 gates GUESSED paths only (FR-101): with it off there is no path mark, no path hit for a
+  // gesture to claim and no path run for the menu — while a web link keeps all three.
+  const detectPaths = deps.detect?.() !== false;
+  const site = detectPaths ? deps.site() : null;
+  const hits: EditorLinkAt[] = [];
 
   let pos = from;
   while (pos <= to) {
     const line = state.doc.lineAt(pos);
-    const candidates = detectPathCandidates(line.text, claimed).slice(
-      0,
-      MAX_LINK_CANDIDATES_PER_LINE,
-    );
-    for (const candidate of candidates) {
-      const hit = hitFor(candidate, line.from, site, deps);
-      // R7's ambiguity rule, as the terminal's provider applies it: detection emits the positioned
-      // reading first, so the first candidate that resolves keeps the span and the second is dropped.
-      if (hit && !hits.some((h) => h.from < hit.to && hit.from < h.to)) hits.push(hit);
+    const scanned = scanLinkLine(line.text);
+    const onLine: EditorLinkAt[] = scanned.web.map((span) => ({
+      kind: 'web' as const,
+      uri: span.uri,
+      from: line.from + span.start,
+      to: line.from + span.end,
+    }));
+    if (site !== null) {
+      const taken: EditorLinkAt[] = [];
+      for (const candidate of scanned.paths.slice(0, MAX_LINK_CANDIDATES_PER_LINE)) {
+        const hit = hitFor(candidate, line.from, site, deps);
+        // R7's ambiguity rule, as the terminal's provider applies it: detection emits the positioned
+        // reading first, so the first candidate that resolves keeps the span and the second is dropped.
+        if (hit && !taken.some((h) => h.from < hit.to && hit.from < h.to)) taken.push(hit);
+      }
+      onLine.push(...taken);
+      onLine.sort((a, b) => a.from - b.from);
     }
+    hits.push(...onLine);
     if (line.to >= state.doc.length) break;
     pos = line.to + 1;
   }
   return hits;
+}
+
+/**
+ * D3 (T215, T216) — the last answer each set of deps DREW, per request.
+ *
+ * The cache drops an answer once it is older than `LINK_CACHE_TTL_MS`, and it drops it on READ. A view
+ * nobody has touched is not rebuilt in that time, so it keeps showing the link it drew — and the next
+ * thing to read the cache is the Ctrl+click on that link, which then heard "not known" (FR-071's
+ * `undefined`), was not claimed, and let CodeMirror add a caret where the user could see an underline.
+ * The same miss re-asked main, so the second click on the same link worked, which is why the probe
+ * saw a first-character click fail and a mid-link one succeed.
+ *
+ * So "not known YET" falls back to what was last drawn for the same request, and only that: an answer
+ * of `{ ok: false }` replaces it at once, and a request never answered `ok` draws nothing, as FR-071
+ * requires. The hit-test therefore reads the span set the decoration drew. Nothing is followed on the
+ * strength of this alone — main re-resolves and re-checks every target at action time (FR-037).
+ */
+const drawnAnswers = new WeakMap<EditorLinkDeps, Map<string, ResolvedLink>>();
+/** A bound, not a budget: one entry per distinct span an editor has drawn, dropped oldest-first. */
+const MAX_DRAWN_ANSWERS = 512;
+
+function drawnKey(request: LinkResolutionRequest): string {
+  return JSON.stringify([
+    request.kind,
+    request.text,
+    request.baseDirectory ?? '',
+    request.panelId,
+    request.originProjectId ?? '',
+  ]);
+}
+
+function answerFor(request: LinkResolutionRequest, deps: EditorLinkDeps): ResolvedLink | null {
+  let drawn = drawnAnswers.get(deps);
+  if (drawn === undefined) {
+    drawn = new Map();
+    drawnAnswers.set(deps, drawn);
+  }
+  const key = drawnKey(request);
+  const resolution = deps.ask(request);
+  if (resolution === undefined) return drawn.get(key) ?? null;
+  if (!resolution.ok) {
+    drawn.delete(key);
+    return null;
+  }
+  drawn.delete(key); // re-inserted, so the order is least-recently-drawn first
+  drawn.set(key, resolution.link);
+  if (drawn.size > MAX_DRAWN_ANSWERS) drawn.delete(drawn.keys().next().value as string);
+  return resolution.link;
 }
 
 function hitFor(
@@ -213,12 +337,13 @@ function hitFor(
   deps: EditorLinkDeps,
 ): EditorLinkHit | null {
   const request = editorLinkRequest(candidate.text, site);
-  const resolution = deps.ask(request);
-  // FR-006 / FR-071: `undefined` (not yet known) and `{ ok: false }` (nothing there) are the same
+  // FR-006 / FR-071: not yet known (and never drawn) and `{ ok: false }` (nothing there) are the same
   // answer as far as the screen is concerned — no underline, nothing followable.
-  if (resolution?.ok !== true) return null;
+  const link = answerFor(request, deps);
+  if (link === null) return null;
   return {
-    link: resolution.link,
+    kind: 'file',
+    link,
     request,
     ...(candidate.position === undefined ? {} : { position: candidate.position }),
     ...(candidate.positionText === undefined ? {} : { positionText: candidate.positionText }),
@@ -232,7 +357,7 @@ export function buildLinkDecorations(view: LinkScanView, deps: EditorLinkDeps): 
   const builder = new RangeSetBuilder<Decoration>();
   for (const range of view.visibleRanges) {
     for (const hit of linkHitsBetween(view.state, range.from, range.to, deps)) {
-      builder.add(hit.from, hit.to, linkMark);
+      builder.add(hit.from, hit.to, markFor(hit));
     }
   }
   return builder.finish();
@@ -243,7 +368,7 @@ export function linkAtPosition(
   state: EditorState,
   pos: number,
   deps: EditorLinkDeps,
-): EditorLinkHit | null {
+): EditorLinkAt | null {
   const line = state.doc.lineAt(pos);
   return (
     linkHitsBetween(state, line.from, line.from, deps).find(
@@ -322,9 +447,12 @@ export function linkModifierName(platform: OsName = DEFAULT_BINDING_PLATFORM): '
   return token ? linkModifierFromChord(token) : 'Ctrl';
 }
 
-/** The label the tooltip uses. Separate from the name so the wording has one source too. */
+/**
+ * The label the tooltip uses — `Ctrl`, or `Cmd` where the modifier is Meta, which is how the
+ * terminal's tooltip names it (FR-105). Separate from the name so the wording has one source too.
+ */
 function linkModifierLabel(): string {
-  return linkModifierName();
+  return linkModifierName() === 'Meta' ? 'Cmd' : 'Ctrl';
 }
 
 function modifierHeld(event: { ctrlKey: boolean; metaKey: boolean }): boolean {
@@ -347,7 +475,7 @@ export function createLinkPointerHandlers(deps: EditorLinkDeps): {
   mousedown(event: MouseEvent, view: LinkPointerView): boolean;
   mouseup(event: MouseEvent, view: LinkPointerView): boolean;
 } {
-  let pending: { hit: EditorLinkHit; x: number; y: number; from: number } | null = null;
+  let pending: { hit: EditorLinkAt; x: number; y: number; from: number } | null = null;
 
   return {
     mousedown(event, view) {
@@ -394,9 +522,10 @@ export function createLinkPointerHandlers(deps: EditorLinkDeps): {
 /**
  * The compartment's content: the decoration plugin and its theme, or NOTHING.
  *
- * `null` is FR-060's off position — `editor.links.detectInEditors` turned off, or an editor with no
- * panel identity to ask about. Returning `[]` rather than a disabled plugin is what makes the switch
- * structural: with the extension absent there is no code path left that could decorate.
+ * `null` is an editor with no panel identity to ask about. Returning `[]` rather than a disabled
+ * plugin makes that structural: with the extension absent there is no code path left that could
+ * decorate. FR-060's switch is NOT this any more — it gates guessed paths inside the scan, because
+ * FR-101 keeps web links marked and followable with it off.
  */
 export function editorLinkExtension(deps: EditorLinkDeps | null): Extension {
   if (deps === null) return [];
@@ -409,8 +538,11 @@ function linkDecorationPlugin(deps: EditorLinkDeps): Extension {
       decorations: DecorationSet;
       /** Dropped on destroy — the cache outlives the view, and a dead view must not repaint. */
       private readonly stop: () => void;
+      /** FR-135's pointer state: the listeners that track whether Ctrl/Cmd is held, removed on destroy. */
+      private readonly stopModifier: () => void;
 
       constructor(private readonly view: EditorView) {
+        this.stopModifier = trackModifier(view.dom);
         this.decorations = buildLinkDecorations(view, deps);
         // FR-070: an answer landing, or a watcher invalidating one, has to reach a view that is
         // already drawn — the resolution is asynchronous and the build that asked for it is over.
@@ -430,10 +562,40 @@ function linkDecorationPlugin(deps: EditorLinkDeps): Extension {
 
       destroy(): void {
         this.stop();
+        this.stopModifier();
       }
     },
     { decorations: (plugin) => plugin.decorations },
   );
+}
+
+/**
+ * FR-135 — keep {@link MODIFIER_HELD_CLASS} on `root` exactly while the link modifier is held.
+ *
+ * The key events come from the WINDOW, because the modifier is often pressed while focus is
+ * elsewhere and the pointer is already over the editor; a pointer move reads the modifier off the
+ * event itself, which also corrects a missed key-up (focus changed with the key down). A window blur
+ * clears it, since no key-up follows a key held while the window loses focus.
+ */
+function trackModifier(root: HTMLElement): () => void {
+  const view = root.ownerDocument.defaultView;
+  const set = (held: boolean): void => {
+    root.classList.toggle(MODIFIER_HELD_CLASS, held);
+  };
+  const onKey = (event: KeyboardEvent): void => set(modifierHeld(event));
+  const onMove = (event: MouseEvent): void => set(modifierHeld(event));
+  const onBlur = (): void => set(false);
+  view?.addEventListener('keydown', onKey, true);
+  view?.addEventListener('keyup', onKey, true);
+  view?.addEventListener('blur', onBlur);
+  root.addEventListener('mousemove', onMove);
+  return () => {
+    view?.removeEventListener('keydown', onKey, true);
+    view?.removeEventListener('keyup', onKey, true);
+    view?.removeEventListener('blur', onBlur);
+    root.removeEventListener('mousemove', onMove);
+    set(false);
+  };
 }
 
 /**

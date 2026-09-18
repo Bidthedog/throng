@@ -111,10 +111,11 @@ import {
   followLink,
   linkFailureReport,
   linkRouting,
+  openWebLink,
   osLinkActions,
   type LinkFollowDeps,
 } from '../links/link-actions.js';
-import type { FileLinkMenuContext } from '../links/link-menu-items.js';
+import type { FileLinkMenuContext, WebLinkMenuContext } from '../links/link-menu-items.js';
 import {
   createLinkPointerHandlers,
   editorLinkExtension,
@@ -124,6 +125,7 @@ import {
   registerPanelLinkDeps,
   setLinkAnswerSubscriber,
   unregisterPanelLinkDeps,
+  type EditorLinkAt,
   type EditorLinkDeps,
   type EditorLinkHit,
 } from './link-decorations.js';
@@ -462,7 +464,9 @@ export function useEditor(params: UseEditorParams): void {
     // on the view itself and would otherwise keep following a link that no longer underlines.
     detect: () => metaRef.current.settings.links.detectInEditors,
     ask: askEditorLink,
-    follow: (hit) => void followEditorLink(hit),
+    // FR-103: a web link goes to the system browser by the one route the terminal takes too; a file
+    // link goes through the click rule.
+    follow: (hit) => (hit.kind === 'web' ? openWebLink(hit.uri) : void followEditorLink(hit)),
   };
 
   /** Peek the cache, and ask if the answer is not here yet (FR-070, FR-071). Never waits. */
@@ -472,12 +476,19 @@ export function useEditor(params: UseEditorParams): void {
     return cached;
   }
 
-  /** FR-054 — the one route Ctrl+click, the chord and the menu's Open Link all take. */
+  /**
+   * FR-054 — the one route Ctrl+click, the chord and the menu's Open Link all take.
+   *
+   * It follows the link the decoration DREW — `hit.link`, the reading that resolved — rather than
+   * asking the cache again (D3). A second ask can answer "not known" for a link the user is looking
+   * at (the entry outlived its TTL with nothing redrawn), and would then do nothing. Main still
+   * re-resolves the request and re-checks the target before any OS action (FR-037).
+   */
   async function followEditorLink(hit: EditorLinkHit): Promise<void> {
     await followLink({
       request: hit.request,
       ...(hit.position === undefined ? {} : { position: hit.position }),
-      resolve: askEditorLink,
+      resolve: () => ({ ok: true, link: hit.link }),
       deps: editorLinkDestinations(),
     });
   }
@@ -486,8 +497,9 @@ export function useEditor(params: UseEditorParams): void {
     const meta = metaRef.current;
     return {
       /*
-       * FR-050 – FR-052, SC-008 — the preference and the file's own default open action, both read
-       * at the GESTURE.
+       * FR-051, FR-052, FR-110 — the file's own default open action, read at the GESTURE. It is the
+       * click rule's one settings-derived input: the *Default link action* is retired (FR-112), and
+       * what a click does is otherwise fixed by `resolveDefaultLinkAction`.
        *
        * `metaRef` is rewritten on every render and `previewProvidersRef` follows the injected
        * registry, so the reader below sees whatever is current even though the extension holding
@@ -549,30 +561,48 @@ export function useEditor(params: UseEditorParams): void {
   const detectLinks = settings.links.detectInEditors;
 
   /**
-   * FR-031 / §5 — the link the content menu should offer, or null.
+   * FR-031 / FR-103 / §5 — the link run the content menu should offer: the file-link run, the
+   * web-link pair, or neither.
    *
    * The chord IS shown here, unlike in the terminal: `preview.followLink` is live in the editor
    * scope (FR-045), so Principle VI's "show its chord where one is bound" applies. It is read at
    * menu-open time so a rebind appears on the next right-click rather than the next restart.
+   * `editor.links.detectInEditors` is applied by the scan, which drops guessed paths and keeps web
+   * links (FR-101).
    */
-  function linkMenuContextFor(view: EditorView, event: MouseEvent): FileLinkMenuContext | null {
-    if (!metaRef.current.settings.links.detectInEditors) return null;
+  function linkMenuContextFor(
+    view: EditorView,
+    event: MouseEvent,
+  ): { fileLink: FileLinkMenuContext | null; webLink: WebLinkMenuContext | null } {
+    const none = { fileLink: null, webLink: null };
     // With text selected the ordinary menu appears, as it does in a terminal (024 FR-019d).
-    if (!view.state.selection.main.empty) return null;
+    if (!view.state.selection.main.empty) return none;
     const pos = linkMenuPosition(view, event);
-    if (pos === null) return null;
-    const hit = linkAtPosition(view.state, pos, linkDeps);
-    if (!hit) return null;
+    if (pos === null) return none;
+    const hit: EditorLinkAt | null = linkAtPosition(view.state, pos, linkDeps);
+    if (!hit) return none;
+    const chord = firstBinding(keybindingsRef.current, 'preview.followLink');
+    if (hit.kind === 'web') {
+      return {
+        fileLink: null,
+        webLink: {
+          uri: hit.uri,
+          ...(chord ? { chord } : {}),
+          openLink: () => openWebLink(hit.uri),
+        },
+      };
+    }
     return {
-      link: hit.link,
-      request: hit.request,
-      ...(hit.position === undefined ? {} : { position: hit.position }),
-      ...(hit.positionText === undefined ? {} : { positionText: hit.positionText }),
-      ...(firstBinding(keybindingsRef.current, 'preview.followLink')
-        ? { chord: firstBinding(keybindingsRef.current, 'preview.followLink')! }
-        : {}),
-      openLink: () => void followEditorLink(hit),
-      deps: { ...editorLinkDestinations(), ...osLinkActions() },
+      webLink: null,
+      fileLink: {
+        link: hit.link,
+        request: hit.request,
+        ...(hit.position === undefined ? {} : { position: hit.position }),
+        ...(hit.positionText === undefined ? {} : { positionText: hit.positionText }),
+        ...(chord ? { chord } : {}),
+        openLink: () => void followEditorLink(hit),
+        deps: { ...editorLinkDestinations(), ...osLinkActions() },
+      },
     };
   }
 
@@ -634,15 +664,16 @@ export function useEditor(params: UseEditorParams): void {
    *
    * The same shape as word wrap and the gutter above, and for the same reason: recreating the
    * `EditorView` would satisfy every content check and take the undo history, the scroll and the
-   * selection with it. Off puts NOTHING in the compartment — not a disabled plugin — so with the
-   * switch off there is no code path left that could decorate.
+   * selection with it. The switch itself is read inside the scan (`linkDeps.detect`), which drops
+   * guessed paths; reconfiguring here rebuilds the marks the moment it moves.
    *
-   * The switch never touches an explicit hyperlink, which an editor has none of; in a terminal that
-   * distinction is the whole of §6, and it is stated here so the two read as one rule.
+   * The plugin stays installed with the switch off, because the switch is about GUESSED paths only:
+   * a web url is a declaration, and FR-101 keeps it marked and followable in an editor exactly as in
+   * a terminal, where an explicit hyperlink is untouched by the same switch (§6).
    */
   useEffect(() => {
     viewRef.current?.dispatch({
-      effects: linkCompartment.reconfigure(editorLinkExtension(detectLinks ? linkDeps : null)),
+      effects: linkCompartment.reconfigure(editorLinkExtension(linkDeps)),
     });
   }, [detectLinks, linkDeps]);
 
@@ -1434,7 +1465,7 @@ export function useEditor(params: UseEditorParams): void {
                    * Composed at menu-open time for Go To Line's reason: the file, the project and
                    * the cached resolution all change under a live view.
                    */
-                  fileLink: linkMenuContextFor(target, event),
+                  ...linkMenuContextFor(target, event),
                 }),
               );
               event.preventDefault();
@@ -1465,14 +1496,12 @@ export function useEditor(params: UseEditorParams): void {
           // (`applyLanguage` reconfigures it); first-class grammars keep it empty.
           functionHighlightCompartment.of([]),
           /*
-           * 045 FR-002 / FR-060 — file links, in a compartment so `editor.links.detectInEditors`
-           * can empty it on a live view. AFTER the highlighting, so the underline nests inside the
-           * syntax span rather than wrapping it — the same ordering the function overlay above
-           * needs, and for the same reason.
+           * 045 FR-002 / FR-060 / FR-100 — file and web links, in a compartment so a change of
+           * `editor.links.detectInEditors` rebuilds the marks on a live view. AFTER the
+           * highlighting, so the underline nests inside the syntax span rather than wrapping it —
+           * the same ordering the function overlay above needs, and for the same reason.
            */
-          linkCompartment.of(
-            editorLinkExtension(metaRef.current.settings.links.detectInEditors ? linkDeps : null),
-          ),
+          linkCompartment.of(editorLinkExtension(linkDeps)),
           // In-panel find/replace (013): paints the match decorations. The bar drives
           // it through the controller registered below; CodeMirror's own search panel
           // is deliberately not used (its controls could not be theme-token driven).

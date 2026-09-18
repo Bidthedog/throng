@@ -138,7 +138,9 @@ async function editorChord(resolved: ResolvedLink, text: string, s: Surface): Pr
   let followed: Promise<void> = Promise.resolve();
   const deps: EditorLinkDeps = {
     site: () => ({ panelId: 'panel-1', originProjectId: 'project-1', baseDirectory: ROOT }),
-    ask: answer(resolved),
+    // Path-specific, as main is: only the text that names the file resolves. A stub answering yes
+    // to every reading made FR-150's extended reading (`setup.bat now`) win, which no real disk does.
+    ask: (request) => (request.text === text ? answer(resolved)() : { ok: false }),
     follow: (hit) => {
       followed = followLink({ request: hit.request, resolve: answer(resolved), deps: s.deps });
     },
