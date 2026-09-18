@@ -23,9 +23,6 @@ import { leavesOfDeclared, type FieldDescriptor, type MetadataRegistry } from '.
 // 044 — imports neither this module nor `app-settings.ts`, so no cycle (see its header).
 import { previewSettingsDescriptors } from './preview-settings.js';
 import { SHIPPED_PREVIEW_PROVIDERS } from '../preview/providers/index.js';
-// 045 — the descriptor's allowed set comes from the same list the parser and
-// `resolveDefaultLinkAction` read, so the three cannot drift (#394).
-import { DEFAULT_LINK_ACTIONS } from '../links/default-action.js';
 
 /** Leaves that are internal bookkeeping, not user-configurable settings. */
 export const SETTINGS_INTERNAL_KEYS: readonly string[] = [
@@ -619,34 +616,20 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   /*
    * Links (045, FR-061 — #394).
    *
-   * Three together under `Editor · Links`, because FR-061 requires the default link action and both
-   * detection switches "in one place". The fourth link setting, `terminals.advertiseHyperlinks`,
-   * deliberately sits in the flat Terminal group instead: it changes what a terminal is STARTED
-   * with, which is a property of the terminal rather than of links.
+   * Three together under `Editor · Links`, because FR-061 requires the link settings "in one
+   * place". The fourth link setting, `terminals.advertiseHyperlinks`, deliberately sits in the flat
+   * Terminal group instead: it changes what a terminal is STARTED with, which is a property of the
+   * terminal rather than of links.
    *
    * These three are declared CONSECUTIVELY on purpose. `groupDescriptors` buckets by group then
    * subgroup in declaration order, so a descriptor pushed in between them would split the section
    * in the editor without any test of the values noticing.
+   *
+   * 045 FR-112 (2026-09-18): `editor.links.defaultAction` was DELETED here and in app-settings.ts,
+   * on the `explorer.openMode` pattern above. The click rule (FR-110) fixes what a click does, so
+   * the setting had nothing left to choose; a persisted value is dropped by the tolerant parse and
+   * the next write leaves it out (FR-113, 019 FR-023's mechanism).
    */
-  {
-    key: 'editor.links.defaultAction',
-    label: 'Default link action',
-    description:
-      'What Ctrl+click, the Open Link chord and the plain Open Link menu item do to a file link. The named items in the link menu always do what they say, whatever this is set to. Two rules override it: a link that carries a line and column always opens an editor, because a preview cannot reveal a position; and a link to a file the operating system would run is never run by a click — it is shown in the file manager instead, and runs only through Open in OS Default Program.',
-    group: 'Editor',
-    subgroup: 'Links',
-    control: 'select',
-    allowedValues: [...DEFAULT_LINK_ACTIONS],
-    // The whole set, all or none (metadata.ts). Title-Casing `osDefaultProgram` reads wrong, and a
-    // partial map renders one dropdown in two registers.
-    optionLabels: {
-      throng: 'Open in throng',
-      editor: 'Open in Editor',
-      preview: 'Open in Preview',
-      osExplorer: 'Open in OS Explorer',
-      osDefaultProgram: 'Open in OS Default Program',
-    },
-  },
   {
     key: 'editor.links.detectInEditors',
     label: 'Detect file links in editors',
@@ -664,6 +647,18 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'Editor',
     subgroup: 'Links',
     control: 'toggle',
+  },
+  {
+    key: 'editor.links.existenceCheckTimeoutMs',
+    label: 'Existence-check timeout',
+    description:
+      'How long throng waits, in milliseconds, for a file or network location to answer before treating a path as not a link for now. Raise it for a slow network share. It applies to the next check, with no restart.',
+    group: 'Editor',
+    subgroup: 'Links',
+    control: 'slider',
+    min: 250,
+    max: 30_000,
+    step: 250,
   },
 
   // Navigation (033, FR-069b). Its own group because these govern the Quick Open and Go To Line

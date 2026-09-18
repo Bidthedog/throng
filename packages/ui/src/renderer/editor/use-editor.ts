@@ -495,7 +495,6 @@ export function useEditor(params: UseEditorParams): void {
        * so this and the terminal cannot read the same preference differently (FR-054).
        */
       ...linkRouting(() => ({
-        defaultAction: metaRef.current.settings.links.defaultAction,
         previewRegistry: previewProvidersRef.current.registry,
         previewSettings: metaRef.current.settings.previews,
       })),

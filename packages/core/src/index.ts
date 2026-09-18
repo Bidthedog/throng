@@ -1025,14 +1025,23 @@ export type {
 export type { IPathForms } from './abstractions/path-forms.js';
 export type { IExecutableExtensions } from './abstractions/executable-extensions.js';
 export { detectPathCandidates } from './links/detect.js';
-export { LINK_CACHE_TTL_MS, MAX_LINK_CANDIDATES_PER_LINE } from './links/limits.js';
+export {
+  LINK_CACHE_TTL_MS,
+  LINK_IDLE_SCAN_MS,
+  MAX_LINK_CANDIDATES_PER_LINE,
+} from './links/limits.js';
 export { classifyTerminalLinkTarget } from './links/classify.js';
 export type { TerminalLinkKind } from './links/classify.js';
 export { resolveCandidate, isLinkInProject } from './links/resolve.js';
 export type { LinkResolutionContext } from './links/resolve.js';
 export { LINK_TARGETS, linkTargetStates } from './links/targets.js';
 export type { LinkTarget, TargetState } from './links/targets.js';
-export { DEFAULT_LINK_ACTIONS, resolveDefaultLinkAction } from './links/default-action.js';
-export type { DefaultLinkAction } from './links/default-action.js';
+export { resolveDefaultLinkAction } from './links/default-action.js';
+export type { ClickTarget } from './links/default-action.js';
+export { linkHoverText } from './links/hover-text.js';
+export { WEB_URL_REGEX, detectWebLinks } from './links/web-url.js';
+export type { WebLinkSpan } from './links/web-url.js';
+export { scanLinkLine } from './links/scan-line.js';
+export type { ScannedLine } from './links/scan-line.js';
 export { fileLinkMenuItems } from './links/menu.js';
 export type { FileLinkMenuItem } from './links/menu.js';

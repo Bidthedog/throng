@@ -1,6 +1,6 @@
 import {
   MAX_LINK_CANDIDATES_PER_LINE,
-  detectPathCandidates,
+  scanLinkLine,
   type LinkCandidate,
   type LinkPosition,
   type LinkResolution,
@@ -9,7 +9,6 @@ import {
   type Span,
 } from '@throng/core';
 import { subscribeLinkCache } from '../links/link-cache.js';
-import { TERMINAL_URL_REGEX } from './terminal-url.js';
 import { terminalLinkRequest, type TerminalLinkSite } from './terminal-link-activation.js';
 import type { HoveredLink } from './hovered-link.js';
 
@@ -108,9 +107,6 @@ export interface FileLinkProvider {
   provideLinks(bufferLineNumber: number, callback: (links: ProvidedLink[] | undefined) => void): void;
 }
 
-/** A global copy of the addon's own pattern — the source of truth for where a url ends (FR-009). */
-const URL_SCANNER = new RegExp(TERMINAL_URL_REGEX.source, 'g');
-
 /**
  * How long a held reply waits for its outstanding resolutions before answering with what it has.
  *
@@ -149,7 +145,9 @@ export function createFileLinkProvider(deps: FileLinkProviderDeps): FileLinkProv
         return;
       }
 
-      const candidates = detectPathCandidates(row, claimedByWebLinks(row)).slice(
+      // FR-009 / D9: the web spans are claimed inside `scanLinkLine`, the one line scan both panel
+      // types share (FR-104), so no path candidate overlaps a url.
+      const candidates = scanLinkLine(row).paths.slice(
         0,
         MAX_LINK_CANDIDATES_PER_LINE,
       );
@@ -244,19 +242,6 @@ function linkFor(
     hover: (event) => deps.onHover(hovered, event),
     leave: () => deps.onHover(null),
   };
-}
-
-/** Every range the web-link pattern matches in this row (FR-009). */
-function claimedByWebLinks(row: string): Span[] {
-  const claimed: Span[] = [];
-  URL_SCANNER.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = URL_SCANNER.exec(row)) !== null) {
-    claimed.push({ start: match.index, end: match.index + match[0].length });
-    // A zero-length match would spin here; the pattern cannot produce one, but the guard is cheap.
-    if (match[0].length === 0) URL_SCANNER.lastIndex += 1;
-  }
-  return claimed;
 }
 
 function overlapsAny(span: Span, ranges: readonly Span[]): boolean {

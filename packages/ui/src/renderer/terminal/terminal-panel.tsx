@@ -253,12 +253,10 @@ export function TerminalPanel({
    */
   const previewProviders = usePreviewProviders();
   const routingRef = useRef<LinkRoutingInputs>({
-    defaultAction: editorSettings.links.defaultAction,
     previewRegistry: previewProviders.registry,
     previewSettings: editorSettings.previews,
   });
   routingRef.current = {
-    defaultAction: editorSettings.links.defaultAction,
     previewRegistry: previewProviders.registry,
     previewSettings: editorSettings.previews,
   };

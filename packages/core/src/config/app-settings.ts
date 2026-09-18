@@ -19,9 +19,6 @@ import { NOTICE_SEVERITIES } from '../notice/severity.js';
 import { parsePreviewSettings, previewSettingsDefaults } from './preview-settings.js';
 import { SHIPPED_PREVIEW_PROVIDERS } from '../preview/providers/index.js';
 import type { PreviewSettings } from '../preview/settings-types.js';
-// 045 — the enum and its value list live beside the decision that reads them, so the parser and the
-// descriptor cannot drift from what `resolveDefaultLinkAction` actually accepts (#394).
-import { DEFAULT_LINK_ACTIONS, type DefaultLinkAction } from '../links/default-action.js';
 
 /** Confirmation depth for a destroy action: none / single / double (wry second). */
 export type ConfirmLevel = 'none' | 'single' | 'double';
@@ -301,20 +298,30 @@ export interface EditorSettings {
   previews: PreviewSettings;
   /**
    * 045: clickable file links (`Editor · Links`, #394). Three leaves in one block because FR-061
-   * requires the default link action and both detection switches "together in one place", and
-   * `group` + `subgroup` is the mechanism that puts them there.
+   * requires the link settings "together in one place", and `group` + `subgroup` is the mechanism
+   * that puts them there.
    */
   links: EditorLinkSettings;
 }
 
-/** 045 FR-050, FR-060 — the `Editor · Links` block (#394). */
+/**
+ * 045 FR-060, FR-120 — the `Editor · Links` block (#394).
+ *
+ * `defaultAction` (FR-050) is RETIRED (FR-112): what a click does is fixed by the click rule
+ * (FR-110), so there is nothing left to choose. A persisted value is dropped by `linkSettings`,
+ * which rebuilds the block from the leaves below, and the next ordinary write leaves it out — 019
+ * FR-023's mechanism for `explorer.openMode` (FR-113).
+ */
 export interface EditorLinkSettings {
-  /** FR-050: what Ctrl+click, the Open Link chord and the plain Open Link item do. */
-  defaultAction: DefaultLinkAction;
   /** FR-060: detect paths in editor documents. Explicit hyperlinks are never affected. */
   detectInEditors: boolean;
   /** FR-060: detect paths in terminal output. Web links and `file:` hyperlinks keep working. */
   detectInTerminals: boolean;
+  /**
+   * FR-120: how long one existence check may take before the link is reported unreachable. Bounded
+   * 250 – 30,000 by its descriptor, which `applyDeclaredBounds` enforces; there is no clamp here.
+   */
+  existenceCheckTimeoutMs: number;
 }
 
 /** Where the new-project folder picker opens (011, FR-041). */
@@ -695,12 +702,12 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     },
     // 044 — DERIVED from the provider registry, as `indentByLanguage` is from the language registry.
     previews: previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS),
-    // 045 FR-050/FR-060 — Open in throng, and both detection switches on. Detection is shipped on
-    // because a link a user has to enable is a feature they never find (#394).
+    // 045 FR-060/FR-120 — both detection switches on, and a two-second existence check. Detection is
+    // shipped on because a link a user has to enable is a feature they never find (#394).
     links: {
-      defaultAction: 'throng',
       detectInEditors: true,
       detectInTerminals: true,
+      existenceCheckTimeoutMs: 2000,
     },
   },
   tabs: {
@@ -1144,20 +1151,19 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
 }
 
 /**
- * Tolerant per-field parse of `editor.links` (045 FR-050, FR-060). A bad leaf falls back to its own
- * default; an unknown enum value is a bad leaf, which is what keeps a hand-edited settings file
- * from putting `resolveDefaultLinkAction` in a state it has no clause for.
+ * Tolerant per-field parse of `editor.links` (045 FR-060, FR-120). A bad leaf falls back to its own
+ * default. The block is REBUILT from the leaves it knows rather than spread from `v`, which is what
+ * drops a retired `defaultAction` (FR-112, FR-113): it is never read, so it is never written back.
+ * The timeout's range is its descriptor's, enforced by `applyDeclaredBounds` — no clamp here.
  */
 function linkSettings(v: unknown, fallback: EditorLinkSettings): EditorLinkSettings {
   if (!isRecord(v)) return { ...fallback };
   return {
-    defaultAction: (DEFAULT_LINK_ACTIONS as readonly string[]).includes(v.defaultAction as string)
-      ? (v.defaultAction as DefaultLinkAction)
-      : fallback.defaultAction,
     detectInEditors:
       typeof v.detectInEditors === 'boolean' ? v.detectInEditors : fallback.detectInEditors,
     detectInTerminals:
       typeof v.detectInTerminals === 'boolean' ? v.detectInTerminals : fallback.detectInTerminals,
+    existenceCheckTimeoutMs: wholeNumber(v.existenceCheckTimeoutMs, fallback.existenceCheckTimeoutMs),
   };
 }
 

@@ -1,70 +1,42 @@
-import { linkTargetStates, type LinkTarget } from './targets.js';
 import type { ResolvedLink } from './types.js';
 
 /**
- * 045 FR-039, FR-050 – FR-055 — what Ctrl+click, the Open Link chord and the plain Open Link item
- * do for THIS link (`data-model.md` §4). One function, so all three cannot disagree (FR-054).
+ * 045 FR-110, FR-111, FR-114 — THE CLICK RULE (`data-model.md` §13.1): what Ctrl+click, the Open
+ * Link chord and the plain Open Link item do for a FILE link. One function, so the three gestures
+ * and the two panel types cannot disagree (FR-054, FR-104).
  *
- * ══ THE ORDER OF THE CLAUSES IS THE REQUIREMENT ══
+ * ══ SUPERSEDED 2026-09-18 ══
  *
- * 1. **FR-039, first, overriding everything.** An executable goes to the file manager, whatever the
- *    setting says and wherever the fallback would otherwise land. It is first rather than folded
- *    into the fallback because the setting can NAME `osDefaultProgram`, and a clause that only
- *    edited the fallback order would let that name through — which is a click on a downloaded
- *    `setup.exe` running it. SC-010 iterates every extension the platform calls executable and
- *    asserts none of them runs by any of the three routes.
- * 2. `'throng'` means "whatever throng would do with this file", which is the preview only when the
- *    file's own default open action is Preview (FR-051) AND the link carries no position (FR-052) —
- *    a preview cannot reveal a line and column, which is the same reason 044 FR-054 gives for
- *    sending Find in Files results to an editor.
- * 3. A named value performs itself, when the link offers that target.
- * 4. Otherwise FR-053's fallback, in ITS order: preview, editor, OS default program, OS file
- *    manager. A `disabled` preview counts as not offered — it is drawn so the user can see the way
- *    to enable it, not so a click can silently land on it.
+ * This used to read FR-050's *Default link action* setting, with FR-039's executable override in
+ * front and FR-053's fallback order behind. FR-110 – FR-112 retire all three: the setting is gone
+ * (`DefaultLinkAction` and `DEFAULT_LINK_ACTIONS` with it), and what a click does is fixed:
  *
- * `previewIsDefault` is `defaultOpenActionFor(...) === 'preview'`, computed by the caller. That
- * keeps this file free of the preview registry, which is 044's own guard against the renderer
- * importing a provider.
+ *   1. a folder                                              → `osExplorer`
+ *   2. anything outside the project                          → `osExplorer`
+ *   3. previewIsDefault, no position, an enabled preview      → `preview`
+ *   4. otherwise                                             → `editor`
+ *
+ * `link.executable` is NOT read (FR-114): an in-project `deploy.ps1` opens as its text, and an
+ * out-of-project one is already shown in the file manager by clause 2. FR-111 — no gesture ever
+ * hands a file to the OS default program — is a property of the RESULT TYPE: `osDefaultProgram` is
+ * reachable only through the explicit menu item, which does not come through here.
+ *
+ * `previewIsDefault` is `defaultOpenActionFor(...) === 'preview'`, computed by the caller, which
+ * keeps this file free of the preview registry (044 FR-070). Web links never pass through this
+ * function: a web link's click is the open-external seam, always.
  */
-export type DefaultLinkAction = 'throng' | 'editor' | 'preview' | 'osExplorer' | 'osDefaultProgram';
-
-/** FR-050's values, in FR-050's order. The shipped value is the first. */
-export const DEFAULT_LINK_ACTIONS: readonly DefaultLinkAction[] = [
-  'throng',
-  'editor',
-  'preview',
-  'osExplorer',
-  'osDefaultProgram',
-];
-
-/** FR-053's order, which is deliberately NOT FR-030's — it runs from the most specific outwards. */
-const FALLBACK_ORDER: readonly LinkTarget[] = ['preview', 'editor', 'osDefaultProgram', 'osExplorer'];
+export type ClickTarget = 'editor' | 'preview' | 'osExplorer';
 
 export function resolveDefaultLinkAction(args: {
-  readonly setting: DefaultLinkAction;
   readonly link: ResolvedLink;
   readonly hasPosition: boolean;
   readonly previewIsDefault: boolean;
-}): LinkTarget {
-  const { setting, link, hasPosition, previewIsDefault } = args;
-
-  // 1 — FR-039. Before anything reads the setting.
-  if (link.executable) return 'osExplorer';
-
-  const states = linkTargetStates(link);
-
-  // 2 — FR-051 / FR-052. `'throng'` names one of throng's own two destinations; whether the link
-  // actually offers it is clause 3's question, so an out-of-project file falls through to 4.
-  const named: LinkTarget =
-    setting === 'throng'
-      ? previewIsDefault && !hasPosition && states.preview === 'offered'
-        ? 'preview'
-        : 'editor'
-      : setting;
-
-  // 3
-  if (states[named] === 'offered') return named;
-
-  // 4 — FR-053. `osExplorer` is always offered, so this always answers.
-  return FALLBACK_ORDER.find((t) => states[t] === 'offered') ?? 'osExplorer';
+}): ClickTarget {
+  const { link, hasPosition, previewIsDefault } = args;
+  if (link.kind === 'folder') return 'osExplorer';
+  if (!link.inProject) return 'osExplorer';
+  // FR-052: a preview cannot reveal a line and column. A `disabled` provider is drawn so the user
+  // can see the way to enable it, not so a click can silently land on it.
+  if (previewIsDefault && !hasPosition && link.preview === 'enabled') return 'preview';
+  return 'editor';
 }

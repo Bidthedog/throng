@@ -1,3 +1,4 @@
+import { linkHoverText, resolveDefaultLinkAction } from '@throng/core';
 import type { LinkPosition, LinkResolutionRequest, ResolvedLink } from '@throng/core';
 
 /**
@@ -43,19 +44,22 @@ export type HoveredLink =
     };
 
 /**
- * FR-042's tooltip. It must NAME THE GESTURE; the destination wording differs by kind.
+ * FR-042's tooltip, worded by FR-105 — delegated to core's `linkHoverText`, which the editor's
+ * tooltip shares, so the two panel types cannot word one link differently.
  *
- * The web wording is 024's, unchanged. The file wording deliberately stops at "to open": a file link
- * can end up in an editor, a preview, the file manager or the OS's own program for the type
- * depending on the link and the *Default link action* setting, and a tooltip that named one of them
- * would be wrong for the other three. Saying `Ctrl+Click to open in system browser` over
- * `src/foo.ts` — which is what matching the web wording verbatim would do — is the specific
- * falsehood the spec's Assumptions amendment of 2026-09-18 was written to prevent.
+ * A file link's wording follows the CLICK RULE (FR-110): "to open" when the click lands in throng,
+ * "to show in OS Explorer" for a folder or anything outside the project. Only those two clauses
+ * decide the wording, and neither reads `hasPosition` or `previewIsDefault` — editor and preview are
+ * both "to open" — so the terminal passes the position it holds and no preview preference.
  */
 export function hoveredLinkTipText(hovered: HoveredLink, chord: string): string {
-  return hovered.kind === 'web'
-    ? `${chord}+Click to open in system browser`
-    : `${chord}+Click to open`;
+  if (hovered.kind === 'web') return linkHoverText('web', null, chord);
+  const click = resolveDefaultLinkAction({
+    link: hovered.link,
+    hasPosition: hovered.position !== undefined,
+    previewIsDefault: false,
+  });
+  return linkHoverText('file', click, chord);
 }
 
 /**

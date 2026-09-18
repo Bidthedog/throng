@@ -41,6 +41,22 @@ export const LINK_CACHE_TTL_MS = 30_000;
 export const MAX_LINK_CANDIDATES_PER_LINE = 64;
 
 /**
+ * How long a terminal's output must stay quiet before the idle scan resolves the rows in view
+ * (FR-137; contract `menus-and-gestures.md` §7 P13).
+ *
+ * It holds two things pulling in opposite directions. Too SHORT and a program that streams in bursts
+ * — a build printing a line every few tens of milliseconds, a `tail -f` — goes "quiet" between every
+ * burst, so the scan runs on what is effectively the output path, which FR-072 forbids. Too LONG and
+ * a user who stops output and looks for a link waits for the at-rest mark (FR-136) long enough to
+ * reach for the pointer anyway.
+ *
+ * 300 because it is several times the gap inside a streamed burst and still well under the moment a
+ * user starts moving the mouse; far inside `LINK_CACHE_TTL_MS`, so a scan's answers are fresh when a
+ * hover reads them.
+ */
+export const LINK_IDLE_SCAN_MS = 300;
+
+/**
  * The most words an anchored path may be extended by across single spaces (FR-150; contract
  * `link-resolution.md` §8.1 D16; plan Complexity Tracking, third round).
  *

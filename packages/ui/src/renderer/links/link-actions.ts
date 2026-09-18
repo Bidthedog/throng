@@ -6,7 +6,6 @@ import {
   type OsName,
 } from '@throng/core';
 import type {
-  DefaultLinkAction,
   LinkActionOutcome,
   LinkPosition,
   LinkResolution,
@@ -193,18 +192,16 @@ export interface LinkFollowDeps {
   readonly openInEditor: LinkActionDeps['openInEditor'];
   readonly openInPreview: LinkActionDeps['openInPreview'];
   readonly reportFailure: LinkActionDeps['reportFailure'];
-  /**
-   * FR-050's *Default link action*, as a READER. Absent means the shipped value.
-   *
-   * A reader rather than a value because of where these deps are built. Both surfaces build theirs
-   * ONCE and hold them for the panel's whole life — the terminal in a `useMemo` its mount effect
-   * reads through a ref, the editor in a function the CodeMirror extension closes over — and
-   * neither can be rebuilt on a settings change without tearing down a live shell or a live view.
-   * A captured value would therefore freeze the preference at whatever it was when the panel
-   * appeared, and SC-008 requires the change to land on the NEXT gesture.
+  /*
+   * 045 FR-112: the `defaultAction` reader is gone with the setting it read. The click rule (FR-110)
+   * fixes what a click does, so there is no preference left to keep live.
    */
-  readonly defaultAction?: () => DefaultLinkAction;
-  /** FR-051: whether THIS file's own default open action is Preview. Absent means no. */
+  /**
+   * FR-051: whether THIS file's own default open action is Preview. Absent means no.
+   *
+   * A reader rather than a value because both surfaces build these deps ONCE for the panel's whole
+   * life, and 044's per-provider setting still changes live — a captured value would freeze it.
+   */
   readonly previewIsDefault?: (link: ResolvedLink) => boolean;
 }
 
@@ -216,8 +213,6 @@ export interface LinkFollowDeps {
  * file's default open action is Preview, and never how that was worked out.
  */
 export interface LinkRoutingInputs {
-  /** `editor.links.defaultAction`, as it is at the moment it is read. */
-  readonly defaultAction: DefaultLinkAction;
   readonly previewRegistry: PreviewProviderRegistry;
   /** `editor.previews`, which carries each provider's `enabled` and `defaultOpenAction`. */
   readonly previewSettings: PreviewSettings;
@@ -237,9 +232,8 @@ export interface LinkRoutingInputs {
  */
 export function linkRouting(
   read: () => LinkRoutingInputs,
-): Required<Pick<LinkFollowDeps, 'defaultAction' | 'previewIsDefault'>> {
+): Required<Pick<LinkFollowDeps, 'previewIsDefault'>> {
   return {
-    defaultAction: () => read().defaultAction,
     previewIsDefault: (link) => {
       const now = read();
       return defaultOpenActionFor(now.previewRegistry, now.previewSettings, link.path) === 'preview';
@@ -271,12 +265,9 @@ export async function followLink(args: {
   if (resolution === undefined || !resolution.ok) return; // FR-006: not a link, so nothing happens
   const link = resolution.link;
 
-  // FR-039 lives in clause ONE of `resolveDefaultLinkAction`, before the setting is read at all, so
-  // an executable reaches the file manager by every one of these routes without this file holding a
-  // second copy of the rule. Routing THROUGH the decision rather than around it is the whole of
-  // T107: there is nothing here to keep in step with it.
+  // 045 FR-110 — the click rule decides, and nothing here keeps a second copy of it. Routing THROUGH
+  // the decision rather than around it is the whole of T107.
   const target = resolveDefaultLinkAction({
-    setting: deps.defaultAction?.() ?? 'throng',
     link,
     hasPosition: position !== undefined,
     previewIsDefault: deps.previewIsDefault?.(link) ?? false,
