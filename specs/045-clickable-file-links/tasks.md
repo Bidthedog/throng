@@ -879,7 +879,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
 - [ ] T143 [P] [US9] RED unit(core) — the `Editor · Links` block after the amendment, in
   `packages/core/tests/unit/app-settings.links.test.ts` and
   `packages/core/tests/unit/settings-metadata-links.test.ts`: **no** `defaultAction` leaf, value
-  array or descriptor (FR-112); `existenceCheckTimeoutMs` ships `2000`, is bounded `250`–`30000`,
+  array or descriptor (FR-112); `existenceCheckTimeoutMs` ships `2000`, is bounded `250`–`25000`,
   survives the clone round-trip, and has a descriptor under Editor · Links whose description says it
   applies with no restart (FR-120); `parseAppSettings` of a document carrying each of the five
   retired values and a junk one yields no `defaultAction` and the other leaves intact, **and parse →

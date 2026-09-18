@@ -101,8 +101,8 @@ describe('editor.links — the link settings after the amendment (FR-060, FR-112
   });
 });
 
-describe('editor.links.existenceCheckTimeoutMs is bounded 250 – 30,000 (FR-120)', () => {
-  it('the declared bounds hold an out-of-range value inside 250 – 30,000', () => {
+describe('editor.links.existenceCheckTimeoutMs is bounded 250 – 25,000 (FR-120)', () => {
+  it('the declared bounds hold an out-of-range value inside 250 – 25,000', () => {
     for (const raw of [0, 1, 249, 30_001, 999_999]) {
       const doc = structuredClone(DEFAULT_APP_SETTINGS) as unknown as Record<string, unknown>;
       (at(doc, 'editor.links') as Record<string, unknown>).existenceCheckTimeoutMs = raw;
@@ -110,12 +110,12 @@ describe('editor.links.existenceCheckTimeoutMs is bounded 250 – 30,000 (FR-120
       const got = at(value, 'editor.links.existenceCheckTimeoutMs');
       expect(typeof got, String(raw)).toBe('number');
       expect(got as number, String(raw)).toBeGreaterThanOrEqual(250);
-      expect(got as number, String(raw)).toBeLessThanOrEqual(30_000);
+      expect(got as number, String(raw)).toBeLessThanOrEqual(25_000);
     }
   });
 
   it('an in-range value passes the bounds unchanged', () => {
-    for (const raw of [250, 2000, 30_000]) {
+    for (const raw of [250, 2000, 25_000]) {
       const doc = structuredClone(DEFAULT_APP_SETTINGS) as unknown as Record<string, unknown>;
       (at(doc, 'editor.links') as Record<string, unknown>).existenceCheckTimeoutMs = raw;
       const { value } = applyDeclaredBounds(doc, SETTINGS_METADATA, DEFAULT_APP_SETTINGS);

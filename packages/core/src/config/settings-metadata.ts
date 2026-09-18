@@ -657,7 +657,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     subgroup: 'Links',
     control: 'slider',
     min: 250,
-    max: 30_000,
+    max: 25_000,
     step: 250,
   },
 

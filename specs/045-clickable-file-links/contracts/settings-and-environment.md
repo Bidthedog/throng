@@ -235,9 +235,9 @@ and parse → serialise → parse → serialise is a fixed point.
 
 **The new leaf.** Label **Existence-check timeout**. Description: how long throng waits for a file or
 network location to answer before treating a path as not a link for now; applies to the next check,
-with no restart; raise it for a slow network share. Bounded `250` – `30,000` ms by 031's bounds guard
+with no restart; raise it for a slow network share. Bounded `250` – `25,000` ms by 031's bounds guard
 (`bounds-guard.ts`'s `correctScalar` substitutes the default for anything outside). Displayed values
-are digit-grouped — `2,000`, `30,000` — per the constitution's NON-NEGOTIABLE gate. The three
+are digit-grouped — `2,000`, `25,000` — per the constitution's NON-NEGOTIABLE gate. The three
 `Editor · Links` descriptors stay **consecutive** in `SETTINGS_METADATA` (§5).
 
 **No `SHIPPED_DEFAULTS_VERSION` bump** — settings leaves only.

@@ -419,7 +419,7 @@ Tracking rows and one reported tension.
 | **XI** | **Not engaged.** No panel, tab or pane change. |
 | **Documentation currency** | **Engaged.** `README.md`, `docs/quick-start.md` and `CHANGELOG.md` change with the behaviour (T169). Because the default link action never reached a release, the CHANGELOG's unreleased 045 entry is corrected rather than a "removed" line added. |
 | **Configuration-editor completeness** | **Engaged.** One descriptor removed, one added; `settings-metadata.test.ts` enforces both. |
-| **Displayed quantities digit-grouped** | **Engaged.** The timeout's descriptor shows `2,000` ms and its bounds as `250` – `30,000`. |
+| **Displayed quantities digit-grouped** | **Engaged.** The timeout's descriptor shows `2,000` ms and its bounds as `250` – `25,000`. |
 
 ### Project structure — files the amendment touches
 

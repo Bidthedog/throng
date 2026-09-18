@@ -1333,7 +1333,7 @@ This is recorded as a hypothesis until T135 runs the reproduction and the mainta
 matches what they saw (the replicating-bugs gate). The fix changes no requirement.
 
 - **FR-120**: Every existence check MUST end within a bounded time — the **existence-check timeout**,
-  a setting (`editor.links.existenceCheckTimeoutMs`, shipped **2,000 ms**, bounded 250 – 30,000 ms
+  a setting (`editor.links.existenceCheckTimeoutMs`, shipped **2,000 ms**, bounded 250 – 25,000 ms
   under 031's bounds guard, with a descriptor under Editor · Links, FR-061). A check that has not
   answered by then MUST answer **unreachable**, which is not a link (FR-071 unchanged) and is
   distinct from "does not exist". The timeout is a setting because network latency is a property of

@@ -319,7 +319,7 @@ export interface EditorLinkSettings {
   detectInTerminals: boolean;
   /**
    * FR-120: how long one existence check may take before the link is reported unreachable. Bounded
-   * 250 – 30,000 by its descriptor, which `applyDeclaredBounds` enforces; there is no clamp here.
+   * 250 – 25,000 by its descriptor, which `applyDeclaredBounds` enforces; there is no clamp here.
    */
   existenceCheckTimeoutMs: number;
 }

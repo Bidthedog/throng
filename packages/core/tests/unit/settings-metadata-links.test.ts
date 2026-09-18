@@ -42,10 +42,10 @@ describe('editor.links.defaultAction is retired (FR-112)', () => {
 describe('editor.links.existenceCheckTimeoutMs (FR-120, FR-061)', () => {
   const d = () => descriptor('editor.links.existenceCheckTimeoutMs');
 
-  it('is a slider over 250 – 30,000 in steps of 250', () => {
+  it('is a slider over 250 – 25,000 in steps of 250', () => {
     expect(d().control).toBe('slider');
     expect(d().min).toBe(250);
-    expect(d().max).toBe(30_000);
+    expect(d().max).toBe(25_000);
     expect(d().step).toBe(250);
   });
 

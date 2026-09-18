@@ -493,7 +493,7 @@ export interface EditorLinkSettings {
   // defaultAction — RETIRED (FR-112). A persisted value is dropped by the parse (FR-113).
   detectInEditors: boolean;               // FR-060, unchanged
   detectInTerminals: boolean;             // FR-060, unchanged
-  existenceCheckTimeoutMs: number;        // FR-120 — ships 2000, bounded 250–30000
+  existenceCheckTimeoutMs: number;        // FR-120 — ships 2000, bounded 250–25000
 }
 ```
 
