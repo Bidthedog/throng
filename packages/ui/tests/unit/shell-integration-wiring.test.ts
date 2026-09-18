@@ -105,6 +105,7 @@ type AppShellFactory = (
     readonly launcher?: DeElevatingLauncher;
     readonly isElevated?: () => boolean;
   },
+  env?: Record<string, string | undefined>,
 ) => shellIntegrationModule.ElectronShellIntegration;
 
 function factory(): AppShellFactory {
@@ -180,5 +181,48 @@ describe('T217 / SI5 — behavioural: the app\u2019s integration, as the composi
 
     expect(platform.launches).toEqual([]);
     expect(shell.calls).toEqual([`showItemInFolder ${FILE}`]);
+  });
+});
+
+/**
+ * Gate run 35381378387 — `terminal-link-once.e2e.ts:322` failed 4/4 on the hosted runner and passes
+ * here, and the only difference that matters is that every GitHub runner is ELEVATED.
+ *
+ * The E2E harness keeps real file-manager windows off the desktop by stubbing Electron's
+ * `shell.showItemInFolder` / `shell.openPath` and recording what reached them (`stubShellOpen`,
+ * `__throngOpenedPaths`). Once T218 wired the de-elevating launcher in, an elevated app stopped
+ * calling either: it started a real `explorer.exe` through the launcher instead, so the recorder
+ * stayed `[]` and the spec timed out — and every elevated run that follows a file link or reveals
+ * from the explorer put a real, focus-stealing Explorer window on the runner's desktop.
+ *
+ * So under the harness marker the app has no de-elevated launch, exactly as it has no OS clipboard
+ * and no foreground handoff there (composition-root.ts). The class's own documented fallback then
+ * applies — an unavailable launcher proceeds through Electron's shell — which is the seam the harness
+ * stubs. FR-038's routing is still proved where it can be: by the cases above, and on a really
+ * elevated host by `link-de-elevated-open.integration.test.ts`.
+ */
+describe('gate 35381378387 — under the E2E harness an elevated app opens through the stubbed shell', () => {
+  const HARNESS = { THRONG_E2E_CLIPBOARD: 'memory' };
+
+  it('elevated, under the harness marker: all three actions reach shell.*, and nothing is launched', async () => {
+    const shell = recordingShell();
+    const integration = factory()(shell, { statKind: async () => 'file' }, HARNESS);
+
+    await integration.revealInFileManager(FILE);
+    await integration.openFolder(FOLDER);
+    await integration.openWithDefaultProgram(FILE);
+
+    expect(platform.launches, 'a real explorer.exe / rundll32.exe was started under the harness').toEqual([]);
+    expect(shell.calls).toEqual([`showItemInFolder ${FILE}`, `openPath ${FOLDER}`, `openPath ${FILE}`]);
+  });
+
+  it('ANTI-VACUITY: the same elevated host WITHOUT the marker still de-elevates', async () => {
+    const shell = recordingShell();
+    const integration = factory()(shell, { statKind: async () => 'file' }, {});
+
+    await integration.revealInFileManager(FILE);
+
+    expect(platform.launches).toHaveLength(1);
+    expect(shell.calls).toEqual([]);
   });
 });

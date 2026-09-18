@@ -154,15 +154,34 @@ export interface AppShellIntegrationOverrides extends DeElevationOptions {
  *
  * Elevation cannot change during a process's life, so the probe is asked once, on first use, and
  * remembered — it is a token query, and there is no reason to repeat it per click.
+ *
+ * **Under the E2E harness there is no de-elevated launch.** The harness keeps real file-manager
+ * windows off the desktop by stubbing Electron's `shell.showItemInFolder` / `shell.openPath` and
+ * recording what reached them. A de-elevated launch goes around that stub and starts a real
+ * `explorer.exe` — so on an elevated host (every GitHub runner is one) the recorder saw nothing and
+ * a focus-stealing Explorer window appeared instead; gate run 35381378387 failed 4/4 on exactly that.
+ * With the launcher unavailable, the class's own documented fallback routes through `shell`, as it
+ * does for a non-elevated app. `THRONG_E2E_CLIPBOARD=memory` is the harness's marker, read here for
+ * the same reason `composition-root.ts` reads it for the clipboard and the foreground handoff.
  */
 export function createAppShellIntegration(
   shell: ElectronShellLike,
   overrides: AppShellIntegrationOverrides = {},
+  env: Readonly<Record<string, string | undefined>> = process.env,
 ): ElectronShellIntegration {
   let elevated: boolean | undefined;
   const probe = overrides.isElevated ?? (() => new WindowsElevation().isElevated());
+  const underHarness = env.THRONG_E2E_CLIPBOARD === 'memory';
   return new ElectronShellIntegration(shell, overrides.statKind ?? statKindOnDisk, {
-    launcher: overrides.launcher ?? new WindowsDeElevatedLauncher(),
+    launcher: overrides.launcher ?? (underHarness ? NO_DE_ELEVATED_LAUNCH : new WindowsDeElevatedLauncher()),
     isElevated: () => (elevated ??= probe()),
   });
 }
+
+/** The harness's launcher: never available, so every action takes the (stubbed) Electron route. */
+const NO_DE_ELEVATED_LAUNCH: DeElevatingLauncher = {
+  isAvailable: () => false,
+  launch: () => {
+    throw new Error('no de-elevated launch under the E2E harness');
+  },
+};
