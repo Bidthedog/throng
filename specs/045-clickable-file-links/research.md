@@ -665,6 +665,23 @@ code does today before changing anything.
 is a fact to measure, not to assume: T190 prints one through each real shell and reads the raw PTY
 stream; the matrix probe (O11) confirms it end to end.
 
+## R24. A request for an extended reading answers for that reading only *(2026-09-18, T202)*
+
+**Finding.** T202 expected no production change — "the resolver already takes the first reading that
+exists". T201's SC-020 cases showed otherwise: `FileLinkResolver.readingsOf` re-runs detection on the
+request's text, and since FR-150 that text may itself be an extended reading
+(`<root>\with space\notes.md for details`). Re-detection then yields the SHORTER readings inside it,
+the resolver takes the first that exists — `…\notes.md` — and answers the long request `ok`. The
+surface, walking its candidates longest first, takes that answer as the long reading's, and underlines
+"for details" as part of the link.
+
+**Decision.** `readingsOf` keeps only the readings of the WHOLE text: the candidates starting at the
+first candidate's start and reaching the widest candidate's end, a position suffix counted as part of
+its reading (so `src/foo.ts:42:7`'s positioned and unpositioned twins both stay, R7). Choosing among
+nested readings is the surface's walk, which already asks for each; main answering a longer request
+with a shorter file was a second opinion about FR-150 living in main — the same thing `readingsOf`'s
+verbatim fallback already refuses to be for FR-003.
+
 ---
 
 ## Open items

@@ -59,11 +59,20 @@ export interface LinkActionDeps {
  * Spoken, and about the TARGET rather than about the user's options: a link whose file was deleted
  * between the hover and the click is a fact about the disk, not a refusal to serve them. One
  * sentence per reason, so one condition raises one notice with one wording wherever it happens.
+ *
+ * `unreachable` (FR-124) is its own sentence because its remedy is different: the location did not
+ * answer within the existence-check timeout — an offline share — so the user reconnects rather than
+ * re-creating a file that may well still be there.
  */
 export function linkFailureMessage(outcome: Extract<LinkActionOutcome, { ok: false }>): string {
-  return outcome.reason === 'gone'
-    ? 'That file or folder is no longer there.'
-    : 'That link could not be opened.';
+  switch (outcome.reason) {
+    case 'gone':
+      return 'That file or folder is no longer there.';
+    case 'unreachable':
+      return 'That location did not answer in time.';
+    case 'refused':
+      return 'That link could not be opened.';
+  }
 }
 
 /**

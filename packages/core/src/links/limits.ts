@@ -69,3 +69,14 @@ export const LINK_IDLE_SCAN_MS = 300;
  * still small enough that one path followed by prose costs a handful of readings, not dozens.
  */
 export const MAX_PATH_SPACE_WORDS = 6;
+
+/**
+ * The most existence checks that may be stuck past the timeout at once, process-wide (FR-121;
+ * contract `link-resolution.md` §6.4 P9; data-model §13.5).
+ *
+ * A `stat` against an offline share does not fail, it waits — and it waits on one of libuv's four
+ * thread-pool threads, which saving, reading and watching share. A check under a root that is already
+ * stuck never starts (P8); this bounds how many DIFFERENT roots may be stuck. At 2, two threads stay
+ * free for the rest of the app whatever the network does; at 4 a single hover could starve a save.
+ */
+export const MAX_TIMED_OUT_LINK_CHECKS = 2;

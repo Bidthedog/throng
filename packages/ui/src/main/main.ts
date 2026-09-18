@@ -1237,6 +1237,8 @@ if (isPrimaryInstance)
         : ([...projectsByRoot.values()].find((p) => p.id === originProjectId)?.rootFolder ?? null),
     previewRegistry: SHIPPED_PREVIEW_PROVIDERS,
     readPreviewSettings: () => currentSettings.editor.previews,
+    // FR-120 / SC-008: read per check, so a changed timeout applies to the next one with no restart.
+    readLinkSettings: () => currentSettings.editor.links,
   });
   fileLinkResolver.setShell(shellIntegration);
   registerLinkIpc(ipcMain, fileLinkResolver);

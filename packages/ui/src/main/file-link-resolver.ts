@@ -1,7 +1,11 @@
+import { parse as parsePath } from 'node:path';
 import {
+  DEFAULT_APP_SETTINGS,
   detectPathCandidates,
   isLinkInProject,
+  MAX_TIMED_OUT_LINK_CHECKS,
   resolveCandidate,
+  type EditorLinkSettings,
   type IExecutableExtensions,
   type IFileSystem,
   type IPathForms,
@@ -61,10 +65,35 @@ export interface FileLinkResolverDeps {
   readonly projectRootFor: (originProjectId: string | undefined) => string | null;
   readonly previewRegistry: PreviewProviderRegistry;
   readonly readPreviewSettings: () => PreviewSettings;
+  /**
+   * FR-120 / SC-008. The link settings, read PER CHECK on the `readPreviewSettings` pattern — this
+   * resolver is built once at startup, so a timeout captured at construction would freeze it until a
+   * restart. Absent (a caller that never offers settings), the shipped default applies.
+   */
+  readonly readLinkSettings?: () => EditorLinkSettings;
 }
+
+/** What one existence check found — `unreachable` when it lost the timeout race (FR-120). */
+type Existence = 'file' | 'folder' | 'unreachable' | null;
+
+/**
+ * `LinkResolution`'s failure arm, or the located link. Internal: `locate`'s answer before it is shaped
+ * for the three public methods.
+ */
+type Located = ResolvedLink | 'unreachable' | null;
 
 export class FileLinkResolver {
   private shell: IShellIntegration | undefined;
+
+  /**
+   * FR-121 / FR-122 (data-model §13.5). Volume roots — `node:path`'s `parse(p).root`, `\\server\share\`
+   * or `C:\` — whose `stat` outlived the timeout and has not settled. While a root is here, a check
+   * under it answers `unreachable` without touching the filesystem; it leaves when that `stat` settles,
+   * whichever way. Bounded by `MAX_TIMED_OUT_LINK_CHECKS`: when full, a check under any OTHER root also
+   * answers `unreachable` rather than risking another stuck thread-pool thread. Main-process memory
+   * only; the renderer's cache TTL is the back-off (P10).
+   */
+  private readonly stuckRoots = new Set<string>();
 
   constructor(private readonly deps: FileLinkResolverDeps) {}
 
@@ -80,6 +109,7 @@ export class FileLinkResolver {
   async resolve(request: LinkResolutionRequest): Promise<LinkResolution> {
     const found = await this.locate(request);
     if (found === null) return { ok: false };
+    if (found === 'unreachable') return { ok: false, reason: 'unreachable' };
     return { ok: true, link: found };
   }
 
@@ -87,6 +117,7 @@ export class FileLinkResolver {
   async revealInFileManager(request: LinkResolutionRequest): Promise<LinkActionOutcome> {
     const found = await this.locate(request);
     if (found === null) return { ok: false, reason: 'gone', path: request.text };
+    if (found === 'unreachable') return { ok: false, reason: 'unreachable', path: request.text };
     if (this.shell === undefined) return { ok: false, reason: 'refused', path: found.path };
     try {
       if (found.kind === 'folder') await this.shell.openFolder(found.path);
@@ -108,6 +139,7 @@ export class FileLinkResolver {
   async openWithDefaultProgram(request: LinkResolutionRequest): Promise<LinkActionOutcome> {
     const found = await this.locate(request);
     if (found === null) return { ok: false, reason: 'gone', path: request.text };
+    if (found === 'unreachable') return { ok: false, reason: 'unreachable', path: request.text };
     if (found.kind === 'folder') return { ok: false, reason: 'refused', path: found.path };
     if (this.shell === undefined) return { ok: false, reason: 'refused', path: found.path };
     try {
@@ -124,18 +156,27 @@ export class FileLinkResolver {
    * The candidate readings are walked in order and the FIRST that exists wins (R1), which is what
    * makes R5, R6 and R7 orderings rather than special cases: a positioned reading is simply tried
    * before the reading without it, and whichever is real decides what the trailing `:42:7` was.
+   *
+   * An attempt that is `unreachable` (FR-120) does not end the walk: a relative text may name a local
+   * file through the project root after its base directory's share failed to answer, and every later
+   * attempt under the same stuck root is answered at once by the gate. Only when nothing exists does
+   * an unreachable attempt decide the answer — "did not answer", rather than "does not exist".
    */
-  private async locate(request: LinkResolutionRequest): Promise<ResolvedLink | null> {
+  private async locate(request: LinkResolutionRequest): Promise<Located> {
     const projectRoot = this.deps.projectRootFor(request.originProjectId);
+    let unreachable = false;
     for (const candidate of this.readingsOf(request)) {
       const attempts = resolveCandidate(candidate, {
         baseDirectory: request.baseDirectory,
         projectRoot,
         pathForms: this.deps.pathForms,
+        // FR-151 / I7: can only remove readings, so it is carried without verification.
+        ...(request.wslFlavour === true ? { wslFlavour: true as const } : {}),
       });
       for (const path of attempts) {
         const kind = await this.kindOf(path);
-        if (kind === null) continue;
+        if (kind === 'unreachable') unreachable = true;
+        if (kind === null || kind === 'unreachable') continue;
         return {
           path,
           kind,
@@ -146,7 +187,7 @@ export class FileLinkResolver {
         };
       }
     }
-    return null;
+    return unreachable ? 'unreachable' : null;
   }
 
   /**
@@ -156,6 +197,14 @@ export class FileLinkResolver {
    * to express and nothing to strip. Detected text goes back through the same grammar the surfaces
    * used, which is what keeps `src/foo.ts:42` meaning line 42 here as well as there — re-running
    * detection is cheaper than trusting a renderer to have split it the same way.
+   *
+   * Only the readings of the WHOLE text are kept — those spanning from the first candidate's start to
+   * the widest candidate's end, position included (T202, SC-020). Since FR-150 a request's text may be
+   * an extended reading (`…\notes.md for details`), and re-detecting it yields the shorter readings
+   * inside it too; trying those would answer the long text with the short text's file, and the
+   * surface would underline "for details" as part of the link. Which reading is the link is the
+   * SURFACE's walk — longest first, the first that resolves — so the shorter one is asked for on its
+   * own, and a request for the longer one answers only for the longer one.
    */
   private readingsOf(request: LinkResolutionRequest): LinkCandidate[] {
     if (request.kind === 'fileHyperlink') {
@@ -165,16 +214,43 @@ export class FileLinkResolver {
     // A request whose text the grammar no longer recognises is still tried verbatim: the surface
     // asked about something, and answering "not a link" because of a scanning difference would be a
     // second opinion about FR-003 living in main.
-    return found.length > 0 ? found : [{ text: request.text, start: 0, end: request.text.length }];
+    if (found.length === 0) return [{ text: request.text, start: 0, end: request.text.length }];
+    const reach = (c: LinkCandidate): number => c.end + (c.positionText?.length ?? 0);
+    const start = Math.min(...found.map((c) => c.start));
+    const end = Math.max(...found.map(reach));
+    return found.filter((c) => c.start === start && reach(c) === end);
   }
 
-  private async kindOf(path: string): Promise<'file' | 'folder' | null> {
-    try {
-      const { kind } = await this.deps.fs.stat(path);
-      return kind;
-    } catch {
-      return null;
-    }
+  /**
+   * One existence check, raced against the existence-check timeout (FR-120, P7 – P10).
+   *
+   * The timeout is read from the settings on every call (SC-008). A root already stuck answers at once
+   * with no `stat` (P8); so does any new root while `MAX_TIMED_OUT_LINK_CHECKS` roots are stuck (P9). A
+   * `stat` that loses the race marks its root, and the mark clears when that same `stat` settles
+   * (P10) — so a share that comes back is asked again, and the renderer's cache TTL is the back-off.
+   */
+  private async kindOf(path: string): Promise<Existence> {
+    const root = parsePath(path).root.toLowerCase();
+    if (this.stuckRoots.has(root)) return 'unreachable';
+    if (this.stuckRoots.size >= MAX_TIMED_OUT_LINK_CHECKS) return 'unreachable';
+
+    const checking = this.deps.fs.stat(path).then(
+      ({ kind }): Existence => kind,
+      (): Existence => null,
+    );
+    const timeoutMs = (this.deps.readLinkSettings?.() ?? DEFAULT_APP_SETTINGS.editor.links)
+      .existenceCheckTimeoutMs;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<'timeout'>((resolve) => {
+      timer = setTimeout(() => resolve('timeout'), timeoutMs);
+    });
+    const winner = await Promise.race([checking, timedOut]);
+    clearTimeout(timer);
+    if (winner !== 'timeout') return winner;
+
+    this.stuckRoots.add(root);
+    void checking.finally(() => this.stuckRoots.delete(root));
+    return 'unreachable';
   }
 
   /** FR-030's tri-state. `none` is "no provider claims this", not "the provider is off". */

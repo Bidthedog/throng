@@ -1029,6 +1029,7 @@ export {
   LINK_CACHE_TTL_MS,
   LINK_IDLE_SCAN_MS,
   MAX_LINK_CANDIDATES_PER_LINE,
+  MAX_TIMED_OUT_LINK_CHECKS,
 } from './links/limits.js';
 export { classifyTerminalLinkTarget } from './links/classify.js';
 export type { TerminalLinkKind } from './links/classify.js';

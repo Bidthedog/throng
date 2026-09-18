@@ -158,3 +158,22 @@ describe('MAX_PATH_SPACE_WORDS — an extension is bounded, and bites exactly at
     expect(longest).toBe(line);
   });
 });
+
+/**
+ * 045 T146 — MAX_TIMED_OUT_LINK_CHECKS, how many volume roots may be stuck past the existence-check
+ * timeout at once (FR-121, P9). The behaviour at the edge — a third stuck root is never stat-ed — is
+ * proven over a fake clock in `packages/ui/tests/unit/file-link-resolver-network.test.ts`; this pins
+ * the number against the pool it protects.
+ */
+describe('MAX_TIMED_OUT_LINK_CHECKS — stuck checks never take the thread pool (FR-121)', () => {
+  const cap = (limits as Record<string, unknown>).MAX_TIMED_OUT_LINK_CHECKS as number | undefined;
+
+  it('is exported as a whole number, at least 1 so one offline share is still reported', () => {
+    expect(Number.isSafeInteger(cap)).toBe(true);
+    expect(cap).toBeGreaterThanOrEqual(1);
+  });
+
+  it('is below libuv’s four-thread pool, so the rest of the app always keeps a thread', () => {
+    expect(cap).toBeLessThan(4);
+  });
+});

@@ -54,6 +54,12 @@ export interface LinkResolutionRequest {
    * Absent for a panel with no owning project, which judges every target outside one (M3).
    */
   readonly originProjectId?: string;
+  /**
+   * FR-151 / I7. Set by a terminal whose flavour the platform identifies as WSL, so main skips Git
+   * Bash's mount table and the platform reading. It can only NARROW what a text resolves to, never
+   * widen it, which is why main takes it without verification (unlike a root, I2).
+   */
+  readonly wslFlavour?: true;
 }
 
 export interface ResolvedLink {
@@ -68,10 +74,17 @@ export interface ResolvedLink {
   readonly preview: 'none' | 'enabled' | 'disabled';
 }
 
-/** FR-006 / FR-013: a candidate that resolves to nothing. Not a failure — a non-link. */
-export type LinkResolution = { readonly ok: true; readonly link: ResolvedLink } | { readonly ok: false };
+/**
+ * FR-006 / FR-013: a candidate that resolves to nothing. Not a failure — a non-link.
+ *
+ * FR-120: `reason: 'unreachable'` when the existence check did not answer within the timeout (an
+ * offline share). Still a non-link (P3); absent means "does not exist".
+ */
+export type LinkResolution =
+  | { readonly ok: true; readonly link: ResolvedLink }
+  | { readonly ok: false; readonly reason?: 'unreachable' };
 
-/** The outcome of an action main performed on a re-resolved link (FR-037). */
+/** The outcome of an action main performed on a re-resolved link (FR-037, FR-124). */
 export type LinkActionOutcome =
   | { readonly ok: true }
-  | { readonly ok: false; readonly reason: 'gone' | 'refused'; readonly path: string };
+  | { readonly ok: false; readonly reason: 'gone' | 'refused' | 'unreachable'; readonly path: string };

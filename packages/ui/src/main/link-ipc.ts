@@ -10,8 +10,8 @@ import type { LinkActionOutcome, LinkResolution, LinkResolutionRequest } from '@
  *
  * ══ THE HANDLERS ARE A GATE, NOT A PASS-THROUGH ══
  *
- * A renderer is untrusted about paths. So each handler rebuilds the request from exactly four fields
- * and forwards NOTHING else (I1) — an `absPath` or a `projectRoot` a renderer adds is dropped on the
+ * A renderer is untrusted about paths. So each handler rebuilds the request from its whitelisted
+ * fields and forwards NOTHING else (I1) — an `absPath` or a `projectRoot` a renderer adds is dropped on the
  * floor rather than reaching the resolver, where it might later be believed. A request with no
  * `panelId` is refused outright rather than resolved against no project (I2): main derives the
  * owning root from the panel, and a resolution with no root to check against would silently answer
@@ -41,7 +41,7 @@ export interface LinkIpcService {
 const KINDS = new Set(['detectedPath', 'fileHyperlink']);
 
 /**
- * I1/I2. Rebuild the request from the five fields it is allowed to have, or `null`.
+ * I1/I2/I7. Rebuild the request from the six fields it is allowed to have, or `null`.
  *
  * Written as a whitelist rather than a delete-list on purpose: a delete-list has to be updated every
  * time someone invents a new field to smuggle, and it fails open when nobody does.
@@ -66,6 +66,9 @@ function sanitise(payload: unknown): LinkResolutionRequest | null {
     // Absent rather than wrong, and absent means "no owning project" — which judges every target
     // outside one (M3), the safe reading of a claim main could not parse.
     originProjectId: typeof raw.originProjectId === 'string' ? raw.originProjectId : undefined,
+    // FR-151 / I7: exactly `true`, or absent. It can only remove readings, so a renderer that lies
+    // about it resolves LESS; anything but `true` gets the non-WSL reading, the one that asks more.
+    ...(raw.wslFlavour === true ? { wslFlavour: true as const } : {}),
   };
 }
 
