@@ -1,4 +1,5 @@
-import { cpSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { cpSync, existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -515,4 +516,95 @@ describe('T207 / FR-151 — Git Bash\u2019s rooted paths resolve through the rea
     const answer = await makeResolver({ pathForms: withRealGit() }).resolve(link('/etc/hosts', { wslFlavour: true }));
     expect(answer.ok && under(answer.link.path, gitRoot), answer.ok ? answer.link.path : '(no link)').toBe(false);
   });
+});
+
+/*
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ * 045 T141 (`@admin`) — FR-003c, FR-012, FR-022 – FR-024, SC-014: a REAL network spelling
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * No UNC location can live in a fixture tree, so this spells the temp tree through the loopback
+ * administrative share — `\\localhost\<drive>$\<temp>\…` — which is a real SMB path to real files.
+ * Both separators, and the `file://127.0.0.1/<drive>$/…` URI. Claimed here: an absolute UNC file and
+ * folder resolve; a relative name against a UNC BASE DIRECTORY resolves (D1); a project ROOTED on the
+ * share judges its files in-project (M7).
+ *
+ * The administrative share ordinarily answers only an elevated token — UAC's filtered token is
+ * refused at loopback — which is why this is `@admin` and runs on the hosted gate, whose runners are
+ * elevated. The gate is REACHABILITY rather than elevation, measured, because the two are not the
+ * same fact: a workstation whose policy lets a filtered token through (a domain or Microsoft account,
+ * `LocalAccountTokenFilterPolicy`) reaches the share without elevation, and skipping there would hide
+ * a check that can run. Where the share does not answer, every case is SKIPPED WITH THE REASON
+ * PRINTED, never passed.
+ */
+
+/** `C:\a\b` as the loopback administrative share spells it: `\\localhost\C$\a\b`. */
+const unc = (winPath: string, host = 'localhost'): string =>
+  `\\\\${host}\\${winPath[0]!.toUpperCase()}$${winPath.slice(2)}`;
+
+function runnerElevated(): boolean {
+  try {
+    execFileSync(join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'net.exe'), ['session'], {
+      stdio: 'ignore',
+      windowsHide: true,
+      timeout: 5000,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const ADMIN = process.platform === 'win32' && /^[a-z]:/i.test(tmpdir()) && existsSync(unc(tmpdir()));
+if (!ADMIN) {
+  console.warn(
+    `T141 (@admin) skipped: the loopback administrative share does not answer here (${unc(tmpdir())}; ` +
+      `elevated: ${runnerElevated()}). It runs on the hosted gate, whose runners are elevated.`,
+  );
+}
+
+(ADMIN ? describe : describe.skip)('T141 (@admin) — the temp tree through \\\\localhost\\<drive>$', () => {
+  it('an absolute UNC file and folder resolve, in both separators', async () => {
+    const resolver = makeResolver();
+    const file = unc(join(root, 'test.txt'));
+    const folder = unc(join(root, 'docs'));
+    for (const text of [file, file.replace(/\\/g, '/')]) {
+      const answer = await resolver.resolve(link(text));
+      expect(answer.ok, text).toBe(true);
+      expect(answer.ok && answer.link.kind, text).toBe('file');
+    }
+    for (const text of [folder, folder.replace(/\\/g, '/')]) {
+      const answer = await resolver.resolve(link(text));
+      expect(answer.ok && answer.link.kind, text).toBe('folder');
+    }
+  }, 30_000);
+
+  it('file://127.0.0.1/<drive>$/… resolves to the same file', async () => {
+    const target = join(root, 'test.txt');
+    const uri = `file://127.0.0.1/${target[0]!.toUpperCase()}$${target.slice(2).replace(/\\/g, '/')}`;
+    const answer = await makeResolver().resolve(link(uri, { kind: 'fileHyperlink' }));
+    expect(answer.ok, uri).toBe(true);
+    expect(answer.ok && answer.link.kind).toBe('file');
+  }, 30_000);
+
+  it('D1: a relative name against a UNC base directory resolves', async () => {
+    const answer = await makeResolver().resolve(
+      link('src/x.ts', { baseDirectory: unc(join(root, 'packages', 'core')) }),
+    );
+    expect(answer.ok, 'a relative path in a terminal sitting on a share').toBe(true);
+    expect(answer.ok && answer.link.path.toLowerCase()).toContain('\\packages\\core\\src\\x.ts');
+  }, 30_000);
+
+  it('M7: a project ROOTED on the share judges its files in-project', async () => {
+    PROJECT_ROOTS.set('proj-unc', unc(root));
+    try {
+      const resolver = makeResolver();
+      const relative = await resolver.resolve(link('test.txt', { originProjectId: 'proj-unc' }));
+      expect(relative.ok && relative.link.inProject, 'a relative name in a share-rooted project').toBe(true);
+      const absolute = await resolver.resolve(link(unc(join(root, 'test.txt')), { originProjectId: 'proj-unc' }));
+      expect(absolute.ok && absolute.link.inProject, 'the same file, spelled on the share').toBe(true);
+    } finally {
+      PROJECT_ROOTS.delete('proj-unc');
+    }
+  }, 30_000);
 });
