@@ -898,7 +898,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   root's request answers `unreachable` without a `stat` (P9); when the stuck `stat` settles the root
   is checked again (P10); `revealInFileManager` and `openWithDefaultProgram` against a stuck root end
   at the timeout with reason `unreachable` (FR-124). Satisfies FR-120 – FR-122, FR-124.
-- [ ] T146 [US9] GREEN `packages/ui/src/main/file-link-resolver.ts` (the volume-root gate, the
+- [x] T146 [US9] GREEN `packages/ui/src/main/file-link-resolver.ts` (the volume-root gate, the
   timeout race, `readLinkSettings` dep), `packages/core/src/links/types.ts` (`reason` on both
   unions), `packages/core/src/links/limits.ts` (`MAX_TIMED_OUT_LINK_CHECKS = 2`, with its edge in
   `packages/core/tests/unit/link-guards.test.ts`), and the wiring in
@@ -923,7 +923,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
 - [ ] T152 [P] [US9] RED component `packages/ui/tests/component/link-failure-notice.test.ts` —
   `unreachable` raises exactly **one** notice naming the path and saying it did not answer, worded
   differently from `gone`. Satisfies FR-124.
-- [ ] T153 [US9] GREEN `packages/ui/src/renderer/links/link-actions.ts` — the notice for
+- [x] T153 [US9] GREEN `packages/ui/src/renderer/links/link-actions.ts` — the notice for
   `unreachable`, through the shared failure presentation (030). Depends on T152, T146.
 - [ ] T154 [US9] Hands-on, maintainer — [quickstart.md](./quickstart.md) §7 steps 1 – 7 on real
   shares, including OS Explorer showing a file on a share, which no test in this repository can
@@ -1294,9 +1294,11 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   `/mnt/x/…` WSL form and a `file:` URI with `%20` each resolve to it; `see <root>\with space\notes.md
   for details` resolves to `notes.md` and not further; a spaced reading that names nothing leaves the
   unextended token's answer unchanged. Satisfies FR-150, SC-020.
-- [ ] T202 [US12] GREEN — make T201 green. **Expected to need no production change** beyond T200 (the
+- [x] T202 [US12] GREEN — make T201 green. **Expected to need no production change** beyond T200 (the
   resolver already takes the first reading that exists); if one is needed it is a new finding,
   recorded in R-notes before it is made. Depends on T201, T200.
+  *Done 2026-09-18:* one production change was needed, recorded as research.md R24 — `readingsOf`
+  no longer re-detects a shorter reading out of a requested extended one.
 
 ### 15d. Git Bash's own paths, and drive-qualified rooted paths [US12]
 
@@ -1333,12 +1335,15 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   `wslFlavour` into the context, and `terminal-panel.tsx` sending it — with T205's contract half.
   Two T205 cases stay red on a spec conflict (`/test.txt` with no anchor: R13 keeps Git's reading,
   T205 says `[]`), awaiting the maintainer.
+  *Progress 2026-09-18 (main):* `file-link-resolver.ts` carries the request's `wslFlavour` into the
+  context and `link-ipc.ts` admits exactly `true` (I7; T205's contract half green). Open: only
+  `terminal-panel.tsx` sending it.
 - [ ] T207 [P] [US12] RED integration `packages/ui/tests/integration/file-link-resolver.integration.test.ts`
   — against the **real** Git for Windows on the machine: `/usr/bin/bash.exe` and `/etc/hosts` resolve
   to files under the detected install, `/tmp` resolves to a folder; a WSL-flavour request for
   `/etc/hosts` does **not** resolve through Git. Skipped **with the reason printed** where Git for
   Windows is not installed. Satisfies FR-151, SC-019.
-- [ ] T208 [US12] GREEN — only if T207 is red after T206. Depends on T207, T206.
+- [x] T208 [US12] GREEN — only if T207 is red after T206. Depends on T207, T206.
 
 ### 15e. POSIX spellings inside `file:` URIs [US12]
 
@@ -1404,7 +1409,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   **Show the failing output to the maintainer before any fix.** The existing `@admin`
   `link-de-elevated-open.integration.test.ts` MUST NOT change: it proves the route, this proves the
   wiring. Covers FR-038.
-- [ ] T218 GREEN `packages/ui/src/main/main.ts` (and a small factory beside
+- [x] T218 GREEN `packages/ui/src/main/main.ts` (and a small factory beside
   `packages/ui/src/main/electron-shell-integration.ts` if T217 needs a seam) — construct
   `WindowsDeElevatedLauncher` (`@throng/platform-windows`) and pass it with
   `() => new WindowsElevation().isElevated()` (the probe already used at `main.ts:704`) as

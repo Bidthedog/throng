@@ -9,6 +9,7 @@ import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
 import { shouldDeElevate, type IShellIntegration } from '@throng/core';
+import { WindowsDeElevatedLauncher, WindowsElevation } from '@throng/platform-windows';
 
 /** The slice of Electron's `shell` this impl needs. */
 export interface ElectronShellLike {
@@ -135,4 +136,33 @@ export class ElectronShellIntegration implements IShellIntegration {
     launcher.launch(file, args);
     return true;
   }
+}
+
+/** What a caller of {@link createAppShellIntegration} may replace — a test's seams, nothing more. */
+export interface AppShellIntegrationOverrides extends DeElevationOptions {
+  readonly statKind?: (path: string) => Promise<PathKind>;
+}
+
+/**
+ * 045 FR-038 / D4 — the app's `ElectronShellIntegration`, as the composition builds it.
+ *
+ * The class de-elevates only when handed a launcher, and for a while the one production construction
+ * handed it none: an elevated throng then revealed and opened files ELEVATED, while the @admin
+ * integration test — which builds its own integration with a launcher injected — stayed green. This
+ * is where the real launcher and the real probe are supplied, so "the app's integration" is one
+ * function a test can call rather than a line in `main.ts` it can only read.
+ *
+ * Elevation cannot change during a process's life, so the probe is asked once, on first use, and
+ * remembered — it is a token query, and there is no reason to repeat it per click.
+ */
+export function createAppShellIntegration(
+  shell: ElectronShellLike,
+  overrides: AppShellIntegrationOverrides = {},
+): ElectronShellIntegration {
+  let elevated: boolean | undefined;
+  const probe = overrides.isElevated ?? (() => new WindowsElevation().isElevated());
+  return new ElectronShellIntegration(shell, overrides.statKind ?? statKindOnDisk, {
+    launcher: overrides.launcher ?? new WindowsDeElevatedLauncher(),
+    isElevated: () => (elevated ??= probe()),
+  });
 }

@@ -106,7 +106,7 @@ import { registerLinkIpc } from './link-ipc.js';
 import { openSubWorkspace } from './subworkspace-open.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { TerminalReconnect } from './terminal-reconnect.js';
-import { ElectronShellIntegration } from './electron-shell-integration.js';
+import { createAppShellIntegration } from './electron-shell-integration.js';
 import { FilesService } from './files-service.js';
 import { resolveThrongHolder } from './throng-holder.js';
 import { PanelIdentityRegistry } from './panel-identity.js';
@@ -931,7 +931,8 @@ if (isPrimaryInstance)
   // The platform seam behind every window's deny-renderer-windows guard (044 FR-091 / R10) and
   // behind file-explorer reveal/open (FR-035) — built early because Preferences, About and the drag
   // ghost all need it below, well before FilesService (which also takes it) is built further down.
-  const shellIntegration = new ElectronShellIntegration(shell);
+  // FR-038 / D4: built by the factory, so an elevated app reveals and opens as the interactive user.
+  const shellIntegration = createAppShellIntegration(shell);
 
   const preferencesDeps: PreferencesWindowDeps = {
     indexHtml: resolveFromHere('../renderer/index.html'),
