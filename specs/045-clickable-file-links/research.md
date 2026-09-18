@@ -509,6 +509,164 @@ rather than restating FR-091's premise.
 
 ---
 
+## R17. Retire the default link action rather than narrow it *(2026-09-18, change request)*
+
+**Question.** The maintainer's rule fixes where every link goes. What becomes of FR-050's five values?
+
+**Options.** (a) Narrow to the values the rule permits — `throng`, `editor`, `preview`. (b) Retire
+the setting.
+
+**Decision: (b).** Every destination is now decided: a folder and an out-of-project file go to OS
+Explorer, and a web link to the browser, whatever a preference says. The only choice left — editor or
+preview for an in-project file — is already made by 044's per-provider default open action, which
+Files & Folders, Quick Open and Find in Files all follow. Keeping `editor` and `preview` as link-only
+overrides would let a link open a file differently from the tree, which is the drift the maintainer's
+"identical" forbids, and would keep a preference whose remaining job duplicates another — the YAGNI
+half of Principle VIII. `osExplorer` as a whole-link value contradicts "in throng if it's a local
+file". `osDefaultProgram` is withdrawn by name.
+
+**The persisted value.** 019 FR-023 is the precedent for a retired key: dropped, not migrated,
+because migration must invent an intent. Its test (C1) asks which option preserves what the user
+experiences. Here no option preserves everything — the maintainer has withdrawn behaviours — but the
+setting **never reached a release** (branch-only, PR #408), and the shipped value `throng` becomes the
+click rule exactly. Dropping is therefore both the precedent and the answer with no invented intent.
+The mechanism is the tolerant parse, as it was for `explorer.openMode`: nothing to write.
+
+**Constitution.** Principle VI's *A preference picks the default* is conditional ("When a preference
+decides…"); the deciding preference is now 044's, and the plain Open Link item runs it. No amendment.
+
+## R18. D1 — where a network path is lost *(2026-09-18)*
+
+**Evidence.** The untracked reproduction `core/tests/unit/link-resolve-unc.test.ts` (another
+session's work in this worktree, adopted by T135, not rewritten) records a trace against real shares
+— absolute UNC paths survive detection, `resolveCandidate`, `NodeFileSystem.stat` (1 – 8 ms),
+membership and `FileLinkResolver` — and a failure at one point: joining onto a UNC base.
+
+**Code, read, not yet run.** `join` in `core/src/links/resolve.ts`:
+
+```ts
+const segments = base.split(/[\\/]/).filter((s, i) => s.length > 0 || i === 0);
+```
+
+`\\fileserver\home\dir` splits to `['', '', 'fileserver', 'home', 'dir']`; the filter keeps index 0 and drops
+index 1, so the result is `\fileserver\home\dir\…` — rooted at the current drive. Every R5 join (a
+terminal's network cwd, an editor's network folder) and every R6 join (a network project root) is
+affected. `..` handling has the same defect one level up: `segments.length > 1` lets `..` pop the
+share.
+
+**Second finding, same reproduction.** PowerShell prints a network location provider-qualified
+(`Microsoft.PowerShell.Core\FileSystem::\\fileserver\home`), in the prompt and in `pwd`; the grammar's
+"a colon anywhere else means not a path" rule refuses the whole token. FR-003g adds the form.
+
+**Status.** A **hypothesis** in CLAUDE.md's sense until T135 runs the reproduction and the maintainer
+confirms it matches what they saw. The absolute-path control in the same file is the anti-vacuity
+check: if it fails, the join cases are failing for another reason.
+
+## R19. Bounding an existence check *(2026-09-18)*
+
+**Question.** FR-071 says a slow location is "not a link until it answers", and says nothing about
+what an offline share costs.
+
+**Finding (hypothesis — not measured on this machine).** `IFileSystem.stat` is `fs.promises.lstat`,
+which runs on the Node thread pool (four threads by default). Against a server that does not answer,
+Windows' SMB client waits out its own timeout — commonly tens of seconds — and the thread is held for
+all of it; JavaScript cannot cancel it. Four such hovers would occupy the whole pool, and every
+`fs.promises` call in UI main — saving a document, reading one, the watchers' follow-up stats —
+would queue behind them. The renderer never blocks (P5 holds), but a save could.
+
+**Decision.** Race each check against a timeout (a setting — the right value is a property of the
+network, Principle X), mark the volume root of a check that loses, and answer at once for that root
+until the stuck call settles; cap the stuck calls process-wide at two, so half the default pool is
+the most links can ever hold. `node:path`'s `parse(p).root` gives `\\server\share\` for UNC and `C:\`
+for a drive, which also gates a **mapped** drive to an offline server without any "is this a network
+drive" question to the OS.
+
+**Open question O7 (FR-123).** The terminal provider holds its reply to xterm for
+`LINK_ANSWER_DEADLINE_MS` and drops an answer that arrives later, because xterm keeps one reply per
+line (`Linkifier._askForLink`, `useLineCache`). Two candidate mechanisms: (a) hold the reply for the
+existence-check timeout rather than a separate constant, so a check that answers at all answers in
+time; (b) on a late answer, make xterm ask again for that line. (a) is the smaller change and removes
+a Principle X constant; its cost is that a line's other links wait for its slowest candidate.
+T149's test states the observable either must satisfy; the choice is T150's, recorded here when made.
+
+## R20. One web grammar, moved rather than copied *(2026-09-18)*
+
+**Finding.** `TERMINAL_URL_REGEX` lives in `ui/src/renderer/terminal/terminal-url.ts`, and an editor
+has no URL scan at all — `link-decorations.ts` passes `claimed: never[] = []`, which contradicts
+[contracts/link-resolution.md](./contracts/link-resolution.md) §1's "the editor passes the ranges its
+own URL scan matched". The contract described a scan that was never built.
+
+**Decision.** Move the pattern to `core/src/links/web-url.ts` byte-for-byte, re-export it from
+`terminal-url.ts`, and leave `ui/tests/unit/terminal-url.test.ts` untouched as the proof nothing
+changed. Add `scanLinkLine` so both surfaces take a line's links from one call (FR-104). Copying the
+pattern into the editor would have been two grammars that agree today — the precondition for the
+drift FR-104 forbids.
+
+## R21. Wrapped links — why nothing past the first row is clickable *(2026-09-18, second round)*
+
+**Code, read, not run.** `file-link-provider.ts` reads exactly one buffer row
+(`buffer.active.getLine(n - 1).translateToString(true)`) and builds every range with `start.y` and
+`end.y` both equal to that row. A path that wraps is therefore two unrelated fragments to it, and
+each fragment usually names nothing, so neither row is a link. Plain-text URLs come from
+`WebLinksAddon`, which the maintainer's report says fails the same way; #326 recorded the underline
+half of it for OSC 8. xterm marks continuation rows (`IBufferLine.isWrapped`), and `ILink.range` may
+span rows, so the fix is to scan the logical line and map spans back to cells. Serving web links from
+the same provider (via `scanLinkLine`) retires `WebLinksAddon`; that is the DRY half of FR-104 in the
+terminal and the only way FR-135's affordance is drawn by one mechanism.
+
+**Hard wraps.** A TUI that inserts its own newline breaks the logical line, and xterm cannot tell a
+wrapped path from two paths. FR-132 declines to guess; OSC 8 is the exception because xterm links
+cells by declared target, not by row.
+
+## R22. At rest, not hover only *(2026-09-18, second round)*
+
+**Options.** (a) Hover only — today's terminal behaviour for web and detected links. (b) At rest for
+every link. (c) At rest for declared links (web, OSC 8) and hover-only for detected paths.
+
+**Decision: (b), with detected paths marked once resolved.** (a) fails the maintainer's test ("it
+should be clear to users that links can be clicked"): discovering links by sweeping the pointer is
+the opposite of clear. (c) is the inconsistency the maintainer reported, relocated. (b) is what the
+editor already does (its `ViewPlugin` marks resolved links in the visible range).
+
+**Squaring it with FR-071/FR-072.** An at-rest mark on a detected path needs its existence answer
+first. FR-071 forbids a check on the **output path**; FR-070 already allows checks "for the visible
+range". So: an idle scan of the rows in view, started only when output has been quiet for
+`LINK_IDLE_SCAN_MS`, cancelled by the next write, bounded by the viewport and the per-line cap, and
+sharing the cache with hover. During streaming nothing is checked — exactly today's state — and
+FR-072's zero-check assertion keeps its meaning. Cost: under output that never stops, detected paths
+are marked only on hover, which is no worse than before.
+
+**Style.** Dashed at rest, solid on hover: xterm already draws OSC 8 links dashed at rest, which is
+the look the maintainer saw and read as "a link"; making every other kind match costs one style,
+where changing OSC 8's may not be possible (O10). The text colour is left alone — a terminal link must
+not alter rendered output (FR-008), and an editor's syntax colours must survive.
+
+## R23. Flavours and their directories *(2026-09-18, second round)*
+
+**Built-in flavours** (`platform-windows/src/windows-shell-detection.ts`): `windows-powershell`,
+`pwsh`, `cmd`, `git-bash`. WSL is not one (the detector deliberately avoids mislabelling
+`System32\bash.exe`); it runs as a user-defined flavour.
+
+**Who reports a directory today** (025 D2, `core/src/terminal/command-recipe.ts`):
+
+| Flavour | Mechanism | With `terminals.shellIntegration` off |
+|---|---|---|
+| `cmd` | observed — `cd` moves the process directory, read by the daemon's PEB poll | unchanged, still observed |
+| `windows-powershell`, `pwsh` | reported — a `prompt` function emits OSC 9;9 (`BUILTIN_SHELL_INTEGRATION`) → `reportTerminalCwd` | cannot report; the PEB poll returns the **launch** directory |
+| `git-bash` | reported — `PROMPT_COMMAND` via environment emits OSC 9;9 with `cygpath -w` | cannot report; same |
+| WSL (user-defined) | none — but `flavourReportsDirectory` answers **true** for it (absent from both maps ⇒ "observable"), so the stale launch directory of `wsl.exe` would be used as a link base today | none |
+
+`flavourReportsDirectory(id, enabled)` already encodes the middle column. **Consequence for links**:
+no built-in flavour needs new integration. The one risk is using the PEB poll's stale launch
+directory as a base for a flavour that cannot report — FR-143 forbids it, and T188 checks what the
+code does today before changing anything.
+
+**OSC 8 through ConPTY.** Whether each flavour's ConPTY path passes OSC 8 intact on this Windows build
+is a fact to measure, not to assume: T190 prints one through each real shell and reads the raw PTY
+stream; the matrix probe (O11) confirms it end to end.
+
+---
+
 ## Open items
 
 | # | Question | Command that settles it |
@@ -519,6 +677,11 @@ rather than restating FR-091's premise.
 | **O4** | Does Claude Code actually emit OSC 8 under `FORCE_HYPERLINK=1` in a throng terminal, on this Windows build? (US7 scenario 6) | **STILL OPEN at the close of Phase 12.** The hands-on step in [quickstart.md](./quickstart.md) §6 is the only thing that can answer it, and it needs the running app, so it is deliberately left for the maintainer (T121). It is a property of **Claude Code**, not of throng: throng's half — that the variable is set, that a user's own value survives, and that nothing else is added — is settled by `core/tests/unit/spawn-env-hyperlinks.test.ts` (E1–E7) and by the real-shell integration test `platform-windows/tests/integration/terminal-hyperlink-env.integration.test.ts`. Whatever the answer, no throng code changes on it. |
 | **O5** | ~~Does widening `preview.followLink`'s scope leave `keybindings-collision.test.ts` green?~~ (R9) | **SETTLED 2026-09-18: yes.** With `COMMAND_SCOPES['preview.followLink']` widened from `PREVIEW_ONLY` to `LINK_SURFACES` (`editor` + `preview`), `keybindings-preview.test.ts`, `keybindings-collision.test.ts` and `keybindings-scope.test.ts` run **42 passed, 0 failed**. Nothing else in the editor scope claims `Ctrl+Enter`, so no collision rule fires and no second command has to be introduced. The three edits S3 permits in `keybindings-preview.test.ts` were made and no others; `:61-67` (Ctrl+Enter dead in a terminal, FR-046) is untouched and still green. |
 | **O6** | Measured cost of the FR-073 visible-range scan on the largest fixture document, for SC-004's editor half | **STILL OPEN at the close of Phase 12.** SC-004's wall-clock ceiling is measured in a running app (quickstart §5) and is deliberately **not** asserted by any test, so it is left for the maintainer (T114). Its **structural** half is already settled and is the half a regression would break: O1 above proves no existence check runs on the output or typing path, and the editor's scan is confined to the visible range by the `ViewPlugin` it lives in. |
+| **O7** *(2026-09-18)* | How does a late existence answer reach xterm for the line it belongs to (FR-123)? (R19) | **OPEN.** Settled by T150 against T149's test; record the mechanism chosen here. |
+| **O8** *(2026-09-18)* | Does D1's reproduction fail as recorded, and does it match what the maintainer saw? (R18) | **OPEN.** T135: run `core/tests/unit/link-resolve-unc.test.ts`, show the output, wait for the maintainer. |
+| **O9** *(second round)* | Does xterm's own OSC 8 handling hover and activate a hyperlink from a soft-wrapped **later** row? (R21) | **OPEN.** The E2E case in T186 answers it; if not, throng's provider serves OSC 8 ranges on continuation rows too. *Evidence 2026-09-18 (third round), not yet the T186 case:* the matrix probe's 76-column pass (row 66, a wrapped OSC 8 `file:` link) showed a Ctrl+click on row 2 **does** activate it, and the solid hover underline covers **only the hovered row** — #326 as filed. So activation needs nothing; the hover half is T185/T187's. |
+| **O10** *(second round)* | Can xterm's OSC 8 underline be styled from the theme tokens, or must a decoration replace it? (R22, FR-139) | **OPEN.** Settled by T184 before the terminal half of the affordance is built. |
+| **O11** *(second round)* | The flavour matrix (FR-145) — which cells pass on this machine, per flavour, including OSC 8 through ConPTY? (R23) | **RECORDED 2026-09-18 (third round, T193).** A temporary Playwright probe ran the maintainer's corpus (81 rows) against the worktree build at `7f985028`, with every OS seam a recorder, in `cmd`, `windows-powershell`, `pwsh` and `git-bash` at 144 columns (plus a 76-column pass for wrapping) and against the same text in an editor. **The four flavours are identical on all 81 rows: 51 pass, 30 fail each.** The editor: 27 pass, 34 fail, 20 not applicable (OSC 8). WSL: **not run** — no WSL flavour is configured (not a built-in; T220). Per FR-145 cell: *OSC 8 `http`* passes in every flavour (so OSC 8 survives ConPTY in all four); *OSC 8 `file:`* fails — out-of-project targets open in the default program (T155 – T158), `file://localhost/C$/…` and `file:///mnt/c/…` do nothing (FR-153), and dead targets are drawn as links (FR-154); *plain-text URL* passes in every terminal and is **not a link** in the editor (T161 – T168); *absolute path, each form* — out-of-project files open in the default program in both panel types (T155 – T158), paths with a space are never recognised (FR-150), `/usr/bin/…`, `/etc/…` and `/tmp` are not mapped to Git Bash's meaning (FR-151/FR-152), `file:///c/…` is not recognised (FR-153); executables are revealed and never run (pass, every row); *relative path after `cd sub`* was not exercised by the corpus (T192); *position suffix* — terminal opens at 1:1 (D2, T174/T175; `terminal-panel.tsx:271-274`), editor passes; *wrapped link* — every wrapped plain-text path is no link at all, the wrapped web URL passes, the wrapped OSC 8 link's hover covers one row (T176 – T187); *affordance* — OSC 8 links carry xterm's dashed underline plus throng's solid hover, plain-text links only the solid hover (T184 – T187). Two failures outside the expected column: an editor first-character Ctrl+click missed a decorated link in 2 of 27 attempts (D3) and, by reading, FR-038's launcher is not wired (D4). The row-by-row mapping is [tasks.md](./tasks.md) Phase 15. The maintainer's folder was snapshotted before and after the run and is unchanged. |
 
 ### Where the six stand, 2026-09-18 (T131)
 

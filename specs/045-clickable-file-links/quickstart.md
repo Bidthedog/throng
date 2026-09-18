@@ -161,3 +161,49 @@ of Claude Code on this Windows build, not of throng — no test in this reposito
 
 Step 5 is the important one: it is the check that US1 and US7 are independent, which is the whole
 reason the spec carries both.
+
+## 7. The change request of 2026-09-18 by hand (US8, US9)
+
+What no test here can show is OS Explorer actually opening on a file on a real share, and the feel
+of an offline share. Run on the maintainer's own shares (T154):
+
+```text
+Network paths (US9)
+1. New PowerShell terminal. `cd \\<server>\<share>\<dir>`, then `dir`.
+2. Hover a listed name: it underlines. Ctrl+click it: an in-project file opens in throng, anything
+   else opens OS Explorer with it selected (FR-110).
+3. Hover `\\<server>\<share>\<dir>` inside the prompt (`FileSystem::` form, FR-003g): a folder link.
+4. Type `..\` + a sibling's name and Enter (so it is printed); Ctrl+click it: it stays on the share.
+5. Open a file that lives on the share in an editor; Ctrl+click a relative path in it.
+6. Disconnect the share (or unplug), hover the same text: no underline, the hover gives up within
+   the existence-check timeout, and saving a local file at the same moment is not delayed.
+7. Reconnect; after the back-off, hovering underlines again with no restart.
+
+One link model (US8)
+8. Put `https://example.com`, `src/foo.ts:42:7`, an out-of-project path, a folder, and an in-project
+   `deploy.ps1` in an editor and print the same line in a terminal. Hover, Ctrl+click, right-click
+   each in both: the tooltips, outcomes and menus match pairwise, and nothing runs or opens in
+   another program — except by choosing Open in OS Default Program.
+9. Settings: no "Default link action"; "Existence-check timeout" sits under Editor · Links.
+```
+
+## 8. The second hands-on round, by flavour (US10, US11, D2)
+
+The corpus is the maintainer's own script, `D:\git\throng_tests\test 1\links-test.sh` (106 lines in
+*working* and *broken* sections). It is **not** copied into this repository; run it from where it
+lives. Git Bash runs it directly; for the other flavours, run it through Git Bash's `bash.exe` from
+that flavour's prompt so the output lands in that flavour's terminal (T192).
+
+```text
+For each installed flavour — Command Prompt, Windows PowerShell, PowerShell 7, Git Bash, WSL if set up:
+1. New terminal. `cd` into a subfolder of the project.
+2. Run the corpus. Without hovering: every line in the *working* section is marked (dashed
+   underline) once output stops; nothing in the *broken* section is.
+3. Narrow the panel until long links wrap. Every row of each is marked; Ctrl+click the SECOND row:
+   the whole target opens, once.
+4. Ctrl+click `test.md:3:5` (D2): an editor opens at line 3, column 5 — with the Markdown provider's
+   default open action at Preview and at Editor, and with test.md already open.
+5. Hover a web link, a path and an OSC 8 link side by side: identical at rest, identical on hover,
+   hand pointer only with Ctrl held.
+6. Record the outcome per section and per FR-145 cell. A flavour not installed is "not run".
+```

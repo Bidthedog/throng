@@ -147,6 +147,10 @@ are pinned in [contracts/menus-and-gestures.md](./contracts/menus-and-gestures.m
 
 ## 4. The default link action — `core/src/links/default-action.ts` (FR-050 – FR-055)
 
+> **Superseded 2026-09-18 by §13.1.** The type, the value array and the setting argument below are
+> retired with the setting (FR-112); the function keeps its name and becomes the click rule
+> (FR-110). This section is kept as the record of what shipped before the change request.
+
 ```ts
 export type DefaultLinkAction = 'throng' | 'editor' | 'preview' | 'osExplorer' | 'osDefaultProgram';
 
@@ -359,6 +363,9 @@ scheme now draws xterm's hover underline; it still opens nothing, on any gesture
 
 ## 9. Settings — `core/src/config/app-settings.ts` (FR-060, FR-061, FR-080b)
 
+> **Amended 2026-09-18 — see §13.3.** `editor.links.defaultAction` is retired and
+> `editor.links.existenceCheckTimeoutMs` is added; the table below is the pre-amendment record.
+
 Three leaves. Each needs four edits in `app-settings.ts` (interface field, `DEFAULT_APP_SETTINGS`
 entry, tolerant parse line, and **the field in `cloneTerminals`/`cloneEditor` — a field missing
 there is silently dropped on write**) plus exactly one descriptor.
@@ -417,3 +424,188 @@ which a de-elevated terminal never receives (R11).
   underlined and is gone when followed" edge case both require the answer to be re-derived, so
   holding a list of live links would be a second source of truth for something the screen already
   owns.
+
+---
+
+## 13. Amendment 2026-09-18 — the click rule, one line scan, network checks
+
+### 13.1 The click rule — `core/src/links/default-action.ts` (FR-110, FR-111, FR-114)
+
+```ts
+/** What Ctrl+click, the Open Link chord and the plain Open Link item do for a FILE link. */
+export type ClickTarget = 'editor' | 'preview' | 'osExplorer';   // never 'osDefaultProgram' (FR-111)
+
+export function resolveDefaultLinkAction(args: {
+  readonly link: ResolvedLink;
+  readonly hasPosition: boolean;
+  readonly previewIsDefault: boolean;   // defaultOpenActionFor(...) === 'preview', from the caller
+}): ClickTarget;
+```
+
+The decision, each clause a unit case:
+
+1. `link.kind === 'folder'` → `osExplorer`.
+2. `!link.inProject` → `osExplorer`.
+3. `previewIsDefault && !hasPosition && link.preview === 'enabled'` → `preview`.
+4. Otherwise → `editor`.
+
+`link.executable` is not read (FR-114). `DefaultLinkAction` and `DEFAULT_LINK_ACTIONS` are deleted;
+so is `LinkFollowDeps.defaultAction` and the `defaultAction` half of `linkRouting` (§4's
+reconciliation note) — the reader existed only to make a changing setting reach the next gesture,
+and there is no setting. `previewIsDefault` stays a reader, because 044's per-provider setting still
+changes live. Web links do not pass through this function: a web link's click is the open-external
+seam, always.
+
+### 13.2 One line scan — `core/src/links/web-url.ts`, `core/src/links/scan-line.ts` (FR-102, FR-104)
+
+```ts
+export interface WebLinkSpan { readonly uri: string; readonly start: number; readonly end: number }
+
+export const WEB_URL_REGEX: RegExp;                       // moved from terminal-url.ts, unchanged
+export function detectWebLinks(line: string): readonly WebLinkSpan[];
+
+export interface ScannedLine {
+  readonly web: readonly WebLinkSpan[];
+  readonly paths: readonly LinkCandidate[];               // never overlapping a web span (FR-009)
+}
+export function scanLinkLine(line: string): ScannedLine;
+```
+
+Pure and total, like `detectPathCandidates` (D8). The terminal's `claimedByWebLinks` and the editor's
+per-line scan in `link-decorations.ts` both become calls to `scanLinkLine`; the `WebLinksAddon` is
+loaded with `WEB_URL_REGEX`. The editor draws a web span as a link without asking main — a web link
+is not resolved (§6.1 of [contracts/link-resolution.md](./contracts/link-resolution.md)).
+
+The editor's decoration carries the kind, so the `mousedown` handler, the chord and the menu can tell
+a web span from a file link:
+
+```ts
+// ui/src/renderer/editor/link-decorations.ts
+type EditorLinkAt =
+  | { readonly kind: 'web'; readonly uri: string; readonly from: number; readonly to: number }
+  | { readonly kind: 'file'; /* as today */ };
+```
+
+### 13.3 Settings — the `Editor · Links` block (FR-112, FR-113, FR-120)
+
+```ts
+export interface EditorLinkSettings {
+  // defaultAction — RETIRED (FR-112). A persisted value is dropped by the parse (FR-113).
+  detectInEditors: boolean;               // FR-060, unchanged
+  detectInTerminals: boolean;             // FR-060, unchanged
+  existenceCheckTimeoutMs: number;        // FR-120 — ships 2000, bounded 250–30000
+}
+```
+
+Four edits for the new leaf (interface, default, tolerant parse, `cloneEditor`) plus one descriptor;
+the same four deletions for the retired one. Full descriptor text in
+[contracts/settings-and-environment.md](./contracts/settings-and-environment.md) §6.1.
+
+### 13.4 Outcomes gain `unreachable` — `core/src/links/types.ts` (FR-120, FR-124)
+
+```ts
+export type LinkResolution =
+  | { readonly ok: true; readonly link: ResolvedLink }
+  | { readonly ok: false; readonly reason?: 'unreachable' };      // absent = does not exist
+
+export type LinkActionOutcome =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: 'gone' | 'refused' | 'unreachable'; readonly path: string };
+```
+
+The renderer's cache stores an `unreachable` answer like any non-link, for the ordinary TTL; that
+expiry **is** FR-122's back-off.
+
+### 13.5 Volume-root state — `ui/src/main/file-link-resolver.ts` (FR-121, FR-122)
+
+Main-process memory only, never persisted, never sent to a renderer:
+
+```ts
+// per volume root (node:path parse(p).root — `\\server\share\` or `C:\`)
+interface RootState {
+  readonly stuckSince: number;    // a stat under this root outlived the timeout and has not settled
+}
+// Map<root, RootState>; size bounded by MAX_TIMED_OUT_LINK_CHECKS (core/src/links/limits.ts) = 2
+```
+
+A root enters the map when its check loses the timeout race and leaves it when that `stat` settles,
+whichever way. While present, checks under it answer `unreachable` without calling `IFileSystem`.
+While the map is full, a check under a root **not** in it also answers `unreachable` at once rather
+than risking a third stuck thread; a root that answers normally never enters it, so a healthy local
+drive is never gated.
+
+`FileLinkResolverDeps` gains `readLinkSettings: () => EditorLinkSettings`, on the
+`readPreviewSettings` pattern, so the timeout is read per check (SC-008, amended).
+
+---
+
+## 14. Amendment 2026-09-18, second round — logical lines, marks, tokens, flavours
+
+### 14.1 The terminal provider reads logical lines (FR-130 – FR-132)
+
+```ts
+// ui/src/renderer/terminal/file-link-provider.ts — the slice of xterm it reads grows by one field
+export interface LinkProviderTerminal {
+  readonly buffer: { readonly active: {
+    getLine(index: number): { translateToString(trimRight?: boolean): string; readonly isWrapped: boolean } | undefined;
+  } };
+}
+
+/** One logical line: its first buffer row, and each row's text in order. */
+interface LogicalLine { readonly firstRow: number; readonly rows: readonly string[] }
+```
+
+A span at offset `o` in the joined text maps to `(x, y)` by walking `rows` lengths. `ProvidedLink.range`
+keeps xterm's 1-based inclusive shape; `start.y` and `end.y` may now differ. `HoveredLink` is
+unchanged — it names the target, not the rows.
+
+### 14.2 At-rest marks and the idle scan (FR-136, FR-137)
+
+```ts
+// ui/src/renderer/terminal/link-idle-scan.ts
+export function createLinkIdleScan(deps: {
+  readonly onWriteQuiet: (listener: () => void, quietMs: number) => () => void; // write-quiet signal, never the data
+  readonly viewportRows: () => { readonly top: number; readonly bottom: number };
+  readonly scanRow: (bufferRow: number) => void;   // the provider's own ask, cache-backed
+}): { dispose(): void };
+
+// ui/src/renderer/terminal/link-marks.ts — one decoration per row a link occupies
+export function syncLinkMarks(links: readonly ProvidedLink[], state: 'rest' | 'hover'): void;
+```
+
+`LINK_IDLE_SCAN_MS` sits in `core/src/links/limits.ts` beside `LINK_CACHE_TTL_MS` and
+`MAX_LINK_CANDIDATES_PER_LINE`.
+
+### 14.3 Theme tokens (FR-138)
+
+| Token | Parent when unset | Area | Used by |
+|---|---|---|---|
+| `linkUnderline` | `accent` | General | at-rest underline, both panel types |
+| `linkUnderlineHover` | `linkUnderline` | General | hover underline, both panel types |
+
+Published as `--throng-colour-linkUnderline` / `--throng-colour-linkUnderlineHover`, on the existing
+`tokens.css` pattern. Adding tokens triggers the `SHIPPED_DEFAULTS_VERSION` rule this plan
+previously avoided (T182).
+
+### 14.4 A terminal's link base directory (FR-142 – FR-144)
+
+```ts
+// the site a terminal panel judges links against (TerminalLinkSite, terminal-link-activation.ts)
+baseDirectory = flavourReportsDirectory(flavourId, settings.terminals.shellIntegration)
+  ? cwdStore.get(panelId)      // observed (cmd) or reported via OSC 9;9 (pwsh, windows-powershell, git-bash)
+  : undefined;                 // never the stale launch directory; R5 then tries the project root alone
+```
+
+**Caution — a user-defined WSL flavour does NOT take the `undefined` branch today.**
+`flavourReportsDirectory` answers `true` for any flavour absent from both integration maps (it
+assumes such a shell moves its real directory, as `cmd` does), and `wsl.exe` does not. FR-144
+therefore needs one more input: a platform answer to "is this flavour WSL?" (the shell detection
+already distinguishes WSL's `System32\bash.exe`), consulted for the **link base only**:
+
+```ts
+baseDirectory = flavourReportsDirectory(id, integration) && !platform.isWslFlavour(flavour)
+  ? cwdStore.get(panelId) : undefined;
+```
+
+The name and home of that platform answer are settled in T189; 025's own callers of
+`flavourReportsDirectory` are not changed by 045.

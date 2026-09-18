@@ -1,6 +1,9 @@
 # Contract: settings, descriptors, IPC and the terminal environment
 
-**Feature**: 045 | **Requirements**: FR-037, FR-060 – FR-062, FR-080 – FR-080d
+**Feature**: 045 | **Requirements**: FR-037, FR-060 – FR-062, FR-080 – FR-080d; *amended
+2026-09-18*: FR-112, FR-113, FR-120, FR-124 — see §6. The `editor.links.defaultAction` row of §1 and
+its descriptor text describe a setting that is **retired**; they are kept as the record of what
+shipped on this branch before the change request.
 
 ---
 
@@ -205,3 +208,43 @@ user-visible; without it xterm never hands a `file:` hyperlink over at all. See
 **The `IPathForms` pass-through** — a form the platform already understands resolves exactly as
 written, rather than being separator-normalised by a port member that does not exist — is recorded
 where the rule lives, in [link-resolution.md](./link-resolution.md) §2's amendment.
+
+---
+
+## §6 Amendment 2026-09-18 — one setting retired, one added, one reason added
+
+### §6.1 The `Editor · Links` block after the change request
+
+| Key | Control | Ships | Group · subgroup | FR |
+|---|---|---|---|---|
+| ~~`editor.links.defaultAction`~~ | — | — | **retired** | FR-112, FR-113 |
+| `editor.links.detectInEditors` | `toggle` | `true` | Editor · Links | FR-060, FR-061 (unchanged) |
+| `editor.links.detectInTerminals` | `toggle` | `true` | Editor · Links | FR-060, FR-061 (unchanged) |
+| `editor.links.existenceCheckTimeoutMs` | `slider`, `step` 250 | `2000` | Editor · Links | FR-120, FR-061 |
+| `terminals.advertiseHyperlinks` | `toggle` | `true` | Terminal | FR-080b (unchanged) |
+
+**Retirement, on 019 FR-023's mechanism.** `DefaultLinkAction`, `DEFAULT_LINK_ACTIONS`, the interface
+field, the `DEFAULT_APP_SETTINGS` entry, the `linkSettings` parse line, the `cloneEditor` field and
+the descriptor are all deleted. Nothing else is written: `linkSettings` builds the block from the
+leaves it knows, so a persisted `defaultAction` does not survive a parse, and the first ordinary
+settings write leaves it out. That is the whole migration, as it was for `explorer.openMode`; a
+comment at the deleted descriptor's position says so, on the pattern at `settings-metadata.ts:353`.
+The idempotent-re-run assertion (FR-113) is a unit test: `parseAppSettings` of a document carrying
+each of the five old values and a junk value yields no `defaultAction` and the other leaves intact,
+and parse → serialise → parse → serialise is a fixed point.
+
+**The new leaf.** Label **Existence-check timeout**. Description: how long throng waits for a file or
+network location to answer before treating a path as not a link for now; applies to the next check,
+with no restart; raise it for a slow network share. Bounded `250` – `30,000` ms by 031's bounds guard
+(`bounds-guard.ts`'s `correctScalar` substitutes the default for anything outside). Displayed values
+are digit-grouped — `2,000`, `30,000` — per the constitution's NON-NEGOTIABLE gate. The three
+`Editor · Links` descriptors stay **consecutive** in `SETTINGS_METADATA` (§5).
+
+**No `SHIPPED_DEFAULTS_VERSION` bump** — settings leaves only.
+
+### §6.2 IPC — the failure reasons
+
+`throng:links:resolve` may now answer `{ ok: false, reason: 'unreachable' }` (a bare `{ ok: false }`
+still means "does not exist"). `throng:links:reveal` and `throng:links:open` may answer
+`{ ok: false, reason: 'unreachable', path }`. `link-ipc.ts`'s handlers pass both through unchanged;
+the sanitiser only ever touched the **request**. I1 – I6 are unchanged.

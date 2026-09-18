@@ -1,6 +1,7 @@
 # Contract: detection, resolution and project membership
 
-**Feature**: 045 | **Requirements**: FR-003 – FR-013, FR-020 – FR-026, FR-070 – FR-073
+**Feature**: 045 | **Requirements**: FR-003 – FR-013, FR-020 – FR-026, FR-070 – FR-073;
+*amended 2026-09-18*: FR-003g, FR-100 – FR-107, FR-120 – FR-123 and defect D1 — see §6.
 
 One set of rules, used by both panel types (FR-010). Everything here is a **pure function in
 `packages/core`**; every OS fact it needs arrives as a parameter or through a port
@@ -156,3 +157,76 @@ They remain inert on every gesture — `classifyTerminalLinkTarget` closes by de
 follows them, no link items appear on the menu and nothing reaches the OS URL opener. The underline
 is the whole of the difference, and it is the price of US2 existing at all rather than an oversight:
 without the option the feature's founding report (SC-005) could not be delivered.
+
+---
+
+## §6 Amendment 2026-09-18 — one scan, UNC roots, bounded checks
+
+### §6.1 One line scan for both panel types (FR-102, FR-104)
+
+§1's D2 said "the editor passes the ranges its own URL scan matched". **There was no editor URL
+scan**: `link-decorations.ts` passes an empty `claimed` list, so an editor had no web links at all —
+the gap the maintainer found. The fix is one function rather than a second scanner:
+
+```ts
+// core/src/links/web-url.ts — moved from ui/src/renderer/terminal/terminal-url.ts, unchanged
+export const WEB_URL_REGEX: RegExp;
+export function detectWebLinks(line: string): readonly { uri: string; start: number; end: number }[];
+
+// core/src/links/scan-line.ts
+export function scanLinkLine(line: string): {
+  readonly web: readonly { uri: string; start: number; end: number }[];
+  readonly paths: readonly LinkCandidate[];   // detectPathCandidates(line, web spans) — D2, once
+};
+```
+
+| # | Guarantee | FR |
+|---|---|---|
+| D9 | Both panel types take a line's links from `scanLinkLine` and from nothing else | FR-104 |
+| D10 | `WEB_URL_REGEX` is byte-for-byte the pattern `TERMINAL_URL_REGEX` was; `terminal-url.ts` re-exports it and `ui/tests/unit/terminal-url.test.ts` passes unchanged | FR-102 |
+| D11 | A web span is never also a path candidate, in either panel type | FR-009 |
+| D12 | `FileSystem::<path>`, optionally after `Microsoft.PowerShell.Core\`, yields a candidate for `<path>` alone, spanning `<path>` alone; any other `Name::` token yields nothing | FR-003g, FR-107 |
+
+Web spans need **no existence check** — they are not resolved by main, and no request for one ever
+reaches `throng:links:resolve`.
+
+### §6.2 R12 — a UNC base keeps its root (D1)
+
+| # | Rule | FR |
+|---|---|---|
+| R12 | When a base directory or project root begins with two separators (the `UNC_FORM` shape R2 already recognises), a join keeps **both** leading separators, and the base's first two segments — server and share — are its **root**: a `..` in the relative part stops there and never pops them | FR-022 – FR-024, D1 |
+
+R5 and R6 were always meant to work against a network base; R12 states what `join` must preserve for
+them to. It adds no port member and names no OS: the shape is the one `resolve.ts` already tests for.
+
+### §6.3 Membership with a network root
+
+| # | Rule | FR |
+|---|---|---|
+| M7 | A project rooted at `\\s\h\proj` contains `\\s\h\proj\src\x.ts` and `//s/h/proj/src/x.ts`, and does not contain `\\s\h\proj-old\x.ts`. The comparison is still `isUnderPath` (M6) | FR-021, D1 |
+| M8 | An **alias** — a mapped drive letter for the share, an administrative share for a local drive, an 8.3 short name — is judged by the name written, like M5's symlink: never canonicalised, never promoted into the project on a guess | FR-106 |
+
+### §6.4 What resolution is allowed to cost — additions to §4
+
+| # | Rule | FR |
+|---|---|---|
+| P7 | Every existence check in `FileLinkResolver` races the **existence-check timeout** (`editor.links.existenceCheckTimeoutMs`, read per check). Losing the race answers `{ ok: false, reason: 'unreachable' }` | FR-120 |
+| P8 | A timed-out check marks its **volume root** (`node:path`'s `parse(p).root`) outstanding. While it is, every check under that root answers `unreachable` at once and calls `IFileSystem.stat` **zero** times | FR-121 |
+| P9 | At most `MAX_TIMED_OUT_LINK_CHECKS` (2) checks may be outstanding past the timeout in the process. A check under a new root beyond that answers `unreachable` at once | FR-121 |
+| P10 | When the stuck `stat` finally settles, the root's mark clears. The renderer's cached `unreachable` expires with the ordinary TTL — FR-122's back-off, with no second timer | FR-122 |
+| P11 | A check under a root that is **not** outstanding is never delayed by one that is | FR-121 |
+| P12 | An answer that lands after a surface stopped waiting reaches that surface for the line it belongs to, with no pointer movement needed (terminal: past `file-link-provider.ts`'s held-reply deadline; editor: the cache subscription, which already redecorates) | FR-123 |
+
+## §7 Amendment 2026-09-18, second round — logical lines and the idle scan
+
+| # | Rule | FR |
+|---|---|---|
+| D13 | A terminal link is detected on the **logical line**: the asked row, plus the rows before it and after it that xterm marks `isWrapped`, joined without separators. Spans map back to cells, so a range may start and end on different rows | FR-130 |
+| D14 | Asking about **any** row of a logical line returns the same links for it | FR-131 |
+| D15 | Rows not joined by `isWrapped` are never joined; an OSC 8 target repeated on separate lines is one link only because xterm links cells by declared target | FR-132 |
+| P2′ | *Supersedes P2 in part.* The existence check has **three** callers: the terminal provider (hover), the editor `ViewPlugin` (visible range), and the terminal **idle scan** of rows in view | FR-137 |
+| P13 | The idle scan starts only after `LINK_IDLE_SCAN_MS` without a write, is cancelled by the next write, covers only the viewport's logical lines within the per-line cap, and reads and fills the same cache. P1 is unchanged: nothing runs on the output path | FR-071, FR-072, FR-137 |
+| P14 | A relative path's base in a terminal is the cwd store's value **only** when `flavourReportsDirectory(flavour, shellIntegration)` is true; otherwise R5 has no base directory and the project root alone is tried | FR-142 – FR-144 |
+
+P3 still holds: `unreachable` is not a link. The difference from `{ ok: false }` with no reason is
+only what a follow reports (FR-124) — a hover draws nothing either way.

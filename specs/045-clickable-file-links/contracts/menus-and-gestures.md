@@ -1,6 +1,8 @@
 # Contract: menus, gestures and the chord
 
-**Feature**: 045 | **Requirements**: FR-030 – FR-034, FR-040 – FR-046, FR-050 – FR-055, FR-062
+**Feature**: 045 | **Requirements**: FR-030 – FR-034, FR-040 – FR-046, FR-050 – FR-055, FR-062;
+*amended 2026-09-18*: FR-100 – FR-105, FR-110 – FR-114, FR-124 — see §7. Wherever this contract says
+"runs the default link action", read **runs the click rule** (FR-110); the setting is retired.
 
 Section vocabulary and guarantees are [033's](../../033-open-and-navigate/contracts/menu-sections.md).
 `section` is a **required** field on `MenuAction` (`ui/src/renderer/workspace/context-menu.tsx:31,48`),
@@ -173,3 +175,94 @@ already use (`use-editor.ts:462-466`, `:939-952`).
 
 A switch **never** touches an explicit hyperlink: the program chose to emit it and throng did not
 guess it, so it follows the same rule as a web link.
+
+*2026-09-18*: neither switch touches a **web link in an editor** either (FR-101) — the editor switch
+governs detected paths only, exactly as the terminal switch does.
+
+---
+
+## §7 Amendment 2026-09-18 — one link model, and the click rule
+
+### §7.1 What Open Link, Ctrl+click and the chord do (FR-110, FR-111)
+
+`resolveDefaultLinkAction` keeps its name — renaming it would churn every caller for no behaviour —
+and loses its `setting` argument and its fallback:
+
+| Resolved link | Result | Route (unchanged from §2) |
+|---|---|---|
+| file, in project, `previewIsDefault` and no position | `preview` | Open in Preview |
+| file, in project, otherwise | `editor` | Open in Editor, at the position |
+| file, outside the project | `osExplorer` | Open in OS Explorer, file selected |
+| folder, anywhere | `osExplorer` | Open in OS Explorer, folder open |
+
+Its return type is `'editor' | 'preview' | 'osExplorer'`. **`osDefaultProgram` cannot be returned**,
+so no caller of the click rule can reach `throng:links:open` — FR-111 is enforced by the compiler.
+The **named** item *Open in OS Default Program* (§1 row 5) is unchanged and is the only caller of
+that channel. An executable is not special-cased (FR-114): in the project it opens as text; outside
+it is revealed like every other file.
+
+### §7.2 The web-link run in an editor (FR-103, S4)
+
+Over a web link, with **no text selected**, the editor's content menu leads with a `contextual`
+section:
+
+| Order | Item | State |
+|---|---|---|
+| 1 | **Open Link** | always; opens the address in the system browser via the open-external seam; shows `Ctrl+Enter` (the chord is bound in the editor scope, §4) |
+| 2 | **Copy Link Address** | always; copies the address exactly as written |
+
+This is the terminal's existing web-link pair (024 FR-019d), built by **one** builder —
+`webLinkMenuActions` in `ui/src/renderer/links/link-menu-items.ts` — which the terminal's
+`terminalContentMenu` now calls too. The terminal's run is unchanged item for item, and **without**
+a chord (§4). With a selection, the ordinary menu wins in both panels. `menu-sections.test.ts`
+gains a `shapeOf` pin for the editor menu over a web link.
+
+### §7.3 Gestures added for web links in an editor
+
+| # | Gesture | Surface | Behaviour | FR |
+|---|---|---|---|---|
+| G11 | **Ctrl+click** over a web link | editor | opens it once in the system browser, `http`/`https` only | FR-103 |
+| G12 | **Plain click** over a web link | editor | places the caret; nothing opens | FR-103 |
+| G13 | **Open Link chord**, single caret inside a web link, no selection | editor | opens it, as G11 | FR-103, FR-044 |
+| G14 | **Ctrl+click that drags**, from a web link | editor | selects | FR-103 |
+
+G4 (Ctrl+click off a link adds a cursor) and G9 (the chord off a link inserts a line) are unchanged
+and now apply with web links present too: the `mousedown` handler claims the press only over a
+**resolved file link or a web span**, and the window chord handler only when the caret is inside
+one.
+
+### §7.4 The tooltip (FR-105)
+
+One function, `linkHoverText(kind, clickResult, chord)` in `core/src/links/hover-text.ts`, which the
+terminal's `hoveredLinkTipText` and the editor's link tooltip both call:
+
+| Link | Text |
+|---|---|
+| web | `Ctrl+Click to open in system browser` (024's wording, unchanged) |
+| file whose click is `editor` or `preview` | `Ctrl+Click to open` |
+| file or folder whose click is `osExplorer` | `Ctrl+Click to show in OS Explorer` |
+
+`Cmd` replaces `Ctrl` on macOS, as today.
+
+### §7.5 The failure notice gains a reason (FR-124)
+
+### §7.6 One affordance, marked at rest (second round — FR-135 – FR-139)
+
+| State | Editor | Terminal |
+|---|---|---|
+| at rest | CodeMirror mark: `text-decoration: underline dashed var(--throng-colour-linkUnderline)`; **no** `color` | an xterm decoration over every row of the link, same style |
+| hovered | underline `solid var(--throng-colour-linkUnderlineHover)` over the whole link | the same, over **every** row (FR-131) |
+| hovered + modifier | `cursor: pointer` | `cursor: pointer` |
+| tooltip | §7.4's `linkHoverText`, after the delay | the same, after `terminals.linkHoverDelayMs` |
+
+Every link kind takes the same row — web, detected path, `file:` text, OSC 8. xterm's own OSC 8
+underline is restyled or replaced per open item O10. Both tokens are in the **General** area with
+inheritance parents (`linkUnderline` → `accent`; `linkUnderlineHover` → `linkUnderline`). This
+supersedes the editor's shipped `color: var(--throng-colour-accent)` on `.cm-throng-link`.
+
+G15 *(second round)* — **Ctrl+click on any row of a wrapped link** (terminal): follows the whole
+target once (FR-131, FR-043).
+
+`LinkActionOutcome`'s failure reasons become `'gone' | 'refused' | 'unreachable'`. `unreachable`
+raises **one** notice naming the path and saying the location did not answer; `gone` keeps saying it
+no longer exists. The notice route is §2's, unchanged.

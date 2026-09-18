@@ -1,6 +1,7 @@
 # Contract: the two new platform ports
 
-**Feature**: 045 | **Requirements**: FR-012, FR-025, FR-026, FR-035, FR-036, FR-038, FR-039a
+**Feature**: 045 | **Requirements**: FR-012, FR-025, FR-026, FR-035, FR-036, FR-038, FR-039a;
+*amended 2026-09-18* — see §5 (no port changes shape).
 
 Principle II. `packages/core` states the rules; `packages/platform-windows` answers the OS
 questions; a contract suite in `core/src/testing/` verifies any implementation. Style:
@@ -203,3 +204,24 @@ container.bind<IExecutableExtensions>(UI_TYPES.ExecutableExtensions)
 The **daemon** container is untouched: nothing in this feature crosses the daemon boundary.
 `FileLinkResolver` receives all four collaborators by constructor
 ([../data-model.md](../data-model.md) §6).
+
+---
+
+## §5 Amendment 2026-09-18 — what the change request does to these ports
+
+**No port gains or loses a member.** Specifically:
+
+- **`IPathForms`** is unchanged. D1's fix (a UNC base keeping its root) lives in core's `join`, which
+  already recognises the UNC shape without naming an OS ([link-resolution.md](./link-resolution.md)
+  §6.2). The volume root that FR-121 gates on is derived in **UI main** with `node:path`, which is
+  where an OS path module is allowed; no core rule needs it. A mapped-drive/UNC alias is judged by
+  name (FR-106), so no "canonical location" member is added — that would be `realpath`, which the
+  symlink rule (M5) deliberately avoids.
+- **`IExecutableExtensions`** is unchanged in shape and keeps its contract suite, but **loses its only
+  production consumer**: the click rule (FR-110) no longer branches on executability, because it
+  never reaches the default program for any file (FR-111, FR-114). It stays because FR-039a stays in
+  force and SC-010/SC-013 are driven from its reported set (EX6). Recorded as a Principle VIII
+  tension in [../plan.md](../plan.md) Complexity Tracking and reported to the maintainer for a
+  keep-or-retire decision. `ResolvedLink.executable` is kept for the same reason and the same review.
+- **`IShellIntegration.openWithDefaultProgram`** is unchanged, and after FR-111 its only caller is the
+  named *Open in OS Default Program* item.
