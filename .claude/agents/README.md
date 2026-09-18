@@ -18,6 +18,14 @@ finished rather than rediscovering `schema-guard.ts` or the blind-Enter trap.
 | `throng-spec-governance` | Spec Kit artifacts, constitution amendments, FR traceability, docs currency |
 | `throng-build-release` | tsc/Vite build, electron-builder + NSIS, CI workflows, verification and publish gates |
 
+## Models
+
+`throng-config-preferences`, `throng-renderer-ui`, `throng-explorer-fileops` and
+`throng-failure-notices` run on Sonnet (`model: sonnet`): their work is checklist-shaped and guarded
+by build-failing tests. The rest inherit the session model, because their failures are silent —
+migrations, orphaned processes, document authority, flake races, governance judgement. Pass `model`
+on the Agent call to escalate one task without changing the default.
+
 ## How these relate to skills
 
 Skills own **process** and run in the main session; agents own **area knowledge** and run in their

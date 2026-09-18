@@ -1,5 +1,6 @@
 ---
 name: throng-explorer-fileops
+model: sonnet
 description: Use for the project file explorer and every filesystem operation the app performs — the tree, watching, drag and drop, rename/move/copy/delete, the recycle bin and undo of file operations, path normalisation and exclusion rules, and the project root-exclusivity constraint. Triggers include a tree that does not refresh, a watcher that dies or misses a path, a move or delete that half-completes, drag-and-drop between panels or from the OS, mixed path separators, and "the same file appears twice".
 ---
 

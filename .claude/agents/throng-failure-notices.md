@@ -1,5 +1,6 @@
 ---
 name: throng-failure-notices
+model: sonnet
 description: Use for how failures reach the user — the shared failure-cause model, notifications and notices, panel banners, exit notices and terminal exit codes, daemon-death reporting, notice suppression and de-duplication, and diagnostics logging. Triggers include a raw error string appearing in the UI, a failure that vanishes silently, duplicate or stacked notifications, "what should this say", an operation that half-fails, and log rotation or log level work.
 ---
 
