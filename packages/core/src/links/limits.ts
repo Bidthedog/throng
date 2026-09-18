@@ -39,3 +39,17 @@ export const LINK_CACHE_TTL_MS = 30_000;
  * compiler diagnostic names one or two files, a stack frame one, `git status` one per row.
  */
 export const MAX_LINK_CANDIDATES_PER_LINE = 64;
+
+/**
+ * The most words an anchored path may be extended by across single spaces (FR-150; contract
+ * `link-resolution.md` §8.1 D16; plan Complexity Tracking, third round).
+ *
+ * Every extended reading is a candidate, so without a cap one path followed by a sentence becomes as
+ * many existence checks as the sentence has words. It sits beside `MAX_LINK_CANDIDATES_PER_LINE`,
+ * which still bounds the line as a whole; this one bounds a single token.
+ *
+ * 6 because the spaced folders people actually have need far fewer: `C:\Program Files\Common Files\…`
+ * adds two words, a synced `OneDrive - Company Name\…` adds three. Twice the corpus's worst case, and
+ * still small enough that one path followed by prose costs a handful of readings, not dozens.
+ */
+export const MAX_PATH_SPACE_WORDS = 6;

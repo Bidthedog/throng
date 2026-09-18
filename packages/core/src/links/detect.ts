@@ -1,3 +1,4 @@
+import { MAX_PATH_SPACE_WORDS } from './limits.js';
 import type { LinkCandidate, LinkPosition, Span } from './types.js';
 
 /**
@@ -53,9 +54,18 @@ export function detectPathCandidates(line: string, claimed: readonly Span[]): Li
   TOKEN.lastIndex = 0;
   let token: RegExpExecArray | null;
   while ((token = TOKEN.exec(line)) !== null) {
-    const at = token.index;
-    if (overlapsAny({ start: at, end: at + token[0].length }, consumed)) continue;
-    emitReadings(out, token[0], at);
+    const end = token.index + token[0].length;
+    if (overlapsAny({ start: token.index, end }, consumed)) continue;
+    // D12: PowerShell's provider qualifier is not part of the path. It is dropped before the token
+    // is judged, so the candidate — and its span — is the path alone; every other `Name::` token is
+    // still judged whole, and still refused for its colon.
+    const qualifier = PROVIDER_QUALIFIER.exec(token[0]);
+    const skip = qualifier === null ? 0 : qualifier[0].length;
+    const raw = token[0].slice(skip);
+    if (raw.length === 0) continue;
+    const at = token.index + skip;
+    emitExtendedReadings(out, line, raw, at, end);
+    emitReadings(out, raw, at);
   }
 
   // D2: a span overlapping a range the web-link scanner already claimed yields nothing (FR-009).
@@ -101,6 +111,97 @@ const ANNOUNCED_RELATIVE = /^(?:\.{1,2}|~)[\\/]/;
  * letter**. See the header — every clause of this is load-bearing against `prose.txt`.
  */
 const EXTENSION = /^[A-Za-z][A-Za-z0-9]{1,9}$/;
+
+/**
+ * D12 / FR-003g: `FileSystem::`, optionally after `Microsoft.PowerShell.Core\` — how PowerShell
+ * prints a location in its prompt, `pwd` and `Resolve-Path`. Anchored at the token's start, so a
+ * qualifier in the middle of a token is not one.
+ */
+const PROVIDER_QUALIFIER = /^(?:Microsoft\.PowerShell\.Core\\)?FileSystem::/i;
+
+/** One whitespace-separated word, read at a fixed offset (sticky). Quotes end it, as in `TOKEN`. */
+const WORD = /[^\s"']+/y;
+
+/**
+ * FR-150 / D16 – D18. An ANCHORED token also yields readings extended across single spaces, one word
+ * at a time, longest first; `emitReadings` then adds the token itself last. Each reading goes through
+ * `emitReadings` like any token, so it gets its own position readings (R7) and its own trim (FR-005).
+ *
+ * Only an anchored token extends — a bare word never starts one — and extension stops BEFORE:
+ *  - anything but exactly one space (a run of two, a tab, a quote, the end of the line);
+ *  - a word that itself begins an anchored form or a scheme (D18: `C:\a.txt C:\b.txt` is two paths,
+ *    and a web link is never part of a path);
+ *  - a word that closes a bracket the reading never opened.
+ * A reading whose brackets are still open is not emitted, but extension carries on past it, so a
+ * folder named `(old stuff)` is reached once its closer is. Which reading is the link is resolution's
+ * business (D19): the first that exists.
+ */
+function emitExtendedReadings(
+  out: LinkCandidate[],
+  line: string,
+  raw: string,
+  at: number,
+  tokenEnd: number,
+): void {
+  if (!isAnchored(trim(raw).text)) return;
+
+  const ends: number[] = [];
+  let pos = tokenEnd;
+  while (ends.length < MAX_PATH_SPACE_WORDS && line[pos] === ' ') {
+    WORD.lastIndex = pos + 1;
+    const word = WORD.exec(line);
+    if (word === null || beginsAnotherLink(word[0])) break;
+    const next = pos + 1 + word[0].length;
+    if (unclosedBrackets(line.slice(at, next)) === null) break;
+    ends.push(next);
+    pos = next;
+  }
+
+  for (let i = ends.length - 1; i >= 0; i -= 1) {
+    const reading = line.slice(at, ends[i]);
+    if (unclosedBrackets(reading) !== 0) continue;
+    // A word that trims away entirely (`D:\a ,`) would leave a reading ending in the space.
+    if (/\s$/.test(trim(reading).text)) continue;
+    emitReadings(out, reading, at);
+  }
+}
+
+/** D16's anchored forms: drive, UNC, a leading `/`, `./`, `../`, `~/`, or a `file:` URI. */
+function isAnchored(text: string): boolean {
+  return (
+    DRIVE_FORM.test(text) ||
+    UNC_FORM.test(text) ||
+    text.startsWith('/') ||
+    ANNOUNCED_RELATIVE.test(text) ||
+    /^file:/i.test(text)
+  );
+}
+
+/** D18: a word that begins an anchored form, a scheme, or D12's qualifier starts a link of its own. */
+function beginsAnotherLink(word: string): boolean {
+  let from = 0;
+  while (from < word.length && OPENERS.includes(word[from])) from += 1;
+  const bare = word.slice(from);
+  return isAnchored(bare) || SCHEME.test(bare) || PROVIDER_QUALIFIER.test(bare);
+}
+
+/** How many brackets are left open, or `null` if one closes that was never opened. */
+function unclosedBrackets(s: string): number | null {
+  const depth = [0, 0, 0, 0];
+  for (const ch of s) {
+    const opener = OPENERS.indexOf(ch);
+    if (opener >= 0) {
+      depth[opener] += 1;
+      continue;
+    }
+    const closer = CLOSERS.indexOf(ch);
+    if (closer >= 0) {
+      depth[closer] -= 1;
+      if (depth[closer] < 0) return null;
+    }
+  }
+  return depth.reduce((a, b) => a + b, 0);
+}
 
 function emitReadings(out: LinkCandidate[], raw: string, rawStart: number): void {
   const trimmed = trim(raw);
