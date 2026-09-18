@@ -94,6 +94,16 @@ export interface TerminalSettings {
    *  "Ctrl+Click to open…" hover tip appears, in milliseconds. Default 500. */
   linkHoverDelayMs: number;
   /**
+   * 045 FR-080/FR-080b (#394): tell the programs a terminal runs that throng renders OSC 8
+   * hyperlinks, by starting them with `FORCE_HYPERLINK=1`.
+   *
+   * It lives with the terminal settings rather than beside the link settings because it changes
+   * what a terminal is STARTED with (FR-061), which is also why it applies to the next terminal and
+   * never to one already running — a process's environment is fixed when it starts (FR-080c). A
+   * `FORCE_HYPERLINK` the user set themselves is never overridden, in either direction (FR-080a).
+   */
+  advertiseHyperlinks: boolean;
+  /**
    * 039 FR-001/FR-002 (#223): seeds the New Panel dialog's "Remember the last running command"
    * checkbox for a FRESH Panel, and resolves an ABSENT per-Panel value (FR-005a). A Panel that
    * holds its own explicit value still wins (FR-005).
@@ -286,6 +296,32 @@ export interface EditorSettings {
    * naming it (FR-071).
    */
   previews: PreviewSettings;
+  /**
+   * 045: clickable file links (`Editor · Links`, #394). Three leaves in one block because FR-061
+   * requires the link settings "together in one place", and `group` + `subgroup` is the mechanism
+   * that puts them there.
+   */
+  links: EditorLinkSettings;
+}
+
+/**
+ * 045 FR-060, FR-120 — the `Editor · Links` block (#394).
+ *
+ * `defaultAction` (FR-050) is RETIRED (FR-112): what a click does is fixed by the click rule
+ * (FR-110), so there is nothing left to choose. A persisted value is dropped by `linkSettings`,
+ * which rebuilds the block from the leaves below, and the next ordinary write leaves it out — 019
+ * FR-023's mechanism for `explorer.openMode` (FR-113).
+ */
+export interface EditorLinkSettings {
+  /** FR-060: detect paths in editor documents. Explicit hyperlinks are never affected. */
+  detectInEditors: boolean;
+  /** FR-060: detect paths in terminal output. Web links and `file:` hyperlinks keep working. */
+  detectInTerminals: boolean;
+  /**
+   * FR-120: how long one existence check may take before the link is reported unreachable. Bounded
+   * 250 – 25,000 by its descriptor, which `applyDeclaredBounds` enforces; there is no clamp here.
+   */
+  existenceCheckTimeoutMs: number;
 }
 
 /** Where the new-project folder picker opens (011, FR-041). */
@@ -608,6 +644,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     shellIntegration: true,
     showStatusBar: true,
     linkHoverDelayMs: 500,
+    // 045 FR-080b (#394): shipped ON. A program that emits OSC 8 is emitting a link throng did not
+    // have to guess, which is strictly better than one it did.
+    advertiseHyperlinks: true,
     // 039 FR-002. OFF restores 025 FR-015; ON for the directory is 025 FR-027b and is unchanged.
     defaultRememberCommand: false,
     defaultRememberDirectory: true,
@@ -663,6 +702,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     },
     // 044 — DERIVED from the provider registry, as `indentByLanguage` is from the language registry.
     previews: previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS),
+    // 045 FR-060/FR-120 — both detection switches on, and a two-second existence check. Detection is
+    // shipped on because a link a user has to enable is a feature they never find (#394).
+    links: {
+      detectInEditors: true,
+      detectInTerminals: true,
+      existenceCheckTimeoutMs: 2000,
+    },
   },
   tabs: {
     smoothScrollMs: 300,
@@ -964,6 +1010,9 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
   const showStatusBar =
     typeof v.showStatusBar === 'boolean' ? v.showStatusBar : fallback.showStatusBar;
   const linkHoverDelayMs = wholeNumber(v.linkHoverDelayMs, fallback.linkHoverDelayMs);
+  // 045 FR-080b.
+  const advertiseHyperlinks =
+    typeof v.advertiseHyperlinks === 'boolean' ? v.advertiseHyperlinks : fallback.advertiseHyperlinks;
   // 039 FR-002. Per-field fallback, like every setting above: a config that sets one of these must
   // not reset the other three by omission.
   const defaultRememberCommand =
@@ -991,6 +1040,7 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
     shellIntegration,
     showStatusBar,
     linkHoverDelayMs,
+    advertiseHyperlinks,
     defaultRememberCommand,
     defaultRememberDirectory,
     defaultRunAsAdmin,
@@ -1014,6 +1064,8 @@ function cloneTerminals(t: TerminalSettings): TerminalSettings {
     shellIntegration: t.shellIntegration,
     showStatusBar: t.showStatusBar,
     linkHoverDelayMs: t.linkHoverDelayMs,
+    // 045 FR-080b, and the note below applies to it exactly as it does to 039's four.
+    advertiseHyperlinks: t.advertiseHyperlinks,
     // 039 FR-002. A field missing HERE is silently dropped on a settings write (032), which no
     // assertion about parsing would catch — hence the dedicated test.
     defaultRememberCommand: t.defaultRememberCommand,
@@ -1093,6 +1145,25 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     navigation: navigationSettings(v.navigation, fallback.navigation),
     // 044 — tolerant per leaf, and it keeps an unknown provider id (see `parsePreviewSettings`).
     previews: parsePreviewSettings(v.previews, SHIPPED_PREVIEW_PROVIDERS),
+    // 045 — tolerant per leaf, like every block above it.
+    links: linkSettings(v.links, fallback.links),
+  };
+}
+
+/**
+ * Tolerant per-field parse of `editor.links` (045 FR-060, FR-120). A bad leaf falls back to its own
+ * default. The block is REBUILT from the leaves it knows rather than spread from `v`, which is what
+ * drops a retired `defaultAction` (FR-112, FR-113): it is never read, so it is never written back.
+ * The timeout's range is its descriptor's, enforced by `applyDeclaredBounds` — no clamp here.
+ */
+function linkSettings(v: unknown, fallback: EditorLinkSettings): EditorLinkSettings {
+  if (!isRecord(v)) return { ...fallback };
+  return {
+    detectInEditors:
+      typeof v.detectInEditors === 'boolean' ? v.detectInEditors : fallback.detectInEditors,
+    detectInTerminals:
+      typeof v.detectInTerminals === 'boolean' ? v.detectInTerminals : fallback.detectInTerminals,
+    existenceCheckTimeoutMs: wholeNumber(v.existenceCheckTimeoutMs, fallback.existenceCheckTimeoutMs),
   };
 }
 
@@ -1135,6 +1206,10 @@ function cloneEditor(e: EditorSettings): EditorSettings {
         Object.entries(e.previews.providers).map(([id, p]) => [id, { ...p }]),
       ),
     },
+    // 045: the SEVENTH object-valued member. Its three leaves are primitives, so a spread is
+    // enough — but omitting this line entirely shares the block with the shipped defaults, which is
+    // the fault `editor-settings.test.ts` sweeps for.
+    links: { ...e.links },
   };
 }
 

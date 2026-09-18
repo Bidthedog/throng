@@ -18,6 +18,11 @@
  * Copy/Paste was rejected as a behaviour regression shipped under a grouping pass.
  */
 import type { MenuAction } from '../workspace/context-menu.js';
+import {
+  fileLinkMenuActions,
+  webLinkMenuActions,
+  type FileLinkMenuContext,
+} from '../links/link-menu-items.js';
 
 export interface TerminalContentMenuActions {
   openLink: (url: string) => void;
@@ -37,6 +42,15 @@ export interface TerminalContentMenuArgs {
    * ordinary Copy menu (024 US7, FR-019d).
    */
   link: string | null;
+  /**
+   * 045 FR-031 — the FILE link under the pointer, and everything needed to act on it, or null.
+   *
+   * When it is set it REPLACES the web pair above rather than joining it: `terminalLinkTarget`
+   * answers the `file:` text for a resolved hyperlink as well, so both inputs arrive together at the
+   * call site and exactly one run must be drawn. A web link leaves this null and keeps 024's two
+   * items byte for byte.
+   */
+  fileLink?: FileLinkMenuContext | null;
   /** The xterm selection captured when the user right-clicked — the menu acts on that, not on later. */
   selection: string;
   /** The chord `terminal.redraw` is bound to right now, or undefined when it is unbound. */
@@ -47,26 +61,25 @@ export interface TerminalContentMenuArgs {
 }
 
 export function terminalContentMenu(args: TerminalContentMenuArgs): MenuAction[] {
-  const { link, selection, redrawChord, startFailure, actions } = args;
+  const { link, fileLink, selection, redrawChord, startFailure, actions } = args;
 
   const items: MenuAction[] = [];
 
-  if (link !== null) {
-    items.push({
-      // No icon: there is no link/open token, and 023's rule is "an icon only where a token
-      // exists". "Copy Link Address" is a copy action, so it carries the shared copy glyph.
-      label: 'Open Link',
-      testId: 'menu-item-Open Link',
-      section: 'contextual',
-      onClick: () => actions.openLink(link),
-    });
-    items.push({
-      label: 'Copy Link Address',
-      icon: 'copy',
-      testId: 'menu-item-Copy Link Address',
-      section: 'contextual',
-      onClick: () => actions.copyLinkAddress(link),
-    });
+  // 045 FR-031 — the file-link run, in place of the web pair. Nothing else about this menu moves:
+  // it is the same Contextual section, in the same leading position, for the same reason (the items
+  // are absent when the pointer is not over a link).
+  const fileRun = selection.length > 0 ? [] : fileLinkMenuActions(fileLink ?? null);
+  if (fileRun.length > 0) items.push(...fileRun);
+  else if (link !== null) {
+    // 024's web pair, from the builder the editor shares (FR-104). No chord: none is bound in a
+    // terminal (FR-046).
+    items.push(
+      ...webLinkMenuActions({
+        uri: link,
+        openLink: () => actions.openLink(link),
+        copyLinkAddress: () => actions.copyLinkAddress(link),
+      }),
+    );
   }
 
   items.push({

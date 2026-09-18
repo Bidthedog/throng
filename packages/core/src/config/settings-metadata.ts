@@ -613,6 +613,54 @@ export const SETTINGS_METADATA: MetadataRegistry = [
    */
   ...previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS),
 
+  /*
+   * Links (045, FR-061 — #394).
+   *
+   * Three together under `Editor · Links`, because FR-061 requires the link settings "in one
+   * place". The fourth link setting, `terminals.advertiseHyperlinks`, deliberately sits in the flat
+   * Terminal group instead: it changes what a terminal is STARTED with, which is a property of the
+   * terminal rather than of links.
+   *
+   * These three are declared CONSECUTIVELY on purpose. `groupDescriptors` buckets by group then
+   * subgroup in declaration order, so a descriptor pushed in between them would split the section
+   * in the editor without any test of the values noticing.
+   *
+   * 045 FR-112 (2026-09-18): `editor.links.defaultAction` was DELETED here and in app-settings.ts,
+   * on the `explorer.openMode` pattern above. The click rule (FR-110) fixes what a click does, so
+   * the setting had nothing left to choose; a persisted value is dropped by the tolerant parse and
+   * the next write leaves it out (FR-113, 019 FR-023's mechanism).
+   */
+  {
+    key: 'editor.links.detectInEditors',
+    label: 'Detect file links in editors',
+    description:
+      'Underline paths in editor documents that name a file or folder that exists, so Ctrl+click and the Open Link chord follow them. When off, Ctrl+click and Ctrl+Enter keep their ordinary editor meanings everywhere.',
+    group: 'Editor',
+    subgroup: 'Links',
+    control: 'toggle',
+  },
+  {
+    key: 'editor.links.detectInTerminals',
+    label: 'Detect file links in terminals',
+    description:
+      'Underline paths in terminal output that name a file or folder that exists, so Ctrl+click follows them. This governs paths throng recognises for itself: web links, and the explicit hyperlinks a program chose to emit, keep working when it is off.',
+    group: 'Editor',
+    subgroup: 'Links',
+    control: 'toggle',
+  },
+  {
+    key: 'editor.links.existenceCheckTimeoutMs',
+    label: 'Existence-check timeout',
+    description:
+      'How long throng waits, in milliseconds, for a file or network location to answer before treating a path as not a link for now. Raise it for a slow network share. It applies to the next check, with no restart.',
+    group: 'Editor',
+    subgroup: 'Links',
+    control: 'slider',
+    min: 250,
+    max: 25_000,
+    step: 250,
+  },
+
   // Navigation (033, FR-069b). Its own group because these govern the Quick Open and Go To Line
   // modals, not an editor panel — the distinction the user reads them by.
   {
@@ -750,6 +798,14 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     min: 0,
     max: 2000,
     step: 50,
+  },
+  {
+    key: 'terminals.advertiseHyperlinks',
+    label: 'Tell programs that links are supported',
+    description:
+      'Start terminal programs with FORCE_HYPERLINK=1, so tools that can emit clickable links — Claude Code among them — do. This applies to terminals started afterwards and does not change one that is already running, because a program’s environment is fixed when it starts. A FORCE_HYPERLINK you have set yourself is never overridden, in either direction. Turning this off does not stop throng recognising paths a program prints as plain text.',
+    group: 'Terminal',
+    control: 'toggle',
   },
 
   // Indentation (016, FR-018/FR-022). The order of precedence is the requirement: what the FILE

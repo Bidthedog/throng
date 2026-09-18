@@ -27,9 +27,18 @@ import {
  */
 function splitRolesFrom(parents: Record<string, string>): Record<string, string> {
   const roles: Record<string, string> = {};
-  for (const [token, parent] of Object.entries(TOKEN_PARENT)) {
-    const value = parents[parent];
-    if (value !== undefined) roles[token] = value;
+  // 045 FR-138: a chain can be two deep (`linkUnderlineHover` → `linkUnderline` → `accent`), so walk
+  // it until a supplied parent answers — the same walk `resolveSplitColour` does.
+  for (const token of Object.keys(TOKEN_PARENT)) {
+    let parent: string | undefined = TOKEN_PARENT[token];
+    for (let hops = 0; parent !== undefined && hops < Object.keys(TOKEN_PARENT).length; hops += 1) {
+      const value = parents[parent];
+      if (value !== undefined) {
+        roles[token] = value;
+        break;
+      }
+      parent = TOKEN_PARENT[parent];
+    }
   }
   return roles;
 }

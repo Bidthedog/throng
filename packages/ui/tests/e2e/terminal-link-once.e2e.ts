@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -7,13 +7,19 @@ import {
   openApp,
   createProject as newProject,
   firstPanelId,
+  charPoint,
   cleanupTemp,
+  linkMarkedText,
+  narrowTerminalWindow,
+  openedPaths,
+  runTypedCommand,
   stayedAbsent,
   TYPE_DELAY,
+  TERMINAL_OUTPUT_TIMEOUT_MS,
   type AppOptions,
   type OpenApp,
 } from './harness.js';
-import { skipIfElevated } from './admin.js';
+import { osc8HalfRuns, skipIfElevated } from './admin.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -63,6 +69,14 @@ const createProject = (win: OpenApp['win'], name: string, root: string): Promise
 
 /**
  * 026 / #198 — one Ctrl+click on a terminal link opens the browser exactly once.
+ *
+ * ══ RESOLVED (2026-09-17) — the sixth case at the end of this file ══
+ *
+ * The second open was never throng's. Claude Code's full-screen UI arms mouse reporting and opens a
+ * link it is Ctrl+clicked on, and xterm forwarded that press to it while also activating the link
+ * itself. None of the five cases below armed the mouse, which is why each saw exactly one open. The
+ * sixth does, and asserts the press is no longer forwarded. The history below is kept because it
+ * records what was ruled out, and how.
  *
  * ══ READ THIS BEFORE FIXING #198 ══
  *
@@ -219,12 +233,17 @@ async function openTerminal(win: Page, root: string): Promise<Locator> {
  * The script must still be a FILE — see `writeLinkScript` above for why typing the sequence at the
  * prompt breaks the test. This changes only HOW it is launched, and deliberately keeps the URL out
  * of the typed command line, which is the property that docblock depends on.
+ *
+ * Typed through `runTypedCommand`, which waits for the shell to echo the script's NAME before it
+ * presses Enter — so `script` must be a name this terminal has not shown yet, or that wait is met by
+ * an earlier line.
  */
-async function runScript(win: Page, term: Locator, printed: string): Promise<void> {
-  await term.click();
-  await win.keyboard.type('powershell -NoProfile -ExecutionPolicy Bypass -File .\\lnk.ps1');
-  await win.keyboard.press('Enter');
-  await expect(term).toContainText(printed, { timeout: 25_000 });
+async function runScript(win: Page, term: Locator, printed: string, script = 'lnk.ps1'): Promise<void> {
+  await runTypedCommand(win, term, `powershell -NoProfile -ExecutionPolicy Bypass -File .\\${script}`, {
+    echoed: script,
+    output: printed,
+    timeout: 25_000,
+  });
 }
 
 /**
@@ -282,6 +301,14 @@ async function clickLink(win: Page, text: string, opts: { ctrl: boolean }): Prom
   if (opts.ctrl) await win.keyboard.up('Control');
 }
 
+/*
+ * Why this one passes on the gate's Server 2022 runner, whose ConPTY carries no OSC 8 around its text
+ * (`osc8HalfRuns` in admin.ts): the link TEXT is the url, so the plain-text provider finds the same
+ * url in the same cells and the Ctrl+click opens it once all the same. Its claim — exactly ONE open
+ * for a url that both mechanisms could match — holds either way, so it is not guarded. The cases
+ * below whose text is NOT the url (`CLICKTHELABEL`, the alt screen, the mouse-owning program) are
+ * `skipIfElevated`, and every GitHub runner is elevated, which is why they have never failed there.
+ */
 test('Ctrl+clicking an OSC 8 link whose text IS the url opens the browser exactly once', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-link1-'));
   const url = 'https://example.com/osc8-same-text';
@@ -309,7 +336,8 @@ test('Ctrl+clicking an OSC 8 link whose text IS the url opens the browser exactl
 
 test('Ctrl+clicking a PLAIN-TEXT url opens exactly once', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-link2-'));
-  const url = 'https://example.com/plain-text-url';
+  // Balanced parentheses belong to the url (#198: Wikipedia's `Bash_(Unix_shell)` opened as `Bash_`).
+  const url = 'https://example.com/wiki/Plain_(text_url)';
   try {
     writePlainScript(root, url);
     await runApp(async (app, win) => {
@@ -325,11 +353,139 @@ test('Ctrl+clicking a PLAIN-TEXT url opens exactly once', { tag: ['@extended', '
       // A SECOND, later open would still be caught — see fenceOnEcho's doc comment.
       await fenceOnEcho(win, term, 'LINKFENCE2');
       expect(await opens.urls()).toEqual([url]);
+
+      /*
+       * ══ 045 T186 — a Ctrl+click on the SECOND row of a wrapped link opens it exactly once ══
+       *
+       * FR-130 made a wrapped link one link on every row it occupies, which is two claims: it is
+       * DRAWN on every row (terminal-links.e2e.ts) and it is FOLLOWED from every row, once. The
+       * second row is where the two used to part company — xterm reports an OSC 8 link one row at a
+       * time, and a plain-text provider that read only the physical row would find no link there at
+       * all. Answers O9 for each kind: a web url, a detected path and an OSC 8 hyperlink.
+       */
+      await ctrlClickSecondRows(app, win, term, root, opens);
     });
   } finally {
     cleanupTemp(root);
   }
 });
+
+/**
+ * T186's half of the PLAIN-TEXT declaration, kept out of its body so the #198 fence above reads as it
+ * always has. The window is narrowed so each link wraps, and restored afterwards: this file shares
+ * one app, and every later test would otherwise run at the minimum width.
+ */
+async function ctrlClickSecondRows(
+  app: ElectronApplication,
+  win: Page,
+  term: Locator,
+  root: string,
+  opens: { urls: () => Promise<string[]>; reset: () => Promise<void> },
+): Promise<void> {
+  const outside = mkdtempSync(join(tmpdir(), 'throng-link2-out-'));
+  // OUTSIDE the project, so a follow is an OS reveal the harness records — an in-project file would
+  // open in a throng editor, whose second open is indistinguishable from its first (FR-053).
+  const outsideFile = join(outside, `wrapped_${'abcdefghij'.repeat(8)}.txt`);
+  writeFileSync(outsideFile, 'outside the project\n', 'utf8');
+  const web = `https://example.com/wrapped/${'uvwxyzabcd'.repeat(9)}`;
+  const oscUri = 'https://example.com/osc8-wrapped-target';
+  const oscText = `OSCWRAP_${'klmnopqrst'.repeat(10)}`;
+  // A name of its own: `runScript` waits for the shell to echo it, and `lnk.ps1` is already on screen.
+  const script = 'lnk2w.ps1';
+  writeFileSync(
+    join(root, script),
+    [
+      '$e=[char]27',
+      "Clear-Host",
+      "Write-Host 'WRAP2WEB'",
+      `Write-Host '${web}'`,
+      "Write-Host 'WRAP2PATH'",
+      `Write-Host '${outsideFile}'`,
+      "Write-Host 'WRAP2OSC'",
+      `Write-Host ("$e" + "]8;;${oscUri}" + "$e" + "\\" + "${oscText}" + "$e" + "]8;;" + "$e" + "\\")`,
+      "Write-Host 'WRAP2END'",
+      '',
+    ].join('\n'),
+  );
+
+  // Narrowed, and returned only once the pty has taken the new width and the prompt has answered at
+  // it — typing straight into the resize lost the whole line on the gate runner (see the helper).
+  const restore = await narrowTerminalWindow(app, win, term, 600, 'WIDTHSETTLED2');
+  try {
+    await runScript(win, term, 'WRAP2END', script);
+    await win.mouse.move(2, 2);
+    const rows = win.locator('.xterm-rows > div');
+    const texts = (await rows.allTextContents()).map((t) => t.replace(/\u00a0/g, ' ').trimEnd());
+    /** The screen index of a link's SECOND row: the row after the one following its marker. */
+    const secondRow = (marker: string): Locator => {
+      const at = texts.findIndex((t) => t === marker);
+      expect(at, `no ${marker} row in ${JSON.stringify(texts)}`).toBeGreaterThanOrEqual(0);
+      // ANTI-VACUITY: the link wrapped — its second row is still the link, not the next marker.
+      expect(texts[at + 2], `the link after ${marker} did not wrap`).not.toMatch(/^WRAP2/);
+      return rows.nth(at + 2);
+    };
+
+    /**
+     * Rest on the second row until throng marks it as the hovered link — a positive signal rather
+     * than a duration, and the same one for all three kinds. A file link needs its answer from main
+     * first (FR-006), and the next query only happens when the pointer re-enters the line, so each
+     * poll arrives from the line below.
+     */
+    const armSecondRow = async (row: Locator, label: string): Promise<LinkPoint> => {
+      const box = (await row.boundingBox())!;
+      const point = { x: box.x + Math.min(box.width / 3, 60), y: box.y + box.height / 2, row: box.height };
+      await expect
+        .poll(
+          async () => {
+            await enterLink(win, point);
+            return linkMarkedText(row, { hover: true });
+          },
+          { timeout: 30_000, intervals: [600], message: `the second row of ${label} is never the hovered link` },
+        )
+        .not.toBe('');
+      return point;
+    };
+    const ctrlPressHere = async (): Promise<void> => {
+      await win.keyboard.down('Control');
+      await win.mouse.down();
+      await win.mouse.up();
+      await win.keyboard.up('Control');
+    };
+
+    // A web url.
+    await opens.reset();
+    await armSecondRow(secondRow('WRAP2WEB'), 'the web url');
+    await ctrlPressHere();
+    await expect.poll(() => opens.urls(), { timeout: 5000 }).toEqual([web]);
+
+    // A detected path, outside the project: one OS reveal.
+    await resetOpenedPaths(app);
+    await armSecondRow(secondRow('WRAP2PATH'), 'the detected path');
+    await ctrlPressHere();
+    await expect.poll(() => openedPaths(app), { timeout: 5000 }).toHaveLength(1);
+
+    // An OSC 8 hyperlink: its TARGET, never its text. Only where the OS's ConPTY carries the
+    // hyperlink around its text at all — below build 22000 it wraps nothing, so there is no link on
+    // that row to follow, and the half is reported NOT RUN rather than failed or passed.
+    const oscRuns = osc8HalfRuns('the wrapped OSC 8 second-row follow (T186)');
+    if (oscRuns) {
+      await opens.reset();
+      await armSecondRow(secondRow('WRAP2OSC'), 'the OSC 8 hyperlink');
+      await ctrlPressHere();
+      await expect.poll(() => opens.urls(), { timeout: 5000 }).toEqual([oscUri]);
+    }
+
+    // A SECOND, later open of any of them would still be caught — see fenceOnEcho's doc comment.
+    await fenceOnEcho(win, term, 'LINKFENCE2W');
+    expect(await opens.urls()).toEqual([oscRuns ? oscUri : web]);
+    const followed = await openedPaths(app);
+    expect(followed, 'the wrapped detected path was followed more than once').toHaveLength(1);
+    expect(samePathish(followed[0], outsideFile), `the wrapped path opened ${followed[0]}, not ${outsideFile}`).toBe(true);
+  } finally {
+    await restore();
+    cleanupTemp(outside);
+  }
+}
 
 test('Ctrl+clicking an OSC 8 link with non-url text opens its TARGET, exactly once', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
@@ -450,5 +606,352 @@ test('Ctrl+clicking a link on the ALTERNATE screen opens exactly once', { tag: [
     });
   } finally {
     cleanupTemp(root);
+  }
+});
+
+/**
+ * #198 — the case the five fences above never drove: a full-screen program that OWNS THE MOUSE.
+ *
+ * Claude Code arms mouse tracking (use-terminal.ts records it re-sending "its screen and mouse modes
+ * after every resize"), and it acts on a click itself. With tracking armed, xterm's always-on
+ * mousedown listener forwards the press to the pty — Ctrl is not a selection-forcing modifier, so
+ * nothing holds it back — while the Linkifier ALSO activates the link on mouseup. One Ctrl+click is
+ * then two opens: throng's, at the `shell.openExternal` seam, and the program's own, from the press
+ * it was sent. The altlink fixture above never armed the mouse, which is why it stayed at one.
+ *
+ * The fixture is terminal-mouse-negotiation.e2e.ts's, in the shape measured to arm through ConPTY
+ * (raw mode first, then 1049 + 1003 + 1006, under windows-powershell), plus an OSC 8 link. Every byte
+ * it receives is logged; a mouse PRESS in that log is the program being asked to act on the click.
+ *
+ * 045 T122 prints two more links into the SAME armed program — a detected path and an OSC 8 `file:`
+ * hyperlink naming a folder — because FR-043 widened the guard from web links to file links, and a
+ * file link reaches it by a different route (a provider that resolves through main) than a web link
+ * does. See the block inside the test for what each of the three kinds is counted at.
+ */
+function writeMouseLinkFixture(
+  root: string,
+  logPath: string,
+  uri: string,
+  /**
+   * 045 T122 — the two FILE link kinds, printed by the SAME mouse-owning program so all three share
+   * one armed ConPTY rather than three fixtures that each have to be measured to arm.
+   */
+  files: { readonly detectedPath: string; readonly folderUri: string; readonly folderText: string },
+): void {
+  const ESC = String.fromCharCode(27);
+  const ST = ESC + String.fromCharCode(92);
+  const osc8 = (target: string, text: string): string =>
+    `${ESC}]8;;${target}${ST}${text}${ESC}]8;;${ST}`;
+  const lines = [
+    "const fs = require('node:fs');",
+    `const LOG = ${JSON.stringify(logPath)};`,
+    'if (process.stdin.isTTY) process.stdin.setRawMode(true);',
+    'process.stdin.resume();',
+    "process.stdin.on('data', (b) => {",
+    "  fs.appendFileSync(LOG, JSON.stringify(b.toString('latin1')) + '\\n');",
+    '});',
+    "process.stdout.write('\\x1b[?1049h');",
+    "process.stdout.write('\\x1b[?1003h');",
+    "process.stdout.write('\\x1b[?1006h');",
+    `process.stdout.write(${JSON.stringify(ESC + '[H' + osc8(uri, uri) + '\r\n')});`,
+    // Each link starts its own row at column 0, so `clickLink`/`armFileLink` land a few cells INTO
+    // the link rather than on whatever preceded it.
+    `process.stdout.write(${JSON.stringify(files.detectedPath + '\r\n')});`,
+    `process.stdout.write(${JSON.stringify(osc8(files.folderUri, files.folderText) + '\r\n')});`,
+    "process.stdout.write('MOUSELINK_READY\\r\\n');",
+    'setInterval(() => {}, 1000);',
+  ];
+  writeFileSync(join(root, 'mouselink.js'), lines.join('\n'), 'utf8');
+}
+
+/** Every byte the fixture has received, in order. */
+function receivedBytes(logPath: string): string {
+  let raw = '';
+  try {
+    raw = readFileSync(logPath, 'utf8');
+  } catch {
+    return '';
+  }
+  return raw
+    .split('\n')
+    .filter((l) => l.length > 0)
+    .map((l) => JSON.parse(l) as string)
+    .join('');
+}
+
+/**
+ * SGR mouse PRESSES of the left button (`CSI < b ; x ; y M` with b's motion bit clear and low bits 0),
+ * whatever modifiers are folded into b. Motion reports (1003 sends them on every move) are excluded.
+ */
+function leftPresses(bytes: string): number[] {
+  const out: number[] = [];
+  for (const m of bytes.matchAll(new RegExp(String.fromCharCode(27) + '\\[<(\\d+);\\d+;\\d+M', 'g'))) {
+    const b = Number(m[1]);
+    if ((b & 32) === 0 && (b & 3) === 0) out.push(b);
+  }
+  return out;
+}
+
+/**
+ * Rest the pointer on a FILE link until throng has RESOLVED it, and answer where to press.
+ *
+ * ══ WHY A FILE LINK NEEDS THIS AND A WEB LINK DOES NOT ══
+ *
+ * A web link is a link the moment it is matched. A file link is only a link once main has said the
+ * location exists (FR-006), and that answer arrives asynchronously — `peekLink` is synchronous and
+ * `undefined` means "not a link", never "wait" (FR-071). So the FIRST query over a path always
+ * misses; it fires the request, and the link exists from the NEXT query onwards.
+ *
+ * ══ AND THE NEXT QUERY ONLY HAPPENS IF THE POINTER LEAVES THE LINE ══
+ *
+ * xterm caches its link providers' replies PER LINE, not per cell (`Linkifier._handleHover`), so
+ * neither a sleep nor a nudge between cells asks again — the cache fills and nothing ever reads it.
+ * The pointer therefore arrives from the line below on every pass. Measured on
+ * `terminal-links.e2e.ts`, where a same-row nudge underlined nothing in 20 seconds while an https
+ * URL in the same row underlined at once, the web scanner needing no round trip.
+ *
+ * The signal is throng's own hover tip, which is a positive fact rather than a duration: it is
+ * written from `hoveredLink`, and a file link is in `hoveredLink` only once it has resolved. Waiting
+ * on it also spends the `terminals.linkHoverDelayMs` the tip is gated by (500ms shipped), which is
+ * time the resolution needs anyway.
+ */
+interface LinkPoint {
+  readonly x: number;
+  readonly y: number;
+  /** One row's height: the distance the pointer leaves the line by. See `armFileLink`. */
+  readonly row: number;
+}
+
+async function armFileLink(win: Page, text: string): Promise<LinkPoint> {
+  const row = win.locator('.xterm-rows > div', { hasText: text }).last();
+  await expect(row).toBeVisible({ timeout: 20_000 });
+  const box = (await row.boundingBox())!;
+  // Measured per character rather than divided out of a column count — see `charPoint`.
+  const point = await charPoint(row, text, 3);
+  const at: LinkPoint = { ...point, row: box.height };
+  const tip = win.locator('.terminal-link-tip:not([hidden])');
+  /*
+   * THREE PHASES, ONE PER PROBE, AND THE SPACING BETWEEN THEM IS THE POINT.
+   *
+   * The tip is deliberately STEADY under a resting pointer (`setHovered`, and the #159 follow-up it
+   * records): a `leave` only schedules the hide 250ms later, and a `hover` naming the link the tip
+   * is already armed for returns without re-arming the 500ms show timer. Both guards are right, and
+   * together they mean a leave-then-enter in the same beat leaves the tip armed but hidden, for
+   * ever. Measured here: the tip element read `Ctrl+Click to open` — so the link HAD resolved — with
+   * `hidden` still set, through twenty seconds of nudging.
+   *
+   * So each probe does one thing and the interval does the waiting: LEAVE (the hide fires at 250ms,
+   * which clears the armed key), ENTER (arms the 500ms show timer), READ (600ms later, by which time
+   * it has fired). Nothing is slept on — a probe interval is a cadence, and if the link never
+   * resolves this still fails rather than passing late.
+   */
+  const phases = ['away', 'onto', 'read'] as const;
+  let probe = 0;
+  await expect
+    .poll(
+      async () => {
+        const phase = phases[probe++ % phases.length];
+        if (phase === 'away') await win.mouse.move(at.x, at.y + at.row);
+        else if (phase === 'onto') await win.mouse.move(at.x, at.y);
+        return tip.count();
+      },
+      {
+        timeout: 30_000,
+        intervals: [600],
+        message: `throng never resolved ${text} into a link`,
+      },
+    )
+    .toBeGreaterThan(0);
+  return at;
+}
+
+/** Arrive on the link from the line below, which is the only thing that re-queries the providers. */
+async function enterLink(win: Page, at: LinkPoint): Promise<void> {
+  await win.mouse.move(at.x, at.y + at.row);
+  await win.mouse.move(at.x, at.y);
+}
+
+/**
+ * Press and release the left button on a link, optionally with Ctrl held.
+ *
+ * It re-enters the link first, and that is load-bearing rather than tidy. xterm activates on a
+ * mouseup whose mousedown armed the SAME `_currentLink`, and `_currentLink` is cleared by any
+ * repaint — throng repaints an alt-screen program on a 2s interval by itself (028's self-heal), so a
+ * link armed a few seconds ago is routinely disarmed by the time a test presses it. A move within
+ * the cell does not restore it either: `Linkifier._handleMouseMove` only re-hovers when the CELL
+ * changes. Measured here: the Ctrl+click recorded nothing at all while the same request driven
+ * straight at main answered `{ ok: true }`, which is what pointed at the pointer rather than at the
+ * link route.
+ */
+async function pressAt(win: Page, at: LinkPoint, opts: { ctrl: boolean }): Promise<void> {
+  await enterLink(win, at);
+  if (opts.ctrl) await win.keyboard.down('Control');
+  await win.mouse.down();
+  await win.mouse.up();
+  if (opts.ctrl) await win.keyboard.up('Control');
+}
+
+/** Forget what the app has asked the OS to open. The harness stubs both routes at launch. */
+async function resetOpenedPaths(app: ElectronApplication): Promise<void> {
+  await app.evaluate(() => {
+    (globalThis as unknown as { __throngOpenedPaths?: string[] }).__throngOpenedPaths = [];
+  });
+}
+
+/**
+ * One location, however it is spelled. The assertions below are about the COUNT — a link followed
+ * exactly once — and a separator or a case difference between what `mkdtemp` returned and what
+ * resolution joined would fail them for a reason that has nothing to do with #198.
+ */
+function samePathish(a: string, b: string): boolean {
+  return a.replace(/\//g, '\\').toLowerCase() === b.replace(/\//g, '\\').toLowerCase();
+}
+
+test('Ctrl+clicking a link in a program that OWNS THE MOUSE opens it once, not also through the program (#198)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
+  skipIfElevated();
+  /*
+   * The project root is a FOLDER INSIDE the scratch directory rather than the scratch directory
+   * itself, so `../outside.txt` names something real and OUTSIDE the project — which is what routes
+   * the detected-path case to an OS destination this test can count, instead of to a throng editor
+   * whose second open would be indistinguishable from its first (FR-055, FR-053).
+   */
+  const base = mkdtempSync(join(tmpdir(), 'throng-link-mouse-'));
+  const root = join(base, 'project');
+  mkdirSync(root);
+  const outsideFile = join(base, 'outside.txt');
+  writeFileSync(outsideFile, 'outside the project\n', 'utf8');
+  const folder = join(root, 'linkdir');
+  mkdirSync(folder);
+
+  const logPath = join(root, 'received.log');
+  const uri = 'https://example.com/mouse-owning-program';
+  const detectedPath = '../outside.txt';
+  const folderText = 'FOLDERLINKTEXT';
+  const folderUri = `file:///${folder.replace(/\\/g, '/')}`;
+  writeMouseLinkFixture(root, logPath, uri, { detectedPath, folderUri, folderText });
+  try {
+    await runApp(async (app, win) => {
+      const opens = await captureOpens(app);
+      await createProject(win, 'LinkMouse', root);
+      const term = await openTerminal(win, root);
+
+      await term.click();
+      await win.keyboard.type('node mouselink.js', { delay: TYPE_DELAY });
+      await win.keyboard.press('Enter');
+      await expect(term).toContainText('MOUSELINK_READY', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
+
+      /*
+       * ANTI-VACUITY: a PLAIN click must reach the program — that is what arming the mouse means, and
+       * it has to keep working. Without this, a fixture whose mouse modes never survived ConPTY would
+       * make the assertion below pass for free.
+       */
+      await clickLink(win, uri, { ctrl: false });
+      await expect
+        .poll(() => leftPresses(receivedBytes(logPath)).length, {
+          timeout: TERMINAL_OUTPUT_TIMEOUT_MS,
+          message: 'the fixture never armed the mouse — the rest of this test would be vacuous',
+        })
+        .toBe(1);
+      expect(await opens.urls()).toEqual([]);
+
+      await opens.reset();
+      await clickLink(win, uri, { ctrl: true });
+      await expect.poll(() => opens.urls(), { timeout: 5000 }).toEqual([uri]);
+
+      // Fence: a key typed AFTER the click travels the same pipe, so once it has arrived any press the
+      // click produced has arrived too.
+      await win.keyboard.press('q');
+      await expect.poll(() => receivedBytes(logPath), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS }).toContain('q');
+
+      // Exactly one open in total: throng's. The program was not ALSO handed the click to act on.
+      expect(await opens.urls()).toEqual([uri]);
+      expect(leftPresses(receivedBytes(logPath)), 'the Ctrl+click was forwarded to the program as well').toHaveLength(1);
+
+      /*
+       * ══ 045 T122 — the same guarantee for the two FILE link kinds (FR-043, SC-002, SC-005) ══
+       *
+       * FR-043 is the widening of #198's guard from web links to file links, and there is nowhere
+       * below this to observe it: the claim is about a REAL xterm Linkifier deciding a path is a
+       * link, a REAL ConPTY carrying the DEC mouse modes, and the bytes a REAL program is handed.
+       * `terminal-hovered-link.test.ts` pins `keepsClickFromProgram` as a function; it cannot make
+       * a program that owns the mouse exist to be spared the press.
+       *
+       * Both kinds are driven in the panel that is ALREADY armed, rather than in a fresh one: the
+       * arming is the expensive and fragile part (raw mode, then 1049 + 1003 + 1006 through
+       * ConPTY), and the anti-vacuity assertion above has just proved it holds for this panel.
+       *
+       * Each is counted at an OS seam the harness already stubs (`__throngOpenedPaths`), which is
+       * what makes "exactly once" falsifiable. A second follow of the same file link would be a
+       * second entry, exactly as a second `openExternal` is for the web cases above.
+       */
+      const detectedAt = await armFileLink(win, detectedPath);
+      await resetOpenedPaths(app);
+
+      // ANTI-VACUITY, per kind: a PLAIN click on a resolved file link must still reach the program.
+      // FR-043 withholds the press only when Ctrl is held, and a guard that withheld every press
+      // would pass the assertion after it while breaking every program that reads the mouse.
+      await pressAt(win, detectedAt, { ctrl: false });
+      await expect
+        .poll(() => leftPresses(receivedBytes(logPath)).length, {
+          timeout: TERMINAL_OUTPUT_TIMEOUT_MS,
+          message: 'a plain click on a detected path no longer reaches the program',
+        })
+        .toBe(2);
+      expect(await openedPaths(app)).toEqual([]);
+
+      await pressAt(win, detectedAt, { ctrl: true });
+      await expect.poll(() => openedPaths(app), { timeout: 5000 }).toHaveLength(1);
+      // The same fence as the web case: a key typed AFTER the click travels the same pipe, so once
+      // it has arrived, any press the click produced has arrived too.
+      await win.keyboard.press('k');
+      await expect.poll(() => receivedBytes(logPath), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS }).toContain('k');
+      const afterDetected = await openedPaths(app);
+      expect(afterDetected, 'a detected path was followed more than once').toHaveLength(1);
+      expect(
+        samePathish(afterDetected[0], outsideFile),
+        `the detected path opened ${afterDetected[0]}, not ${outsideFile}`,
+      ).toBe(true);
+      expect(
+        leftPresses(receivedBytes(logPath)),
+        'the Ctrl+click on a detected path was forwarded to the program as well',
+      ).toHaveLength(2);
+
+      /*
+       * The second kind: an OSC 8 hyperlink whose target is a `file:` URI naming a FOLDER — the
+       * maintainer's status line, and the report the feature started from (SC-005). A folder offers
+       * only the file manager (FR-030), so one Ctrl+click is exactly one `openPath`.
+       *
+       * Only where the OS's ConPTY carries a hyperlink around its text — `osc8HalfRuns` in admin.ts.
+       */
+      if (!osc8HalfRuns('the OSC 8 file: folder hyperlink in a mouse-owning program (T122)')) return;
+      const folderAt = await armFileLink(win, folderText);
+      await resetOpenedPaths(app);
+
+      await pressAt(win, folderAt, { ctrl: false });
+      await expect
+        .poll(() => leftPresses(receivedBytes(logPath)).length, {
+          timeout: TERMINAL_OUTPUT_TIMEOUT_MS,
+          message: 'a plain click on a file hyperlink no longer reaches the program',
+        })
+        .toBe(3);
+      expect(await openedPaths(app)).toEqual([]);
+
+      await pressAt(win, folderAt, { ctrl: true });
+      await expect.poll(() => openedPaths(app), { timeout: 5000 }).toHaveLength(1);
+      await win.keyboard.press('w');
+      await expect.poll(() => receivedBytes(logPath), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS }).toContain('w');
+      const afterFolder = await openedPaths(app);
+      expect(afterFolder, 'a folder hyperlink was followed more than once').toHaveLength(1);
+      expect(
+        samePathish(afterFolder[0], folder),
+        `the folder hyperlink opened ${afterFolder[0]}, not ${folder}`,
+      ).toBe(true);
+      expect(
+        leftPresses(receivedBytes(logPath)),
+        'the Ctrl+click on a file hyperlink was forwarded to the program as well',
+      ).toHaveLength(3);
+    });
+  } finally {
+    cleanupTemp(base);
   }
 });

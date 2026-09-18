@@ -139,7 +139,9 @@ export type ActionId =
    * `preview.open` (FR-005) opens the preview of the focused editor's file or the tree's selection,
    * and ships UNBOUND: every entry point is a button or a menu item, and no chord was asked for.
    * `navigate.back` / `navigate.forward` (FR-105) step the focused editor or preview through its
-   * history. `preview.followLink` (FR-096c) is Ctrl+click for the keyboard, on the focused link.
+   * history. `preview.followLink` (FR-096c) is Ctrl+click for the keyboard, on the focused link —
+   * and since 045 FR-045 it is live in an EDITOR as well as a preview, on the same id and the same
+   * chord (S3).
    */
   | 'preview.open'
   | 'navigate.back'
@@ -177,7 +179,23 @@ export type CommandScopes = Readonly<Record<ActionId, ReadonlySet<DispatchScope>
  */
 const EVERYWHERE = new Set<DispatchScope>(['editor', 'terminal', 'explorer', 'findInFiles', 'preview']);
 const EDITOR_ONLY = new Set<DispatchScope>(['editor']);
-const PREVIEW_ONLY = new Set<DispatchScope>(['preview']);
+/**
+ * 045 FR-045 / S3 (#394): the panel kinds a file link can be FOLLOWED from with the keyboard.
+ *
+ * It replaces `PREVIEW_ONLY`, which had exactly one member and one user. Principle IV requires one
+ * command to use one chord across panel types, and editors now have links — so widening the scope
+ * of the command 044 introduced is the alternative to a second command sharing Ctrl+Enter, which
+ * two users could rebind apart.
+ *
+ * A terminal is deliberately absent and stays so (FR-046). A terminal link has no keyboard
+ * position to follow FROM, and taking Ctrl+Enter there would take a key the shell is entitled to —
+ * including its modified-Enter encoding. Its keyboard route is the context menu.
+ *
+ * The same shape as `HISTORY_PANELS` and deliberately not shared with it: the two sets agree today
+ * by coincidence, and folding them together would mean a future change to one silently moving the
+ * other.
+ */
+const LINK_SURFACES = new Set<DispatchScope>(['editor', 'preview']);
 /** The two panel kinds that keep a navigation history (FR-100). */
 const HISTORY_PANELS = new Set<DispatchScope>(['editor', 'preview']);
 /** Where a file whose preview can be opened is focused: its editor, or the tree's selection (FR-005). */
@@ -253,7 +271,9 @@ export const COMMAND_SCOPES: CommandScopes = {
   'preview.open': PREVIEW_SOURCES,
   'navigate.back': HISTORY_PANELS,
   'navigate.forward': HISTORY_PANELS,
-  'preview.followLink': PREVIEW_ONLY,
+  // 045 FR-045: widened from `PREVIEW_ONLY`. The ActionId and the `['Ctrl+Enter']` default are
+  // unchanged — a rename would silently drop every rebinding saved since 044.
+  'preview.followLink': LINK_SURFACES,
   // 044 FR-122d — live exactly where the toggle is shown: an editor or a preview. Never a terminal, so
   // no shell loses a key even once a user binds it.
   'preview.toggleSyncScroll': HISTORY_PANELS,

@@ -1,0 +1,9 @@
+US1 scenario 3 reads this file through five spellings of one location:
+
+  test.txt
+  /test.txt
+  ./test.txt
+  <root>/test.txt
+  /<drive>/<root>/test.txt
+
+All five must give the same verdict for project membership (FR-021, M2).

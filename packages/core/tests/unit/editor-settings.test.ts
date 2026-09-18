@@ -59,6 +59,15 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
           markdown: { enabled: true, defaultOpenAction: 'editor', loadRemoteImages: true, showFrontMatter: true },
         },
       },
+      // 045 FR-060/FR-120 (#394) — Editor · Links. Both detection switches on and a 2 s existence
+      // check; `defaultAction` is retired (FR-112). Their key-by-key parse is asserted in
+      // `app-settings.links.test.ts`; they appear here because this assertion is exhaustive, which is
+      // what makes a silently-added key impossible.
+      links: {
+        detectInEditors: true,
+        detectInTerminals: true,
+        existenceCheckTimeoutMs: 2000,
+      },
     });
   });
 
@@ -242,6 +251,15 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
           // FR-117 (iteration 2026-09-15) — Markdown's own Show front matter, shipped ON.
           markdown: { enabled: true, defaultOpenAction: 'editor', loadRemoteImages: true, showFrontMatter: true },
         },
+      },
+      // 045 FR-060/FR-120 (#394) — Editor · Links. Both detection switches on and a 2 s existence
+      // check; `defaultAction` is retired (FR-112). Their key-by-key parse is asserted in
+      // `app-settings.links.test.ts`; they appear here because this assertion is exhaustive, which is
+      // what makes a silently-added key impossible.
+      links: {
+        detectInEditors: true,
+        detectInTerminals: true,
+        existenceCheckTimeoutMs: 2000,
       },
     });
   });

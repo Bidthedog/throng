@@ -39,9 +39,13 @@ describe('the four commands, their scopes and chords (FR-005, FR-096c, FR-105)',
     expect(scopesOf('navigate.forward')).toEqual(['editor', 'preview']);
   });
 
-  it('binds Open Link to Ctrl+Enter, live in a preview only', () => {
+  // 045 FR-045 / S3 (#394): the same command, the same id and the same chord, now live in editors
+  // as well — Principle IV requires one command to use one chord across panel types, and editors
+  // now have links. The ActionId is deliberately NOT renamed: a rename silently drops every
+  // rebinding a user has saved since 044.
+  it('binds Open Link to Ctrl+Enter, live in an editor and a preview', () => {
     expect(DEFAULT_KEYBINDINGS.bindings['preview.followLink']).toEqual(['Ctrl+Enter']);
-    expect(scopesOf('preview.followLink')).toEqual(['preview']);
+    expect(scopesOf('preview.followLink')).toEqual(['editor', 'preview']);
   });
 
   it('resolves a REAL Alt+ArrowLeft / Alt+ArrowRight keydown in both scopes', () => {
@@ -53,9 +57,12 @@ describe('the four commands, their scopes and chords (FR-005, FR-096c, FR-105)',
     }
   });
 
-  it('resolves a real Ctrl+Enter to Open Link in a preview, and to nothing in an editor', () => {
+  // 045 FR-045: Ctrl+Enter now resolves in an editor too. What it DOES there is FR-044's — the
+  // default link action when a single caret sits inside a link, and the editor's own blank-line
+  // insert otherwise — and that is a renderer question, not this one.
+  it('resolves a real Ctrl+Enter to Open Link in a preview and in an editor', () => {
     expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'Enter', ctrl: true }, 'preview')).toBe('preview.followLink');
-    expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'Enter', ctrl: true }, 'editor')).toBeNull();
+    expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'Enter', ctrl: true }, 'editor')).toBe('preview.followLink');
   });
 
   it('scopes none of the four to a terminal — a shell keeps Alt+Arrow and Ctrl+Enter', () => {
@@ -116,7 +123,9 @@ describe("'preview' is a dispatch scope", () => {
 
   it('has a name of its own in the Key Bindings editor', () => {
     expect(scopeNames(COMMAND_SCOPES['navigate.back'])).toEqual(['Editor', 'Preview']);
-    expect(scopeNames(COMMAND_SCOPES['preview.followLink'])).toEqual(['Preview']);
+    // 045 FR-062: the Scope column now lists editors as well, and it is derived from COMMAND_SCOPES
+    // rather than written out — so this line changing is the whole of that requirement's visible half.
+    expect(scopeNames(COMMAND_SCOPES['preview.followLink'])).toEqual(['Editor', 'Preview']);
   });
 
   it('leaves the file, save, find and rename commands dead in a preview (FR-021, FR-030)', () => {

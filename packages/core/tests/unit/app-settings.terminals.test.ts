@@ -12,6 +12,10 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       shellIntegration: true,
       showStatusBar: true,
       linkHoverDelayMs: 500,
+      // 045 FR-080b (#394). Shipped ON: a program that emits an explicit hyperlink is emitting a
+      // link throng did not have to guess. Its own parse is asserted in `app-settings.links.test.ts`;
+      // it appears here because this assertion is exhaustive.
+      advertiseHyperlinks: true,
       // 039 FR-002. `defaultRememberCommand` ships OFF, restoring 025 FR-015 — see the 039
       // supersession block and the dedicated describe at the foot of this file.
       defaultRememberCommand: false,
@@ -28,6 +32,10 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       shellIntegration: true,
       showStatusBar: true,
       linkHoverDelayMs: 500,
+      // 045 FR-080b (#394). Shipped ON: a program that emits an explicit hyperlink is emitting a
+      // link throng did not have to guess. Its own parse is asserted in `app-settings.links.test.ts`;
+      // it appears here because this assertion is exhaustive.
+      advertiseHyperlinks: true,
       // 039 FR-002. `defaultRememberCommand` ships OFF, restoring 025 FR-015 — see the 039
       // supersession block and the dedicated describe at the foot of this file.
       defaultRememberCommand: false,
@@ -166,6 +174,10 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       shellIntegration: true,
       showStatusBar: true,
       linkHoverDelayMs: 500,
+      // 045 FR-080b (#394). Shipped ON: a program that emits an explicit hyperlink is emitting a
+      // link throng did not have to guess. Its own parse is asserted in `app-settings.links.test.ts`;
+      // it appears here because this assertion is exhaustive.
+      advertiseHyperlinks: true,
       // 039 FR-002. `defaultRememberCommand` ships OFF, restoring 025 FR-015 — see the 039
       // supersession block and the dedicated describe at the foot of this file.
       defaultRememberCommand: false,

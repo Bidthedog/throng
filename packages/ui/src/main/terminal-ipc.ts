@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import { ipcMain, type WebContents } from 'electron';
 import { statSync } from 'node:fs';
 import {
+  hyperlinkAdvertisementEnv,
   resolveLaunchSpec,
   resolveShellHistorySuppression,
   shellHistoryOff,
@@ -13,6 +14,7 @@ import {
   type IClipboard,
   type IForegroundHandoff,
   type FailureCause,
+  type TerminalSettings,
 } from '@throng/core';
 import type { TerminalAttachResult } from '@throng/ipc-contract';
 import { RpcTimeoutError, type DaemonClient } from './daemon-client.js';
@@ -112,8 +114,28 @@ export function registerTerminalIpc(deps: {
    * such concept — on anything but Windows it is the no-op.
    */
   foregroundHandoff: IForegroundHandoff;
+  /**
+   * 045 FR-080 – FR-080c — the terminal settings, read on EVERY attach.
+   *
+   * Injected rather than read here, on the same terms `ShellDetectionService` takes its config
+   * store. Per attach because a process's environment is fixed when it starts, so FR-080c's "applies
+   * to terminals started afterwards, never to one already running" is not a rule to remember — it is
+   * what reading here rather than at registration already does.
+   *
+   * Neither shipped pattern fits. Riding on `TerminalFlavour`, as `terminals.shellIntegration` does,
+   * would make hyperlink advertising a property of a SHELL, which it is not. Re-reading in the
+   * daemon, as `terminals.commandPollMs` does, would need a daemon restart, which FR-080c forbids.
+   */
+  readTerminalSettings: () => TerminalSettings;
 }): void {
-  const { daemonClient, shellDetection, attachTimeoutMs, clipboard, foregroundHandoff } = deps;
+  const {
+    daemonClient,
+    shellDetection,
+    attachTimeoutMs,
+    clipboard,
+    foregroundHandoff,
+    readTerminalSettings,
+  } = deps;
 
   // Window-close detach backstop (008 FR-008a). When a window (a sub-workspace, or the
   // main window) is torn down, its renderer is destroyed WITHOUT running React effect
@@ -261,6 +283,26 @@ export function registerTerminalIpc(deps: {
         cwd,
         req.startupCommand,
       );
+      /*
+       * 045 FR-080 – FR-080d — tell the programs this shell runs that throng renders OSC 8
+       * hyperlinks.
+       *
+       * Into `launch.env` and deliberately NOT into `baseEnv` below (R11). A de-elevated terminal
+       * never receives the base — `daemon/src/pty-agent-host.ts:290` sends only `env` and
+       * `pty-agent-entry.ts:172-179` forwards only `env` — so a variable put there would reach an
+       * ordinary terminal and miss the elevated one. `launch.env` also layers on top of the base at
+       * `platform-windows/src/node-pty-host.ts:135-138`, so it wins in any case.
+       *
+       * The decision itself is `hyperlinkAdvertisementEnv`, which answers `undefined` whenever the
+       * launching environment already carries a `FORCE_HYPERLINK` — in EITHER direction, because a
+       * value throng set is a value throng may stop setting, and the user's own is neither. It can
+       * return at most one key, which is how FR-080d's refusal to fake `WT_SESSION` or a borrowed
+       * `TERM_PROGRAM` is a shape rather than a rule to re-obey.
+       */
+      const hyperlinkEnv = hyperlinkAdvertisementEnv(
+        process.env,
+        readTerminalSettings().advertiseHyperlinks,
+      );
       // The attach RPC gets the shell-launch budget, NOT the health-check ping budget
       // (008 FR-004): a shell can take seconds to come up, and reusing the ping budget is
       // exactly what surfaced a spurious connection timeout in a fresh sub-workspace.
@@ -271,6 +313,8 @@ export function registerTerminalIpc(deps: {
           projectId: req.projectId,
           launch: {
             ...launch,
+            // FR-080: throng's one addition, layered over whatever the flavour's own env carries.
+            ...(hyperlinkEnv ? { env: { ...launch.env, ...hyperlinkEnv } } : {}),
             /*
              * #209 — the environment the shell is built from comes from HERE.
              *

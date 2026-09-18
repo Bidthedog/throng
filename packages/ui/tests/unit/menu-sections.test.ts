@@ -27,9 +27,11 @@ import {
   type MenuSection,
   type Panel,
   type PreviewAffordance,
+  type ResolvedLink,
 } from '@throng/core';
 import type { EditorView } from '@codemirror/view';
 import type { MenuAction, MenuItem } from '../../src/renderer/workspace/context-menu.js';
+import type { FileLinkMenuContext } from '../../src/renderer/links/link-menu-items.js';
 import { withDividers } from '../../src/renderer/workspace/menu-dividers.js';
 import { buildContextMenuItems } from '../../src/renderer/explorer/context-menu-items.js';
 import { editorContentMenu } from '../../src/renderer/editor/content-menu.js';
@@ -363,9 +365,41 @@ const tabMenu = (detach: boolean): MenuAction[] =>
     actions: { rename: noop, destroyTab: noop, destroyOthers: noop },
   });
 
-const terminalMenu = (over: { link?: string | null; selection?: string; startFailure?: boolean }): MenuAction[] =>
+/**
+ * 045 FR-031 — the file link under the pointer, for the shape pins below.
+ *
+ * Every field is the smallest thing that makes the run drawable: the resolved link decides which
+ * targets are offered, and the performers are never called by a shape test.
+ */
+const fileLinkContext = (over: Partial<ResolvedLink> = {}): FileLinkMenuContext => ({
+  link: {
+    path: 'D:\\project\\src\\foo.ts',
+    kind: 'file',
+    inProject: true,
+    executable: false,
+    preview: 'enabled',
+    ...over,
+  },
+  request: { text: 'src/foo.ts', kind: 'detectedPath', panelId: 'p1' },
+  openLink: noop,
+  deps: {
+    openInEditor: noop,
+    openInPreview: noop,
+    revealInOsExplorer: async () => ({ ok: true }) as const,
+    openInOsDefaultProgram: async () => ({ ok: true }) as const,
+    reportFailure: noop,
+  },
+});
+
+const terminalMenu = (over: {
+  link?: string | null;
+  fileLink?: FileLinkMenuContext | null;
+  selection?: string;
+  startFailure?: boolean;
+}): MenuAction[] =>
   terminalContentMenu({
     link: over.link ?? null,
+    fileLink: over.fileLink ?? null,
     selection: over.selection ?? '',
     redrawChord: 'Ctrl+Shift+R',
     startFailure: over.startFailure ?? false,
@@ -1404,6 +1438,107 @@ describe('the terminal content menu leads with its contextual items (AS-8)', () 
       'Copy details',
       'Clear panel type',
     ]);
+  });
+});
+
+/**
+ * 045 T080 — the file-link run is ONE contextual section, in both content menus (FR-031).
+ *
+ * The pin exists for one reason: the run is six rows long and it is the first contextual section the
+ * editor's menu has ever had, so the obvious mistake is to give it a section name of its own —
+ * 'link', say — which would sort it somewhere else in every menu in the app and derive a divider
+ * through the middle of it. `MENU_SECTION_ORDER` is the whole vocabulary and this run adds nothing
+ * to it; what the shape below proves is that one divider sits between the run and Copy/Paste and
+ * none sits inside it.
+ */
+describe('045 — the file-link run is one contextual section (FR-031, Principle VI)', () => {
+  it('the terminal content menu over a file link', () => {
+    expect(shapeOf(terminalMenu({ fileLink: fileLinkContext() }))).toEqual([
+      'Open Link',
+      'Open in Editor',
+      'Open in Preview',
+      'Open in OS Explorer',
+      'Open in OS Default Program',
+      'Copy Link Address',
+      '—',
+      'Copy',
+      'Paste',
+      '—',
+      'Refresh / redraw terminal',
+    ]);
+  });
+
+  it('every row of the run declares `contextual`, and no new section name is introduced', () => {
+    const run = terminalMenu({ fileLink: fileLinkContext() }).filter(
+      (item) => item.section === 'contextual',
+    );
+    expect(run).toHaveLength(6);
+    for (const item of terminalMenu({ fileLink: fileLinkContext() })) {
+      expect(MENU_SECTION_ORDER).toContain(item.section);
+    }
+  });
+
+  it('the editor content menu, with no link under the pointer, is unchanged', () => {
+    expect(shapeOf(editorMenu())).toEqual([
+      'Cut',
+      'Copy',
+      'Paste',
+      'Select All',
+      'Undo',
+      'Redo',
+      '—',
+      'Go To Line…',
+      '—',
+      'Set Language…',
+      'Word Wrap ✓',
+    ]);
+  });
+});
+
+/**
+ * 045 T167 — the editor content menu over a WEB link (FR-103, S4; contracts/menus-and-gestures.md
+ * §7.2): Open Link (showing Ctrl+Enter) then Copy Link Address, one contextual section, then the
+ * ordinary menu.
+ *
+ * The argument is named `webLink`, the sibling of `fileLink`, carrying the address and the chord —
+ * T168 builds the run with `webLinkMenuActions` and may settle a different shape; if it does, it
+ * renames this one call and nothing else. Cast because `ContentMenuArgs` does not have it yet.
+ */
+describe('045 T167 — the editor content menu over a web link (FR-103, S4)', () => {
+  const editorMenuOverWebLink = (): MenuAction[] =>
+    editorContentMenu({
+      view: {} as EditorView,
+      panelId: 'p1',
+      viewId: 'v1',
+      lineEnding: () => 'lf',
+      wordWrap: { on: true, toggle: noop, chord: 'Alt+Z' },
+      gotoLine: { open: noop, chord: 'Ctrl+G' },
+      webLink: { uri: 'https://example.test/docs', chord: 'Ctrl+Enter', openLink: noop },
+    } as unknown as Parameters<typeof editorContentMenu>[0]);
+
+  it('leads with the web-link pair, divided once from the ordinary menu', () => {
+    expect(shapeOf(editorMenuOverWebLink())).toEqual([
+      'Open Link',
+      'Copy Link Address',
+      '—',
+      'Cut',
+      'Copy',
+      'Paste',
+      'Select All',
+      'Undo',
+      'Redo',
+      '—',
+      'Go To Line…',
+      '—',
+      'Set Language…',
+      'Word Wrap ✓',
+    ]);
+  });
+
+  it('Open Link shows the chord; both rows are `contextual`', () => {
+    const [open, copy] = editorMenuOverWebLink();
+    expect(open?.shortcut).toBe('Ctrl+Enter');
+    expect([open?.section, copy?.section]).toEqual(['contextual', 'contextual']);
   });
 });
 

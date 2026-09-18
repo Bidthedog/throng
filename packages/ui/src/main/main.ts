@@ -42,7 +42,14 @@ import {
   SHIPPED_PREVIEW_PROVIDERS,
   providersTurnedOff,
 } from '@throng/core';
-import type { IClipboard, IForegroundHandoff, IShellIntegration } from '@throng/core';
+import type {
+  IClipboard,
+  IExecutableExtensions,
+  IFileSystem,
+  IForegroundHandoff,
+  IPathForms,
+  IShellIntegration,
+} from '@throng/core';
 import { createUiContainer, UI_TYPES } from './composition-root.js';
 import { appIcon } from './app-icon.js';
 import { registerOpenExternalIpc } from './external-url.js';
@@ -93,13 +100,13 @@ import { loadWindowState, saveWindowState } from './window-state.js';
 import { registerGhostIpc, setGhostTheme, disposeGhost } from './ghost-window.js';
 import { revealWhenPainted } from './reveal-when-painted.js';
 import { WindowManager } from './window-manager.js';
-import { NodeFileSystem } from './node-file-system.js';
-import { restoreFromRecycleBin } from './recycle-bin-restore.js';
 import { pickFolder } from './pick-folder.js';
+import { FileLinkResolver } from './file-link-resolver.js';
+import { registerLinkIpc } from './link-ipc.js';
 import { openSubWorkspace } from './subworkspace-open.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { TerminalReconnect } from './terminal-reconnect.js';
-import { ElectronShellIntegration } from './electron-shell-integration.js';
+import { createAppShellIntegration } from './electron-shell-integration.js';
 import { FilesService } from './files-service.js';
 import { resolveThrongHolder } from './throng-holder.js';
 import { PanelIdentityRegistry } from './panel-identity.js';
@@ -924,7 +931,8 @@ if (isPrimaryInstance)
   // The platform seam behind every window's deny-renderer-windows guard (044 FR-091 / R10) and
   // behind file-explorer reveal/open (FR-035) — built early because Preferences, About and the drag
   // ghost all need it below, well before FilesService (which also takes it) is built further down.
-  const shellIntegration = new ElectronShellIntegration(shell);
+  // FR-038 / D4: built by the factory, so an elevated app reveals and opens as the interactive user.
+  const shellIntegration = createAppShellIntegration(shell);
 
   const preferencesDeps: PreferencesWindowDeps = {
     indexHtml: resolveFromHere('../renderer/index.html'),
@@ -981,6 +989,7 @@ if (isPrimaryInstance)
     ipcMain,
     shellIntegration,
     container.get<IForegroundHandoff>(UI_TYPES.ForegroundHandoff),
+    (line) => diagnostics.log.info(line),
   );
   // The application menu is set NOW (early), but the main window is created further below — so
   // About resolves its parent through the same nullable ref as Preferences, for the same
@@ -1078,14 +1087,12 @@ if (isPrimaryInstance)
   // only through these `files.*` channels. Recycle-Bin + reveal use Electron's
   // built-in `shell`; confinement to the active project root is enforced by the
   // service on resolved real paths (research D1/D5).
-  const fileSystem = new NodeFileSystem(
-    (p) => shell.trashItem(p),
-    // 024 US3: recycle-bin restore is Windows-only (PowerShell Shell.Application); elsewhere the
-    // default rejecting impl leaves delete-undo unavailable and it degrades cleanly.
-    process.platform === 'win32'
-      ? (originalPath) => restoreFromRecycleBin(originalPath)
-      : undefined,
-  );
+  // 045 (#394): from the container, not from a `new` here. `NodeFileSystem` was one of the named
+  // items in 043's recorded Principle IX exception; 045 needs the same filesystem in
+  // `FileLinkResolver`, and two `new`s would be two filesystems whose recycle-bin behaviour could
+  // drift apart. The construction and its Electron/Windows collaborators moved to
+  // `composition-root.ts`, which is the file allowed to know about them.
+  const fileSystem = container.get<IFileSystem>(UI_TYPES.FileSystem);
   // shellIntegration is built earlier (before the Preferences/About deps above), which is also
   // early enough for FilesService here.
   // Watch the active project's root and push change signals to every window so
@@ -1205,6 +1212,37 @@ if (isPrimaryInstance)
   void refreshProjectsCache().then((changed) => {
     for (const root of changed) projectFileIndex.refresh(root);
   });
+  /*
+   * 045 (#394) — the ONE file-link authority, and the three channels both surfaces reach it by.
+   *
+   * It is built HERE rather than in the container because its collaborators are: the project cache
+   * above, the shell integration, the preview registry and the live settings are all in this scope
+   * already, and nothing inside the resolver reaches for any of them itself. That is 043's recorded
+   * continuation, unchanged and unwidened — the container owns the SEAMS (`FileSystem`,
+   * `PathForms`, `ExecutableExtensions`), and this file owns the graph built from them.
+   *
+   * `projectRootFor` is the whole of I2. The renderer names a project ID — `Panel.originProjectId`,
+   * which it legitimately owns — and this closure turns it into a root from MAIN's own daemon-fed
+   * cache. An id main does not recognise answers `null`, which judges every target outside a
+   * project (M3): a lookup that failed cannot prove a file is in scope, and a check that gives up
+   * and says yes is not a check. It is the same shape, and the same reasoning, as `authoritative()`
+   * in `editor-ipc.ts`.
+   */
+  const fileLinkResolver = new FileLinkResolver({
+    fs: fileSystem,
+    pathForms: container.get<IPathForms>(UI_TYPES.PathForms),
+    executables: container.get<IExecutableExtensions>(UI_TYPES.ExecutableExtensions),
+    projectRootFor: (originProjectId) =>
+      originProjectId === undefined
+        ? null
+        : ([...projectsByRoot.values()].find((p) => p.id === originProjectId)?.rootFolder ?? null),
+    previewRegistry: SHIPPED_PREVIEW_PROVIDERS,
+    readPreviewSettings: () => currentSettings.editor.previews,
+    // FR-120 / SC-008: read per check, so a changed timeout applies to the next one with no restart.
+    readLinkSettings: () => currentSettings.editor.links,
+  });
+  fileLinkResolver.setShell(shellIntegration);
+  registerLinkIpc(ipcMain, fileLinkResolver);
   /*
    * FR-069c's other half: an `explorer.excludeGlobs` change must reach the INDEX, not only the tree.
    *
@@ -1665,6 +1703,10 @@ if (isPrimaryInstance)
     clipboard: container.get<IClipboard>(UI_TYPES.Clipboard),
     // #199: granted from here because only the foreground owner may hand the foreground on.
     foregroundHandoff: container.get<IForegroundHandoff>(UI_TYPES.ForegroundHandoff),
+    // 045 FR-080c: `currentSettings` is the parsed snapshot the config watcher keeps fresh, so the
+    // NEXT terminal to attach sees a change and a running one is untouched — which is what the
+    // requirement asks for and what a process's fixed environment makes true anyway.
+    readTerminalSettings: () => currentSettings.terminals,
   });
   /*
    * 029 / #182 — the daemon supervisor.

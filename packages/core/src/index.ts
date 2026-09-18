@@ -192,6 +192,8 @@ export type {
   // 039 FR-020 (#293) — automatic vs manual terminal reload.
   TerminalReloadMode,
   EditorSettings,
+  // 045 FR-050/FR-060 (#394) — the `Editor · Links` block.
+  EditorLinkSettings,
   EditorNavigationSettings,
   EditorOpenOnClick,
   EditorOpenTarget,
@@ -650,6 +652,7 @@ export {
   BUILTIN_SHELL_INTEGRATION_ENV,
   flavourReportsDirectory,
   BUILTIN_SHELL_INTEGRATION,
+  isWslExecutable,
   THRONG_TEST_SHELL_HISTORY,
   SHELL_HISTORY_OFF_SNIPPET,
   SHELL_HISTORY_OFF_ENV,
@@ -695,6 +698,9 @@ export {
   type ShellProbe,
   type ShellResolver,
   sanitizeSpawnEnv,
+  // 045 FR-080 – FR-080d (#394): what to add to a terminal's environment so programs know throng
+  // renders hyperlinks. At most one key, and it is FORCE_HYPERLINK.
+  hyperlinkAdvertisementEnv,
   canRunAsAdmin,
   shouldRespawnDaemonElevated,
   shouldDeElevate,
@@ -1003,3 +1009,41 @@ export {
   serialiseHistory,
 } from './navigation/history.js';
 export type { NavigationEntry, NavigationHistory } from './navigation/history.js';
+
+// 045 — clickable file links (#394 / #198). The grammar and every decision, pure and OS-free.
+// `core/src/links/**` names no operating system, extension or drive mapping; the OS facts arrive
+// through IPathForms and IExecutableExtensions, and `links-no-os-names.test.ts` fails the build on
+// one that leaks in.
+export type {
+  Span,
+  LinkPosition,
+  LinkCandidate,
+  LinkResolutionRequest,
+  ResolvedLink,
+  LinkResolution,
+  LinkActionOutcome,
+} from './links/types.js';
+export type { IPathForms } from './abstractions/path-forms.js';
+export type { IExecutableExtensions } from './abstractions/executable-extensions.js';
+export { detectPathCandidates } from './links/detect.js';
+export {
+  LINK_CACHE_TTL_MS,
+  LINK_IDLE_SCAN_MS,
+  MAX_LINK_CANDIDATES_PER_LINE,
+  MAX_TIMED_OUT_LINK_CHECKS,
+} from './links/limits.js';
+export { classifyTerminalLinkTarget } from './links/classify.js';
+export type { TerminalLinkKind } from './links/classify.js';
+export { resolveCandidate, isLinkInProject } from './links/resolve.js';
+export type { LinkResolutionContext } from './links/resolve.js';
+export { LINK_TARGETS, linkTargetStates } from './links/targets.js';
+export type { LinkTarget, TargetState } from './links/targets.js';
+export { resolveDefaultLinkAction } from './links/default-action.js';
+export type { ClickTarget } from './links/default-action.js';
+export { linkHoverText } from './links/hover-text.js';
+export { WEB_URL_REGEX, detectWebLinks } from './links/web-url.js';
+export type { WebLinkSpan } from './links/web-url.js';
+export { scanLinkLine } from './links/scan-line.js';
+export type { ScannedLine } from './links/scan-line.js';
+export { fileLinkMenuItems } from './links/menu.js';
+export type { FileLinkMenuItem } from './links/menu.js';

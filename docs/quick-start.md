@@ -160,6 +160,119 @@ never elevates anything on its own.
 Confirm, and you have a live shell **at the project root** — or back in the directory this panel
 was last working in, if it has one.
 
+### Paths in terminal output are clickable
+
+throng recognises file paths in whatever a terminal prints — a compiler's diagnostics, a test
+runner's failures, a `git status` — with no cooperation from the program. It recognises:
+
+- relative paths (`src/foo.ts`, `./foo.ts`, `../docs/x.md`) and home-relative ones (`~/x.ts`);
+- Windows absolute paths with either slash (`D:\git\x.ts`, `D:/git/x.ts`) and network paths with
+  either slash (`\\server\share\x.ts`, `//server/share/x.ts`);
+- POSIX-style absolute paths, including the Git Bash and WSL drive forms (`/d/git/x.ts`,
+  `/mnt/d/git/x.ts`) and Git Bash's own folders — `/usr/bin/bash.exe`, `/etc/hosts` and `/tmp` mean
+  what Git Bash means by them, in any terminal and in an editor;
+- `file:` URLs written out as text, however the path inside is spelled (`file:///D:/x.ts`,
+  `file:///d/x.ts`, `file:///mnt/d/x.ts`);
+- PowerShell's own spelling of a location, `Microsoft.PowerShell.Core\FileSystem::\\server\share\dir`,
+  which is how its prompt shows a network folder;
+- a path containing spaces — `C:\Program Files\x\y.js`, `/d/my projects/notes.md` — with or without
+  quotes, as long as it starts with a drive, a `/`, `~/`, `./`, `../` or `\\`. throng tries the
+  longest reading that names something real, so `see D:\my notes\a.md for details` links
+  `D:\my notes\a.md` and stops there.
+
+A position after the path comes with it: `foo.ts:42`, `foo.ts:42:7` and `foo.ts(42,7)` all name a
+line — and a trailing comma, full stop or bracket is left out of the path rather than breaking it.
+
+**A path is only a link if it is really there.** Anything throng cannot find is ordinary text: no
+underline, no tooltip, nothing to click. That is what keeps a page of prose from filling with
+underlines — `e.g.`, `60/40`, `1.2.3` and `support.example.com` are not paths and are left alone.
+
+A **relative** path is measured from the directory the terminal is in *now*, so `npm run build` in
+`packages/ui` printing `src/foo.ts` means the file next to it — not the one at the project root.
+That holds on a network share too: a PowerShell sitting in `\\server\share\dir` running `dir` prints
+names that are links. throng falls back to the **project root** when it cannot tell where the shell
+is — a PowerShell, pwsh or Git Bash terminal with shell integration switched off, and a WSL terminal
+you have defined yourself — rather than guessing from the folder the shell started in; see *Shell
+integration* below for which shells can report it.
+
+**WSL.** In a WSL terminal, `/mnt/d/…` paths are links as everywhere else, but Git Bash's meaning of
+`/usr`, `/etc` and `/tmp` is not applied, and the distro's own Linux paths (`/home/…`) are not links
+yet — they name the distro's filesystem, which throng does not reach.
+
+**Every link looks the same.** A link carries a **dashed underline** while at rest, so you can see
+what is clickable without sweeping the pointer across the screen; under the pointer the underline
+turns **solid**, and a tooltip says where a click will go. The pointer becomes a hand only while
+**Ctrl** is held, because that is when a click follows. The text keeps its own colour. A path is
+marked once throng has checked it is really there — straight away under the pointer, and for the
+rest of the screen once the terminal's output has been quiet for a moment — so a streaming build is
+never slowed by the checking.
+
+A link the terminal **wrapped** onto several rows is one link: marked on every row, and a hover or a
+Ctrl+click on any of its rows acts on the whole of it.
+
+**Ctrl+click** follows a path. The destinations are the same as for a link a program prints, below.
+
+**Network shares.** A path on a share that is slow or offline is not a link until the share answers;
+throng waits at most the **Existence-check timeout** (2,000 ms as shipped; see *Make it yours*) and
+never lets a dead share hold anything else up. Once a share has failed to answer, throng stops asking
+it until it responds, and its paths become links again on their own when it is back. Following a link
+to a location that stops answering ends with one notice saying the location did not answer in time.
+
+### Links a program prints
+
+Some programs mark up their output with real hyperlinks — the same mechanism Windows Terminal
+supports — and a link whose target is a **file or a folder** is now followable in throng.
+
+It wears the same dashed underline as any other link, turns solid under the pointer, and shows a
+tooltip after the usual pause (the *Link hover tooltip delay* preference). **Ctrl+click** follows
+it, and **never runs anything or opens a file in its default program**:
+
+- a **file inside the project** opens in throng — in a preview if its file type's default open action
+  is Preview, otherwise in an editor, and **always in an editor, at the line and column**, when the
+  link names one (`test.md:3:5` puts the caret on line 3, column 5, even if the file is already open).
+  A script or program in the project opens as text;
+- a **folder**, and **anything outside the project**, is shown in OS Explorer.
+
+Opening a file in the program its type belongs to is still there, on the right-click menu as *Open in
+OS Default Program*, which you choose on purpose. If throng itself is running as administrator, that
+program — and OS Explorer — is started **without** administrator rights.
+
+A link to something that is not there — a missing file, a host that does not answer, a scheme throng
+does not follow such as `mailto:` or `javascript:` — is not a link at all and looks like plain text:
+no underline, no hand pointer, no tooltip, no link items on its menu, and no notice. A Ctrl+click on
+it goes to the program, as any other click would. Web links (`http`/`https`) open in your system
+browser, as before.
+
+One Ctrl+click follows a link **once**. Full-screen programs such as Claude Code often open links
+they are Ctrl+clicked on themselves, so throng keeps the press to itself when it is over a link it
+recognises, and lets it through everywhere else — so the program's own links keep working too.
+
+### Choosing where a link opens
+
+Ctrl+click picks one destination. **Right-click a link** — with nothing selected — and the menu
+leads with every destination that link has:
+
+| Item | When you see it |
+|---|---|
+| **Open Link** | always — it does exactly what Ctrl+click does |
+| **Open in Editor** | a file inside the project |
+| **Open in Preview** | a file inside the project that a preview provider handles; drawn **greyed** when that provider is switched off, so you can see the destination exists |
+| **Open in OS Explorer** | always — the file is selected in its folder, or the folder is opened |
+| **Open in OS Default Program** | a file (never a folder) |
+| **Copy Link Address** | always — the full path, plus the `:42:7` or `(42,7)` exactly as it was printed |
+
+**Open Link** goes where Ctrl+click goes; each of the other items does its own thing, which is how
+you reach the destinations a click does not choose. Over a **web** address the menu offers **Open
+Link** and **Copy Link Address**, in a terminal and in an editor alike.
+
+An item you do not see is one that could never apply to that link — there is no editor for a folder,
+and nothing outside the project ever opens in a throng editor or preview. Select some text first and
+you get the ordinary Copy/Paste menu instead, whatever the pointer is over.
+
+The menu is also reachable from the keyboard with **Shift+F10**, which offers the items for whatever
+the pointer is resting on. Ctrl+Enter in a terminal is **not** an Open Link shortcut — it reaches
+the shell, as it always has — which is why the terminal's Open Link item shows no shortcut.
+
 ### Reloading terminals
 
 By default, opening a project brings its terminals back: the tab you land on starts its terminals
@@ -214,6 +327,16 @@ those shells, because without it they genuinely cannot report where they are; Co
 unaffected either way. The panel header shows the terminal's
 **live working directory**, so you can see where a shell is even when a full-screen program hides
 the prompt.
+
+**Tell programs that links are supported** (Settings → Terminal), also **on by default**, is how programs know
+they can print real hyperlinks in a throng terminal: a terminal throng starts carries
+`FORCE_HYPERLINK=1`, which is the variable the common Rust and Node link libraries read. Two things
+it deliberately does not do. **It never overrides a `FORCE_HYPERLINK` you set yourself** — neither a
+`0` you set to switch links off nor a `1` you set to force them on; if the variable is already there
+when throng launches, throng leaves it exactly as it is. And **it applies to terminals started
+afterwards, never to one already running**, because a program's environment is fixed when it starts —
+so switch it and open a new terminal. throng also never pretends to be some other terminal: it sets
+that one variable and nothing else.
 
 Terminals belong to the project, but are managed by the daemon, not the window. **Close throng and
 they keep running**; reopen it and they reattach with their scrollback intact. Closing the app
@@ -296,6 +419,37 @@ which becomes an editor showing that file.
 Saves are confined to the project root. Unsaved changes show a pulsing dot; open the same file in
 two windows and they share **one buffer and one undo stack**, so Ctrl+Z in either reverts the
 other's edit. In-progress edits and their undo history survive a crash.
+
+### Paths in a document are clickable too
+
+An editor recognises the same links a terminal does — the path forms listed up in *Paths in
+terminal output are clickable*, and **web addresses** (`http`/`https`) — anywhere in the text of any
+file it opens, and treats each exactly as a terminal would: the same look, the same tooltip, the
+same destinations. A path that names a file that is really there carries the dashed link underline;
+anything else is ordinary text. Syntax colours are left alone — the underline is the only mark.
+
+A relative path is measured from **the open file's own folder** first, then from the project root.
+So in `docs/a.md`, `./b.md` is the file beside it and `packages/core/x.ts` is the one at the root.
+An untitled buffer has no folder of its own, so only the project root is tried.
+
+- **Ctrl+click** a link to follow it. Ctrl+click anywhere else still **adds a cursor**, as it always
+  has, and a Ctrl+click that drags still selects.
+- **Ctrl+Enter** follows the link the caret is sitting inside. With a selection, with more than one
+  cursor, or anywhere else, it inserts a blank line exactly as before.
+- **Right-click** a link for the same menu a terminal gives you — Open Link, the destinations that
+  apply, and Copy Link Address. Here **Open Link** shows its `Ctrl+Enter` shortcut, because in an
+  editor that key really does follow the link.
+
+A path that carries a position — `src/foo.ts:42`, `src/foo.ts:42:7`, `src/foo.ts(42,7)` — opens the
+file **at that line and column**. If the file has since got shorter, the caret lands as close as it
+can rather than refusing.
+
+A web address opens in your system browser, and its right-click menu offers **Open Link** and **Copy
+Link Address**. Only `http` and `https` are links; `mailto:` and `javascript:` text is not.
+
+Path detection can be turned off: **Preferences → Editor → Links → Detect file links in editors**.
+Paths then stop being links and the gestures go back to their ordinary editor meanings over them; web
+addresses stay links.
 
 ### Preview a file
 
@@ -490,6 +644,24 @@ There is a reason, and it is a few paragraphs below.
   drives the other) that previews use, and any settings a provider adds of its own, such as
   Markdown's **Load remote images** and **Show front matter**
   (on by default; off hides the front-matter table entirely rather than rendering it as Markdown).
+- **Links** — where a Ctrl+click, the **Ctrl+Enter** chord and the menu's **Open Link** go is not a
+  setting: a file in the project opens in throng (a preview or an editor, by that file type's
+  **default open action** under **Editor → Previews**), and everything else is shown in OS Explorer
+  — see *Links a program prints*. **Editor → Links** holds **Existence-check timeout** (2,000 ms as
+  shipped, 250 – 25,000): how long throng waits for a file or network location to answer before
+  treating a path as not a link for now. Raise it for a slow network share; it applies to the next
+  check, with no restart.
+  The same page holds two switches, both on as shipped: **Detect file links in editors** and
+  **Detect file links in terminals**. Each turns off throng's *guess* that a run of characters is a
+  path — no underline, no tooltip, no Ctrl+click, and no link items on the right-click menu, in that
+  panel type. Neither touches a link something **declared**, nor a web address: a program's own
+  hyperlinks and web links go on working in a terminal with detection off, and in an editor web
+  addresses stay links while Ctrl+click goes back to adding a cursor and Ctrl+Enter to inserting a
+  blank line everywhere else. Both apply at once — nothing reopens, and a running terminal keeps its
+  scrollback.
+  The link underline's colours are two theme tokens in the theme editor's **General** area, **Link
+  Underline** (the dashed underline at rest) and **Link Hover Underline** (the solid one under the
+  pointer); unset, they follow the theme's accent colour.
 
 Every setting, binding and theme is a **human-editable file** under `%USERPROFILE%\.throng\`
 (`settings.json`, `keybindings.json`, `themes\<name>.json`, `icon-packs\<pack>\`) that **hot-reloads**
@@ -554,7 +726,7 @@ also the full list.
 | **F2**, **Delete**, **Ctrl+X/C/V** | Rename, delete, cut/copy/paste — **in the file tree** |
 | **Alt+Left** / **Alt+Right** | Back / Forward — in the focused editor or preview panel |
 | Mouse back / forward buttons | Same as Alt+Left / Alt+Right, over an editor or preview panel |
-| **Ctrl+Enter** | Follow the focused link, after Tab — **in a preview** |
+| **Ctrl+Enter** | Follow a link — the focused one in a **preview**, or the one the caret sits inside in an **editor**. A terminal still gets Ctrl+Enter for the shell |
 | **Shift+PageUp/PageDown**, **Ctrl+Home/End** | Scroll a terminal's scrollback |
 | **Ctrl+F5** | Refresh / redraw the focused terminal |
 

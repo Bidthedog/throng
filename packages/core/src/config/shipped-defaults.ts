@@ -150,7 +150,14 @@ import { setAtPath } from './metadata.js';
 // already carry an 8 and would otherwise never receive the new token. Additive only: no value moves,
 // so there is no frozen version-8 record to guard against. The one new key binding the iteration adds
 // needs no bump, for the reason given above — `parseKeybindings` fills an absent action on every read.
-export const SHIPPED_DEFAULTS_VERSION = 9;
+//
+// Bumped by 045 (9 → 10): two colour tokens, `linkUnderline` and `linkUnderlineHover`, the underline
+// that marks a link in both panel types (FR-138). The 044 case again: additive only, every payload
+// arrives and no existing value moves, so there is no frozen version-9 record to guard against.
+// Without the bump an existing install's theme files never receive the tokens. The settings the same
+// release changes need none — `editor.links.existenceCheckTimeoutMs` is filled by the tolerant parse
+// on every read, and the retired `editor.links.defaultAction` is dropped by it (FR-113).
+export const SHIPPED_DEFAULTS_VERSION = 10;
 
 /**
  * `explorer.excludeGlobs` as shipped-defaults version 4 wrote it — the VS Code `files.exclude`

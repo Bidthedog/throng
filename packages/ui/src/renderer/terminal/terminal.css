@@ -149,3 +149,47 @@
   background: var(--throng-colour-cancelButtonHoverBg);
   color: var(--throng-colour-cancelButtonHoverText);
 }
+
+/* 045 FR-135 – FR-139 — the ONE link affordance, for every link kind (link-marks.ts). An xterm
+   decoration over the link's cells on each row it occupies: dashed at rest, solid on hover, in the
+   two link tokens and never a text colour. It must not take the pointer's events — xterm's own
+   Linkifier, under it, is what hovers and activates the link. */
+.terminal-panel .terminal-link-mark {
+  pointer-events: none;
+  box-sizing: border-box;
+  border-bottom: 1px dashed var(--throng-colour-linkUnderline);
+}
+.terminal-panel .terminal-link-mark.terminal-link-mark--hover {
+  border-bottom-style: solid;
+  border-bottom-color: var(--throng-colour-linkUnderlineHover);
+}
+
+/* O10 (research R22): xterm 6.0.0 draws its own link visuals and no option styles them — every OSC 8
+   cell renders as `xterm-underline-5` (dashed, in the cell's colour, whatever its target), a hovered
+   link gets an INLINE solid underline, and the screen gets `xterm-cursor-pointer`. Inside a terminal
+   panel those are switched off, so throng's mark is the only affordance (FR-139) and a hyperlink
+   that goes nowhere looks like plain text (FR-154). The cost, recorded in R22: a program's own
+   SGR 4:5 (dashed underline) is drawn without its underline here, since xterm gives it the same
+   class. */
+.terminal-panel .xterm-rows .xterm-underline-5 {
+  text-decoration: none;
+}
+.terminal-panel .xterm-rows .xterm-overline.xterm-underline-5 {
+  text-decoration: overline;
+}
+.terminal-panel .xterm-rows span[style*='text-decoration: underline'] {
+  text-decoration: none !important;
+}
+.terminal-panel .xterm.xterm-cursor-pointer,
+.terminal-panel .xterm .xterm-cursor-pointer {
+  cursor: text;
+}
+.terminal-panel .xterm.enable-mouse-events.xterm-cursor-pointer,
+.terminal-panel .xterm.enable-mouse-events .xterm-cursor-pointer {
+  cursor: default;
+}
+/* FR-135 — the hand, only while a followable link is hovered WITH Ctrl/Cmd held. */
+.terminal-panel.terminal-link-pointer .xterm,
+.terminal-panel.terminal-link-pointer .xterm .xterm-screen {
+  cursor: pointer;
+}
