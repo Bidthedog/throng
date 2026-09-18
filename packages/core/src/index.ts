@@ -1025,6 +1025,7 @@ export type {
 export type { IPathForms } from './abstractions/path-forms.js';
 export type { IExecutableExtensions } from './abstractions/executable-extensions.js';
 export { detectPathCandidates } from './links/detect.js';
+export { LINK_CACHE_TTL_MS, MAX_LINK_CANDIDATES_PER_LINE } from './links/limits.js';
 export { classifyTerminalLinkTarget } from './links/classify.js';
 export type { TerminalLinkKind } from './links/classify.js';
 export { resolveCandidate, isLinkInProject } from './links/resolve.js';

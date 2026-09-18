@@ -34,10 +34,12 @@ import {
 import {
   activateTerminalHyperlink,
   askTerminalLink,
+  followTerminalLink,
   hoveredLinkFromUri,
   type TerminalLinkDeps,
   type TerminalLinkSite,
 } from './terminal-link-activation.js';
+import { createFileLinkProvider } from './file-link-provider.js';
 import { shouldDropScrollback } from './clear-detect.js';
 import { TERMINAL_URL_REGEX } from './terminal-url.js';
 import { saveTerminalViewState, takeTerminalViewState } from './terminal-view-state.js';
@@ -876,6 +878,32 @@ export function useTerminal(opts: UseTerminalOptions): void {
         leave: () => setHoveredUri(undefined),
       }),
     );
+    /*
+     * 045 FR-001 — detected PATHS, beside the web scanner rather than inside it.
+     *
+     * A provider rather than an addon because the two questions are different: the web addon scans
+     * for a pattern and is done, while a path is only a link once main says the location exists. The
+     * provider is called for the row under the pointer and for rows being decorated, never for
+     * output as it arrives, which is FR-071 and FR-072 by construction.
+     *
+     * Registered AFTER the web addon so the web links are in place first; overlap is settled by the
+     * claimed ranges the provider passes detection, not by registration order (FR-009).
+     */
+    const fileLinks = term.registerLinkProvider(
+      createFileLinkProvider({
+        terminal: term,
+        site: linkSite,
+        ask: askTerminalLink,
+        onHover: setHovered,
+        follow: ({ request, position }) => {
+          void followTerminalLink({
+            request,
+            ...(position === undefined ? {} : { position }),
+            deps: linkActionsRef.current ?? NO_LINK_DESTINATIONS,
+          });
+        },
+      }),
+    );
 
     // In-panel find over the retained scrollback (013). Read-only: the addon reads the
     // buffer and moves the viewport, never the pty. Registered against the panel id so
@@ -1397,6 +1425,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // cleanup is backstopped by the main process (FR-008a).
       void bridge.detach?.(panelId, viewId);
       cleanupSearch?.();
+      fileLinks.dispose(); // 045 — the link provider goes with the view that registered it
       // Remember the scroll offset + selection before the xterm is disposed, so the
       // next mount of this terminal (tab/panel/project switch) can restore them
       // (issue 144, follow-up). Offset is measured from the buffer bottom.

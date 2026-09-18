@@ -160,6 +160,34 @@ never elevates anything on its own.
 Confirm, and you have a live shell **at the project root** — or back in the directory this panel
 was last working in, if it has one.
 
+### Paths in terminal output are clickable
+
+throng recognises file paths in whatever a terminal prints — a compiler's diagnostics, a test
+runner's failures, a `git status` — with no cooperation from the program. It recognises:
+
+- relative paths (`src/foo.ts`, `./foo.ts`, `../docs/x.md`) and home-relative ones (`~/x.ts`);
+- Windows absolute paths with either slash (`D:\git\x.ts`, `D:/git/x.ts`) and UNC paths
+  (`\\server\share\x.ts`);
+- POSIX-style absolute paths, including the Git Bash and WSL drive forms (`/d/git/x.ts`,
+  `/mnt/d/git/x.ts`);
+- `file://` URLs written out as text;
+- a path in quotes, spaces and all.
+
+A position after the path comes with it: `foo.ts:42`, `foo.ts:42:7` and `foo.ts(42,7)` all name a
+line — and a trailing comma, full stop or bracket is left out of the path rather than breaking it.
+
+**A path is only a link if it is really there.** Anything throng cannot find is ordinary text: no
+underline, no tooltip, nothing to click. That is what keeps a page of prose from filling with
+underlines — `e.g.`, `60/40`, `1.2.3` and `support.example.com` are not paths and are left alone.
+
+A **relative** path is measured from the directory the terminal is in *now*, so `npm run build` in
+`packages/ui` printing `src/foo.ts` means the file next to it — not the one at the project root.
+throng falls back to the project root when it cannot tell where the shell is; see *Shell
+integration* below for which shells can report it.
+
+Rest the pointer on a path to underline it, and **Ctrl+click** to open it. The destinations are the
+same as for a link a program prints, below.
+
 ### Links a program prints
 
 Some programs mark up their output with real hyperlinks — the same mechanism Windows Terminal

@@ -1,5 +1,15 @@
 import { useSyncExternalStore } from 'react';
-import { isUnderPath, samePath, type LinkResolution, type LinkResolutionRequest } from '@throng/core';
+import {
+  LINK_CACHE_TTL_MS,
+  isUnderPath,
+  samePath,
+  type LinkResolution,
+  type LinkResolutionRequest,
+} from '@throng/core';
+
+// Re-exported so a caller reasoning about the cache reads one name from one place; the value itself
+// lives in `core/src/links/limits.ts`, beside the per-line cap it is a sibling of.
+export { LINK_CACHE_TTL_MS };
 
 /**
  * The per-window file-link resolution cache (045 FR-070, FR-071; `data-model.md` §7).
@@ -32,16 +42,6 @@ import { isUnderPath, samePath, type LinkResolution, type LinkResolutionRequest 
  * This is **view state** (Principle XI): it holds nothing that shapes content, and a window that
  * loses it re-derives every entry from what is on screen.
  */
-
-/**
- * How long an answer is believed without corroboration.
- *
- * A named constant rather than a setting: no user has a reason to want a different number, and a
- * setting nobody should change is a setting somebody eventually will (Complexity Tracking). Long
- * enough that resting the pointer on one path does not re-ask, short enough that a change no
- * watcher reported heals on its own.
- */
-export const LINK_CACHE_TTL_MS = 30_000;
 
 interface Entry {
   readonly resolution: LinkResolution;
