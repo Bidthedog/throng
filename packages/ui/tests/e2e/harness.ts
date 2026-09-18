@@ -1377,7 +1377,8 @@ export async function charPoint(
         nodes.push(node);
         text += node.textContent ?? '';
       }
-      const start = text.indexOf(want);
+      // xterm's DOM renderer may draw a space as a no-break space; the offsets are the same either way.
+      const start = text.replace(/\u00a0/g, ' ').indexOf(want);
       if (start < 0) {
         throw new Error(`charPoint: this row does not contain ${want}. It reads: ${JSON.stringify(text)}`);
       }
@@ -1398,6 +1399,52 @@ export async function charPoint(
     },
     [token, index] as [string, number],
   );
+}
+
+/**
+ * The text of one terminal row that throng's link mark is DRAWN under (045 FR-135 – FR-139).
+ *
+ * The mark is an xterm decoration (`link-marks.ts`) — an element of its own in the decoration
+ * container, positioned over the cells, and not a style on the cells' spans. So "which characters are
+ * marked" is geometry: every character of the row whose centre falls inside a `.terminal-link-mark`
+ * box on the same row. `hover: true` counts only marks in the hover state
+ * (`.terminal-link-mark--hover`), which is what a hovered link draws on every row it occupies.
+ *
+ * xterm's OWN link visuals (the inline `text-decoration: underline` it writes on hover, and the
+ * `xterm-underline-5` class on OSC 8 cells) are switched off inside a terminal panel, so reading
+ * those would measure nothing — which is exactly how `terminal-links.e2e.ts` went red the day they
+ * were.
+ */
+export async function linkMarkedText(row: Locator, opts: { hover?: boolean } = {}): Promise<string> {
+  await expect(row).toBeVisible();
+  return row.evaluate((el, hoverOnly: boolean) => {
+    const rowBox = el.getBoundingClientRect();
+    const marks = [...(el.closest('.xterm')?.querySelectorAll<HTMLElement>('.terminal-link-mark') ?? [])]
+      .filter((m) => !hoverOnly || m.classList.contains('terminal-link-mark--hover'))
+      .map((m) => m.getBoundingClientRect())
+      .filter(
+        (b) =>
+          b.width > 0 &&
+          b.height > 0 &&
+          b.top < rowBox.bottom - rowBox.height / 4 &&
+          b.bottom > rowBox.top + rowBox.height / 4,
+      );
+    let out = '';
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode as Text;
+      const text = node.textContent ?? '';
+      for (let i = 0; i < text.length; i += 1) {
+        const range = document.createRange();
+        range.setStart(node, i);
+        range.setEnd(node, i + 1);
+        const c = range.getBoundingClientRect();
+        const cx = c.left + c.width / 2;
+        if (marks.some((b) => cx > b.left && cx < b.right)) out += text[i];
+      }
+    }
+    return out;
+  }, opts.hover === true);
 }
 
 /**

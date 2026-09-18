@@ -342,18 +342,26 @@ menu offers, what a switch gates and what a terminal is spawned with are all pur
 `@throng/core` with unit tests, and the renderer's halves are component tests against the real
 builders. The main-process authority — re-resolve, re-check, act, de-elevate — is covered by contract
 and integration tests over a real filesystem and a real shell. What was left is the handful of
-claims that need a real xterm, a real ConPTY and a real pointer, and **two declarations that already
+claims that need a real xterm, a real ConPTY and a real pointer, and **declarations that already
 existed were the right home for them**:
 
 | Declaration | What 045 added to it |
 |---|---|
 | `terminal-link-once.e2e.ts` — *"Ctrl+clicking a link in a program that OWNS THE MOUSE opens it once, not also through the program (#198)"* (`@extended @terminal @reserve:pty`) | two cases under the same mouse-owning fixture — a **detected path**, and an **OSC 8 `file:` target naming a folder**. Each asserts one Ctrl+click opens exactly once, that the program receives no press, and that a **plain** click still reaches the program (FR-043, SC-002, SC-005) |
-| `terminal-links.e2e.ts` — *"a renderer-opened window is denied and http(s) routed to the OS opener (#159); a detected path underlines on hover and a look-alike does not (045)"* (`@extended @terminal`) | a hover case: a path that names a real file underlines, and a look-alike that names nothing does not (FR-006, FR-042, SC-003) |
+| `terminal-link-once.e2e.ts` — *"Ctrl+clicking a PLAIN-TEXT url opens exactly once"* (`@extended @terminal @reserve:pty`) | a web url, a detected path and an OSC 8 hyperlink, each wrapped by a narrowed window: a Ctrl+click on the **second** row opens each exactly once (FR-130, SC-017, T186) |
+| `terminal-links.e2e.ts` — *"a renderer-opened window is denied and http(s) routed to the OS opener (#159); a detected path is marked and a look-alike is not, a wrapped link is marked on every row and a dead hyperlink on none (045)"* (`@extended @terminal`) | a path that names a real file is marked and a look-alike is not (FR-006, FR-042, SC-003); the three link kinds, wrapped, carry the same at-rest mark on every row (FR-130, FR-136, T186); the corpus's four dead OSC 8 hyperlinks carry no mark, no computed underline and no hand, at rest, hovered and with Ctrl held (FR-154, T213) |
+
+The mark is throng's own xterm decoration (`link-marks.ts`), not a style on the cells, so these read
+it by geometry — `linkMarkedText()` in `harness.ts`. xterm's inline hover underline and its
+`xterm-underline-5` class on OSC 8 cells are switched off in a terminal panel, and the class cannot be
+removed through xterm's API, so a dead hyperlink is asserted on its **computed**
+`text-decoration-line`, never on the class. `terminal-wrapped-link.e2e.ts` (#326) was skipped until
+the marks landed; it now runs, measuring the hover mark on every row of a wrapped OSC 8 link.
 
 **A case inside an existing declaration does not move the ratchet**, because the counter is a
 per-line regex over `test(` declarations — so the right question for each new claim was not "does
 this need an E2E" but "does an E2E that already launches this app, this shell and this fixture
-exist". Both times one did, and the marginal cost of the assertion was a few hundred milliseconds
+exist". Every time one did, and the marginal cost of the assertion was a few hundred milliseconds
 rather than another Electron launch.
 
 **One thing only the E2E layer could have caught, and did.** xterm's `OscLinkProvider` discards an

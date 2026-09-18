@@ -9,6 +9,7 @@ import {
   firstPanelId,
   charPoint,
   cleanupTemp,
+  linkMarkedText,
   openedPaths,
   stayedAbsent,
   TYPE_DELAY,
@@ -337,11 +338,141 @@ test('Ctrl+clicking a PLAIN-TEXT url opens exactly once', { tag: ['@extended', '
       // A SECOND, later open would still be caught — see fenceOnEcho's doc comment.
       await fenceOnEcho(win, term, 'LINKFENCE2');
       expect(await opens.urls()).toEqual([url]);
+
+      /*
+       * ══ 045 T186 — a Ctrl+click on the SECOND row of a wrapped link opens it exactly once ══
+       *
+       * FR-130 made a wrapped link one link on every row it occupies, which is two claims: it is
+       * DRAWN on every row (terminal-links.e2e.ts) and it is FOLLOWED from every row, once. The
+       * second row is where the two used to part company — xterm reports an OSC 8 link one row at a
+       * time, and a plain-text provider that read only the physical row would find no link there at
+       * all. Answers O9 for each kind: a web url, a detected path and an OSC 8 hyperlink.
+       */
+      await ctrlClickSecondRows(app, win, term, root, opens);
     });
   } finally {
     cleanupTemp(root);
   }
 });
+
+/**
+ * T186's half of the PLAIN-TEXT declaration, kept out of its body so the #198 fence above reads as it
+ * always has. The window is narrowed so each link wraps, and restored afterwards: this file shares
+ * one app, and every later test would otherwise run at the minimum width.
+ */
+async function ctrlClickSecondRows(
+  app: ElectronApplication,
+  win: Page,
+  term: Locator,
+  root: string,
+  opens: { urls: () => Promise<string[]>; reset: () => Promise<void> },
+): Promise<void> {
+  const outside = mkdtempSync(join(tmpdir(), 'throng-link2-out-'));
+  // OUTSIDE the project, so a follow is an OS reveal the harness records — an in-project file would
+  // open in a throng editor, whose second open is indistinguishable from its first (FR-053).
+  const outsideFile = join(outside, `wrapped_${'abcdefghij'.repeat(8)}.txt`);
+  writeFileSync(outsideFile, 'outside the project\n', 'utf8');
+  const web = `https://example.com/wrapped/${'uvwxyzabcd'.repeat(9)}`;
+  const oscUri = 'https://example.com/osc8-wrapped-target';
+  const oscText = `OSCWRAP_${'klmnopqrst'.repeat(10)}`;
+  writeFileSync(
+    join(root, 'lnk.ps1'),
+    [
+      '$e=[char]27',
+      "Clear-Host",
+      "Write-Host 'WRAP2WEB'",
+      `Write-Host '${web}'`,
+      "Write-Host 'WRAP2PATH'",
+      `Write-Host '${outsideFile}'`,
+      "Write-Host 'WRAP2OSC'",
+      `Write-Host ("$e" + "]8;;${oscUri}" + "$e" + "\\" + "${oscText}" + "$e" + "]8;;" + "$e" + "\\")`,
+      "Write-Host 'WRAP2END'",
+      '',
+    ].join('\n'),
+  );
+
+  const original = await app.evaluate(({ BrowserWindow }) => {
+    const [w] = BrowserWindow.getAllWindows();
+    const maximized = w.isMaximized();
+    if (maximized) w.unmaximize();
+    const size = w.getContentSize();
+    w.setContentSize(600, size[1]);
+    return { maximized, size };
+  });
+  try {
+    await runScript(win, term, 'WRAP2END');
+    await win.mouse.move(2, 2);
+    const rows = win.locator('.xterm-rows > div');
+    const texts = (await rows.allTextContents()).map((t) => t.replace(/\u00a0/g, ' ').trimEnd());
+    /** The screen index of a link's SECOND row: the row after the one following its marker. */
+    const secondRow = (marker: string): Locator => {
+      const at = texts.findIndex((t) => t === marker);
+      expect(at, `no ${marker} row in ${JSON.stringify(texts)}`).toBeGreaterThanOrEqual(0);
+      // ANTI-VACUITY: the link wrapped — its second row is still the link, not the next marker.
+      expect(texts[at + 2], `the link after ${marker} did not wrap`).not.toMatch(/^WRAP2/);
+      return rows.nth(at + 2);
+    };
+
+    /**
+     * Rest on the second row until throng marks it as the hovered link — a positive signal rather
+     * than a duration, and the same one for all three kinds. A file link needs its answer from main
+     * first (FR-006), and the next query only happens when the pointer re-enters the line, so each
+     * poll arrives from the line below.
+     */
+    const armSecondRow = async (row: Locator, label: string): Promise<LinkPoint> => {
+      const box = (await row.boundingBox())!;
+      const point = { x: box.x + Math.min(box.width / 3, 60), y: box.y + box.height / 2, row: box.height };
+      await expect
+        .poll(
+          async () => {
+            await enterLink(win, point);
+            return linkMarkedText(row, { hover: true });
+          },
+          { timeout: 30_000, intervals: [600], message: `the second row of ${label} is never the hovered link` },
+        )
+        .not.toBe('');
+      return point;
+    };
+    const ctrlPressHere = async (): Promise<void> => {
+      await win.keyboard.down('Control');
+      await win.mouse.down();
+      await win.mouse.up();
+      await win.keyboard.up('Control');
+    };
+
+    // A web url.
+    await opens.reset();
+    await armSecondRow(secondRow('WRAP2WEB'), 'the web url');
+    await ctrlPressHere();
+    await expect.poll(() => opens.urls(), { timeout: 5000 }).toEqual([web]);
+
+    // A detected path, outside the project: one OS reveal.
+    await resetOpenedPaths(app);
+    await armSecondRow(secondRow('WRAP2PATH'), 'the detected path');
+    await ctrlPressHere();
+    await expect.poll(() => openedPaths(app), { timeout: 5000 }).toHaveLength(1);
+
+    // An OSC 8 hyperlink: its TARGET, never its text.
+    await opens.reset();
+    await armSecondRow(secondRow('WRAP2OSC'), 'the OSC 8 hyperlink');
+    await ctrlPressHere();
+    await expect.poll(() => opens.urls(), { timeout: 5000 }).toEqual([oscUri]);
+
+    // A SECOND, later open of any of them would still be caught — see fenceOnEcho's doc comment.
+    await fenceOnEcho(win, term, 'LINKFENCE2W');
+    expect(await opens.urls()).toEqual([oscUri]);
+    const followed = await openedPaths(app);
+    expect(followed, 'the wrapped detected path was followed more than once').toHaveLength(1);
+    expect(samePathish(followed[0], outsideFile), `the wrapped path opened ${followed[0]}, not ${outsideFile}`).toBe(true);
+  } finally {
+    await app.evaluate(({ BrowserWindow }, o) => {
+      const [w] = BrowserWindow.getAllWindows();
+      w.setContentSize(o.size[0], o.size[1]);
+      if (o.maximized) w.maximize();
+    }, original);
+    cleanupTemp(outside);
+  }
+}
 
 test('Ctrl+clicking an OSC 8 link with non-url text opens its TARGET, exactly once', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
