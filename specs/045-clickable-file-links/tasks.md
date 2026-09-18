@@ -381,30 +381,30 @@ widening to US1. It is done here (T064/T065) because **US2 scenario 1 requires F
 ONE commit with all four of its readers — split across slices, the interceptor is briefly blind to
 file links, which is #198 reopened. US1 then adds only a new *producer* of the same value.
 
-- [ ] T063 [P] [US2] RED unit(ui) `packages/ui/tests/unit/terminal-link-activation.test.ts` — a
+- [x] T063 [P] [US2] RED unit(ui) `packages/ui/tests/unit/terminal-link-activation.test.ts` — a
   resolving `file:` OSC 8 target routes through `throng:links:*` and **never** through
   `throng:openExternal`; `http(s)` keeps today's behaviour byte for byte; `javascript:`, `data:`,
   `mailto:` and any unknown scheme stay inert; and a `file:` target that does **not** resolve offers
   nothing. Satisfies FR-011, FR-012, FR-013, FR-037; S1.
-- [ ] T064 [P] [US2] RED unit(ui) `packages/ui/tests/unit/terminal-hovered-link.test.ts` — the four
+- [x] T064 [P] [US2] RED unit(ui) `packages/ui/tests/unit/terminal-hovered-link.test.ts` — the four
   readers of `hoveredLink` under a `{ kind: 'file' }` value ([data-model.md](./data-model.md) §8):
   `keepLinkClickFromProgram` (`use-terminal.ts:838-861`) fires for a file link exactly as it does for
   a web link; the tooltip text (`:311`) is worded by kind and names the gesture (FR-042, per T003's
   amendment); `setHovered`'s `^https?://` filter (`:369`) is gone, replaced by
   `classifyTerminalLinkTarget`; and `getHoveredLink()` (`terminal-panel.tsx:268`) returns the
   resolved link rather than a URL string. Satisfies FR-042, FR-043; R4, R5.
-- [ ] T065 [US2] Change `hoveredLink`'s type and **all four readers in one commit** across
+- [x] T065 [US2] Change `hoveredLink`'s type and **all four readers in one commit** across
   `packages/ui/src/renderer/terminal/use-terminal.ts` and
   `packages/ui/src/renderer/terminal/terminal-panel.tsx`. Depends on T064. Satisfies FR-042, FR-043.
-- [ ] T066 [US2] Teach the `linkHandler` path (`use-terminal.ts:402-409`) `file:` targets — classify,
+- [x] T066 [US2] Teach the `linkHandler` path (`use-terminal.ts:402-409`) `file:` targets — classify,
   resolve through `link-cache.ts`, act through `link-actions.ts`. `WebLinksAddon` and
   `TERMINAL_URL_REGEX` are **not** touched. Depends on T063, T065, T062. Satisfies FR-011, FR-012,
   FR-013.
-- [ ] T067 [US2] Confirm `packages/ui/tests/unit/external-url.test.ts` is **unchanged and green** —
+- [x] T067 [US2] Confirm `packages/ui/tests/unit/external-url.test.ts` is **unchanged and green** —
   `isSafeExternalUrl` stays `http`/`https` only and keeps `file:`/`FILE:` in its `INJECTIONS` array.
   The spec names this file as one FR-037 depends on; a diff to it is a defect, not a task.
   Satisfies FR-037; I5.
-- [ ] T068 [P] [US2] Update `docs/quick-start.md` §3 *Run a terminal* — an OSC 8 `file:` hyperlink to
+- [x] T068 [P] [US2] Update `docs/quick-start.md` §3 *Run a terminal* — an OSC 8 `file:` hyperlink to
   a file or folder is now followable, and what a Ctrl+click does with it. Ships in the same commit as
   this slice (Documentation currency). Satisfies FR-090.
 
@@ -421,35 +421,35 @@ working directory first.
 **Independent Test**: print each supported path form with and without a position, Ctrl+click each,
 and check which file opens and where the cursor lands.
 
-- [ ] T069 [P] [US1] RED unit(ui)
+- [x] T069 [P] [US1] RED unit(ui)
   `packages/ui/tests/unit/terminal-file-link-provider.test.ts` — **FR-072's structural assertion**,
   on `packages/ui/tests/unit/terminal-output-gate.test.ts`'s fake-terminal pattern: 50,000 lines
   pushed through a fake `Terminal`'s data path call the resolver port **zero** times; one
   `provideLinks(row, cb)` calls it exactly once; a second call for the same span calls it **not at
   all** (FR-070's cache); and the provider module registers no `onData`/`onWriteParsed` hook. This
   also settles **Open item O1**. Satisfies FR-070, FR-071, FR-072; P1/P2.
-- [ ] T070 [US1] Implement `packages/ui/src/renderer/terminal/file-link-provider.ts` — the repo's
+- [x] T070 [US1] Implement `packages/ui/src/renderer/terminal/file-link-provider.ts` — the repo's
   **first** `registerLinkProvider`. It scans one buffer row with `detectPathCandidates`, passes the
   ranges `TERMINAL_URL_REGEX` matched as `claimed` so it **declines** any span the web provider owns
   (FR-009), stops at the per-line candidate cap, and returns nothing on a cache miss (FR-071).
   Depends on T069. Satisfies FR-001, FR-003, FR-006, FR-007, FR-008, FR-009.
-- [ ] T071 [US1] Register the provider in `packages/ui/src/renderer/terminal/use-terminal.ts` beside
+- [x] T071 [US1] Register the provider in `packages/ui/src/renderer/terminal/use-terminal.ts` beside
   `WebLinksAddon` and the `linkHandler`, and produce a `{ kind: 'file' }` `hoveredLink` from it so
   FR-043 covers detected paths too. Depends on T070, T065. Satisfies FR-001, FR-042, FR-043.
-- [ ] T072 [P] [US1] RED unit(ui) `packages/ui/tests/unit/terminal-link-base-directory.test.ts` —
+- [x] T072 [P] [US1] RED unit(ui) `packages/ui/tests/unit/terminal-link-base-directory.test.ts` —
   the request's `baseDirectory` is the panel's **live** working directory (025's seam) where throng
   knows it, and absent otherwise, so a relative path is tried against the terminal's directory before
   the project root (US1 scenario 8). Satisfies FR-023.
-- [ ] T073 [US1] Wire the live cwd and `panelId` into the request in
+- [x] T073 [US1] Wire the live cwd and `panelId` into the request in
   `packages/ui/src/renderer/terminal/terminal-panel.tsx`. Depends on T072. Satisfies FR-023.
-- [ ] T074 [P] [US1] RED unit(core) `packages/core/tests/unit/link-guards.test.ts` — the two
+- [x] T074 [P] [US1] RED unit(core) `packages/core/tests/unit/link-guards.test.ts` — the two
   hard-coded integrity guards at their edges: `LINK_CACHE_TTL_MS` (a cached "this does not exist"
   cannot outlive the file being created) and the per-line candidate cap (a 100,000-character line of
   slashes cannot make a hover expensive). Both are named constants, not settings — recorded in
   [plan.md](./plan.md) Complexity Tracking with 030's and 044's precedents. Satisfies FR-070, FR-071.
-- [ ] T075 [US1] Declare both constants in `packages/core/src/links/` and consume them from
+- [x] T075 [US1] Declare both constants in `packages/core/src/links/` and consume them from
   `link-cache.ts` and `file-link-provider.ts`. Depends on T074. Satisfies FR-070, FR-071.
-- [ ] T076 [P] [US1] Update `docs/quick-start.md` §3 *Run a terminal* — detected paths, the supported
+- [x] T076 [P] [US1] Update `docs/quick-start.md` §3 *Run a terminal* — detected paths, the supported
   forms, the position suffixes, the hover tooltip and Ctrl+click. Ships with this slice.
   Satisfies FR-090, FR-042.
 
