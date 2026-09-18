@@ -164,48 +164,48 @@ mapping (FR-026, FR-039a). T022 fails the build on one.
 
 ### 2b. The two new Principle II ports and their contract suites
 
-- [ ] T023 [P] Add `IPathForms` in `packages/core/src/abstractions/path-forms.ts` —
+- [x] T023 [P] Add `IPathForms` in `packages/core/src/abstractions/path-forms.ts` —
   `homeDirectory()`, `fromDriveForm()`, `fromFileUrl()`, `fromHomeForm()` with the doc comments from
   [contracts/platform-ports.md](./contracts/platform-ports.md) §1. **Note the name collision**: the
   unrelated `packages/core/src/explorer/path-forms.ts` (Copy Path renderings, #156) and its test
   `packages/core/tests/unit/path-forms.test.ts` already exist and are NOT touched. Satisfies FR-012,
   FR-025, FR-026.
-- [ ] T024 Write the contract suite `packages/core/src/testing/path-forms-contract.ts` —
+- [x] T024 Write the contract suite `packages/core/src/testing/path-forms-contract.ts` —
   `runPathFormsContract(makeSubject)`, PF1–PF12, in the **pure-throw** style of
   `packages/core/src/testing/platform-info-contract.ts:18` (imports nothing, throws
   `IPathForms contract violation: …`). It asserts shape and relationship, never a literal Windows
   path. Export it from `packages/core/src/testing/index.ts`. Depends on T023. Satisfies FR-012,
   FR-025, FR-026.
-- [ ] T025 RED contract `packages/platform-windows/tests/contract/windows-path-forms.contract.test.ts`
+- [x] T025 RED contract `packages/platform-windows/tests/contract/windows-path-forms.contract.test.ts`
   — run `runPathFormsContract(() => new WindowsPathForms())`, plus the Windows-specific cases the
   shared suite deliberately omits (`/d/x` → `D:\x`, `file://server/share/x` → `\\server\share\x`,
   mixed separators). Observe it failing on the missing module. Depends on T024. Satisfies FR-012,
   FR-025.
-- [ ] T026 Implement `packages/platform-windows/src/windows-path-forms.ts` and export it from that
+- [x] T026 Implement `packages/platform-windows/src/windows-path-forms.ts` and export it from that
   package's index. Depends on T025. Satisfies FR-012, FR-025, FR-026.
-- [ ] T027 [P] Add `IExecutableExtensions` in
+- [x] T027 [P] Add `IExecutableExtensions` in
   `packages/core/src/abstractions/executable-extensions.ts` — `isExecutable(path)` **and** the
   member that reports the set it considers executable, which is what lets SC-010 be a test rather
   than a list (EX6). Satisfies FR-039a, SC-010.
-- [ ] T028 Write `packages/core/src/testing/executable-extensions-contract.ts` —
+- [x] T028 Write `packages/core/src/testing/executable-extensions-contract.ts` —
   `runExecutableExtensionsContract(makeSubject)`, EX1–EX7, pure-throw style, exported from
   `packages/core/src/testing/index.ts`. Depends on T027. Satisfies FR-039a.
-- [ ] T029 RED contract
+- [x] T029 RED contract
   `packages/platform-windows/tests/contract/windows-executable-extensions.contract.test.ts` — the
   shared suite, plus the Windows cases: `.exe`, `.bat`, `.cmd`, `.ps1`, `.lnk`, `.msi` executable;
   and `PATHEXT` **read per call**, so a fake environment that adds an extension makes it executable
   and one that removes it makes it not — FR-039a's "without a restart". Depends on T028.
   Satisfies FR-039a.
-- [ ] T030 Implement `packages/platform-windows/src/windows-executable-extensions.ts` — `PATHEXT`
+- [x] T030 Implement `packages/platform-windows/src/windows-executable-extensions.ts` — `PATHEXT`
   per call, uppercased and case-insensitive, plus the declared handler-launched set
   (`.lnk .url .msi .msp .ps1 .scr .cpl .reg .hta .pif`) — and export it. Depends on T029.
   Satisfies FR-039a.
-- [ ] T031 [P] RED contract — extend `packages/core/src/testing/shell-integration-contract.ts` with
+- [x] T031 [P] RED contract — extend `packages/core/src/testing/shell-integration-contract.ts` with
   SI1–SI4 of [contracts/platform-ports.md](./contracts/platform-ports.md) §3: reject for a missing
   path, reject for a **folder**, a rejection carrying the path and a reason, and (SI4, `@admin`) a
   de-elevating implementation performing neither OS action from the elevated process itself.
   Satisfies FR-030, FR-036, FR-038.
-- [ ] T032 Add `openWithDefaultProgram(path): Promise<void>` to
+- [x] T032 Add `openWithDefaultProgram(path): Promise<void>` to
   `packages/core/src/abstractions/shell-integration.ts`. Depends on T031. Satisfies FR-036.
 
 ### 2c. Settings, the chord, and the terminal environment
