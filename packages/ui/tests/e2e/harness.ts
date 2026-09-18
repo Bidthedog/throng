@@ -1346,6 +1346,61 @@ export async function geom(
 }
 
 /**
+ * The viewport point at the CENTRE of one character of rendered text (045).
+ *
+ * Written for terminal links, where a test has to put the pointer inside a specific token on a
+ * specific row. The obvious arithmetic — a row's width divided by a column count read from some
+ * other row's `textContent` — is wrong in a way that passes silently: a blank row reports a length
+ * of zero, the cell width comes out roughly double, and the pointer lands well past the token while
+ * the test reports only that nothing was underlined. Measured once, on `terminal-links.e2e.ts`.
+ *
+ * A DOM Range over the actual text node is exact instead, and needs no column count at all. It also
+ * FAILS LOUDLY: the row's whole rendered text is in the error, so "the pointer missed" and "the row
+ * does not say what the test thinks" are two different messages rather than one silent timeout.
+ *
+ * `index` is an offset into `token`, so a caller aims a few characters inside a link rather than at
+ * its first cell — an edge cell is where a hover is least reliable.
+ */
+export async function charPoint(
+  row: Locator,
+  token: string,
+  index = 0,
+): Promise<{ x: number; y: number }> {
+  await expect(row).toBeVisible();
+  return row.evaluate(
+    (el, [want, into]: [string, number]) => {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      const nodes: Text[] = [];
+      let text = '';
+      while (walker.nextNode()) {
+        const node = walker.currentNode as Text;
+        nodes.push(node);
+        text += node.textContent ?? '';
+      }
+      const start = text.indexOf(want);
+      if (start < 0) {
+        throw new Error(`charPoint: this row does not contain ${want}. It reads: ${JSON.stringify(text)}`);
+      }
+      const at = start + into;
+      let seen = 0;
+      for (const node of nodes) {
+        const length = (node.textContent ?? '').length;
+        if (at < seen + length) {
+          const range = document.createRange();
+          range.setStart(node, at - seen);
+          range.setEnd(node, at - seen + 1);
+          const rect = range.getBoundingClientRect();
+          return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+        }
+        seen += length;
+      }
+      throw new Error(`charPoint: offset ${at} is past the end of ${JSON.stringify(text)}`);
+    },
+    [token, index] as [string, number],
+  );
+}
+
+/**
  * The rendered text of something that redraws, read once it has STOPPED redrawing (034 FR-019).
  *
  * `geom()` is this idea applied to geometry; this is the same idea applied to text, and it exists
