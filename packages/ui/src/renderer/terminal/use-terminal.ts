@@ -489,6 +489,25 @@ export function useTerminal(opts: UseTerminalOptions): void {
         activate: (event, uri) => openTerminalLink(event, uri),
         hover: (event, uri) => setHoveredUri(uri, event),
         leave: () => setHoveredUri(undefined),
+        /*
+         * 045 FR-011 – FR-013 — without this, xterm never hands over a `file:` hyperlink at all.
+         *
+         * `OscLinkProvider` parses every OSC 8 target and DISCARDS anything that is not `http(s)`
+         * before it builds a range, unless the link handler asks for the rest. So the whole of US2 —
+         * a program emitting a `file:` hyperlink to a file or a folder, which is the report this
+         * feature started from (SC-005) — was inert in the app while every unit test around it
+         * passed: no underline, no tooltip, and a Ctrl+click that did nothing. Nothing below E2E
+         * could see it, because nothing below E2E constructs an xterm `Terminal`.
+         *
+         * xterm's own doc for this option asks for "proper protection in `activate`", and that is
+         * what this feature already built rather than something added alongside it:
+         * `classifyTerminalLinkTarget` closes by default, so `javascript:`, `data:`, `mailto:` and
+         * every unknown scheme stay exactly as inert as 024 made them, and a `file:` target never
+         * reaches the OS url opener — it goes to main as TEXT, which re-resolves it against the
+         * panel's own project before acting (FR-037). The one visible cost is that an inert scheme
+         * now draws xterm's hover underline; it still opens nothing, on any gesture.
+         */
+        allowNonHttpProtocols: true,
       },
       // NB: do NOT set `windowsPty` here. Without a matching Windows build number it
       // applies the wrong ConPTY reflow/wrapping heuristics and garbles scrolled
