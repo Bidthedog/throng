@@ -110,6 +110,7 @@ import { peekLink, requestLink, subscribeLinkCache } from '../links/link-cache.j
 import {
   followLink,
   linkFailureReport,
+  linkRouting,
   osLinkActions,
   type LinkFollowDeps,
 } from '../links/link-actions.js';
@@ -480,6 +481,20 @@ export function useEditor(params: UseEditorParams): void {
   function editorLinkDestinations(): LinkFollowDeps {
     const meta = metaRef.current;
     return {
+      /*
+       * FR-050 – FR-052, SC-008 — the preference and the file's own default open action, both read
+       * at the GESTURE.
+       *
+       * `metaRef` is rewritten on every render and `previewProvidersRef` follows the injected
+       * registry, so the reader below sees whatever is current even though the extension holding
+       * these deps was installed at mount. Composed through `linkRouting` rather than written out,
+       * so this and the terminal cannot read the same preference differently (FR-054).
+       */
+      ...linkRouting(() => ({
+        defaultAction: metaRef.current.settings.links.defaultAction,
+        previewRegistry: previewProvidersRef.current.registry,
+        previewSettings: metaRef.current.settings.previews,
+      })),
       // FR-033 — `openFileInTab`, honouring *Open files in*, and NEVER `open-router.ts`: a link is
       // always an editor, whatever the file's own default open action (044 FR-055). FR-052's
       // position is placed by `positionRevealTarget`, which resolves once the view holds the text.

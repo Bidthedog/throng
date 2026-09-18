@@ -590,6 +590,16 @@ There is a reason, and it is a few paragraphs below.
   drives the other) that previews use, and any settings a provider adds of its own, such as
   Markdown's **Load remote images** and **Show front matter**
   (on by default; off hides the front-matter table entirely rather than rendering it as Markdown).
+- **Links** — **Editor → Links** holds **Default link action**, which is what a Ctrl+click, the
+  **Ctrl+Enter** chord and the menu's **Open Link** all do. Five values: **Open in throng** (the
+  default), **Open in Editor**, **Open in Preview**, **Open in OS Explorer** and **Open in OS
+  Default Program**. *Open in throng* means whatever throng would normally do with that file — the
+  preview for a file type whose provider's default open action is Preview, an editor for everything
+  else. Two rules override whatever you pick, because both are things you would otherwise report as
+  a bug: **a link that names a line and column always opens an editor** (a preview cannot put the
+  caret on line 42), and **a click never runs an executable, script, shortcut or installer** — it
+  shows the file in OS Explorer instead. Running one stays on *Open in OS Default Program*, which
+  you have to choose from the menu on purpose.
 
 Every setting, binding and theme is a **human-editable file** under `%USERPROFILE%\.throng\`
 (`settings.json`, `keybindings.json`, `themes\<name>.json`, `icon-packs\<pack>\`) that **hot-reloads**

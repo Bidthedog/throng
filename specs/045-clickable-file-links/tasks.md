@@ -600,7 +600,7 @@ behaviour here that cannot be shipped and fixed later ([plan.md](./plan.md) *Seq
 default open action to Preview and repeat; set the default link action to Open in OS Default Program
 and repeat **without restarting**.
 
-- [ ] T104 [P] [US5] RED component
+- [x] T104 [P] [US5] RED component
   `packages/ui/tests/component/link-default-action-wiring.test.ts` — Ctrl+click, the Open Link chord
   and the plain **Open Link** menu item all run the same `resolveDefaultLinkAction` for the same link
   (FR-054); `previewIsDefault` is computed by the caller from `defaultOpenActionFor`
@@ -608,28 +608,28 @@ and repeat **without restarting**.
   registry; a link **with** a position opens an editor whatever the file's default open action
   (FR-052); an in-project `.md` with the provider set to Preview and **no** position opens its
   preview beside the file's editor (FR-051, 044 FR-053). Satisfies FR-050 – FR-054.
-- [ ] T105 [US5] Wire the setting and `previewIsDefault` into
+- [x] T105 [US5] Wire the setting and `previewIsDefault` into
   `packages/ui/src/renderer/links/link-actions.ts` and both surfaces. Depends on T104.
   Satisfies FR-050 – FR-054.
-- [ ] T106 [P] [US5] RED component `packages/ui/tests/component/link-executable-refusal.test.ts` —
+- [x] T106 [P] [US5] RED component `packages/ui/tests/component/link-executable-refusal.test.ts` —
   **SC-010**, driven from `IExecutableExtensions`' own reported set (EX6) rather than a hand-written
   list: **none** of them runs under Ctrl+click, the Open Link chord or the plain Open Link item, at
   **any** setting — all three perform Open in OS Explorer with the file selected — and **each** of
   them runs when Open in OS Default Program is chosen explicitly. Satisfies FR-039, FR-053, SC-010.
-- [ ] T107 [US5] Make T106 green **without a second implementation**: FR-039's precedence already
+- [x] T107 [US5] Make T106 green **without a second implementation**: FR-039's precedence already
   lives in `packages/core/src/links/default-action.ts` (step 1, before everything). The only change
   here is that `link-actions.ts` routes through it rather than around it. Depends on T106.
   Satisfies FR-039.
-- [ ] T108 [P] [US5] RED component `packages/ui/tests/component/link-setting-live.test.ts` —
+- [x] T108 [P] [US5] RED component `packages/ui/tests/component/link-setting-live.test.ts` —
   **SC-008**: a change to `editor.links.defaultAction` applies to the **next gesture** with no
   restart, in both panel types. Satisfies FR-050, SC-008.
-- [ ] T109 [US5] Read the setting live in `packages/ui/src/renderer/links/link-actions.ts` rather
+- [x] T109 [US5] Read the setting live in `packages/ui/src/renderer/links/link-actions.ts` rather
   than capturing it at mount. Depends on T108. Satisfies FR-050.
-- [ ] T110 [P] [US5] RED component `packages/ui/tests/component/link-out-of-project.test.ts` —
+- [x] T110 [P] [US5] RED component `packages/ui/tests/component/link-out-of-project.test.ts` —
   **SC-007**: across the fixture set, **no** gesture, menu item or setting opens a file outside the
   owning project in a throng editor or preview, including a path inside **another** throng project
   and a panel with no owning project. Satisfies FR-055, SC-007.
-- [ ] T111 [P] [US5] Update `docs/quick-start.md` §7 *Make it yours* and `README.md` *Configuration*
+- [x] T111 [P] [US5] Update `docs/quick-start.md` §7 *Make it yours* and `README.md` *Configuration*
   — the default link action, its five values, the position rule (FR-052) and the refusal to run an
   executable (FR-039). Ships with this slice. Satisfies FR-090.
 

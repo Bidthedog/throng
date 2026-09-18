@@ -63,7 +63,13 @@ import {
 } from '../workspace/panel-failure-notice.js';
 import { openFileInTab } from '../editor/editor-open.js';
 import { requestPreviewOpen } from '../preview/open-preview.js';
-import { linkFailureReport, osLinkActions } from '../links/link-actions.js';
+import {
+  linkFailureReport,
+  linkRouting,
+  osLinkActions,
+  type LinkRoutingInputs,
+} from '../links/link-actions.js';
+import { usePreviewProviders } from '../preview/provider-registry-context.js';
 import type { FileLinkMenuContext } from '../links/link-menu-items.js';
 import { hoveredLinkMenuText } from './hovered-link.js';
 import { followTerminalLink, type TerminalLinkDeps } from './terminal-link-activation.js';
@@ -232,12 +238,33 @@ export function TerminalPanel({
    * outside the owning project once, below every caller, precisely so a call site like this one
    * cannot forget to.
    */
-  const openTarget = useAppSettings().editor.openTarget;
+  const editorSettings = useAppSettings().editor;
+  const openTarget = editorSettings.openTarget;
   const reportSubject = useReportSubjectFailure();
   /** Shared with the start-failure banner below: one reading of the platform per render. */
   const osName = window.throng?.osName ?? 'windows';
+  /*
+   * 045 FR-050 – FR-052, SC-008 — the preference, read AT THE GESTURE.
+   *
+   * `linkActions` below is memoised and the mount effect holds it through a ref, so anything read
+   * into it is read once per panel and never again. A ref rewritten on every render is what makes
+   * the preference live without putting it in the memo's dependencies — which would rebuild the
+   * performers, and through them nothing useful, on every unrelated settings change.
+   */
+  const previewProviders = usePreviewProviders();
+  const routingRef = useRef<LinkRoutingInputs>({
+    defaultAction: editorSettings.links.defaultAction,
+    previewRegistry: previewProviders.registry,
+    previewSettings: editorSettings.previews,
+  });
+  routingRef.current = {
+    defaultAction: editorSettings.links.defaultAction,
+    previewRegistry: previewProviders.registry,
+    previewSettings: editorSettings.previews,
+  };
   const linkActions = useMemo<TerminalLinkDeps>(
     () => ({
+      ...linkRouting(() => routingRef.current),
       openInEditor: (link) => {
         const tabId = ws.layout?.activeTabId;
         // The position is carried this far and placed by US3's `positionRevealTarget` (FR-033,

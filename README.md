@@ -225,6 +225,15 @@ open previews and greys its other settings rather than hiding them. **`editor.na
 (under **Editor · Navigation**, 10 as shipped, 1–100) caps how many files each editor or preview
 panel's Back/Forward history remembers.
 
+**Clickable file links** are tuned by settings under **Editor · Links**.
+`editor.links.defaultAction` decides what a Ctrl+click, the `preview.followLink` chord and the
+menu's **Open Link** do, and takes one of five values: `throng` (as shipped — whatever throng would
+normally do with that file), `editor`, `preview`, `osExplorer` or `osDefaultProgram`. Two rules
+outrank it: a link carrying a **line and column** always opens an editor, because a preview cannot
+reveal one; and a click **never runs an executable, script, shortcut or installer**, which is
+revealed in OS Explorer instead — running one is only ever reached by choosing *Open in OS Default
+Program* from the menu.
+
 **Logs and crash reports** are written to a `logs` folder under the user-data directory (`throng`
 when installed, `throng-dev` for a dev run), so a crash that closes the window leaves evidence
 behind instead of vanishing. `diagnostics.logLevel`, `diagnostics.maxFileSizeKb` and

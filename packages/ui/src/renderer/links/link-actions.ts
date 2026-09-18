@@ -1,4 +1,5 @@
 import {
+  defaultOpenActionFor,
   relativeToRoot,
   resolveDefaultLinkAction,
   toDisplayPath,
@@ -11,6 +12,8 @@ import type {
   LinkResolution,
   LinkResolutionRequest,
   LinkTarget,
+  PreviewProviderRegistry,
+  PreviewSettings,
   ResolvedLink,
 } from '@throng/core';
 import type { SubjectFailureReport } from '../workspace/panel-failure-notice.js';
@@ -190,10 +193,58 @@ export interface LinkFollowDeps {
   readonly openInEditor: LinkActionDeps['openInEditor'];
   readonly openInPreview: LinkActionDeps['openInPreview'];
   readonly reportFailure: LinkActionDeps['reportFailure'];
-  /** FR-050's *Default link action*. Absent means the shipped value — US5 wires the live setting. */
-  readonly defaultAction?: DefaultLinkAction;
+  /**
+   * FR-050's *Default link action*, as a READER. Absent means the shipped value.
+   *
+   * A reader rather than a value because of where these deps are built. Both surfaces build theirs
+   * ONCE and hold them for the panel's whole life — the terminal in a `useMemo` its mount effect
+   * reads through a ref, the editor in a function the CodeMirror extension closes over — and
+   * neither can be rebuilt on a settings change without tearing down a live shell or a live view.
+   * A captured value would therefore freeze the preference at whatever it was when the panel
+   * appeared, and SC-008 requires the change to land on the NEXT gesture.
+   */
+  readonly defaultAction?: () => DefaultLinkAction;
   /** FR-051: whether THIS file's own default open action is Preview. Absent means no. */
   readonly previewIsDefault?: (link: ResolvedLink) => boolean;
+}
+
+/**
+ * What the LIVE preferences say about where a link opens (FR-050, FR-051).
+ *
+ * The preview halves are here rather than in `@throng/core`'s `resolveDefaultLinkAction` because
+ * 044 FR-070 keeps the provider registry out of the pure decision: core is told *whether* this
+ * file's default open action is Preview, and never how that was worked out.
+ */
+export interface LinkRoutingInputs {
+  /** `editor.links.defaultAction`, as it is at the moment it is read. */
+  readonly defaultAction: DefaultLinkAction;
+  readonly previewRegistry: PreviewProviderRegistry;
+  /** `editor.previews`, which carries each provider's `enabled` and `defaultOpenAction`. */
+  readonly previewSettings: PreviewSettings;
+}
+
+/**
+ * The two settings-derived inputs {@link followLink} needs, composed once for BOTH surfaces
+ * (FR-050 – FR-052, SC-008).
+ *
+ * One function so the terminal and the editor cannot read the preference differently — the failure
+ * FR-054 exists to rule out, and one that would show up as "Ctrl+click does different things in the
+ * two panels" long after the change that caused it.
+ *
+ * `read` is consulted on every gesture. A surface passes a closure over whatever it holds the live
+ * settings in — the terminal a ref it rewrites each render, the editor its `metaRef` — so nothing
+ * here has to know how a renderer keeps settings current.
+ */
+export function linkRouting(
+  read: () => LinkRoutingInputs,
+): Required<Pick<LinkFollowDeps, 'defaultAction' | 'previewIsDefault'>> {
+  return {
+    defaultAction: () => read().defaultAction,
+    previewIsDefault: (link) => {
+      const now = read();
+      return defaultOpenActionFor(now.previewRegistry, now.previewSettings, link.path) === 'preview';
+    },
+  };
 }
 
 /**
@@ -220,8 +271,12 @@ export async function followLink(args: {
   if (resolution === undefined || !resolution.ok) return; // FR-006: not a link, so nothing happens
   const link = resolution.link;
 
+  // FR-039 lives in clause ONE of `resolveDefaultLinkAction`, before the setting is read at all, so
+  // an executable reaches the file manager by every one of these routes without this file holding a
+  // second copy of the rule. Routing THROUGH the decision rather than around it is the whole of
+  // T107: there is nothing here to keep in step with it.
   const target = resolveDefaultLinkAction({
-    setting: deps.defaultAction ?? 'throng',
+    setting: deps.defaultAction?.() ?? 'throng',
     link,
     hasPosition: position !== undefined,
     previewIsDefault: deps.previewIsDefault?.(link) ?? false,
