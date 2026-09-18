@@ -1,7 +1,8 @@
 # Contract: detection, resolution and project membership
 
 **Feature**: 045 | **Requirements**: FR-003 – FR-013, FR-020 – FR-026, FR-070 – FR-073;
-*amended 2026-09-18*: FR-003g, FR-100 – FR-107, FR-120 – FR-123 and defect D1 — see §6.
+*amended 2026-09-18*: FR-003g, FR-100 – FR-107, FR-120 – FR-123 and defect D1 — see §6;
+*second round*: FR-130 – FR-137, FR-142 – FR-144 — see §7; *third round*: FR-150 – FR-154 — see §8.
 
 One set of rules, used by both panel types (FR-010). Everything here is a **pure function in
 `packages/core`**; every OS fact it needs arrives as a parameter or through a port
@@ -50,8 +51,8 @@ Main walks the list and takes the first that exists (FR-006, FR-020). `ctx` carr
 | R5 | A **relative** path is tried against `baseDirectory` first, then `projectRoot` | FR-022, FR-023 |
 | R6 | A **leading-`/`** path that is not a drive form is tried against `projectRoot` **first**, then as the platform's own meaning | FR-024 |
 | R7 | The reading **with** a position is tried before the reading without; whichever resolves first decides whether the trailing `:42:7` was a position or part of the name | Edge case |
-| R8 | A `file:` URI (a hyperlink target, or FR-003f text) is percent-decoded, host→UNC, no-host/`localhost`→local, by `IPathForms.fromFileUrl` | FR-012 |
-| R9 | On Windows, a POSIX path with no project-root match and no drive form is **not otherwise mapped** — no WSL filesystem access | FR-025, Out of scope |
+| R8 | A `file:` URI (a hyperlink target, or FR-003f text) is percent-decoded, host→UNC, no-host/`localhost`→local, by `IPathForms.fromFileUrl` *(extended by §8 R15 — third round)* | FR-012 |
+| R9 | On Windows, a POSIX path with no project-root match and no drive form is **not otherwise mapped** — no WSL filesystem access *(superseded in part by §8 R13/R14 — Git Bash's mount table is tried, and the platform reading is drive-qualified; still true for WSL)* | FR-025, Out of scope |
 | R10 | An untitled buffer supplies no `baseDirectory`, so R5 tries the project root alone | FR-022 |
 | R11 | `projectRoot === null` (a panel with no owning project) still resolves absolute forms; R5/R6's project-root attempt is simply absent | FR-021 |
 
@@ -158,6 +159,12 @@ follows them, no link items appear on the menu and nothing reaches the OS URL op
 is the whole of the difference, and it is the price of US2 existing at all rather than an oversight:
 without the option the feature's founding report (SC-005) could not be delivered.
 
+*Superseded 2026-09-18 (third round) by FR-154 — see §8 V1 – V4.* The "price" this note accepted is
+withdrawn: the maintainer's corpus showed dead OSC 8 targets drawn with an underline and a hand
+pointer that then did nothing, which is exactly the "not clear what is clickable" report. The option
+stays on (US2 still needs it); what changes is that throng's hover and xterm's own underline are both
+suppressed for a target the click rule cannot follow.
+
 ---
 
 ## §6 Amendment 2026-09-18 — one scan, UNC roots, bounded checks
@@ -230,3 +237,72 @@ them to. It adds no port member and names no OS: the shape is the one `resolve.t
 
 P3 still holds: `unreachable` is not a link. The difference from `{ ok: false }` with no reason is
 only what a follow reports (FR-124) — a hover draws nothing either way.
+
+## §8 Amendment 2026-09-18, third round — spaces, Git Bash paths, `file:` spellings, dead hyperlinks
+
+Source: the maintainer's corpus run by a probe ([../research.md](../research.md) O11); requirements
+FR-150 – FR-154; tasks T198 – T214.
+
+### §8.1 Detection — paths containing spaces (FR-150)
+
+| # | Guarantee | FR |
+|---|---|---|
+| D16 | A candidate whose text begins with an **anchored** form — drive (either separator), UNC (either separator), leading `/` (every FR-003d form), `~/`, `./`, `../`, a `file:` URI, or D12's provider-qualified form — also yields **extended readings**: the token plus the next 1, 2, … whitespace-separated words across single spaces, up to `MAX_PATH_SPACE_WORDS` words added | FR-150 |
+| D17 | Readings are emitted **longest first**, the unextended token last. Each reading carries its own D3 position readings (with-position before without, R7) and its own D4 trailing-punctuation trim | FR-150, FR-004, FR-005 |
+| D18 | Extension stops **before** a word that itself begins an anchored form, a web span (D2/D11), a quote, an unbalanced bracket, a run of two or more spaces, and the end of the logical line (D13). A bare word never begins an extended reading | FR-150, FR-009 |
+| D19 | D7 and D8 are unchanged: extension reads the given line only and touches no disk. Which reading is the link is decided by R1 — the first that exists — in main, never here | FR-150, FR-006 |
+
+**Why SC-003 still holds.** Only anchored tokens extend, and every reading is a candidate like any
+other: a reading that names nothing is not a link (FR-006). A prose line with no existing location
+yields zero links however many readings it produces. The cost is bounded twice — by
+`MAX_PATH_SPACE_WORDS` per token and by `MAX_LINK_CANDIDATES_PER_LINE` per line — and is spent only
+by the three P2′ callers, never on the output or typing path (P1 unchanged).
+
+**Worked example.** `see D:\git\throng_tests\test 1\test.md:3 for details` yields, in order,
+`D:\git\throng_tests\test 1\test.md:3 for details` (and its readings), …,
+`D:\git\throng_tests\test 1\test.md` with position `3`, the same without the position, …, and last
+`D:\git\throng_tests\test` alone. The first that exists is the link; its span ends at `test.md`, and
+`:3` is its position.
+
+### §8.2 Resolution — Git Bash's mount table and drive qualification (FR-151, FR-152)
+
+`LinkResolutionContext` gains one field — `wslFlavour?: true` — set when the asking panel is a
+terminal whose flavour the platform identifies as WSL (T189's answer; data-model §15.2).
+
+| # | Rule | FR |
+|---|---|---|
+| R13 | *Extends R6/R3.* A leading-`/` path that is not a drive form is tried, in order: against `projectRoot` (R6); as a drive form (R3); through **`IPathForms.fromMountTable`** — Git Bash's install root and declared mount points; then as the platform's own meaning, **qualified by R14**. With `wslFlavour`, the mount-table step and the platform step are both **absent**: only R6 and R3 remain | FR-151, FR-025 |
+| R14 | The platform's own meaning of a rooted, drive-less path is **`IPathForms.qualifyRooted(path, anchor)`**, where `anchor` is `baseDirectory` if present, else `projectRoot`. With neither, the step yields nothing. No list ever contains a rooted path without a drive, and nothing is resolved against throng's own process directory | FR-152, FR-020 |
+
+R9's "no WSL filesystem access" stands for a WSL flavour and for any Linux filesystem path; only Git
+Bash's own mount points change. `resolve.ts` still names no OS: the mount table and the drive are
+both the port's answers (FR-026).
+
+### §8.3 Resolution — POSIX spellings inside `file:` URIs (FR-153)
+
+| # | Rule | FR |
+|---|---|---|
+| R15 | *Extends R8.* For a `file:` URI with no host or host `localhost`: when **`IPathForms.fileUrlLocalPath(url)`** returns a path (the decoded path was **not** drive-qualified), that path is resolved exactly as the same text written bare — R6, R3, R13, R14, and R11 for a panel with no project. When it returns `null`, R8 applies unchanged | FR-153, FR-012 |
+| R16 | For a `localhost` URI whose first path segment is not a drive, **`IPathForms.loopbackFromFileUrl(url)`** — `\\localhost\<segment>\…` — is appended **after** R15's readings | FR-153 |
+
+A hosted URI (`file://server/share/x`) is R8 alone, unchanged. A `file:` URI still never reaches the
+OS URL opener (I4).
+
+### §8.4 What is never a link — additions to §5 (FR-154)
+
+| # | Input | Affordance | Gesture | Menu | Notice | FR |
+|---|---|---|---|---|---|---|
+| V1 | OSC 8, scheme other than `http`, `https`, `file:`, or an empty target | **none**: no xterm underline, no throng mark, no hover underline, no pointer, no tooltip | Ctrl+click reaches a mouse-reporting program (G6) | no link items | none | FR-154, FR-013, FR-043 |
+| V2 | OSC 8 `file:` target that has not yet resolved, does not resolve, or answers `unreachable` | none, as V1 | as V1 | no link items | none | FR-154, FR-006, FR-071 |
+| V3 | OSC 8 `file:` target that resolves | FR-135's affordance, marked at rest once resolved — by hover or the idle scan (P13), from the same cache (P4) | the click rule | the file-link run | — | FR-154, FR-137 |
+| V4 | OSC 8 `http`/`https` target | FR-135's affordance, marked as drawn — no existence check | the open-external seam | the web-link run | — | FR-136 |
+
+**Why no notice (V1, V2).** A notice reports a condition an action ran into. Nothing was attempted —
+the text is not a link — so there is no condition; and a notice raised per hover or per click of a
+program's dead hyperlink would be one condition raising many notices (CLAUDE.md, *One condition,
+one notice*). The one notice that remains is FR-037/FR-124's: a link that **was** a link when the
+user acted, and has gone or stopped answering by the time main re-checks it.
+
+| # | Rule | FR |
+|---|---|---|
+| P15 | *Extends P2′.* The idle scan's rows include the OSC 8 `file:` targets in view; a V2 answer that later becomes V3 (file created, share back) is drawn without pointer movement, as P12 | FR-154, FR-123 |

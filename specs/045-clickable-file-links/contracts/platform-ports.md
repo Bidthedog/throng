@@ -1,7 +1,9 @@
 # Contract: the two new platform ports
 
 **Feature**: 045 | **Requirements**: FR-012, FR-025, FR-026, FR-035, FR-036, FR-038, FR-039a;
-*amended 2026-09-18* — see §5 (no port changes shape).
+*amended 2026-09-18* — see §5 (no port changes shape); *third round* — see §6 (`IPathForms` gains
+four members, the WSL-flavour answer is placed, and FR-038's wiring is stated as the composition
+root's obligation, D4).
 
 Principle II. `packages/core` states the rules; `packages/platform-windows` answers the OS
 questions; a contract suite in `core/src/testing/` verifies any implementation. Style:
@@ -182,6 +184,11 @@ SI4's real verification is an `@admin` case — it is meaningless in a non-eleva
 assert a hollow baseline there (Principle V). Hosted runners are always elevated, so CI can answer
 it; see [../quickstart.md](../quickstart.md) §4.
 
+*Note 2026-09-18 (third round) — D4.* SI4 proves the **route** and nothing about the **wiring**: the
+`@admin` case constructs `ElectronShellIntegration` with its own launcher, while the app's only
+construction (`ui/src/main/main.ts:934`) passes none, so the shipped app never de-elevates. §6.3 makes
+supplying the launcher the composition root's stated obligation, and SI5 (a wiring case) is added.
+
 ---
 
 ## §4 Dependency injection
@@ -225,3 +232,93 @@ The **daemon** container is untouched: nothing in this feature crosses the daemo
   keep-or-retire decision. `ResolvedLink.executable` is kept for the same reason and the same review.
 - **`IShellIntegration.openWithDefaultProgram`** is unchanged, and after FR-111 its only caller is the
   named *Open in OS Default Program* item.
+
+---
+
+## §6 Amendment 2026-09-18, third round — what the corpus probe does to these ports
+
+§5's "no port gains or loses a member" held for the change request. It does not hold for the third
+round: FR-151 – FR-153 each need an OS fact that only the platform can answer, and FR-026 forbids core
+from answering it.
+
+### §6.1 `IPathForms` gains four members (FR-151, FR-152, FR-153)
+
+```ts
+export interface IPathForms {
+  // … the four members of §1, unchanged …
+
+  /**
+   * FR-151. A rooted POSIX path mapped through Git Bash's own mount table — the Git for Windows
+   * install root for `/`, plus the mount points Git declares (its `etc/fstab` and its built-in
+   * defaults: `/usr/bin` and `/bin`, `/tmp` as the user's temp folder, …). `null` when Git for
+   * Windows is not installed, when the input is not rooted, and for a drive form (`/c/x`,
+   * `/mnt/c/x` are `fromDriveForm`'s).
+   */
+  fromMountTable(posixPath: string): string | null;
+
+  /**
+   * FR-152. A rooted path with no drive (`\tmp`, `/tmp`), qualified with the drive of `anchor` —
+   * an absolute path the caller already holds (a base directory or a project root). `null` when
+   * `anchor` is not absolute or has no drive to lend (a UNC anchor lends its `\\server\share`).
+   */
+  qualifyRooted(rootedPath: string, anchor: string): string | null;
+
+  /**
+   * FR-153. For a `file:` URI with no host or host `localhost`, the decoded path when it is NOT
+   * drive-qualified (`file:///c/Windows/win.ini` → `/c/Windows/win.ini`), so core can resolve it as
+   * the same path written bare. `null` for a drive-qualified path (R8 handles it), a hosted URI, and
+   * anything not a `file:` URI.
+   */
+  fileUrlLocalPath(url: string): string | null;
+
+  /**
+   * FR-153. For a `localhost` URI whose first segment is not a drive
+   * (`file://localhost/C$/Windows/win.ini`), the loopback network location
+   * (`\\localhost\C$\Windows\win.ini`). `null` otherwise, including for a hostless URI.
+   */
+  loopbackFromFileUrl(url: string): string | null;
+}
+```
+
+**Where Git's install root comes from.** The shell detection that already finds Git Bash
+(`platform-windows/src/windows-shell-detection.ts`, 005 FR-024) knows the install; `WindowsPathForms`
+takes it by constructor and reads the mount table **once**, lazily, and caches it. No new
+dependency on the detection's own callers.
+
+| # | Case (added to `core/src/testing/path-forms-contract.ts`) | FR |
+|---|---|---|
+| PF13 | Over a subject given a Git root: `fromMountTable('/usr/bin/bash.exe')` is under that root and ends in `bash.exe`; `fromMountTable('/etc/hosts')` is under it and ends in `hosts` | FR-151 |
+| PF14 | `fromMountTable('/tmp')` is absolute and is **not** under the Git root when the mount table maps `/tmp` elsewhere (Git's shipped `usertemp` mapping) | FR-151 |
+| PF15 | `fromMountTable('/c/x')`, `('/mnt/c/x')`, `('x')`, `('')` are `null`; a subject given **no** Git root answers `null` for every input | FR-151, FR-025 |
+| PF16 | `qualifyRooted('/tmp', A)` and `qualifyRooted('\\tmp', A)` are absolute, on `A`'s drive; with a non-absolute `A`, `null` | FR-152 |
+| PF17 | `fileUrlLocalPath('file:///c/Windows/win.ini')` = `'/c/Windows/win.ini'`; `('file://localhost/mnt/c/x')` = `'/mnt/c/x'`; `('file:///D:/x')`, `('file://server/share/x')` are `null` | FR-153 |
+| PF18 | `loopbackFromFileUrl('file://localhost/C$/Windows/win.ini')` names host `localhost`, share `C$` and ends in `win.ini`; `('file://localhost/D:/x')`, `('file:///C$/x')` are `null` | FR-153 |
+| PF19 | PF8 still holds (`file://localhost/D:/x` = `file:///D:/x`), and PF7's hosted case is unchanged | FR-012 |
+| PF12′ | *Extends PF12.* The four new members are total: `null`, never a throw, for any string | — |
+
+(PF13 was named once in §2's amendment of [link-resolution.md](./link-resolution.md) as the case a
+rejected separator-normalising member *would* have needed. That member was never added; the number is
+used here for the first time.)
+
+### §6.2 "Is this flavour WSL?" — placed, not yet shaped (FR-144, FR-151)
+
+Two requirements now read this answer: FR-144 (a WSL flavour's link base is absent) and FR-151 (a WSL
+flavour skips Git's mount table). It is an OS fact — WSL is recognised by its `System32\wsl.exe` /
+`System32\bash.exe` executable, which the shell detection already tells apart from Git Bash — so it
+sits behind the platform abstraction, beside that detection. Its exact name and home are T189's to
+settle; this contract fixes only that **one** answer serves both requirements, so they cannot
+disagree about which terminals are WSL.
+
+### §6.3 FR-038's launcher is the composition root's obligation (D4)
+
+§3 said a de-elevating launcher is used "when `shouldDeElevate(...)` says the host is elevated". It
+did not say who supplies it, and nothing did. Stated now:
+
+- **UI main's composition** MUST construct `ElectronShellIntegration` with `DeElevationOptions`
+  carrying a `WindowsDeElevatedLauncher` and an elevation probe (`WindowsElevation().isElevated()`,
+  already used for the daemon at `main.ts:704`). A construction without them is the defect D4.
+- Research O2 already established the launcher is available in UI main, so this needs no RPC.
+
+| # | Case | FR |
+|---|---|---|
+| SI5 | The **app's** shell integration — as the composition builds it, not as a test builds it — routes `revealInFileManager`, `openFolder` and `openWithDefaultProgram` through the launcher when the probe answers elevated. A unit case over the extracted factory (T217) | FR-038, D4 |

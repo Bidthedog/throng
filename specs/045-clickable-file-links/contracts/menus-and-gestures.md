@@ -3,6 +3,7 @@
 **Feature**: 045 | **Requirements**: FR-030 – FR-034, FR-040 – FR-046, FR-050 – FR-055, FR-062;
 *amended 2026-09-18*: FR-100 – FR-105, FR-110 – FR-114, FR-124 — see §7. Wherever this contract says
 "runs the default link action", read **runs the click rule** (FR-110); the setting is retired.
+*Second round*: FR-130 – FR-139 — §7.6. *Third round*: FR-150, FR-151, FR-154 and D3 — §8.
 
 Section vocabulary and guarantees are [033's](../../033-open-and-navigate/contracts/menu-sections.md).
 `section` is a **required** field on `MenuAction` (`ui/src/renderer/workspace/context-menu.tsx:31,48`),
@@ -266,3 +267,49 @@ target once (FR-131, FR-043).
 `LinkActionOutcome`'s failure reasons become `'gone' | 'refused' | 'unreachable'`. `unreachable`
 raises **one** notice naming the path and saying the location did not answer; `gone` keeps saying it
 no longer exists. The notice route is §2's, unchanged.
+
+*Note 2026-09-18 (third round):* the paragraph above belongs under §7.5's heading, which is empty; it
+was placed after §7.6 by an earlier edit. It is left where it is (nothing is moved or deleted) and
+this note is the pointer.
+
+---
+
+## §8 Amendment 2026-09-18, third round — dead hyperlinks, the first character, and one more tooltip case
+
+### §8.1 §7.6's "every link kind takes the same row" means every **followable** link (FR-154)
+
+§7.6 says every link kind, "OSC 8" included, takes the affordance row. Read literally it would draw
+the affordance over an OSC 8 hyperlink whose target goes nowhere — which is what the corpus probe
+found shipped (rows 13 – 15: underline and hand pointer, then nothing). Stated precisely:
+
+| OSC 8 target | Affordance | Tooltip | Ctrl+click | Menu |
+|---|---|---|---|---|
+| `http` / `https` | §7.6, marked as drawn | web wording | open-external, once | web-link run |
+| `file:` that has resolved | §7.6, marked once resolved (hover or idle scan) | §7.4 by click result | the click rule | file-link run (§1) |
+| `file:` not yet resolved, not found, or `unreachable` | **none** — xterm's own underline suppressed too | **none** | reaches a mouse-reporting program (G6) | the ordinary menu |
+| any other scheme, or empty | **none** | **none** | as above | the ordinary menu |
+
+No notice is raised for either "none" row; the reasoning is in
+[link-resolution.md](./link-resolution.md) §8.4. A `file:` target that later resolves gains its mark
+with no pointer movement (FR-123).
+
+| # | Gesture | Surface | Behaviour | FR |
+|---|---|---|---|---|
+| G16 | **Hover** over a dead OSC 8 hyperlink | terminal | nothing: no underline, no pointer, no tooltip | FR-154 |
+| G17 | **Ctrl+click** on a dead OSC 8 hyperlink under a mouse-reporting program | terminal | reaches the program; throng opens nothing and reports nothing | FR-154, FR-043 |
+
+### §8.2 G1 at a link's first character (D3)
+
+G1 applies to **every** character of a link's span, the first included: the `mousedown` handler's
+hit-test and the decoration MUST agree on where a span starts, so a Ctrl+click on the character under
+which the hover draws a link and a hand pointer is always a follow and never CodeMirror's
+add-a-cursor (G4). The probe saw this fail 2 of 27 times at column 1 in an editor (D3). The cause is
+a hypothesis until T215 reproduces it; this clause states only what must hold.
+
+### §8.3 The tooltip over a spaced or Git Bash path (FR-150, FR-151)
+
+No new wording. §7.4's table applies to the **resolved** link: a path with spaces whose longest
+existing reading is in the project says `Ctrl+Click to open`; `/usr/bin/bash.exe` resolved through
+Git's mount table is outside every project and says `Ctrl+Click to show in OS Explorer`. The
+underline and the tooltip cover the span of the reading that resolved (link-resolution §8.1), never
+the words after it.

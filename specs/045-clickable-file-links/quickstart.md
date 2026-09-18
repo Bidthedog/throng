@@ -109,6 +109,12 @@ npm run test:e2e:admin
 By hand, from an elevated throng: choose **Open in OS Default Program** on a `.txt` link and check
 the launched editor's process integrity level in Process Explorer. It must be Medium, not High.
 
+*Note 2026-09-18 (third round) — expect this to FAIL until T218 lands (D4).* The app's only
+construction of `ElectronShellIntegration` (`main.ts:934`) supplies no de-elevating launcher, so an
+elevated throng launches at High today. `npm run test:e2e:admin` and the `@admin` integration case can
+both pass meanwhile, because they supply their own launcher; this hand check is the one that shows the
+defect, and it is the check to repeat after T218.
+
 ## 5. The performance numbers (SC-004) — measured, not asserted
 
 A wall-clock bound on a shared hosted runner is a flake by construction, so nothing asserts one.
@@ -207,3 +213,61 @@ For each installed flavour — Command Prompt, Windows PowerShell, PowerShell 7,
    hand pointer only with Ctrl held.
 6. Record the outcome per section and per FR-145 cell. A flavour not installed is "not run".
 ```
+
+*Note 2026-09-18 (third round):* "WSL if set up" means a **user-defined** WSL flavour (025 FR-011) —
+WSL is not a built-in flavour and is not offered in the picker until one is configured (T220). In
+step 2, the *working* rows that name Git Bash's own paths (`/usr/…`, `/etc/…`, `/tmp`) are expected to
+be marked only once FR-151 lands, and never in a WSL flavour.
+
+## 9. The third round, by hand (US12, D3, D4)
+
+The probe that produced [research.md](./research.md) O11 was temporary and is not committed. T219
+re-runs it; this is the hand version of the same checks, on the corpus
+(`D:\git\throng_tests\test 1\links-test.sh`, not copied in) and on the fixture tree, which gains
+`<root>/with space/notes.md` (T201).
+
+```text
+Spaces (FR-150)
+1. In a terminal and in an editor, print / type `<root>\with space\notes.md`, `/x/…/with space/notes.md`
+   (Git Bash drive form) and `/mnt/x/…/with space/notes.md:3`. Each is marked as ONE link, ending at
+   `notes.md`; Ctrl+click opens it in throng, the last at line 3.
+2. `see <root>\with space\notes.md for details`: the link ends at `notes.md`; "for details" is text.
+3. `C:\Windows\win.ini C:\Windows\notepad.exe` on one line: two links, never one joined link.
+4. Open fixture `prose.txt`: still nothing marked (SC-003).
+
+Git Bash paths (FR-151, FR-152) — Git for Windows installed
+5. Ctrl+click `/usr/bin/bash.exe` and `/etc/hosts` in each built-in flavour and in an editor: OS
+   Explorer opens under the Git install with the file selected.
+6. Ctrl+click `/tmp`: OS Explorer opens on your user temp folder — not `\tmp` on the current drive.
+7. In a WSL flavour (if configured): the same three are not links through Git (T220).
+
+file: spellings (FR-153)
+8. `file:///c/Windows/win.ini` as text, and OSC 8 hyperlinks to `file:///mnt/c/Windows/win.ini` and
+   `file://localhost/C$/Windows/win.ini`: each Ctrl+click shows win.ini in OS Explorer.
+
+Dead hyperlinks (FR-154)
+9. OSC 8 hyperlinks to `file:///C:/does/not/exist.txt`, `file://nonexistent-host-xyz/share/file.txt`
+   and `notascheme:foo`: no underline at rest or on hover, no hand pointer, no tooltip, the ordinary
+   menu on right-click, and no notice on Ctrl+click.
+
+The click rule, re-checked (FR-110, FR-111)
+10. Ctrl+click an out-of-project `win.ini`, a `.dll` and a `.md` in both panel types: OS Explorer,
+    never the default program.
+
+D3
+11. In an editor, Ctrl+click the FIRST character of several decorated links at column 1, including
+    straight after following the previous line's link: every one follows; none adds a cursor.
+
+D4 — elevated throng only
+12. §4's Process Explorer check. Medium, not High, after T218.
+```
+
+### Corrections to earlier sections (third round; no behaviour change)
+
+- **§3, the two US5 rows** use the fixture's `setup.exe`, which sits **inside** the project root. Under
+  FR-114 an in-project executable opens in throng **as its text** on Ctrl+click; it is revealed in OS
+  Explorer only outside the project. Use an out-of-project executable (for example
+  `C:\Windows\System32\calc.exe`) to see the reveal; the second row (Open in OS Default Program runs
+  it) is unchanged.
+- **§1's integration sample** names `packages/ui/tests/integration/file-link-resolver.test.ts`; the
+  file is `file-link-resolver.integration.test.ts`.

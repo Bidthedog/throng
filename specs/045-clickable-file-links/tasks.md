@@ -1229,12 +1229,21 @@ T184 and T187; D3 (15g) and D4 (15h) are reproduce-first and gate on the maintai
   change; *Key Entities*; *Out of scope*), [plan.md](./plan.md) (third-round design and Complexity
   Tracking, including the WSL deferral to #13), [research.md](./research.md) (O9 evidence, O11
   recorded), and this phase. **Done 2026-09-18.** Nothing was deleted.
-- [ ] T198 [P] Amend the design artifacts for FR-150 – FR-154: `contracts/link-resolution.md` (the
+- [x] T198 [P] Amend the design artifacts for FR-150 – FR-154: `contracts/link-resolution.md` (the
   extended-reading rule beside R7, the mount-table step and drive qualification in R6/R9, the `file:`
   readings in R8, and the dead-OSC-8 rule beside the affordance), `contracts/platform-ports.md` (the
   new `IPathForms` questions and their contract cases), [data-model.md](./data-model.md) (a §15 for the
   resolution context's WSL flag), and [quickstart.md](./quickstart.md) (a §9 hands-on block for US12's
   scenarios). No code. Satisfies FR-150 – FR-154.
+  **Done 2026-09-18** — `contracts/link-resolution.md` §8 (D16 – D19, R13 – R16, V1 – V4, P15; notes
+  on R8, R9 and §5's T130 note), `contracts/platform-ports.md` §6 (four `IPathForms` members, PF13 –
+  PF19, the WSL answer placed, SI5 and FR-038's wiring for D4), `contracts/menus-and-gestures.md` §8
+  (dead-hyperlink table, G16/G17, D3's first-character clause), `contracts/settings-and-environment.md`
+  §7 (`wslFlavour` on the request, I7), [data-model.md](./data-model.md) §15 (including five
+  corrections to stale earlier sections), [quickstart.md](./quickstart.md) §9 (and two corrections).
+  **Names settled for T203 – T211**: `IPathForms.fromMountTable`, `qualifyRooted`, `fileUrlLocalPath`,
+  `loopbackFromFileUrl`; `LinkResolutionContext.wslFlavour` / `LinkResolutionRequest.wslFlavour`;
+  `MAX_PATH_SPACE_WORDS`.
 
 ### 15b. Every failing row, and the task that covers it
 
@@ -1308,6 +1317,10 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   and platform steps are absent; with no base directory and no project root, `/test.txt` yields `[]`;
   no list ever contains a rooted path without a drive. Edits only the three cases the third-round
   supersessions permit (spec *Supersessions*); every other case stays. Satisfies FR-151, FR-152.
+  *Amended 2026-09-18 (T198):* plus its contract half, in
+  `packages/ui/tests/contract/link-ipc.contract.test.ts` — the request whitelist admits
+  `wslFlavour: true` and drops any other value (settings-and-environment §7.1, I7). That file has
+  uncommitted work in progress from another session; coordinate before editing it.
 - [ ] T206 [US12] GREEN `packages/core/src/links/resolve.ts` (the step, the qualification, the WSL
   flag on `LinkResolutionContext`) and the surfaces that build the context —
   `packages/ui/src/main/file-link-resolver.ts`, and the terminal site that already asks T189's "is this

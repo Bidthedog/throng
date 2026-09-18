@@ -248,3 +248,30 @@ are digit-grouped — `2,000`, `30,000` — per the constitution's NON-NEGOTIABL
 still means "does not exist"). `throng:links:reveal` and `throng:links:open` may answer
 `{ ok: false, reason: 'unreachable', path }`. `link-ipc.ts`'s handlers pass both through unchanged;
 the sanitiser only ever touched the **request**. I1 – I6 are unchanged.
+
+---
+
+## §7 Amendment 2026-09-18, third round — one request field, one guard, no setting
+
+### §7.1 The request gains `wslFlavour` (FR-151)
+
+`LinkResolutionRequest` gains a sixth field, `wslFlavour?: true`, which a terminal sets when its
+flavour is WSL (platform-ports §6.2) so main can skip Git Bash's mount table
+([link-resolution.md](./link-resolution.md) §8 R13). The handler's whitelist admits it; any other
+value than `true` is dropped.
+
+| # | Rule |
+|---|---|
+| I7 | `wslFlavour` can only **remove** readings — the mount-table and platform steps — never add one, and it changes neither the project root main derives (I2) nor the existence re-check (I3). A renderer that lies about it can make a link resolve **less**, never reach a location the text did not name. It therefore needs no main-side verification, unlike a root, which I2 keeps in main |
+
+`link-ipc.contract.test.ts` gains the whitelist case: `wslFlavour: true` passes, `wslFlavour: 'x'`
+and `wslFlavour: false` arrive absent. *(Not written by this amendment — the file is in progress
+elsewhere; T205 carries it, as its contract half.)*
+
+### §7.2 No new setting
+
+FR-150's word cap (`MAX_PATH_SPACE_WORDS`) is an integrity guard in `core/src/links/limits.ts`, not a
+setting — [../plan.md](../plan.md) Complexity Tracking, third round. Git's install root comes from
+shell detection, not configuration. FR-154 adds no switch: a dead hyperlink is not a link under any
+setting. The `Editor · Links` block of §6.1 is unchanged, and so is `SHIPPED_DEFAULTS_VERSION` for this
+round.

@@ -609,3 +609,95 @@ baseDirectory = flavourReportsDirectory(id, integration) && !platform.isWslFlavo
 
 The name and home of that platform answer are settled in T189; 025's own callers of
 `flavourReportsDirectory` are not changed by 045.
+
+---
+
+## 15. Amendment 2026-09-18, third round — extended readings, the WSL flag, dead hyperlinks, D4
+
+Source: the corpus probe ([research.md](./research.md) O11); FR-150 – FR-154, D3, D4. Rules are in
+[contracts/link-resolution.md](./contracts/link-resolution.md) §8 and
+[contracts/platform-ports.md](./contracts/platform-ports.md) §6.
+
+### 15.1 Extended readings — `core/src/links/detect.ts`, `limits.ts` (FR-150)
+
+`LinkCandidate` does **not** change shape. An extended reading is simply another candidate, emitted
+before the unextended one, exactly as §1's two position readings are; `text`, `start` and `end`
+describe that reading, so the underline covers only the reading that resolves.
+
+```ts
+// core/src/links/limits.ts — beside LINK_CACHE_TTL_MS, MAX_LINK_CANDIDATES_PER_LINE, LINK_IDLE_SCAN_MS
+/** FR-150. How many whitespace-separated words an anchored token may be extended by. */
+export const MAX_PATH_SPACE_WORDS: number;
+```
+
+§1's grammar table gains a row:
+
+| Rule | FR |
+|---|---|
+| an **anchored** token (drive, UNC, leading `/`, `~/`, `./`, `../`, `file:`, `FileSystem::`) also yields readings extended across single spaces, longest first, up to `MAX_PATH_SPACE_WORDS` words; never into another anchored word, a web span, a quote or an unbalanced bracket; a bare word never extends | FR-150 |
+
+### 15.2 The resolution context and request gain the WSL flag (FR-151, FR-152)
+
+```ts
+// core/src/links/resolve.ts
+export interface LinkResolutionContext {
+  readonly baseDirectory?: string;
+  readonly projectRoot: string | null;
+  readonly pathForms: IPathForms;           // gains fromMountTable, qualifyRooted,
+                                            // fileUrlLocalPath, loopbackFromFileUrl (platform-ports §6.1)
+  /** FR-151. A WSL terminal: skip Git's mount table and the platform reading. */
+  readonly wslFlavour?: true;
+}
+
+// core/src/links/types.ts — §2's request, one field added
+export interface LinkResolutionRequest {
+  // … text, kind, baseDirectory, panelId, originProjectId (§2) …
+  /** FR-151. Set by a terminal whose flavour the platform identifies as WSL. Can only narrow. */
+  readonly wslFlavour?: true;
+}
+```
+
+`FileLinkResolver` copies `req.wslFlavour` into the context; the whitelist rule is
+[contracts/settings-and-environment.md](./contracts/settings-and-environment.md) §7.1 (I7). The
+editor never sets it. `WindowsPathForms` gains a constructor collaborator — the Git install root, from
+shell detection — and caches the mount table it reads.
+
+### 15.3 A dead hyperlink's hover state — `ui/src/renderer/terminal/` (FR-154)
+
+§8's `HoveredLink` does **not** gain a "dead" arm. A dead OSC 8 target never becomes a `HoveredLink`
+at all — `hoveredLink` stays `null` over it, which is what makes G6 (a Ctrl+click reaches the program)
+fall out of `keepsClickFromProgram` unchanged. The judgement is made where the OSC 8 hover arrives
+(`use-terminal.ts`'s `linkHandler.hover`): `classifyTerminalLinkTarget` for the scheme, then
+`peekLink` for a `file:` target — only `{ ok: true }` sets `hoveredLink` or draws a mark.
+
+*Superseded by this section:* §8's closing sentence, "The one visible cost is that an inert scheme
+now draws xterm's hover underline". That cost is withdrawn (FR-154); `allowNonHttpProtocols` stays on.
+
+### 15.4 The app's shell integration (D4)
+
+```ts
+// ui/src/main — the composition's construction, replacing `new ElectronShellIntegration(shell)`
+new ElectronShellIntegration(shell, undefined /* the default on-disk stat */, {
+  launcher: new WindowsDeElevatedLauncher(/* … */),
+  isElevated: () => new WindowsElevation().isElevated(),
+});
+```
+
+`DeElevationOptions` (`electron-shell-integration.ts:42-46`) is unchanged; what changes is that the app
+supplies it. The shape of any factory T218 extracts to make this testable is T218's to choose.
+
+### 15.5 Corrections to earlier sections found while amending (no behaviour change)
+
+These sections describe states later amendments changed, and were not marked. Each is corrected here
+rather than edited in place:
+
+- **Preamble, "no `SHIPPED_DEFAULTS_VERSION` bump (… no theme token …)"** and **§12, "no new icon or
+  colour token"** — superseded by §14.3: the second round adds two theme tokens and T182 bumps the
+  version.
+- **§5's port table** lists `IExecutableExtensions` with `isExecutable` only; it has two members since
+  T130 (`executableExtensions` too — platform-ports §2), and `IPathForms` has eight after §15.2.
+- **§13.2, "the `WebLinksAddon` is loaded with `WEB_URL_REGEX`"** — superseded by the second round:
+  T177 unloads `WebLinksAddon` and throng's own provider serves web spans from `scanLinkLine`
+  ([plan.md](./plan.md) Complexity Tracking, second round). §13.2's sentence described the step
+  before that one.
+- **§6's `LinkActionOutcome`** reads `'gone' | 'refused'`; §13.4 added `'unreachable'`.
