@@ -199,6 +199,11 @@ export interface UseTerminalOptions {
    */
   linkBaseDirectory?: () => string | undefined;
   /**
+   * 045 FR-151 — whether this terminal's flavour is WSL, as a reader (the flavour list is a live
+   * setting). True puts `wslFlavour: true` on every link request, so main skips Git's mount table.
+   */
+  linkWslFlavour?: () => boolean;
+  /**
    * 045 FR-033 – FR-036 — where a followed link is allowed to open. The panel supplies these
    * because they need the workspace, the preferences and the notice surface, none of which a hook
    * inside the mount effect can reach. Absent means links are inert, which is what a surface that
@@ -275,6 +280,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
   // 045 — the link collaborators follow the same rule as the search ones above: read through refs,
   // so rebinding a preference or re-rendering the panel can never tear a running terminal down.
   const linkCwdRef = useRef(opts.linkBaseDirectory);
+  const linkWslRef = useRef(opts.linkWslFlavour);
   const linkActionsRef = useRef(opts.linkActions);
   const detectLinksRef = useRef(opts.detectFileLinks);
   onExitRef.current = opts.onExit;
@@ -290,6 +296,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
   onSearchCountRef.current = opts.onSearchCount;
   linkDelayRef.current = opts.linkHoverDelayMs;
   linkCwdRef.current = opts.linkBaseDirectory;
+  linkWslRef.current = opts.linkWslFlavour;
   linkActionsRef.current = opts.linkActions;
   detectLinksRef.current = opts.detectFileLinks;
   // Read the active-panel predicate through a ref so the (async) attach focus below sees the CURRENT
@@ -354,6 +361,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       panelId,
       ...(opts.projectId ? { originProjectId: opts.projectId } : {}),
       ...(linkCwdRef.current?.() ? { baseDirectory: linkCwdRef.current() as string } : {}),
+      ...(linkWslRef.current?.() === true ? { wslFlavour: true as const } : {}),
     });
     // 024 US7 (#159 follow-up): a hover tooltip naming the activation gesture. xterm's only built-in
     // link affordance is a hover underline, which does not say the link is Ctrl-clickable — so we add

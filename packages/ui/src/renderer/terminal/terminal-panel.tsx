@@ -10,6 +10,7 @@ import {
 import {
   effectiveActivePanelId,
   formatDroppedPaths,
+  isWslExecutable,
   terminalLinkTarget,
   firstBinding,
   resolveAction,
@@ -73,7 +74,11 @@ import {
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
 import type { FileLinkMenuContext } from '../links/link-menu-items.js';
 import { hoveredLinkMenuText } from './hovered-link.js';
-import { followTerminalLink, type TerminalLinkDeps } from './terminal-link-activation.js';
+import {
+  followTerminalLink,
+  terminalLinkBaseDirectory,
+  type TerminalLinkDeps,
+} from './terminal-link-activation.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import { clearPanelExit, setPanelExit } from './exit-store.js';
 import { useTerminal, type TerminalApi } from './use-terminal.js';
@@ -263,6 +268,16 @@ export function TerminalPanel({
   routingRef.current = {
     previewRegistry: previewProviders.registry,
     previewSettings: editorSettings.previews,
+  };
+  /**
+   * FR-142 – FR-144, FR-151 — what this panel's flavour can tell a link about its directory, live for
+   * the same reason. Only a user-defined flavour can be WSL: the built-in detection never offers one.
+   */
+  const userFlavourFile = terminalSettings.flavours.find((f) => f.id === config.flavourId)?.file;
+  const linkFlavourRef = useRef({ shellIntegration: false, isWsl: false });
+  linkFlavourRef.current = {
+    shellIntegration: terminalSettings.shellIntegration,
+    isWsl: isWslExecutable(userFlavourFile),
   };
   /** FR-060, live for the same reason — the provider is registered once, against a live shell. */
   const detectFileLinksRef = useRef(editorSettings.links.detectInTerminals);
@@ -875,7 +890,16 @@ export function TerminalPanel({
     linkHoverDelayMs: terminalSettings.linkHoverDelayMs,
     // 045 FR-023: the terminal's live working directory, read at hover time rather than captured —
     // a relative path a command printed almost always means the directory that command ran in.
-    linkBaseDirectory: () => peekTerminalCwd(panel.id),
+    // FR-142 – FR-144: only where this flavour can REPORT it; otherwise the store holds the stale
+    // launch directory, and there is no base directory at all.
+    linkBaseDirectory: () =>
+      terminalLinkBaseDirectory({
+        flavourId: config.flavourId ?? '',
+        shellIntegration: linkFlavourRef.current.shellIntegration,
+        isWsl: linkFlavourRef.current.isWsl,
+        cwd: peekTerminalCwd(panel.id),
+      }),
+    linkWslFlavour: () => linkFlavourRef.current.isWsl,
     linkActions,
     // FR-060 — read through the routing ref, which this render has just refreshed, so the switch
     // applies to the next hover without re-registering the provider against a live shell.

@@ -309,6 +309,15 @@ sits behind the platform abstraction, beside that detection. Its exact name and 
 settle; this contract fixes only that **one** answer serves both requirements, so they cannot
 disagree about which terminals are WSL.
 
+*Settled by T189 (2026-09-18):* `isWslExecutable(file)` in `packages/core/src/terminal/wsl-flavour.ts`,
+beside `flavourReportsDirectory`, not a port. The question is asked by the **renderer**, at hover
+time, about a user-defined flavour it already holds in settings; the renderer has no route to
+`platform-windows` and no synchronous bridge, and the answer is a pure reading of an executable path
+(`wsl[.exe]` anywhere; `bash[.exe]` directly in `System32`/`Sysnative`). Only a user-defined flavour
+can be WSL — the built-in detection skips `System32\bash.exe`. Cases:
+`packages/core/tests/unit/wsl-flavour.test.ts`. The terminal panel feeds it to
+`terminalLinkBaseDirectory` (FR-144) and to the request's `wslFlavour` (FR-151).
+
 ### §6.3 FR-038's launcher is the composition root's obligation (D4)
 
 §3 said a de-elevating launcher is used "when `shouldDeElevate(...)` says the host is elevated". It

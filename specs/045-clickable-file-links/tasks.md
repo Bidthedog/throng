@@ -1160,7 +1160,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
   flavour gets no base directory (FR-144) — **expected red**, because `flavourReportsDirectory`
   answers `true` for any flavour outside the integration maps (data-model §14.4). The other cases may
   pass on first run; any that do are kept as characterisation pins.
-- [ ] T189 [US11] GREEN — `packages/ui/src/renderer/terminal/terminal-panel.tsx` (the site's
+- [x] T189 [US11] GREEN — `packages/ui/src/renderer/terminal/terminal-panel.tsx` (the site's
   `baseDirectory`) consults `flavourReportsDirectory` **and** a platform answer to "is this flavour
   WSL?", placed behind the platform abstraction beside the shell detection that already recognises
   WSL's `System32\bash.exe` (`packages/platform-windows/src/windows-shell-detection.ts`), with a
@@ -1325,7 +1325,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   `packages/ui/tests/contract/link-ipc.contract.test.ts` — the request whitelist admits
   `wslFlavour: true` and drops any other value (settings-and-environment §7.1, I7). That file has
   uncommitted work in progress from another session; coordinate before editing it.
-- [ ] T206 [US12] GREEN `packages/core/src/links/resolve.ts` (the step, the qualification, the WSL
+- [x] T206 [US12] GREEN `packages/core/src/links/resolve.ts` (the step, the qualification, the WSL
   flag on `LinkResolutionContext`) and the surfaces that build the context —
   `packages/ui/src/main/file-link-resolver.ts`, and the terminal site that already asks T189's "is this
   flavour WSL?" (`packages/ui/src/renderer/terminal/terminal-panel.tsx`), sending it in the link
@@ -1338,6 +1338,8 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   *Progress 2026-09-18 (main):* `file-link-resolver.ts` carries the request's `wslFlavour` into the
   context and `link-ipc.ts` admits exactly `true` (I7; T205's contract half green). Open: only
   `terminal-panel.tsx` sending it.
+  *Done 2026-09-18 (T189):* the terminal panel reads `isWslExecutable` for its flavour and every link
+  request it sends carries `wslFlavour: true` for a WSL flavour (`TerminalLinkSite.wslFlavour`).
 - [ ] T207 [P] [US12] RED integration `packages/ui/tests/integration/file-link-resolver.integration.test.ts`
   — against the **real** Git for Windows on the machine: `/usr/bin/bash.exe` and `/etc/hosts` resolve
   to files under the detected install, `/tmp` resolves to a folder; a WSL-flavour request for

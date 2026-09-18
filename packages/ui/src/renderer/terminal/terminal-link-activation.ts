@@ -1,5 +1,6 @@
 import {
   classifyTerminalLinkTarget,
+  flavourReportsDirectory,
   type LinkPosition,
   type LinkResolution,
   type LinkResolutionRequest,
@@ -50,6 +51,35 @@ export interface TerminalLinkSite {
    * almost always means that command's directory, and `cd` moves it.
    */
   readonly baseDirectory?: string;
+  /**
+   * FR-151 — this terminal's flavour is WSL, so main skips Git's mount table and the platform reading
+   * for a leading-`/` path. Can only narrow; absent for every other flavour and for the editor.
+   */
+  readonly wslFlavour?: true;
+}
+
+/**
+ * FR-142 – FR-144 (data-model §14.4) — the base directory a terminal's links are judged from.
+ *
+ * The cwd store's value only when this flavour can actually REPORT its directory as configured:
+ * `cmd` is observed moving its real process directory; PowerShell and Git Bash report it through
+ * shell integration (OSC 9;9) and nothing else. For a shell that cannot — integration off, or WSL,
+ * whose Linux `cd` never moves the Windows-side process — the store holds only the LAUNCH directory,
+ * and handing that over would resolve a relative path against the folder the user left. So the answer
+ * is `undefined`, and main tries the project root alone (R5).
+ *
+ * `isWsl` is an input rather than a lookup because `flavourReportsDirectory` answers `true` for any
+ * flavour outside the integration maps — a user-defined WSL flavour included — and 025's own callers
+ * of it are deliberately left alone. It is consulted for the link base only.
+ */
+export function terminalLinkBaseDirectory(args: {
+  readonly flavourId: string;
+  readonly shellIntegration: boolean;
+  readonly isWsl: boolean;
+  readonly cwd: string | undefined;
+}): string | undefined {
+  if (args.isWsl) return undefined;
+  return flavourReportsDirectory(args.flavourId, args.shellIntegration) ? args.cwd : undefined;
 }
 
 /**
@@ -74,6 +104,7 @@ export function terminalLinkRequest(args: {
     panelId: site.panelId,
     ...(site.originProjectId ? { originProjectId: site.originProjectId } : {}),
     ...(site.baseDirectory ? { baseDirectory: site.baseDirectory } : {}),
+    ...(site.wslFlavour === true ? { wslFlavour: true as const } : {}),
   };
 }
 

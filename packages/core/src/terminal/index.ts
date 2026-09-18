@@ -30,6 +30,7 @@ export {
   flavourReportsDirectory,
   BUILTIN_SHELL_INTEGRATION,
 } from './command-recipe.js';
+export { isWslExecutable } from './wsl-flavour.js';
 export {
   THRONG_TEST_SHELL_HISTORY,
   SHELL_HISTORY_OFF_SNIPPET,
