@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { release, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   BUILTIN_FLAVOUR_COMMAND_RECIPES,
@@ -61,6 +61,18 @@ function osc8Intact(output: string): boolean {
   const close = `${ESC}\\]8;[^;${BEL}${ESC}]*;${st}`;
   return new RegExp(`${open}${noCells}${OSC8_TEXT}[\\s\\S]*?${close}`).test(output);
 }
+
+/**
+ * Whether this OS build's ConPTY carries a hyperlink AROUND its text. Measured on GitHub's
+ * `windows-2022` runner (Server 2022, build 20348), all four shells: ConPTY either dropped the
+ * sequences (cmd) or forwarded the opener and closer back to back and painted the text after both
+ * (the other three), so the hyperlink wrapped nothing. The same shells on this workstation's Windows 11
+ * wrap their text. That is the OS's ConPTY, not the shell and not throng, so below Windows 11 (build
+ * 22000) the OSC 8 half is SKIPPED WITH THE REASON PRINTED — never passed, never failed (FR-145) — and
+ * the directory half, which that ConPTY does carry, still runs.
+ */
+const osBuild = Number(release().split('.')[2] ?? 0);
+const conptyCarriesHyperlinks = osBuild >= 22_000;
 
 /**
  * The command that makes THE SHELL print the hyperlink — its own `echo`/`Write-Host`/`printf`, not a
@@ -193,7 +205,7 @@ describe('045 T190 — every installed built-in flavour, through ConPTY', () => 
     if (!shell) console.warn(`[T190] ${reason}`);
 
     it.skipIf(!shell)(
-      `${id}: after \`cd sub\` the directory arrives comparable with the root, and OSC 8 arrives intact`,
+      `${id}: after \`cd sub\` the directory arrives comparable with the root`,
       async () => {
         const root = makeRoot();
         const sub = join(root, 'sub');
@@ -228,7 +240,26 @@ describe('045 T190 — every installed built-in flavour, through ConPTY', () => 
               reported,
             );
           }
+        } finally {
+          session.stop();
+        }
+      },
+      90_000,
+    );
 
+    if (shell && !conptyCarriesHyperlinks) {
+      console.warn(`[T190] ${id}: OS build ${osBuild}'s ConPTY does not carry OSC 8 around its text — OSC 8 half not run (FR-145)`);
+    }
+
+    it.skipIf(!shell || !conptyCarriesHyperlinks)(
+      `${id}: an OSC 8 hyperlink the shell prints arrives intact`,
+      async () => {
+        const root = makeRoot();
+        const session = startBuiltIn(id, shell!.file, root);
+        try {
+          await until(`${id}'s first prompt`, () =>
+            id === 'cmd' ? session.output().includes('>') : reportedDirectories(session.output()).length > 0,
+          );
           // FR-141: the shell prints an OSC 8 hyperlink; it arrives as one.
           session.write(`${printHyperlinkCommand(id)}\r`);
           await until(`${id}'s hyperlink to arrive intact`, () => osc8Intact(session.output()), 20_000).catch(() => {
@@ -271,7 +302,7 @@ describe('045 T190 — a WSL flavour, where a distro is installed', () => {
   const distro = wslDistro();
   if (distro === null) console.warn('[T190] no WSL distro is installed — WSL not run (FR-145)');
 
-  it.skipIf(distro === null)(
+  it.skipIf(distro === null || !conptyCarriesHyperlinks)(
     'OSC 8 printed inside WSL arrives intact through ConPTY (FR-141)',
     async () => {
       const root = makeRoot();
