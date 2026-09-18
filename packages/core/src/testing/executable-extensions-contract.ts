@@ -99,7 +99,9 @@ export function runExecutableExtensionsContract(makeSubject: () => IExecutableEx
   }
 
   // ── EX5 ──────────────────────────────────────────────────────────────────────────────────────
-  for (const document of ['notes.txt', 'README.md', 'src/foo.ts', 'package.json', 'a/b/c.log']) {
+  // No Markdown sample here on purpose: a shared surface naming a provider's format fails
+  // preview-surfaces-name-no-provider (044 FR-070). `REPORT.docx` keeps the upper-case case.
+  for (const document of ['notes.txt', 'REPORT.docx', 'src/foo.ts', 'package.json', 'a/b/c.log']) {
     assert(
       !subject.isExecutable(document),
       `an ordinary document extension must not be executable; ${JSON.stringify(document)} was`,
