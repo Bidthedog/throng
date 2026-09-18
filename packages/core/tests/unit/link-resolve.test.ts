@@ -235,10 +235,11 @@ describe('resolveCandidate — R9/R11: what is deliberately NOT mapped', () => {
 
   it('R11: with no project root the project-root attempt is simply absent', () => {
     // *Third round (T205):* was `['/test.txt']`. FR-152 — with no base directory and no project root
-    // the platform step is not reached. T205 states the answer as `[]`, which also leaves out
-    // FR-151's mount-table reading (Git's `/` + `test.txt`); R13 as written would keep it. Flagged
-    // for the maintainer rather than settled here — this case follows T205's wording.
-    expect(resolveCandidate(candidate('/test.txt'), ctx({ projectRoot: null }))).toEqual([]);
+    // the platform step is not reached, but FR-151's mount-table reading (Git's `/` + `test.txt`)
+    // still is: R13 is not gated on a base (settled 2026-09-18, the maintainer accepting FR-151).
+    expect(resolveCandidate(candidate('/test.txt'), ctx({ projectRoot: null }))).toEqual([
+      'C:\\Program Files\\Git\\test.txt',
+    ]);
     expect(resolveCandidate(candidate('test.txt'), ctx({ projectRoot: null }))).toEqual([]);
   });
 
@@ -346,8 +347,10 @@ describe('T205 / FR-152 — no list ever contains a rooted path without a drive'
     });
   }
 
-  it('with no base directory and no project root, /test.txt yields []', () => {
-    expect(resolveCandidate(candidate('/test.txt'), ctx({ projectRoot: null }))).toEqual([]);
+  it('with no base directory and no project root, /test.txt yields only the mount-table reading', () => {
+    expect(resolveCandidate(candidate('/test.txt'), ctx({ projectRoot: null }))).toEqual([
+      'C:\\Program Files\\Git\\test.txt',
+    ]);
   });
 });
 

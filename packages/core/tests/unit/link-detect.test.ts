@@ -53,7 +53,9 @@ describe('detectPathCandidates — D1: every FR-003 form, without markup', () =>
   });
 
   it('FR-003f: a file: URI written as text', () => {
-    expect(texts('see file:///D:/a%20b/c.txt now')).toEqual(['file:///D:/a%20b/c.txt']);
+    // FR-150 (third round): an anchored form also reads extended across the next word, longest
+    // first, so the unextended reading is the last one offered.
+    expect(texts('see file:///D:/a%20b/c.txt now')).toEqual(['file:///D:/a%20b/c.txt now', 'file:///D:/a%20b/c.txt']);
     expect(texts('see file://server/share/x.txt')).toEqual(['file://server/share/x.txt']);
   });
 
@@ -146,7 +148,9 @@ describe('detectPathCandidates — D2: a span claimed by a web link yields nothi
 
 describe('detectPathCandidates — the ambiguity rule: two candidates, positioned first', () => {
   it('C:\\x\\foo.ts:42:7 reads both ways, the positioned reading first', () => {
-    const found = detectPathCandidates('at C:\\x\\foo.ts:42:7 here', []);
+    // FR-150 (third round): the extended reading (`… here`) comes first; the two unextended
+    // readings keep their order after it.
+    const found = detectPathCandidates('at C:\\x\\foo.ts:42:7 here', []).slice(-2);
     expect(found.map((c) => c.text)).toEqual(['C:\\x\\foo.ts', 'C:\\x\\foo.ts:42:7']);
     expect(found[0].position).toEqual({ line: 42, column: 7 });
     expect(found[1].position).toBeUndefined();
