@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LINK_CACHE_TTL_MS } from '@throng/core';
 import type {
   LinkActionOutcome,
   LinkPosition,
@@ -7,10 +8,12 @@ import type {
   ResolvedLink,
 } from '@throng/core';
 import { __resetLinkCacheForTests } from '../../src/renderer/links/link-cache.js';
+import { createFileLinkProvider, type ProvidedLink } from '../../src/renderer/terminal/file-link-provider.js';
 import { keepsClickFromProgram } from '../../src/renderer/terminal/hovered-link.js';
 import {
   activateTerminalHyperlink,
   askTerminalLink,
+  followTerminalLink,
   hoveredLinkFromUri,
   terminalLinkRequest,
   type TerminalLinkDeps,
@@ -286,5 +289,120 @@ describe('T212 / FR-154 — a dead OSC 8 target is no link: not hovered, not swa
   it('V4: an https target is a hovered link as drawn — no existence check', () => {
     const hovered = hoveredLinkFromUri('https://example.com/a', SITE, askTerminalLink);
     expect(hovered).toEqual({ kind: 'web', uri: 'https://example.com/a' });
+  });
+});
+
+/*
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ * A Ctrl+click on a link the terminal is SHOWING does nothing once the cached answer behind it has
+ * outlived LINK_CACHE_TTL_MS — D3's cause, on the terminal's three follow routes.
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * What the user sees: the link is marked, hovered, the hand is up with Ctrl held — and the click does
+ * nothing. A second Ctrl+click on the same link opens it. Measured with a stress probe over real
+ * shells (git-bash and WSL): 4 of 510 fresh-measured Ctrl+clicks, every one with the pointer on the
+ * link's line, xterm's current link equal to it at press and release, and the previous resolve of
+ * that text 29.8 – 30.1 s before the release — the click itself re-asked main.
+ *
+ * The cache drops an entry on READ once it is older than the TTL, and nothing re-reads it while the
+ * pointer rests: the hover took the answer, and the click asked AGAIN (`followLink`'s `resolve`),
+ * heard FR-071's `undefined` — "not a link" — and returned. A pointer left on a link longer than the
+ * entry's remaining life makes it deterministic. The editor fixed the same miss by following the link
+ * it DREW (T216); main still re-resolves the request and re-checks the target before any OS action
+ * (FR-037), so following the drawn answer trusts nothing new.
+ */
+describe('a terminal link followed after its cached answer outlived LINK_CACHE_TTL_MS, nothing redrawn', () => {
+  const WIN_INI: ResolvedLink = {
+    path: 'C:\\Windows\\win.ini',
+    kind: 'file',
+    inProject: false,
+    executable: false,
+    preview: 'none',
+  };
+  const settle = async (): Promise<void> => {
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-18T12:00:00Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('a Ctrl+click on a DETECTED path the provider served still reveals it', async () => {
+    const text = 'C:\\Windows\\win.ini';
+    resolved[text] = { ok: true, link: WIN_INI };
+    const row = `26. ${text}`;
+    const provider = createFileLinkProvider({
+      terminal: {
+        buffer: {
+          active: {
+            getLine: (index: number) =>
+              index === 0 ? { translateToString: () => row, isWrapped: false } : undefined,
+          },
+        },
+      },
+      detect: () => true,
+      site: () => SITE,
+      ask: askTerminalLink,
+      onHover: () => {},
+      // What use-terminal.ts wires: the provider's follow goes straight to followTerminalLink.
+      follow: (args) => void followTerminalLink({ ...args, deps: deps() }),
+    });
+
+    // The hover: xterm asks for the row, the answer lands, the held reply carries the link.
+    let served: ProvidedLink[] | undefined;
+    provider.provideLinks(1, (links) => {
+      served = links;
+    });
+    await settle();
+    expect(served?.map((l) => l.text), 'the path is a link once it has resolved').toEqual([text]);
+
+    // The pointer rests on it past the answer's TTL; nothing redraws, so nothing asks again.
+    vi.setSystemTime(Date.now() + LINK_CACHE_TTL_MS + 1);
+
+    served![0]!.activate({ ctrlKey: true, metaKey: false } as MouseEvent, text);
+    await settle();
+
+    expect(revealed.map((r) => r.text), 'the link the user can see is followed on the FIRST click').toEqual([text]);
+    expect(revealed[0]?.kind, 'main is still sent the REQUEST, and re-resolves it (FR-037)').toBe('detectedPath');
+  });
+
+  it('a Ctrl+click on an OSC 8 `file:` hyperlink still reveals it', async () => {
+    const uri = 'file:///D:/elsewhere';
+    resolved[uri] = { ok: true, link: OUT_OF_PROJECT_FOLDER };
+    await hover(uri);
+    const hovered = hoveredLinkFromUri(uri, SITE, askTerminalLink);
+    expect(hovered?.kind).toBe('file');
+
+    vi.setSystemTime(Date.now() + LINK_CACHE_TTL_MS + 1);
+
+    await activateTerminalHyperlink({
+      event: CTRL,
+      uri,
+      site: SITE,
+      deps: deps(),
+      drawn: hovered?.kind === 'file' ? hovered.link : undefined,
+    } as Parameters<typeof activateTerminalHyperlink>[0]);
+    await settle();
+
+    expect(revealed.map((r) => r.text)).toEqual([uri]);
+  });
+
+  it("the context menu's Open Link on the hovered link still reveals it", async () => {
+    const text = 'C:\\Windows\\win.ini';
+    resolved[text] = { ok: true, link: WIN_INI };
+    const request = terminalLinkRequest({ text, kind: 'detectedPath', site: SITE });
+    askTerminalLink(request);
+    await settle();
+
+    vi.setSystemTime(Date.now() + LINK_CACHE_TTL_MS + 1);
+
+    await followTerminalLink({ request, drawn: WIN_INI, deps: deps() } as Parameters<typeof followTerminalLink>[0]);
+    await settle();
+
+    expect(revealed.map((r) => r.text)).toEqual([text]);
   });
 });
