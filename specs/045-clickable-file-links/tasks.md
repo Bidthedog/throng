@@ -719,15 +719,15 @@ with the variable already set outside throng.
 inside an existing declaration does not raise the count — the counter is a per-line regex over
 `test(` declarations.
 
-- [ ] T122 [P] Add two cases inside the existing declaration at
+- [x] T122 [P] Add two cases inside the existing declaration at
   `packages/ui/tests/e2e/terminal-link-once.e2e.ts:529` (`@extended @terminal @reserve:pty`), under
   the same mouse-owning fixture: a **detected path** and an **OSC 8 `file:` target naming a folder**.
   Each asserts one Ctrl+click opens once, the program receives no press, and a **plain** click still
   reaches the program. Satisfies FR-043, SC-002, SC-005; G5/G6.
-- [ ] T123 [P] Add a hover case inside an existing declaration in
+- [x] T123 [P] Add a hover case inside an existing declaration in
   `packages/ui/tests/e2e/terminal-links.e2e.ts` — a detected path underlines on hover and a
   look-alike that names nothing does not. Satisfies FR-006, FR-042, SC-003.
-- [ ] T124 Re-read `packages/ui/tests/e2e/e2e-budget.json` and
+- [x] T124 Re-read `packages/ui/tests/e2e/e2e-budget.json` and
   `packages/ui/tests/e2e/parallel-plan.json` **in the same commit** and confirm neither needs a
   change — `"total": 570` and `"@terminal": 107` before and after, and no new spec file to place in a
   tier. Run `packages/ui/tests/unit/e2e-budget.test.ts`, `packages/ui/tests/unit/e2e-tags.test.ts`
