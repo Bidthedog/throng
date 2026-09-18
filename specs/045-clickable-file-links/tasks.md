@@ -284,29 +284,29 @@ design exists to prevent.
   the de-elevation to the daemon over an existing RPC, and
   `specs/045-clickable-file-links/plan.md`'s Complexity Tracking row is rewritten before T055 starts.
   Satisfies FR-038.
-- [ ] T046 [P] RED integration `packages/ui/tests/integration/file-link-resolver.integration.test.ts`
+- [x] T046 [P] RED integration `packages/ui/tests/integration/file-link-resolver.integration.test.ts`
   — a real `NodeFileSystem` over a temp tree seeded from `packages/ui/tests/fixtures/links/`: every
   resolution rule R1–R11 against real files including UNC-shaped and missing paths; `inProject` for a
   sub-workspace panel (`originProjectId`) and for a panel with no project; the symlink rule M5;
   `kind`, `executable` and `preview: 'none' | 'enabled' | 'disabled'` on the answer; and **FR-037 —
   a file deleted between hover and follow answers `{ ok: false, reason: 'gone', path }` and raises
   exactly ONE notice**. Satisfies FR-006, FR-020 – FR-026, FR-030, FR-037, FR-039a.
-- [ ] T047 Implement `packages/ui/src/main/file-link-resolver.ts` — `resolve`,
+- [x] T047 Implement `packages/ui/src/main/file-link-resolver.ts` — `resolve`,
   `revealInFileManager`, `openWithDefaultProgram`, every collaborator by constructor
   (`fs`, `pathForms`, `executables`, `projectRootFor`, `previewRegistry`, `readPreviewSettings`) per
   [data-model.md](./data-model.md) §6. `preview` is answered by `registry.forPath(path)` plus
   `settings.providers[id]?.enabled === true`, so the renderer never imports a provider. Depends on
   T046. Satisfies FR-020 – FR-026, FR-030, FR-037.
-- [ ] T048 [P] RED contract `packages/ui/tests/contract/link-ipc.contract.test.ts` — I1–I6 of
+- [x] T048 [P] RED contract `packages/ui/tests/contract/link-ipc.contract.test.ts` — I1–I6 of
   [contracts/settings-and-environment.md](./contracts/settings-and-environment.md) §3, on
   `preview-ipc.contract.test.ts`'s pattern: the three channels' request/response shapes, **preload
   parity for `window.throng.links`**, and that nothing here is broadcast. Satisfies FR-037.
-- [ ] T049 Implement `packages/ui/src/main/link-ipc.ts` — `throng:links:resolve`,
+- [x] T049 Implement `packages/ui/src/main/link-ipc.ts` — `throng:links:resolve`,
   `throng:links:reveal`, `throng:links:open`, all `ipcRenderer.invoke`, all over `FileLinkResolver`.
   Depends on T048, T047. Satisfies FR-035, FR-036, FR-037.
-- [ ] T050 Add `window.throng.links` to `packages/ui/src/preload/preload.cts` and type it in
+- [x] T050 Add `window.throng.links` to `packages/ui/src/preload/preload.cts` and type it in
   `packages/ui/src/renderer/global.d.ts`. Depends on T049. Satisfies FR-037.
-- [ ] T051 [P] RED integration
+- [x] T051 [P] RED integration
   `packages/ui/tests/integration/link-ipc-confinement.integration.test.ts` — I1/I2: the request
   carries a **link** (text, kind, baseDirectory, panelId) and never a resolved path; the owning
   project root is derived in main from `panelId` (the `authoritative()` precedent,

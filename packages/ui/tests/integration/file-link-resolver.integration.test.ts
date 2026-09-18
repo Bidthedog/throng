@@ -1,0 +1,352 @@
+import { cpSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { SHIPPED_PREVIEW_PROVIDERS, type PreviewSettings } from '@throng/core';
+import { WindowsExecutableExtensions, WindowsPathForms } from '@throng/platform-windows';
+import { NodeFileSystem } from '../../src/main/node-file-system.js';
+import { FileLinkResolver } from '../../src/main/file-link-resolver.js';
+
+/**
+ * 045 FR-006, FR-020 – FR-026, FR-030, FR-037, FR-039a — the ONE authority, against a real disk.
+ *
+ * The rules themselves are unit-tested in `packages/core/tests/unit/link-*.test.ts` against fakes.
+ * What that cannot show is whether the ordered list core produces actually finds the right file
+ * when walked over a real tree, with real `stat` results and a real `PATHEXT`. That is this file,
+ * and it is why the tree below is copied from the shipped fixtures rather than invented: the
+ * acceptance scenarios name those files.
+ *
+ * `projectRootFor` is a function rather than a service, which is the shape `PreviewService` and
+ * `NavigationHistoryService` already take, and the reason the resolver is testable without Electron.
+ * It is also the whole of I2: **the owning project root is derived in MAIN from `panelId`**, and a
+ * renderer cannot widen its own confinement by naming one.
+ */
+
+const FIXTURES = fileURLToPath(new URL('../fixtures/links', import.meta.url));
+const OUTSIDE_FIXTURES = fileURLToPath(new URL('../fixtures/links-outside', import.meta.url));
+
+let root = '';
+let outside = '';
+const roots: string[] = [];
+
+/** Every panel the cases below name, and the project root main derives for it. */
+const PANELS = new Map<string, string | null>();
+
+function makeResolver(over: { previewSettings?: Partial<PreviewSettings> } = {}) {
+  // The SHIPPED registry, not one invented here: FR-030's `preview` field has to mean what the app
+  // means by it, and a hand-built registry would be a second opinion about which types previewable.
+  const registry = SHIPPED_PREVIEW_PROVIDERS;
+  const settings: PreviewSettings = {
+    updateDelayMs: 300,
+    maxWaitMs: 1000,
+    copyFormat: 'rich',
+    syncScroll: true,
+    providers: { markdown: { enabled: true, defaultOpenAction: 'editor' } },
+    ...over.previewSettings,
+  };
+  return new FileLinkResolver({
+    fs: new NodeFileSystem(async () => {}),
+    pathForms: new WindowsPathForms(),
+    executables: new WindowsExecutableExtensions(),
+    projectRootFor: (panelId) => PANELS.get(panelId) ?? null,
+    previewRegistry: registry,
+    readPreviewSettings: () => settings,
+  });
+}
+
+const link = (text: string, over: { baseDirectory?: string; panelId?: string; kind?: 'detectedPath' | 'fileHyperlink' } = {}) => ({
+  text,
+  kind: over.kind ?? ('detectedPath' as const),
+  baseDirectory: over.baseDirectory,
+  panelId: over.panelId ?? 'inProject',
+});
+
+beforeAll(() => {
+  const base = mkdtempSync(join(tmpdir(), 'throng-link-resolver-'));
+  roots.push(base);
+  root = join(base, 'project');
+  outside = join(base, 'elsewhere');
+  cpSync(FIXTURES, root, { recursive: true });
+  cpSync(OUTSIDE_FIXTURES, outside, { recursive: true });
+
+  PANELS.set('inProject', root);
+  PANELS.set('rootless', null);
+  // M4: a sub-workspace panel judges against its ORIGINAL project, which is the root main looks up
+  // for it — there is no second root hiding anywhere.
+  PANELS.set('subWorkspace', root);
+  PANELS.set('otherProject', outside);
+});
+
+afterAll(() => {
+  for (const dir of roots.splice(0)) {
+    try {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    } catch {
+      /* a temp tree left behind is not worth failing a passing assertion over */
+    }
+  }
+});
+
+describe('FileLinkResolver.resolve — R1: the first location that exists wins', () => {
+  it('a relative path in the project resolves', async () => {
+    const answer = await makeResolver().resolve(link('test.txt'));
+    expect(answer.ok).toBe(true);
+    expect(answer.ok && answer.link.path).toBe(join(root, 'test.txt'));
+  });
+
+  it('FR-006: text that names nothing is a NON-link, not an error', async () => {
+    await expect(makeResolver().resolve(link('nothing-here.txt'))).resolves.toEqual({ ok: false });
+    await expect(makeResolver().resolve(link('src/also-missing.ts'))).resolves.toEqual({ ok: false });
+  });
+
+  it('a UNC-shaped path that does not exist answers a non-link rather than hanging', async () => {
+    const answer = await makeResolver().resolve(link('\\\\throng-no-such-host\\share\\x.txt'));
+    expect(answer).toEqual({ ok: false });
+  }, 20_000);
+});
+
+describe('FileLinkResolver.resolve — R5/R6: the orderings, over real files', () => {
+  it('R5 / US1 scenario 8: the base directory beats the project root', async () => {
+    // `src/x.ts` exists BOTH at `<root>/packages/core/src/x.ts` and nowhere else at the root, so
+    // the discriminating case is the one where the base directory supplies the winner.
+    const answer = await makeResolver().resolve(
+      link('src/x.ts', { baseDirectory: join(root, 'packages', 'core') }),
+    );
+    expect(answer.ok && answer.link.path).toBe(join(root, 'packages', 'core', 'src', 'x.ts'));
+  });
+
+  it('R5: with no base directory the project root still resolves the same text', async () => {
+    const answer = await makeResolver().resolve(link('src/foo.ts'));
+    expect(answer.ok && answer.link.path).toBe(join(root, 'src', 'foo.ts'));
+  });
+
+  it("R6 / #394: a leading-slash path is the PROJECT's file", async () => {
+    const answer = await makeResolver().resolve(link('/test.txt'));
+    expect(answer.ok && answer.link.path).toBe(join(root, 'test.txt'));
+  });
+
+  it('R10: an untitled buffer supplies no base directory and still resolves', async () => {
+    const answer = await makeResolver().resolve(link('docs/a.md', { baseDirectory: undefined }));
+    expect(answer.ok && answer.link.path).toBe(join(root, 'docs', 'a.md'));
+  });
+
+  it('R11: a panel with no project resolves an ABSOLUTE form and nothing relative', async () => {
+    const abs = join(root, 'test.txt');
+    const resolver = makeResolver();
+    expect((await resolver.resolve(link(abs, { panelId: 'rootless' }))).ok).toBe(true);
+    expect(await resolver.resolve(link('test.txt', { panelId: 'rootless' }))).toEqual({ ok: false });
+  });
+});
+
+describe('FileLinkResolver.resolve — R7: the positioned reading is tried first', () => {
+  it('src/foo.ts:42:7 resolves to the file, not to a name ending in :42:7', async () => {
+    const answer = await makeResolver().resolve(link('src/foo.ts:42:7'));
+    expect(answer.ok && answer.link.path).toBe(join(root, 'src', 'foo.ts'));
+  });
+});
+
+describe('FileLinkResolver.resolve — R8: a file: URI, decoded', () => {
+  it('a hostless file: URI naming a real file resolves', async () => {
+    const target = join(root, 'docs', 'My File.md');
+    const uri = `file:///${target.replace(/\\/g, '/').replace(/ /g, '%20')}`;
+    const answer = await makeResolver().resolve(link(uri, { kind: 'fileHyperlink' }));
+    expect(answer.ok && answer.link.path).toBe(target);
+  });
+
+  it('FR-013: a file: URI naming nothing is a non-link', async () => {
+    const answer = await makeResolver().resolve(
+      link('file:///D:/throng-no-such-file.txt', { kind: 'fileHyperlink' }),
+    );
+    expect(answer).toEqual({ ok: false });
+  });
+
+  it('US2: a file: URI naming a FOLDER is a link, and its kind says so', async () => {
+    const uri = `file:///${root.replace(/\\/g, '/')}`;
+    const answer = await makeResolver().resolve(link(uri, { kind: 'fileHyperlink' }));
+    expect(answer.ok && answer.link.kind).toBe('folder');
+  });
+});
+
+describe('FileLinkResolver.resolve — FR-021 membership, from the RESOLVED path', () => {
+  it('M2 / US1 scenario 3: every spelling of one file gives one verdict', async () => {
+    const resolver = makeResolver();
+    const spellings = [
+      'test.txt',
+      '/test.txt',
+      './test.txt',
+      join(root, 'test.txt'),
+      join(root, 'test.txt').replace(/\\/g, '/'),
+    ];
+    for (const text of spellings) {
+      const answer = await resolver.resolve(link(text));
+      expect(answer.ok, text).toBe(true);
+      expect(answer.ok && answer.link.inProject, text).toBe(true);
+    }
+  });
+
+  it('a file outside the project is resolved, and judged outside', async () => {
+    const answer = await makeResolver().resolve(link(join(outside, 'elsewhere.txt')));
+    expect(answer.ok).toBe(true);
+    expect(answer.ok && answer.link.inProject).toBe(false);
+  });
+
+  it('M3: a panel with no project judges EVERYTHING outside', async () => {
+    const answer = await makeResolver().resolve(link(join(root, 'test.txt'), { panelId: 'rootless' }));
+    expect(answer.ok && answer.link.inProject).toBe(false);
+  });
+
+  it('M4: a sub-workspace panel judges against its origin project', async () => {
+    const answer = await makeResolver().resolve(
+      link(join(root, 'test.txt'), { panelId: 'subWorkspace' }),
+    );
+    expect(answer.ok && answer.link.inProject).toBe(true);
+    const foreign = await makeResolver().resolve(
+      link(join(root, 'test.txt'), { panelId: 'otherProject' }),
+    );
+    expect(foreign.ok && foreign.link.inProject).toBe(false);
+  });
+
+  it('I2: a panel main has never heard of gets no project root, not a guessed one', async () => {
+    const answer = await makeResolver().resolve(link(join(root, 'test.txt'), { panelId: 'invented' }));
+    expect(answer.ok && answer.link.inProject).toBe(false);
+  });
+
+  it('M5: a symlink under the root is judged on the location it NAMES, not its destination', async () => {
+    const target = join(outside, 'elsewhere.txt');
+    const named = join(root, 'linked.txt');
+    try {
+      symlinkSync(target, named, 'file');
+    } catch {
+      // Creating a symlink needs a privilege a medium session may not hold. Skipping is honest;
+      // asserting the non-symlink case instead would be a hollow baseline.
+      return;
+    }
+    const answer = await makeResolver().resolve(link('linked.txt'));
+    expect(answer.ok && answer.link.inProject, 'realpath must not be consulted').toBe(true);
+  });
+});
+
+describe('FileLinkResolver.resolve — the answer\u2019s other three fields', () => {
+  it('kind distinguishes a file from a folder', async () => {
+    const file = await makeResolver().resolve(link('test.txt'));
+    const folder = await makeResolver().resolve(link('docs'));
+    expect(file.ok && file.link.kind).toBe('file');
+    expect(folder.ok && folder.link.kind).toBe('folder');
+  });
+
+  it('FR-039a: executable comes from the platform, and a folder is never executable', async () => {
+    const resolver = makeResolver();
+    for (const name of ['setup.exe', 'build.bat', 'deploy.ps1', 'shortcut.lnk']) {
+      const answer = await resolver.resolve(link(name));
+      expect(answer.ok, name).toBe(true);
+      expect(answer.ok && answer.link.executable, name).toBe(true);
+    }
+    const document = await resolver.resolve(link('test.txt'));
+    expect(document.ok && document.link.executable).toBe(false);
+    const folder = await resolver.resolve(link('docs'));
+    expect(folder.ok && folder.link.kind === 'folder' && folder.link.executable).toBe(false);
+  });
+
+  it('FR-030: preview is enabled / disabled / none, from the registry AND the settings', async () => {
+    const enabled = await makeResolver().resolve(link('README.md'));
+    expect(enabled.ok && enabled.link.preview).toBe('enabled');
+
+    const off = makeResolver({
+      previewSettings: { providers: { markdown: { enabled: false, defaultOpenAction: 'editor' } } },
+    });
+    const disabled = await off.resolve(link('README.md'));
+    expect(disabled.ok && disabled.link.preview).toBe('disabled');
+
+    // No provider claims `.txt`, so the item is meaningless rather than unavailable.
+    const none = await makeResolver().resolve(link('test.txt'));
+    expect(none.ok && none.link.preview).toBe('none');
+  });
+
+  it('a folder never offers a preview, whatever a provider would say of its name', async () => {
+    const answer = await makeResolver().resolve(link('docs'));
+    expect(answer.ok && answer.link.preview).toBe('none');
+  });
+});
+
+describe('FileLinkResolver — FR-037: the action re-checks, and a gone file says so ONCE', () => {
+  it('revealInFileManager re-resolves and acts on a real file', async () => {
+    const revealed: string[] = [];
+    const resolver = makeResolver();
+    resolver.setShell({
+      revealInFileManager: async (p) => void revealed.push(p),
+      openFolder: async (p) => void revealed.push(p),
+      openExternal: async () => {},
+      openWithDefaultProgram: async () => {},
+    });
+    await expect(resolver.revealInFileManager(link('test.txt'))).resolves.toEqual({ ok: true });
+    expect(revealed).toEqual([join(root, 'test.txt')]);
+  });
+
+  it('a file deleted between hover and follow answers { ok:false, reason:"gone", path }', async () => {
+    const doomed = join(root, 'doomed.txt');
+    writeFileSync(doomed, 'x', 'utf8');
+    const resolver = makeResolver();
+    const calls: string[] = [];
+    resolver.setShell({
+      revealInFileManager: async (p) => void calls.push(p),
+      openFolder: async (p) => void calls.push(p),
+      openExternal: async () => {},
+      openWithDefaultProgram: async (p) => void calls.push(p),
+    });
+    // It IS a link while it exists…
+    expect((await resolver.resolve(link('doomed.txt'))).ok).toBe(true);
+    rmSync(doomed);
+    // …and the follow re-checks rather than trusting the earlier answer.
+    const outcome = await resolver.revealInFileManager(link('doomed.txt'));
+    expect(outcome).toEqual({ ok: false, reason: 'gone', path: 'doomed.txt' });
+    expect(calls, 'nothing may reach the OS for a path that has gone').toEqual([]);
+  });
+
+  it('ONE outcome, not one per collaborator — the caller raises exactly one notice', async () => {
+    const resolver = makeResolver();
+    resolver.setShell({
+      revealInFileManager: async () => {},
+      openFolder: async () => {},
+      openExternal: async () => {},
+      openWithDefaultProgram: async () => {},
+    });
+    const outcome = await resolver.openWithDefaultProgram(link('not-a-real-file.txt'));
+    expect(outcome.ok).toBe(false);
+    expect(outcome.ok === false && outcome.reason).toBe('gone');
+    // The outcome is a VALUE, so there is one thing to report and one place reporting it.
+    expect(Object.keys(outcome).sort()).toEqual(['ok', 'path', 'reason']);
+  });
+
+  it('openWithDefaultProgram refuses a folder, as a link action and not only at the shell', async () => {
+    const resolver = makeResolver();
+    resolver.setShell({
+      revealInFileManager: async () => {},
+      openFolder: async () => {},
+      openExternal: async () => {},
+      openWithDefaultProgram: async () => {
+        throw new Error('the shell must not be reached for a folder');
+      },
+    });
+    const outcome = await resolver.openWithDefaultProgram(link('docs'));
+    expect(outcome.ok).toBe(false);
+    expect(outcome.ok === false && outcome.reason).toBe('refused');
+  });
+
+  it('a folder link reveals through openFolder, and a file through revealInFileManager', async () => {
+    const calls: { op: string; path: string }[] = [];
+    const resolver = makeResolver();
+    resolver.setShell({
+      revealInFileManager: async (p) => void calls.push({ op: 'reveal', path: p }),
+      openFolder: async (p) => void calls.push({ op: 'openFolder', path: p }),
+      openExternal: async () => {},
+      openWithDefaultProgram: async () => {},
+    });
+    await resolver.revealInFileManager(link('docs'));
+    await resolver.revealInFileManager(link('test.txt'));
+    expect(calls).toEqual([
+      { op: 'openFolder', path: join(root, 'docs') },
+      { op: 'reveal', path: join(root, 'test.txt') },
+    ]);
+  });
+});
