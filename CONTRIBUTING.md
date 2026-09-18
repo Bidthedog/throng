@@ -7,9 +7,8 @@ before merge. Please read this before opening an issue or PR. New to the app? St
 
 > **In short:** get a maintainer to **agree an issue** before you build; capture intent in a
 > **clear, fully-specified spec**; deliver it **unit + integration + E2E tested**; keep the
-> **docs current**. The **Claude Code + Superpowers + Spec Kit +
-> [Superpowers Bridge](https://github.com/lihan3238/speckit-superpowers-bridge)** toolchain is
-> the recommended way to hit that bar — but **hand-written, non-AI contributions are equally
+> **docs current**. The **Claude Code + Spec Kit** toolchain (test-first, spec-driven discipline)
+> is the recommended way to hit that bar — but **hand-written, non-AI contributions are equally
 > welcome, held to the same testing bar.**
 
 ## Code of conduct
@@ -43,9 +42,7 @@ back regardless of how it was authored.
 | Tool | Role | Link |
 |---|---|---|
 | **Claude Code** | The coding agent the AI path runs through. | <https://claude.com/claude-code> |
-| **Superpowers** | Execution discipline: TDD, systematic debugging, verification, code review, branch finishing. | <https://github.com/obra/superpowers> |
-| **Spec Kit** | The design artifacts: constitution, spec, clarify, plan, tasks, analyze, converge. | <https://github.com/github/spec-kit> |
-| **speckit-superpowers-bridge** | Runs Spec Kit's `tasks.md` through native Superpowers execution. | <https://github.com/lihan3238/speckit-superpowers-bridge> |
+| **Spec Kit** | The design artifacts and test-first execution: constitution, spec, clarify, plan, tasks, analyze, implement, converge. | <https://github.com/github/spec-kit> |
 
 **Model floor (AI path):** if AI-driven, it **must** be **Claude Opus 4.8 or better** — the
 spec-driven, test-first discipline degrades badly on weaker or older models. State in your PR
@@ -57,14 +54,14 @@ it was produced.
 
 ```
 issue (agreed) → /speckit-specify → /speckit-clarify → /speckit-plan → /speckit-tasks
-              → /speckit-analyze → /speckit-superpowers-bridge → /speckit-converge
+              → /speckit-analyze → /speckit-implement → /speckit-converge
               → tests green (unit + integration + e2e) → docs current → pull request
 ```
 
 1. **Issue, agreed** — search first, open with a template, [label it](#labelling), describe *intent* (what a user needs and why), and wait for a maintainer to **agree it in a comment**. A PR without an agreed issue is closed. *(Trivial typo/link/doc fixes may skip the spec steps but still need an agreed issue.)*
 2. **Spec** — `/speckit-specify` then `/speckit-clarify` until every `[NEEDS CLARIFICATION]` is gone and requirements are testable and unambiguous.
 3. **Plan & analyse** — `/speckit-plan` → `/speckit-tasks` → `/speckit-analyze`; resolve every critical/high finding before building.
-4. **Implement (TDD)** — `/speckit-superpowers-bridge` drives Superpowers test-first (Red → Green → Refactor). Hand-writing instead is fine, but apply the same discipline and coverage by hand.
+4. **Implement (TDD)** — `/speckit-implement` drives test-first execution (Red → Green → Refactor). Hand-writing instead is fine, but apply the same discipline and coverage by hand.
 5. **Converge & document** — `/speckit-converge` until code and artifacts agree, and bring the `README`, the affected `docs/` guides and `CONTRIBUTING` current **in the same change**.
 6. **Pull request** — branch from `master`, complete the whole PR template, link the agreed issue, and attach passing test output.
 
@@ -201,9 +198,7 @@ Two tests enforce it, not a review comment:
 
 Clone, then `npm install && npm run build && npm test` to confirm a green baseline before you
 start (prerequisites and commands are in the [README](README.md)). For the AI path, install
-Claude Code with the Superpowers and Spec Kit skills; the bridge is vendored at
-`.specify/extensions/speckit-superpowers-bridge/` — use the repo-local `/speckit-*` commands
-(don't overwrite it with a published ZIP).
+Claude Code with the Spec Kit extension and use the repo-local `/speckit-*` commands.
 
 ## Licensing
 

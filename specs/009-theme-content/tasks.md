@@ -85,7 +85,7 @@ Monorepo: core = `packages/core/src/config/`, core tests = `packages/core/tests/
 
 ## Phase 7: Polish, Docs & Verification
 
-- [x] T060 Run full suite with fresh output: `npm run test:unit`, `test:integration`, `test:contract`, `test:e2e`. Apply `superpowers:verification-before-completion`.
+- [x] T060 Run full suite with fresh output: `npm run test:unit`, `test:integration`, `test:contract`, `test:e2e`. Verify all green before claiming completion.
 - [x] T061 [P] Update `README.md` (gutter now themeable; recoloured/branded themes) and `ROADMAP.md` per the documentation-currency rule.
 - [x] T062 Re-run Constitution Check (v3.12.0); confirm configuration-editor-completeness test passes with the gutter tokens and no editor-renderer change.
 - [x] T063 Commit to branch `009-theme-content` (no push).

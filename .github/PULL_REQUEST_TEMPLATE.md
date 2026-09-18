@@ -55,7 +55,7 @@ paste relevant passing output here
 ## Toolchain & review
 
 - [ ] **Authoring (tick one):**
-  - [ ] Produced with **Claude Code + Superpowers + Spec Kit + the [Superpowers Bridge](https://github.com/lihan3238/speckit-superpowers-bridge)**, driven by **Claude Opus 4.8 or a more capable model** (minimum). Model used: `________`
+  - [ ] Produced with **Claude Code + Spec Kit** (test-first, spec-driven discipline), driven by **Claude Opus 4.8 or a more capable model** (minimum). Model used: `________`
   - [ ] **Hand-written / non-AI** — and tested **at least as thoroughly** (unit + integration + E2E) as the AI workflow would produce for this change.
 - [ ] Every artifact passed human review before commit.
 
@@ -69,7 +69,7 @@ Spec directory: `specs/<NNN-feature-slug>/`
 - [ ] `/speckit-plan` produced `plan.md`, `research.md`, `data-model.md`, `contracts/`.
 - [ ] `/speckit-tasks` produced a dependency-ordered `tasks.md`.
 - [ ] `/speckit-analyze` was run; **no critical/high-severity** cross-artifact findings remain.
-- [ ] Implemented via **`/speckit-superpowers-bridge`** (native Superpowers TDD), not a one-shot run.
+- [ ] Implemented via **`/speckit-implement`** (test-first TDD), not a one-shot run.
 - [ ] `/speckit-converge` was run and the codebase agrees with spec/plan/tasks.
 - [ ] Manual testing of all new features carried out.
 

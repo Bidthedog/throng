@@ -7,9 +7,7 @@
     "ask": [
     ]
   },
-  "enabledPlugins": {
-    "superpowers@claude-plugins-official": true
-  },
+  "enabledPlugins": {},
   "enabledMcpjsonServers": [
   ]
 }

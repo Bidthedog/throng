@@ -1391,7 +1391,7 @@ Every FR and SC maps to at least one task. Primary proving task(s) first.
 ## Phase 12: Convergence
 
 *Baseline converge, 2026-09-15, against the spec, plan and tasks as they stood before any
-speckit-iterate amendment. Adversarial-review fix batches A–D (`.superpowers/sdd/tasks/progress.md`,
+speckit-iterate amendment. Adversarial-review fix batches A–D (`session-notes/progress.md`,
 FIX BATCHES) are already queued and are not repeated here.*
 
 - [x] T177 [renderer-ui] Keep the reader's scroll position when a preview's file changes path without a link being followed (in-app rename or move, or Save As from the parent editor): `packages/ui/src/renderer/preview/providers/markdown/markdown-body.tsx:198-207` treats every `filePath` change as a navigation and sets `scrollTop = 0`, while `packages/ui/src/main/preview-service.ts` re-points the run on `repointed` (`:727-728`, `:1087-1099`) and `moved()` (`:672-681`). Distinguish a re-point from a navigation (a signal on the update, or the history intent) and add the rename case to `packages/ui/tests/component/markdown-body.test.ts` first, observed failing, per FR-024 with FR-013c (partial)
@@ -1408,7 +1408,7 @@ text-selection defect (FR-035, FR-094). Design: plan.md → *Iteration 2026-09-1
 data-model §14; contracts `settings-bindings-tokens.md` (iteration obligations), `menus-and-controls.md`
 §4 and §8, `navigation-history.md` §3 and §8, `security-policy.md` Layer 1, Layer 2 and *Links out*;
 quickstart §8. The `contracts/preview-ipc.md` §1 change for FR-115 is written in
-`.superpowers/sdd/tasks/iterate-preview-ipc-pending.md` and is applied to the contract before T201 starts.*
+`session-notes/iterate-preview-ipc-pending.md` and is applied to the contract before T201 starts.*
 
 **Starts after** Phase 12 (T177–T180) and the adversarial-review fix batches C and D, which edit
 `markdown-body.tsx`, `pipeline.ts` and `preview-panel.tsx`. **T176** (the hosted gate) stays open and runs
@@ -1746,9 +1746,9 @@ flat by T181.
 
 *Second converge pass, 2026-09-16, against the spec, plan, tasks and contracts as they stand after the
 `speckit-iterate` amendment (FR-113–FR-120) and Phase 13. The 2026-09-15 baseline
-(`.superpowers/sdd/tasks/iterate-baseline-converge.md`) was read as the "before": **T177–T180 all landed
+(`session-notes/iterate-baseline-converge.md`) was read as the "before": **T177–T180 all landed
 and none regressed**, verified in the code rather than assumed. Full report:
-`.superpowers/sdd/tasks/converge-final.md`.*
+`session-notes/converge-final.md`.*
 
 **26 findings: 1 missing, 12 partial, 10 contradicts, 3 unrequested.** Eighteen were artifact drift whose
 fix was text, and those are **already applied** to `spec.md`, `plan.md`, `research.md`, `data-model.md`
@@ -1758,7 +1758,7 @@ repeated as tasks. The eight below are what remains. No code was written by this
 **Three things this pass deliberately did NOT do**, so the next reader is not misled:
 
 - **It did not tick T216.** `research.md` Open item O10 cites T216 in the past tense and
-  `.superpowers/sdd/tasks/t216-report.md` records rungs 1–8 green, but the full re-run of the named
+  `session-notes/t216-report.md` records rungs 1–8 green, but the full re-run of the named
   unit/component/integration set **after** the declaration-1 re-seat has not happened. T216 and T217 stay
   open, and that is the honest state.
 - **It did not edit T183, T213 or T216 in place**, though each carries an instruction the delivery
@@ -2191,9 +2191,9 @@ T237's declaration exists only if T226 has paid for it.
       `preview-subworkspace.e2e.ts` (a parented preview in a second window, where FR-121a says no editor is
       driven) must pass unchanged; if either fails because sync moved something, report it with both scroll
       traces rather than seeding the setting off.
-      > **Ticked at converge 2026-09-16 (round 2)** against `.superpowers/sdd/tasks/t252-report.md` (HEAD
+      > **Ticked at converge 2026-09-16 (round 2)** against `session-notes/t252-report.md` (HEAD
       > `b6e43b91`): typecheck exit 0; lint red only on two untracked, gitignored scratch scripts under
-      > `.superpowers/`, tracked source clean; the 17 unit, 17 component and 2 integration files covering
+      > `session-notes/`, tracked source clean; the 17 unit, 17 component and 2 integration files covering
       > T227–T236 (plus the re-run files T240/T242 name) green; a clean build carrying `syncScroll`; and
       > `preview-scroll`, `preview-subworkspace`, `navigation-history-keys` and `quick-open` (the spec T226
       > edited), plus `editor-status-bar`, `status-bar-visibility`, `editor-menus` and
