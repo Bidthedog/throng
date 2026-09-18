@@ -25,3 +25,8 @@ C:\elsewhere\x.ts
 see https://example.com/docs for details
 https://host/src/foo.ts:42
 error at src/foo.ts:42:7 (see https://example.com/issue/1)
+D:\p\with space\notes.md
+/d/p/with space/notes.md
+/mnt/d/p/with space/notes.md
+file:///D:/p/with%20space/notes.md
+see D:\p\with space\notes.md for details

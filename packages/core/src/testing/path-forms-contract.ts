@@ -37,7 +37,64 @@ function endsWithSegments(path: string, segments: readonly string[]): boolean {
   return segments.every((s, i) => parts[parts.length - segments.length + i] === s);
 }
 
-export function runPathFormsContract(makeSubject: () => IPathForms): void {
+/**
+ * 045 T203 / T210 — the four members `contracts/platform-ports.md` §6.1 adds (FR-151 – FR-153).
+ *
+ * Declared here as OPTIONAL and looked up at run time, because the port does not carry them yet
+ * (T204 adds them to `abstractions/path-forms.ts` and then folds this type away). Written that way so
+ * `@throng/core` still type-checks while the suite is red: a missing member fails as a contract
+ * violation naming the member, not as a compile error that stops every other package building.
+ */
+interface ThirdRoundPathForms {
+  fromMountTable?: (posixPath: string) => string | null;
+  qualifyRooted?: (rootedPath: string, anchor: string) => string | null;
+  fileUrlLocalPath?: (url: string) => string | null;
+  loopbackFromFileUrl?: (url: string) => string | null;
+}
+
+type ThirdRoundMember = keyof ThirdRoundPathForms;
+
+/** The member, bound to its subject — or a contract violation naming the one that is missing. */
+function member<K extends ThirdRoundMember>(
+  subject: IPathForms,
+  name: K,
+): NonNullable<ThirdRoundPathForms[K]> {
+  const found = (subject as IPathForms & ThirdRoundPathForms)[name];
+  assert(
+    typeof found === 'function',
+    `IPathForms.${name} must exist (platform-ports.md §6.1); the subject has no such member`,
+  );
+  return (found as (...args: never[]) => unknown).bind(subject) as NonNullable<ThirdRoundPathForms[K]>;
+}
+
+/**
+ * What PF13 – PF15 need that the other cases do not: a subject told where Git for Windows is
+ * installed, and one told it is not installed at all. Git's install root reaches the implementation
+ * by constructor (platform-ports §6.1, "Where Git's install root comes from"), so only the caller can
+ * build these two — the suite cannot.
+ *
+ * `gitRoot` must be an absolute folder holding `etc/fstab` that maps `/tmp` somewhere other than
+ * under the root — the shape Git for Windows ships (`none /tmp usertemp …`), which PF14 depends on.
+ * A platform with no Git Bash omits the fixture, and PF13 – PF15 are then not its to answer.
+ */
+export interface PathFormsGitFixture {
+  readonly gitRoot: string;
+  readonly withGitRoot: (gitRoot: string) => IPathForms;
+  readonly withoutGit: () => IPathForms;
+}
+
+function isUnder(child: string, parent: string): boolean {
+  const norm = (p: string) => p.replace(/[\\/]+/g, '/').replace(/\/$/, '').toLowerCase();
+  const c = norm(child);
+  const p = norm(parent);
+  return c.length > p.length && c.startsWith(`${p}/`);
+}
+
+function driveOf(path: string): string | null {
+  return /^([A-Za-z]):/.exec(path)?.[1]?.toUpperCase() ?? null;
+}
+
+export function runPathFormsContract(makeSubject: () => IPathForms, git?: PathFormsGitFixture): void {
   const subject = makeSubject();
 
   // ── PF1 ──────────────────────────────────────────────────────────────────────────────────────
@@ -195,6 +252,144 @@ export function runPathFormsContract(makeSubject: () => IPathForms): void {
       ['fromDriveForm', () => subject.fromDriveForm(input)],
       ['fromFileUrl', () => subject.fromFileUrl(input)],
       ['fromHomeForm', () => subject.fromHomeForm(input)],
+    ] as const) {
+      let answer: string | null | undefined;
+      let threw: unknown;
+      try {
+        answer = call();
+      } catch (e) {
+        threw = e;
+      }
+      assert(
+        threw === undefined,
+        `${name} must be total and must not throw; it threw ${String(threw)} for ${JSON.stringify(input)}`,
+      );
+      assert(
+        answer === null || typeof answer === 'string',
+        `${name} must return a string or null; got ${typeof answer} for ${JSON.stringify(input)}`,
+      );
+    }
+  }
+
+  // ══ Third round (045 T203 / T210; platform-ports.md §6.1) ══════════════════════════════════════
+
+  // ── PF13 – PF15: Git Bash's mount table (FR-151) ─────────────────────────────────────────────
+  if (git !== undefined) {
+    const withGit = member(git.withGitRoot(git.gitRoot), 'fromMountTable');
+
+    // PF13
+    const bash = withGit('/usr/bin/bash.exe');
+    assert(
+      typeof bash === 'string' && isUnder(bash, git.gitRoot) && endsWithSegments(bash, ['usr', 'bin', 'bash.exe']),
+      `fromMountTable('/usr/bin/bash.exe') must lie under the Git root ${JSON.stringify(git.gitRoot)} and end in usr/bin/bash.exe; got ${JSON.stringify(bash)}`,
+    );
+    const hosts = withGit('/etc/hosts');
+    assert(
+      typeof hosts === 'string' && isUnder(hosts, git.gitRoot) && endsWithSegments(hosts, ['etc', 'hosts']),
+      `fromMountTable('/etc/hosts') must lie under the Git root and end in etc/hosts; got ${JSON.stringify(hosts)}`,
+    );
+
+    // PF14
+    const tmp = withGit('/tmp');
+    assert(
+      typeof tmp === 'string' && ABSOLUTE.test(tmp),
+      `fromMountTable('/tmp') must be absolute; got ${JSON.stringify(tmp)}`,
+    );
+    assert(
+      !isUnder(tmp, git.gitRoot),
+      `fromMountTable('/tmp') must follow the mount table's /tmp mapping, not the Git root; got ${JSON.stringify(tmp)} under ${JSON.stringify(git.gitRoot)}`,
+    );
+
+    // PF15
+    for (const notMounted of ['/c/x', '/mnt/c/x', 'x', '']) {
+      assert(
+        withGit(notMounted) === null,
+        `fromMountTable(${JSON.stringify(notMounted)}) must be null — a drive form is fromDriveForm's, and a relative path is not rooted; got ${JSON.stringify(withGit(notMounted))}`,
+      );
+    }
+    const noGit = member(git.withoutGit(), 'fromMountTable');
+    for (const any of ['/usr/bin/bash.exe', '/etc/hosts', '/tmp', '/', '/c/x']) {
+      assert(
+        noGit(any) === null,
+        `with no Git for Windows installed, fromMountTable(${JSON.stringify(any)}) must be null; got ${JSON.stringify(noGit(any))}`,
+      );
+    }
+  }
+
+  // ── PF16: drive qualification (FR-152) ──────────────────────────────────────────────────────
+  const qualify = member(subject, 'qualifyRooted');
+  for (const rooted of ['/tmp', '\\tmp']) {
+    const q = qualify(rooted, home);
+    assert(
+      typeof q === 'string' && ABSOLUTE.test(q),
+      `qualifyRooted(${JSON.stringify(rooted)}, ${JSON.stringify(home)}) must be absolute; got ${JSON.stringify(q)}`,
+    );
+    assert(
+      driveOf(q) === driveOf(home),
+      `qualifyRooted(${JSON.stringify(rooted)}, anchor) must be on the anchor's drive; got ${JSON.stringify(q)} for anchor ${JSON.stringify(home)}`,
+    );
+    assert(
+      endsWithSegments(q, ['tmp']),
+      `qualifyRooted(${JSON.stringify(rooted)}, anchor) must keep the path it was given; got ${JSON.stringify(q)}`,
+    );
+  }
+  for (const notAbsolute of ['relative/dir', '', 'x']) {
+    assert(
+      qualify('/tmp', notAbsolute) === null,
+      `qualifyRooted('/tmp', ${JSON.stringify(notAbsolute)}) must be null — an anchor that is not absolute has no drive to lend; got ${JSON.stringify(qualify('/tmp', notAbsolute))}`,
+    );
+  }
+
+  // ── PF17: the local path inside a file: URI, when it is not drive-qualified (FR-153) ────────
+  const localPath = member(subject, 'fileUrlLocalPath');
+  assert(
+    localPath('file:///c/Windows/win.ini') === '/c/Windows/win.ini',
+    `fileUrlLocalPath('file:///c/Windows/win.ini') must be '/c/Windows/win.ini'; got ${JSON.stringify(localPath('file:///c/Windows/win.ini'))}`,
+  );
+  assert(
+    localPath('file://localhost/mnt/c/x') === '/mnt/c/x',
+    `fileUrlLocalPath('file://localhost/mnt/c/x') must be '/mnt/c/x'; got ${JSON.stringify(localPath('file://localhost/mnt/c/x'))}`,
+  );
+  assert(
+    localPath('file:///usr/bin/a%20b') === '/usr/bin/a b',
+    `fileUrlLocalPath must percent-decode, as FR-012 does; got ${JSON.stringify(localPath('file:///usr/bin/a%20b'))}`,
+  );
+  for (const notLocal of ['file:///D:/x', 'file://localhost/D:/x', 'file://server/share/x', 'http://x/y', '', 'x']) {
+    assert(
+      localPath(notLocal) === null,
+      `fileUrlLocalPath(${JSON.stringify(notLocal)}) must be null — drive-qualified, hosted, or not a file: URI; got ${JSON.stringify(localPath(notLocal))}`,
+    );
+  }
+
+  // ── PF18: the loopback share a localhost URI may name (FR-153) ─────────────────────────────
+  const loopback = member(subject, 'loopbackFromFileUrl');
+  const share = loopback('file://localhost/C$/Windows/win.ini');
+  assert(
+    typeof share === 'string' && endsWithSegments(share, ['localhost', 'C$', 'Windows', 'win.ini']),
+    `loopbackFromFileUrl('file://localhost/C$/Windows/win.ini') must name host localhost, share C$, and end in win.ini; got ${JSON.stringify(share)}`,
+  );
+  assert(
+    typeof share === 'string' && share.split(SEPARATOR).filter((p) => p.length > 0)[0] === 'localhost',
+    `the loopback location must BEGIN with the host — it is a network location, not a local one; got ${JSON.stringify(share)}`,
+  );
+  for (const notLoopback of ['file://localhost/D:/x', 'file:///C$/x', 'file://server/C$/x', 'http://localhost/C$/x', '']) {
+    assert(
+      loopback(notLoopback) === null,
+      `loopbackFromFileUrl(${JSON.stringify(notLoopback)}) must be null; got ${JSON.stringify(loopback(notLoopback))}`,
+    );
+  }
+
+  // ── PF19: PF7 and PF8 above run unchanged — the hosted and localhost-drive readings of
+  // fromFileUrl are not moved by FR-153. Nothing to add here; they are asserted where they stand.
+
+  // ── PF12′: the four new members are total ────────────────────────────────────────────────────
+  for (const input of hostile) {
+    for (const [name, call] of [
+      ['fromMountTable', () => member(subject, 'fromMountTable')(input)],
+      ['qualifyRooted(input, home)', () => qualify(input, home)],
+      ['qualifyRooted(/tmp, input)', () => qualify('/tmp', input)],
+      ['fileUrlLocalPath', () => localPath(input)],
+      ['loopbackFromFileUrl', () => loopback(input)],
     ] as const) {
       let answer: string | null | undefined;
       let threw: unknown;

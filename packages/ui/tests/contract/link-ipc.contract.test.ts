@@ -287,3 +287,42 @@ describe('throng:links:* — T147: reason ‘unreachable’ passes through all t
     }
   });
 });
+
+/**
+ * 045 T205 (contract half), FR-151 — `settings-and-environment.md` §7.1, I7.
+ *
+ * The request gains `wslFlavour?: true`, which a WSL terminal sets so main skips Git Bash's mount
+ * table. The whitelist admits exactly `true`; every other value arrives ABSENT, not coerced — a
+ * renderer that sends `'x'` or `false` gets the non-WSL reading, which is the one that asks more.
+ */
+describe('throng:links:* — T205 / I7: the whitelist admits wslFlavour: true and nothing else', () => {
+  it('wslFlavour: true is forwarded', async () => {
+    const ipc = fakeIpc();
+    const { service, seen } = fakeService();
+    registerLinkIpc(ipc, service);
+    await ipc.handles.get('throng:links:resolve')!(event(1), { ...REQUEST, wslFlavour: true });
+    expect(seen[0]?.request.wslFlavour).toBe(true);
+  });
+
+  for (const value of ['x', false, 1, 'true', null, {}] as const) {
+    it(`wslFlavour: ${JSON.stringify(value)} arrives absent`, async () => {
+      const ipc = fakeIpc();
+      const { service, seen } = fakeService();
+      registerLinkIpc(ipc, service);
+      await ipc.handles.get('throng:links:resolve')!(event(1), { ...REQUEST, wslFlavour: value });
+      expect(seen).toHaveLength(1);
+      // `toBeUndefined`, as the baseDirectory case above: the sanitiser spells a dropped field as an
+      // undefined member, and that is the same answer to every reader of the request.
+      expect(seen[0]!.request.wslFlavour).toBeUndefined();
+    });
+  }
+
+  it('reveal and open carry it too — they resolve the same text again (I3)', async () => {
+    const ipc = fakeIpc();
+    const { service, seen } = fakeService();
+    registerLinkIpc(ipc, service);
+    await ipc.handles.get('throng:links:reveal')!(event(1), { ...REQUEST, wslFlavour: true });
+    await ipc.handles.get('throng:links:open')!(event(1), { ...REQUEST, wslFlavour: true });
+    expect(seen.map((s) => s.request.wslFlavour)).toEqual([true, true]);
+  });
+});

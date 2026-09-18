@@ -36,7 +36,38 @@ const fakePathForms: IPathForms = {
     const m = /^~[\\/](.*)$/.exec(p);
     return m ? `${HOME}\\${m[1].replace(/\//g, '\\')}` : null;
   },
+  // 045 T205 / T209 — the four members platform-ports.md §6.1 adds. The port does not declare them
+  // yet (T204), so they ride on the object as extra properties; resolve.ts reaches them through the
+  // port once it does.
+  ...({
+    fromMountTable: (p: string): string | null => {
+      if (!/^\//.test(p) || /^\/(?:mnt\/)?[A-Za-z](?:\/|$)/.test(p)) return null;
+      if (/^\/tmp(?:\/|$)/.test(p)) return `${USER_TEMP}${p.slice('/tmp'.length).replace(/\//g, '\\')}`;
+      if (/^\/bin(?:\/|$)/.test(p)) return `${GIT_ROOT}\\usr\\bin${p.slice('/bin'.length).replace(/\//g, '\\')}`;
+      return `${GIT_ROOT}${p.replace(/\//g, '\\')}`;
+    },
+    qualifyRooted: (p: string, anchor: string): string | null => {
+      const drive = /^([A-Za-z]:)[\\/]/.exec(anchor)?.[1];
+      if (drive === undefined || !/^[\\/](?![\\/])/.test(p)) return null;
+      return `${drive}${p.replace(/\//g, '\\')}`;
+    },
+    fileUrlLocalPath: (url: string): string | null => {
+      const m = /^file:\/\/(localhost)?(\/.*)$/i.exec(url);
+      if (!m) return null;
+      const decoded = decodeURIComponent(m[2]);
+      return /^\/[A-Za-z]:/.test(decoded) ? null : decoded;
+    },
+    loopbackFromFileUrl: (url: string): string | null => {
+      const m = /^file:\/\/localhost\/([^/]+)(\/.*)?$/i.exec(url);
+      if (!m || /^[A-Za-z]:$/.test(m[1])) return null;
+      return `\\\\localhost\\${m[1]}${decodeURIComponent(m[2] ?? '').replace(/\//g, '\\')}`;
+    },
+  } as object),
 };
+
+/** Where the fake's Git for Windows lives, and the user's temp folder its `/tmp` maps to. */
+const GIT_ROOT = 'C:\\Program Files\\Git';
+const USER_TEMP = 'C:\\Users\\dev\\AppData\\Local\\Temp';
 
 const candidate = (text: string, extra: Partial<LinkCandidate> = {}): LinkCandidate => ({
   text,
@@ -125,7 +156,8 @@ describe('resolveCandidate — R6: a leading / tries the PROJECT ROOT first', ()
   it("#394's own example: /test.txt is the project's test.txt", () => {
     const list = resolveCandidate(candidate('/test.txt'), ctx());
     expect(list[0]).toBe('C:\\throng\\test.txt');
-    expect(list).toHaveLength(2);
+    // *Third round (T205):* `toHaveLength(2)` withdrawn, as spec *Supersessions* permits — FR-151's
+    // mount-table reading may now sit between the project root and the platform's meaning.
     expect(existsFirst(list, () => true)).toBe('C:\\throng\\test.txt');
   });
 
@@ -188,7 +220,10 @@ describe('resolveCandidate — R8: a file: URI is decoded through IPathForms', (
 describe('resolveCandidate — R9/R11: what is deliberately NOT mapped', () => {
   it('R9: a POSIX path that is not a drive form gets no WSL mapping', () => {
     const list = resolveCandidate(candidate('/etc/hosts'), ctx());
-    expect(list).toEqual(['C:\\throng\\etc\\hosts', '/etc/hosts']);
+    // *Third round (T205):* was `['C:\\throng\\etc\\hosts', '/etc/hosts']`. FR-151 inserts Git's
+    // mount-table reading and FR-152 drive-qualifies the last one (spec *Supersessions*).
+    expect(list).toEqual(['C:\\throng\\etc\\hosts', `${GIT_ROOT}\\etc\\hosts`, 'C:\\etc\\hosts']);
+    // This half MUST stay: still no WSL mapping.
     expect(list.some((p) => /mnt/i.test(p))).toBe(false);
   });
 
@@ -199,7 +234,11 @@ describe('resolveCandidate — R9/R11: what is deliberately NOT mapped', () => {
   });
 
   it('R11: with no project root the project-root attempt is simply absent', () => {
-    expect(resolveCandidate(candidate('/test.txt'), ctx({ projectRoot: null }))).toEqual(['/test.txt']);
+    // *Third round (T205):* was `['/test.txt']`. FR-152 — with no base directory and no project root
+    // the platform step is not reached. T205 states the answer as `[]`, which also leaves out
+    // FR-151's mount-table reading (Git's `/` + `test.txt`); R13 as written would keep it. Flagged
+    // for the maintainer rather than settled here — this case follows T205's wording.
+    expect(resolveCandidate(candidate('/test.txt'), ctx({ projectRoot: null }))).toEqual([]);
     expect(resolveCandidate(candidate('test.txt'), ctx({ projectRoot: null }))).toEqual([]);
   });
 
@@ -221,5 +260,166 @@ describe('resolveCandidate — purity', () => {
   it('never returns the same location twice', () => {
     const list = resolveCandidate(candidate('src/x.ts'), ctx({ baseDirectory: 'C:\\throng' }));
     expect(new Set(list).size).toBe(list.length);
+  });
+});
+
+/*
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ * 045 T205 — FR-151 / FR-152 (link-resolution.md §8.2, R13 / R14)
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * What the user sees today (O11's corpus rows 38 – 40): `/usr/bin/bash.exe` and `/etc/hosts` are not
+ * Git Bash's files, and `/tmp` is followed to the CURRENT drive's `\tmp` — whatever drive throng's own
+ * process happens to be on — with the text handed over as written.
+ *
+ * R13's order for a leading-`/` path that is not a drive form: project root, drive form, Git's mount
+ * table, then the platform's own meaning qualified by R14's anchor (base directory, else project
+ * root). With `wslFlavour`, only the first two remain.
+ */
+const wslCtx = (over: { baseDirectory?: string; projectRoot?: string | null } = {}) => ({
+  ...ctx(over),
+  wslFlavour: true as const,
+});
+
+/** A rooted path with no drive — `\tmp`, `/tmp` — but not a UNC `\\server\share`. */
+const ROOTED_WITHOUT_DRIVE = /^[\\/](?![\\/])/;
+
+describe('T205 / R13 — a non-drive leading-/ path: project root, drive form, mount table, qualified platform', () => {
+  it('/usr/bin/bash.exe tries the project, then Git\u2019s install, then the drive-qualified meaning', () => {
+    expect(resolveCandidate(candidate('/usr/bin/bash.exe'), ctx())).toEqual([
+      'C:\\throng\\usr\\bin\\bash.exe',
+      `${GIT_ROOT}\\usr\\bin\\bash.exe`,
+      'C:\\usr\\bin\\bash.exe',
+    ]);
+  });
+
+  it('/tmp reaches the user\u2019s temp folder through the mount table, before any \\tmp on a drive', () => {
+    const list = resolveCandidate(candidate('/tmp'), ctx());
+    expect(list).toEqual(['C:\\throng\\tmp', USER_TEMP, 'C:\\tmp']);
+    expect(existsFirst(list, (p) => p !== 'C:\\throng\\tmp')).toBe(USER_TEMP);
+  });
+
+  it('R14: the platform reading is qualified by the BASE directory\u2019s drive first, then the project root\u2019s', () => {
+    const list = resolveCandidate(candidate('/tmp'), ctx({ baseDirectory: 'D:\\work\\sub' }));
+    expect(list[list.length - 1]).toBe('D:\\tmp');
+    const rootOnly = resolveCandidate(candidate('/tmp'), ctx({ projectRoot: 'E:\\proj' }));
+    expect(rootOnly[rootOnly.length - 1]).toBe('E:\\tmp');
+  });
+
+  it('a backslash-rooted path is qualified the same way', () => {
+    const list = resolveCandidate(candidate('\\tmp\\x.log'), ctx({ baseDirectory: 'D:\\work' }));
+    expect(list).toContain('D:\\tmp\\x.log');
+    expect(list.some((p) => ROOTED_WITHOUT_DRIVE.test(p))).toBe(false);
+  });
+
+  it('with no Git install (the port answers null) the mount-table step is simply absent', () => {
+    const noGit = { ...fakePathForms, fromMountTable: () => null } as IPathForms;
+    expect(resolveCandidate(candidate('/etc/hosts'), { projectRoot: 'C:\\throng', pathForms: noGit })).toEqual([
+      'C:\\throng\\etc\\hosts',
+      'C:\\etc\\hosts',
+    ]);
+  });
+
+  it('a drive form keeps R3\u2019s mapping and gains no mount-table reading', () => {
+    const list = resolveCandidate(candidate('/d/git/x.ts'), ctx());
+    expect(list).toContain('D:\\git\\x.ts');
+    expect(list.some((p) => p.startsWith(GIT_ROOT))).toBe(false);
+  });
+});
+
+describe('T205 / FR-152 — no list ever contains a rooted path without a drive', () => {
+  const inputs = ['/test.txt', '/etc/hosts', '/tmp', '\\tmp', '/usr/bin/bash.exe', '/d/x', '/mnt/c/x', 'src/x.ts'];
+  const contexts = [
+    ['a project root', ctx()],
+    ['a base directory and a root', ctx({ baseDirectory: 'D:\\work' })],
+    ['a base directory, no root', ctx({ baseDirectory: 'D:\\work', projectRoot: null })],
+    ['neither', ctx({ projectRoot: null })],
+    ['a WSL flavour', wslCtx()],
+  ] as const;
+
+  for (const [label, c] of contexts) {
+    it(`with ${label}`, () => {
+      for (const text of inputs) {
+        const list = resolveCandidate(candidate(text), c);
+        expect(list.filter((p) => ROOTED_WITHOUT_DRIVE.test(p)), `${text} with ${label}`).toEqual([]);
+      }
+    });
+  }
+
+  it('with no base directory and no project root, /test.txt yields []', () => {
+    expect(resolveCandidate(candidate('/test.txt'), ctx({ projectRoot: null }))).toEqual([]);
+  });
+});
+
+describe('T205 / R13 — a WSL flavour skips the mount table and the platform step', () => {
+  it('/etc/hosts in WSL tries the project root only — never Git\u2019s install', () => {
+    expect(resolveCandidate(candidate('/etc/hosts'), wslCtx())).toEqual(['C:\\throng\\etc\\hosts']);
+  });
+
+  it('/tmp in WSL is not the Windows temp folder and not a drive\u2019s \\tmp', () => {
+    expect(resolveCandidate(candidate('/tmp'), wslCtx({ baseDirectory: 'D:\\work' }))).toEqual(['C:\\throng\\tmp']);
+  });
+
+  it('/mnt/c/x in WSL still maps through the drive form (FR-025)', () => {
+    expect(resolveCandidate(candidate('/mnt/c/x.txt'), wslCtx())).toEqual(['C:\\throng\\mnt\\c\\x.txt', 'C:\\x.txt']);
+  });
+
+  it('WSL never ADDS a reading (I7): its list is a subset of the non-WSL list', () => {
+    for (const text of ['/etc/hosts', '/tmp', '/usr/bin/bash.exe', '/mnt/c/x.txt', 'src/x.ts', 'D:\\x']) {
+      const plain = resolveCandidate(candidate(text), ctx({ baseDirectory: 'D:\\work' }));
+      const wsl = resolveCandidate(candidate(text), wslCtx({ baseDirectory: 'D:\\work' }));
+      expect(wsl.every((p) => plain.includes(p)), text).toBe(true);
+    }
+  });
+});
+
+/*
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ * 045 T209 — FR-153 (link-resolution.md §8.3, R15 / R16)
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * What the user sees today (O11 rows 5, 44, 45): `file:///c/Windows/win.ini` is not a link at all,
+ * an OSC 8 `file:///mnt/c/…` is inert, and `file://localhost/C$/…` is underlined and does nothing —
+ * because a hostless or localhost `file:` URI is handed to `fromFileUrl` alone, which reads a
+ * POSIX-spelled path as a folder on the current drive.
+ */
+describe('T209 / R15 — a file: URI whose path is not drive-qualified resolves as the bare path', () => {
+  const same = (url: string, bare: string, c = ctx()) =>
+    expect(resolveCandidate(candidate(url), c), `${url} \u2261 ${bare}`).toEqual(resolveCandidate(candidate(bare), c));
+
+  it('file:///c/Windows/win.ini is /c/Windows/win.ini', () => {
+    same('file:///c/Windows/win.ini', '/c/Windows/win.ini');
+    expect(resolveCandidate(candidate('file:///c/Windows/win.ini'), ctx())).toContain('C:\\Windows\\win.ini');
+  });
+
+  it('file:///mnt/c/Windows/win.ini is /mnt/c/Windows/win.ini', () => {
+    same('file:///mnt/c/Windows/win.ini', '/mnt/c/Windows/win.ini');
+  });
+
+  it('file:///usr/bin/bash.exe is /usr/bin/bash.exe — Git\u2019s mount table included', () => {
+    same('file:///usr/bin/bash.exe', '/usr/bin/bash.exe');
+    expect(resolveCandidate(candidate('file:///usr/bin/bash.exe'), ctx())).toContain(`${GIT_ROOT}\\usr\\bin\\bash.exe`);
+  });
+
+  it('the same holds in a panel with no project (R11) and in a WSL flavour', () => {
+    same('file:///c/Windows/win.ini', '/c/Windows/win.ini', ctx({ projectRoot: null }));
+    same('file:///usr/bin/bash.exe', '/usr/bin/bash.exe', wslCtx());
+  });
+});
+
+describe('T209 / R16 — a localhost URI whose first segment is not a drive also tries the loopback share', () => {
+  it('file://localhost/C$/Windows/win.ini ends with \\\\localhost\\C$\\Windows\\win.ini, after its local readings', () => {
+    const list = resolveCandidate(candidate('file://localhost/C$/Windows/win.ini'), ctx());
+    expect(list[list.length - 1]).toBe('\\\\localhost\\C$\\Windows\\win.ini');
+    expect(list.slice(0, -1)).toEqual(resolveCandidate(candidate('/C$/Windows/win.ini'), ctx()));
+    expect(list.length).toBeGreaterThan(1);
+  });
+});
+
+describe('T209 — the drive-qualified and hosted URIs are unchanged (FR-012)', () => {
+  it('file:///C:/x, file://localhost/D:/x and file://server/share/x', () => {
+    expect(resolveCandidate(candidate('file:///C:/x'), ctx())).toEqual(['C:\\x']);
+    expect(resolveCandidate(candidate('file://localhost/D:/x'), ctx())).toEqual(['D:\\x']);
+    expect(resolveCandidate(candidate('file://server/share/x'), ctx())).toEqual(['\\\\server\\share\\x']);
   });
 });

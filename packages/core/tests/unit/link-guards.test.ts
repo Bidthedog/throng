@@ -112,3 +112,49 @@ describe('LINK_IDLE_SCAN_MS — the idle scan waits for quiet, and not for long 
     expect(idle).toBeLessThan(LINK_CACHE_TTL_MS);
   });
 });
+
+/**
+ * 045 T199 — MAX_PATH_SPACE_WORDS, how many words an anchored token may be extended by (FR-150;
+ * link-resolution.md §8.1 D16; plan Complexity Tracking, third round). The third guard beside the
+ * per-line cap: every extended reading is a candidate, so without a cap one path followed by a long
+ * sentence multiplies into as many existence checks as the sentence has words.
+ *
+ * Read through the module namespace, like LINK_IDLE_SCAN_MS above, so the file's existing cases keep
+ * running while the export is absent.
+ */
+describe('MAX_PATH_SPACE_WORDS — an extension is bounded, and bites exactly at its edge (FR-150)', () => {
+  const cap = (limits as Record<string, unknown>).MAX_PATH_SPACE_WORDS as number | undefined;
+
+  it('is exported from core/src/links/limits.ts as a whole number', () => {
+    expect(typeof cap, 'limits.ts exports MAX_PATH_SPACE_WORDS').toBe('number');
+    expect(Number.isSafeInteger(cap)).toBe(true);
+  });
+
+  it('is at least 2 — the corpus needs C:\\Program Files\\Common Files\\…', () => {
+    expect(cap).toBeGreaterThanOrEqual(2);
+  });
+
+  it('is small enough that one line cannot turn a sentence into dozens of readings', () => {
+    expect(cap).toBeLessThanOrEqual(16);
+  });
+
+  it('at the edge: a token followed by cap + 1 words yields cap extended readings plus the token', () => {
+    expect(typeof cap, 'limits.ts exports MAX_PATH_SPACE_WORDS').toBe('number');
+    const n = cap ?? 0;
+    const words = Array.from({ length: n + 1 }, (_, i) => `w${i + 1}`);
+    const line = `D:\\a ${words.join(' ')}`;
+    const fromToken = detectPathCandidates(line, []).filter((c) => c.start === 0).map((c) => c.text);
+    expect(fromToken).toHaveLength(n + 1);
+    expect(fromToken[0]).toBe(`D:\\a ${words.slice(0, n).join(' ')}`);
+    expect(fromToken[fromToken.length - 1]).toBe('D:\\a');
+  });
+
+  it('exactly cap words: the longest reading takes every one of them', () => {
+    expect(typeof cap, 'limits.ts exports MAX_PATH_SPACE_WORDS').toBe('number');
+    const n = cap ?? 0;
+    const words = Array.from({ length: n }, (_, i) => `w${i + 1}`);
+    const line = `D:\\a ${words.join(' ')}`;
+    const longest = detectPathCandidates(line, []).find((c) => c.start === 0)?.text;
+    expect(longest).toBe(line);
+  });
+});

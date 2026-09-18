@@ -1,10 +1,14 @@
 import { cpSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { SHIPPED_PREVIEW_PROVIDERS, type PreviewSettings } from '@throng/core';
-import { WindowsExecutableExtensions, WindowsPathForms } from '@throng/platform-windows';
+import { detectPathCandidates, SHIPPED_PREVIEW_PROVIDERS, type PreviewSettings } from '@throng/core';
+import {
+  WindowsExecutableExtensions,
+  WindowsPathForms,
+  WindowsShellDetection,
+} from '@throng/platform-windows';
 import { NodeFileSystem } from '../../src/main/node-file-system.js';
 import { FileLinkResolver } from '../../src/main/file-link-resolver.js';
 
@@ -37,7 +41,9 @@ const roots: string[] = [];
  */
 const PROJECT_ROOTS = new Map<string, string>();
 
-function makeResolver(over: { previewSettings?: Partial<PreviewSettings> } = {}) {
+function makeResolver(
+  over: { previewSettings?: Partial<PreviewSettings>; pathForms?: WindowsPathForms } = {},
+) {
   // The SHIPPED registry, not one invented here: FR-030's `preview` field has to mean what the app
   // means by it, and a hand-built registry would be a second opinion about which types previewable.
   const registry = SHIPPED_PREVIEW_PROVIDERS;
@@ -51,7 +57,7 @@ function makeResolver(over: { previewSettings?: Partial<PreviewSettings> } = {})
   };
   return new FileLinkResolver({
     fs: new NodeFileSystem(async () => {}),
-    pathForms: new WindowsPathForms(),
+    pathForms: over.pathForms ?? new WindowsPathForms(),
     executables: new WindowsExecutableExtensions(),
     projectRootFor: (projectId) =>
       projectId === undefined ? null : (PROJECT_ROOTS.get(projectId) ?? null),
@@ -67,6 +73,8 @@ const link = (
     panelId?: string;
     originProjectId?: string | null;
     kind?: 'detectedPath' | 'fileHyperlink';
+    /** 045 T207 — FR-151: set by a WSL terminal (settings-and-environment §7.1). */
+    wslFlavour?: true;
   } = {},
 ) => ({
   text,
@@ -75,6 +83,7 @@ const link = (
   panelId: over.panelId ?? 'p1',
   // `null` means "a panel with no owning project" explicitly; omitted means the fixture project.
   originProjectId: over.originProjectId === null ? undefined : (over.originProjectId ?? 'proj-1'),
+  ...(over.wslFlavour ? { wslFlavour: true as const } : {}),
 });
 
 beforeAll(() => {
@@ -361,5 +370,149 @@ describe('FileLinkResolver — FR-037: the action re-checks, and a gone file say
       { op: 'openFolder', path: join(root, 'docs') },
       { op: 'reveal', path: join(root, 'test.txt') },
     ]);
+  });
+});
+
+/*
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ * 045 T201 — FR-150, SC-020: paths containing spaces, over a real tree
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * The fixture tree now holds `with space/notes.md` (added for this task). What the user sees today
+ * (O11 rows 28, 36, 43, 60): a path through a folder whose name has a space is never a link — the
+ * text splits at the space and neither half names anything.
+ *
+ * Two routes are exercised, because they are the two a follow actually takes:
+ *  - the TEXT of the whole path, as a surface sends it once detection has found it (`resolve`);
+ *  - a whole LINE walked as the surfaces walk it — detect, ask about each candidate in order, the
+ *    first that resolves is the link. That is where "and not further" (SC-020) is observable: the
+ *    candidate that wins decides what gets underlined, and it must end at `notes.md`.
+ */
+const spacedPath = (): string => join(root, 'with space', 'notes.md');
+
+/** `C:\a\b` as Git Bash (`/c/a/b`) or WSL (`/mnt/c/a/b`) spells it. */
+const posix = (winPath: string, prefix: '' | '/mnt'): string =>
+  `${prefix}/${winPath[0]!.toLowerCase()}${winPath.slice(2).replace(/\\/g, '/')}`;
+
+/** The surfaces' walk: detection's candidates in order; the first that resolves is the link. */
+async function firstLinkOn(line: string): Promise<{ text: string; path: string } | null> {
+  const resolver = makeResolver();
+  for (const candidate of detectPathCandidates(line, [])) {
+    const answer = await resolver.resolve(link(candidate.text));
+    if (answer.ok) return { text: candidate.text, path: answer.link.path };
+  }
+  return null;
+}
+
+describe('T201 / FR-150 — each spelling of a spaced path resolves to it', () => {
+  it('a drive path', async () => {
+    const answer = await makeResolver().resolve(link(spacedPath()));
+    expect(answer.ok && answer.link.path).toBe(spacedPath());
+  });
+
+  it('the Git Bash /x/… form', async () => {
+    const answer = await makeResolver().resolve(link(posix(spacedPath(), '')));
+    expect(answer.ok && answer.link.path).toBe(spacedPath());
+  });
+
+  it('the WSL /mnt/x/… form', async () => {
+    const answer = await makeResolver().resolve(link(posix(spacedPath(), '/mnt')));
+    expect(answer.ok && answer.link.path).toBe(spacedPath());
+  });
+
+  it('a file: URI with %20', async () => {
+    const uri = `file:///${spacedPath().replace(/\\/g, '/').replace(/ /g, '%20')}`;
+    const answer = await makeResolver().resolve(link(uri));
+    expect(answer.ok && answer.link.path).toBe(spacedPath());
+  });
+
+  it('the WSL form with a position, as corpus row 43 prints it', async () => {
+    const answer = await makeResolver().resolve(link(`${posix(spacedPath(), '/mnt')}:3`));
+    expect(answer.ok && answer.link.path).toBe(spacedPath());
+  });
+});
+
+describe('T201 / SC-020 — a spaced path inside a sentence is the link, and the sentence is not', () => {
+  it('see <root>\\with space\\notes.md for details → notes.md, and the link ends there', async () => {
+    const found = await firstLinkOn(`see ${spacedPath()} for details`);
+    expect(found?.path).toBe(spacedPath());
+    expect(found?.text, 'the winning reading must not swallow "for details"').toBe(spacedPath());
+  });
+
+  it('the same line in Git Bash\u2019s spelling', async () => {
+    const found = await firstLinkOn(`see ${posix(spacedPath(), '')} for details`);
+    expect(found?.path).toBe(spacedPath());
+    expect(found?.text).toBe(posix(spacedPath(), ''));
+  });
+
+  it('a spaced reading that names nothing leaves the unextended token\u2019s answer unchanged', async () => {
+    const target = join(root, 'docs', 'a.md');
+    const found = await firstLinkOn(`opened ${target} and more words after it`);
+    expect(found?.path).toBe(target);
+    expect(found?.text).toBe(target);
+    const direct = await makeResolver().resolve(link(join(root, 'test.txt')));
+    expect(direct.ok && direct.link.path).toBe(join(root, 'test.txt'));
+  });
+});
+
+/*
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ * 045 T207 — FR-151, SC-019: Git Bash's own paths, against the REAL Git for Windows on this machine
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * What the user sees today (O11 rows 38 – 40): `/usr/bin/bash.exe` and `/etc/hosts` are not links,
+ * and `/tmp` follows to the current drive's `\tmp` with the text handed over as written.
+ *
+ * The install is found the way the app finds it — `WindowsShellDetection`, which already locates Git
+ * Bash (005 FR-024) — and its root is `bash.exe`'s `bin\` folder's parent. `WindowsPathForms` is
+ * assumed to take that root by constructor as `{ gitRoot }` (data-model §15.2; the shape is T204's,
+ * and the same assumption as `windows-path-forms.contract.test.ts`). Where Git for Windows is not
+ * installed every case skips, and SAYS so.
+ */
+let gitRoot: string | null = null;
+
+beforeAll(async () => {
+  const shells = await new WindowsShellDetection().detectInstalledShells();
+  const bash = shells.find((s) => s.id === 'git-bash')?.file;
+  gitRoot = bash === undefined ? null : dirname(dirname(bash));
+  if (gitRoot === null) {
+    console.warn('T207 skipped: Git for Windows is not installed on this machine, so there is no mount table to resolve through.');
+  }
+});
+
+type GitCtor = new (options: { gitRoot: string | null }) => WindowsPathForms;
+const withRealGit = (): WindowsPathForms =>
+  new (WindowsPathForms as unknown as GitCtor)({ gitRoot });
+
+const under = (child: string, parent: string): boolean =>
+  child.toLowerCase().startsWith(`${parent.replace(/[\\/]+$/, '').toLowerCase()}\\`);
+
+describe('T207 / FR-151 — Git Bash\u2019s rooted paths resolve through the real install', () => {
+  it('/usr/bin/bash.exe is a file under the detected install', async (ctx) => {
+    if (gitRoot === null) return ctx.skip();
+    const answer = await makeResolver({ pathForms: withRealGit() }).resolve(link('/usr/bin/bash.exe'));
+    expect(answer.ok, 'a link').toBe(true);
+    expect(answer.ok && under(answer.link.path, gitRoot), answer.ok ? answer.link.path : '').toBe(true);
+    expect(answer.ok && answer.link.kind).toBe('file');
+  });
+
+  it('/etc/hosts is a file under the detected install', async (ctx) => {
+    if (gitRoot === null) return ctx.skip();
+    const answer = await makeResolver({ pathForms: withRealGit() }).resolve(link('/etc/hosts'));
+    expect(answer.ok, 'a link').toBe(true);
+    expect(answer.ok && under(answer.link.path, gitRoot), answer.ok ? answer.link.path : '').toBe(true);
+  });
+
+  it('/tmp resolves to a folder — the user\u2019s temp folder, as Git\u2019s fstab maps it', async (ctx) => {
+    if (gitRoot === null) return ctx.skip();
+    const answer = await makeResolver({ pathForms: withRealGit() }).resolve(link('/tmp'));
+    expect(answer.ok && answer.link.kind).toBe('folder');
+    expect(answer.ok && answer.link.path.toLowerCase()).toBe(tmpdir().toLowerCase());
+  });
+
+  it('a WSL-flavour request for /etc/hosts does NOT resolve through Git', async (ctx) => {
+    if (gitRoot === null) return ctx.skip();
+    const answer = await makeResolver({ pathForms: withRealGit() }).resolve(link('/etc/hosts', { wslFlavour: true }));
+    expect(answer.ok && under(answer.link.path, gitRoot), answer.ok ? answer.link.path : '(no link)').toBe(false);
   });
 });

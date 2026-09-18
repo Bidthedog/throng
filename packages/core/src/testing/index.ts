@@ -31,4 +31,5 @@ export { runClipboardContract, runClipboardRichContract } from './clipboard-cont
 export type { ClipboardRichHarness } from './clipboard-contract.js';
 // 045 — the two ports clickable file links added (#394).
 export { runPathFormsContract } from './path-forms-contract.js';
+export type { PathFormsGitFixture } from './path-forms-contract.js';
 export { runExecutableExtensionsContract } from './executable-extensions-contract.js';

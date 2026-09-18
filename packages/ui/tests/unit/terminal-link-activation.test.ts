@@ -7,9 +7,11 @@ import type {
   ResolvedLink,
 } from '@throng/core';
 import { __resetLinkCacheForTests } from '../../src/renderer/links/link-cache.js';
+import { keepsClickFromProgram } from '../../src/renderer/terminal/hovered-link.js';
 import {
   activateTerminalHyperlink,
   askTerminalLink,
+  hoveredLinkFromUri,
   terminalLinkRequest,
   type TerminalLinkDeps,
   type TerminalLinkSite,
@@ -223,5 +225,66 @@ describe('the gesture itself (FR-040, 024 FR-019c)', () => {
 
     expect(revealed).toEqual([]);
     expect(openedExternally).toEqual([]);
+  });
+});
+
+/*
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ * 045 T212 — FR-154: a hyperlink that goes nowhere looks like text (link-resolution.md §8.4 V1 – V4)
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * What the user sees today (O11 rows 5, 13 – 15): an OSC 8 hyperlink to a missing file, a missing
+ * host or `notascheme:foo` is underlined and shows a hand pointer, and does nothing. The DRAWING half
+ * of that (xterm's own OSC 8 underline) only a real renderer shows — T213. What this file pins is the
+ * judgement the drawing must follow: a dead target is no hovered link at all, so a Ctrl+click on it
+ * reaches a mouse-reporting program (FR-043's pass-through) and nothing raises a notice.
+ */
+describe('T212 / FR-154 — a dead OSC 8 target is no link: not hovered, not swallowed, no notice', () => {
+  const DEAD: readonly (readonly [string, string, LinkResolution | undefined])[] = [
+    ['a scheme throng does not follow', 'notascheme:foo', undefined],
+    ['an empty target', '', undefined],
+    ['a file: target that does not exist', 'file:///C:/does/not/exist.txt', { ok: false }],
+    ['a file: target whose host does not answer', 'file://nonexistent-host-xyz/share/file.txt', { ok: false, reason: 'unreachable' }],
+  ];
+
+  for (const [label, uri, answer] of DEAD) {
+    it(`${label} (${JSON.stringify(uri)}): no hovered link, the press reaches the program, and no notice`, async () => {
+      if (answer !== undefined) resolved[uri] = answer;
+      await hover(uri);
+
+      const hovered = hoveredLinkFromUri(uri, SITE, askTerminalLink);
+      expect(hovered, 'V1/V2: nothing to hover, so nothing to draw a tooltip for').toBeNull();
+      expect(
+        keepsClickFromProgram({ hovered, button: 0, ctrlKey: true, metaKey: false, mouseTrackingMode: 'vt200' }),
+        'FR-043: a Ctrl+click on text that is not a link is the program\u2019s',
+      ).toBe(false);
+
+      await activateTerminalHyperlink({ event: CTRL, uri, site: SITE, deps: deps() });
+      expect(failures, 'nothing was attempted, so there is no condition to report').toEqual([]);
+      expect(openedExternally).toEqual([]);
+      expect(revealed).toEqual([]);
+      expect(openedInOs).toEqual([]);
+      expect(openedInEditor).toEqual([]);
+    });
+  }
+
+  it('V3: a file: target is a hovered link only ONCE it has resolved — not before', async () => {
+    const uri = 'file:///D:/p/src/foo.ts';
+    // The hover lands before main has answered.
+    resolved[uri] = { ok: true, link: IN_PROJECT_FILE };
+    expect(hoveredLinkFromUri(uri, SITE, askTerminalLink), 'unresolved is not yet a link').toBeNull();
+    // …and then main's answer lands.
+    await Promise.resolve();
+    await Promise.resolve();
+    const hovered = hoveredLinkFromUri(uri, SITE, askTerminalLink);
+    expect(hovered?.kind).toBe('file');
+    expect(
+      keepsClickFromProgram({ hovered, button: 0, ctrlKey: true, metaKey: false, mouseTrackingMode: 'vt200' }),
+    ).toBe(true);
+  });
+
+  it('V4: an https target is a hovered link as drawn — no existence check', () => {
+    const hovered = hoveredLinkFromUri('https://example.com/a', SITE, askTerminalLink);
+    expect(hovered).toEqual({ kind: 'web', uri: 'https://example.com/a' });
   });
 });

@@ -235,3 +235,176 @@ describe('detectPathCandidates — SC-003: ordinary prose and log text yields no
     expect(offenders).toEqual([]);
   });
 });
+
+/*
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ * 045 T199 — FR-150: a path may contain spaces without quotes (link-resolution.md §8.1, D16 – D19)
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * What the user sees today (O11's corpus rows 28, 36, 43, 60): `D:\…\test 1\test.md`,
+ * `/d/…/test 1/test.md`, `/mnt/d/…/test 1/test.md:3` and `C:\Program Files\Common Files\…` are never
+ * links, in either panel type — detection splits on the space and neither half names anything.
+ *
+ * FR-150: an ANCHORED token also yields readings extended across single spaces, one word at a time,
+ * LONGEST FIRST, the unextended token last; each carries its own FR-004 position readings (with
+ * before without) and its own FR-005 trim. Which one is the link is resolution's business (D19).
+ *
+ * Other candidates on the same line are not this rule's concern (`1\test.md` is a rule-C candidate of
+ * its own, today and after), so the readings are compared among the candidates that START where the
+ * anchored token starts — `detectPathCandidates` sorts stably by start, so their order is the order
+ * detection emitted them in.
+ */
+type Reading = { text: string; position?: LinkCandidate['position'] };
+
+const readingsAt = (line: string, at: number): Reading[] =>
+  detectPathCandidates(line, [])
+    .filter((c) => c.start === at)
+    .map((c) => (c.position === undefined ? { text: c.text } : { text: c.text, position: c.position }));
+
+const textsAt = (line: string, at: number): string[] => readingsAt(line, at).map((r) => r.text);
+
+/** Every anchored form FR-150 names, each ending in a word the suffix below continues. */
+const ANCHORED: readonly (readonly [string, string])[] = [
+  ['drive, backslash', 'D:\\git\\throng_tests\\test'],
+  ['drive, forward slash', 'D:/git/throng_tests/test'],
+  ['UNC, backslash', '\\\\fileserver\\home\\test'],
+  ['UNC, forward slash', '//fileserver/home/test'],
+  ['Git Bash drive form', '/d/git/throng_tests/test'],
+  ['WSL drive form', '/mnt/d/git/throng_tests/test'],
+  ['leading /', '/usr/test'],
+  ['home', '~/test'],
+  ['./', './test'],
+  ['../', '../test'],
+  ['file: URI', 'file:///D:/git/test'],
+];
+
+describe('T199 / D16 – D17 — each anchored form, extended across one space, longest first', () => {
+  for (const [label, token] of ANCHORED) {
+    for (const suffix of [' 1\\test.md', ' 1/test.md', ' Files\\x']) {
+      it(`${label}: ${JSON.stringify(token + suffix)}`, () => {
+        expect(textsAt(token + suffix, 0)).toEqual([token + suffix, token]);
+      });
+    }
+  }
+
+  it('the corpus rows, verbatim: D:\\git\\throng_tests\\test 1\\test.md and /d/git/throng_tests/test 1/test.md', () => {
+    expect(textsAt('D:\\git\\throng_tests\\test 1\\test.md', 0)[0]).toBe('D:\\git\\throng_tests\\test 1\\test.md');
+    expect(textsAt('/d/git/throng_tests/test 1/test.md', 0)[0]).toBe('/d/git/throng_tests/test 1/test.md');
+  });
+
+  it('two words: C:\\Program Files\\Common Files\\x.js', () => {
+    expect(textsAt('C:\\Program Files\\Common Files\\x.js', 0)).toEqual([
+      'C:\\Program Files\\Common Files\\x.js',
+      'C:\\Program Files\\Common',
+      'C:\\Program',
+    ]);
+  });
+
+  it('D12\u2019s provider-qualified form extends too, from where its path starts', () => {
+    const line = 'FileSystem::\\\\fileserver\\home\\test 1\\x.md';
+    const at = line.indexOf('\\\\');
+    expect(textsAt(line, at)).toEqual(['\\\\fileserver\\home\\test 1\\x.md', '\\\\fileserver\\home\\test']);
+  });
+
+  it('every reading\u2019s span indexes back into the line', () => {
+    const line = 'see D:\\git\\throng_tests\\test 1\\test.md now';
+    for (const c of detectPathCandidates(line, [])) expect(line.slice(c.start, c.end)).toBe(c.text);
+  });
+});
+
+describe('T199 / D17 — each reading carries its own position readings and its own trim', () => {
+  it('/mnt/d/a b/c.md:3 carries :3 — with the position, then without, then the unextended token', () => {
+    expect(readingsAt('/mnt/d/a b/c.md:3', 0)).toEqual([
+      { text: '/mnt/d/a b/c.md', position: { line: 3 } },
+      { text: '/mnt/d/a b/c.md:3' },
+      { text: '/mnt/d/a' },
+    ]);
+  });
+
+  it('the corpus row /mnt/d/git/throng_tests/test 1/test.md:3 leads with its positioned reading', () => {
+    expect(readingsAt('/mnt/d/git/throng_tests/test 1/test.md:3', 0)[0]).toEqual({
+      text: '/mnt/d/git/throng_tests/test 1/test.md',
+      position: { line: 3 },
+    });
+  });
+
+  it('FR-005\u2019s trailing punctuation is trimmed from the extended reading\u2019s own end', () => {
+    expect(textsAt('D:\\x\\my file.txt.', 0)).toEqual(['D:\\x\\my file.txt', 'D:\\x\\my']);
+  });
+
+  it('the worked example: see D:\\git\\throng_tests\\test 1\\test.md:3 for details', () => {
+    const line = 'see D:\\git\\throng_tests\\test 1\\test.md:3 for details';
+    const found = readingsAt(line, line.indexOf('D:'));
+    // Longest first …
+    expect(found[0]!.text.length).toBeGreaterThan(found[1]!.text.length);
+    // … and the tail is the positioned reading, the same without it, and the bare token.
+    expect(found.slice(-3)).toEqual([
+      { text: 'D:\\git\\throng_tests\\test 1\\test.md', position: { line: 3 } },
+      { text: 'D:\\git\\throng_tests\\test 1\\test.md:3' },
+      { text: 'D:\\git\\throng_tests\\test' },
+    ]);
+  });
+});
+
+describe('T199 / D18 — where an extension stops', () => {
+  it('never into a word that begins an anchored form: C:\\a.txt C:\\b.txt is two candidates', () => {
+    expect(texts('C:\\a.txt C:\\b.txt')).toEqual(['C:\\a.txt', 'C:\\b.txt']);
+  });
+
+  it('never into a web span — with or without the scanner\u2019s claim', () => {
+    const line = 'D:\\git\\a see https://example.com/a';
+    const at = line.indexOf('https://');
+    for (const claimed of [[], [{ start: at, end: line.length }]]) {
+      const found = detectPathCandidates(line, claimed).map((c) => c.text);
+      expect(found.filter((t) => t.includes('https')), JSON.stringify(claimed)).toEqual([]);
+    }
+  });
+
+  it('never past an unbalanced bracket', () => {
+    expect(textsAt('D:\\git\\a b) c d', 0).filter((t) => t.includes(' c'))).toEqual([]);
+    expect(textsAt('D:\\git\\a (b c d', 0).filter((t) => t.includes(' c'))).toEqual([]);
+  });
+
+  it('never into or past a quote', () => {
+    expect(textsAt('D:\\git\\a "b c" d', 0)).toEqual(['D:\\git\\a']);
+    expect(textsAt("D:\\git\\a it's here", 0).filter((t) => t.includes("'"))).toEqual([]);
+  });
+
+  it('never across a run of two or more spaces', () => {
+    expect(textsAt('D:\\git\\a  b.md', 0)).toEqual(['D:\\git\\a']);
+  });
+
+  it('a bare word never starts one — test 1/test.md and notes.md more words', () => {
+    expect(texts('see test 1/test.md').filter((t) => t.includes(' '))).toEqual([]);
+    expect(texts('notes.md more words')).toEqual(['notes.md']);
+  });
+});
+
+describe('T199 / SC-003, SC-020 — prose after a path does not make prose a link', () => {
+  const prose = readFileSync(
+    fileURLToPath(new URL('../../../ui/tests/fixtures/links/prose.txt', import.meta.url)),
+    'utf8',
+  )
+    .split(/\r?\n/)
+    .filter((l) => l.trim().length > 0);
+
+  it('prose.txt, each line spoken after an existing-looking path: every candidate is anchored at the path', () => {
+    const PATH = 'D:\\git\\x.ts';
+    const offenders: string[] = [];
+    for (const l of prose) {
+      const line = `built ${PATH} ${l}`;
+      for (const c of detectPathCandidates(line, [])) {
+        if (!c.text.startsWith(PATH)) offenders.push(`${JSON.stringify(l)} \u2192 ${c.text}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('and the unextended path is always among them, last of its readings', () => {
+    const PATH = 'D:\\git\\x.ts';
+    const line = `built ${PATH} and the split came out 60/40 in the end.`;
+    const found = textsAt(line, line.indexOf(PATH));
+    expect(found.length, 'extended readings exist').toBeGreaterThan(1);
+    expect(found[found.length - 1]).toBe(PATH);
+  });
+});
