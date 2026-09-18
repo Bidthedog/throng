@@ -732,7 +732,7 @@ inside an existing declaration does not raise the count — the counter is a per
   change — `"total": 570` and `"@terminal": 107` before and after, and no new spec file to place in a
   tier. Run `packages/ui/tests/unit/e2e-budget.test.ts`, `packages/ui/tests/unit/e2e-tags.test.ts`
   and the tier-plan guard. Depends on T122, T123. Satisfies Principle V; R15.
-- [ ] T125 Confirm `packages/ui/tests/e2e/terminal-modified-enter.e2e.ts:233` is **untouched and
+- [x] T125 Confirm `packages/ui/tests/e2e/terminal-modified-enter.e2e.ts:233` is **untouched and
   green** — Ctrl+Enter still reaches the program in a terminal with its modified-Enter encoding. A
   diff to this file is a defect, not a task. Satisfies FR-046.
   **Half-confirmed 2026-09-18 (T130/T131 pass): UNTOUCHED.** `git diff 92b29e68..HEAD --
@@ -864,7 +864,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   still yields zero. Satisfies FR-003g, FR-107, SC-003.
 - [x] T140 [US9] GREEN — strip the qualifier in `packages/core/src/links/detect.ts` before a token is
   judged, keeping `::` a refusal everywhere else. Depends on T139.
-- [ ] T141 [P] [US9] RED integration (`@admin`)
+- [x] T141 [P] [US9] RED integration (`@admin`)
   `packages/ui/tests/integration/file-link-resolver.integration.test.ts` — against a **real**
   network spelling of the temp tree, `\\localhost\<drive>$\<temp>\…`, in both separators and as
   `file://127.0.0.1/<drive>$/…`: an absolute UNC file and folder resolve; a relative name against
@@ -872,7 +872,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   The loopback administrative share needs an elevated token, so the case is skipped **with the
   reason printed** on a non-elevated workstation and runs on the hosted gate. Satisfies FR-003c,
   FR-012, FR-022 – FR-024, SC-014.
-- [ ] T142 [US9] GREEN — make T141 green. **Expected to need no production change** beyond T136 and
+- [x] T142 [US9] GREEN — make T141 green. **Expected to need no production change** beyond T136 and
   T140; if one is needed, it is a new finding and is recorded in R18 before it is made. Depends on
   T141, T136, T140.
 
@@ -1020,7 +1020,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   "removed" line added — the setting never reached a release. Satisfies FR-090 (amended).
   **Done 2026-09-18 in `ac9d1329`**, with T195 and T221 — one docs commit after the behaviour rather
   than one per behaviour commit, because the three rounds' behaviour landed in overlapping commits.
-- [ ] T170 Re-read `packages/ui/tests/e2e/e2e-budget.json` and
+- [x] T170 Re-read `packages/ui/tests/e2e/e2e-budget.json` and
   `packages/ui/tests/e2e/parallel-plan.json`: `"total": 570` and no change; run
   `packages/ui/tests/unit/e2e-budget.test.ts`, `packages/ui/tests/unit/e2e-tags.test.ts` and the
   tier-plan guard. T125 (`terminal-modified-enter.e2e.ts:233` untouched) still holds. Depends on
@@ -1150,7 +1150,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
   link and OSC 8 link in view; the hover state spans all rows (FR-131); the pointer class is applied
   only with the modifier; marks are removed when a cached answer is invalidated. Satisfies FR-130,
   FR-135, FR-136, FR-139.
-- [ ] T186 [US10] RED e2e — **cases inside existing declarations, no new `test(`**: in
+- [x] T186 [US10] RED e2e — **cases inside existing declarations, no new `test(`**: in
   `packages/ui/tests/e2e/terminal-links.e2e.ts`, a web URL, a detected path and an OSC 8 link each
   soft-wrapped by a narrowed panel are marked on every row at rest with the same decoration class;
   in `packages/ui/tests/e2e/terminal-link-once.e2e.ts`'s existing `@reserve:pty` declaration, a
@@ -1179,7 +1179,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
   `packages/core/src/terminal/wsl-flavour.ts`, a pure function with unit cases, **not** a port behind
   the platform abstraction — see [contracts/platform-ports.md](./contracts/platform-ports.md) §6.2,
   [spec.md](./spec.md) FR-144's note and [plan.md](./plan.md) *Complexity Tracking — third round*.
-- [ ] T190 [P] [US11] RED integration
+- [x] T190 [P] [US11] RED integration
   `packages/platform-windows/tests/integration/terminal-link-flavours.integration.test.ts` — for each
   built-in flavour **installed on the machine**, and WSL where a distro is configured, spawn the real
   shell on 025's `shell-history.integration.test.ts` shape: after `cd sub`, the directory arrives
@@ -1187,7 +1187,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
   project root (025 FR-032f); and an OSC 8 sequence the shell prints reaches the PTY output **intact**
   through ConPTY. A flavour not installed is skipped **with the reason printed**, never passed.
   Satisfies FR-141, FR-142, FR-144, SC-018.
-- [ ] T191 [US11] GREEN — make T190 green. **Expected to need no production change** for the built-in
+- [x] T191 [US11] GREEN — make T190 green. **Expected to need no production change** for the built-in
   flavours; where a flavour's path strips OSC 8, record it per flavour in R23 and rely on FR-141's
   detection fallback rather than working around ConPTY. Depends on T190.
 - [ ] T192 [US11] Hands-on, maintainer — run `D:\git\throng_tests\test 1\links-test.sh` (the corpus;
@@ -1204,7 +1204,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
 
 ### 14e. Closeout
 
-- [ ] T194 [P] #326: the PR states **closes #326** (FR-130), and the issue is claimed and released
+- [x] T194 [P] #326: the PR states **closes #326** (FR-130), and the issue is claimed and released
   through the `github-issue-state` skill. **The coordinator does this, not the spec** — recorded
   here so it is not forgotten.
 - [x] T195 [P] Docs in the same commits as the behaviour: `README.md` and `docs/quick-start.md` —
@@ -1212,7 +1212,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
   (including WSL's project-root fallback); `CHANGELOG.md`'s unreleased 045 entry, including #326.
   Satisfies FR-090.
   **Done 2026-09-18 in `ac9d1329`** (with T169 and T221).
-- [ ] T196 Re-read `packages/ui/tests/e2e/e2e-budget.json` after T186: `"total": 570`, unchanged;
+- [x] T196 Re-read `packages/ui/tests/e2e/e2e-budget.json` after T186: `"total": 570`, unchanged;
   run the budget, tag and tier-plan guards. Depends on T186.
 
 **Checkpoint**: SC-015 – SC-018 hold; D2 closed with its reproduction green; #326 closed; the budget
@@ -1393,7 +1393,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   pass-through) and raises no notice; an OSC 8 `file:` target is marked only after the idle scan or a
   hover resolves it, and gains its mark without pointer movement when a late answer arrives (FR-123);
   an `https` OSC 8 target is marked as drawn. Satisfies FR-154, FR-013, FR-043.
-- [ ] T213 [US12] RED e2e — **a case inside the existing `packages/ui/tests/e2e/terminal-links.e2e.ts`
+- [x] T213 [US12] RED e2e — **a case inside the existing `packages/ui/tests/e2e/terminal-links.e2e.ts`
   declaration, no new `test(`**: a program prints the three dead OSC 8 hyperlinks from the corpus; at
   rest and on hover none carries xterm's OSC 8 underline class or throng's mark, and the pointer stays
   the text cursor. Only a real renderer draws xterm's own underline. Satisfies FR-154, FR-139.
@@ -1439,11 +1439,11 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
 
 ### 15i. Evidence, docs and closeout
 
-- [ ] T219 [US12] Re-run the corpus through the probe in every installed built-in flavour and an
+- [x] T219 [US12] Re-run the corpus through the probe in every installed built-in flavour and an
   editor, after 13d, 13e, 14a – 14c and 15c – 15h are green, and record the new matrix in O11 beside
   the first. **SC-019 is 0 FAIL.** A row that still fails becomes an appended task with its own RED
   test, never a silent fix. Depends on T158, T168, T175, T187, T202, T208, T211, T214, T216.
-- [ ] T220 [US11] [US12] Configure a **user-defined WSL flavour** (025 FR-011; WSL is not a built-in —
+- [x] T220 [US11] [US12] Configure a **user-defined WSL flavour** (025 FR-011; WSL is not a built-in —
   005 FR-024, epic #13) where a distro is installed, and run the corpus and FR-145's cells in it:
   `/mnt/<drive>/…` maps (FR-025), relative paths resolve against the project root (FR-144), Git Bash's
   mount table is **not** applied (FR-151), and Linux filesystem paths are recorded as not links —
@@ -1455,7 +1455,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   `CHANGELOG.md`'s unreleased 045 entry. Satisfies FR-090.
   **Done 2026-09-18 in `ac9d1329`** (with T169 and T195), plus a `CHANGELOG.md` *Changed* line for
   the program's own SGR 4:5 dashed underline that O10's route no longer draws.
-- [ ] T222 Re-read `packages/ui/tests/e2e/e2e-budget.json` after T213: `"total": 570`, unchanged; run
+- [x] T222 Re-read `packages/ui/tests/e2e/e2e-budget.json` after T213: `"total": 570`, unchanged; run
   the budget, tag and tier-plan guards. Depends on T213.
 - [x] T223 The maintainer confirms the **derived** decisions of the fifth session: FR-150's grammar
   (anchored forms only, longest existing reading, the word cap), FR-151 applying in editors and in
@@ -1464,7 +1464,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   **Confirmed by the maintainer 2026-09-18** — all four, plus R12, the D1/D2/D3/D4 reproductions, and
   D3's fix through the cache-expiry hypothesis; recorded in [spec.md](./spec.md), *Session
   2026-09-18 (maintainer confirmation)*.
-- [ ] T224 [P] Record the deferred WSL Linux-path link mapping on issue #13 (a comment naming FR-151's
+- [x] T224 [P] Record the deferred WSL Linux-path link mapping on issue #13 (a comment naming FR-151's
   WSL exclusion and plan *Complexity Tracking*, third round), through the `github-issues` skill. **The
   coordinator does this, not the spec.**
 
